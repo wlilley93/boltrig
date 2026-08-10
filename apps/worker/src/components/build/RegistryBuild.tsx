@@ -61,7 +61,7 @@ function sameRouteInput(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-export function RegistryBuild() {
+export function RegistryBuild({ initialVerbId }: { initialVerbId?: string | null } = {}) {
   const [nouns, setNouns] = useState<NounAuthorView[]>([]);
   const [verbs, setVerbs] = useState<VerbInventoryItem[]>([]);
   const [filter, setFilter] = useState("");
@@ -262,7 +262,11 @@ export function RegistryBuild() {
     }
   }
   useEffect(() => {
-    void refresh(false);
+    // When the read-first Actions table opens a row it passes the verb id so
+    // the complete authoring records are hydrated before any replacement.
+    void refresh(false).then(() => {
+      if (initialVerbId) void edit(initialVerbId);
+    });
   }, []);
 
   const visible = useMemo(() => {
@@ -375,16 +379,14 @@ export function RegistryBuild() {
     setHydratedNoun(noun.id);
   }
 
-  async function edit(verb: VerbInventoryItem) {
+  async function edit(verbIdToLoad: string) {
     finalizer.invalidate();
     setMessage("");
     setHydratedNoun(null);
     setHydratedVerb(null);
     try {
-      const [nounResult, verbResult] = await Promise.all([
-        client.noun(verb.noun_id),
-        client.verb(verb.id),
-      ]);
+      const verbResult = await client.verb(verbIdToLoad);
+      const nounResult = await client.noun(verbResult.verb.noun_id);
       setNounId(nounResult.noun.id);
       setNounDescription(nounResult.noun.description);
       setNounSchema(JSON.stringify(nounResult.noun.schema, null, 2));
@@ -519,7 +521,7 @@ export function RegistryBuild() {
           </div>
           <div className="data-list compact-list" role="region" aria-label="Authored verbs" tabIndex={0}>
             {visible.map((verb) => (
-              <button className="data-row" key={verb.id} onClick={() => void edit(verb)}>
+              <button className="data-row" key={verb.id} onClick={() => void edit(verb.id)}>
                 <span className={`activity-dot ${verb.is_active && verb.noun_status === "active" ? "ok" : "paused"}`} />
                 <span className="data-row-copy"><strong>{verb.id}</strong><small>{verb.noun_id}{verb.noun_status === "archived" ? " (archived noun)" : ""} · {verb.binding ? `${verb.binding.target_type}:${verb.binding.target_ref}` : "unbound"}</small></span>
                 <span className="row-meta">{verb.status} · {verb.consequence}</span>

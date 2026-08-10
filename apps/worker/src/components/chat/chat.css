@@ -1,0 +1,328 @@
+/* Chat-family delta styles (console redesign). Owned by the chat cluster;
+   tokens come from styles.css and are never redefined here. */
+
+/* --- New screen ------------------------------------------------------------ */
+
+.starter-icon { display: flex; color: var(--text-3); }
+
+/* The New state draws no header bar, but the theme stays reachable: the
+   toggle floats where the header actions would sit. */
+.chat-floating-actions {
+  position: absolute;
+  z-index: 6;
+  top: 8px;
+  right: 12px;
+  display: flex;
+  gap: 4px;
+}
+
+.voice-banner {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: min(745px, calc(100% - 48px));
+  margin: 0 auto 10px;
+  padding: 11px 12px 11px 15px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--card);
+}
+.voice-banner-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 99px;
+  color: #fff;
+  background: var(--accent);
+}
+.voice-banner-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13.5px;
+}
+.voice-banner-copy small { color: var(--text-3); font-size: 12.5px; }
+.voice-banner-start {
+  flex: 0 0 auto;
+  padding: 7px 15px;
+  border: 0;
+  border-radius: 99px;
+  color: var(--bg);
+  background: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+.voice-banner-dismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--text-4);
+  background: transparent;
+  cursor: pointer;
+}
+.voice-banner-dismiss:hover { color: var(--text); background: var(--hover); }
+
+/* The hint sits under the composer card, outside its border. */
+.composer-hint {
+  width: min(745px, calc(100% - 48px));
+  margin: -12px auto 16px;
+  color: var(--text-4);
+  font-size: 11.5px;
+  text-align: center;
+}
+
+/* --- Composer chips -------------------------------------------------------- */
+
+/* The wrapper the voice affordances start calls through; it must not change
+   how VoiceCall's own idle/call layouts flow inside the tools row. */
+.voice-dock { display: flex; min-width: 0; align-items: center; }
+
+.model-chip-wrap { position: relative; }
+.model-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-2);
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+}
+.model-chip:hover { background: var(--hover); }
+.model-chip svg { color: var(--text-4); }
+.model-menu {
+  position: absolute;
+  right: 0;
+  bottom: 34px;
+  z-index: 20;
+  min-width: 180px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+.model-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--text-2);
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+.model-option:hover,
+.model-option[data-active="true"] { color: var(--text); background: var(--hover); }
+.model-option[aria-selected="true"] { color: var(--text); font-weight: 500; }
+.model-chip-tech { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+
+/* --- Work disclosure ------------------------------------------------------- */
+
+.work-disclosure { display: flex; flex-direction: column; gap: 8px; margin: 0 0 14px; }
+.work-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  color: var(--text-2);
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+}
+.work-toggle:hover { color: var(--text); }
+.work-toggle svg { transition: transform 140ms ease; }
+.work-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.work-rule { height: 1px; background: var(--border); }
+.work-disclosure .activity { margin-top: 0; }
+
+/* --- Verb / tech chips ----------------------------------------------------- */
+
+.verb-chip {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 5px;
+  color: var(--text-4);
+  background: var(--card-2);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* --- Subagent chips and fan-out -------------------------------------------- */
+
+.subagent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 14px;
+}
+.subagent-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 11px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  color: var(--text-2);
+  background: var(--card);
+  font-size: 13px;
+}
+button.subagent-chip { cursor: pointer; }
+button.subagent-chip:hover { border-color: var(--border-2); color: var(--text); }
+.subagent-chip .familiar-orb { width: 15px; height: 15px; }
+.subagent-chips-rest { font-size: 13px; color: var(--text-3); }
+
+.subagent-fanout { display: flex; flex-direction: column; gap: 9px; margin-top: 12px; }
+.subagent-fan-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+button.subagent-fan-row { cursor: pointer; }
+button.subagent-fan-row:hover .subagent-fan-name { color: var(--text); }
+.subagent-fan-row .familiar-orb { width: 18px; height: 18px; }
+.subagent-fan-name { flex: 0 0 auto; color: var(--text-2); font-size: 13.5px; }
+.subagent-fan-task {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.subagent-fan-state { flex: 0 0 auto; color: var(--text-4); font-size: 12.5px; }
+.subagent-fan-state[data-tone="red"] { color: var(--red); }
+.subagent-fan-state[data-tone="amber"] { color: var(--amber); }
+.subagent-fan-state[data-tone="muted"] { color: var(--text-3); }
+
+/* --- Inline approval ------------------------------------------------------- */
+
+.inline-approval {
+  overflow: hidden;
+  margin-top: 12px;
+  border: 1px solid var(--border-2);
+  border-radius: 12px;
+  background: var(--card);
+}
+.inline-approval-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+}
+.inline-approval-head > span:first-child {
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: var(--amber);
+}
+.inline-approval-head > strong { flex: 1; min-width: 0; font-weight: 400; }
+.inline-approval[data-phase="settled"] .inline-approval-head > span:first-child {
+  background: var(--green);
+}
+.inline-approval-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 13px 15px;
+  color: var(--text-2);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.inline-approval-body p { margin: 0; }
+.inline-approval-actions { display: flex; align-items: center; gap: 8px; }
+.inline-approval-affirm {
+  padding: 7px 15px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+.inline-approval-other {
+  padding: 7px 15px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  color: var(--text-2);
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+}
+.inline-approval-other:hover { color: var(--text); }
+.inline-approval-affirm:disabled,
+.inline-approval-other:disabled { opacity: .5; cursor: default; }
+.inline-approval-inspect {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  color: var(--text-3);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.inline-approval-inspect:hover { color: var(--text); }
+
+/* --- Chat header / rail ---------------------------------------------------- */
+
+/* Desktop rail collapse. Compact widths are untouched: there the rail is the
+   task-details sheet whose single trigger the 39c14bd invariant protects. */
+.chat-layout[data-rail-collapsed="true"] { grid-template-columns: minmax(0, 1fr); }
+.chat-layout[data-rail-collapsed="true"] > .right-rail:not(.task-details-sheet) { display: none; }
+
+/* --- Mobile approvals ------------------------------------------------------ */
+
+/* The pending row grows a second line for its actions/receipt. */
+.m-pending-row { flex-wrap: wrap; }
+.m-pending-actions { display: flex; flex-basis: 100%; gap: 8px; margin-top: 2px; padding-left: 18px; }
+.m-pending-actions button {
+  min-height: 36px;
+  padding: 7px 16px;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.m-pending-actions .m-approve { color: #fff; background: var(--accent); }
+.m-pending-actions .m-defer {
+  border: 1px solid var(--border-2);
+  color: var(--text-2);
+  background: transparent;
+}
+.m-pending-note { flex-basis: 100%; margin: 2px 0 0; padding-left: 18px; color: var(--text-3); font-size: 13px; }

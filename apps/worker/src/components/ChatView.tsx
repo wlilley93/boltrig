@@ -21,6 +21,7 @@ import {
   type FamiliarPhenotypeResponse,
   type ModelProfile,
   type NormalizedTurn,
+  type SubagentEntry,
 } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../client";
@@ -33,7 +34,7 @@ import {
 } from "../desktop";
 import { appliedTheme, toggleTheme } from "../theme";
 import { ConversationControls } from "./ConversationControls";
-import { FamiliarBadge, familiarPalette } from "./familiar/FamiliarBadge";
+import { FamiliarBadge } from "./familiar/FamiliarBadge";
 import { FamiliarStage } from "./familiar/FamiliarStage";
 import {
   familiarStateFromTurn,
@@ -42,11 +43,25 @@ import {
 import { LiveQuestionCard } from "./LiveQuestionCard";
 import { MobileChat } from "./MobileChat";
 import { VoiceCall } from "./VoiceCall";
+import { InlineApproval, SettledApproval } from "./chat/InlineApproval";
+import { ModelChip } from "./chat/ModelChip";
+import { RunSectionView } from "./chat/RunSectionView";
+import { SubagentChips } from "./chat/SubagentChips";
+import { SubagentTabs } from "./chat/SubagentTabs";
+import { useTechDetails } from "./chat/useTechDetails";
+import { VoiceBanner } from "./chat/VoiceBanner";
+import { WorkDisclosure } from "./chat/WorkDisclosure";
+import "./chat/chat.css";
 
 interface ChatViewProps {
   conversationId: string | null;
   onConversation(id: string): void;
   onChanged(): void;
+  /** Mount point for the subagent tab strip (SubagentTabs): subagent chips
+      and fan-out rows call this with the subagent whose pane should open
+      beside the conversation. Until the tabs surface is wired, the rows stay
+      non-interactive rather than pretending a pane exists. */
+  onOpenSubagent?(agent: SubagentEntry): void;
 }
 
 const DEFAULT_ATTACHMENT_LIMITS: ChatAttachmentLimits = {
@@ -56,7 +71,12 @@ const DEFAULT_ATTACHMENT_LIMITS: ChatAttachmentLimits = {
   model_readable_media_types: ["text/*"],
 };
 
-export function ChatView({ conversationId, onConversation, onChanged }: ChatViewProps) {
+export function ChatView({
+  conversationId,
+  onConversation,
+  onChanged,
+  onOpenSubagent,
+}: ChatViewProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [events, setEvents] = useState<ChatEvent[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
@@ -77,7 +97,36 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
   // Mobile is a different surface, not the console squeezed. Below the phone
   // breakpoint the conversation is drawn by MobileChat on its own palette.
   const phone = useMediaQuery("(max-width: 640px)");
+  // The split panes (subagent tabs, run-section drawing) mount only in the
+  // desktop layout. Narrower widths keep chips and rail rows as static
+  // readings, so no control is offered whose target surface cannot appear.
+  const canOpenPanes = !phone && !compactTaskDetails;
   const [mobileDraft, setMobileDraft] = useState("");
+  // The composer draft is lifted so starter cards can fill it (the design's
+  // New screen behaviour: a starter fills the draft, it never sends).
+  const [draft, setDraft] = useState("");
+  // Desktop-only rail visibility. Compact widths keep the task-details sheet
+  // and its single trigger untouched (the 39c14bd invariant).
+  const [railOpen, setRailOpen] = useState(true);
+  // Subagent tabs hold a runId-tagged snapshot of the entries they were opened
+  // for. Tab keys are per-turn event indices, so a key minted by one turn must
+  // never resolve against another turn's entries; the tag stops the next turn's
+  // identical index from stealing a tab, and the snapshot keeps a settled
+  // turn's tabs readable instead of vanishing mid-read.
+  const [openTabs, setOpenTabs] = useState<Array<{ key: string; agent: SubagentEntry }>>([]);
+  const [tabsRunId, setTabsRunId] = useState<string | null>(null);
+  const [activeSubagentKey, setActiveSubagentKey] = useState<string | null>(null);
+  // The run the section drawing was opened for — pinned, so a settling turn
+  // neither yanks the reader out nor re-arms the drawing for the next run.
+  const [sectionRunId, setSectionRunId] = useState<string | null>(null);
+  // Turn durations measured while this client watched the run. ChatEvent
+  // frames carry no timestamps, so a turn that was not watched here has no
+  // duration to state - the work disclosure then omits the number.
+  const [turnDurations, setTurnDurations] = useState<Record<string, number>>({});
+  const liveStartsRef = useRef(new Map<string, number>());
+  const draftInputRef = useRef<HTMLTextAreaElement>(null);
+  const voiceDockRef = useRef<HTMLSpanElement>(null);
+  const tech = useTechDetails();
   const [voiceActivity, setVoiceActivity] = useState<{
     speaking: boolean;
     level: number;
@@ -110,6 +159,9 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
     setError("");
     setContinuity("");
     setRetryFollow(false);
+    // The design's New tab resets the draft on entry; switching conversations
+    // likewise drops a stale draft rather than carrying it across tasks.
+    setDraft("");
     const priorLive = liveConversationRef.current;
     if (priorLive && priorLive !== conversationId) {
       abortStreams();
@@ -160,7 +212,46 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
 
   useEffect(() => {
     setTaskDetailsOpen(false);
+    setOpenTabs([]);
+    setTabsRunId(null);
+    setActiveSubagentKey(null);
+    setSectionRunId(null);
   }, [conversationId]);
+
+  // Opening a subagent surfaces its own thread as a tab beside the transcript.
+  // Only the live turn wires this: a settled turn's chips are static marks,
+  // because their entries no longer exist to open. The optional onOpenSubagent
+  // prop still fires so hosts and tests observe it.
+  function openSubagentTab(agent: SubagentEntry) {
+    onOpenSubagent?.(agent);
+    if (!live.runId) return;
+    if (tabsRunId !== live.runId) {
+      // A new turn's first open replaces the old turn's tabs wholesale — the
+      // old keys' index space is dead and must not linger next to new entries.
+      setTabsRunId(live.runId);
+      setOpenTabs([{ key: agent.key, agent }]);
+    } else {
+      setOpenTabs((tabs) => (tabs.some((tab) => tab.key === agent.key)
+        ? tabs
+        : [...tabs, { key: agent.key, agent }]));
+    }
+    setActiveSubagentKey(agent.key);
+  }
+
+  function closeSubagentTab(key: string) {
+    const next = openTabs.filter((tab) => tab.key !== key);
+    setOpenTabs(next);
+    if (activeSubagentKey === key) setActiveSubagentKey(next[next.length - 1]?.key ?? null);
+    // The pane unmounts with the last tab; hand focus back to the composer
+    // rather than dropping it on <body>.
+    if (next.length === 0) draftInputRef.current?.focus();
+  }
+
+  function closeAllSubagentTabs() {
+    setOpenTabs([]);
+    setActiveSubagentKey(null);
+    draftInputRef.current?.focus();
+  }
 
   useEffect(() => {
     if (!compactTaskDetails) {
@@ -471,7 +562,19 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
         "Some internal runtime activity was withheld from the public task stream.",
       );
     }
+    if (event.type === "message_end" || event.type === "cancelled") {
+      // Settle the locally-observed duration for this run so the durable
+      // transcript can keep stating what this client actually measured.
+      const started = liveStartsRef.current.get(event.run_id);
+      if (started != null) {
+        const seconds = Math.max(0, Math.round((Date.now() - started) / 1_000));
+        setTurnDurations((current) => ({ ...current, [event.run_id]: seconds }));
+      }
+    }
     if (event.type === "message_start") {
+      if (!liveStartsRef.current.has(event.run_id)) {
+        liveStartsRef.current.set(event.run_id, Date.now());
+      }
       const priorRun = activeRunRef.current;
       activeRunRef.current = event.run_id;
       liveConversationRef.current = event.conversation_id;
@@ -547,6 +650,64 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
   const stage = <FamiliarStage mode={stageMode} state={stageState} phenotype={phenotype} />;
   const bulletStage = stagePlacement === "bullet" ? stage : undefined;
 
+  // The decided target's New screen is chrome-free: no header row, the glyph
+  // and question are the top of the surface. A conversation (or a live call)
+  // brings the header back.
+  const isNewState = stageIsHero && !conversationId;
+  const showHeader = !isNewState || callActive;
+
+  // The header count is conversation-wide: settled messages carry their
+  // events, so subagents from earlier turns stay counted after their run
+  // ends, deduplicated by child run.
+  const conversationSubagentCount = useMemo(() => {
+    const seen = new Set<string>();
+    for (const message of messages) {
+      if (!message.events?.length) continue;
+      for (const agent of normalizeEvents(message.events).subagents) {
+        seen.add(agent.childRunId || agent.key);
+      }
+    }
+    for (const agent of live.subagents) seen.add(agent.childRunId || agent.key);
+    return seen.size;
+  }, [messages, live]);
+
+  // Live voice is feature-guarded the same way VoiceCall guards itself: the
+  // affordances render only where the call control is actually mounted.
+  const voiceAvailable = (
+    typeof client.createCall === "function"
+    && (!conversationId || conversationStatus === "active")
+  );
+
+  // The empty-draft primary and the voice banner both start the call through
+  // the mounted VoiceCall control (its start button inside the dock), so call
+  // creation, capability fallbacks and media teardown stay in one place.
+  function startVoiceFromComposer() {
+    const dock = voiceDockRef.current;
+    const buttons = dock ? [...dock.querySelectorAll("button")] : [];
+    const start = dock?.querySelector<HTMLButtonElement>(
+      ".voice-idle > button.secondary-button",
+    ) ?? (buttons.length === 1 ? (buttons[0] as HTMLButtonElement) : null);
+    if (start) {
+      start.click();
+    } else {
+      setError("Live voice is not ready here. Use the call controls beside the composer.");
+    }
+  }
+
+  function fillDraft(text: string) {
+    setDraft(text);
+    window.setTimeout(() => draftInputRef.current?.focus(), 0);
+  }
+
+  // Tabs render live entries while their turn is still the live turn (status
+  // words keep updating); after it settles, the snapshot taken at open keeps
+  // each tab readable. The runId tag stops a later turn's colliding key from
+  // substituting its own, unrelated entry.
+  const tabAgents = openTabs.map((tab) =>
+    (live.runId === tabsRunId
+      ? live.subagents.find((entry) => entry.key === tab.key)
+      : undefined) ?? tab.agent);
+
   // The task-details trigger renders once, at the same tree position for
   // every width, so a breakpoint flip never detaches the node mid-measure:
   // the mobile/console swap happens beneath it. Its placement is CSS.
@@ -575,6 +736,14 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
           messages={messages}
           onBack={() => navigate("home")}
           onComposerChange={setMobileDraft}
+          onRespondHitl={async (id, decision) => {
+            try {
+              const result = await client.respondHitl(id, decision, "");
+              return result.status === "ok" || result.status === "answered";
+            } catch {
+              return false;
+            }
+          }}
           onSend={() => {
             const text = mobileDraft.trim();
             if (!text) return;
@@ -635,8 +804,34 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
           Task details
         </button>
       )}
-    <div className="chat-layout">
+    {sectionRunId && (
+      // The run-section drawing covers the conversation surface; the layout
+      // beneath stays MOUNTED (display:none) so the composer draft, staged
+      // attachments and any live voice call survive the visit. The run id is
+      // pinned at open, so a settling turn neither closes the drawing under
+      // the reader nor re-arms it for the next run.
+      <RunSectionView
+        runId={sectionRunId}
+        title={conversationTitle || undefined}
+        devDetails={tech}
+        familiarsByRunId={Object.fromEntries(
+          [...live.subagents, ...openTabs.map((tab) => tab.agent)]
+            .filter((agent) => agent.childRunId)
+            .map((agent) => [agent.childRunId, agent.familiarGenotype]),
+        )}
+        onBack={() => {
+          setSectionRunId(null);
+          draftInputRef.current?.focus();
+        }}
+      />
+    )}
+    <div
+      className="chat-layout"
+      data-rail-collapsed={!compactTaskDetails && !railOpen ? "true" : undefined}
+      style={sectionRunId ? { display: "none" } : undefined}
+    >
       <main className="chat-main">
+        {showHeader ? (
         <header className="chat-header">
           <div className="agent-heading">
             <h1>{
@@ -648,17 +843,41 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
             }</h1>
             {/* The decided target sets a muted count beside the title. It is
                 stated only when there is something to count, so an empty chat
-                does not carry a "0 subagents" label the design never draws. */}
-            {live.subagents.length > 0 && (
+                does not carry a "0 subagents" label the design never draws.
+                The count is conversation-wide: settled turns stay counted. */}
+            {conversationSubagentCount > 0 && (
               <span className="chat-header-sub">
-                {live.subagents.length} {live.subagents.length === 1 ? "subagent" : "subagents"}
+                {conversationSubagentCount} {conversationSubagentCount === 1 ? "subagent" : "subagents"}
               </span>
             )}
           </div>
           <div className="chat-header-actions">
             <ThemeToggle />
+            {/* Desktop-only rail toggle. Below the compact breakpoint the
+                task-details trigger remains the single rail affordance
+                (39c14bd: exactly one trigger at every width). */}
+            {!compactTaskDetails && (
+              <button
+                aria-expanded={railOpen}
+                aria-label={railOpen ? "Hide the task panel" : "Show the task panel"}
+                className="icon-button rail-toggle"
+                onClick={() => setRailOpen((open) => !open)}
+                title="Toggle panel"
+                type="button"
+              >
+                <svg aria-hidden fill="none" height="15" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24" width="15">
+                  <rect height="14" rx="2.5" width="18" x="3" y="5" />
+                  <line x1="15" x2="15" y1="5" y2="19" />
+                </svg>
+              </button>
+            )}
           </div>
         </header>
+        ) : (
+          // Chrome-free New state: the theme control floats where the header
+          // actions would sit, so the surface keeps its one theme affordance.
+          <div className="chat-floating-actions"><ThemeToggle /></div>
+        )}
         {stagePlacement === "centre" && (
           <div className="voice-stage" aria-hidden={false}>{stage}</div>
         )}
@@ -669,7 +888,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
           role="region"
           tabIndex={0}
         >
-          {stageIsHero ? <Welcome /> : null}
+          {stageIsHero ? <Welcome onStarter={fillDraft} /> : null}
           {messages.map((message) => (
             <Message
               key={message.id}
@@ -677,6 +896,10 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
               stage={events.length === 0 && message.id === lastAssistantMessageId
                 ? bulletStage
                 : undefined}
+              tech={tech}
+              durationSeconds={message.run_id ? turnDurations[message.run_id] : undefined}
+              // Settled turns' chips stay static marks: their entries' keys
+              // belong to a dead index space and cannot honestly open a tab.
             />
           ))}
           {modelContext?.compacted && (
@@ -692,7 +915,15 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
               <blockquote>{modelContext.summary}</blockquote>
             </details>
           )}
-          {events.length > 0 && <LiveTurn turn={live} stage={bulletStage} />}
+          {events.length > 0 && (
+            <LiveTurn
+              turn={live}
+              stage={bulletStage}
+              tech={tech}
+              startedAt={live.runId ? liveStartsRef.current.get(live.runId) ?? null : null}
+              onOpenSubagent={canOpenPanes ? openSubagentTab : undefined}
+            />
+          )}
           {continuity && (
             <p className="notice" role="status">
               {continuity}
@@ -711,6 +942,9 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
           )}
           {error && <p className="notice" role="alert">{error}</p>}
         </div>
+        {isNewState && voiceAvailable && (
+          <VoiceBanner onStartVoice={startVoiceFromComposer} />
+        )}
         <Composer
           busy={loading}
           disabled={Boolean(conversationId) && conversationStatus !== "active"}
@@ -722,18 +956,44 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
           onProfile={setProfile}
           onSend={send}
           onStop={stop}
+          value={draft}
+          onChange={setDraft}
+          inputRef={draftInputRef}
+          tech={tech}
+          voicePrimary={isNewState && voiceAvailable && !callActive
+            ? { onStart: startVoiceFromComposer }
+            : undefined}
           voice={(!conversationId || conversationStatus === "active") ? (
-            <VoiceCall
-              conversationId={conversationId}
-              modelProfileId={profile || undefined}
-              onConversation={onConversation}
-              onError={setError}
-              onFamiliarActivity={setVoiceActivity}
-              onCallActive={setCallActive}
-            />
+            <span className="voice-dock" ref={voiceDockRef}>
+              <VoiceCall
+                conversationId={conversationId}
+                modelProfileId={profile || undefined}
+                onConversation={onConversation}
+                onError={setError}
+                onFamiliarActivity={setVoiceActivity}
+                onCallActive={setCallActive}
+              />
+            </span>
           ) : undefined}
         />
+        {isNewState && voiceAvailable && !callActive && !draft.trim() && (
+          <p className="composer-hint">
+            Nothing typed, so the round button starts a voice call.
+          </p>
+        )}
       </main>
+      {openTabs.length > 0 && canOpenPanes && (
+        <SubagentTabs
+          subagents={tabAgents}
+          openKeys={openTabs.map((tab) => tab.key)}
+          activeKey={activeSubagentKey}
+          parentRunId={tabsRunId ?? undefined}
+          turnEnded={live.runId === tabsRunId ? live.ended : true}
+          onSelect={setActiveSubagentKey}
+          onClose={closeSubagentTab}
+          onCloseAll={closeAllSubagentTabs}
+        />
+      )}
       {compactTaskDetails && taskDetailsOpen && (
         <button
           aria-label="Dismiss task details"
@@ -755,8 +1015,12 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
         loadingArtifacts={loadingArtifacts}
         onLoadMoreArtifacts={loadMoreArtifacts}
         onConversationChanged={controlsChanged}
+        onOpenSubagent={canOpenPanes ? openSubagentTab : undefined}
+        onSeeWhatRan={canOpenPanes && live.runId
+          ? () => setSectionRunId(live.runId ?? null)
+          : undefined}
         compact={compactTaskDetails}
-        open={!compactTaskDetails || taskDetailsOpen}
+        open={compactTaskDetails ? taskDetailsOpen : railOpen}
         panelRef={taskDetailsPanelRef}
         onClose={closeTaskDetails}
         onConversationDeleted={() => {
@@ -793,17 +1057,38 @@ function ThemeToggle() {
   );
 }
 
-const STARTERS: Array<[string, string]> = [
-  ["Turn these notes into a brief", "Paste what you have and it writes the brief"],
-  ["Research and compare options", "It reads what it may reach and lays them side by side"],
-  ["Prepare this week\u2019s update", "From the work that actually happened"],
-  ["Read a run that went well", "And keep it as a routine you can repeat"],
+// Starter icon paths, traced from the design's icon set (stroke, 24 viewBox).
+const STARTERS: Array<{ title: string; desc: string; icon: string[] }> = [
+  {
+    title: "Find something out",
+    desc: "Read across your systems and come back with an answer",
+    icon: [
+      "M4.5 4.5h6a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5h-6.5z",
+      "M19.5 4.5h-6a3 3 0 0 0-3 3v12a2.5 2.5 0 0 1 2.5-2.5h6.5z",
+    ],
+  },
+  {
+    title: "Draft something",
+    desc: "Written in your voice, and sent to nobody until you say",
+    icon: ["M6 3.5h7l5 5v12H6z", "M13 3.5V9h5"],
+  },
+  {
+    title: "Work through a list",
+    desc: "The same job across many records, a helper on each",
+    icon: ["M4 4.5h16v5H4zM4 14.5h16v5H4z", "M7.5 7h.01M7.5 17h.01"],
+  },
+  {
+    title: "Keep an eye on something",
+    desc: "A standing goal it keeps pursuing until you stop it",
+    icon: ["M5 12.5l4.5 4.5L19 7"],
+  },
 ];
 
 // The decided target opens a new chat with a quiet mark, one question and four
 // starters. It does NOT open with the Stage at hero size: that placement came
 // from ADR 0025 and the new target supersedes it here, which also removes the
-// unbounded square that pushed the composer off a short window.
+// unbounded square that pushed the composer off a short window. Clicking a
+// starter fills the composer draft; it never sends.
 function Welcome({ onStarter }: { onStarter?(text: string): void }) {
   return (
     <section className="welcome">
@@ -814,13 +1099,18 @@ function Welcome({ onStarter }: { onStarter?(text: string): void }) {
       </svg>
       <h2>What needs doing?</h2>
       <div className="starters">
-        {STARTERS.map(([title, desc]) => (
+        {STARTERS.map(({ title, desc, icon }) => (
           <button
             className="starter-card"
             key={title}
             onClick={() => onStarter?.(title)}
             type="button"
           >
+            <span aria-hidden className="starter-icon">
+              <svg fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" viewBox="0 0 24 24" width="16">
+                {icon.map((d) => <path d={d} key={d} />)}
+              </svg>
+            </span>
             <span className="starter-title">{title}</span>
             <span className="starter-desc">{desc}</span>
           </button>
@@ -833,11 +1123,17 @@ function Welcome({ onStarter }: { onStarter?(text: string): void }) {
 function Message({
   message,
   stage,
+  tech,
+  durationSeconds,
+  onOpenSubagent,
 }: {
   message: ChatMessage;
   // The one Familiar Stage, when this is the newest assistant turn it
   // presides over (ADR 0025); older turns render the static badge.
   stage?: React.ReactNode;
+  tech: boolean;
+  durationSeconds?: number;
+  onOpenSubagent?(agent: SubagentEntry): void;
 }) {
   const turn = useMemo(() => normalizeEvents(message.events ?? []), [message.events]);
   const identity = turn.subagents[0];
@@ -861,6 +1157,11 @@ function Message({
             This response used a degraded fallback; treat its result as incomplete.
           </p>
         )}
+        {/* The design's order: the collapsed work disclosure sits above the
+            prose, subagents and decisions below it. */}
+        {message.events?.length ? (
+          <WorkDisclosure turn={turn} settled durationSeconds={durationSeconds ?? null} />
+        ) : null}
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
         {message.attachments?.map((item) => (
           <button
@@ -872,13 +1173,27 @@ function Message({
             ▧ {item.name}{item.size != null ? ` · ${formatBytes(item.size)}` : ""}
           </button>
         ))}
-        {message.events?.length ? <TurnActivity turn={turn} settled /> : null}
+        {message.events?.length ? (
+          <TurnDecisions turn={turn} settled tech={tech} onOpenSubagent={onOpenSubagent} />
+        ) : null}
       </div>
     </article>
   );
 }
 
-function LiveTurn({ turn, stage }: { turn: NormalizedTurn; stage?: React.ReactNode }) {
+function LiveTurn({
+  turn,
+  stage,
+  tech,
+  startedAt,
+  onOpenSubagent,
+}: {
+  turn: NormalizedTurn;
+  stage?: React.ReactNode;
+  tech: boolean;
+  startedAt: number | null;
+  onOpenSubagent?(agent: SubagentEntry): void;
+}) {
   const identity = turn.subagents[0];
   return (
     <article className="message assistant live">
@@ -899,9 +1214,12 @@ function LiveTurn({ turn, stage }: { turn: NormalizedTurn; stage?: React.ReactNo
           </p>
         )}
         {turn.reasoning && <details><summary>Working notes</summary><p>{turn.reasoning}</p></details>}
+        <WorkDisclosure turn={turn} startedAt={startedAt} />
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{turn.text || "Working…"}</ReactMarkdown>
-        <TurnActivity turn={turn} />
-        {turn.modelRouting && (
+        <TurnDecisions turn={turn} tech={tech} onOpenSubagent={onOpenSubagent} />
+        {/* The raw profile id is developer detail (the plain console already
+            names the model in the composer chip). */}
+        {tech && turn.modelRouting && (
           <p className="routing-note">
             {turn.modelRouting.selectedProfileId} · {turn.modelRouting.routingClass}
             {turn.modelRouting.overridden ? " · policy adjusted" : ""}
@@ -912,53 +1230,46 @@ function LiveTurn({ turn, stage }: { turn: NormalizedTurn; stage?: React.ReactNo
   );
 }
 
-function TurnActivity({
+/** Everything below the prose: the subagent chip row and fan-out, then the
+ * decision cards (approvals and questions) in stream order. Tool activity is
+ * not repeated here - it lives in the WorkDisclosure above the prose. */
+function TurnDecisions({
   turn,
   settled = false,
+  tech,
+  onOpenSubagent,
 }: {
   turn: NormalizedTurn;
   settled?: boolean;
+  tech: boolean;
+  onOpenSubagent?(agent: SubagentEntry): void;
 }) {
-  if (!turn.timeline.length) return null;
+  const decisions = turn.timeline.filter(
+    (item) => item.kind === "hitl" || item.kind === "question",
+  );
+  if (turn.subagents.length === 0 && decisions.length === 0) return null;
   return (
-    <div className="activity">
-      {turn.timeline.map((item) => {
-        if (item.kind === "tool") return (
-          <div className="activity-row" key={item.key}>
-            <span className={`activity-dot ${item.entry.status}`} />
-            <span>{item.entry.verb}</span><small>{item.entry.status}</small>
-          </div>
-        );
-        if (item.kind === "subagent") {
-          const hasIdentity = (
-            item.entry.familiarGenotype?.source === "agent_capability.name.v1"
-          );
+    <>
+      <SubagentChips
+        subagents={turn.subagents}
+        turnEnded={turn.ended || settled}
+        tech={tech}
+        onOpenSubagent={onOpenSubagent}
+      />
+      {decisions.map((item) => {
+        if (item.kind === "hitl") {
+          // A settled transcript replays the hitl event, but its request
+          // belongs to a dead turn; the card must never invite re-answering.
+          if (settled) return <SettledApproval entry={item.entry} tech={tech} key={item.key} />;
           return (
-            <div className="activity-row subagent" key={item.key}>
-              <span
-                className="mini-familiar"
-                data-genotype-source={hasIdentity
-                  ? item.entry.familiarGenotype?.source
-                  : "unbound"}
-                style={hasIdentity
-                  ? familiarPalette(item.entry.familiarGenotype?.palette)
-                  : undefined}
-                aria-label={hasIdentity
-                  ? `${item.entry.name ?? "Subagent"} profile Familiar`
-                  : `${item.entry.name ?? "Subagent"} activity`}
-              /><span>
-                {item.entry.name ?? "Subagent"} · {item.entry.task}
-                {item.entry.spawnRule ? ` · policy ${item.entry.spawnRule.id}` : ""}
-              </span>
-              <small>{item.entry.status ?? "running"}</small>
-            </div>
+            <InlineApproval
+              entry={item.entry}
+              tech={tech}
+              disabled={turn.ended}
+              key={item.key}
+            />
           );
         }
-        if (item.kind === "hitl") return (
-          <div className="approval-card" key={item.key}>
-            <strong>Approval needed</strong><p>{item.entry.question}</p>
-          </div>
-        );
         if (item.kind === "question") {
           // A settled transcript replays the question event, but its HITL
           // request is already resolved; rendering the interactive card would
@@ -978,7 +1289,7 @@ function TurnActivity({
         }
         return null;
       })}
-    </div>
+    </>
   );
 }
 
@@ -990,6 +1301,15 @@ interface ComposerProps {
   profile: string;
   attachmentLimits: ChatAttachmentLimits;
   attachmentLimitsVerified: boolean;
+  /** The draft lives with the caller so starter cards can fill it. */
+  value: string;
+  onChange: React.Dispatch<React.SetStateAction<string>>;
+  inputRef?: RefObject<HTMLTextAreaElement>;
+  /** Developer detail: raw profile ids on the model chip. */
+  tech: boolean;
+  /** When set (the New state only, with live voice verified reachable), an
+      empty draft turns the primary button into "Start a voice call". */
+  voicePrimary?: { onStart(): void };
   onProfile(value: string): void;
   onSend(message: string, files: ChatAttachment[]): Promise<boolean>;
   onStop(): Promise<void>;
@@ -1006,12 +1326,16 @@ function Composer({
   profile,
   attachmentLimits,
   attachmentLimitsVerified,
+  value,
+  onChange,
+  inputRef,
+  tech,
+  voicePrimary,
   onProfile,
   onSend,
   onStop,
   voice,
 }: ComposerProps) {
-  const [value, setValue] = useState("");
   const [files, setFiles] = useState<ChatAttachment[]>([]);
   const [fileError, setFileError] = useState("");
   const input = useRef<HTMLInputElement>(null);
@@ -1052,12 +1376,12 @@ function Composer({
     event.preventDefault();
     const message = value.trim();
     if (!message) return;
-    setValue("");
+    onChange("");
     const sentFiles = files;
     setFiles([]);
     const restore = await onSend(message, sentFiles);
     if (restore) {
-      setValue((current) => current || message);
+      onChange((current) => current || message);
       setFiles((current) => current.length ? current : sentFiles);
     }
   }
@@ -1080,11 +1404,12 @@ function Composer({
             ? "This conversation is closed"
             : disabled
               ? "Loading conversation state…"
-              : "Describe what you want done…"
+              : "Describe the work"
         }
         disabled={disabled}
+        ref={inputRef}
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.nativeEvent.isComposing || event.keyCode === 229) return;
           if (event.key === "Enter" && !event.shiftKey) {
@@ -1101,10 +1426,13 @@ function Composer({
         </div>
         <div>
           {profiles.length > 0 && (
-            <select className="composer-model" aria-label="Model profile" disabled={disabled} value={profile} onChange={(event) => onProfile(event.target.value)}>
-              <option value="">Best available</option>
-              {profiles.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-            </select>
+            <ModelChip
+              profiles={profiles}
+              value={profile}
+              disabled={disabled}
+              tech={tech}
+              onChange={onProfile}
+            />
           )}
 
           {busy && (
@@ -1112,18 +1440,39 @@ function Composer({
               ■ Stop
             </button>
           )}
-          <button
-            aria-label={busy ? "Queue next ↑" : "Send ↑"}
-            className="send-button"
-            disabled={disabled || !value.trim()}
-            title={busy ? "Queue next" : "Send"}
-            type="submit"
-          >
-            <svg aria-hidden fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.3" viewBox="0 0 24 24" width="14">
-              <line x1="12" x2="12" y1="19" y2="5" />
-              <polyline points="5 12 12 5 19 12" />
-            </svg>
-          </button>
+          {/* The primary is dual: with a draft it sends (or queues); with an
+              empty draft on the New state it starts a voice call. Only an
+              explicit click starts a call - Enter on an empty draft stays
+              inert, so a stray keystroke never opens a microphone. */}
+          {voicePrimary && !value.trim() && !busy && !disabled ? (
+            <button
+              aria-label="Start a voice call"
+              className="send-button voice-primary"
+              onClick={() => voicePrimary.onStart()}
+              title="Start a voice call"
+              type="button"
+            >
+              <svg aria-hidden fill="currentColor" height="15" viewBox="0 0 24 24" width="15">
+                <rect height="4" rx="1.2" width="2.4" x="4" y="10" />
+                <rect height="10" rx="1.2" width="2.4" x="8.4" y="7" />
+                <rect height="15" rx="1.2" width="2.4" x="12.8" y="4.5" />
+                <rect height="6" rx="1.2" width="2.4" x="17.2" y="9" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              aria-label={busy ? "Queue next ↑" : "Send ↑"}
+              className="send-button"
+              disabled={disabled || !value.trim()}
+              title={busy ? "Queue next" : "Send"}
+              type="submit"
+            >
+              <svg aria-hidden fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.3" viewBox="0 0 24 24" width="14">
+                <line x1="12" x2="12" y1="19" y2="5" />
+                <polyline points="5 12 12 5 19 12" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
       <p className="muted small">
@@ -1213,6 +1562,9 @@ interface RightRailProps {
   onLoadMoreArtifacts(): Promise<void>;
   onConversationChanged(): Promise<void>;
   onConversationDeleted(): void;
+  onOpenSubagent?(agent: SubagentEntry): void;
+  /** Opens the run-section drawing; offered only while the turn has a run. */
+  onSeeWhatRan?(): void;
   onClose(): void;
 }
 
@@ -1229,6 +1581,8 @@ function RightRail({
   onConversationChanged,
   onConversationDeleted,
   onClose,
+  onOpenSubagent,
+  onSeeWhatRan,
 }: RightRailProps) {
   const [downloadError, setDownloadError] = useState("");
   const [materialized, setMaterialized] = useState<Record<string, string>>({});
@@ -1307,7 +1661,11 @@ function RightRail({
         </div>
       )}
       <div className="rail-card">
-      <RailGroup title="This run">
+      <RailGroup
+        title="This run"
+        action={turn.runId && onSeeWhatRan ? "See what ran" : undefined}
+        onAction={turn.runId ? onSeeWhatRan : undefined}
+      >
         <RailRow
           tone={turn.cancelled ? "red" : turn.ended ? "green" : turn.runId ? "green" : "unknown"}
           label={turn.cancelled ? "Cancelled" : turn.ended ? "Done" : turn.runId ? "Running" : "Ready"}
@@ -1339,6 +1697,7 @@ function RightRail({
               mark={<FamiliarBadge state={turn.ended ? "ready" : "working"} label={item.name ?? item.task} />}
               label={item.name ?? item.task}
               meta={item.role}
+              onClick={onOpenSubagent ? () => onOpenSubagent(item) : undefined}
             />
           ))}
         </RailGroup>

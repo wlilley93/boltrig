@@ -49,6 +49,7 @@ const ICON_PATHS: Record<string, string[]> = {
     "M19.9 14.6a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4.1 14H4a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1A2 2 0 1 1 7.9 4.4l.1.1A1.6 1.6 0 0 0 10.7 3.4V3a2 2 0 0 1 4 0v.4a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1 .6z",
   ],
   code: ["M8.5 7.5L4 12l4.5 4.5M15.5 7.5L20 12l-4.5 4.5"],
+  logout: ["M10 17l5-5-5-5M15 12H3", "M15 5h5v14h-5"],
 };
 
 function Icon({ name, size = 16 }: { name: keyof typeof ICON_PATHS; size?: number }) {
@@ -83,10 +84,24 @@ const primary: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICO
   { route: "automations", label: "Routines", icon: "flow" },
 ];
 
-// Everything the decided target does not put in the sidebar stays reachable
-// from the account menu and the command palette. What used to be the Workspace
-// group lives here: the target reaches those records through the rail and the
-// run view rather than through a second nav list.
+// The user menu is intentionally small. The app's task surfaces stay in the
+// primary rail; account actions are the only things that belong behind the
+// identity control.
+const accountMenuItems: Array<{
+  action: "spend" | "invite" | "settings" | "logout";
+  label: string;
+  icon: keyof typeof ICON_PATHS;
+}> = [
+  { action: "spend", label: "Spend remaining", icon: "pulse" },
+  { action: "invite", label: "Invite someone", icon: "org" },
+  { action: "settings", label: "Settings", icon: "gear" },
+  { action: "logout", label: "Log out", icon: "logout" },
+];
+
+// The remainder, below a divider in the same menu. The design's sidebar draws
+// only the four primary surfaces because it assumes these are absorbed into
+// the rail and the run view; in this build they are real, working routes, so
+// they keep an affordance rather than becoming reachable by ⌘K alone.
 const menuSurfaces: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
   { route: "home", label: "Home", icon: "home" },
   { route: "inbox", label: "Inbox", icon: "inbox" },
@@ -98,12 +113,8 @@ const menuSurfaces: Array<{ route: WorkerRoute; label: string; icon: keyof typeo
   { route: "evaluations", label: "Evaluations", icon: "skill" },
   { route: "channels", label: "Channels", icon: "monitor" },
   { route: "operate", label: "Operate", icon: "pulse" },
-];
-
-const menuControl: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
   { route: "account", label: "Account", icon: "user" },
   { route: "organisation", label: "Organisation", icon: "org" },
-  { route: "settings", label: "Settings", icon: "gear" },
 ];
 
 interface SidebarProps {
@@ -121,6 +132,9 @@ interface SidebarProps {
   /** Present only while the settings surface is open. */
   settingsSection?: SettingsSection;
   onSettingsSection?(section: SettingsSection): void;
+  /** Lifted settings search query; when provided, row-level results render in the page. */
+  settingsQuery?: string;
+  onSettingsQuery?(value: string): void;
 }
 
 interface ConversationSearchState {
@@ -148,8 +162,12 @@ export function Sidebar({
   onCommandPalette,
   settingsSection,
   onSettingsSection,
+  settingsQuery: settingsQueryProp,
+  onSettingsQuery,
 }: SidebarProps) {
-  const [settingsQuery, setSettingsQuery] = useState("");
+  const [localSettingsQuery, setLocalSettingsQuery] = useState("");
+  const settingsQuery = settingsQueryProp ?? localSettingsQuery;
+  const setSettingsQuery = onSettingsQuery ?? setLocalSettingsQuery;
   const {
     identity,
     identityStatus,
@@ -271,9 +289,23 @@ export function Sidebar({
     }
   }
 
-  function chooseFromMenu(next: WorkerRoute) {
+  function chooseAccountAction(action: (typeof accountMenuItems)[number]["action"]) {
     setAccountOpen(false);
-    onRoute(next);
+    if (action === "spend") {
+      onSettingsSection?.("spend");
+      onRoute("settings");
+      return;
+    }
+    if (action === "settings") {
+      onSettingsSection?.("you");
+      onRoute("settings");
+      return;
+    }
+    if (action === "invite") {
+      onRoute("organisation");
+      return;
+    }
+    void client.logout().finally(() => window.location.reload());
   }
 
   const initials = (identity?.user ?? "?").slice(0, 1).toUpperCase();
@@ -293,9 +325,98 @@ export function Sidebar({
     ? "green"
     : health.status === "degraded" ? "amber" : "unknown";
 
+  function renderAccountMenu() {
+    if (!accountOpen) return null;
+    return (
+      <>
+        <button
+          aria-label="Close account menu"
+          className="side-menu-scrim"
+          onClick={() => setAccountOpen(false)}
+          type="button"
+        />
+        <div className="side-menu" role="menu">
+          <div className="side-menu-identity">
+            <span aria-hidden className="side-avatar">{initials}</span>
+            <span className="side-menu-name">
+              {identity
+                ? `${identity.user}${identity.role ? ` (${identity.role})` : ""}`
+                : (identityStatus === "unavailable" ? "Identity unavailable" : "Loading identity…")}
+            </span>
+          </div>
+          {accountMenuItems.map((item) => (
+            <button
+              className="side-menu-row"
+              key={item.action}
+              onClick={() => chooseAccountAction(item.action)}
+              role="menuitem"
+              type="button"
+            >
+              <span className="nav-icon"><Icon name={item.icon} size={15} /></span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+          <div className="side-menu-divider" role="separator" />
+          {menuSurfaces.map((item) => (
+            <button
+              className="side-menu-row"
+              key={item.route}
+              onClick={() => {
+                setAccountOpen(false);
+                onRoute(item.route);
+              }}
+              role="menuitem"
+              type="button"
+            >
+              <span className="nav-icon"><Icon name={item.icon} size={15} /></span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  function renderSidebarFooter() {
+    return (
+      <div className="sidebar-footer">
+        <button
+          aria-expanded={accountOpen}
+          aria-label={identity
+            ? `Signed in as ${identity.user}${identity.role ? `, role ${identity.role}` : ""}, ${identity.organisation}, ${identity.workspace}. Account menu`
+            : `Account menu, identity ${identityStatus}`}
+          className="side-account"
+          onClick={() => setAccountOpen((current) => !current)}
+          title={identity
+            ? `${identity.user} · ${identity.role ?? "member"} · ${identity.organisation} / ${identity.workspace}`
+            : undefined}
+          type="button"
+        >
+          <span aria-hidden className="side-avatar">{initials}</span>
+          <span className="side-account-name">
+            {identity?.user
+              ?? (identityStatus === "unavailable" ? "Identity unavailable" : "Loading identity…")}
+          </span>
+        </button>
+        <button
+          aria-label="Open settings"
+          className="side-round-button"
+          onClick={() => {
+            onSettingsSection?.("you");
+            onRoute("settings");
+          }}
+          type="button"
+        >
+          <Icon name="gear" size={13} />
+        </button>
+      </div>
+    );
+  }
+
   // In settings the sidebar becomes the settings nav, as the decided target
   // draws it: a way back, one search over every setting, and the ten sections
-  // under their heads. The global nav is one press away behind "Back to app".
+  // under their heads. The identity footer remains anchored at the bottom so
+  // the user's menu and settings entry never disappear during navigation.
   if (route === "settings" && onSettingsSection) {
     return (
       <aside className="sidebar" aria-label="Settings navigation">
@@ -336,6 +457,7 @@ export function Sidebar({
                 onClick={() => onSettingsSection(entry.id)}
                 type="button"
               >
+                <span className="nav-icon"><Icon name={settingsIcon(entry.id)} size={15} /></span>
                 <span>{entry.label}</span>
               </button>
             </div>
@@ -344,6 +466,8 @@ export function Sidebar({
         <p className="settings-side-foot">
           Every setting is one search away. Nothing is hidden, only quiet.
         </p>
+        {renderAccountMenu()}
+        {renderSidebarFooter()}
       </aside>
     );
   }
@@ -370,8 +494,11 @@ export function Sidebar({
 
       <button
         className="side-workspace"
-        onClick={() => onRoute("account")}
-        title="Workspace switching lives in Account"
+        onClick={() => {
+          onSettingsSection?.("you");
+          onRoute("settings");
+        }}
+        title="Open workspace settings"
         type="button"
       >
         <span>{workspaceLabel}</span>
@@ -534,80 +661,27 @@ export function Sidebar({
         <span>Open Operator</span>
       </a>
 
-      {accountOpen && (
-        <>
-          <button
-            aria-label="Close account menu"
-            className="side-menu-scrim"
-            onClick={() => setAccountOpen(false)}
-            type="button"
-          />
-          <div className="side-menu" role="presentation">
-            <div className="side-menu-identity">
-              <span aria-hidden className="side-avatar">{initials}</span>
-              <span className="side-menu-name">
-                {identity
-                  ? `${identity.user}${identity.role ? ` (${identity.role})` : ""}`
-                  : (identityStatus === "unavailable" ? "Identity unavailable" : "Loading identity…")}
-              </span>
-            </div>
-            {menuSurfaces.map((item) => (
-              <button
-                className="side-menu-row"
-                key={item.route}
-                onClick={() => chooseFromMenu(item.route)}
-                type="button"
-              >
-                <span className="nav-icon"><Icon name={item.icon} size={15} /></span>
-                <span>{item.label}</span>
-              </button>
-            ))}
-            <div className="side-menu-divider" aria-hidden />
-            {menuControl.map((item) => (
-              <button
-                className="side-menu-row"
-                key={item.route}
-                onClick={() => chooseFromMenu(item.route)}
-                type="button"
-              >
-                <span className="nav-icon"><Icon name={item.icon} size={15} /></span>
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
-      <div className="sidebar-footer">
-        <button
-          aria-expanded={accountOpen}
-          aria-label={identity
-            ? `Signed in as ${identity.user}${identity.role ? `, role ${identity.role}` : ""}, ${identity.organisation}, ${identity.workspace}. Account menu`
-            : `Account menu, identity ${identityStatus}`}
-          className="side-account"
-          onClick={() => setAccountOpen((current) => !current)}
-          title={identity
-            ? `${identity.user} · ${identity.role ?? "member"} · ${identity.organisation} / ${identity.workspace}`
-            : undefined}
-          type="button"
-        >
-          <span aria-hidden className="side-avatar">{initials}</span>
-          <span className="side-account-name">
-            {identity?.user
-              ?? (identityStatus === "unavailable" ? "Identity unavailable" : "Loading identity…")}
-          </span>
-        </button>
-        <button
-          aria-label="Open settings"
-          className="side-round-button"
-          onClick={() => onRoute("settings")}
-          type="button"
-        >
-          <Icon name="gear" size={13} />
-        </button>
-      </div>
+      {renderAccountMenu()}
+      {renderSidebarFooter()}
     </aside>
   );
+}
+
+const settingsIcons: Record<SettingsSection, keyof typeof ICON_PATHS> = {
+  you: "user",
+  autonomy: "pulse",
+  spend: "pulse",
+  shortcuts: "code",
+  knowledge: "book",
+  overnight: "clock",
+  health: "monitor",
+  organisation: "org",
+  advanced: "gear",
+  archived: "inbox",
+};
+
+function settingsIcon(section: SettingsSection): keyof typeof ICON_PATHS {
+  return settingsIcons[section];
 }
 
 function relativeTime(value: string): string {

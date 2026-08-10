@@ -4,7 +4,7 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WorkflowStepDefinition } from "@wlilley93/boltrig-web-sdk";
 
-import { RoutineThumb, layoutSteps } from "../src/components/RoutineThumb";
+import { RoutineThumb, layoutGrid, layoutSteps } from "../src/components/RoutineThumb";
 
 afterEach(cleanup);
 
@@ -58,6 +58,16 @@ describe("routine thumbnail", () => {
     ];
     const { nodes } = layoutSteps(cyclic);
     expect(nodes.length).toBe(2);
+  });
+
+  it("shares one grid between the thumbnail and the full canvas", () => {
+    // The canvas seeds its default positions from the same depth grid, so a
+    // routine looks like a bigger version of its own card.
+    const cells = layoutGrid(FAN);
+    expect(cells.get("start")).toEqual({ col: 0, row: 0 });
+    expect(cells.get("score")?.col).toBe(cells.get("draft")?.col);
+    expect(cells.get("score")?.row).not.toBe(cells.get("draft")?.row);
+    expect(cells.get("check")?.col).toBeGreaterThan(cells.get("score")?.col ?? 0);
   });
 
   it("says a routine has no steps rather than drawing an empty box", () => {

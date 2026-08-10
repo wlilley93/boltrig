@@ -1,0 +1,40 @@
+/* Build read-first tables (design lines 798-896): risk pips, the needs-you
+   tone, the "Recently changed" strip and the small chrome the console idiom
+   in styles.css does not already carry. Tokens only - no new colours. */
+
+.console-pip {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 99px;
+  background: var(--unknown);
+}
+.console-pip[data-tone="high"] { background: var(--amber); }
+.console-pip[data-tone="low"] { background: var(--green); }
+.console-pip[data-tone="off"] { background: var(--unknown); }
+
+/* Head spacer matching the trailing per-row action button so uppercase column
+   labels stay over their cells. */
+.agents-actions-spacer { width: 96px; flex: 0 0 96px; }
+
+.build-back-row { display: flex; align-items: center; gap: 10px; }
+.build-back {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.console-recent { display: flex; flex-direction: column; gap: 11px; }
+.console-recent-age {
+  flex: 0 0 auto;
+  color: var(--text-4);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An accent add-affordance that is an anchor rather than a button keeps the
+   same look (Add a plugin routes to the Plugins surface). */
+a.console-primary { text-decoration: none; }

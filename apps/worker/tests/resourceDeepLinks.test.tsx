@@ -7,9 +7,11 @@ const api = vi.hoisted(() => ({
   agentCapabilities: vi.fn(),
   auditTree: vi.fn(),
   capabilities: vi.fn(),
+  capabilityChangelog: vi.fn(),
   channels: vi.fn(),
   evalCases: vi.fn(),
   evalRuns: vi.fn(),
+  hitl: vi.fn(),
   knowledgeAsset: vi.fn(),
   knowledgeAssets: vi.fn(),
   knowledgeProviders: vi.fn(),
@@ -56,6 +58,8 @@ beforeEach(() => {
   api.capabilities.mockResolvedValue({ verbs: [] });
   api.channels.mockResolvedValue({ channels: [] });
   api.evalRuns.mockResolvedValue({ runs: [] });
+  api.capabilityChangelog.mockResolvedValue({ changes: [] });
+  api.hitl.mockResolvedValue({ requests: [] });
   api.knowledgeProviders.mockResolvedValue({ providers: [] });
   api.modelEndpoints.mockResolvedValue({ endpoints: [] });
   api.permanentFleet.mockResolvedValue({

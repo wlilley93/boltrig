@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   chatConfig: vi.fn(),
   conversation: vi.fn(),
   conversations: vi.fn(),
+  createCall: vi.fn(),
   modelProfiles: vi.fn(),
   streamChat: vi.fn(),
 }));
@@ -15,10 +16,18 @@ const api = vi.hoisted(() => ({
 vi.mock("../src/client", () => ({ client: api }));
 // A stub call control: placement rule 3 is about where the Stage sits for the
 // life of a call, not about realtime media, so the stub only raises the
-// call-active signal the way the real control does.
+// call-active signal the way the real control does. It keeps the real idle
+// markup shape (.voice-idle > .secondary-button) because the empty-draft
+// primary starts the call through that button.
 vi.mock("../src/components/VoiceCall", () => ({
   VoiceCall: ({ onCallActive }: { onCallActive?(active: boolean): void }) => (
-    <button onClick={() => onCallActive?.(true)} type="button">Start test call</button>
+    <div className="voice-idle">
+      <button
+        className="secondary-button"
+        onClick={() => onCallActive?.(true)}
+        type="button"
+      >Start test call</button>
+    </div>
   ),
 }));
 
@@ -52,6 +61,7 @@ afterEach(() => {
   delete document.documentElement.dataset.theme;
   try {
     localStorage.removeItem("boltrig-worker-theme");
+    localStorage.removeItem("boltrig-worker-voice-banner-dismissed");
   } catch {
     // Storage is optional in this environment.
   }
@@ -68,7 +78,7 @@ function renderChat(conversationId: string | null) {
 }
 
 describe("console chat surface", () => {
-  it("greets a fresh chat the way the decided target does, and keeps the header clean", async () => {
+  it("greets a fresh chat the way the decided target does, chrome-free", async () => {
     renderChat(null);
 
     // The decided target opens on a quiet mark, one question and four starters.
@@ -78,13 +88,58 @@ describe("console chat surface", () => {
     expect(screen.getByRole("heading", { level: 2, name: "What needs doing?" }))
       .toBeTruthy();
     expect(document.querySelectorAll(".welcome .starter-card").length).toBe(4);
+    expect(document.querySelectorAll(".welcome .starter-icon").length).toBe(4);
     await waitFor(() => {
       expect(document.querySelector(".welcome .familiar-stage")).toBeNull();
     });
-    // Rules 2 and 3 still hold: no familiar of any kind in the chat header.
-    expect(document.querySelector(".chat-header .familiar-stage")).toBeNull();
-    expect(document.querySelector(".chat-header .familiar-orb")).toBeNull();
-    expect(screen.getByRole("heading", { level: 1, name: "New chat" })).toBeTruthy();
+    // The New state draws no header bar at all (so no familiar can sit in
+    // one), yet the theme control stays reachable as a floating action.
+    expect(document.querySelector(".chat-header")).toBeNull();
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    expect(screen.getByRole("button", { name: "Toggle theme" })).toBeTruthy();
+  });
+
+  it("fills the composer draft from a starter card without sending", () => {
+    renderChat(null);
+
+    fireEvent.click(screen.getByRole("button", { name: /Find something out/ }));
+
+    const composer = screen.getByRole("textbox", {
+      name: "Task instructions",
+    }) as HTMLTextAreaElement;
+    expect(composer.value).toBe("Find something out");
+    expect(api.streamChat).not.toHaveBeenCalled();
+  });
+
+  it("offers the voice banner on the New state and remembers its dismissal", () => {
+    renderChat(null);
+
+    expect(screen.getByText("Try boltrig Voice")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss the voice banner" }));
+    expect(screen.queryByText("Try boltrig Voice")).toBeNull();
+    expect(localStorage.getItem("boltrig-worker-voice-banner-dismissed")).toBe("true");
+  });
+
+  it("turns the empty-draft primary into a voice call, and says so", async () => {
+    renderChat(null);
+
+    // Empty draft: the primary is voice, with the hint line stating it.
+    expect(screen.getByText("Nothing typed, so the round button starts a voice call."))
+      .toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Start a voice call" }));
+
+    // The click reaches VoiceCall's own start control, so the call machinery
+    // (capability fallbacks, media teardown) stays in one place.
+    await waitFor(() => {
+      expect(document.querySelector(".voice-stage")).toBeTruthy();
+    });
+
+    // A non-empty draft flips the primary back to Send.
+    fireEvent.change(screen.getByRole("textbox", { name: "Task instructions" }), {
+      target: { value: "draft text" },
+    });
+    expect(screen.queryByRole("button", { name: "Start a voice call" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Send ↑" })).toBeTruthy();
   });
 
   it("keeps voice reachable from the composer, not the title row", async () => {
@@ -184,6 +239,65 @@ describe("console chat surface", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: "Renewal outreach" }))
       .toBeTruthy();
+  });
+
+  it("collapses the desktop rail from the header toggle", async () => {
+    api.conversation.mockResolvedValue({ messages: [], active_run_id: null });
+    renderChat("conversation-a");
+    await screen.findByRole("heading", { level: 1, name: "Renewal outreach" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide the task panel" }));
+    expect(document.querySelector(".chat-layout")?.getAttribute("data-rail-collapsed"))
+      .toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show the task panel" }));
+    expect(document.querySelector(".chat-layout")?.getAttribute("data-rail-collapsed"))
+      .toBeNull();
+  });
+
+  it("counts subagents conversation-wide, including settled turns", async () => {
+    api.conversation.mockResolvedValue({
+      messages: [
+        { id: "m1", role: "user", content: "Do the renewals" },
+        {
+          id: "m2", role: "assistant", content: "Done", events: [
+            { type: "subagent", child_run_id: "r1", task: "Read health signals" },
+            { type: "subagent", child_run_id: "r2", task: "Draft outreach" },
+          ],
+        },
+      ],
+      active_run_id: null,
+    });
+    renderChat("conversation-a");
+
+    expect(await screen.findByText("2 subagents")).toBeTruthy();
+  });
+
+  it("replays a settled approval as a card that cannot be re-answered", async () => {
+    api.conversation.mockResolvedValue({
+      messages: [
+        { id: "m1", role: "user", content: "Do the renewals" },
+        {
+          id: "m2", role: "assistant", content: "Stopped for approval", events: [
+            {
+              type: "hitl",
+              hitl_request_id: "h1",
+              kind: "approval",
+              question: "Raise 3 tickets",
+              options: [],
+              verb: "ticket.create",
+            },
+          ],
+        },
+      ],
+      active_run_id: null,
+    });
+    renderChat("conversation-a");
+
+    expect(await screen.findByText("Raise 3 tickets")).toBeTruthy();
+    // The request belongs to a dead turn: no approve/deny is offered.
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(screen.getByText(/can no longer be answered here/)).toBeTruthy();
   });
 
   it("flips the theme from the header and persists the choice", () => {

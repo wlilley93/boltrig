@@ -1,0 +1,173 @@
+/* Subagent split pane: tab strip + per-tab thread. Reuses the console tokens
+   from styles.css only; no new colour values are introduced here. */
+
+.subtabs {
+  flex: 2.2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.subtabs-strip {
+  height: 44px;
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.subtabs-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 4px 0 11px;
+  border-radius: 8px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.subtabs-tab[data-active] { background: var(--card-2); color: var(--text); }
+
+.subtabs-tab-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.subtabs-tab-close,
+.subtabs-close-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-4);
+  cursor: pointer;
+  font-family: inherit;
+}
+.subtabs-tab-close { width: 18px; height: 18px; border-radius: 5px; font-size: 12px; }
+.subtabs-close-all { width: 26px; height: 26px; border-radius: 6px; font-size: 13px; }
+.subtabs-tab-close:hover,
+.subtabs-close-all:hover { background: var(--hover); color: var(--text); }
+
+/* The badge is the 39px orb by default; inside a 30px tab it shrinks. */
+.subtabs-tab .familiar-orb { width: 15px; height: 15px; box-shadow: none; }
+.subtabs-tab .familiar-orb i { width: 4px; height: 4px; }
+.subtabs-identity .familiar-orb { width: 22px; height: 22px; }
+.subtabs-identity .familiar-orb i { width: 6px; height: 6px; }
+
+.subtabs-thread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 26px 0 20px;
+}
+
+.subtabs-thread-inner {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 0 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.subtabs-instruction-row { display: flex; justify-content: flex-end; }
+.subtabs-instruction {
+  max-width: 80%;
+  margin: 0;
+  background: var(--card);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.subtabs-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+}
+.subtabs-identity strong { font-weight: 500; }
+
+.subtabs-state { font-size: 12.5px; }
+.subtabs-state[data-state="ok"] { color: var(--text-3); }
+.subtabs-state[data-state="degraded"] { color: var(--amber); }
+.subtabs-state[data-state="error"] { color: var(--red); }
+.subtabs-state[data-state="running"] { color: var(--text-2); }
+.subtabs-state[data-state="unreported"] { color: var(--text-4); }
+
+.subtabs-role { font-size: 12px; color: var(--text-4); }
+.subtabs-capability {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--text-4);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+.subtabs-steps {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.subtabs-steps span { color: var(--text-4); }
+
+.subtabs-operator {
+  align-self: flex-start;
+  font-size: 12.5px;
+  color: var(--text-3);
+  text-decoration: none;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  padding: 5px 11px;
+}
+.subtabs-operator:hover { background: var(--hover); color: var(--text); }
+
+.subtabs-allowed { display: flex; flex-direction: column; gap: 9px; }
+.subtabs-allowed-title { font-size: 13px; color: var(--text-2); }
+.subtabs-allowed-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+.subtabs-allowed-skills { flex: 1; font-size: 13px; color: var(--text-2); }
+.subtabs-allowed-spend {
+  font-size: 12px;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.subtabs-allowed-caption { font-size: 12px; line-height: 1.5; color: var(--text-4); }
+
+/* Screen-reader-only text (no global utility exists in this app yet). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

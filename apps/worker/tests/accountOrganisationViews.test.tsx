@@ -1263,12 +1263,15 @@ describe("Worker conversation management", () => {
 
     // The newest turn's avatar slot now hosts the one presiding Familiar
     // Stage (console placement rule 2), which stays root-neutral; the emitted
-    // identity remains visible on the subagent marker, still derived only
-    // from the canonical genotype.
-    const profile = await screen.findByLabelText("local-worker profile Familiar");
-    expect(profile.dataset.genotypeSource).toBe("agent_capability.name.v1");
-    expect(profile.getAttribute("style")).toContain("#112233");
-    expect(screen.getByText(/policy research-route/)).toBeTruthy();
+    // identity remains visible on the subagent marker — drawn as a chip and a
+    // fan-out row, both from the canonical genotype.
+    const profiles = await screen.findAllByLabelText("local-worker Familiar · ready");
+    expect(profiles.length).toBeGreaterThan(0);
+    expect(profiles[0].dataset.genotypeSource).toBe("agent_capability.name.v1");
+    expect(profiles[0].getAttribute("style")).toContain("#112233");
+    // Spawn-rule provenance is the technical register: it renders only when
+    // the persisted developer-details flag is on, and this account has it off.
+    expect(screen.queryByText(/policy research-route/)).toBeNull();
     const root = screen.getByRole("img", { name: "Boltrig activity · ready" });
     expect(root.dataset.genotypeSource).toBe("unbound");
     expect(root.getAttribute("style")).toBeNull();

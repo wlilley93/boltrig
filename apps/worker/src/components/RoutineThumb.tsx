@@ -27,11 +27,14 @@ export interface ThumbNode {
 
 export interface ThumbEdge { from: ThumbNode; to: ThumbNode }
 
-export function layoutSteps(steps: WorkflowStepDefinition[]): {
-  nodes: ThumbNode[];
-  edges: ThumbEdge[];
-} {
-  if (steps.length === 0) return { nodes: [], edges: [] };
+export interface GridCell { col: number; row: number }
+
+// The same depth-based grid seeds both this thumbnail and the full routine
+// canvas, so a routine looks like a bigger version of its own card rather
+// than a differently-shaped drawing of the same spec.
+export function layoutGrid(
+  steps: { id: string; parents?: string[] }[],
+): Map<string, GridCell> {
   const byId = new Map(steps.map((step) => [step.id, step]));
 
   // Depth is the longest path from a root, so a fan-in sits to the right of
@@ -54,9 +57,27 @@ export function layoutSteps(steps: WorkflowStepDefinition[]): {
   }
   for (const step of steps) depth(step.id, new Set());
 
+  const rowsUsed = new Map<number, number>();
+  const cells = new Map<string, GridCell>();
+  for (const step of steps) {
+    const col = depthOf.get(step.id) ?? 0;
+    const row = rowsUsed.get(col) ?? 0;
+    rowsUsed.set(col, row + 1);
+    cells.set(step.id, { col, row });
+  }
+  return cells;
+}
+
+export function layoutSteps(steps: WorkflowStepDefinition[]): {
+  nodes: ThumbNode[];
+  edges: ThumbEdge[];
+} {
+  if (steps.length === 0) return { nodes: [], edges: [] };
+  const cells = layoutGrid(steps);
+
   const columns = new Map<number, WorkflowStepDefinition[]>();
   for (const step of steps) {
-    const column = depthOf.get(step.id) ?? 0;
+    const column = cells.get(step.id)?.col ?? 0;
     const list = columns.get(column) ?? [];
     list.push(step);
     columns.set(column, list);

@@ -1,144 +1,31 @@
 import { useEffect, useState } from "react";
-import type {
-  BudgetItem,
-  ConversationSummary,
-  CostResponse,
-  ReadinessCheck,
-} from "@wlilley93/boltrig-web-sdk";
+import type { BudgetItem } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../client";
-import { settingsEntry, type SettingsSection } from "../settingsSections";
+import type { SettingsSection } from "../settingsSections";
+import { ArchivedSection } from "./settings/ArchivedSection";
+import {
+  CompactAdvancedSection,
+  CompactKnowledgeSection,
+  CompactOrganisationSection,
+  CompactYouSection,
+} from "./settings/CompactSections";
+import { HealthSection } from "./settings/HealthSection";
+import { OvernightSection } from "./settings/OvernightSection";
+import { SectionHead } from "./settings/SectionHead";
+import { ShortcutsSection } from "./settings/ShortcutsSection";
+import { SpendingSection } from "./settings/SpendingSection";
+import { SettingsGroup, SettingsRow } from "./settings/rowKit";
 
-// The settings pane. Six sections are drawn here on the console idiom; the four
-// that already have a working surface (You, Organisation, Knowledge, Advanced)
-// are rendered by their existing views rather than reimplemented, because
-// redrawing a working credential or roster surface to change its frame is how
-// you lose one.
+// The settings pane, recast onto the typed row-control kit in
+// ./settings/rowKit.tsx. Every section uses the same calm row idiom. Larger
+// operational surfaces remain available from their dedicated app routes, but
+// the settings route does not force most users through those dense dashboards.
 
-function money(micros: number): string {
-  return `£${(micros / 1_000_000).toFixed(2)}`;
-}
-
-export function SettingsGroup({ title, children }: {
-  title?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="settings-group">
-      {title && <div className="console-section-title">{title}</div>}
-      <div className="console-table">{children}</div>
-    </div>
-  );
-}
-
-export function SettingsRow({ title, desc, tech, control }: {
-  title: string;
-  desc?: string;
-  tech?: string;
-  control?: React.ReactNode;
-}) {
-  return (
-    <div className="settings-row">
-      <div className="settings-row-main">
-        <div className="console-row-title">
-          <span>{title}</span>
-          {tech && <span className="console-tech">{tech}</span>}
-        </div>
-        {desc && <div className="settings-row-desc">{desc}</div>}
-      </div>
-      {control}
-    </div>
-  );
-}
-
-function SectionHead({ section }: { section: SettingsSection }) {
-  const entry = settingsEntry(section);
-  return (
-    <div className="settings-head">
-      <h1>{entry.title}</h1>
-      <p>{entry.lead}</p>
-    </div>
-  );
-}
-
-// --- Spending ---------------------------------------------------------------
-
-function SpendingSection({ head = true }: { head?: boolean }) {
-  const [budgets, setBudgets] = useState<BudgetItem[]>([]);
-  const [cost, setCost] = useState<CostResponse | null>(null);
-  const [state, setState] = useState<"loading" | "ready" | "unavailable">("loading");
-
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all([
-      client.budgets().catch(() => null),
-      client.cost().catch(() => null),
-    ]).then(([budgetResult, costResult]) => {
-      if (cancelled) return;
-      if (!budgetResult && !costResult) {
-        setState("unavailable");
-        return;
-      }
-      setBudgets(budgetResult?.budgets ?? []);
-      setCost(costResult);
-      setState("ready");
-    });
-    return () => { cancelled = true; };
-  }, []);
-
-  return (
-    <>
-      {head && <SectionHead section="spend" />}
-      {state === "loading" && <p className="muted small">Reading what work has cost…</p>}
-      {state === "unavailable" && (
-        <p className="notice">Spending is not readable with your current role.</p>
-      )}
-      {state === "ready" && (
-        <>
-          <SettingsGroup title="What it has cost">
-            <SettingsRow
-              title="Total so far"
-              desc="Every governed call this workspace has paid for, in the scope you may see."
-              control={<span className="settings-value">{money(cost?.total_cost_micros ?? 0)}</span>}
-            />
-            {Object.entries(cost?.by_actor ?? {}).slice(0, 8).map(([actor, micros]) => (
-              <SettingsRow key={actor} title={actor} tech="actor"
-                control={<span className="settings-value">{money(micros)}</span>} />
-            ))}
-          </SettingsGroup>
-          <SettingsGroup title="Ceilings">
-            {budgets.length === 0 ? (
-              <SettingsRow
-                title="No ceiling is set"
-                desc="Nothing stops spend in this workspace except the limits on each provider key."
-              />
-            ) : budgets.map((budget) => {
-              const limit = budget.cost_limit_micros;
-              const pct = limit ? Math.round((budget.spent_micros / limit) * 100) : null;
-              return (
-                <SettingsRow
-                  key={budget.id}
-                  title={`${budget.scope_type} · ${budget.window}`}
-                  desc={budget.hard_stop
-                    ? "Work stops when this ceiling is reached."
-                    : "This ceiling is recorded but does not stop work."}
-                  tech={budget.id}
-                  control={(
-                    <span className="settings-value">
-                      {limit === null
-                        ? `${money(budget.spent_micros)} spent, no ceiling`
-                        : `${money(budget.spent_micros)} of ${money(limit)}${pct === null ? "" : ` · ${pct}%`}`}
-                    </span>
-                  )}
-                />
-              );
-            })}
-          </SettingsGroup>
-        </>
-      )}
-    </>
-  );
-}
+// Re-exported so other surfaces (the Plugins pane shares this renderer) keep
+// importing the row idiom from here.
+export { SettingsGroup, SettingsRow };
+export { SettingsSearchResults } from "./settings/SearchResults";
 
 // --- Autonomy ---------------------------------------------------------------
 
@@ -188,188 +75,6 @@ function AutonomySection({ head = true }: { head?: boolean }) {
   );
 }
 
-// --- Health -----------------------------------------------------------------
-
-function HealthSection({ head = true }: { head?: boolean }) {
-  const [checks, setChecks] = useState<Record<string, ReadinessCheck> | null>(null);
-  const [status, setStatus] = useState("");
-  useEffect(() => {
-    let cancelled = false;
-    void client.readiness()
-      .then((result) => {
-        if (cancelled) return;
-        setChecks(result.checks ?? {});
-        setStatus(result.status ?? "");
-      })
-      .catch(() => { if (!cancelled) setChecks({}); });
-    return () => { cancelled = true; };
-  }, []);
-
-  // The kernel reports a healthy check as "ready" OR "ok", and a check that is
-  // switched off as "disabled". Treating only "ready" as healthy painted an ok
-  // check red and counted it as failing.
-  const healthy = (value: string) => value === "ready" || value === "ok";
-  const entries = Object.entries(checks ?? {});
-  const notReady = entries.filter(([, check]) => !healthy(check.status));
-  return (
-    <>
-      {head && <SectionHead section="health" />}
-      <SettingsGroup title="Right now">
-        <SettingsRow
-          title="Overall"
-          desc={notReady.length === 0
-            ? "Every required check is ready."
-            : `${notReady.length} of ${entries.length} checks are not ready.`}
-          control={(
-            <span className="settings-state" data-tone={healthy(status) ? "ok" : "warn"}>
-              {status || "…"}
-            </span>
-          )}
-        />
-      </SettingsGroup>
-      {entries.length > 0 && (
-        <SettingsGroup title="Each check">
-          {entries.map(([name, check]) => (
-            <SettingsRow
-              key={name}
-              title={name}
-              desc={check.reason || (check.required ? "Required for this build" : "Optional")}
-              control={(
-                <span className="settings-state" data-tone={healthy(check.status)
-                  ? "ok"
-                  : check.required && check.status !== "disabled" ? "bad" : "warn"}>
-                  {check.status}
-                </span>
-              )}
-            />
-          ))}
-        </SettingsGroup>
-      )}
-    </>
-  );
-}
-
-// --- Keyboard shortcuts -----------------------------------------------------
-
-const SHORTCUTS: Array<[string, Array<[string, string, string]>]> = [
-  ["Getting around", [
-    ["New chat", "Start something new", "⌘N"],
-    ["Search everything", "Chats, routines, agents, settings", "⌘K"],
-    ["Show or hide the sidebar", "", "⌘B"],
-  ]],
-  ["In a conversation", [
-    ["Send", "Send what you have written", "↵"],
-    ["New line", "Without sending", "⇧↵"],
-  ]],
-];
-
-function ShortcutsSection({ head = true }: { head?: boolean }) {
-  return (
-    <>
-      {head && <SectionHead section="shortcuts" />}
-      {SHORTCUTS.map(([group, rows]) => (
-        <SettingsGroup key={group} title={group}>
-          {rows.map(([label, desc, keys]) => (
-            <SettingsRow
-              key={label}
-              title={label}
-              desc={desc || undefined}
-              control={<kbd className="settings-key">{keys}</kbd>}
-            />
-          ))}
-        </SettingsGroup>
-      ))}
-      <p className="console-foot">
-        Only the shortcuts this build actually binds are listed. An unassigned key is not shown as
-        though it worked.
-      </p>
-    </>
-  );
-}
-
-// --- Overnight --------------------------------------------------------------
-
-function OvernightSection({ head = true }: { head?: boolean }) {
-  return (
-    <>
-      {head && <SectionHead section="overnight" />}
-      <SettingsGroup title="What this build does">
-        <SettingsRow
-          title="Nothing runs overnight yet"
-          desc="Nightly consolidation is designed (decision 0023: rebuild-from-base, craft, register and diversity gates, promotion as an audited action) but no scheduler in this build starts it, and no endpoint reports it."
-        />
-        <SettingsRow
-          title="Nothing is learned on its own"
-          desc="A run becomes a routine only when you save it. No adapter is promoted without an audited action."
-        />
-      </SettingsGroup>
-      <p className="console-foot">
-        The decided target draws an Overnight screen with what changed, what it had to prove and what
-        it practised on. That screen is drawn against a capability this build does not have, so this
-        section says so rather than showing an empty week.
-      </p>
-    </>
-  );
-}
-
-// --- Archived chats ---------------------------------------------------------
-
-function ArchivedSection({ head = true }: { head?: boolean }) {
-  const [rows, setRows] = useState<ConversationSummary[]>([]);
-  const [state, setState] = useState<"loading" | "ready" | "unavailable">("loading");
-  const [busy, setBusy] = useState("");
-
-  async function load() {
-    try {
-      const result = await client.conversations();
-      setRows((result.conversations ?? []).filter((row) => row.status === "closed"));
-      setState("ready");
-    } catch {
-      setState("unavailable");
-    }
-  }
-  useEffect(() => { void load(); }, []);
-
-  async function restore(id: string) {
-    setBusy(id);
-    try {
-      await client.restoreMyConversation(id);
-      await load();
-    } finally {
-      setBusy("");
-    }
-  }
-
-  return (
-    <>
-      {head && <SectionHead section="archived" />}
-      {state === "loading" && <p className="muted small">Loading archived chats…</p>}
-      {state === "unavailable" && <p className="notice">Archived chats could not be read.</p>}
-      {state === "ready" && (
-        <SettingsGroup>
-          {rows.length === 0 ? (
-            <SettingsRow title="Nothing is archived" desc="Closed chats appear here during the recovery window." />
-          ) : rows.map((row) => (
-            <SettingsRow
-              key={row.id}
-              title={row.title || "Untitled task"}
-              desc="Closed · retained during the recovery window"
-              control={(
-                <button
-                  className="console-lifecycle"
-                  disabled={busy === row.id}
-                  onClick={() => void restore(row.id)}
-                  type="button"
-                >{busy === row.id ? "Bringing back…" : "Bring back"}</button>
-              )}
-            />
-          ))}
-        </SettingsGroup>
-      )}
-    </>
-  );
-}
-
 export function SettingsSectionPane({ section, head = true }: {
   section: SettingsSection;
   /** The mobile surface draws its own head, so it suppresses this one. */
@@ -381,5 +86,17 @@ export function SettingsSectionPane({ section, head = true }: {
   if (section === "shortcuts") return <ShortcutsSection head={head} />;
   if (section === "overnight") return <OvernightSection head={head} />;
   if (section === "archived") return <ArchivedSection head={head} />;
+  if (section === "you") {
+    return <>{head && <SectionHead section={section} />}<CompactYouSection /></>;
+  }
+  if (section === "organisation") {
+    return <>{head && <SectionHead section={section} />}<CompactOrganisationSection /></>;
+  }
+  if (section === "knowledge") {
+    return <>{head && <SectionHead section={section} />}<CompactKnowledgeSection /></>;
+  }
+  if (section === "advanced") {
+    return <>{head && <SectionHead section={section} />}<CompactAdvancedSection /></>;
+  }
   return null;
 }

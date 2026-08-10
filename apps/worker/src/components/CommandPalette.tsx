@@ -11,6 +11,8 @@ import type { WorkerRoute } from "../routes";
 
 interface Command {
   route: WorkerRoute;
+  /** Sub-surface within the route (e.g. a Build tab), passed as the route id. */
+  routeId?: string;
   label: string;
   description: string;
   keywords: string;
@@ -47,13 +49,17 @@ export const workerCommands: Command[] = [
   { route: "work", label: "Work", description: "Browse canonical work and project dependencies", keywords: "tasks projects queue dag" },
   { route: "runs", label: "Runs", description: "Inspect execution, cost, and subagent topology", keywords: "history audit subagents codex" },
   { route: "agents", label: "Agents", description: "Configure governed Codex worker profiles", keywords: "subagents profiles familiar runtime" },
-  { route: "automations", label: "Automations", description: "Author workflows, DAGs, triggers, and schedules", keywords: "hatchet workflow cron webhook" },
+  // Labels follow the sidebar's decided-target vocabulary; the words they
+  // replaced stay searchable as keywords.
+  { route: "automations", label: "Routines", description: "Author workflows, DAGs, triggers, and schedules", keywords: "automations hatchet workflow cron webhook routine" },
   { route: "evaluations", label: "Evaluations", description: "Test governed agent behavior", keywords: "eval fixtures regression" },
   { route: "knowledge", label: "Knowledge", description: "Search and manage governed sources", keywords: "documents rag files citations" },
   { route: "memory", label: "Memory", description: "Browse, recall, and improve durable memory", keywords: "facts remember ingest kernel" },
   { route: "channels", label: "Channels", description: "Connect external message and event channels", keywords: "webhook messaging pairing" },
-  { route: "integrations", label: "Integrations", description: "Manage provider connections", keywords: "connectors oauth external" },
+  { route: "integrations", label: "Plugins", description: "Manage provider connections", keywords: "integrations connectors oauth external plugin" },
   { route: "build", label: "Build", description: "Author capabilities and model endpoints", keywords: "skills mcp models tools" },
+  { route: "build", routeId: "skills", label: "Skills", description: "What the agents know how to do, and where it came from", keywords: "build capabilities know-how provenance" },
+  { route: "build", routeId: "actions", label: "Actions", description: "Every governed verb an agent can reach", keywords: "build verbs registry approval" },
   { route: "operate", label: "Operate", description: "Monitor operational health", keywords: "operations health status" },
   { route: "account", label: "Account", description: "Manage your profile, security, and automation", keywords: "identity auth devices keys" },
   { route: "organisation", label: "Organisation", description: "Manage workspace members and policy", keywords: "team roles directory workspace" },
@@ -128,7 +134,7 @@ export function CommandPalette({
   );
   const options = useMemo<PaletteOption[]>(() => [
     ...visibleCommands.map((command) => ({
-      key: `command:${command.route}`,
+      key: `command:${command.route}${command.routeId ? `:${command.routeId}` : ""}`,
       kind: "command" as const,
       command,
     })),
@@ -164,7 +170,7 @@ export function CommandPalette({
 
   function choose(option: PaletteOption) {
     if (option.kind === "command") {
-      onNavigate(option.command.route, null);
+      onNavigate(option.command.route, option.command.routeId ?? null);
     } else {
       onNavigate(option.hit.route, boundedRouteId(option.hit.route_id));
     }
@@ -273,7 +279,7 @@ export function CommandPalette({
             >
               <p className="command-group-heading">Commands</p>
               {visibleCommands.map((command) => {
-                const key = `command:${command.route}`;
+                const key = `command:${command.route}${command.routeId ? `:${command.routeId}` : ""}`;
                 const index = optionIndexes.get(key) ?? 0;
                 const option = options[index];
                 return (
@@ -281,7 +287,7 @@ export function CommandPalette({
                     aria-selected={index === activeIndex}
                     className={index === activeIndex ? "command-row active" : "command-row"}
                     id={optionId(index)}
-                    key={command.route}
+                    key={key}
                     onClick={() => choose(option)}
                     onMouseEnter={() => setActiveIndex(index)}
                     role="option"

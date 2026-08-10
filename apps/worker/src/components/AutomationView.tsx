@@ -16,6 +16,7 @@ import {
   type WorkflowScheduleOccurrence,
   type WorkflowScheduleState,
   type WorkflowStepDefinition,
+  type WorkflowStepResult,
   type WorkflowSummary,
   type WorkflowTriggerDelivery,
   type WorkflowTriggerMutationResponse,
@@ -45,6 +46,24 @@ import {
   type GovernedResult,
   useExactApprovalFinalizer,
 } from "./ExactApprovalFinalizer";
+import {
+  checkDefinitionSteps,
+  checkDraftSteps,
+  type GraphProblem,
+} from "./routine/graphChecks";
+import {
+  coerceSampleText,
+  predicateSampleRefs,
+  selectBranchLabel,
+} from "./routine/predicates";
+import {
+  RoutineCanvas,
+  type CanvasEdgeRef,
+  type CanvasMode,
+  type TryWalkState,
+} from "./routine/RoutineCanvas";
+import { RecentlyChanged } from "./build/RecentlyChanged";
+import { StepInspector } from "./routine/StepInspector";
 import { RoutineThumb } from "./RoutineThumb";
 import { Topbar, Unavailable } from "./Shell";
 
@@ -161,6 +180,9 @@ export function AutomationsView() {
   const [pendingTrigger, setPendingTrigger] = useState<PendingTriggerMutation | null>(null);
   const [listNotice, setListNotice] = useState("");
   const [detailError, setDetailError] = useState("");
+  // A picker card with a problem opens the editor with that step selected, so
+  // the State word and the canvas agree about what to fix first.
+  const [focusStepId, setFocusStepId] = useState<string | null>(null);
   const exactApprovalInvalidator = useRef<() => void>(() => undefined);
   selectedWorkflowIdRef.current = selectedWorkflowId;
 
@@ -522,6 +544,30 @@ export function AutomationsView() {
     setMessage("");
   }
 
+  function closeEditor() {
+    invalidateExactApproval();
+    invalidatePendingOccurrenceRetry();
+    workflowLoadSequence.current += 1;
+    setSelectedWorkflowId(null);
+    setDraft(null);
+    setDirty(false);
+    setFocusStepId(null);
+    setBusy(false);
+    setMessage("");
+  }
+
+  // Discard reloads the saved baseline through the same governed read that
+  // opened the editor; an unsaved new draft has no baseline, so it closes.
+  function discardDraft() {
+    if (!draft) return;
+    if (selectedWorkflowIdRef.current && draft.id === selectedWorkflowIdRef.current) {
+      setDirty(false);
+      void openWorkflow(draft.id);
+      return;
+    }
+    closeEditor();
+  }
+
   function updateStep(index: number, patch: Partial<WorkflowStepDraft>) {
     changeDraft((current) => ({
       ...current,
@@ -564,7 +610,10 @@ export function AutomationsView() {
   }
 
   async function saveWorkflow() {
-    if (!draft) return;
+    // Re-entry guard: the keyboard path (⌘S in the canvas) is not gated by the
+    // Save button's disabled state, and a second governed save racing the
+    // first would double-submit.
+    if (!draft || busy) return;
     const errors = validateWorkflowDraft(draft);
     if (errors.length) {
       setMessage(errors.join(" "));
@@ -1059,7 +1108,11 @@ export function AutomationsView() {
         {surfaceState === "ready" && !draft && (
           <RoutinePicker
             onNew={newWorkflow}
-            onOpen={(id) => { invalidateExactApproval(); setSelectedWorkflowId(id); }}
+            onOpen={(id, focusStep) => {
+              invalidateExactApproval();
+              setFocusStepId(focusStep ?? null);
+              setSelectedWorkflowId(id);
+            }}
             onRefresh={() => void refreshList()}
             stats={stats}
             workflows={workflows}
@@ -1124,6 +1177,11 @@ export function AutomationsView() {
                 triggerDeliveries={triggerDeliveries}
                 triggerSecret={triggerSecret}
                 pendingTrigger={pendingTrigger}
+                sessionKey={selectedWorkflowId ?? "new-draft"}
+                initialFocusStepId={focusStepId}
+                onFocusStepConsumed={() => setFocusStepId(null)}
+                onBack={closeEditor}
+                onDiscard={discardDraft}
                 onDraft={changeDraft}
                 onStep={updateStep}
                 onAddStep={addStep}
@@ -1194,6 +1252,12 @@ interface WorkflowEditorProps {
   triggerDeliveries: WorkflowTriggerDelivery[];
   triggerSecret: { secret: string; webhookPath?: string } | null;
   pendingTrigger: PendingTriggerMutation | null;
+  /** Stable identity of the opened selection; resets canvas UI state. */
+  sessionKey: string;
+  initialFocusStepId: string | null;
+  onFocusStepConsumed: () => void;
+  onBack: () => void;
+  onDiscard: () => void;
   onDraft: (update: (current: WorkflowDraft) => WorkflowDraft) => void;
   onStep: (index: number, patch: Partial<WorkflowStepDraft>) => void;
   onAddStep: () => void;
@@ -1226,20 +1290,45 @@ interface WorkflowEditorProps {
 
 function WorkflowEditor(props: WorkflowEditorProps) {
   const { draft, verbs } = props;
+  // Canvas UI state. Keyed by sessionKey (the opened selection), NOT draft.id,
+  // so typing in the Workflow id field does not reset the selection.
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<CanvasEdgeRef | null>(null);
+  const [mode, setMode] = useState<CanvasMode>("edit");
+  const [specOpen, setSpecOpen] = useState(false);
+  const [tryValues, setTryValues] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setSelectedStepId(null);
+    setSelectedEdge(null);
+    setMode("edit");
+    setSpecOpen(false);
+    setTryValues({});
+  }, [props.sessionKey]);
+
+  // A picker card opened through a problem lands with that step selected.
+  useEffect(() => {
+    if (!props.initialFocusStepId) return;
+    setSelectedStepId(props.initialFocusStepId);
+    setSelectedEdge(null);
+    setMode("edit");
+    props.onFocusStepConsumed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.initialFocusStepId, props.sessionKey]);
+
   const authoredActions = useMemo(() => [
     ...WORKER_CONTROL_ACTIONS,
     ...verbs
       .map((verb) => verb.id)
       .filter((id) => !workflowActionLimitation(id)),
   ].filter((id, index, all) => all.indexOf(id) === index), [verbs]);
-  const actionIds = useMemo(() => new Set(authoredActions), [authoredActions]);
   const actionConsequences = useMemo(
     () => new Map(verbs.map((verb) => [verb.id, verb.consequence ?? "unknown"])),
     [verbs],
   );
-  const actionByStepId = useMemo(
-    () => new Map(draft.steps.map((step) => [step.id, step.action])),
-    [draft.steps],
+  const verbById = useMemo(
+    () => new Map(verbs.map((verb) => [verb.id, verb])),
+    [verbs],
   );
   const loopBodyIds = useMemo(
     () => new Set(
@@ -1249,10 +1338,261 @@ function WorkflowEditor(props: WorkflowEditorProps) {
     ),
     [draft.steps],
   );
+  // One shared check set drives the Problems strip, the card outlines, and the
+  // picker's State word (checkDefinitionSteps over the same rules).
+  const problems = useMemo(() => checkDraftSteps(draft.steps), [draft.steps]);
+
+  // Last run paints ONLY from the run record the kernel returned to this
+  // screen (POST execute). Loop iteration clones (id__N) fold onto their base
+  // card as a derived count; nothing else is aggregated or guessed.
+  const runSteps = useMemo(() => {
+    if (!props.lastExecution) return null;
+    const map = new Map<string, WorkflowStepResult>();
+    const cloneCounts = new Map<string, { total: number; failed: number; paused: number }>();
+    for (const record of props.lastExecution.steps) {
+      const cloneMatch = /^(.+)__[0-9]+$/.exec(record.id);
+      if (cloneMatch && draft.steps.some((step) => step.id.trim() === cloneMatch[1])) {
+        const tally = cloneCounts.get(cloneMatch[1]) ?? { total: 0, failed: 0, paused: 0 };
+        tally.total += 1;
+        if (record.status === "failed" || record.status === "error") tally.failed += 1;
+        if (record.status === "paused") tally.paused += 1;
+        cloneCounts.set(cloneMatch[1], tally);
+        continue;
+      }
+      map.set(record.id, record);
+    }
+    for (const [base, tally] of cloneCounts) {
+      if (map.has(base)) continue;
+      map.set(base, {
+        id: base,
+        status: tally.failed > 0 ? "failed" : tally.paused > 0 ? "paused" : "ok",
+        reason: `${tally.total} loop ${tally.total === 1 ? "item" : "items"}${
+          tally.failed > 0 ? `, ${tally.failed} failed` : ""
+        }`,
+      });
+    }
+    return map;
+  }, [props.lastExecution, draft.steps]);
+
+  // Try it: the same fail-closed predicate rules as control_flow.py, over
+  // sample values the user types. Nothing runs and nothing leaves boltrig.
+  const sampleRefs = useMemo(() => {
+    const refs: string[] = [];
+    for (const step of draft.steps) {
+      if (step.action.trim() !== "flow.branch") continue;
+      for (const ref of predicateSampleRefs(parseParamsOrEmpty(step.paramsText))) {
+        if (!refs.includes(ref)) refs.push(ref);
+      }
+    }
+    return refs;
+  }, [draft.steps]);
+
+  const tryWalk = useMemo<TryWalkState | null>(() => {
+    if (mode !== "try") return null;
+    const lookup = (ref: string) => {
+      const typed = tryValues[ref];
+      // An untyped sample mirrors a missing field: the engine resolves it to
+      // null, and a null compares fail-closed rather than matching by luck.
+      return typed === undefined || typed === "" ? null : coerceSampleText(typed);
+    };
+    const states = new Map<string, "ok" | "skipped">();
+    const labels = new Map<string, string>();
+    const steps = draft.steps.map((step) => ({
+      id: step.id.trim(),
+      action: step.action.trim(),
+      parents: step.parents,
+      branchArm: step.branchArm,
+      params: parseParamsOrEmpty(step.paramsText),
+    }));
+    for (const step of steps) {
+      if (step.parents.length === 0) {
+        states.set(step.id, "ok");
+        if (step.action === "flow.branch") {
+          labels.set(step.id, selectBranchLabel(step.params, lookup));
+        }
+      }
+    }
+    let changed = true;
+    let guard = 0;
+    while (changed && guard++ < 200) {
+      changed = false;
+      for (const step of steps) {
+        if (states.has(step.id)) continue;
+        const parents = step.parents;
+        // A parent that does not exist never finishes, so the step stays
+        // "not reached" — the honest mirror of a walk that cannot schedule it.
+        if (!parents.every((parent) => states.has(parent))) continue;
+        let skipped = parents.some((parent) => states.get(parent) === "skipped");
+        if (!skipped && step.branchArm) {
+          // Mirrors control_flow.branch_matches: the declared arm must match
+          // every parent that produced a branch label.
+          skipped = parents.some((parent) => (
+            labels.has(parent) && labels.get(parent) !== step.branchArm
+          ));
+        }
+        states.set(step.id, skipped ? "skipped" : "ok");
+        if (!skipped && step.action === "flow.branch") {
+          labels.set(step.id, selectBranchLabel(step.params, lookup));
+        }
+        changed = true;
+      }
+    }
+    return { states, labels };
+  }, [mode, draft.steps, tryValues]);
+
+  // Read-only spec pane: exactly what Save would send through the governed
+  // authoring route, or the preserved stored definition when Save is disabled.
+  const spec = useMemo(() => {
+    try {
+      return {
+        text: JSON.stringify(buildWorkflowRequest(draft), null, 2),
+        preserved: false,
+      };
+    } catch {
+      return {
+        text: JSON.stringify(
+          { id: draft.id, version: draft.version, definition: draft.baseDefinition },
+          null,
+          2,
+        ),
+        preserved: true,
+      };
+    }
+  }, [draft]);
+
+  // Header summary lines, both from real data only. The touches line derives
+  // adapter/agent names from VerbInfo.binding rather than any invented
+  // noun-to-product table; with no registry it is omitted, not guessed.
+  const triggerSummary = props.hasSchedule
+    ? `cron ${props.cron} ${props.timezone}`
+      + (props.scheduleState
+        ? ` · scheduler ${props.scheduleState.observed.status.replace("_", " ")}`
+        : "")
+      + (props.scheduleState?.observed.next_run_at
+        ? ` · next ${props.scheduleState.observed.next_run_at}`
+        : "")
+    : props.triggers.length > 0
+      ? `${props.triggers.length} event ${props.triggers.length === 1 ? "binding" : "bindings"} · also starts by hand`
+      : "Started by hand — nothing else starts it";
+  const touchesSummary = useMemo(() => {
+    if (verbs.length === 0) return null;
+    const touched: string[] = [];
+    let high = 0;
+    for (const step of draft.steps) {
+      const verb = verbById.get(step.action.trim());
+      if (!verb) continue;
+      if (verb.consequence === "high") high += 1;
+      const ref = verb.binding?.target_ref;
+      if (ref && !touched.includes(ref)) touched.push(ref);
+    }
+    const touchText = touched.length > 0
+      ? `Touches ${joinNames(touched)}`
+      : "Touches nothing outside boltrig";
+    const highText = high > 0
+      ? `${high} high-consequence ${high === 1 ? "step" : "steps"} can pause for approval`
+      : "no high-consequence steps";
+    return `${touchText} · ${highText}`;
+  }, [draft.steps, verbById, verbs.length]);
+
+  const stepIndexOf = (id: string) => (
+    draft.steps.findIndex((step) => step.id.trim() === id)
+  );
+
+  function addStepAfter(id: string) {
+    const newId = nextStepId(draft.steps);
+    const parent = draft.steps.find((step) => step.id.trim() === id);
+    props.onDraft((current) => {
+      const source = current.steps.find((step) => step.id.trim() === id);
+      if (!source) return current;
+      return {
+        ...current,
+        steps: [...current.steps, {
+          id: nextStepId(current.steps),
+          action: "",
+          parents: [id],
+          description: "",
+          paramsText: "{}",
+          loopBindingsText: "{}",
+          branchArm: source.action.trim() === "flow.branch" ? "true" : "",
+          parameterField: "params",
+          baseRecord: {},
+        }],
+      };
+    });
+    if (parent) {
+      setSelectedStepId(newId);
+      setSelectedEdge(null);
+    }
+  }
+
+  function duplicateStep(id: string) {
+    const source = draft.steps.find((step) => step.id.trim() === id);
+    if (!source || isPreservedUnsupportedStep(source)) return;
+    const existing = new Set(draft.steps.map((step) => step.id.trim()));
+    let copyId = `${id}-copy`;
+    let suffix = 2;
+    while (existing.has(copyId)) copyId = `${id}-copy-${suffix++}`;
+    props.onDraft((current) => ({
+      ...current,
+      steps: [...current.steps, {
+        ...source,
+        id: copyId,
+        baseRecord: {},
+      }],
+    }));
+    setSelectedStepId(copyId);
+    setSelectedEdge(null);
+  }
+
+  function removeStepById(id: string) {
+    const index = stepIndexOf(id);
+    if (index < 0) return;
+    if (isPreservedUnsupportedStep(draft.steps[index])) return;
+    props.onRemoveStep(index);
+    if (selectedStepId === id) setSelectedStepId(null);
+    setSelectedEdge((edge) => (
+      edge && (edge.from === id || edge.to === id) ? null : edge
+    ));
+  }
+
+  function linkSteps(from: string, to: string) {
+    if (from === to) return;
+    const index = stepIndexOf(to);
+    if (index < 0 || stepIndexOf(from) < 0) return;
+    const target = draft.steps[index];
+    if (isPreservedUnsupportedStep(target)) return;
+    if (target.parents.includes(from)) return;
+    props.onStep(index, { parents: [...target.parents, from] });
+  }
+
+  function removeEdge(from: string, to: string) {
+    const index = stepIndexOf(to);
+    if (index < 0) return;
+    const target = draft.steps[index];
+    if (isPreservedUnsupportedStep(target)) return;
+    props.onStep(index, {
+      parents: target.parents.filter((parent) => parent !== from),
+    });
+    setSelectedEdge(null);
+  }
+
+  function addStepAtEnd() {
+    const newId = nextStepId(draft.steps);
+    props.onAddStep();
+    setSelectedStepId(newId);
+    setSelectedEdge(null);
+    setMode("edit");
+  }
+
+  const problemsVisible = mode === "edit" && problems.length > 0;
   return (
     <main className="workflow-editor">
       <header className="workflow-editor-head">
         <div>
+          <button className="rc-back" onClick={props.onBack} type="button">
+            <svg aria-hidden fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="14"><polyline points="15 18 9 12 15 6" /></svg>
+            <span>Routines</span>
+          </button>
           <p className="eyebrow">{props.dirty ? "Unsaved draft" : "Saved definition"}</p>
           <input
             aria-label="Workflow id"
@@ -1261,8 +1601,15 @@ function WorkflowEditor(props: WorkflowEditorProps) {
             value={draft.id}
             onChange={(event) => props.onDraft((current) => ({ ...current, id: event.target.value }))}
           />
+          <div className="rc-head-sub">
+            <span className="rc-head-trigger">{triggerSummary}</span>
+            {touchesSummary && <span>{touchesSummary}</span>}
+          </div>
         </div>
         <div className="inline-actions">
+          {props.dirty && (
+            <button className="secondary-button" disabled={props.busy} onClick={props.onDiscard}>Discard</button>
+          )}
           <button className="secondary-button" disabled={props.busy || props.dirty || props.status === "archived"} onClick={props.onQueue}>Queue run</button>
           <button className="secondary-button" disabled={props.busy || props.dirty || props.status === "archived"} onClick={props.onRunNow}>Run now</button>
           <button className="primary-button" disabled={props.busy || draft.preservationErrors.length > 0} onClick={props.onSave}>{props.busy ? "Working…" : "Save"}</button>
@@ -1281,7 +1628,7 @@ function WorkflowEditor(props: WorkflowEditorProps) {
       <section className="dag-section">
         <div className="dag-heading">
           <div><p className="eyebrow">Dependency graph</p><p>{verbs.length ? `${verbs.length} scoped actions available` : "Scoped action registry unavailable; existing actions remain visible."}</p></div>
-          <button className="secondary-button" onClick={props.onAddStep}>Add step</button>
+          <button className="secondary-button" onClick={addStepAtEnd}>Add step</button>
         </div>
         {draft.preservationErrors.length > 0 && (
           <div className="workflow-preservation-warning" role="alert">
@@ -1290,89 +1637,187 @@ function WorkflowEditor(props: WorkflowEditorProps) {
             <span>Worker has disabled Save so the original step data cannot be lost.</span>
           </div>
         )}
-        {draft.steps.length === 0 ? <p className="dag-empty">Add the first governed step. An empty workflow is valid but does no work.</p> : (
-          <div className="dag-map">{draft.steps.map((step, index) => {
-            const limitation = workflowActionLimitation(step.action);
-            const locked = isPreservedUnsupportedStep(step);
-            const hasBranchParent = step.parents.some(
-              (parent) => actionByStepId.get(parent) === "flow.branch",
-            );
-            const branchEligible = Boolean(step.branchArm) || hasBranchParent;
-            const legacyBranch = Boolean(
-              step.branchArm && !["true", "false"].includes(step.branchArm),
-            );
-            return (
-            <article className={`dag-step${locked ? " unsupported" : ""}`} key={`${index}-${step.id}`} aria-label={`Step ${step.id || index + 1}`}>
-              <div className="dag-step-index">{index + 1}</div>
-              <div className="dag-step-fields">
-                <div className="dag-step-row">
-                  <label><span>Step id</span><input className="field-control" disabled={locked} value={step.id} onChange={(event) => props.onStep(index, { id: event.target.value })} /></label>
-                  <label><span>Governed action</span><input className="field-control" disabled={locked} list="worker-actions" value={step.action} onChange={(event) => props.onStep(index, { action: event.target.value })} /></label>
-                  <label><span>Depends on</span><select className="field-control parent-select" disabled={locked} multiple value={step.parents} onChange={(event) => props.onStep(index, { parents: [...event.target.selectedOptions].map((option) => option.value) })}>{draft.steps.filter((_, candidate) => candidate !== index).map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.id || "unnamed"}</option>)}</select></label>
+        <div className="rc-section">
+          <div className="rc-toolbar">
+            <div aria-label="Canvas mode" className="rc-seg" role="group">
+              {([["edit", "Edit"], ["last", "Last run"], ["try", "Try it"]] as [CanvasMode, string][]).map(([value, label]) => (
+                <button
+                  data-active={mode === value ? "true" : undefined}
+                  key={value}
+                  onClick={() => setMode(value)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className="rc-toolbar-spacer" />
+            <div className="rc-seg">
+              <button
+                data-active={specOpen ? "true" : undefined}
+                onClick={() => setSpecOpen((open) => !open)}
+                type="button"
+              >
+                {specOpen ? "Hide the spec" : "Show the spec"}
+              </button>
+            </div>
+          </div>
+          <div className="rc-body">
+            {draft.steps.length === 0 ? (
+              <p className="dag-empty" style={{ flex: 1, margin: 16 }}>
+                Add the first governed step. An empty workflow is valid but does no work.
+              </p>
+            ) : (
+              <RoutineCanvas
+                layoutKey={props.sessionKey}
+                locked={draft.preservationErrors.length > 0}
+                mode={mode}
+                problems={problems}
+                runSteps={mode === "last" ? runSteps : null}
+                selectedEdge={selectedEdge}
+                selectedStepId={selectedStepId}
+                steps={draft.steps}
+                tryWalk={tryWalk}
+                verbById={verbById}
+                onAddAfter={addStepAfter}
+                onDuplicateStep={duplicateStep}
+                onLinkSteps={linkSteps}
+                onRemoveEdge={removeEdge}
+                onRemoveStep={removeStepById}
+                // ⌘S honours the same guards as the Save button; saveWorkflow
+                // additionally refuses re-entry while a save is in flight.
+                onRequestSave={() => {
+                  if (!props.busy && draft.preservationErrors.length === 0) props.onSave();
+                }}
+                onSelectEdge={setSelectedEdge}
+                onSelectStep={(id) => {
+                  setSelectedStepId(id);
+                  if (id !== null) setSelectedEdge(null);
+                }}
+              />
+            )}
+            <aside aria-label="Routine rail" className="rc-rail">
+              {specOpen ? (
+                <div className="rc-spec">
+                  <span style={{ fontSize: "13px" }}>The spec</span>
+                  <p>
+                    A routine is data, not code.
+                    {spec.preserved
+                      ? " Shown as stored: the current draft cannot be serialized — either this definition is preserved read-only, or a field is not valid JSON yet."
+                      : " This is exactly what Save sends through the governed authoring route."}
+                  </p>
+                  <pre aria-label="Workflow spec JSON">{spec.text}</pre>
                 </div>
-                <label><span>Description</span><input className="field-control" disabled={locked} value={step.description} onChange={(event) => props.onStep(index, { description: event.target.value })} /></label>
-                {branchEligible && (
-                  <label>
-                    <span>Branch arm</span>
-                    <select
-                      aria-label={`Branch arm for ${step.id || `step ${index + 1}`}`}
-                      className="field-control"
-                      disabled={locked}
-                      value={step.branchArm}
-                      onChange={(event) => props.onStep(index, { branchArm: event.target.value })}
-                    >
-                      <option value="">Always</option>
-                      <option value="true">IF / true</option>
-                      <option value="false">ELSE / false</option>
-                      {legacyBranch && (
-                        <option value={step.branchArm}>Existing unsupported label: {step.branchArm}</option>
-                      )}
-                    </select>
-                    <small>Runs only when every branch-producing parent matches this arm.</small>
-                  </label>
-                )}
-                <label><span>Parameters (JSON object)</span><textarea className="field-control params-editor" disabled={locked} value={step.paramsText} onChange={(event) => props.onStep(index, { paramsText: event.target.value })} /></label>
-                {step.action === "flow.loop" && (
-                  <small className="loop-contract-note" role="note">
-                    Use exactly one item source: a literal <code>items</code> array or an
-                    ancestor <code>items_from</code> reference such as
-                    <code>$fetch.output.rows</code>. Boltrig runs at most 100 items in
-                    stable array order; the selected values must fit 256 KiB.
-                  </small>
-                )}
-                {(loopBodyIds.has(step.id) || step.loopBindingsText.trim() !== "{}") && (
-                  <label>
-                    <span>Loop bindings (JSON object)</span>
-                    <textarea
-                      aria-label={`Loop bindings for ${step.id || `step ${index + 1}`}`}
-                      className="field-control params-editor"
-                      disabled={locked}
-                      value={step.loopBindingsText}
-                      onChange={(event) => props.onStep(index, {
-                        loopBindingsText: event.target.value,
-                      })}
-                    />
-                    <small>
-                      Map an existing top-level parameter to <code>item</code> or
-                      <code>index</code>. Values are replaced as typed JSON before the
-                      governed action is schema-checked. Up to 32 bindings are allowed.
-                    </small>
-                  </label>
-                )}
-                {limitation && (
-                  <small className="unsupported-action" role="note">
-                    {limitation} {locked
-                      ? "Worker preserves this existing step exactly and locks its fields."
-                      : "Worker cannot author this action; choose a supported action before saving."}
-                  </small>
-                )}
-                {!limitation && !actionIds.has(step.action) && <small className="unresolved-action">This action is not in the caller-scoped registry. It will fail closed unless available at run time.</small>}
+              ) : (
+                <>
+                  {mode === "try" && (
+                    <div className="rc-try">
+                      <span style={{ fontSize: "13px" }}>Try it</span>
+                      <p>
+                        {sampleRefs.length > 0
+                          ? "Type sample values for the fields the branches compare. The lit path is the one the engine would take with those values."
+                          : "No branch in this routine compares a value, so every reachable step would run."}
+                      </p>
+                      {sampleRefs.map((ref) => (
+                        <label key={ref}>
+                          <span>{ref}</span>
+                          <input
+                            className="field-control"
+                            value={tryValues[ref] ?? ""}
+                            onChange={(event) => setTryValues((current) => ({
+                              ...current,
+                              [ref]: event.target.value,
+                            }))}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {mode === "last" && !runSteps && (
+                    <div className="rc-facts">
+                      <p className="rc-fact" data-tone="amber">
+                        <span className="rc-fact-dot" />
+                        <span>
+                          No run record is readable here. A per-step record is
+                          returned only when a run starts from this screen with
+                          Run now; queued and scheduled runs keep their receipts
+                          in Schedule occurrences below.
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                  <StepInspector
+                    cron={props.cron}
+                    draft={draft}
+                    hasSchedule={props.hasSchedule}
+                    loopBodyIds={loopBodyIds}
+                    mode={mode}
+                    problems={problems}
+                    runSteps={mode === "last" ? runSteps : null}
+                    scheduleState={props.scheduleState}
+                    selectedEdge={selectedEdge}
+                    selectedStepId={selectedStepId}
+                    timezone={props.timezone}
+                    triggers={props.triggers}
+                    verbById={verbById}
+                    verbs={verbs}
+                    onDuplicateStep={duplicateStep}
+                    onRemoveEdge={removeEdge}
+                    onRemoveStep={(index) => {
+                      const step = draft.steps[index];
+                      if (step) removeStepById(step.id.trim());
+                    }}
+                    onSelectStep={(id) => {
+                      setSelectedStepId(id);
+                      if (id !== null) setSelectedEdge(null);
+                    }}
+                    onStep={props.onStep}
+                  />
+                </>
+              )}
+            </aside>
+          </div>
+          <div className="rc-foot">
+            {problemsVisible ? (
+              <>
+                <span className="rc-problems-head">
+                  {problems.length === 1
+                    ? "One thing to fix"
+                    : `${problems.length} things to fix`}
+                </span>
+                {problems.map((problem) => (
+                  <button
+                    className="rc-problem"
+                    data-tone={problem.tone}
+                    key={`${problem.stepId}:${problem.text}`}
+                    onClick={() => {
+                      setMode("edit");
+                      setSelectedStepId(problem.stepId);
+                      setSelectedEdge(null);
+                    }}
+                    type="button"
+                  >
+                    <span className="rc-problem-dot" />
+                    <span style={{ flex: 1, minWidth: 0 }}>{problem.text}</span>
+                  </button>
+                ))}
+              </>
+            ) : (
+              <div className="rc-foot-ok">
+                <span className="rc-foot-dot" />
+                <p>
+                  {mode === "last"
+                    ? runSteps && props.lastExecution
+                      ? `Painted from run ${props.lastExecution.run_id} (${props.lastExecution.status}) — the record the kernel returned when it was started here.`
+                      : "Nothing is painted, because no per-step run record is readable for this routine in this session."
+                    : mode === "try"
+                      ? "Sample values only — nothing ran and nothing left boltrig. Comparisons follow the engine's fail-closed rules, so an unknown operator takes the false path."
+                      : "This drawing is the saved spec itself: every wire is a parents[] entry the engine walks, and every action stays behind the kernel."}
+                </p>
               </div>
-              <button className="danger-button" disabled={locked} aria-label={`Remove ${step.id || `step ${index + 1}`}`} onClick={() => props.onRemoveStep(index)}>Remove</button>
-            </article>
-            );
-          })}</div>
-        )}
+            )}
+          </div>
+        </div>
         <datalist id="worker-actions">{authoredActions.map((id) => <option value={id} key={id}>{actionConsequences.has(id) ? `${actionConsequences.get(id)} consequence` : "built-in workflow control"}</option>)}</datalist>
       </section>
       <section className="workflow-schedule">
@@ -1743,6 +2188,25 @@ function WorkflowTriggersPanel(props: WorkflowTriggersPanelProps) {
   );
 }
 
+function parseParamsOrEmpty(text: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(text.trim() || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Malformed JSON already surfaces through validateWorkflowDraft; the
+    // canvas simply treats it as an empty predicate rather than crashing.
+  }
+  return {};
+}
+
+function joinNames(items: string[]): string {
+  if (items.length === 0) return "nothing";
+  if (items.length === 1) return items[0];
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
 function scheduleOf(definition: Record<string, unknown>): { cron: string; timezone: string } | null {
   const value = definition.schedule;
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -1905,11 +2369,22 @@ export function RoutinePicker({
 }: {
   workflows: WorkflowSummary[];
   stats: Record<string, WorkflowRunStat>;
-  onOpen(id: string): void;
+  onOpen(id: string, focusStep?: string): void;
   onNew(): void;
   onRefresh(): void;
 }) {
   const [steps, setSteps] = useState<Record<string, WorkflowStepDefinition[]>>({});
+
+  // The State word runs the same shared graph checks as the canvas Problems
+  // strip, over the same steps already fetched for the thumbnail, so the card
+  // and the editor can never disagree about what needs fixing.
+  const problemsById = useMemo(() => {
+    const map: Record<string, GraphProblem[]> = {};
+    for (const [id, list] of Object.entries(steps)) {
+      map[id] = checkDefinitionSteps(list);
+    }
+    return map;
+  }, [steps]);
 
   // Summaries carry no steps, so the graph has to be read from each detail. A
   // failed read leaves that card without a drawing rather than inventing one.
@@ -1945,7 +2420,7 @@ export function RoutinePicker({
         </span>
         <span className="routine-new-title">New routine</span>
         <span className="routine-new-sub">
-          An empty routine with a chat in it. Ask it to read a run that went well, or say what should happen.
+          An empty routine on the canvas. Add steps, say what starts it, and save a version.
         </span>
       </button>
       {workflows.map((workflow) => {
@@ -1956,11 +2431,21 @@ export function RoutinePicker({
         const scheduled = Boolean(workflow.schedule);
         const observed = workflow.schedule_state?.observed.status;
         const needsYou = observed === "needs_action";
+        const problems = problemsById[workflow.id] ?? [];
+        // Precedence: broken graph > scheduler waiting on a person > archived
+        // > runs unattended on a schedule > started by hand.
+        const stateWord = problems.length > 0
+          ? `${problems.length} to fix`
+          : needsYou
+            ? "needs you"
+            : workflow.status === "archived"
+              ? "archived"
+              : scheduled ? "unattended" : "manual";
         return (
           <button
             className="routine-card"
             key={workflow.id}
-            onClick={() => onOpen(workflow.id)}
+            onClick={() => onOpen(workflow.id, problems[0]?.stepId)}
             type="button"
           >
             <span className="routine-thumb">
@@ -1987,12 +2472,11 @@ export function RoutinePicker({
                     ? ` \u00b7 scheduler ${workflow.schedule_state.observed.status.replace("_", " ")}`
                     : ""}
                 </span>
-                <span className="routine-state" data-tone={needsYou ? "needs" : undefined}>
-                  {needsYou
-                    ? "needs you"
-                    : workflow.status === "archived"
-                      ? "archived"
-                      : scheduled ? "unattended" : "manual"}
+                <span
+                  className="routine-state"
+                  data-tone={problems.length > 0 || needsYou ? "needs" : undefined}
+                >
+                  {stateWord}
                 </span>
                 <span className="routine-when" data-tone={failed ? "failed" : undefined}>
                   {routineWhen(stat?.last_run_at)}
@@ -2003,6 +2487,7 @@ export function RoutinePicker({
         );
       })}
     </div>
+    <RecentlyChanged />
     </>
   );
 }

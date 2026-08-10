@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({
   agentCapabilities: vi.fn(),
   auditTree: vi.fn(),
+  capabilityChangelog: vi.fn(),
+  hitl: vi.fn(),
   knowledgeAsset: vi.fn(),
   knowledgeAssets: vi.fn(),
   knowledgeProviders: vi.fn(),
@@ -112,6 +114,8 @@ const surfaces: Array<{
 
 beforeEach(() => {
   api.auditTree.mockResolvedValue({ root: null });
+  api.capabilityChangelog.mockResolvedValue({ changes: [] });
+  api.hitl.mockResolvedValue({ requests: [] });
   api.knowledgeProviders.mockResolvedValue({ providers: [] });
   api.runTopology.mockResolvedValue({ root: null });
   api.modelEndpoints.mockResolvedValue({ endpoints: [] });
@@ -279,10 +283,11 @@ describe("Worker exact-detail response ordering", () => {
     ));
 
     render(<KnowledgeView />);
-    const inspect = await screen.findAllByRole("button", { name: "Inspect" });
-    fireEvent.click(inspect[0]);
+    // Selection is the row itself in the file table; the detail opens in the
+    // right rail.
+    fireEvent.click(await screen.findByRole("button", { name: /Source A/ }));
     await waitFor(() => expect(api.knowledgeAsset).toHaveBeenCalledWith("asset-a"));
-    fireEvent.click(inspect[1]);
+    fireEvent.click(screen.getByRole("button", { name: /Source B/ }));
     await waitFor(() => expect(api.knowledgeAsset).toHaveBeenCalledWith("asset-b"));
 
     await act(async () => detailB.resolve({

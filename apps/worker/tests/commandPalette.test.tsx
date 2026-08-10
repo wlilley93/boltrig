@@ -34,7 +34,9 @@ describe("Worker command palette", () => {
     fireEvent.change(screen.getByLabelText("Search Worker"), {
       target: { value: "hatchet" },
     });
-    fireEvent.click(screen.getByRole("option", { name: /Automations/ }));
+    // "hatchet" is a keyword of the Routines entry, which the sidebar's
+    // decided-target vocabulary renamed from "Automations".
+    fireEvent.click(screen.getByRole("option", { name: /Routines/ }));
 
     expect(onNavigate).toHaveBeenCalledWith("automations", null);
     expect(onClose).toHaveBeenCalled();

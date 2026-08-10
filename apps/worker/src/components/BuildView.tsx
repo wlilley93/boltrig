@@ -1,83 +1,180 @@
 import { useEffect, useState } from "react";
-import type { CapabilityChange } from "@wlilley93/boltrig-web-sdk";
 
-import { client } from "../client";
-import { Topbar } from "./Shell";
+import { useRouteSelection } from "../useRouteSelection";
 import { AdaptersBuild } from "./build/AdaptersBuild";
+import { AgentTabsStrip } from "./build/AgentTabsStrip";
+import { ActionsTable } from "./build/ActionsTable";
+import { CapabilityRunner } from "./build/CapabilityRunner";
+import { ModelEndpointsBuild } from "./build/ModelEndpointsBuild";
+import { RecentlyChanged } from "./build/RecentlyChanged";
 import { RegistryBuild } from "./build/RegistryBuild";
 import { SkillsBuild } from "./build/SkillsBuild";
-import { ModelEndpointsBuild } from "./build/ModelEndpointsBuild";
+import { SkillsTable } from "./build/SkillsTable";
 import { SpawnRulesBuild } from "./build/SpawnRulesBuild";
-import { CapabilityRunner } from "./build/CapabilityRunner";
 
-type BuildTab = "run" | "registry" | "skills" | "adapters" | "models" | "routing" | "history";
+import "./build/build.css";
+
+// The decided target's Build surface: Skills and Actions are read-first tables
+// under the shared Agents | Skills | Actions | Knowledge strip, with authoring
+// kept behind row-open (and behind the remaining governed tabs, which the
+// design gives no home but which must stay reachable - losing them would lose
+// governed authoring). The tab is carried in the hash (#/build/<tab>) so the
+// strip on other surfaces can deep-link here.
+
+type BuildTab =
+  | "actions"
+  | "skills"
+  | "run"
+  | "registry"
+  | "adapters"
+  | "models"
+  | "routing";
+
+// The lower strip holds the authoring surfaces only. Skills and Actions are
+// reached from the AgentTabsStrip above it — listing them twice gave the
+// screen two highlighted "Skills" buttons that did the same thing.
+const BUILD_TABS: ReadonlyArray<readonly [BuildTab, string]> = [
+  ["run", "Run"],
+  ["registry", "Registry"],
+  ["adapters", "Adapters"],
+  ["models", "Models"],
+  ["routing", "Routing"],
+];
+
+const TAB_COPY: Record<BuildTab, { title: string; lead: string }> = {
+  actions: {
+    title: "Actions",
+    lead: "Everything Boltrig knows how to do, and what each action may touch. "
+      + "Adding a plugin adds words here — it never adds permission.",
+  },
+  skills: {
+    title: "Skills",
+    lead: "How to do things, written down and versioned. An agent can only be "
+      + "spawned with the skills its profile supports.",
+  },
+  run: {
+    title: "Run a capability",
+    lead: "Execute one governed verb with full receipts. High-consequence calls "
+      + "still pause for approval.",
+  },
+  registry: {
+    title: "Registry",
+    lead: "Author nouns, verbs and bindings as data. Activation and "
+      + "high-consequence changes still pass through the kernel.",
+  },
+  adapters: {
+    title: "Adapters",
+    lead: "Generated adapters stay inert until reviewed and activated.",
+  },
+  models: {
+    title: "Models",
+    lead: "Model endpoints the kernel may route completions through.",
+  },
+  routing: {
+    title: "Routing",
+    lead: "Spawn rules that decide which profile picks up new work.",
+  },
+};
+
+function asBuildTab(selection: string | null): BuildTab {
+  if (selection && BUILD_TABS.some(([id]) => id === selection)) {
+    return selection as BuildTab;
+  }
+  return "actions";
+}
 
 export function BuildView() {
-  const [tab, setTab] = useState<BuildTab>("run");
+  const [selection, setSelection] = useRouteSelection("build");
+  const tab = asBuildTab(selection);
+  // Row-open drops into the full governed authoring surface for that record;
+  // null means the read-first table, "" means a fresh record.
+  const [openSkillId, setOpenSkillId] = useState<string | null>(null);
+  const [openVerbId, setOpenVerbId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setOpenSkillId(null);
+    setOpenVerbId(null);
+  }, [tab]);
+
+  const copy = TAB_COPY[tab];
   return (
     <div className="page">
-      <Topbar title="Build" status="Governed authoring" />
-      <div className="page-content">
-        <div className="page-intro">
+      <div className="console-page">
+        <AgentTabsStrip active={tab === "skills" || tab === "actions" ? tab : null} />
+        <div className="console-head">
           <div>
-            <h2>Extend what Boltrig can do</h2>
-            <p>Author nouns, verbs, skills and adapters as data. Activation and high-consequence changes still pass through the kernel.</p>
+            <h1>{copy.title}</h1>
+            <p>{copy.lead}</p>
           </div>
+          {tab === "actions" && (
+            <a className="console-primary" href="#/integrations">
+              <PlusIcon />
+              <span>Add a plugin</span>
+            </a>
+          )}
+          {tab === "skills" && openSkillId === null && (
+            <button className="console-primary" onClick={() => setOpenSkillId("")} type="button">
+              <PlusIcon />
+              <span>Record a skill</span>
+            </button>
+          )}
         </div>
-        <nav className="tabs" aria-label="Build sections">
-          {(["run", "registry", "skills", "adapters", "models", "routing", "history"] as const).map((item) => (
+        <nav aria-label="Build sections" className="console-seg">
+          {BUILD_TABS.map(([id, label]) => (
             <button
-              className={tab === item ? "active" : ""}
-              aria-current={tab === item ? "page" : undefined}
-              onClick={() => setTab(item)}
-              key={item}
+              aria-current={tab === id ? "page" : undefined}
+              data-active={tab === id ? "true" : undefined}
+              key={id}
+              onClick={() => setSelection(id)}
+              type="button"
             >
-              {item[0].toUpperCase() + item.slice(1)}
+              {label}
             </button>
           ))}
         </nav>
+        {tab === "actions" && (
+          openVerbId === null
+            ? <ActionsTable onOpen={setOpenVerbId} />
+            : (
+              <>
+                <div className="build-back-row">
+                  <button className="build-back" onClick={() => setOpenVerbId(null)} type="button">
+                    ← Back to the actions list
+                  </button>
+                </div>
+                <RegistryBuild initialVerbId={openVerbId || null} />
+              </>
+            )
+        )}
+        {tab === "skills" && (
+          openSkillId === null
+            ? <SkillsTable onOpen={setOpenSkillId} />
+            : (
+              <>
+                <div className="build-back-row">
+                  <button className="build-back" onClick={() => setOpenSkillId(null)} type="button">
+                    ← Back to the skills list
+                  </button>
+                </div>
+                <SkillsBuild initialSkillId={openSkillId || null} />
+              </>
+            )
+        )}
         {tab === "run" && <CapabilityRunner />}
         {tab === "registry" && <RegistryBuild />}
-        {tab === "skills" && <SkillsBuild />}
         {tab === "adapters" && <AdaptersBuild />}
         {tab === "models" && <ModelEndpointsBuild />}
         {tab === "routing" && <SpawnRulesBuild />}
-        {tab === "history" && <CapabilityHistory />}
+        <RecentlyChanged />
       </div>
     </div>
   );
 }
 
-function CapabilityHistory() {
-  const [changes, setChanges] = useState<CapabilityChange[]>([]);
-  const [message, setMessage] = useState("");
-
-  function refresh() {
-    setMessage("");
-    void client.capabilityChangelog()
-      .then((result) => setChanges(result.changes))
-      .catch(() => setMessage("Capability history is unavailable for this identity."));
-  }
-
-  useEffect(refresh, []);
+function PlusIcon() {
   return (
-    <section className="settings-card">
-      <div className="section-heading">
-        <div><p className="eyebrow">Governed history</p><h2>Capability changes</h2></div>
-        <button className="secondary-button" onClick={refresh}>Refresh</button>
-      </div>
-      <p className="muted small">Recent authoring actions from the tamper-evident audit stream. Raw configuration diffs and rollback remain in Operator.</p>
-      {message && <p className="notice" role="status">{message}</p>}
-      <div className="data-list" aria-label="Capability changes">
-        {changes.map((change) => (
-          <div className="data-row static" key={`${change.ts}-${change.actor}-${change.action}-${change.ref}`}>
-            <span className={`activity-dot ${change.status === "ok" ? "ok" : "paused"}`} />
-            <span className="data-row-copy"><strong>{change.action}</strong><small>{change.actor} · {new Date(change.ts).toLocaleString()}</small></span>
-            <span className="row-meta">{change.ref || change.status}</span>
-          </div>
-        ))}
-        {changes.length === 0 && !message && <p className="muted">No capability changes are visible.</p>}
-      </div>
-    </section>
+    <svg aria-hidden fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="2" viewBox="0 0 24 24" width="14">
+      <line x1="12" x2="12" y1="5" y2="19" /><line x1="5" x2="19" y1="12" y2="12" />
+    </svg>
   );
 }

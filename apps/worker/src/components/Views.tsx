@@ -6,9 +6,7 @@ import { DesktopUpdater } from "./DesktopUpdater";
 import { InboxQueue } from "./InboxHitl";
 import { Topbar, Unavailable } from "./Shell";
 import { SettingsSectionPane } from "./SettingsSurface";
-import { AccountView } from "./AccountView";
-import { OrganisationView } from "./OrganisationView";
-import { KnowledgeView } from "./ParityViews";
+import { DeveloperDetailsRow } from "./settings/rowKit";
 import type { SettingsSection } from "../settingsSections";
 
 export function InboxView() {
@@ -22,12 +20,19 @@ export function SettingsView({
   section?: SettingsSection;
   onContextChanged?(): void;
 }) {
-  // Four sections already have a working surface, so settings routes to them
-  // rather than redrawing a credential, roster or knowledge view to change its
-  // frame. The other six are drawn here on the console idiom.
-  if (section === "you") return <AccountView onContextChanged={onContextChanged} />;
-  if (section === "organisation") return <OrganisationView />;
-  if (section === "knowledge") return <KnowledgeView />;
+  // Settings uses one calm row-based surface. The larger legacy account,
+  // organisation and knowledge dashboards are still available from their
+  // dedicated app routes where they are needed, but are not the default
+  // settings experience.
+  if (section === "you" || section === "organisation" || section === "knowledge") {
+    return (
+      <div className="page">
+        <div className="page-content narrow">
+          <SettingsSectionPane section={section} />
+        </div>
+      </div>
+    );
+  }
   if (section === "advanced") {
     return (
       <div className="page">
@@ -57,6 +62,16 @@ export function SettingsView({
                 <li>Every command requires per-invocation approval</li>
                 <li>Artifact saves use a native user dialog</li>
               </ul>
+            </section>
+            <section className="settings-card">
+              <p className="eyebrow">Presentation</p>
+              <h2>Developer details</h2>
+              <p>
+                Shows the technical register everywhere it exists: verb chips,
+                raw model ids, run identifiers. The plain-language reading stays
+                the default.
+              </p>
+              <DeveloperDetailsRow />
             </section>
             <section className="settings-card">
               <p className="eyebrow">Session</p>

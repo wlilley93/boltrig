@@ -75,4 +75,16 @@ describe("Worker mobile settings", () => {
     fireEvent.click(screen.getByRole("button", { name: /Today/ }));
     expect(onLeave).toHaveBeenCalledTimes(1);
   });
+
+  it("answers the settings search with rows, replacing the section list", () => {
+    renderSettings();
+    fireEvent.change(screen.getByRole("textbox", { name: "Search every setting" }), {
+      target: { value: "bring back" },
+    });
+    // Grouped row-level results stand in for the list while the query is live.
+    expect(screen.queryByRole("button", { name: /Keyboard shortcuts/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Bring back a closed chat/ }));
+    // The result opens the owning section's detail screen.
+    expect(screen.getByText(settingsEntry("archived").title)).toBeTruthy();
+  });
 });

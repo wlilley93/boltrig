@@ -85,6 +85,48 @@ describe("mobile surface", () => {
       }),
     });
     expect(screen.getByText("Raise 3 tickets")).toBeTruthy();
+    // Without a wired responder the row stays read-only: the surface never
+    // draws a button that goes nowhere.
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+  });
+
+  it("answers an approval inline when a responder is wired", async () => {
+    const onRespondHitl = vi.fn().mockResolvedValue(true);
+    renderMobile({
+      onRespondHitl,
+      turn: turnWith({
+        hitls: [{
+          hitlRequestId: "h1",
+          kind: "approval",
+          question: "Raise 3 tickets",
+          options: [],
+        }],
+      }),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(onRespondHitl).toHaveBeenCalledWith("h1", "approve");
+    expect(await screen.findByText(/was recorded/)).toBeTruthy();
+    // The optimistic settle removes the buttons once the kernel accepted it.
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+  });
+
+  it("reverts the optimistic settle when the kernel refuses the decision", async () => {
+    const onRespondHitl = vi.fn().mockResolvedValue(false);
+    renderMobile({
+      onRespondHitl,
+      turn: turnWith({
+        hitls: [{
+          hitlRequestId: "h1",
+          kind: "approval",
+          question: "Raise 3 tickets",
+          options: [],
+        }],
+      }),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    expect(await screen.findByText(/was not accepted/)).toBeTruthy();
   });
 
   it("offers stop while a run is live and send otherwise", () => {

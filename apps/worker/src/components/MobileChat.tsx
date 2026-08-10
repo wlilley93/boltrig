@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import type { ChatMessage, NormalizedTurn } from "@wlilley93/boltrig-web-sdk";
+import { useEffect, useRef, useState } from "react";
+import type { ChatMessage, HitlEntry, NormalizedTurn } from "@wlilley93/boltrig-web-sdk";
 
 import { FamiliarBadge } from "./familiar/FamiliarBadge";
+import "./chat/chat.css";
 
 // The mobile conversation surface.
 //
@@ -20,6 +21,71 @@ function StateWord({ state }: { state: "done" | "waiting" | "running" }) {
   );
 }
 
+/** A pending decision with the same inline approve/decline the console chat
+ * offers, kept behaviorally consistent: real options from the request, an
+ * optimistic settle that reverts if the kernel refuses, and no buttons at all
+ * when no responder is wired. */
+function MobilePendingRow({
+  hitl,
+  onRespond,
+}: {
+  hitl: HitlEntry;
+  onRespond?(id: string, decision: string): Promise<boolean>;
+}) {
+  const [phase, setPhase] = useState<"open" | "sending" | "done" | "failed">("open");
+  const [decision, setDecision] = useState("");
+  const inFlight = useRef(false);
+
+  const provided = hitl.options.filter(Boolean);
+  const choices = provided.length > 0
+    ? provided
+    : hitl.kind === "approval" ? ["approve", "deny"] : [];
+
+  async function respond(choice: string) {
+    if (!onRespond || inFlight.current || phase === "sending" || phase === "done") return;
+    inFlight.current = true;
+    setDecision(choice);
+    setPhase("sending");
+    try {
+      setPhase(await onRespond(hitl.hitlRequestId, choice) ? "done" : "failed");
+    } catch {
+      setPhase("failed");
+    } finally {
+      inFlight.current = false;
+    }
+  }
+
+  return (
+    <div className="m-pending-row">
+      <span className="m-dot" data-tone={phase === "done" ? "done" : "waiting"} />
+      <span className="m-pending-label">{hitl.question}</span>
+      {onRespond && choices.length > 0 && (phase === "open" || phase === "failed") && (
+        <div className="m-pending-actions">
+          {choices.map((choice) => (
+            <button
+              className={/^(approve|allow|yes|confirm)$/i.test(choice) ? "m-approve" : "m-defer"}
+              key={choice}
+              onClick={() => void respond(choice)}
+              type="button"
+            >
+              {choice.charAt(0).toUpperCase() + choice.slice(1)}
+            </button>
+          ))}
+        </div>
+      )}
+      {phase === "sending" && <p className="m-pending-note" role="status">Sending "{decision}"…</p>}
+      {phase === "done" && (
+        <p className="m-pending-note" role="status">Your decision "{decision}" was recorded.</p>
+      )}
+      {phase === "failed" && (
+        <p className="m-pending-note" role="alert">
+          The response was not accepted. It may already be settled; check the Inbox.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function MobileChat({
   title,
   subtitle,
@@ -30,6 +96,7 @@ export function MobileChat({
   busy,
   composerValue,
   onComposerChange,
+  onRespondHitl,
 }: {
   title: string;
   subtitle: string;
@@ -40,6 +107,10 @@ export function MobileChat({
   busy: boolean;
   composerValue: string;
   onComposerChange(value: string): void;
+  /** Governed approval responder (client.respondHitl behind it); resolves
+      true when the kernel accepted the decision. Absent, pending rows stay
+      read-only - the surface never draws a button that goes nowhere. */
+  onRespondHitl?(id: string, decision: string): Promise<boolean>;
 }) {
   // The mobile surface owns the whole screen: the shell's floating menu button
   // would otherwise sit on top of the back control. The flag is on the root so
@@ -162,10 +233,11 @@ export function MobileChat({
         {turn.hitls.length > 0 && (
           <div className="m-card m-pending">
             {turn.hitls.map((hitl) => (
-              <div className="m-pending-row" key={hitl.hitlRequestId}>
-                <span className="m-dot" data-tone="waiting" />
-                <span className="m-pending-label">{hitl.question}</span>
-              </div>
+              <MobilePendingRow
+                hitl={hitl}
+                key={hitl.hitlRequestId}
+                onRespond={onRespondHitl}
+              />
             ))}
           </div>
         )}

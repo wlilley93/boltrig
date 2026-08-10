@@ -10,12 +10,14 @@ const api = vi.hoisted(() => ({
   capabilities: vi.fn(),
   auditTree: vi.fn(),
   assignWork: vi.fn(),
+  capabilityChangelog: vi.fn(),
   channels: vi.fn(),
   createWorkflowTrigger: vi.fn(),
   createWork: vi.fn(),
   disableWorkflowTrigger: vi.fn(),
   disconnectIntegration: vi.fn(),
   executeWorkflow: vi.fn(),
+  hitl: vi.fn(),
   integrationCatalogue: vi.fn(),
   integrationConnections: vi.fn(),
   invokeApprovalState: vi.fn(),
@@ -88,6 +90,10 @@ beforeEach(() => {
     finalizations: [],
   });
   api.modelEndpoints.mockResolvedValue({ endpoints: [] });
+  // The Agents table derives its only real "asking" signal from the pending
+  // Inbox list; an empty list means no waiting state is claimed.
+  api.hitl.mockResolvedValue({ requests: [] });
+  api.capabilityChangelog.mockResolvedValue({ changes: [] });
   api.permanentFleet.mockResolvedValue({
     status: "not_configured",
     hierarchy: null,
@@ -535,19 +541,26 @@ describe("Worker Knowledge approval continuation", () => {
     expect(await screen.findByText("Provider enabled.")).toBeTruthy();
   });
 
-  it("replays only the exact approved source erasure", async () => {
+  it("replays only the exact approved source erasure from the detail rail", async () => {
+    const asset = {
+      id: "asset-a",
+      title: "Source A",
+      filename: "source-a.txt",
+      asset_type: "text",
+      revision_id: "revision-a",
+      source_kind: "upload",
+      segment_count: 1,
+      created_at: "2026-01-01T00:00:00Z",
+    };
     api.knowledgeAssets.mockResolvedValue({
-      assets: [{
-        id: "asset-a",
-        title: "Source A",
-        filename: "source-a.txt",
-        asset_type: "text",
-        revision_id: "revision-a",
-        source_kind: "upload",
-        segment_count: 1,
-        created_at: "2026-01-01T00:00:00Z",
-      }],
+      assets: [asset],
       next_offset: null,
+    });
+    api.knowledgeAsset.mockResolvedValue({
+      asset,
+      segments: [],
+      projections: [],
+      provenance: { source_kind: "upload" },
     });
     api.knowledgeProviders.mockResolvedValue({ providers: [] });
     api.eraseKnowledgeAsset
@@ -563,8 +576,11 @@ describe("Worker Knowledge approval continuation", () => {
     api.invokeApprovalState.mockResolvedValue({ status: "approved" });
 
     render(<KnowledgeView />);
-    fireEvent.click(await screen.findByRole("button", { name: "Erase" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm erase" }));
+    // The remove affordance lives on the selected file's rail and keeps the
+    // governed two-step arm before the kernel is asked anything.
+    fireEvent.click(await screen.findByRole("button", { name: /Source A/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove this file" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm removal" }));
     fireEvent.click(await screen.findByRole("button", {
       name: "Check approval and apply exact change",
     }));
@@ -1520,7 +1536,8 @@ describe("Worker Familiar identity", () => {
     });
 
     render(<AgentsView />);
-    expect(await screen.findByText("retired · standard")).toBeTruthy();
+    expect(await screen.findByText("retired")).toBeTruthy();
+    expect(screen.getByText("standard")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Restore profile" }));
     await waitFor(() => expect(api.restoreAgentCapability).toHaveBeenCalledWith("archivist"));
     expect(await screen.findByText(/Restore is waiting for approval/)).toBeTruthy();

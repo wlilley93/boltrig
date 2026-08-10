@@ -69,7 +69,9 @@ export const SETTINGS_SECTIONS: SettingsEntry[] = [
     id: "health",
     label: "Health",
     title: "Health",
-    lead: "What is ready, what is degraded, and what this build does not do yet.",
+    // The design's lead, kept because the pane now actually draws both halves:
+    // the readiness readings and the boundaries card.
+    lead: "What is working, and what boltrig cannot do yet.",
   },
   {
     id: "organisation",

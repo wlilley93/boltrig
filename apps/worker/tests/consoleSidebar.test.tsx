@@ -43,8 +43,6 @@ describe("console sidebar", () => {
     const onRoute = renderSidebar();
 
     // The decided target's sidebar carries four surfaces and no second group.
-    // Everything else stays reachable from the account menu and the palette,
-    // which the "reaches the rest" case below covers.
     const expectations: Array<[string, WorkerRoute]> = [
       ["Chat", "chat"],
       ["Agents", "agents"],
@@ -58,25 +56,22 @@ describe("console sidebar", () => {
     }
   });
 
-  it("keeps every quiet surface reachable from the account menu", () => {
+  it("keeps the account menu small and canonical", () => {
     api.readiness.mockResolvedValue({ status: "ready", checks: {} });
     const onRoute = renderSidebar();
 
     const expectations: Array<[string, WorkerRoute]> = [
-      ["Home", "home"],
-      ["Build", "build"],
-      ["Evaluations", "evaluations"],
-      ["Channels", "channels"],
-      ["Operate", "operate"],
-      ["Account", "account"],
-      ["Organisation", "organisation"],
+      ["Spend remaining", "settings"],
+      ["Invite someone", "organisation"],
       ["Settings", "settings"],
     ];
     for (const [label, route] of expectations) {
       fireEvent.click(screen.getByRole("button", { name: /Account menu/ }));
-      fireEvent.click(screen.getByRole("button", { name: label }));
+      fireEvent.click(screen.getByRole("menuitem", { name: label }));
       expect(onRoute).toHaveBeenLastCalledWith(route);
     }
+    fireEvent.click(screen.getByRole("button", { name: /Account menu/ }));
+    expect(screen.getByRole("menuitem", { name: "Log out" })).toBeTruthy();
     // The Operator handoff stays a plain visible link, never a re-implemented
     // surface (WORKER-PARITY.md) - and exactly one, so role queries stay strict.
     expect(screen.getByRole("link", { name: "Open Operator" })

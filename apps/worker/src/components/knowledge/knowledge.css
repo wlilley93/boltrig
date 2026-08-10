@@ -1,0 +1,220 @@
+/* Knowledge (design lines 897-1045): a 900px centred file surface with a
+   330px right detail rail. Tokens only - the console idiom classes it builds
+   on (console-page, console-table, console-seg, console-foot) live in
+   styles.css. */
+
+.knowledge-page { display: flex; overflow: hidden; }
+.knowledge-main { flex: 1; min-width: 0; overflow-y: auto; }
+.knowledge-col { max-width: 900px; gap: 24px; }
+
+.knowledge-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 330px;
+  flex: 0 0 330px;
+  padding: 40px 20px;
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+}
+@media (max-width: 1100px) {
+  .knowledge-page { flex-direction: column; overflow-y: auto; }
+  .knowledge-main { flex: none; overflow: visible; }
+  .knowledge-rail {
+    width: auto;
+    flex: none;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}
+
+.knowledge-actions { display: flex; align-items: center; gap: 10px; }
+.knowledge-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: 9px;
+}
+.knowledge-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+}
+/* Ring on the wrapper, not suppressed: the input is borderless by design but
+   must still show where focus is. */
+.knowledge-search:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* File table columns beyond the shared console idiom. The design's Quoted and
+   Size columns are omitted: neither figure is served by any endpoint. */
+.knowledge-icon-col { display: flex; width: 18px; flex: 0 0 18px; color: var(--text-4); }
+.knowledge-num {
+  width: 74px;
+  flex: 0 0 74px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.knowledge-when {
+  width: 86px;
+  flex: 0 0 86px;
+  color: var(--text-4);
+  font-size: 12.5px;
+  text-align: right;
+}
+.console-row[data-selected="true"] { background: var(--hover); }
+
+/* The upload receipt card: an accent border while the one real request is in
+   flight, then rows stating only what the commit response reported. */
+.knowledge-upload-card {
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--card);
+  overflow: hidden;
+}
+.knowledge-upload-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.knowledge-upload-head > strong { flex: 1; font-size: 13.5px; font-weight: 400; }
+.knowledge-upload-head > span { color: var(--text-3); font-size: 12.5px; }
+.knowledge-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 16px;
+  font-size: 13px;
+}
+.knowledge-upload-row + .knowledge-upload-row { border-top: 1px solid var(--border); }
+.knowledge-upload-row > i {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  border: 1.5px solid var(--border-2);
+  border-radius: 99px;
+  font-size: 10px;
+  font-style: normal;
+}
+.knowledge-upload-row[data-done="true"] > i {
+  border: 0;
+  background: var(--green);
+  color: var(--bg);
+}
+.knowledge-upload-row > span { flex: 1; }
+.knowledge-upload-row > small {
+  color: var(--text-4);
+  font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.knowledge-upload-dismiss {
+  align-self: flex-start;
+  margin: 10px 16px 12px;
+  padding: 5px 11px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--card-2);
+  color: var(--text-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* Right rail sections. */
+.knowledge-rail-head { display: flex; align-items: flex-start; gap: 8px; }
+.knowledge-rail-head > div { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.knowledge-rail-title { font-size: 15px; line-height: 1.35; }
+.knowledge-rail-meta { color: var(--text-3); font-size: 12.5px; }
+.knowledge-rail-section { display: flex; flex-direction: column; gap: 9px; }
+.knowledge-rail-label { display: flex; align-items: center; color: var(--text-2); font-size: 13px; }
+.knowledge-rail-label > span:last-child { flex: 1; }
+.knowledge-rail-label > small { color: var(--text-4); font-size: 12px; }
+.knowledge-rail-note { color: var(--text-4); font-size: 12px; line-height: 1.5; }
+.knowledge-original {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+.knowledge-original > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.knowledge-original > button {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--card-2);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.knowledge-passages {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  overflow: hidden;
+}
+.knowledge-passage { display: flex; flex-direction: column; gap: 5px; padding: 11px 13px; }
+.knowledge-passage + .knowledge-passage { border-top: 1px solid var(--border); }
+.knowledge-passage > small { color: var(--text-4); font-size: 11.5px; }
+.knowledge-passage > p { margin: 0; color: var(--text-2); font-size: 12.5px; line-height: 1.5; }
+.knowledge-kept { color: var(--text-3); font-size: 12.5px; line-height: 1.5; }
+.knowledge-kept dd {
+  margin: 0 0 4px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.knowledge-kept dt { color: var(--text-4); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+
+.knowledge-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 13px;
+  border: 1px solid var(--border-2);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--red);
+  font-size: 13px;
+  cursor: pointer;
+}
+.knowledge-remove:hover { border-color: var(--red); }
+.knowledge-remove[data-armed="true"] {
+  border-color: var(--red);
+  background: var(--red);
+  color: #fff;
+}
+.knowledge-remove-note { margin-top: -12px; color: var(--text-4); font-size: 12px; line-height: 1.5; }
+
+/* What it remembers. */
+.knowledge-forget {
+  flex: 0 0 auto;
+  padding: 5px 11px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--card-2);
+  color: var(--text-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+.knowledge-forget:hover { color: var(--red); }
+.knowledge-forget[data-armed="true"] { background: var(--red); color: #fff; }

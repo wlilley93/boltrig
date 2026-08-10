@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 
 import { SETTINGS_SECTIONS, settingsEntry, type SettingsSection } from "../settingsSections";
-import { SettingsSectionPane } from "./SettingsSurface";
+import { SettingsSearchResults, SettingsSectionPane } from "./SettingsSurface";
 
 // Mobile Settings and its detail screen. The decided target draws these as an
 // iOS list: a back control naming where it returns to, a large title, an
-// identity row, then one grouped card of sections. The detail screen reuses the
-// console pane's CONTENT — the same real readings of budgets, readiness and the
-// archive — under a mobile head, so the two surfaces cannot drift apart on what
-// they claim is true.
+// identity row, a search over every setting row, then one grouped card of
+// sections. The detail screen reuses the console pane's CONTENT — the same
+// real readings of budgets, readiness and the archive — under a mobile head,
+// so the two surfaces cannot drift apart on what they claim is true. While a
+// query is live the results replace the section list, as the design's pane
+// does.
 
 function Chevron() {
   return (
@@ -43,6 +45,7 @@ export function MobileSettings({
   onLeave(): void;
 }) {
   const [open, setOpen] = useState<SettingsSection | null>(null);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     document.documentElement.dataset.mobileSurface = open ? "settings-detail" : "settings";
@@ -80,14 +83,37 @@ export function MobileSettings({
           <Chevron />
         </div>
 
-        <div className="m-card">
-          {SETTINGS_SECTIONS.map((entry) => (
-            <button className="m-settings-row" key={entry.id} onClick={() => setOpen(entry.id)} type="button">
-              <span className="m-settings-label">{entry.label}</span>
-              <Chevron />
-            </button>
-          ))}
+        <div className="settings-inline-search">
+          <svg aria-hidden fill="none" height="14" stroke="var(--text-4)" strokeLinecap="round" strokeWidth="2" viewBox="0 0 24 24" width="14">
+            <circle cx="11" cy="11" r="7" />
+            <line x1="16.5" x2="21" y1="16.5" y2="21" />
+          </svg>
+          <input
+            aria-label="Search every setting"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search every setting"
+            value={query}
+          />
         </div>
+
+        {query.trim() ? (
+          <SettingsSearchResults
+            onOpenSection={(section) => {
+              setQuery("");
+              setOpen(section);
+            }}
+            query={query}
+          />
+        ) : (
+          <div className="m-card">
+            {SETTINGS_SECTIONS.map((entry) => (
+              <button className="m-settings-row" key={entry.id} onClick={() => setOpen(entry.id)} type="button">
+                <span className="m-settings-label">{entry.label}</span>
+                <Chevron />
+              </button>
+            ))}
+          </div>
+        )}
 
         <span className="m-settings-foot">
           Every setting is one search away. Nothing is hidden, only quiet.

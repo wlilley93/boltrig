@@ -12,6 +12,7 @@ import { ChatView } from "./components/ChatView";
 import { CommandPalette } from "./components/CommandPalette";
 import { Sidebar } from "./components/Shell";
 import { notifyWorkerContextChanged } from "./components/WorkerGlobalContext";
+import { globalShortcutFor } from "./shortcuts";
 import {
   conversationFromHash,
   navigate,
@@ -19,7 +20,6 @@ import {
   type WorkerRoute,
 } from "./routes";
 
-const AccountView = lazyNamed(() => import("./components/AccountView"), "AccountView");
 const AgentsView = lazyNamed(() => import("./components/ParityViews"), "AgentsView");
 const AutomationsView = lazyNamed(() => import("./components/AutomationView"), "AutomationsView");
 const BuildView = lazyNamed(() => import("./components/BuildView"), "BuildView");
@@ -34,6 +34,7 @@ const OperateView = lazyNamed(() => import("./components/OperationsView"), "Oper
 const OrganisationView = lazyNamed(() => import("./components/OrganisationView"), "OrganisationView");
 const RunsView = lazyNamed(() => import("./components/ParityViews"), "RunsView");
 const SettingsView = lazyNamed(() => import("./components/Views"), "SettingsView");
+const SettingsSearchResults = lazyNamed(() => import("./components/SettingsSurface"), "SettingsSearchResults");
 const WorkView = lazyNamed(() => import("./components/ParityViews"), "WorkView");
 
 // Two initials from whatever the identity gives us — an email, a handle or a
@@ -57,6 +58,12 @@ export function App() {
   // Which settings section is open. The sidebar and the pane both read it, so
   // it lives above them rather than inside either.
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("you");
+  // The settings search query lives here too: the sidebar input feeds it and
+  // the page swaps the section pane for row-level results while it is set.
+  const [settingsQuery, setSettingsQuery] = useState("");
+  useEffect(() => {
+    if (route !== "settings") setSettingsQuery("");
+  }, [route]);
   const phone = useMediaQuery("(max-width: 640px)");
   const { identity } = useWorkerGlobalContext();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -108,14 +115,18 @@ export function App() {
   }, [refreshConversations]);
 
   useEffect(() => {
+    // Global bindings come from the shortcut registry so the Shortcuts
+    // screen and the behaviour cannot disagree.
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      const hit = globalShortcutFor(event);
+      if (!hit) return;
+      if (hit.id === "command-palette") {
         event.preventDefault();
         setCommandPaletteOpen((current) => !current);
       }
       // Best effort: browsers may reserve Cmd/Ctrl-N for a new window, but
       // the desktop shell and permissive browsers land on a fresh chat.
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n") {
+      if (hit.id === "new-chat") {
         event.preventDefault();
         chooseDestination("chat", null);
       }
@@ -241,8 +252,13 @@ export function App() {
           onRetryConversations={refreshConversations}
           hasMoreConversations={conversationOffset !== null}
           onCommandPalette={() => setCommandPaletteOpen(true)}
-          onSettingsSection={setSettingsSection}
+          onSettingsSection={(section) => {
+            setSettingsSection(section);
+            setSettingsQuery("");
+          }}
           settingsSection={settingsSection}
+          settingsQuery={settingsQuery}
+          onSettingsQuery={setSettingsQuery}
         />
       </div>
       <section className="surface" ref={surfaceRef}>
@@ -286,8 +302,22 @@ export function App() {
               user={identity?.user ?? ""}
             />
           )
-          : <SettingsView onContextChanged={contextChanged} section={settingsSection} />)}
-        {route === "account" && <AccountView onContextChanged={contextChanged} />}
+          : settingsQuery.trim()
+            ? (
+              <div className="page">
+                <div className="page-content narrow">
+                  <SettingsSearchResults
+                    onOpenSection={(section) => {
+                      setSettingsSection(section);
+                      setSettingsQuery("");
+                    }}
+                    query={settingsQuery}
+                  />
+                </div>
+              </div>
+            )
+            : <SettingsView onContextChanged={contextChanged} section={settingsSection} />)}
+        {route === "account" && <SettingsView onContextChanged={contextChanged} section="you" />}
         {route === "runs" && <RunsView />}
         {route === "work" && <WorkView />}
         {route === "agents" && <AgentsView />}

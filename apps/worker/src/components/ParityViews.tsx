@@ -5,11 +5,6 @@ import {
   type AuditNode,
   type CapabilityLifecycleResponse,
   type FamiliarGenotype,
-  type KnowledgeAsset,
-  type KnowledgeAssetDetailResponse,
-  type KnowledgeMutationResponse,
-  type KnowledgeProvider,
-  type KnowledgeSearchHit,
   type MemoryFactView,
   type MemoryIngestionRow,
   type RunRow,
@@ -22,6 +17,8 @@ import {
 import { client } from "../client";
 import { useRouteSelection } from "../useRouteSelection";
 import { AgentProfileEditor } from "./AgentProfileEditor";
+import { AgentTabsStrip } from "./build/AgentTabsStrip";
+import { RecentlyChanged } from "./build/RecentlyChanged";
 import {
   ExactApprovalFinalizer,
   useExactApprovalFinalizer,
@@ -856,6 +853,11 @@ export function AgentsView() {
   const [agents, setAgents] = useState<AgentCapabilityAuthorInfo[]>([]);
   const [surfaceState, setSurfaceState] = useState<SurfaceState>("loading");
   const loadedAgents = useRef(false);
+  // Names with a pending Inbox decision they raised (HITL requested_by /
+  // requested_on_behalf_of). This is the only real per-agent "asking" signal
+  // this client has; when the Inbox list is not visible to this role the set
+  // stays empty and no waiting state is claimed.
+  const [askingActors, setAskingActors] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState("");
@@ -904,6 +906,14 @@ export function AgentsView() {
         setEditing(undefined);
         setSurfaceState(state);
       });
+    void client.hitl()
+      .then((result) => {
+        setAskingActors(new Set(result.requests.flatMap((request) => (
+          [request.requested_by, request.requested_on_behalf_of]
+            .filter((value): value is string => Boolean(value))
+        ))));
+      })
+      .catch(() => setAskingActors(new Set()));
   }
   useEffect(refresh, []);
   useEffect(() => {
@@ -953,6 +963,7 @@ export function AgentsView() {
   return (
     <div className="page">
       <div className="console-page">
+        <AgentTabsStrip active="agents" />
         <div className="console-head">
           <div>
             <h1>Agents</h1>
@@ -989,10 +1000,12 @@ export function AgentsView() {
                 <span className="console-cell">What it may do</span>
                 <span className="console-state">State</span>
                 <span className="console-far">Tier</span>
+                <span aria-hidden className="agents-actions-spacer" />
               </div>
               {agents.map((agent) => (
                 <AgentRow
                   agent={agent}
+                  asking={agent.is_active && askingActors.has(agent.name)}
                   busy={busy === agent.name}
                   key={agent.name}
                   onEdit={() => setSelectedAgentName(agent.name)}
@@ -1001,22 +1014,24 @@ export function AgentsView() {
               ))}
             </div>
             {/* The decided target puts a "Today" spend column here. This client
-                has no per-agent spend on the author inventory, so the column
-                states the cost tier it does have rather than a figure it does
-                not. */}
+                has no per-agent spend windowed to today (client.cost().by_actor
+                is total-window micros), so the column states the cost tier it
+                does have rather than a figure it does not. */}
             <p className="console-foot">
               Each agent&rsquo;s picture is drawn from what it is and how its work is going.
               Nothing in it is decoration. {skillCount} skills are visible to this role.
             </p>
           </div>
         ))}
+        {surfaceState === "ready" && <RecentlyChanged />}
       </div>
     </div>
   );
 }
 
-function AgentRow({ agent, busy, onEdit, onLifecycle }: {
+function AgentRow({ agent, asking, busy, onEdit, onLifecycle }: {
   agent: AgentCapabilityAuthorInfo;
+  asking: boolean;
   busy: boolean;
   onEdit(): void;
   onLifecycle(): void;
@@ -1053,9 +1068,14 @@ function AgentRow({ agent, busy, onEdit, onLifecycle }: {
           ? "No named skills"
           : `${skills.slice(0, 3).join(", ")}${skills.length > 3 ? ` +${skills.length - 3}` : ""}`}
       </span>
-      <span className="console-state" data-tone={agent.is_active ? undefined : "asking"}>
-        {`${agent.status} \u00b7 ${agent.cost_tier}`}
+      <span
+        className="console-state"
+        data-tone={asking ? "asking" : undefined}
+        title={asking ? "This profile raised a decision that is waiting in Inbox." : undefined}
+      >
+        {asking ? "asking" : agent.status}
       </span>
+      <span className="console-far">{agent.cost_tier}</span>
       <button
         className="console-lifecycle"
         disabled={busy}
@@ -1078,311 +1098,10 @@ function familiarStyle(genotype: FamiliarGenotype): React.CSSProperties {
   };
 }
 
-export function KnowledgeView() {
-  const [selectedAssetId, setSelectedAssetId] = useRouteSelection("knowledge");
-  const [tab, setTab] = useState<"library" | "search" | "providers">("library");
-  const [assets, setAssets] = useState<KnowledgeAsset[]>([]);
-  const [surfaceState, setSurfaceState] = useState<SurfaceState>("loading");
-  const loadedKnowledge = useRef(false);
-  const [assetOffset, setAssetOffset] = useState<number | null>(0);
-  const [assetDetail, setAssetDetail] = useState<KnowledgeAssetDetailResponse | null>(null);
-  const [assetDetailState, setAssetDetailState] = useState<DetailState>("idle");
-  const selectedAssetIdRef = useRef(selectedAssetId);
-  const assetDetailSequence = useRef(0);
-  const [providers, setProviders] = useState<KnowledgeProvider[]>([]);
-  const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<KnowledgeSearchHit[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [upload, setUpload] = useState<File | null>(null);
-  const [uploadTitle, setUploadTitle] = useState("");
-  const [eraseArmed, setEraseArmed] = useState<string | null>(null);
-  const mutationFinalizer = useExactApprovalFinalizer<
-    | { kind: "erase"; assetId: string }
-    | { kind: "provider"; providerId: string; enabled: boolean },
-    KnowledgeMutationResponse
-  >({
-    isCurrent: (input) => (
-      input.kind === "erase"
-        ? assets.some((asset) => asset.id === input.assetId)
-        : providers.some((provider) => (
-          provider.id === input.providerId
-          && provider.enabled !== input.enabled
-        ))
-    ),
-    replay: (input, approvalId) => (
-      input.kind === "erase"
-        ? client.eraseKnowledgeAsset(input.assetId, approvalId)
-        : client.setKnowledgeProvider(input.providerId, input.enabled, approvalId)
-    ),
-    onApplied: async (_result, input) => {
-      setMessage(
-        input.kind === "erase"
-          ? "The source was erased."
-          : `Provider ${input.enabled ? "enabled" : "disabled"}.`,
-      );
-      refresh();
-    },
-    onRefused: (result) => {
-      setMessage(result.reason ?? "The approved Knowledge change was not applied.");
-    },
-  });
-  selectedAssetIdRef.current = selectedAssetId;
-
-  function refresh() {
-    mutationFinalizer.invalidate();
-    void client.knowledgeAssets(25, 0).then((result) => {
-      setAssets(result.assets);
-      setAssetOffset(result.next_offset ?? null);
-      loadedKnowledge.current = true;
-      setSurfaceState("ready");
-      setError("");
-    }).catch((reason) => {
-      const state = failureState(reason);
-      if (state === "unavailable" && loadedKnowledge.current) {
-        setError("Knowledge could not be refreshed. Showing the last loaded sources.");
-        return;
-      }
-      loadedKnowledge.current = false;
-      setError("");
-      setAssets([]);
-      setAssetOffset(null);
-      setProviders([]);
-      setSurfaceState(state);
-    });
-    void client.knowledgeProviders().then((result) => setProviders(result.providers)).catch(() => {});
-  }
-
-  async function loadMoreAssets() {
-    if (assetOffset === null) return;
-    const result = await client.knowledgeAssets(25, assetOffset);
-    setAssets((current) => [
-      ...current,
-      ...result.assets.filter(
-        (asset) => !current.some((item) => item.id === asset.id),
-      ),
-    ]);
-    setAssetOffset(result.next_offset ?? null);
-  }
-
-  useEffect(refresh, []);
-  useEffect(() => {
-    mutationFinalizer.invalidate();
-    if (!selectedAssetId) {
-      assetDetailSequence.current += 1;
-      setAssetDetail(null);
-      setAssetDetailState("idle");
-      return;
-    }
-    if (surfaceState !== "ready") {
-      assetDetailSequence.current += 1;
-      setAssetDetail(null);
-      setAssetDetailState("idle");
-      return;
-    }
-    const sequence = ++assetDetailSequence.current;
-    setTab("library");
-    setAssetDetail(null);
-    setAssetDetailState("loading");
-    void client.knowledgeAsset(selectedAssetId)
-      .then((result) => {
-        if (
-          assetDetailSequence.current === sequence
-          && selectedAssetIdRef.current === selectedAssetId
-        ) {
-          setAssetDetail(result);
-          setAssetDetailState("ready");
-        }
-      })
-      .catch((reason) => {
-        if (
-          assetDetailSequence.current === sequence
-          && selectedAssetIdRef.current === selectedAssetId
-        ) setAssetDetailState(failureState(reason));
-      });
-    return () => {
-      if (assetDetailSequence.current === sequence) assetDetailSequence.current += 1;
-    };
-  }, [selectedAssetId, surfaceState]);
-
-  async function search() {
-    if (!query.trim()) return;
-    setBusy(true);
-    setError("");
-    try {
-      setHits((await client.knowledgeSearch(query.trim())).hits);
-    } catch {
-      setError("Knowledge search is unavailable.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function uploadAsset(event: React.FormEvent) {
-    event.preventDefault();
-    if (!upload) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      const result = await client.uploadKnowledge(upload, uploadTitle);
-      setMessage(result.status === "ok"
-        ? `Uploaded and indexed ${result.segment_count} passages.`
-        : `Upload finished with status ${result.status}.`);
-      setUpload(null);
-      setUploadTitle("");
-      refresh();
-    } catch {
-      setMessage("The source was not uploaded. No partial asset is shown as complete.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function downloadAsset(asset: KnowledgeAsset) {
-    try {
-      const blob = await client.knowledgeOriginal(asset.id);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = asset.filename;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      setMessage("The original source could not be downloaded.");
-    }
-  }
-
-  async function eraseAsset(asset: KnowledgeAsset) {
-    if (eraseArmed !== asset.id) {
-      setEraseArmed(asset.id);
-      return;
-    }
-    const input = { kind: "erase", assetId: asset.id } as const;
-    const result = await client.eraseKnowledgeAsset(asset.id);
-    setEraseArmed(null);
-    if (mutationFinalizer.begin(input, result, "Knowledge source erasure")) {
-      setMessage("Erasure is waiting for approval in Inbox.");
-      return;
-    }
-    setMessage(
-      result.reason ?? (
-        result.status === "ok"
-          ? "The source was erased."
-          : `Erasure status: ${result.status ?? "unknown"}.`
-      ),
-    );
-    if (result.status === "ok") refresh();
-  }
-
-  async function setProvider(provider: KnowledgeProvider) {
-    if (provider.status === "unavailable") {
-      setMessage(
-        provider.last_error
-          ? `${provider.display_name} is unavailable: ${provider.last_error}`
-          : `${provider.display_name} is unavailable in this build.`,
-      );
-      return;
-    }
-    const input = {
-      kind: "provider",
-      providerId: provider.id,
-      enabled: !provider.enabled,
-    } as const;
-    const result = await client.setKnowledgeProvider(
-      input.providerId,
-      input.enabled,
-    );
-    if (mutationFinalizer.begin(input, result, "Knowledge provider change")) {
-      setMessage("Provider change is waiting for approval in Inbox.");
-      return;
-    }
-    setMessage(
-      result.reason ?? `Provider ${provider.enabled ? "disabled" : "enabled"}.`,
-    );
-    if (result.status === "ok") refresh();
-  }
-
-  return (
-    <div className="page">
-      <Topbar title="Knowledge" status={`${assets.length} sources`} />
-      <div className="page-content">
-        <div className="page-intro"><div><h2>Governed source library</h2><p>Canonical documents, cited search results and rebuildable provider projections.</p></div></div>
-        {surfaceState === "ready" && <Tabs value={tab} options={[["library", "Library"], ["search", "Search"], ["providers", "Providers"]]} onChange={(value) => setTab(value as typeof tab)} />}
-        {error && <p className="notice">{error}</p>}
-        {message && <p className="notice" role="status">{message}</p>}
-        <ExactApprovalFinalizer controller={mutationFinalizer} />
-        {surfaceState === "loading" && <Unavailable title="Loading knowledge">Loading governed sources and provider state.</Unavailable>}
-        {surfaceState === "denied" && <Unavailable title="Knowledge access denied">Your current role cannot view this governed source library.</Unavailable>}
-        {surfaceState === "not-found" && <Unavailable title="Knowledge not found">This deployment does not expose the canonical knowledge library route.</Unavailable>}
-        {surfaceState === "unavailable" && <Unavailable title="Knowledge unavailable">The governed knowledge service could not be reached.</Unavailable>}
-        {surfaceState === "ready" && tab === "library" && (
-          <div className="stack-view">
-            <form className="knowledge-upload" onSubmit={(event) => void uploadAsset(event)}>
-              <label><span>Source file</span><input className="field-control" type="file" onChange={(event) => setUpload(event.target.files?.[0] ?? null)} /></label>
-              <label><span>Title (optional)</span><input className="field-control" value={uploadTitle} onChange={(event) => setUploadTitle(event.target.value)} /></label>
-              <button className="primary-button" disabled={!upload || busy}>{busy ? "Uploading…" : "Upload and index"}</button>
-            </form>
-            {assets.length === 0 && !error ? <Unavailable title="No source documents">Upload the first governed source above.</Unavailable> :
-            <div className="source-grid">{assets.map((asset) => (
-              <article className="source-card" key={asset.id}>
-                <span className="artifact-icon">▧</span>
-                <div><h3>{asset.title}</h3><p>{asset.filename}</p><small>{asset.segment_count} passages · revision {asset.revision_id.slice(-8)}</small></div>
-                <div className="source-actions">
-                  <button className="secondary-button" onClick={() => setSelectedAssetId(asset.id)}>Inspect</button>
-                  <button className="secondary-button" onClick={() => void downloadAsset(asset)}>Download</button>
-                  <button className={eraseArmed === asset.id ? "danger-button armed" : "danger-button"} onClick={() => void eraseAsset(asset)}>{eraseArmed === asset.id ? "Confirm erase" : "Erase"}</button>
-                </div>
-              </article>
-            ))}</div>}
-            {assetOffset !== null && (
-              <button className="secondary-button" onClick={() => void loadMoreAssets()}>
-                Load more sources
-              </button>
-            )}
-            {assetDetailState === "loading" && <Unavailable title="Loading source detail">Loading exact source provenance.</Unavailable>}
-            {assetDetailState === "denied" && <Unavailable title="Source access denied">Your current role cannot inspect this source.</Unavailable>}
-            {assetDetailState === "not-found" && <Unavailable title="Source not found">That source is outside the active library or no longer exists.</Unavailable>}
-            {assetDetailState === "unavailable" && <Unavailable title="Source unavailable">Exact source provenance could not be reached.</Unavailable>}
-            {assetDetailState === "ready" && assetDetail && (
-              <section className="settings-card">
-                <div className="editable-row">
-                  <div><p className="eyebrow">Source detail</p><h2>{assetDetail.asset.title}</h2></div>
-                  <button className="icon-button" aria-label="Close source detail" onClick={() => setSelectedAssetId(null)}>×</button>
-                </div>
-                <dl className="fact-grid">
-                  <Fact label="Source" value={assetDetail.asset.source_ref ?? assetDetail.asset.source_kind} />
-                  <Fact label="Revision" value={assetDetail.asset.revision_id} />
-                  <Fact label="Segments" value={String(assetDetail.segments.length)} />
-                  <Fact label="Projections" value={String(assetDetail.projections.length)} />
-                </dl>
-                <details>
-                  <summary>Provenance</summary>
-                  <pre className="json-block">{JSON.stringify(assetDetail.provenance, null, 2)}</pre>
-                </details>
-              </section>
-            )}
-          </div>
-        )}
-        {surfaceState === "ready" && tab === "search" && (
-          <div className="stack-view">
-            <form className="search-form" onSubmit={(event) => { event.preventDefault(); void search(); }}>
-              <input className="field-control" aria-label="Search Knowledge" placeholder="Search sources, decisions, people…" value={query} onChange={(event) => setQuery(event.target.value)} />
-              <button className="primary-button" disabled={busy || !query.trim()}>{busy ? "Searching…" : "Search"}</button>
-            </form>
-            {hits.map((hit) => <article className="search-hit" key={hit.segment_id}><div><h3>{hit.title}</h3><span className="score">{hit.score.toFixed(2)}</span></div><p>{hit.text}</p><small>{hit.filename} · revision {hit.revision_id.slice(-8)} · {locatorText(hit.citation.locator)}</small></article>)}
-            {!busy && query && hits.length === 0 && <p className="muted small">No cited passages matched.</p>}
-          </div>
-        )}
-        {surfaceState === "ready" && tab === "providers" && (
-          <div className="data-list">{providers.map((provider) => (
-            <div className="data-row static" key={provider.id}><span className={`activity-dot ${provider.health === "ok" ? "ok" : provider.health}`} /><span className="data-row-copy"><strong>{provider.display_name}</strong><small>{provider.role.replaceAll("_", " ")}{provider.last_error ? ` · ${provider.last_error}` : ""}</small></span><span className="row-meta">{provider.status}</span><button className="secondary-button" disabled={provider.status === "unavailable"} title={provider.status === "unavailable" ? provider.last_error ?? "Unavailable in this build" : undefined} onClick={() => void setProvider(provider)}>{provider.status === "unavailable" ? "Unavailable" : provider.enabled ? "Disable" : "Enable"}</button></div>
-          ))}</div>
-        )}
-      </div>
-    </div>
-  );
-}
+// The Knowledge surface was recast to the decided target's file-table +
+// detail-rail layout and now lives in its own module; the export stays here
+// so App.tsx and Views.tsx keep their import path.
+export { KnowledgeView } from "./knowledge/KnowledgeView";
 
 type MemoryApprovalInput =
   | {
@@ -1901,10 +1620,6 @@ function formatCost(micros: number) {
     minimumFractionDigits: micros < 10_000 ? 6 : 2,
     maximumFractionDigits: micros < 10_000 ? 6 : 2,
   }).format(micros / 1_000_000);
-}
-
-function locatorText(locator: Record<string, unknown>) {
-  return Object.entries(locator).map(([key, value]) => `${key.replaceAll("_", " ")} ${String(value)}`).join(" · ") || "document passage";
 }
 
 function contentText(content: unknown) {
