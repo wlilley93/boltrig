@@ -8,30 +8,93 @@ import { client } from "../client";
 import { navigate, type WorkerRoute } from "../routes";
 import { useWorkerGlobalContext } from "./WorkerGlobalContext";
 
-const primary: Array<{ route: WorkerRoute; label: string; icon: string }> = [
-  { route: "home", label: "Home", icon: "⌂" },
-  { route: "chat", label: "New task", icon: "✦" },
-  { route: "inbox", label: "Inbox", icon: "◫" },
-  { route: "automations", label: "Automations", icon: "↻" },
-  { route: "channels", label: "Channels", icon: "⌁" },
-  { route: "integrations", label: "Integrations", icon: "⌁" },
+// Stroke-path icons carried over from the Boltrig Console design component so
+// the sidebar reads exactly like the design. Each entry is one or more SVG
+// path `d` strings drawn at 24x24 with a 1.7 stroke.
+const ICON_PATHS: Record<string, string[]> = {
+  chat: ["M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H9l-4.5 4V6A1.5 1.5 0 0 1 5 4.5z"],
+  agents: [
+    "M12 3.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z",
+    "M5 20.4a2.4 2.4 0 1 1 0-4.8 2.4 2.4 0 0 1 0 4.8zM19 20.4a2.4 2.4 0 1 1 0-4.8 2.4 2.4 0 0 1 0 4.8z",
+    "M12 8.6v3.2M5 15.6c0-1.9 1.6-3.5 3.5-3.5h7c1.9 0 3.5 1.6 3.5 3.5",
+  ],
+  plug: ["M8 3v5M16 3v5", "M5.5 8h13v3a6.5 6.5 0 0 1-13 0z", "M12 17.5V21"],
+  flow: ["M4.5 5.5h5v4h-5zM14.5 5.5h5v4h-5zM9.5 14.5h5v4h-5z", "M7 9.5v2.5h10V9.5M12 12v2.5"],
+  inbox: ["M3.5 13.5l3-8h11l3 8v6h-17z", "M3.5 13.5h5l1.5 2.5h4l1.5-2.5h5"],
+  home: ["M4.5 10.5l7.5-6.5 7.5 6.5V20h-15z"],
+  clock: ["M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16z", "M12 7.8V12l2.8 1.8"],
+  work: ["M4 5.5h16v13H4z", "M4 10h16M10 5.5v13"],
+  book: [
+    "M4.5 4.5h6a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5h-6.5z",
+    "M19.5 4.5h-6a3 3 0 0 0-3 3v12a2.5 2.5 0 0 1 2.5-2.5h6.5z",
+  ],
+  brain: [
+    "M9.5 4a3 3 0 0 0-3 3 2.8 2.8 0 0 0-1 5.4V16a3 3 0 0 0 5 2.2",
+    "M14.5 4a3 3 0 0 1 3 3 2.8 2.8 0 0 1 1 5.4V16a3 3 0 0 1-5 2.2",
+    "M12 5v14",
+  ],
+  registry: ["M4 4.5h16v5H4zM4 14.5h16v5H4z", "M7.5 7h.01M7.5 17h.01"],
+  skill: ["M12 3.5l2.4 5 5.6.8-4 3.9 1 5.5-5-2.6-5 2.6 1-5.5-4-3.9 5.6-.8z"],
+  monitor: ["M3.5 5h17v10h-17z", "M9 19h6M12 15v4"],
+  pulse: ["M3 12h4l2-5 4 10 2-5h6"],
+  user: ["M12 4.6a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8z", "M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"],
+  org: [
+    "M6.5 7.5v9",
+    "M6.5 7.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM6.5 20.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17.5 7.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
+    "M17.5 7.5v2.5a3 3 0 0 1-3 3h-8",
+  ],
+  gear: [
+    "M12 9.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6z",
+    "M19.9 14.6a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4.1 14H4a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1A2 2 0 1 1 7.9 4.4l.1.1A1.6 1.6 0 0 0 10.7 3.4V3a2 2 0 0 1 4 0v.4a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1 .6z",
+  ],
+  code: ["M8.5 7.5L4 12l4.5 4.5M15.5 7.5L20 12l-4.5 4.5"],
+};
+
+function Icon({ name, size = 16 }: { name: keyof typeof ICON_PATHS; size?: number }) {
+  return (
+    <svg
+      aria-hidden
+      fill="none"
+      height={size}
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={1.7}
+      viewBox="0 0 24 24"
+      width={size}
+    >
+      {ICON_PATHS[name].map((d) => <path d={d} key={d} />)}
+    </svg>
+  );
+}
+
+// The console nav holds the task-first surfaces; everything else stays one
+// press away inside the account menu, matching the design's "nothing is
+// hidden, only quiet" stance while keeping every Worker route reachable.
+const primary: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
+  { route: "chat", label: "Chat", icon: "chat" },
+  { route: "inbox", label: "Inbox", icon: "inbox" },
+  { route: "agents", label: "Agents", icon: "agents" },
+  { route: "integrations", label: "Plugins", icon: "plug" },
+  { route: "automations", label: "Routines", icon: "flow" },
 ];
 
-const library: Array<{ route: WorkerRoute; label: string }> = [
-  { route: "runs", label: "Runs" },
-  { route: "work", label: "Work" },
-  { route: "agents", label: "Agents" },
-  { route: "knowledge", label: "Knowledge" },
-  { route: "memory", label: "Memory" },
+const menuSurfaces: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
+  { route: "home", label: "Home", icon: "home" },
+  { route: "runs", label: "Runs", icon: "clock" },
+  { route: "work", label: "Work", icon: "work" },
+  { route: "knowledge", label: "Knowledge", icon: "book" },
+  { route: "memory", label: "Memory", icon: "brain" },
+  { route: "build", label: "Build", icon: "registry" },
+  { route: "evaluations", label: "Evaluations", icon: "skill" },
+  { route: "channels", label: "Channels", icon: "monitor" },
+  { route: "operate", label: "Operate", icon: "pulse" },
 ];
 
-const control: Array<{ route: WorkerRoute; label: string }> = [
-  { route: "build", label: "Build" },
-  { route: "evaluations", label: "Evaluations" },
-  { route: "operate", label: "Operate" },
-  { route: "account", label: "Account" },
-  { route: "organisation", label: "Organisation" },
-  { route: "settings", label: "Settings" },
+const menuControl: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
+  { route: "account", label: "Account", icon: "user" },
+  { route: "organisation", label: "Organisation", icon: "org" },
+  { route: "settings", label: "Settings", icon: "gear" },
 ];
 
 interface SidebarProps {
@@ -52,6 +115,11 @@ interface ConversationSearchState {
   query: string;
   status: "idle" | "loading" | "ready" | "unavailable";
   results: ConversationSearchResult[];
+}
+
+interface HealthState {
+  status: "loading" | "ready" | "degraded" | "unavailable";
+  failing: number;
 }
 
 export function Sidebar({
@@ -82,6 +150,8 @@ export function Sidebar({
   });
   const [restoring, setRestoring] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState("");
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [health, setHealth] = useState<HealthState>({ status: "loading", failing: 0 });
 
   useEffect(() => {
     const query = conversationQuery.trim();
@@ -118,6 +188,45 @@ export function Sidebar({
     };
   }, [conversationQuery, searchAttempt]);
 
+  // The status line at the foot of the rail reads the same /readyz projection
+  // Operate renders in full; it never invents health it did not measure.
+  useEffect(() => {
+    if (typeof client.readiness !== "function") {
+      setHealth({ status: "unavailable", failing: 0 });
+      return;
+    }
+    let cancelled = false;
+    const pull = () => {
+      void client.readiness()
+        .then((result) => {
+          if (cancelled) return;
+          const failing = Object.values(result.checks ?? {})
+            .filter((check) => check.status !== "ok" && check.status !== "ready").length;
+          setHealth(result.status === "ready"
+            ? { status: "ready", failing: 0 }
+            : { status: "degraded", failing });
+        })
+        .catch(() => {
+          if (!cancelled) setHealth({ status: "unavailable", failing: 0 });
+        });
+    };
+    pull();
+    const timer = window.setInterval(pull, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!accountOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAccountOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [accountOpen]);
+
   const query = conversationQuery.trim();
   const activeSearch = searchState.query === query
     ? searchState
@@ -147,21 +256,78 @@ export function Sidebar({
     }
   }
 
+  function chooseFromMenu(next: WorkerRoute) {
+    setAccountOpen(false);
+    onRoute(next);
+  }
+
+  const initials = (identity?.user ?? "?").slice(0, 1).toUpperCase();
+  const workspaceLabel = identity
+    ? `${identity.organisation} / ${identity.workspace}`
+    : (identityStatus === "unavailable" ? "Workspace unavailable" : "Loading workspace…");
+  const healthLabel = health.status === "loading"
+    ? "Checking health…"
+    : health.status === "ready"
+      ? "Everything responding"
+      : health.status === "degraded"
+        ? (health.failing > 0
+          ? `${health.failing} check${health.failing === 1 ? "" : "s"} not ready`
+          : "Some checks not ready")
+        : "Health unavailable";
+  const healthTone = health.status === "ready"
+    ? "green"
+    : health.status === "degraded" ? "amber" : "unknown";
+
   return (
     <aside className="sidebar" aria-label="Worker navigation">
-      <div className="brand">
-        <span className="bolt-mark" aria-hidden>ϟ</span>
-        <span>Boltrig</span>
-        <span className="worker-label">Worker</span>
+      <div className="side-top">
+        <span className="side-brand">boltrig</span>
+        {onCommandPalette && (
+          <button
+            aria-label="Search everything"
+            className="side-icon-button"
+            onClick={onCommandPalette}
+            title="Search everything (Ctrl or Command K)"
+            type="button"
+          >
+            <svg aria-hidden fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="16.5" x2="21" y1="16.5" y2="21" />
+            </svg>
+          </button>
+        )}
       </div>
-      <nav className="primary-nav">
+
+      <button
+        className="side-workspace"
+        onClick={() => onRoute("account")}
+        title="Workspace switching lives in Account"
+        type="button"
+      >
+        <span>{workspaceLabel}</span>
+        <svg aria-hidden fill="none" height="12" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" viewBox="0 0 24 24" width="12">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      <button className="side-new-chat" onClick={() => onRoute("chat")} type="button">
+        <svg aria-hidden fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15">
+          <line x1="12" x2="12" y1="5" y2="19" />
+          <line x1="5" x2="19" y1="12" y2="12" />
+        </svg>
+        <span>New chat</span>
+        <kbd>⌘N</kbd>
+      </button>
+
+      <nav className="side-nav">
         {primary.map((item) => (
           <button
             className={route === item.route ? "nav-row active" : "nav-row"}
             key={item.route}
             onClick={() => onRoute(item.route)}
+            type="button"
           >
-            <span aria-hidden>{item.icon}</span>
+            <span className="nav-icon"><Icon name={item.icon} /></span>
             <span>{item.label}</span>
             {item.route === "inbox"
               && pendingStatus === "ready"
@@ -177,20 +343,9 @@ export function Sidebar({
           </button>
         ))}
       </nav>
-      <div className="nav-section">
-        <p className="eyebrow">Workspace</p>
-        {library.map((item) => (
-          <button
-            className={route === item.route ? "nav-row active" : "nav-row"}
-            key={item.route}
-            onClick={() => onRoute(item.route)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+
+      <p className="side-recents-label">Recents</p>
       <div className="sessions">
-        <p className="eyebrow">Recent</p>
         <input
           className="conversation-search"
           aria-label="Search conversations"
@@ -276,6 +431,7 @@ export function Sidebar({
               }
               key={conversation.id}
               onClick={() => onConversation(conversation.id)}
+              type="button"
             >
               <span>{conversation.title || "Untitled task"}</span>
               <time>{relativeTime(conversation.updated_at)}</time>
@@ -286,52 +442,98 @@ export function Sidebar({
         ))}
         {restoreError && <p className="session-error" role="alert">{restoreError}</p>}
         {!query && conversationStatus === "ready" && hasMoreConversations && (
-          <button className="secondary-button" onClick={onLoadMore}>
+          <button className="secondary-button" onClick={onLoadMore} type="button">
             Load more conversations
           </button>
         )}
       </div>
-      <div className="nav-section control-nav">
-        <p className="eyebrow">Control</p>
-        {control.map((item) => (
+
+      <button
+        className="side-status"
+        onClick={() => onRoute("operate")}
+        title="Open Operate"
+        type="button"
+      >
+        <span aria-hidden className={`side-status-dot ${healthTone}`} />
+        <span>{healthLabel}</span>
+      </button>
+
+      {accountOpen && (
+        <>
           <button
-            className={route === item.route ? "nav-row active" : "nav-row"}
-            key={item.route}
-            onClick={() => onRoute(item.route)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+            aria-label="Close account menu"
+            className="side-menu-scrim"
+            onClick={() => setAccountOpen(false)}
+            type="button"
+          />
+          <div className="side-menu" role="presentation">
+            <div className="side-menu-identity">
+              <span aria-hidden className="side-avatar">{initials}</span>
+              <span className="side-menu-name">
+                {identity
+                  ? `${identity.user}${identity.role ? ` (${identity.role})` : ""}`
+                  : (identityStatus === "unavailable" ? "Identity unavailable" : "Loading identity…")}
+              </span>
+            </div>
+            {menuSurfaces.map((item) => (
+              <button
+                className="side-menu-row"
+                key={item.route}
+                onClick={() => chooseFromMenu(item.route)}
+                type="button"
+              >
+                <span className="nav-icon"><Icon name={item.icon} size={15} /></span>
+                <span>{item.label}</span>
+              </button>
+            ))}
+            <div className="side-menu-divider" aria-hidden />
+            {menuControl.map((item) => (
+              <button
+                className="side-menu-row"
+                key={item.route}
+                onClick={() => chooseFromMenu(item.route)}
+                type="button"
+              >
+                <span className="nav-icon"><Icon name={item.icon} size={15} /></span>
+                <span>{item.label}</span>
+              </button>
+            ))}
+            <div className="side-menu-divider" aria-hidden />
+            <a className="side-menu-row" href="/operator/">
+              <span className="nav-icon"><Icon name="code" size={15} /></span>
+              <span>Open Operator</span>
+            </a>
+          </div>
+        </>
+      )}
+
       <div className="sidebar-footer">
-        <span
+        <button
+          aria-expanded={accountOpen}
           aria-label={identity
-            ? `Signed in as ${identity.user}${identity.role ? `, role ${identity.role}` : ""}, ${identity.organisation}, ${identity.workspace}`
-            : `Worker identity ${identityStatus}`}
-          className={`sidebar-identity ${identityStatus}`}
+            ? `Account menu, signed in as ${identity.user}${identity.role ? `, role ${identity.role}` : ""}, ${identity.organisation}, ${identity.workspace}`
+            : `Account menu, identity ${identityStatus}`}
+          className="side-account"
+          onClick={() => setAccountOpen((current) => !current)}
           title={identity
             ? `${identity.user} · ${identity.role ?? "member"} · ${identity.organisation} / ${identity.workspace}`
             : undefined}
+          type="button"
         >
-          {identity
-            ? `${identity.user}${identity.role ? ` (${identity.role})` : ""} · ${identity.organisation} / ${identity.workspace}`
-            : (identityStatus === "unavailable" ? "Identity unavailable" : "Loading identity…")}
-        </span>
-        <div className="sidebar-footer-actions">
-          <a href="/operator/" className="operator-link">Open Operator</a>
-          {onCommandPalette && (
-            <button
-              aria-label="Open command palette"
-              className="command-trigger"
-              onClick={onCommandPalette}
-              title="Command palette (Ctrl or Command K)"
-              type="button"
-            >
-              ⌘K
-            </button>
-          )}
-          <button className="icon-button" onClick={() => onRoute("settings")} aria-label="Settings">⚙</button>
-        </div>
+          <span aria-hidden className="side-avatar">{initials}</span>
+          <span className="side-account-name">
+            {identity?.user
+              ?? (identityStatus === "unavailable" ? "Identity unavailable" : "Loading identity…")}
+          </span>
+        </button>
+        <button
+          aria-label="Settings"
+          className="side-round-button"
+          onClick={() => onRoute("settings")}
+          type="button"
+        >
+          <Icon name="gear" size={13} />
+        </button>
       </div>
     </aside>
   );
@@ -372,7 +574,6 @@ export function Topbar({ title, status }: { title: string; status?: string }) {
   return (
     <header className="topbar">
       <div>
-        <p className="eyebrow">Boltrig Worker</p>
         <h1>{title}</h1>
       </div>
       <div className="topbar-actions">

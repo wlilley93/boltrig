@@ -138,7 +138,7 @@ describe("Worker conversation shell truthfulness", () => {
 
     await waitFor(() => {
       expect(document.activeElement).toBe(screen.getByRole("button", {
-        name: "Home",
+        name: "Search everything",
       }));
     });
     expect(opener.getAttribute("aria-expanded")).toBe("true");
