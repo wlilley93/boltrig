@@ -131,7 +131,15 @@ describe("Worker command palette", () => {
     fireEvent.keyDown(options.at(-1)!, { key: "Tab" });
     expect(document.activeElement).toBe(input);
 
-    fireEvent.keyDown(input, { key: "Escape" });
+    // Escape from a focused option, not just the input: Tab puts focus on the
+    // rows, and the registry promises Escape closes what is open.
+    fireEvent.keyDown(input, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(options.at(-1));
+    fireEvent.keyDown(options.at(-1)!, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(opener);
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(opener);
   });

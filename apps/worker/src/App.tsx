@@ -11,7 +11,6 @@ import { useWorkerGlobalContext } from "./components/WorkerGlobalContext";
 import { ChatView } from "./components/ChatView";
 import { CommandPalette } from "./components/CommandPalette";
 import { Sidebar } from "./components/Shell";
-import { notifyWorkerContextChanged } from "./components/WorkerGlobalContext";
 import { globalShortcutFor } from "./shortcuts";
 import {
   conversationFromHash,
@@ -128,6 +127,9 @@ export function App() {
       // the desktop shell and permissive browsers land on a fresh chat.
       if (hit.id === "new-chat") {
         event.preventDefault();
+        // Every other palette navigation closes it; this one must too, or the
+        // modal is left open over results for a surface that has moved on.
+        setCommandPaletteOpen(false);
         chooseDestination("chat", null);
       }
     };
@@ -209,11 +211,6 @@ export function App() {
     navigate("chat", id);
     setRoute("chat");
     setRailOpen(false);
-  }
-
-  function contextChanged() {
-    refreshConversations();
-    notifyWorkerContextChanged();
   }
 
   return (
@@ -316,8 +313,8 @@ export function App() {
                 </div>
               </div>
             )
-            : <SettingsView onContextChanged={contextChanged} section={settingsSection} />)}
-        {route === "account" && <SettingsView onContextChanged={contextChanged} section="you" />}
+            : <SettingsView section={settingsSection} />)}
+        {route === "account" && <SettingsView section="you" />}
         {route === "runs" && <RunsView />}
         {route === "work" && <WorkView />}
         {route === "agents" && <AgentsView />}

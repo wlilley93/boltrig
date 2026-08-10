@@ -65,7 +65,7 @@ import {
 import { RecentlyChanged } from "./build/RecentlyChanged";
 import { StepInspector } from "./routine/StepInspector";
 import { RoutineThumb } from "./RoutineThumb";
-import { Topbar, Unavailable } from "./Shell";
+import { Unavailable } from "./Shell";
 
 type PendingTriggerMutation =
   | {
@@ -1090,14 +1090,27 @@ export function AutomationsView() {
 
   return (
     <div className="page">
-      <Topbar title="Routines" status={surfaceState === "loading" ? "Loading…" : surfaceState === "ready" ? `${workflows.length} workflows` : surfaceState === "denied" ? "Restricted" : "Unavailable"} />
-      <div className="page-content">
-        <div className="page-intro">
+      {/* The console idiom, as on Build and the parity views: one head, one
+          title. The Topbar's status line is folded into the lead so the word
+          "Routines" is not printed twice down the same column. */}
+      <div className="console-page">
+        <div className="console-head">
           <div>
-            <h2>Routines</h2>
-            <p>Steps boltrig repeats the same way every time, held as data rather than code. Each one is a graph: what starts it, then steps that wait on the steps before them. Every step names a scoped verb, and saves, approvals, runs, credentials and Hatchet handoff stay behind the kernel.</p>
+            <h1>Routines</h1>
+            <p>
+              Repeat a task automatically. Start with a routine, add the steps
+              you need, and run it when you are ready.
+              {surfaceState === "ready" && ` ${workflows.length} saved here.`}
+            </p>
           </div>
-          {surfaceState === "ready" && <button className="primary-button" onClick={newWorkflow}>New routine</button>}
+          {surfaceState === "ready" && (
+            <button className="console-primary" onClick={newWorkflow} type="button">
+              <svg aria-hidden fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="2" viewBox="0 0 24 24" width="14">
+                <line x1="12" x2="12" y1="5" y2="19" /><line x1="5" x2="19" y1="12" y2="12" />
+              </svg>
+              <span>New routine</span>
+            </button>
+          )}
         </div>
         {listNotice && <p className="notice" role="status">{listNotice}</p>}
         {detailError && <p className="notice" role="alert">{detailError}</p>}
@@ -1137,15 +1150,7 @@ export function AutomationsView() {
                 >
                   <strong>{workflow.id}</strong>
                   <small>
-                    v{workflow.version} · {workflow.source}
-                    {` · ${workflow.status ?? "active"}`}
-                    {workflow.schedule
-                      ? ` · ${workflow.schedule.cron} ${workflow.schedule.timezone}`
-                      : " · unscheduled"}
-                    {workflow.schedule_state?.desired.status === "active"
-                      ? ` · scheduler ${workflow.schedule_state.observed.status.replace("_", " ")}`
-                      : ""}
-                    {stats[workflow.id] ? ` · ${stats[workflow.id].run_count} runs` : ""}
+                    v{workflow.version} · {workflow.status ?? "active"}
                   </small>
                 </button>
               ))}
@@ -1615,19 +1620,22 @@ function WorkflowEditor(props: WorkflowEditorProps) {
           <button className="primary-button" disabled={props.busy || draft.preservationErrors.length > 0} onClick={props.onSave}>{props.busy ? "Working…" : "Save"}</button>
         </div>
       </header>
-      <section className="workflow-meta">
-        <span className={`status-pill ${props.status}`}>{props.status}</span>
-        <label><span>Version</span><input className="field-control" value={draft.version} onChange={(event) => props.onDraft((current) => ({ ...current, version: event.target.value }))} /></label>
-        <div className="workflow-source-readonly">
-          <span>Source</span>
-          <strong>{draft.source}</strong>
-          <small>Assigned by Boltrig</small>
-        </div>
-        <label><span>Intent tags</span><input className="field-control" value={draft.tagsText} onChange={(event) => props.onDraft((current) => ({ ...current, tagsText: event.target.value }))} /></label>
-      </section>
+      <details className="workflow-meta-details">
+        <summary>Routine details</summary>
+        <section className="workflow-meta">
+          <span className={`status-pill ${props.status}`}>{props.status}</span>
+          <label><span>Version</span><input className="field-control" value={draft.version} onChange={(event) => props.onDraft((current) => ({ ...current, version: event.target.value }))} /></label>
+          <div className="workflow-source-readonly">
+            <span>Source</span>
+            <strong>{draft.source}</strong>
+            <small>Assigned by Boltrig</small>
+          </div>
+          <label><span>Intent tags</span><input className="field-control" value={draft.tagsText} onChange={(event) => props.onDraft((current) => ({ ...current, tagsText: event.target.value }))} /></label>
+        </section>
+      </details>
       <section className="dag-section">
         <div className="dag-heading">
-          <div><p className="eyebrow">Dependency graph</p><p>{verbs.length ? `${verbs.length} scoped actions available` : "Scoped action registry unavailable; existing actions remain visible."}</p></div>
+          <div><p className="eyebrow">What this routine does</p><p>Add the steps in the order they should happen.</p></div>
           <button className="secondary-button" onClick={addStepAtEnd}>Add step</button>
         </div>
         {draft.preservationErrors.length > 0 && (
@@ -1820,6 +1828,9 @@ function WorkflowEditor(props: WorkflowEditorProps) {
         </div>
         <datalist id="worker-actions">{authoredActions.map((id) => <option value={id} key={id}>{actionConsequences.has(id) ? `${actionConsequences.get(id)} consequence` : "built-in workflow control"}</option>)}</datalist>
       </section>
+      <details className="workflow-advanced">
+        <summary>Scheduling, triggers, and history</summary>
+        <div className="workflow-advanced-body">
       <section className="workflow-schedule">
         <div>
           <p className="eyebrow">Cron schedule</p>
@@ -1977,6 +1988,8 @@ function WorkflowEditor(props: WorkflowEditorProps) {
       </section>
       {props.message && <p className="notice workflow-notice" role="status">{props.message}</p>}
       <p className="advanced-handoff">Advanced run-event canvas and authoring diagnostics remain in <a href="/operator/#/automations">Operator</a>.</p>
+        </div>
+      </details>
     </main>
   );
 }
@@ -2420,7 +2433,7 @@ export function RoutinePicker({
         </span>
         <span className="routine-new-title">New routine</span>
         <span className="routine-new-sub">
-          An empty routine on the canvas. Add steps, say what starts it, and save a version.
+          Start with a few steps and save it when you are ready.
         </span>
       </button>
       {workflows.map((workflow) => {

@@ -186,6 +186,13 @@ export function CommandPalette({
         aria-modal="true"
         className="command-palette"
         onKeyDown={(event) => {
+          // Escape is owned here rather than on the input: Tab moves focus onto
+          // the option rows, and from there a keydown on the input never fires.
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onClose();
+            return;
+          }
           if (event.key !== "Tab") return;
           const focusable = dialogRef.current
             ? focusableElements(dialogRef.current)
@@ -226,10 +233,9 @@ export function CommandPalette({
             }}
             onKeyDown={(event) => {
               if (event.nativeEvent.isComposing || event.keyCode === 229) return;
-              if (event.key === "Escape") {
-                event.preventDefault();
-                onClose();
-              } else if (event.key === "ArrowDown") {
+              // Escape is handled by the dialog this bubbles to, so it closes
+              // from the input and from a focused option alike.
+              if (event.key === "ArrowDown") {
                 event.preventDefault();
                 if (options.length > 0) {
                   setActiveIndex((current) => Math.min(options.length - 1, current + 1));

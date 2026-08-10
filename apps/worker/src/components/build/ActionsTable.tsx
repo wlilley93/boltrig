@@ -8,9 +8,14 @@ import "./build.css";
 
 // The read-first Actions table (design lines 851-875, tab "actions"): one row
 // per caller-visible verb from client.verbs(). Every cell states only what the
-// inventory record carries - description, the binding it executes through, and
-// the consequence-derived needs-you word. The design's "Used N x" column has no
-// endpoint anywhere, so it is omitted rather than invented.
+// inventory record carries - description and the binding it executes through.
+// The design's "Used N x" column has no endpoint anywhere, so it is omitted
+// rather than invented.
+//
+// "Needs you" has TWO sources: the authored consequence, and the deployment's
+// HITL policy, which can add asking to any verb. Reading only the first would
+// print a flat "no" the deployment can falsify, so the policy is read too - and
+// when it cannot be read, the column says so instead of guessing.
 
 type TableState = "loading" | "ready" | "denied" | "unavailable";
 
@@ -18,7 +23,16 @@ export function ActionsTable({ onOpen }: { onOpen(verbId: string): void }) {
   const [verbs, setVerbs] = useState<VerbInventoryItem[]>([]);
   const [state, setState] = useState<TableState>("loading");
   const [filter, setFilter] = useState("");
+  // null means the policy could not be read, which is not the same as "no verb
+  // is gated" - the column distinguishes the two.
+  const [blocking, setBlocking] = useState<Set<string> | null>(null);
   const loaded = useRef(false);
+
+  useEffect(() => {
+    void client.hitlPolicy()
+      .then((result) => setBlocking(new Set(result.policy.blocking_verbs)))
+      .catch(() => setBlocking(null));
+  }, []);
 
   useEffect(() => {
     void client.verbs()
@@ -78,7 +92,7 @@ export function ActionsTable({ onOpen }: { onOpen(verbId: string): void }) {
         </div>
         {visible.map((verb) => {
           const runnable = verb.is_active && verb.noun_status === "active";
-          const needsYou = verb.consequence === "high";
+          const needsYou = verb.consequence === "high" || (blocking?.has(verb.id) ?? false);
           return (
             <button className="console-row" key={verb.id} onClick={() => onOpen(verb.id)} type="button">
               <span
@@ -98,7 +112,7 @@ export function ActionsTable({ onOpen }: { onOpen(verbId: string): void }) {
                   : "Not bound — cannot run"}
               </span>
               <span className="console-state" data-tone={needsYou ? "asking" : undefined}>
-                {needsYou ? "always" : "no"}
+                {needsYou ? "always" : blocking ? "no" : "not known"}
               </span>
               <span className="console-far">{runnable ? "on" : verb.status === "archived" ? "archived" : "off"}</span>
             </button>
@@ -111,9 +125,10 @@ export function ActionsTable({ onOpen }: { onOpen(verbId: string): void }) {
       <p className="console-foot">
         Anything not on this list simply cannot happen: an unknown action is
         refused, not guessed at. &ldquo;Always&rdquo; comes from the action&rsquo;s high
-        consequence and cannot be bypassed; deployment policy can add asking to
-        any action, and can never remove it. Archived actions stay listed and
-        cannot run.
+        consequence or from this deployment&rsquo;s policy, and cannot be bypassed;
+        policy can add asking to any action, and can never remove it.
+        {blocking === null && " This deployment's policy could not be read here, so actions that are not high-consequence read “not known” rather than “no”."}
+        {" "}Archived actions stay listed and cannot run.
       </p>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { HitlEntry } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../../client";
@@ -61,6 +61,21 @@ export function InlineApproval({ entry, tech, disabled = false }: InlineApproval
   const [inspectOpen, setInspectOpen] = useState(false);
   const [inspect, setInspect] = useState<InspectFacts | null>(null);
   const inFlight = useRef(false);
+  // The decision buttons unmount the moment a choice is made, which would drop
+  // focus to <body> and send the next Tab to the top of the document. The card
+  // body survives every phase, so focus lands there and reading continues from
+  // the place the user was.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const wasOpen = useRef(true);
+  useEffect(() => {
+    if (phase === "open") {
+      wasOpen.current = true;
+      return;
+    }
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
+    bodyRef.current?.focus();
+  }, [phase]);
 
   const provided = entry.options.filter(Boolean);
   const choices = provided.length > 0
@@ -122,7 +137,7 @@ export function InlineApproval({ entry, tech, disabled = false }: InlineApproval
         <strong>{entry.question}</strong>
         {tech && entry.verb && <span className="verb-chip">{entry.verb}</span>}
       </div>
-      <div className="inline-approval-body">
+      <div className="inline-approval-body" ref={bodyRef} tabIndex={-1}>
         {disabled ? (
           <p className="muted small">
             This turn has settled. If the request is still pending it is
