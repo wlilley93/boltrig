@@ -15,7 +15,9 @@ test("workflow canvas follows one governed run from approval to terminal state",
   expect(seeded.ok()).toBeTruthy();
 
   await page.goto("/#/automations/e2e-live-workflow");
-  await expect(page.locator(".wf3-header__name")).toHaveValue(
+  // Chat-first authoring: the Studio canvas is read-only, so the header name
+  // is a static <span>, not an editable <input> - assert its text, not a value.
+  await expect(page.locator(".wf3-header__name")).toHaveText(
     "e2e-live-workflow",
   );
   await expect(page.locator(".wf3-node")).toHaveCount(2);
