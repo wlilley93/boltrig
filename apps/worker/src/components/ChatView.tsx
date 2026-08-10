@@ -76,6 +76,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
     bands?: number[];
     onset?: number;
   }>({ speaking: false, level: 0 });
+  const [callActive, setCallActive] = useState(false);
   const [phenotype, setPhenotype] = useState<FamiliarPhenotypeResponse | null>(null);
   const [pageHidden, setPageHidden] = useState(
     typeof document !== "undefined" && document.visibilityState === "hidden",
@@ -506,15 +507,22 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
     window.setTimeout(() => taskDetailsTriggerRef.current?.focus(), 0);
   }
 
-  // One Familiar Stage per client (ADR 0025): hero over the welcome, compact
-  // in the header once the transcript has content, voice while the assistant
-  // speaks, minimised when the tab is hidden. Conditional rendering guarantees
-  // a single renderer session; the hero->conversation move is a remount by
-  // design (the being re-arrives through its aperture in the new position).
+  // One Familiar Stage per client (ADR 0025), placed where the being presides:
+  // large and centred over the hero welcome; as the avatar bullet of the most
+  // recent assistant turn once the conversation has content (older turns keep
+  // static badges); back to the centre, large, for the whole life of a voice
+  // call; minimised sizing while the tab is hidden. Conditional rendering
+  // guarantees a single renderer session; each move is a remount by design
+  // (the being re-arrives through its aperture in the new position).
   const stageIsHero = messages.length === 0 && events.length === 0;
+  const stagePlacement: "hero" | "centre" | "bullet" = callActive
+    ? "centre"
+    : stageIsHero
+      ? "hero"
+      : "bullet";
   const stageMode: FamiliarPresentationMode = pageHidden
     ? "minimised"
-    : voiceActivity.speaking
+    : callActive
       ? "voice"
       : stageIsHero
         ? "hero"
@@ -529,15 +537,13 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
     voiceOnset: voiceActivity.onset,
   });
   const stage = <FamiliarStage mode={stageMode} state={stageState} phenotype={phenotype} />;
+  const bulletStage = stagePlacement === "bullet" ? stage : undefined;
 
   return (
     <div className="chat-layout">
       <main className="chat-main">
         <header className="chat-header">
           <div className="agent-heading">
-            {stageIsHero
-              ? <FamiliarBadge state={loading ? "working" : "ready"} />
-              : stage}
             <h1>{
               conversationStatus === "closed"
                 ? "Closed conversation"
@@ -555,6 +561,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
                 onConversation={onConversation}
                 onError={setError}
                 onFamiliarActivity={setVoiceActivity}
+                onCallActive={setCallActive}
               />
             )}
             {compactTaskDetails && (
@@ -571,9 +578,26 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
             )}
           </div>
         </header>
-        <div className="transcript" aria-live="polite">
-          {stageIsHero ? <Welcome stage={stage} /> : null}
-          {messages.map((message) => <Message key={message.id} message={message} />)}
+        {stagePlacement === "centre" && (
+          <div className="voice-stage" aria-hidden={false}>{stage}</div>
+        )}
+        <div
+          aria-label="Conversation transcript"
+          aria-live="polite"
+          className="transcript"
+          role="region"
+          tabIndex={0}
+        >
+          {stageIsHero ? <Welcome stage={stagePlacement === "hero" ? stage : undefined} /> : null}
+          {messages.map((message) => (
+            <Message
+              key={message.id}
+              message={message}
+              stage={events.length === 0 && message.id === lastAssistantMessageId
+                ? bulletStage
+                : undefined}
+            />
+          ))}
           {modelContext?.compacted && (
             <details className="notice model-context-notice">
               <summary>
@@ -587,7 +611,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
               <blockquote>{modelContext.summary}</blockquote>
             </details>
           )}
-          {events.length > 0 && <LiveTurn turn={live} />}
+          {events.length > 0 && <LiveTurn turn={live} stage={bulletStage} />}
           {continuity && (
             <p className="notice" role="status">
               {continuity}
@@ -681,7 +705,7 @@ function Welcome({ stage }: { stage?: React.ReactNode }) {
   return (
     <section className="welcome">
       {stage ?? <div className="welcome-mark" aria-hidden>ϟ</div>}
-      <h2>What needs doing?</h2>
+      <h2>What should we get done?</h2>
       <p>I can plan the work, use the tools your workspace grants, pause for approval, and return the artifact here.</p>
       <div className="starters">
         <span className="starter-card">Turn these notes into a brief</span>
@@ -692,18 +716,28 @@ function Welcome({ stage }: { stage?: React.ReactNode }) {
   );
 }
 
-function Message({ message }: { message: ChatMessage }) {
+function Message({
+  message,
+  stage,
+}: {
+  message: ChatMessage;
+  // The one Familiar Stage, when this is the newest assistant turn it
+  // presides over (ADR 0025); older turns render the static badge.
+  stage?: React.ReactNode;
+}) {
   const turn = useMemo(() => normalizeEvents(message.events ?? []), [message.events]);
   const identity = turn.subagents[0];
   return (
     <article className={`message ${message.role}`}>
       {message.role === "assistant" && (
         <div className="message-author">
-          <FamiliarBadge
-            state={turn.ended ? "ready" : "working"}
-            genotype={identity?.familiarGenotype}
-            label={identity?.name}
-          />
+          {stage ?? (
+            <FamiliarBadge
+              state={turn.ended ? "ready" : "working"}
+              genotype={identity?.familiarGenotype}
+              label={identity?.name}
+            />
+          )}
           <strong>{identity?.name ?? "Boltrig"}</strong>
         </div>
       )}
@@ -730,16 +764,18 @@ function Message({ message }: { message: ChatMessage }) {
   );
 }
 
-function LiveTurn({ turn }: { turn: NormalizedTurn }) {
+function LiveTurn({ turn, stage }: { turn: NormalizedTurn; stage?: React.ReactNode }) {
   const identity = turn.subagents[0];
   return (
     <article className="message assistant live">
       <div className="message-author">
-        <FamiliarBadge
-          state={turn.ended ? "ready" : "working"}
-          genotype={identity?.familiarGenotype}
-          label={identity?.name}
-        />
+        {stage ?? (
+          <FamiliarBadge
+            state={turn.ended ? "ready" : "working"}
+            genotype={identity?.familiarGenotype}
+            label={identity?.name}
+          />
+        )}
         <strong>{identity?.name ?? "Boltrig"}</strong>
       </div>
       <div className="message-content">

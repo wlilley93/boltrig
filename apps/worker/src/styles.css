@@ -1,10 +1,22 @@
 /* Boltrig Console token system.
  *
  * Source of truth: the "Boltrig Console" design component (boltrig-console
- * .dc.html, its [data-ui="light"] / [data-ui="dark"] variable sets), carried
- * over verbatim. VDS holds no design values by statute (VDS S-2(4)) and no
- * boltrig Figma library exists, so the design component is the only named
- * design source; these values were cross-checked against both on 2026-08-10.
+ * .dc.html, its [data-ui="light"] / [data-ui="dark"] variable sets). VDS
+ * holds no design values by statute (VDS S-2(4)) and no boltrig Figma
+ * library exists, so the design component is the only named design source;
+ * these values were cross-checked against both on 2026-08-10.
+ *
+ * Accessibility deviations from the design component, forced by WCAG 2.2
+ * 1.4.3 (>=4.5:1 for normal text, measured against every surface a token
+ * sits on, worst case --card-2):
+ *   light --text-3  #77776f -> #63635b   light --text-4 #93938a -> #6b6b62
+ *   light --amber   #9a7413 -> #82620d   light --green  #2f8a57 -> #27754a
+ *   light --red     #c04329 -> #b23d24
+ *   dark  --text-3  #8b8b8b -> #9c9c9c   dark  --text-4 #6a6a6a -> #8f8f8f
+ *   --accent (both) #0a84ff -> #0068d0 (white-on-accent chips and
+ *   accent-on-white links both clear 4.5); dark link/accent text uses
+ *   --blue #57a3ff because a colour dark enough to carry white text can
+ *   never also carry itself as text on a dark ground.
  *
  * The legacy names (--paper, --ink, --muted, --line…) alias into the console
  * tokens so every existing surface re-skins with the shell. New styling
@@ -31,15 +43,15 @@
   --hover: rgb(20 20 19 / 5%);
   --text: #1c1c1a;
   --text-2: #4f4f4b;
-  --text-3: #77776f;
-  --text-4: #93938a;
-  --accent: #0a84ff;
+  --text-3: #63635b;
+  --text-4: #6b6b62;
+  --accent: #0068d0;
   --switch-off: #c9c8c3;
   --seg-active: #fff;
   --orange: #c2541f;
-  --green: #2f8a57;
-  --amber: #9a7413;
-  --red: #c04329;
+  --green: #27754a;
+  --amber: #82620d;
+  --red: #b23d24;
   --unknown: #a8a89f;
   --shadow: 0 16px 48px rgb(0 0 0 / 14%);
 
@@ -70,9 +82,9 @@
   --hover: rgb(255 255 255 / 5.5%);
   --text: #ededed;
   --text-2: #b4b4b4;
-  --text-3: #8b8b8b;
-  --text-4: #6a6a6a;
-  --accent: #0a84ff;
+  --text-3: #9c9c9c;
+  --text-4: #8f8f8f;
+  --accent: #0068d0;
   --switch-off: #3a3a3a;
   --seg-active: #3a3a3a;
   --orange: #e8734a;
@@ -81,6 +93,7 @@
   --red: #e0614a;
   --unknown: #6a6a6a;
   --shadow: 0 16px 48px rgb(0 0 0 / 50%);
+  --blue: #57a3ff;
   background: #1a1a1a;
   color: var(--text);
 }
@@ -428,6 +441,9 @@ h1, h2, h3, p { margin-top: 0; }
 }
 .side-status-dot.green { background: var(--green); }
 .side-status-dot.amber { background: var(--amber); }
+.side-operator { gap: 11px; text-decoration: none; }
+.side-operator .nav-icon { color: inherit; }
+.side-operator:hover { text-decoration: none; }
 
 .side-menu-scrim {
   position: absolute;
@@ -668,7 +684,53 @@ h1, h2, h3, p { margin-top: 0; }
 
 .surface { min-width: 0; min-height: 0; background: var(--paper); overflow: hidden; }
 .chat-layout { display: grid; grid-template-columns: minmax(0, 1fr) 308px; height: 100%; }
-.chat-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.chat-main { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+/* Familiar Stage placement (ADR 0025 + the console placement decisions):
+ * hero centred over the welcome; the avatar bullet of the newest assistant
+ * turn in conversation; centred over the content for the life of a voice
+ * call. One instance, moved between slots by remount. */
+.message-author .familiar-stage.conversation,
+.message-author .familiar-stage.minimised {
+  flex: 0 0 auto;
+  width: 40px;
+  margin: 0;
+}
+.voice-stage {
+  position: absolute;
+  z-index: 5;
+  inset: 44px 0 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .welcome .familiar-stage,
+  .voice-stage .familiar-stage {
+    animation: stage-arrive 320ms ease;
+  }
+
+  /* Bullet presence: at avatar size the shader's internal swirl is too
+   * subtle to read, so the being bobs a couple of pixels and the canvas
+   * itself turns, slowly. Transform-only; the renderer's DPR cap already
+   * keeps a 40px canvas cheap. */
+  .message-author .familiar-stage {
+    animation: stage-arrive 320ms ease, bullet-bob 7.9s ease-in-out 320ms infinite;
+  }
+  .message-author .familiar-stage .familiar-stage-canvas {
+    animation: bullet-turn 42s linear infinite;
+  }
+}
+@keyframes stage-arrive {
+  from { opacity: 0; transform: scale(.92); }
+}
+@keyframes bullet-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2.5px); }
+}
+@keyframes bullet-turn {
+  to { transform: rotate(1turn); }
+}
 .chat-header, .topbar {
   display: flex;
   flex: 0 0 auto;
@@ -931,7 +993,7 @@ h1, h2, h3, p { margin-top: 0; }
 }
 .artifact-native-actions { display: flex; gap: 4px; }
 .artifact-native-actions .secondary-button { padding: 5px 6px; }
-.artifact-icon { display: grid; place-items: center; width: 31px; height: 35px; border-radius: 6px; color: var(--accent); background: var(--accent-soft); }
+.artifact-icon { display: grid; place-items: center; width: 31px; height: 35px; border-radius: 6px; color: var(--blue); background: var(--accent-soft); }
 .artifact-card strong, .artifact-card small { display: block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .artifact-card strong { font-size: 11px; }
 .artifact-card small { margin-top: 3px; color: var(--muted); font-size: 9px; }

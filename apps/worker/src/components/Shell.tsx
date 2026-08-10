@@ -68,23 +68,27 @@ function Icon({ name, size = 16 }: { name: keyof typeof ICON_PATHS; size?: numbe
   );
 }
 
-// The console nav holds the task-first surfaces; everything else stays one
-// press away inside the account menu, matching the design's "nothing is
-// hidden, only quiet" stance while keeping every Worker route reachable.
+// The console nav holds the task-first surfaces under their canonical Worker
+// names (the browser acceptance contract in ui/e2e-worker/worker.spec.ts
+// names them exactly), a quiet Workspace group keeps the record surfaces
+// visible, and the remainder stays one press away inside the account menu.
 const primary: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
   { route: "chat", label: "Chat", icon: "chat" },
   { route: "inbox", label: "Inbox", icon: "inbox" },
   { route: "agents", label: "Agents", icon: "agents" },
-  { route: "integrations", label: "Plugins", icon: "plug" },
-  { route: "automations", label: "Routines", icon: "flow" },
+  { route: "integrations", label: "Integrations", icon: "plug" },
+  { route: "automations", label: "Automations", icon: "flow" },
 ];
 
-const menuSurfaces: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
-  { route: "home", label: "Home", icon: "home" },
+const workspace: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
   { route: "runs", label: "Runs", icon: "clock" },
   { route: "work", label: "Work", icon: "work" },
   { route: "knowledge", label: "Knowledge", icon: "book" },
   { route: "memory", label: "Memory", icon: "brain" },
+];
+
+const menuSurfaces: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
+  { route: "home", label: "Home", icon: "home" },
   { route: "build", label: "Build", icon: "registry" },
   { route: "evaluations", label: "Evaluations", icon: "skill" },
   { route: "channels", label: "Channels", icon: "monitor" },
@@ -284,7 +288,7 @@ export function Sidebar({
         <span className="side-brand">boltrig</span>
         {onCommandPalette && (
           <button
-            aria-label="Search everything"
+            aria-label="Open command palette"
             className="side-icon-button"
             onClick={onCommandPalette}
             title="Search everything (Ctrl or Command K)"
@@ -340,6 +344,21 @@ export function Sidebar({
                   {pendingCount}
                 </span>
               )}
+          </button>
+        ))}
+      </nav>
+
+      <p className="side-recents-label">Workspace</p>
+      <nav className="side-nav" aria-label="Workspace surfaces">
+        {workspace.map((item) => (
+          <button
+            className={route === item.route ? "nav-row active" : "nav-row"}
+            key={item.route}
+            onClick={() => onRoute(item.route)}
+            type="button"
+          >
+            <span className="nav-icon"><Icon name={item.icon} /></span>
+            <span>{item.label}</span>
           </button>
         ))}
       </nav>
@@ -458,6 +477,11 @@ export function Sidebar({
         <span>{healthLabel}</span>
       </button>
 
+      <a className="side-status side-operator" href="/operator/">
+        <span className="nav-icon"><Icon name="code" size={13} /></span>
+        <span>Open Operator</span>
+      </a>
+
       {accountOpen && (
         <>
           <button
@@ -498,11 +522,6 @@ export function Sidebar({
                 <span>{item.label}</span>
               </button>
             ))}
-            <div className="side-menu-divider" aria-hidden />
-            <a className="side-menu-row" href="/operator/">
-              <span className="nav-icon"><Icon name="code" size={15} /></span>
-              <span>Open Operator</span>
-            </a>
           </div>
         </>
       )}
@@ -511,7 +530,7 @@ export function Sidebar({
         <button
           aria-expanded={accountOpen}
           aria-label={identity
-            ? `Account menu, signed in as ${identity.user}${identity.role ? `, role ${identity.role}` : ""}, ${identity.organisation}, ${identity.workspace}`
+            ? `Signed in as ${identity.user}${identity.role ? `, role ${identity.role}` : ""}, ${identity.organisation}, ${identity.workspace}. Account menu`
             : `Account menu, identity ${identityStatus}`}
           className="side-account"
           onClick={() => setAccountOpen((current) => !current)}
@@ -527,7 +546,7 @@ export function Sidebar({
           </span>
         </button>
         <button
-          aria-label="Settings"
+          aria-label="Open settings"
           className="side-round-button"
           onClick={() => onRoute("settings")}
           type="button"

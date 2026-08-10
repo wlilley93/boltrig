@@ -13,6 +13,14 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("../src/client", () => ({ client: api }));
+// A stub call control: placement rule 3 is about where the Stage sits for the
+// life of a call, not about realtime media, so the stub only raises the
+// call-active signal the way the real control does.
+vi.mock("../src/components/VoiceCall", () => ({
+  VoiceCall: ({ onCallActive }: { onCallActive?(active: boolean): void }) => (
+    <button onClick={() => onCallActive?.(true)} type="button">Start test call</button>
+  ),
+}));
 
 import { ChatView } from "../src/components/ChatView";
 
@@ -60,19 +68,78 @@ function renderChat(conversationId: string | null) {
 }
 
 describe("console chat surface", () => {
-  it("greets a fresh chat with the console hero and one Familiar Stage", async () => {
+  it("greets a fresh chat with one centred hero Stage and a clean header", async () => {
     renderChat(null);
 
-    expect(screen.getByRole("heading", { level: 2, name: "What needs doing?" }))
+    expect(screen.getByRole("heading", { level: 2, name: "What should we get done?" }))
       .toBeTruthy();
-    // ADR 0025: exactly one Stage session per client. In hero mode the Stage
-    // lives in the welcome; the header slot holds only the cheap badge.
+    // Placement rule 1: the hero orb is the presence - one Stage, centred in
+    // the welcome, and no familiar of any kind in the chat header.
     await waitFor(() => {
       const stages = document.querySelectorAll(".familiar-stage");
       expect(stages.length).toBe(1);
       expect(stages[0]!.classList.contains("hero")).toBeTruthy();
+      expect(stages[0]!.closest(".welcome")).toBeTruthy();
     });
+    expect(document.querySelector(".chat-header .familiar-stage")).toBeNull();
+    expect(document.querySelector(".chat-header .familiar-orb")).toBeNull();
     expect(screen.getByRole("heading", { level: 1, name: "New chat" })).toBeTruthy();
+  });
+
+  it("moves the one Stage to the newest assistant turn's avatar bullet", async () => {
+    api.conversation.mockResolvedValue({
+      messages: [
+        { id: "m1", role: "user", content: "First ask" },
+        { id: "m2", role: "assistant", content: "Older answer" },
+        { id: "m3", role: "user", content: "Second ask" },
+        { id: "m4", role: "assistant", content: "Newest answer" },
+      ],
+      active_run_id: null,
+    });
+    renderChat("conversation-a");
+
+    // Placement rule 2: the newest assistant turn's avatar slot holds the one
+    // Stage; every older assistant turn keeps its static badge; the header
+    // holds neither.
+    await waitFor(() => {
+      const stages = document.querySelectorAll(".familiar-stage");
+      expect(stages.length).toBe(1);
+      const article = stages[0]!.closest("article.message.assistant");
+      expect(article?.textContent?.includes("Newest answer")).toBeTruthy();
+      expect(stages[0]!.closest(".message-author")).toBeTruthy();
+    });
+    const older = [...document.querySelectorAll("article.message.assistant")]
+      .find((article) => article.textContent?.includes("Older answer"));
+    expect(older?.querySelector(".familiar-orb")).toBeTruthy();
+    expect(older?.querySelector(".familiar-stage")).toBeNull();
+    expect(document.querySelector(".chat-header .familiar-stage")).toBeNull();
+  });
+
+  it("returns the one Stage to the centre for the life of a voice call", async () => {
+    api.conversation.mockResolvedValue({
+      messages: [
+        { id: "m1", role: "user", content: "First ask" },
+        { id: "m2", role: "assistant", content: "Newest answer" },
+      ],
+      active_run_id: null,
+    });
+    renderChat("conversation-a");
+    await screen.findByText("Newest answer");
+
+    fireEvent.click(screen.getByRole("button", { name: "Start test call" }));
+
+    // Placement rule 3: centred and large while the call lives; the newest
+    // turn falls back to a static badge so there is still exactly one Stage.
+    await waitFor(() => {
+      const stages = document.querySelectorAll(".familiar-stage");
+      expect(stages.length).toBe(1);
+      expect(stages[0]!.closest(".voice-stage")).toBeTruthy();
+      expect(stages[0]!.classList.contains("voice")).toBeTruthy();
+    });
+    const newest = [...document.querySelectorAll("article.message.assistant")]
+      .find((article) => article.textContent?.includes("Newest answer"));
+    expect(newest?.querySelector(".familiar-orb")).toBeTruthy();
+    expect(newest?.querySelector(".familiar-stage")).toBeNull();
   });
 
   it("titles the header with the real conversation, not a slogan", async () => {

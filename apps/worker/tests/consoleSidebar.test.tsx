@@ -46,8 +46,12 @@ describe("console sidebar", () => {
       ["Chat", "chat"],
       ["Inbox", "inbox"],
       ["Agents", "agents"],
-      ["Plugins", "integrations"],
-      ["Routines", "automations"],
+      ["Integrations", "integrations"],
+      ["Automations", "automations"],
+      ["Runs", "runs"],
+      ["Work", "work"],
+      ["Knowledge", "knowledge"],
+      ["Memory", "memory"],
       ["New chat ⌘N", "chat"],
     ];
     for (const [label, route] of expectations) {
@@ -62,28 +66,21 @@ describe("console sidebar", () => {
 
     const expectations: Array<[string, WorkerRoute]> = [
       ["Home", "home"],
-      ["Runs", "runs"],
-      ["Work", "work"],
-      ["Knowledge", "knowledge"],
-      ["Memory", "memory"],
       ["Build", "build"],
       ["Evaluations", "evaluations"],
       ["Channels", "channels"],
       ["Operate", "operate"],
+      ["Account", "account"],
+      ["Organisation", "organisation"],
+      ["Settings", "settings"],
     ];
     for (const [label, route] of expectations) {
       fireEvent.click(screen.getByRole("button", { name: /Account menu/ }));
       fireEvent.click(screen.getByRole("button", { name: label }));
       expect(onRoute).toHaveBeenLastCalledWith(route);
     }
-    fireEvent.click(screen.getByRole("button", { name: /Account menu/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Account" }));
-    expect(onRoute).toHaveBeenLastCalledWith("account");
-    fireEvent.click(screen.getByRole("button", { name: /Account menu/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Organisation" }));
-    expect(onRoute).toHaveBeenLastCalledWith("organisation");
-    // The Operator handoff stays a plain link, never a re-implemented surface.
-    fireEvent.click(screen.getByRole("button", { name: /Account menu/ }));
+    // The Operator handoff stays a plain visible link, never a re-implemented
+    // surface (WORKER-PARITY.md) - and exactly one, so role queries stay strict.
     expect(screen.getByRole("link", { name: "Open Operator" })
       .getAttribute("href")).toBe("/operator/");
   });
