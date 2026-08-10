@@ -7,10 +7,15 @@ sessions collaborated on a shared checkout; lanes and authorship are recorded
 below.
 
 **State at handover**: PR #265 (`feat/console-polish`) is green locally and
-unmerged, with 21 commits unpushed from a machine that has no GitHub creds.
-Typecheck clean, 349 tests / 43 files, worker browser suite 22/22, prose-claim
-gate 0 unresolved. Nothing is known-broken; the outstanding work is release
-mechanics plus three unbuilt mobile screens.
+unmerged. Typecheck clean, 349 tests / 43 files, worker browser suite 22/22,
+prose-claim gate 0 unresolved, working tree empty. Nothing is known-broken;
+the outstanding work is one push plus three unbuilt mobile screens.
+
+**The one remaining action**: relay-push `feat/console-polish` and merge #265.
+Ten commits are unpushed. Read the "Pushing" note below first — the count and
+the fetch state have both been wrong in this document before, so verify with
+`git log --oneline origin/feat/console-polish..HEAD` rather than trusting any
+number written here.
 
 ## Shipped (merged to main)
 
@@ -59,10 +64,26 @@ Outstanding to land it:
    checker (`scripts/check_prose_references.py`, run it directly) now passes
    with 0 unresolved. Note this file is still UNTRACKED — it must be committed
    or dropped before the gate means anything in CI.
-5. **Unpushed**: 21 commits sit local on `feat/console-polish`, including the
-   four this session added (`e378f74`, `553b578`, `b455da7`, `c847e24`). The
-   M4 has no GitHub creds — see the relay recipe below.
-6. Merge on green via `gh pr merge 265` on the beelink.
+5. **Unpushed**: 10 commits sit local on `feat/console-polish` — this
+   session's (`b455da7`, `c847e24`, `280a7b4`, `d3644ae`), the DAG session's
+   (`93b3e07`, `ef703be`, `41c4687`, `10cb92f`), and the merge below. The M4
+   has no GitHub creds — see the relay recipe.
+
+   Beware the arithmetic here. Counting against `main` gives 27 and counting
+   against a stale `origin/main` gave 21; both were quoted as "unpushed" at
+   points today and both were wrong. The only count that means anything is
+   against the remote BRANCH: `git log --oneline origin/feat/console-polish..HEAD`.
+6. **`git fetch` works from the M4** even though pushing does not — read
+   access needs no local creds. It had not been run since 10:59 today, which
+   is why the numbers above drifted. Fetch before trusting any of them.
+7. **The remote branch can be ahead of you.** `9e2007f` (a lint fix to
+   `tests/unit/test_workflow_parity.py`, authored via the relay by another
+   session at 15:26) existed only on `origin/feat/console-polish`. It is now
+   merged in locally — by MERGE, deliberately, not rebase, so that the commit
+   hashes quoted throughout this document stay valid. A blind `git push
+   --force` from the M4 would have destroyed it. Always fetch and integrate
+   first.
+8. Merge on green via `gh pr merge 265` on the beelink.
 
 ## Boltrig Mobile — 2 of 5 screens built (this session, on feat/console-polish)
 
@@ -191,6 +212,16 @@ worker browser suite **22/22** including the axe sweep.
 - Desktop familiar: filament shader installed to the beelink's
   `~/.config/familiar/` — applies next time familiar-bg runs (no active
   session at install time).
+
+## Cross-lane state at close (both sessions reconciled)
+
+The DAG-rollout session and this one closed out against each other: tree clean
+both sides, nothing mid-flight, no ordering constraint between our commits.
+Their remaining work is post-#265 and briefed in
+`docs/HANDOVER-2026-08-10-workflow-dag.md`: Will's hands-on Studio session
+(human UX validation of the chat-first authoring loop), then studio polish and
+Hatchet child-run fan-out. Their boltrig-vm roll is done — hatchet-worker
+serving, 3/4 live DAG gates passed including kill/restart/resume.
 
 ## Backlog (post-#265)
 
