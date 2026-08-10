@@ -92,6 +92,14 @@ def _compare(left: Any, op: str, right: Any) -> bool:
         return left != right
     if op == "exists":
         return left is not None
+    if op in {"not_exists", "is_null"}:
+        return left is None
+    if op == "not_null":
+        return left is not None
+    if op == "empty":
+        return not left
+    if op == "not_empty":
+        return bool(left)
     try:
         if op == "gt":
             return left > right
@@ -103,8 +111,16 @@ def _compare(left: Any, op: str, right: Any) -> bool:
             return left <= right
         if op == "in":
             return left in (right or [])
+        if op == "not_in":
+            return left not in (right or [])
         if op == "contains":
             return right in (left or [])
+        if op == "not_contains":
+            return right not in (left or [])
+        if op == "starts_with":
+            return isinstance(left, str) and isinstance(right, str) and left.startswith(right)
+        if op == "ends_with":
+            return isinstance(left, str) and isinstance(right, str) and left.endswith(right)
     except TypeError:
         return False
     return False
@@ -127,6 +143,58 @@ def eval_predicate(params: dict[str, Any], results: dict[str, dict[str, Any]]) -
     op = str(params.get("op", "eq"))
     right = resolve_ref(params.get("right"), results)
     return _compare(left, op, right)
+
+
+def _eval_case(case: dict[str, Any], results: dict[str, dict[str, Any]]) -> bool:
+    """Evaluate one multi-case branch case: a condition list joined and/or.
+
+    A case with no (or an empty) ``conditions`` list matches unconditionally -
+    the authored "else"/"always" arm. Malformed conditions evaluate false
+    through ``_compare``'s fail-closed default; a malformed case never matches.
+    """
+    conditions = case.get("conditions")
+    if not conditions:
+        return True
+    if not isinstance(conditions, list):
+        return False
+    verdicts: list[bool] = []
+    for cond in conditions:
+        if not isinstance(cond, dict):
+            return False
+        left = resolve_ref(cond.get("left"), results)
+        op = str(cond.get("op", "eq"))
+        right = resolve_ref(cond.get("right"), results)
+        verdicts.append(_compare(left, op, right))
+    joiner = str(case.get("logical_operator", "and"))
+    return any(verdicts) if joiner == "or" else all(verdicts)
+
+
+def select_branch_label(params: dict[str, Any], results: dict[str, dict[str, Any]]) -> str:
+    """Pick the branch label a ``flow.branch`` step records.
+
+    Two authored shapes:
+    * legacy single predicate (``left``/``op``/``right`` or ``value``) ->
+      ``"true"``/``"false"``;
+    * multi-case (``cases: [{label, logical_operator, conditions}]``) ->
+      first matching case's label, in declaration order, else
+      ``default_label`` (``"false"`` when unset - the legacy no-match label,
+      so a two-case migration keeps its else-arm wiring).
+    A ``cases`` value that is not a list falls back to the legacy predicate;
+    a case without a usable string label never matches (fail-closed).
+    """
+    cases = params.get("cases")
+    if isinstance(cases, list):
+        for case in cases:
+            if not isinstance(case, dict):
+                continue
+            label = case.get("label")
+            if not isinstance(label, str) or not label:
+                continue
+            if _eval_case(case, results):
+                return label
+        default = params.get("default_label")
+        return default if isinstance(default, str) and default else "false"
+    return "true" if eval_predicate(params, results) else "false"
 
 
 def resolve_items(params: dict[str, Any], results: dict[str, dict[str, Any]]) -> list[Any] | None:
@@ -160,8 +228,7 @@ def run_control_step(
     if noun == "flow" and verb == "end":
         return {"status": "ok", "output": {"terminal": True}}
     if noun == "flow" and verb == "branch":
-        outcome = "true" if eval_predicate(params, results) else "false"
-        return {"status": "ok", "output": {"branch": outcome}}
+        return {"status": "ok", "output": {"branch": select_branch_label(params, results)}}
     if noun == "flow" and verb == "loop":
         items = resolve_items(params, results)
         if items is None:
@@ -269,29 +336,62 @@ def expand_loop(
     return new_ordered, body
 
 
+# How a flow.loop treats a failed body iteration (``params.on_item_error``):
+# ``fail`` (default) fails the aggregate; ``continue`` keeps a ``None``
+# placeholder at the item's index; ``drop`` omits the item from the output.
+LOOP_ITEM_ERROR_MODES = frozenset({"fail", "continue", "drop"})
+
+
 def aggregate_loop_results(
     results: dict[str, dict[str, Any]],
     body_ids: list[str],
     item_count: int,
     *,
     actions: dict[str, str] | None = None,
-) -> None:
+    on_item_error: str = "fail",
+    failed: set[str] | None = None,
+) -> int:
     """Collapse per-item clone results back onto each original body step id so the
     run record (keyed by original step id) reflects the iteration. Sets
-    ``results[id] = {status, output: {iterations, count}}`` from its clones."""
+    ``results[id] = {status, output: {iterations, count}}`` from its clones.
+
+    Under ``continue``/``drop`` an errored iteration is absorbed: the aggregate
+    stays ``ok``, the clone's failure is removed from ``failed`` (it no longer
+    fails the run), and the absorbed-error count is returned so the run record
+    can surface it as ``exceptions_count`` (partial success stays observable,
+    never hidden). ``exception``-status clones (a step-level error strategy
+    already absorbed the failure) count as delivered in every mode.
+    """
+    absorbed = 0
     for sid in body_ids:
         iterations: list[Any] = []
-        all_ok = True
+        errored: list[int] = []
         for k in range(item_count):
             clone = results.pop(f"{sid}__{k}", None)
-            if clone is None:
-                all_ok = False
+            delivered = clone is not None and clone.get("status") in {"ok", "exception"}
+            if not delivered:
+                errored.append(k)
+                if on_item_error != "fail" and failed is not None:
+                    failed.discard(f"{sid}__{k}")
+                if on_item_error == "drop":
+                    continue
+                if on_item_error == "continue":
+                    iterations.append(None)
+                elif clone is not None:
+                    iterations.append(clone.get("output"))
                 continue
-            if clone.get("status") != "ok":
-                all_ok = False
             iterations.append(clone.get("output"))
+        status = "ok" if (not errored or on_item_error != "fail") else "failed"
+        output: dict[str, Any] = {"iterations": iterations, "count": item_count}
+        if errored and on_item_error != "fail":
+            # Honesty (US-FLT-07 posture): absorbed errors are visible in the
+            # aggregate, not silently swallowed.
+            output["errors"] = len(errored)
+            output["errored_indexes"] = errored
+            absorbed += len(errored)
         results[sid] = {
             "action": (actions or {}).get(sid),
-            "status": "ok" if all_ok else "failed",
-            "output": {"iterations": iterations, "count": item_count},
+            "status": status,
+            "output": output,
         }
+    return absorbed

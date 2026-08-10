@@ -25,6 +25,15 @@ _LOOP_BINDINGS: dict[str, Any] = {
         "enum": list(WORKFLOW_LOOP_BINDING_SOURCES),
     },
 }
+_RETRY: dict[str, Any] = {
+    # Per-step retry, clamped again at runtime (interpreter policy bounds).
+    "type": "object",
+    "properties": {
+        "max": {"type": "integer", "minimum": 0, "maximum": 5},
+        "interval_ms": {"type": "integer", "minimum": 0, "maximum": 60_000},
+    },
+    "additionalProperties": False,
+}
 _STEP: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -36,6 +45,12 @@ _STEP: dict[str, Any] = {
         "with": _OBJECT,
         "branch": _STRING,
         "loop_bindings": _LOOP_BINDINGS,
+        # Error handling (graphon-parity): how an exhausted step failure
+        # resolves - poison descendants (fail), route success/fail arms
+        # (branch), or substitute a declared default output (default).
+        "on_error": {"type": "string", "enum": ["fail", "branch", "default"]},
+        "default_output": _OBJECT,
+        "retry": _RETRY,
     },
     "required": ["id", "action"],
     "additionalProperties": True,

@@ -14,7 +14,10 @@ export type RunNodeStatus =
   | "failed"
   | "error"
   | "skipped"
-  | "paused";
+  | "paused"
+  // The step failed but a declared error strategy absorbed it (on_error:
+  // branch|default) - the run continued, honestly marked as recovered.
+  | "exception";
 
 export type StepNodeData = {
   action: string;

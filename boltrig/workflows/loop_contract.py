@@ -205,6 +205,11 @@ def validate_loop_contract(definition: dict[str, Any]) -> LoopContractIssue | No
         has_ref = "items_from" in params
         if has_items == has_ref:
             return LoopContractIssue(step_id, "loop_requires_one_item_source")
+        # ``on_item_error`` (graphon-parity item error modes) fails loudly at
+        # definition time rather than silently falling back at the next run.
+        mode = params.get("on_item_error", "fail")
+        if mode not in ("fail", "continue", "drop"):
+            return LoopContractIssue(step_id, "loop_on_item_error_invalid")
         if has_items:
             if not isinstance(params.get("items"), list):
                 return LoopContractIssue(step_id, "loop_items_must_be_array")

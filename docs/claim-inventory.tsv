@@ -202,7 +202,6 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:1748		tenant's AI-conf
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:833		(tenant, user) rows, so another user's thread can never surface.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:941		Append-only ([2026] VJS-COUNTY 4 keeps message content frozen): a summary
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:972		explicitly first.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:288		one-time secret result must never be replay-cached.
 LOAD-BEARING	NO-SUBJECT	compose	docker-compose.yml:48		M9 (SEC-69): no baked default credential.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/channel_send.py:1	outbound_url	channel.send - the governed outbound egress verb (decision 0003).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/crm_sql.py:1	contact	Reference SQL adapter: a CRM over a relational database (US-ADP-03, SEC-09).
@@ -281,6 +280,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/store/distillation_reads.py:78	i
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/store/rls_pool.py:26	assume_role	SET LOCAL app.tenant_id from the request context.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/workflows/library.py:151	LookupError	Start a workflow and return a run descriptor (Hatchet seam).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/workflows/loop_contract.py:1	flow.loop	Closed declarative contract for bounded ``flow.loop`` expansion.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/workflows/step_execution.py:65	None	The deterministic per-step idempotency key, or ``None``.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/base.py:1	Credential	The single adapter interface (S7.3).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/inbound_webhook.py:1	verify_and_normalise	Inbound webhook receiver helper (US-ADP-05).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/inbound_webhook.py:240	WebhookValidationError	Authenticate and validate an inbound webhook, returning a normalised work-item candidate (US-ADP-05).
@@ -1266,18 +1266,21 @@ ORDINARY	NO-SUBJECT	comment	boltrig/store/work_items.py:120		can only REMOVE row
 ORDINARY	NO-SUBJECT	comment	boltrig/store/work_items.py:249		ONLY - never the hidden-alias subquery - so a filter can only NARROW
 ORDINARY	NO-SUBJECT	comment	boltrig/store/work_items.py:250		the already-scoped, hidden-wins-deduped set, never widen it.
 ORDINARY	NO-SUBJECT	comment	boltrig/work/store.py:22		cancelled run is never resurrected.
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/control_flow.py:182		Excess items beyond the canonical cap are never dispatched: recorded
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/control_flow.py:249		Excess items beyond the canonical cap are never dispatched: recorded
 ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/control_flow.py:87		Evaluate a declarative comparison.
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:144		step.
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:197		resumed run;
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:217		A step whose parent failed/was skipped cannot run (fail-closed).
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:229		cannot resolve.
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:311		above and never reaches here).
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:336		and descendants must never dispatch with the paused parent's
-ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/interpreter.py:75		Order steps so every parent precedes its children (Kahn's algorithm).
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:145		step.
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:178		a child (fail-closed: its data genuinely never arrived).
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:211		resumed run;
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:232		A step with a failure-lineage parent cannot run (fail-closed).
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:255		cannot resolve.
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:316		dispatch, many ways to record the outcome (never a second path).
+ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/interpreter.py:76		Order steps so every parent precedes its children (Kahn's algorithm).
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/library.py:200		itself guarantees depends on the executor - see
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/scheduler_loop.py:113		never change the outcome, and a failed write must not stall the loop.
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/scheduler_loop.py:94		due rows cannot make its own inaction look like there was nothing due.
+ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/step_execution.py:144		A held HITL gate is a pause, not a failure - the run can resume.
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/step_execution.py:202		COMPLETED prior record replays inside the kernel and never
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/step_execution.py:259		Pauses are never retried and never strategy-absorbed: the
 ORDINARY	NO-SUBJECT	compose	docker-compose.vm.yml:32		adapter then pins an address a v4-only container cannot route.
 ORDINARY	NO-SUBJECT	compose	docker-compose.vm.yml:8		profile - the kernel then refuses to start rather than run an unproven sandbox
 ORDINARY	NO-SUBJECT	compose	docker-compose.vm.yml:97		[/tmp]` from *app-hardening, and its rootfs is read_only, so it cannot
@@ -1293,14 +1296,14 @@ ORDINARY	NO-SUBJECT	compose	docker-compose.yml:261		BOLTRIG_REFLECT=1 in .env al
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:279		Stack-owned OpenCode state only;
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:281		Stack-owned Browser Use CLI state only;
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:288		The worker serves no HTTP, so this cannot be a URL probe - but it does
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:330		hatchet-lite required auth/session config (it refuses to boot without a
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:371		`build: !reset null` and pull the pinned image, so tenants never build.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:423		never routed through it (residency) - that goes to local-model.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:468		Mount a local model cache so air-gapped boxes never reach the internet.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:513		Development compatibility only;
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:546		Worker-authored channel provider config - it is never written here.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:565		THIS image, never the kernel's or the Python gateway's).
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:662		a local gateway.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:377		hatchet-lite required auth/session config (it refuses to boot without a
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:418		`build: !reset null` and pull the pinned image, so tenants never build.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:470		never routed through it (residency) - that goes to local-model.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:515		Mount a local model cache so air-gapped boxes never reach the internet.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:560		Development compatibility only;
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:593		Worker-authored channel provider config - it is never written here.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:612		THIS image, never the kernel's or the Python gateway's).
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:709		a local gateway.
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:96		than folklore: a NON-ROOT container cannot hold CAP_SETUID at all.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/adapters/base.py:100	disabled	``disabled`` is for one-time/bearer-secret results that must never be
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/channel_send.py:133	approval_notice	What the approver must be told before they approve (C3).
@@ -1376,7 +1379,8 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/store/postgres.py:155	apply_schema	O
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/store/postgres.py:403	_still_leased	Write the row ONLY if it still carries the lease the caller was given.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/store/tenant_scope.py:83	pool	Whether statements on ``pool``'s connections must drop to ``boltrig_app``.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/work/store.py:105	cap	Persist discovered child items and write them back, capped (US-WRK-04).
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/workflows/control_flow.py:201	branch	Whether a step's declared ``branch`` is satisfied by its parents' outputs.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/workflows/control_flow.py:172	flow.branch	Pick the branch label a ``flow.branch`` step records.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/workflows/control_flow.py:268	branch	Whether a step's declared ``branch`` is satisfied by its parents' outputs.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/workflows/scheduler_loop.py:40	next_due_at	Schedules whose stored ``next_due_at`` has passed.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/desktop.py:1	HandsRegistry	The desktop-hands adapter (source = 'builtin'), binding DH-1.
 ORDINARY	SUBJECT-REACHED	comment	boltrig/adapters/builtin/fish_audio.py:197	bearer_token	Fail closed before the request is built: when `bearer_token` yields None
@@ -1472,7 +1476,12 @@ ORDINARY	SUBJECT-REACHED	comment	boltrig/store/memory.py:649	restore_closed_conv
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/store/sealing.py:139	CredentialResolution	Unseal an envelope back to the original reference dict.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/work/normalise.py:58	decide_mode	Turn a raw source payload into a :class:`WorkItem` (US-WRK-01).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/work/queue.py:1	decide_mode	Source queue adapters and the confidence scorer (S7.7, US-WRK-02).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/control_flow.py:148	_compare	Evaluate one multi-case branch case: a condition list joined and/or.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/control_flow.py:345	exception	Collapse per-item clone results back onto each original body step id so the run record (keyed by original step id) reflects the iteration.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/generator.py:120	learn_from_success	Prefer a matched (learned/precreated/generated) workflow, else synthesise.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/library.py:1	WorkflowLibrary	The workflow library: register, look up, intent-match and trigger (US-WFL-01).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/library.py:230	executor.run_step	Interpret a stored workflow: run its steps through the chokepoint.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/loop_execution.py:155	fail	The loop's declared item-error mode;
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/scheduler_loop.py:1	reconcile_workflow_schedules	The workflow scheduler's forever-loop, and the progress it publishes.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/step_execution.py:1	IdempotencyConflict	Capability-step execution for the workflow interpreter (DAG parity).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/step_execution.py:59	fail	The step's declared error strategy;

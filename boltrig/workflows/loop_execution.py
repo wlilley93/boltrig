@@ -14,7 +14,7 @@ from . import control_flow, run_events
 from .loop_contract import validate_loop_contract
 
 StepEmitter = Callable[[dict[str, Any]], None]
-Expansion = tuple[list[str], int, dict[str, str]]
+Expansion = tuple[list[str], int, dict[str, str], str]
 
 
 def invalid_loop_run_record(
@@ -77,6 +77,8 @@ class LoopWalk:
         ordered: list[dict[str, Any]],
         step_id: str,
         outcome: dict[str, Any],
+        *,
+        on_item_error: str = "fail",
     ) -> list[dict[str, Any]]:
         items = outcome.get("_items") if outcome.get("status") == "ok" else None
         if items is None:
@@ -89,6 +91,7 @@ class LoopWalk:
                     body_ids,
                     len(items),
                     {body_id: actions.get(body_id, "") for body_id in body_ids},
+                    on_item_error,
                 )
             )
             self.original_body_ids.update(body_ids)
@@ -111,7 +114,10 @@ class LoopWalk:
         """Re-resolve a checkpointed loop and expand only if its digest matches."""
         outcome = control_flow.run_control_step(action, params, results, inputs)
         if outcome["status"] == "ok" and outcome.get("output") == recorded_output:
-            return self.expand_outcome(ordered, step_id, outcome)
+            return self.expand_outcome(
+                ordered, step_id, outcome,
+                on_item_error=loop_item_error_mode(params),
+            )
         results[step_id] = {
             "action": action,
             "status": "failed",
@@ -129,11 +135,24 @@ class LoopWalk:
         )
         return ordered
 
-    def aggregate(self, results: dict[str, dict[str, Any]]) -> None:
-        for body_ids, item_count, actions in reversed(self.expanded):
-            control_flow.aggregate_loop_results(
+    def aggregate(
+        self, results: dict[str, dict[str, Any]], *, failed: set[str] | None = None
+    ) -> int:
+        """Collapse clone results; returns the count of absorbed item errors."""
+        absorbed = 0
+        for body_ids, item_count, actions, on_item_error in reversed(self.expanded):
+            absorbed += control_flow.aggregate_loop_results(
                 results,
                 body_ids,
                 item_count,
                 actions=actions,
+                on_item_error=on_item_error,
+                failed=failed,
             )
+        return absorbed
+
+
+def loop_item_error_mode(params: dict[str, Any]) -> str:
+    """The loop's declared item-error mode; unknown values fail closed to ``fail``."""
+    mode = params.get("on_item_error", "fail")
+    return mode if mode in control_flow.LOOP_ITEM_ERROR_MODES else "fail"

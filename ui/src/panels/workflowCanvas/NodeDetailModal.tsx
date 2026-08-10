@@ -29,6 +29,11 @@ interface NodeDetailModalProps {
   onRename: () => void;
   onDelete: () => void;
   onClose: () => void;
+  // Chat-first authoring: the canvas is a read-only projection. When set, the
+  // modal inspects (no edit affordances) and offers "Ask in chat" instead -
+  // pointing at a step, never mutating it. Mutation stays in the chat lane.
+  readOnly?: boolean;
+  onAskInChat?: (stepId: string) => void;
 }
 
 function safeObj(text: string): Record<string, unknown> {
@@ -50,6 +55,7 @@ const STATUS_LABEL: Record<RunNodeStatus, string> = {
   error: "Error",
   skipped: "Skipped",
   paused: "Needs you",
+  exception: "Recovered",
 };
 
 export function NodeDetailModal({
@@ -61,6 +67,8 @@ export function NodeDetailModal({
   onRename,
   onDelete,
   onClose,
+  readOnly = false,
+  onAskInChat,
 }: NodeDetailModalProps) {
   if (!selectedNode) return null;
   const d = selectedNode.data;
@@ -101,60 +109,102 @@ export function NodeDetailModal({
           )}
         </header>
 
-        <label className="wf3-modal__field">
-          <span>id</span>
-          <input value={inspector.editId} onChange={(e) => inspector.setEditId(e.target.value)} />
-        </label>
+        {readOnly ? (
+          <>
+            <div className="wf3-modal__field">
+              <span>id</span>
+              <div className="code">{inspector.editId}</div>
+            </div>
+            <div className="wf3-modal__field">
+              <span>action (verb)</span>
+              <div className="code">{d.action}</div>
+            </div>
+            {inspector.editDesc && (
+              <div className="wf3-modal__field">
+                <span>description</span>
+                <div>{inspector.editDesc}</div>
+              </div>
+            )}
+            <div className="wf3-modal__field">
+              <span>parameters</span>
+              <pre className="wf3-modal__code code">{inspector.editParams || "{}"}</pre>
+            </div>
+            <footer className="wf3-modal__actions">
+              {onAskInChat && (
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={() => {
+                    onAskInChat(inspector.editId || selectedNode.id);
+                    onClose();
+                  }}
+                >
+                  Ask in chat
+                </button>
+              )}
+              <button type="button" className="btn" onClick={onClose}>
+                Close
+              </button>
+            </footer>
+          </>
+        ) : (
+          <>
+            <label className="wf3-modal__field">
+              <span>id</span>
+              <input value={inspector.editId} onChange={(e) => inspector.setEditId(e.target.value)} />
+            </label>
 
-        <label className="wf3-modal__field">
-          <span>action (verb)</span>
-          <Select
-            value={d.action}
-            ariaLabel="Action verb"
-            onChange={onSwap}
-            options={verbs.map((v) => ({ value: v.id, label: v.id }))}
-          />
-        </label>
+            <label className="wf3-modal__field">
+              <span>action (verb)</span>
+              <Select
+                value={d.action}
+                ariaLabel="Action verb"
+                onChange={onSwap}
+                options={verbs.map((v) => ({ value: v.id, label: v.id }))}
+              />
+            </label>
 
-        <label className="wf3-modal__field">
-          <span>description</span>
-          <input
-            value={inspector.editDesc}
-            onChange={(e) => inspector.setEditDesc(e.target.value)}
-          />
-        </label>
+            <label className="wf3-modal__field">
+              <span>description</span>
+              <input
+                value={inspector.editDesc}
+                onChange={(e) => inspector.setEditDesc(e.target.value)}
+              />
+            </label>
 
-        <div className="wf3-modal__field">
-          <span>parameters</span>
-          {hasSchema ? (
-            <SchemaFormV2
-              schema={verb!.input_schema}
-              value={safeObj(inspector.editParams)}
-              onChange={(o) => inspector.setEditParams(JSON.stringify(o, null, 2))}
-            />
-          ) : (
-            <textarea
-              className="wf3-modal__code code"
-              value={inspector.editParams}
-              onChange={(e) => inspector.setEditParams(e.target.value)}
-              rows={5}
-            />
-          )}
-        </div>
+            <div className="wf3-modal__field">
+              <span>parameters</span>
+              {hasSchema ? (
+                <SchemaFormV2
+                  schema={verb!.input_schema}
+                  value={safeObj(inspector.editParams)}
+                  onChange={(o) => inspector.setEditParams(JSON.stringify(o, null, 2))}
+                />
+              ) : (
+                <textarea
+                  className="wf3-modal__code code"
+                  value={inspector.editParams}
+                  onChange={(e) => inspector.setEditParams(e.target.value)}
+                  rows={5}
+                />
+              )}
+            </div>
 
-        {inspector.editError && <p className="wf3-modal__error error">{inspector.editError}</p>}
+            {inspector.editError && <p className="wf3-modal__error error">{inspector.editError}</p>}
 
-        <footer className="wf3-modal__actions">
-          <button type="button" className="btn btn--primary" onClick={inspector.applyParams}>
-            Apply
-          </button>
-          <button type="button" className="btn" onClick={onRename}>
-            Rename
-          </button>
-          <button type="button" className="btn btn--ghost" onClick={onDelete}>
-            Delete
-          </button>
-        </footer>
+            <footer className="wf3-modal__actions">
+              <button type="button" className="btn btn--primary" onClick={inspector.applyParams}>
+                Apply
+              </button>
+              <button type="button" className="btn" onClick={onRename}>
+                Rename
+              </button>
+              <button type="button" className="btn btn--ghost" onClick={onDelete}>
+                Delete
+              </button>
+            </footer>
+          </>
+        )}
       </div>
     </div>
   );

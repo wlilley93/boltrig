@@ -11,7 +11,6 @@ import {
   BackgroundVariant,
   ReactFlow,
   ReactFlowProvider,
-  useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useState } from "react";
@@ -21,15 +20,12 @@ import { EditorHeader } from "./workflowCanvas/EditorHeader";
 import { useWorkflowCanvas } from "./workflowCanvas/useWorkflowCanvas";
 import { nodeTypes } from "./workflowCanvas/nodes";
 import { edgeTypes } from "./workflowCanvas/edges";
-import { DockToolbar } from "./workflowCanvas/DockToolbar";
-import { NodeDrawer, DRAWER_DRAG_KIND } from "./workflowCanvas/NodeDrawer";
 import { NodeDetailModal } from "./workflowCanvas/NodeDetailModal";
 import { ExecutionConsole } from "./workflowCanvas/ExecutionConsole";
 import { BoltChatPanel } from "./workflowCanvas/BoltChatPanel";
 import { StickyNotes } from "./workflowCanvas/StickyNotes";
 import { useStickyNotes } from "./workflowCanvas/useStickyNotes";
-import type { NodeVisualKind } from "./workflowCanvas/nodeTaxonomy";
-import type { XYPosition } from "@xyflow/react";
+import { useStudioChat } from "./workflowCanvas/useStudioChat";
 
 export type {
   WorkflowStep,
@@ -91,6 +87,7 @@ export function WorkflowCanvas({
         canRedo={ctx.graph.canRedo}
         onUndo={ctx.graph.undo}
         onRedo={ctx.graph.redo}
+        readOnly
       />
       {pendingRunCard}
       <ReactFlowProvider>
@@ -102,46 +99,32 @@ export function WorkflowCanvas({
 
 type Ctx = ReturnType<typeof useWorkflowCanvas>;
 
+// Chat-first authoring (design pivot): the canvas is a READ-ONLY projection of
+// the stored definition. No node drawer, no drag-drop, no connect - describing
+// the flow in the side panel chat is the only authoring channel; clicking a
+// node inspects it (and can point the chat at it). Layout dragging is allowed
+// (positions are presentation, not semantics); structure is not.
 function CanvasSurface({ ctx }: { ctx: Ctx }) {
   const { data, meta, graph, inspector, onNodeClick } = ctx;
-  const rf = useReactFlow();
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
-  const [boltOpen, setBoltOpen] = useState(false);
+  const [boltOpen, setBoltOpen] = useState(true);
   const [notes, setNotes] = useStickyNotes(meta.wfId);
+  const chat = useStudioChat(meta.wfId, graph.previewSteps);
 
-  const addAtCentre = (kind: NodeVisualKind) => {
-    const centre = rf.screenToFlowPosition({
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-    });
-    graph.addNodeKind(kind, centre);
-  };
-
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const kind = e.dataTransfer.getData(DRAWER_DRAG_KIND) as NodeVisualKind;
-    if (!kind) return;
-    const pos: XYPosition = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
-    graph.addNodeKind(kind, pos);
-  };
-
-  const closeModal = () => {
-    if (inspector.dirty()) inspector.commit();
-    graph.setSelectedId(null);
-  };
+  const closeModal = () => graph.setSelectedId(null);
 
   return (
-    <div className="wf3-canvas-wrap" onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
+    <div className="wf3-canvas-wrap">
       <ReactFlow
         nodes={graph.nodes}
         edges={graph.edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={graph.onNodesChange}
-        onEdgesChange={graph.onEdgesChange}
-        onConnect={graph.onConnect}
         onNodeClick={onNodeClick}
+        nodesConnectable={false}
+        edgesFocusable={false}
+        deleteKeyCode={null}
         minZoom={0.3}
         maxZoom={2}
         fitView
@@ -155,18 +138,15 @@ function CanvasSurface({ ctx }: { ctx: Ctx }) {
         />
       </ReactFlow>
 
-      <NodeDrawer
-        open={drawerOpen}
-        onAdd={addAtCentre}
-        onClose={() => setDrawerOpen(false)}
-        verbsById={data.verbsById}
-      />
-      <DockToolbar
-        drawerOpen={drawerOpen}
-        onToggleDrawer={() => setDrawerOpen((v) => !v)}
-        consoleOpen={consoleOpen}
-        onToggleConsole={() => setConsoleOpen((v) => !v)}
-      />
+      <button
+        type="button"
+        className="wf3-console-toggle btn"
+        onClick={() => setConsoleOpen((v) => !v)}
+        aria-label="Toggle execution console"
+        title="Execution console"
+      >
+        Console
+      </button>
       <NodeDetailModal
         selectedNode={graph.selectedNode}
         verbs={data.verbs}
@@ -176,6 +156,11 @@ function CanvasSurface({ ctx }: { ctx: Ctx }) {
         onRename={inspector.renameStep}
         onDelete={graph.deleteSelected}
         onClose={closeModal}
+        readOnly
+        onAskInChat={(stepId) => {
+          chat.mention(stepId);
+          setBoltOpen(true);
+        }}
       />
       <ExecutionConsole
         open={consoleOpen}
@@ -187,6 +172,7 @@ function CanvasSurface({ ctx }: { ctx: Ctx }) {
         onToggle={() => setBoltOpen((v) => !v)}
         workflowId={meta.wfId}
         steps={graph.previewSteps}
+        chat={chat}
       />
       <StickyNotes notes={notes} onChange={setNotes} />
     </div>
