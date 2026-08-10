@@ -1,0 +1,29 @@
+id: CMP-0025
+name: AdaptersBuild
+status: proposed
+contractVersion: 1
+figma: null
+code:
+  importPath: ./build/AdaptersBuild
+  sourceFile: apps/worker/src/components/build/AdaptersBuild.tsx
+  exportName: AdaptersBuild
+props: []
+states:
+  required: []
+  drawn: []
+  built: []
+a11y:
+  role: null
+  accessibleNameSource: children
+  keyboard: []
+  contrastFloors: []
+demand:
+  routes: 1
+  measuredAt: 2026-08-10T13:48:51Z
+  measuredBy: vds register measure-demand
+supersedes: []
+supersededBy: null
+amendments: []
+basis:
+- ACT-VDS-001:s5
+notes: 'Imported by `vds register import` from apps/worker/src/components/build/AdaptersBuild.tsx:41. A CANDIDATE, not a contract: it carries what the code says and nothing the code cannot say. Its required states, contrast floors, role and keyboard contract are decisions nobody has made yet.'

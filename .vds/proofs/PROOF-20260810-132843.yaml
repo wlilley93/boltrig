@@ -1,0 +1,1661 @@
+id: PROOF-20260810-132843
+kind: composition
+status: failed
+warrant_id: null
+command: vds proof composition
+script: crates/vds-proof/src/composition.rs
+exit_code: 1
+rows_considered: 1277
+rows_enforced: 271
+rows_skipped_reasons:
+  bare_element_below_the_floor_vds_s9_10: 966
+  component_reference_with_no_resolvable_import: 38
+  import_outside_governed_prefixes: 2
+violations:
+- location: apps/worker/src/components/AccountView.tsx:43 <Topbar>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0022 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0022 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:58 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:68 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:73 <ProfileSettings>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0005 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0005 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:74 <ActivityAndExport>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0003 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0003 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:75 <PrivacyPolicyEvidence>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0004 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0004 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:80 <DeveloperTokens>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0007 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0007 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:81 <ConnectionInstructions>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0013 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0013 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:82 <AiKeyManagement>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0011 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0011 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:83 <PasswordSecurity>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0008 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0008 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:84 <TwoFactorSecurity>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0010 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0010 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:85 <SecuritySessions>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0009 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0009 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:86 <ActiveContext>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0006 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0006 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:90 <NotificationPreferences>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0001 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0001 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:93 <PersonalAgentLifecycle>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0002 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0002 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1044 <Topbar>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0022 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0022 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1051 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1055 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0015 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0015 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1056 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1057 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1058 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1073 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1077 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1101 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1257 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1266 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1267 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1268 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1273 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1279 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1284 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1309 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1310 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1311 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1311 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1313 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1317 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1324 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1325 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1326 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1328 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1334 <textarea>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <textarea>, or a named carve-out in [surface] element_carveouts
+  actual: '<textarea> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1346 <textarea>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <textarea>, or a named carve-out in [surface] element_carveouts
+  actual: '<textarea> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1371 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1376 <datalist>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <datalist>, or a named carve-out in [surface] element_carveouts
+  actual: '<datalist> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1376 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1394 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1395 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1396 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1398 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1401 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1403 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1428 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1471 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1587 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1599 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1608 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1609 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1615 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1624 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1626 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1633 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1650 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1667 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1691 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1701 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1709 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1936 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1940 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1960 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1967 <RoutineThumb>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0061 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0061 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:19 <Topbar>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0022 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0022 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:29 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:39 <CapabilityRunner>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0026 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0026 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:40 <RegistryBuild>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0028 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0028 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:41 <SkillsBuild>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0029 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0029 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:42 <AdaptersBuild>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0025 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0025 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:43 <ModelEndpointsBuild>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0027 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0027 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:44 <SpawnRulesBuild>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0030 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0030 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:67 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1106 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1109 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1109 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1110 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1111 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1111 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1111 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1114 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1123 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1149 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1153 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1167 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1170 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1171 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1421 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1471 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1472 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1472 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1472 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1475 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1481 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1486 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1528 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1538 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1546 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1551 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1557 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1570 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1581 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1592 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1600 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1604 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1621 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1633 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1653 <textarea>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <textarea>, or a named carve-out in [surface] element_carveouts
+  actual: '<textarea> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1670 <textarea>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <textarea>, or a named carve-out in [surface] element_carveouts
+  actual: '<textarea> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1675 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1679 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1680 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1706 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1736 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1755 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1784 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1801 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1802 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1808 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1809 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1811 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1812 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1814 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1814 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1814 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1814 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1815 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1817 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1820 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1890 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1908 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1914 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:2133 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0015 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0015 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:2134 <textarea>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <textarea>, or a named carve-out in [surface] element_carveouts
+  actual: '<textarea> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:2135 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:2136 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:848 <Topbar>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0022 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0022 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:859 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:869 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0015 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0015 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:870 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:871 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:872 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:889 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:891 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1000 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1004 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1047 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1082 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1187 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1228 <FamiliarBadge>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0031 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0031 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1241 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1251 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1256 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1267 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1281 <ConversationControls>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0014 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0014 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:539 <FamiliarStage>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0032 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0032 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:566 <VoiceCall>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0024 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0024 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:576 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:610 <details>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <details>, or a named carve-out in [surface] element_carveouts
+  actual: '<details> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:611 <summary>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <summary>, or a named carve-out in [surface] element_carveouts
+  actual: '<summary> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:627 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:655 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:691 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:743 <FamiliarBadge>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0031 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0031 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:758 <ReactMarkdown>
+  rule: 'VDS S-7(5) composition: bounded by [surface] governed_import_prefixes'
+  expected: an import inside a governed prefix, or one resolving into a governed library directory
+  actual: imported from "react-markdown", which is outside both
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:760 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:781 <FamiliarBadge>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0031 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0031 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:795 <details>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <details>, or a named carve-out in [surface] element_carveouts
+  actual: '<details> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:795 <summary>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <summary>, or a named carve-out in [surface] element_carveouts
+  actual: '<summary> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:796 <ReactMarkdown>
+  rule: 'VDS S-7(5) composition: bounded by [surface] governed_import_prefixes'
+  expected: an import inside a governed prefix, or one resolving into a governed library directory
+  actual: imported from "react-markdown", which is outside both
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:871 <LiveQuestionCard>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0016 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0016 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:963 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:966 <textarea>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <textarea>, or a named carve-out in [surface] element_carveouts
+  actual: '<textarea> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:988 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:989 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:993 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:994 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:995 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:304 <Topbar>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0022 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0022 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:317 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:321 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0015 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0015 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:322 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:323 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:324 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:344 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:348 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:377 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:387 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:395 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:396 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:407 <details>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <details>, or a named carve-out in [surface] element_carveouts
+  actual: '<details> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:408 <summary>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <summary>, or a named carve-out in [surface] element_carveouts
+  actual: '<summary> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:413 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:427 <details>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <details>, or a named carve-out in [surface] element_carveouts
+  actual: '<details> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:428 <summary>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <summary>, or a named carve-out in [surface] element_carveouts
+  actual: '<summary> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:464 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:467 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:470 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:479 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:480 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:483 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:485 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:487 <textarea>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <textarea>, or a named carve-out in [surface] element_carveouts
+  actual: '<textarea> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:488 <textarea>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <textarea>, or a named carve-out in [surface] element_carveouts
+  actual: '<textarea> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:491 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:492 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:336 <Topbar>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0022 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0022 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:350 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:359 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0015 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0015 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:376 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:396 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:422 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:423 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:500 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:512 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:528 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:101 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:111 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:135 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:147 <Topbar>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0022 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0022 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:154 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:216 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:321 <BackupStatusCard>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0012 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0012 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:58 <Topbar>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0022 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0022 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:68 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:684 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:686 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:689 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:690 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:691 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:694 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:695 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:696 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:697 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:698 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:702 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:705 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:71 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:743 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:744 <details>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <details>, or a named carve-out in [surface] element_carveouts
+  actual: '<details> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:745 <summary>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <summary>, or a named carve-out in [surface] element_carveouts
+  actual: '<summary> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:762 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:764 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:891 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0015 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0015 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:918 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:934 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:937 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:937 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:938 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:944 <select>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <select>, or a named carve-out in [surface] element_carveouts
+  actual: '<select> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:947 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:947 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:947 <option>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <option>, or a named carve-out in [surface] element_carveouts
+  actual: '<option> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:949 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:953 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:957 <input>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <input>, or a named carve-out in [surface] element_carveouts
+  actual: '<input> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:961 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:43 <Topbar>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0022 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0022 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:57 <button>
+  rule: 'VDS S-9(10) composition R4 ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5): a bare element above the primitive floor is an unregistered component wearing an element''s name'
+  expected: a registered component in place of the bare <button>, or a named carve-out in [surface] element_carveouts
+  actual: '<button> is an interactive element above the primitive floor, used bare. A hand-rolled control is exactly the drift this proof exists to catch: nothing governs its states, its contrast or its keyboard contract, and every proof about the registered equivalent stays green while users get this instead'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:66 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:70 <OrganisationPolicy>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0020 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0020 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:75 <OrganisationRoster>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0019 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0019 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:80 <WorkspaceAdministration>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0021 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0021 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:86 <AdminDirectory>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0017 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0017 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:87 <InvitationAdministration>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0018 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0018 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:90 <Unavailable>
+  rule: 'VDS S-7(5) composition R2 / S-5(4): the record exists and its status is not a registered state'
+  expected: CMP-0023 in status one of registered, built, verified before any screen composes with it
+  actual: 'CMP-0023 status proposed: the record exists but the component is not registered, so this is drift'
+  severity: fatal
+  drift: undetermined
+notes:
+- 'S-9(10) is SETTLED ([2026] VJS-CC-VIBE-DESIGN-SYSTEM 5, answering SUBMISSION-VDS-005): elements in the enumerated floor are informational; a bare element above it fails R4 unless named in [surface] element_carveouts, where every use is counted by site.'
+inputs_digest: sha256:4c5f43394c35a21afdb919c45e26d82c9e6074a4a63266d0c2ec6775486b3ada
+digest: sha256:79181c3a5bb00c1e594e30e5eb6fd4545ee71355ee04b9514df47aca8e3decaa
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-10T13:28:41Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

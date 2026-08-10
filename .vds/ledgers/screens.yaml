@@ -1,0 +1,9084 @@
+schema_version: 1
+generated_at: 2026-08-10T13:48:51Z
+generated_by: vds ledger screens
+source_globs:
+- apps/worker/src/components/*View.tsx
+source_digest: sha256:98ae215e032bdebe5b02ad98b562b52469de75ccf97861579f2aaf3bc180ed7d
+content_digest: sha256:ea34a5075791dbe8513d687d62728c1956b3e7b5d28695270eae1fe264aba6b9
+screens:
+- route: apps/worker/src/components/AccountView.tsx
+  digest: sha256:de974d81b5f02bd734d36b61476d72dbe60a8c12931d6b3084f396dd446825ac
+  references:
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 42
+  - name: Topbar
+    root: Topbar
+    export_name: Topbar
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 43
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 44
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 45
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 46
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 47
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 48
+  - name: nav
+    root: nav
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 51
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 58
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 68
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 70
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 72
+  - name: ProfileSettings
+    root: ProfileSettings
+    export_name: ProfileSettings
+    namespace_member: false
+    kind: component
+    import_path: ./AccountProfileSections
+    resolved_path: apps/worker/src/components/AccountProfileSections
+    line: 73
+  - name: ActivityAndExport
+    root: ActivityAndExport
+    export_name: ActivityAndExport
+    namespace_member: false
+    kind: component
+    import_path: ./AccountProfileSections
+    resolved_path: apps/worker/src/components/AccountProfileSections
+    line: 74
+  - name: PrivacyPolicyEvidence
+    root: PrivacyPolicyEvidence
+    export_name: PrivacyPolicyEvidence
+    namespace_member: false
+    kind: component
+    import_path: ./AccountProfileSections
+    resolved_path: apps/worker/src/components/AccountProfileSections
+    line: 75
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 79
+  - name: DeveloperTokens
+    root: DeveloperTokens
+    export_name: DeveloperTokens
+    namespace_member: false
+    kind: component
+    import_path: ./AccountSecuritySections
+    resolved_path: apps/worker/src/components/AccountSecuritySections
+    line: 80
+  - name: ConnectionInstructions
+    root: ConnectionInstructions
+    export_name: ConnectionInstructions
+    namespace_member: false
+    kind: component
+    import_path: ./ConnectionInstructions
+    resolved_path: apps/worker/src/components/ConnectionInstructions
+    line: 81
+  - name: AiKeyManagement
+    root: AiKeyManagement
+    export_name: AiKeyManagement
+    namespace_member: false
+    kind: component
+    import_path: ./AiKeyManagement
+    resolved_path: apps/worker/src/components/AiKeyManagement
+    line: 82
+  - name: PasswordSecurity
+    root: PasswordSecurity
+    export_name: PasswordSecurity
+    namespace_member: false
+    kind: component
+    import_path: ./AccountSecuritySections
+    resolved_path: apps/worker/src/components/AccountSecuritySections
+    line: 83
+  - name: TwoFactorSecurity
+    root: TwoFactorSecurity
+    export_name: TwoFactorSecurity
+    namespace_member: false
+    kind: component
+    import_path: ./AccountSecuritySections
+    resolved_path: apps/worker/src/components/AccountSecuritySections
+    line: 84
+  - name: SecuritySessions
+    root: SecuritySessions
+    export_name: SecuritySessions
+    namespace_member: false
+    kind: component
+    import_path: ./AccountSecuritySections
+    resolved_path: apps/worker/src/components/AccountSecuritySections
+    line: 85
+  - name: ActiveContext
+    root: ActiveContext
+    export_name: ActiveContext
+    namespace_member: false
+    kind: component
+    import_path: ./AccountSecuritySections
+    resolved_path: apps/worker/src/components/AccountSecuritySections
+    line: 86
+  - name: NotificationPreferences
+    root: NotificationPreferences
+    export_name: NotificationPreferences
+    namespace_member: false
+    kind: component
+    import_path: ./AccountAutomationSections
+    resolved_path: apps/worker/src/components/AccountAutomationSections
+    line: 90
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 90
+  - name: PersonalAgentLifecycle
+    root: PersonalAgentLifecycle
+    export_name: PersonalAgentLifecycle
+    namespace_member: false
+    kind: component
+    import_path: ./AccountAutomationSections
+    resolved_path: apps/worker/src/components/AccountAutomationSections
+    line: 93
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 93
+- route: apps/worker/src/components/AutomationView.tsx
+  digest: sha256:d9e7a202e69cf206ea9d1119c09b42011119bc48e79f54d6e091d3d7127c774e
+  references:
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1043
+  - name: Topbar
+    root: Topbar
+    export_name: Topbar
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 1044
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1045
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1046
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1047
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1048
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1049
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1051
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1053
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1054
+  - name: ExactApprovalFinalizer
+    root: ExactApprovalFinalizer
+    export_name: ExactApprovalFinalizer
+    namespace_member: false
+    kind: component
+    import_path: ./ExactApprovalFinalizer
+    resolved_path: apps/worker/src/components/ExactApprovalFinalizer
+    line: 1055
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 1056
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 1057
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 1058
+  - name: RoutinePicker
+    root: RoutinePicker
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1060
+    unresolved_because: '"RoutinePicker" is not imported in this file, so it is defined locally or comes from a global'
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1069
+  - name: aside
+    root: aside
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1070
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1071
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1072
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1073
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1075
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1077
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1085
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1086
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 1101
+  - name: WorkflowEditor
+    root: WorkflowEditor
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1105
+    unresolved_because: '"WorkflowEditor" is not imported in this file, so it is defined locally or comes from a global'
+  - name: main
+    root: main
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1253
+  - name: header
+    root: header
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1254
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1255
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1256
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1257
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1265
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1266
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1267
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1268
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1271
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1272
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1273
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1273
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1273
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1274
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1275
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1276
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1277
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1279
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1279
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1279
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1281
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1282
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1283
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1283
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1283
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1284
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1287
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1288
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1289
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1290
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1293
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1294
+  - name: article
+    root: article
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1305
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1306
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1307
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1308
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1309
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1309
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1309
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1310
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1310
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1310
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1311
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1311
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1311
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1311
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1313
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1313
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1313
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1315
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1316
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1317
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1324
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1325
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1326
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1328
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1331
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1334
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1334
+  - name: textarea
+    root: textarea
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1334
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1336
+  - name: code
+    root: code
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1337
+  - name: code
+    root: code
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1338
+  - name: code
+    root: code
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1339
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1344
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1345
+  - name: textarea
+    root: textarea
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1346
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1355
+  - name: code
+    root: code
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1356
+  - name: code
+    root: code
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1357
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1363
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1369
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1371
+  - name: datalist
+    root: datalist
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1376
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1376
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1378
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1379
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1380
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1381
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1383
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1394
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1395
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1396
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1398
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1401
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1403
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1406
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1407
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1408
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1409
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1410
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1415
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1421
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1422
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1425
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1428
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1439
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1441
+  - name: article
+    root: article
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1443
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1444
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1445
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1446
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1452
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1464
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1471
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1484
+  - name: WorkflowTriggersPanel
+    root: WorkflowTriggersPanel
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1487
+    unresolved_because: '"WorkflowTriggersPanel" is not imported in this file, so it is defined locally or comes from a global'
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1504
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1505
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1506
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1507
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1508
+  - name: a
+    root: a
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1514
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1517
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1518
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1522
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1523
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1525
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1526
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1527
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1527
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1533
+  - name: a
+    root: a
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1534
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1534
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1577
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1578
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1579
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1580
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1581
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1584
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1585
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1586
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1587
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1597
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1598
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1599
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1608
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1609
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1613
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1614
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1615
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1624
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1626
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1633
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1642
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1643
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1644
+  - name: code
+    root: code
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1645
+  - name: code
+    root: code
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1647
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1649
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1650
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1654
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1655
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1656
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1661
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1667
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1677
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1679
+  - name: article
+    root: article
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1681
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1682
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1683
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1684
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1690
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1691
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1701
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1709
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1721
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1723
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1724
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1731
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1733
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1935
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1936
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1938
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1939
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1940
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1941
+  - name: svg
+    root: svg
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1942
+  - name: line
+    root: line
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1943
+  - name: line
+    root: line
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1943
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1946
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1947
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1960
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1966
+  - name: RoutineThumb
+    root: RoutineThumb
+    export_name: RoutineThumb
+    namespace_member: false
+    kind: component
+    import_path: ./RoutineThumb
+    resolved_path: apps/worker/src/components/RoutineThumb
+    line: 1967
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1969
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1970
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1971
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1972
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1973
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1975
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1980
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1981
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1982
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1990
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1997
+- route: apps/worker/src/components/BuildView.tsx
+  digest: sha256:bdc8cbc7d2cc0250efba9205099cd6dbb4fbc6adda3e343ae0420414c4208679
+  references:
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 18
+  - name: Topbar
+    root: Topbar
+    export_name: Topbar
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 19
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 20
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 21
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 22
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 23
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 24
+  - name: nav
+    root: nav
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 27
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 29
+  - name: CapabilityRunner
+    root: CapabilityRunner
+    export_name: CapabilityRunner
+    namespace_member: false
+    kind: component
+    import_path: ./build/CapabilityRunner
+    resolved_path: apps/worker/src/components/build/CapabilityRunner
+    line: 39
+  - name: RegistryBuild
+    root: RegistryBuild
+    export_name: RegistryBuild
+    namespace_member: false
+    kind: component
+    import_path: ./build/RegistryBuild
+    resolved_path: apps/worker/src/components/build/RegistryBuild
+    line: 40
+  - name: SkillsBuild
+    root: SkillsBuild
+    export_name: SkillsBuild
+    namespace_member: false
+    kind: component
+    import_path: ./build/SkillsBuild
+    resolved_path: apps/worker/src/components/build/SkillsBuild
+    line: 41
+  - name: AdaptersBuild
+    root: AdaptersBuild
+    export_name: AdaptersBuild
+    namespace_member: false
+    kind: component
+    import_path: ./build/AdaptersBuild
+    resolved_path: apps/worker/src/components/build/AdaptersBuild
+    line: 42
+  - name: ModelEndpointsBuild
+    root: ModelEndpointsBuild
+    export_name: ModelEndpointsBuild
+    namespace_member: false
+    kind: component
+    import_path: ./build/ModelEndpointsBuild
+    resolved_path: apps/worker/src/components/build/ModelEndpointsBuild
+    line: 43
+  - name: SpawnRulesBuild
+    root: SpawnRulesBuild
+    export_name: SpawnRulesBuild
+    namespace_member: false
+    kind: component
+    import_path: ./build/SpawnRulesBuild
+    resolved_path: apps/worker/src/components/build/SpawnRulesBuild
+    line: 44
+  - name: CapabilityHistory
+    root: CapabilityHistory
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 45
+    unresolved_because: '"CapabilityHistory" is not imported in this file, so it is defined locally or comes from a global'
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 64
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 65
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 66
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 66
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 66
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 67
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 69
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 70
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 71
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 73
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 74
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 75
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 75
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 75
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 76
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 79
+- route: apps/worker/src/components/ChannelsView.tsx
+  digest: sha256:3f8cefccb892c6345e4cab3f4087443f6508881c4cd6466388828af2202b7b74
+  references:
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 847
+  - name: Topbar
+    root: Topbar
+    export_name: Topbar
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 848
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 852
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 853
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 854
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 855
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 856
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 859
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 868
+  - name: ExactApprovalFinalizer
+    root: ExactApprovalFinalizer
+    export_name: ExactApprovalFinalizer
+    namespace_member: false
+    kind: component
+    import_path: ./ExactApprovalFinalizer
+    resolved_path: apps/worker/src/components/ExactApprovalFinalizer
+    line: 869
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 870
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 871
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 872
+  - name: ConnectChannelForm
+    root: ConnectChannelForm
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 874
+    unresolved_because: '"ConnectChannelForm" is not imported in this file, so it is defined locally or comes from a global'
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 886
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 887
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 889
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 891
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 896
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 897
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 898
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 899
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 901
+  - name: ChannelDetail
+    root: ChannelDetail
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 908
+    unresolved_because: '"ChannelDetail" is not imported in this file, so it is defined locally or comes from a global'
+  - name: form
+    root: form
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1067
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1104
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1105
+  - name: h3
+    root: h3
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1105
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1105
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1106
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1108
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1109
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1109
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1109
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1109
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1110
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1110
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1110
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1111
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1111
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1111
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1111
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1111
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1112
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1113
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1114
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1123
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1131
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1137
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1140
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1144
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1149
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1149
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1149
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1149
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1151
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1152
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1153
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1163
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1167
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1167
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1167
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1169
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1170
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1171
+  - name: aside
+    root: aside
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1418
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1419
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1420
+  - name: h3
+    root: h3
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1420
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1420
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1421
+  - name: dl
+    root: dl
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1423
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1424
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1424
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1424
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1425
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1425
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1425
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1426
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1426
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1426
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1427
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1427
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1427
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1428
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1428
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1428
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1429
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1429
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1429
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1432
+  - name: GatewaySessionRecovery
+    root: GatewaySessionRecovery
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1438
+    unresolved_because: '"GatewaySessionRecovery" is not imported in this file, so it is defined locally or comes from a global'
+  - name: form
+    root: form
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1443
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1470
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1471
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1471
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1471
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1472
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1472
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1472
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1472
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1472
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1473
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1474
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1475
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1481
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1486
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1491
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1497
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1503
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1509
+  - name: fieldset
+    root: fieldset
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1515
+  - name: legend
+    root: legend
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1516
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1517
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1525
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1526
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1527
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1528
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1536
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1537
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1538
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1546
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1551
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1557
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1568
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1570
+  - name: fieldset
+    root: fieldset
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1578
+  - name: legend
+    root: legend
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1579
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1580
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1581
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1586
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1590
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1591
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1592
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1600
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1604
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1608
+  - name: fieldset
+    root: fieldset
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1612
+  - name: legend
+    root: legend
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1613
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1615
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1620
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1621
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1628
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1632
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1633
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1640
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1645
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1651
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1652
+  - name: textarea
+    root: textarea
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1653
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1663
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1670
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1670
+  - name: textarea
+    root: textarea
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1670
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1671
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1673
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1674
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1675
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1678
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1679
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1679
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1679
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1680
+  - name: ChannelSendTest
+    root: ChannelSendTest
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1682
+    unresolved_because: '"ChannelSendTest" is not imported in this file, so it is defined locally or comes from a global'
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1683
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1684
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1685
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1686
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1692
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1698
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1702
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1703
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1706
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1716
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1717
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1718
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1720
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1723
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1724
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1725
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1726
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1731
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1733
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1736
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1747
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1748
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1748
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1748
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1749
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1750
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1751
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1753
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1754
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1754
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1754
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1755
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1764
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1767
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1771
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1774
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1775
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1784
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1795
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1796
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1797
+  - name: code
+    root: code
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1798
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1799
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1800
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1801
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1802
+  - name: form
+    root: form
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1806
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1807
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1808
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1809
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1811
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1811
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1811
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1812
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1812
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1812
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1813
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1814
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1814
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1814
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1814
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1814
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1814
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1815
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1815
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1815
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1817
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1820
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1872
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1873
+  - name: h4
+    root: h4
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1874
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1875
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1881
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1890
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1898
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1899
+  - name: code
+    root: code
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1900
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1901
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1907
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1908
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1914
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1923
+  - name: form
+    root: form
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 2130
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 2131
+  - name: code
+    root: code
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 2132
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 2132
+  - name: ExactApprovalFinalizer
+    root: ExactApprovalFinalizer
+    export_name: ExactApprovalFinalizer
+    namespace_member: false
+    kind: component
+    import_path: ./ExactApprovalFinalizer
+    resolved_path: apps/worker/src/components/ExactApprovalFinalizer
+    line: 2133
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 2134
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 2134
+  - name: textarea
+    root: textarea
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 2134
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 2135
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 2135
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 2135
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 2136
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 2137
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 2138
+- route: apps/worker/src/components/ChatView.tsx
+  digest: sha256:3a33b66f4e72d925bc98a5815eb5df4aa345198c5b2e5e51d2323c6c5b3a83bc
+  references:
+  - name: FamiliarStage
+    root: FamiliarStage
+    export_name: FamiliarStage
+    namespace_member: false
+    kind: component
+    import_path: ./familiar/FamiliarStage
+    resolved_path: apps/worker/src/components/familiar/FamiliarStage
+    line: 544
+  - name: MobileChat
+    root: MobileChat
+    export_name: MobileChat
+    namespace_member: false
+    kind: component
+    import_path: ./MobileChat
+    resolved_path: apps/worker/src/components/MobileChat
+    line: 549
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 571
+  - name: main
+    root: main
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 572
+  - name: header
+    root: header
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 573
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 574
+  - name: h1
+    root: h1
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 575
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 586
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 591
+  - name: ThemeToggle
+    root: ThemeToggle
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 592
+    unresolved_because: '"ThemeToggle" is not imported in this file, so it is defined locally or comes from a global'
+  - name: VoiceCall
+    root: VoiceCall
+    export_name: VoiceCall
+    namespace_member: false
+    kind: component
+    import_path: ./VoiceCall
+    resolved_path: apps/worker/src/components/VoiceCall
+    line: 594
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 604
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 618
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 620
+  - name: Welcome
+    root: Welcome
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 627
+    unresolved_because: '"Welcome" is not imported in this file, so it is defined locally or comes from a global'
+  - name: Message
+    root: Message
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 629
+    unresolved_because: '"Message" is not imported in this file, so it is defined locally or comes from a global'
+  - name: details
+    root: details
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 638
+  - name: summary
+    root: summary
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 639
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 643
+  - name: blockquote
+    root: blockquote
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 647
+  - name: LiveTurn
+    root: LiveTurn
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 650
+    unresolved_because: '"LiveTurn" is not imported in this file, so it is defined locally or comes from a global'
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 652
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 655
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 667
+  - name: Composer
+    root: Composer
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 669
+    unresolved_because: '"Composer" is not imported in this file, so it is defined locally or comes from a global'
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 683
+  - name: RightRail
+    root: RightRail
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 690
+    unresolved_because: '"RightRail" is not imported in this file, so it is defined locally or comes from a global'
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 719
+  - name: svg
+    root: svg
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 727
+  - name: path
+    root: path
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 728
+  - name: path
+    root: path
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 729
+  - name: svg
+    root: svg
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 732
+  - name: path
+    root: path
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 733
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 742
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 743
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 744
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 745
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 746
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 747
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 748
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 749
+  - name: article
+    root: article
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 767
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 769
+  - name: FamiliarBadge
+    root: FamiliarBadge
+    export_name: FamiliarBadge
+    namespace_member: false
+    kind: component
+    import_path: ./familiar/FamiliarBadge
+    resolved_path: apps/worker/src/components/familiar/FamiliarBadge
+    line: 771
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 777
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 780
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 782
+  - name: ReactMarkdown
+    root: ReactMarkdown
+    export_name: default
+    namespace_member: false
+    kind: component
+    import_path: react-markdown
+    line: 786
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 788
+  - name: TurnActivity
+    root: TurnActivity
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 797
+    unresolved_because: '"TurnActivity" is not imported in this file, so it is defined locally or comes from a global'
+  - name: article
+    root: article
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 806
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 807
+  - name: FamiliarBadge
+    root: FamiliarBadge
+    export_name: FamiliarBadge
+    namespace_member: false
+    kind: component
+    import_path: ./familiar/FamiliarBadge
+    resolved_path: apps/worker/src/components/familiar/FamiliarBadge
+    line: 809
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 815
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 817
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 819
+  - name: details
+    root: details
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 823
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 823
+  - name: summary
+    root: summary
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 823
+  - name: ReactMarkdown
+    root: ReactMarkdown
+    export_name: default
+    namespace_member: false
+    kind: component
+    import_path: react-markdown
+    line: 824
+  - name: TurnActivity
+    root: TurnActivity
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 825
+    unresolved_because: '"TurnActivity" is not imported in this file, so it is defined locally or comes from a global'
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 827
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 846
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 849
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 850
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 851
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 851
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 859
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 860
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 871
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 875
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 880
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 881
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 881
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 890
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 891
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 892
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 893
+  - name: LiveQuestionCard
+    root: LiveQuestionCard
+    export_name: LiveQuestionCard
+    namespace_member: false
+    kind: component
+    import_path: ./LiveQuestionCard
+    resolved_path: apps/worker/src/components/LiveQuestionCard
+    line: 899
+  - name: form
+    root: form
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 984
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 986
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 990
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 991
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 993
+  - name: textarea
+    root: textarea
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 994
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1014
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1015
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1016
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1017
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1019
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1021
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1022
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1023
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1028
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1032
+  - name: svg
+    root: svg
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1039
+  - name: line
+    root: line
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1040
+  - name: polyline
+    root: polyline
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1041
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1046
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1070
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1071
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1072
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1075
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1076
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1102
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1103
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1104
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1105
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1108
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1110
+  - name: aside
+    root: aside
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1197
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1210
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1211
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1212
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1213
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1215
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1226
+  - name: RailGroup
+    root: RailGroup
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1227
+    unresolved_because: '"RailGroup" is not imported in this file, so it is defined locally or comes from a global'
+  - name: RailRow
+    root: RailRow
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1228
+    unresolved_because: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  - name: RailRow
+    root: RailRow
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1233
+    unresolved_because: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  - name: RailGroup
+    root: RailGroup
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1241
+    unresolved_because: '"RailGroup" is not imported in this file, so it is defined locally or comes from a global'
+  - name: RailRow
+    root: RailRow
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1243
+    unresolved_because: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  - name: RailRow
+    root: RailRow
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1246
+    unresolved_because: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  - name: RailGroup
+    root: RailGroup
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1251
+    unresolved_because: '"RailGroup" is not imported in this file, so it is defined locally or comes from a global'
+  - name: RailRow
+    root: RailRow
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1253
+    unresolved_because: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  - name: FamiliarBadge
+    root: FamiliarBadge
+    export_name: FamiliarBadge
+    namespace_member: false
+    kind: component
+    import_path: ./familiar/FamiliarBadge
+    resolved_path: apps/worker/src/components/familiar/FamiliarBadge
+    line: 1256
+  - name: RailGroup
+    root: RailGroup
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1263
+    unresolved_because: '"RailGroup" is not imported in this file, so it is defined locally or comes from a global'
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1264
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1265
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1268
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1269
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1274
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1275
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1275
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1275
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1278
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1279
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1284
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1295
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1304
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1308
+  - name: ConversationControls
+    root: ConversationControls
+    export_name: ConversationControls
+    namespace_member: false
+    kind: component
+    import_path: ./ConversationControls
+    resolved_path: apps/worker/src/components/ConversationControls
+    line: 1309
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1319
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1320
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1321
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1321
+- route: apps/worker/src/components/EvaluationsView.tsx
+  digest: sha256:41e3560d2743e681b8deff6d00f30c2c8bc5222191ad1fda7713b940da2d349d
+  references:
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 303
+  - name: Topbar
+    root: Topbar
+    export_name: Topbar
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 304
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 310
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 311
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 312
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 313
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 314
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 317
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 320
+  - name: ExactApprovalFinalizer
+    root: ExactApprovalFinalizer
+    export_name: ExactApprovalFinalizer
+    namespace_member: false
+    kind: component
+    import_path: ./ExactApprovalFinalizer
+    resolved_path: apps/worker/src/components/ExactApprovalFinalizer
+    line: 321
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 322
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 323
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 324
+  - name: CaseEditor
+    root: CaseEditor
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 326
+    unresolved_because: '"CaseEditor" is not imported in this file, so it is defined locally or comes from a global'
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 341
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 342
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 344
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 348
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 357
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 358
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 359
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 360
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 362
+  - name: aside
+    root: aside
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 374
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 375
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 376
+  - name: h3
+    root: h3
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 376
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 376
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 377
+  - name: dl
+    root: dl
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 379
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 380
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 380
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 380
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 381
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 381
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 381
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 382
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 382
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 382
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 383
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 383
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 383
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 384
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 384
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 384
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 386
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 387
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 395
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 396
+  - name: ResultCard
+    root: ResultCard
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 406
+    unresolved_because: '"ResultCard" is not imported in this file, so it is defined locally or comes from a global'
+  - name: details
+    root: details
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 407
+  - name: summary
+    root: summary
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 408
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 409
+  - name: pre
+    root: pre
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 409
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 410
+  - name: pre
+    root: pre
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 410
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 412
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 413
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 413
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 413
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 414
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 415
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 417
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 418
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 419
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 420
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 421
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 422
+  - name: details
+    root: details
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 427
+  - name: summary
+    root: summary
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 428
+  - name: pre
+    root: pre
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 430
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 431
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 434
+  - name: form
+    root: form
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 461
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 462
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 463
+  - name: h3
+    root: h3
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 463
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 463
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 464
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 466
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 467
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 467
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 467
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 468
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 469
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 470
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 479
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 480
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 483
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 483
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 483
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 485
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 485
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 485
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 486
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 487
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 487
+  - name: textarea
+    root: textarea
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 487
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 488
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 488
+  - name: textarea
+    root: textarea
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 488
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 490
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 491
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 492
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 501
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 502
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 502
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 502
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 503
+  - name: li
+    root: li
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 504
+  - name: ul
+    root: ul
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 504
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 505
+- route: apps/worker/src/components/IntegrationsView.tsx
+  digest: sha256:a7f24f79ba09aa4260da22c9273545aaf16783b39d3bba154087910fc993993c
+  references:
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 335
+  - name: Topbar
+    root: Topbar
+    export_name: Topbar
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 336
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 340
+  - name: RuntimeAddons
+    root: RuntimeAddons
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 341
+    unresolved_because: '"RuntimeAddons" is not imported in this file, so it is defined locally or comes from a global'
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 345
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 346
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 347
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 348
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 350
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 353
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 357
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 358
+  - name: ExactApprovalFinalizer
+    root: ExactApprovalFinalizer
+    export_name: ExactApprovalFinalizer
+    namespace_member: false
+    kind: component
+    import_path: ./ExactApprovalFinalizer
+    resolved_path: apps/worker/src/components/ExactApprovalFinalizer
+    line: 359
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 360
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 361
+  - name: article
+    root: article
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 367
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 368
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 369
+  - name: h3
+    root: h3
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 370
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 371
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 372
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 376
+  - name: aside
+    root: aside
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 395
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 396
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 397
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 398
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 399
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 400
+  - name: dl
+    root: dl
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 401
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 402
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 402
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 402
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 403
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 403
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 403
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 404
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 404
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 404
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 405
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 405
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 405
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 406
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 406
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 406
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 407
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 407
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 407
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 408
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 409
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 410
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 415
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 416
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 417
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 418
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 419
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 421
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 421
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 422
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 423
+  - name: ManualSecretSetup
+    root: ManualSecretSetup
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 436
+    unresolved_because: '"ManualSecretSetup" is not imported in this file, so it is defined locally or comes from a global'
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 448
+  - name: form
+    root: form
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 493
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 494
+  - name: code
+    root: code
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 495
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 498
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 499
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 500
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 510
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 511
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 512
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 528
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 543
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 544
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 545
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 546
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 547
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 549
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 552
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 557
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 562
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 567
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 572
+  - name: article
+    root: article
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 574
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 575
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 576
+  - name: h3
+    root: h3
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 577
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 578
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 580
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 584
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 587
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 588
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 589
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 590
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 591
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 593
+- route: apps/worker/src/components/OperationsView.tsx
+  digest: sha256:a1f1ff79230eabc3907a68a5498436df6b0a4650a21defa2613c3ea9a7139fac
+  references:
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 57
+  - name: Topbar
+    root: Topbar
+    export_name: Topbar
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 58
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 62
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 63
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 64
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 65
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 66
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 68
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 70
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 71
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 73
+  - name: Pulse
+    root: Pulse
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 74
+    unresolved_because: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  - name: Pulse
+    root: Pulse
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 80
+    unresolved_because: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  - name: Pulse
+    root: Pulse
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 86
+    unresolved_because: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  - name: Pulse
+    root: Pulse
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 92
+    unresolved_because: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 99
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 100
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 101
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 101
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 101
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 101
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 101
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 102
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 103
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 104
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 105
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 105
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 105
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 106
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 110
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 111
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 111
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 111
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 111
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 111
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 113
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 114
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 115
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 115
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 115
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 116
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 135
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 136
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 137
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 138
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 146
+  - name: Topbar
+    root: Topbar
+    export_name: Topbar
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 147
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 148
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 149
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 150
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 150
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 150
+  - name: nav
+    root: nav
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 152
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 154
+  - name: Posture
+    root: Posture
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 159
+    unresolved_because: '"Posture" is not imported in this file, so it is defined locally or comes from a global'
+  - name: Audit
+    root: Audit
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 160
+    unresolved_because: '"Audit" is not imported in this file, so it is defined locally or comes from a global'
+  - name: Budgets
+    root: Budgets
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 161
+    unresolved_because: '"Budgets" is not imported in this file, so it is defined locally or comes from a global'
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 213
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 214
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 215
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 215
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 215
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 216
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 219
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 224
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 229
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 234
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 240
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 241
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 242
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 244
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 246
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 247
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 248
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 249
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 250
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 250
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 250
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 251
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 255
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 256
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 258
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 260
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 261
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 262
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 263
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 264
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 264
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 264
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 265
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 270
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 271
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 272
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 273
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 279
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 281
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 285
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 289
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 293
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 297
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 298
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 299
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 303
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 308
+  - name: PasswordResetDeliveryCard
+    root: PasswordResetDeliveryCard
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 316
+    unresolved_because: '"PasswordResetDeliveryCard" is not imported in this file, so it is defined locally or comes from a global'
+  - name: BackupStatusCard
+    root: BackupStatusCard
+    export_name: BackupStatusCard
+    namespace_member: false
+    kind: component
+    import_path: ./BackupStatusCard
+    resolved_path: apps/worker/src/components/BackupStatusCard
+    line: 321
+  - name: MemoryProjectionDeliveryCard
+    root: MemoryProjectionDeliveryCard
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 322
+    unresolved_because: '"MemoryProjectionDeliveryCard" is not imported in this file, so it is defined locally or comes from a global'
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 327
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 328
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 329
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 330
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 336
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 338
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 343
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 351
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 352
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 353
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 354
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 355
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 357
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 361
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 362
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 363
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 364
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 365
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 369
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 372
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 373
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 374
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 375
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 376
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 381
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 386
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 392
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 393
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 394
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 395
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 401
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 403
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 408
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 409
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 412
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 413
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 414
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 416
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 418
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 419
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 424
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 425
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 426
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 431
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 436
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 437
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 438
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 439
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 445
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 447
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 452
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 453
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 456
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 457
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 460
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 462
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 466
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 467
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 470
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 471
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 472
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 483
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 491
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 492
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 493
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 494
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 499
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 501
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 506
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 507
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 508
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 509
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 510
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 515
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 521
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 522
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 523
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 524
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 525
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 530
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 534
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 535
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 536
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 537
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 538
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 543
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 548
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 549
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 550
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 551
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 557
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 559
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 563
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 567
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 568
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 569
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 570
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 575
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 583
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 592
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 593
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 594
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 596
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 598
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 599
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 600
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 601
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 602
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 602
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 602
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 603
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 682
+  - name: form
+    root: form
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 683
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 684
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 686
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 689
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 690
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 691
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 694
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 695
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 695
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 695
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 696
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 696
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 696
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 697
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 697
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 698
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 700
+  - name: i
+    root: i
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 701
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 701
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 702
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 705
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 708
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 709
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 710
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 711
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 712
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 714
+  - name: i
+    root: i
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 715
+  - name: dl
+    root: dl
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 720
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 721
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 721
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 721
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 722
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 722
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 722
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 723
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 723
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 723
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 724
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 724
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 724
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 727
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 731
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 736
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 739
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 741
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 742
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 743
+  - name: details
+    root: details
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 744
+  - name: summary
+    root: summary
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 745
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 746
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 747
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 747
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 747
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 748
+  - name: dl
+    root: dl
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 750
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 751
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 751
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 751
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 752
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 752
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 752
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 753
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 753
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 753
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 754
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 754
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 754
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 755
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 755
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 755
+  - name: dd
+    root: dd
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 756
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 756
+  - name: dt
+    root: dt
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 756
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 761
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 762
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 764
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 888
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 889
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 890
+  - name: ExactApprovalFinalizer
+    root: ExactApprovalFinalizer
+    export_name: ExactApprovalFinalizer
+    namespace_member: false
+    kind: component
+    import_path: ./ExactApprovalFinalizer
+    resolved_path: apps/worker/src/components/ExactApprovalFinalizer
+    line: 891
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 892
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 893
+  - name: article
+    root: article
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 894
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 895
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 896
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 897
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 909
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 910
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 913
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 918
+  - name: form
+    root: form
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 925
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 926
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 927
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 934
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 934
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 934
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 937
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 937
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 938
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 938
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 938
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 942
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 943
+  - name: select
+    root: select
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 944
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 947
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 947
+  - name: option
+    root: option
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 947
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 949
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 949
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 949
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 953
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 953
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 953
+  - name: input
+    root: input
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 957
+  - name: label
+    root: label
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 957
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 961
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1054
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1055
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1056
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1057
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1063
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1065
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1070
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1075
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1076
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1079
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1080
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1081
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1087
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1092
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1096
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1097
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1100
+  - name: strong
+    root: strong
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1101
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1105
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1109
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1115
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1121
+  - name: section
+    root: section
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1179
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1180
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1181
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1182
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1183
+- route: apps/worker/src/components/OrganisationView.tsx
+  digest: sha256:067e313ae52cb9a3676986dbf88b3e6e4fa2a3cc1ff34c12ad6dd0f7ee1b5f63
+  references:
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 42
+  - name: Topbar
+    root: Topbar
+    export_name: Topbar
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 43
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 44
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 45
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 46
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 47
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 48
+  - name: nav
+    root: nav
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 51
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 57
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 66
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 67
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 69
+  - name: OrganisationPolicy
+    root: OrganisationPolicy
+    export_name: OrganisationPolicy
+    namespace_member: false
+    kind: component
+    import_path: ./OrganisationWorkspaceSections
+    resolved_path: apps/worker/src/components/OrganisationWorkspaceSections
+    line: 70
+  - name: OrganisationRoster
+    root: OrganisationRoster
+    export_name: OrganisationRoster
+    namespace_member: false
+    kind: component
+    import_path: ./OrganisationDirectorySections
+    resolved_path: apps/worker/src/components/OrganisationDirectorySections
+    line: 75
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 79
+  - name: WorkspaceAdministration
+    root: WorkspaceAdministration
+    export_name: WorkspaceAdministration
+    namespace_member: false
+    kind: component
+    import_path: ./OrganisationWorkspaceSections
+    resolved_path: apps/worker/src/components/OrganisationWorkspaceSections
+    line: 80
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 85
+  - name: AdminDirectory
+    root: AdminDirectory
+    export_name: AdminDirectory
+    namespace_member: false
+    kind: component
+    import_path: ./OrganisationDirectorySections
+    resolved_path: apps/worker/src/components/OrganisationDirectorySections
+    line: 86
+  - name: InvitationAdministration
+    root: InvitationAdministration
+    export_name: InvitationAdministration
+    namespace_member: false
+    kind: component
+    import_path: ./OrganisationDirectorySections
+    resolved_path: apps/worker/src/components/OrganisationDirectorySections
+    line: 87
+  - name: Unavailable
+    root: Unavailable
+    export_name: Unavailable
+    namespace_member: false
+    kind: component
+    import_path: ./Shell
+    resolved_path: apps/worker/src/components/Shell
+    line: 90

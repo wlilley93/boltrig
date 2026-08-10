@@ -1,0 +1,344 @@
+id: PROOF-20260810-121449
+kind: reconciliation
+status: failed
+warrant_id: null
+command: vds proof reconciliation
+script: crates/vds-proof/src/reconciliation.rs
+exit_code: 1
+rows_considered: 170
+rows_enforced: 74
+rows_skipped_reasons:
+  demand_currency_reported_not_enforced_vds_s5_7: 32
+  prop_and_state_parity_needs_typescript_analysis: 32
+  record_declares_no_figma_node_to_resolve: 32
+violations:
+- location: .vds/register/CMP-0001.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0001''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0001 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0002.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0002''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0002 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0003.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0003''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0003 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0004.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0004''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0004 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0005.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0005''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0005 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0006.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0006''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0006 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0007.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0007''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0007 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0008.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0008''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0008 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0009.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0009''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0009 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0010.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0010''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0010 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0011.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0011''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0011 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0012.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0012''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0012 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0013.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0013''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0013 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0014.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0014''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0014 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0015.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0015''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0015 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0016.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0016''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0016 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0017.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0017''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0017 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0018.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0018''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0018 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0019.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0019''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0019 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0020.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0020''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0020 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0021.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0021''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0021 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0022.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0022''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0022 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0023.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0023''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0023 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0024.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0024''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0024 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0025.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0025''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0025 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0026.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0026''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0026 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0027.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0027''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0027 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0028.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0028''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0028 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0029.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0029''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0029 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0030.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0030''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0030 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0031.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0031''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0031 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: .vds/register/CMP-0032.yaml
+  rule: 'VDS S-5(7): a demand figure older than its ledger''s generation is stale'
+  expected: 'CMP-0032''s demand re-measured by "vds register import (not yet measured; run: vds register measure-demand --all)" at or after the screens ledger was generated, so the figure is about the inventory that exists now'
+  actual: CMP-0032 carries demand.routes 0 measured at 2026-08-10T11:56:33Z, and the screens ledger was generated at 2026-08-10T12:14:34Z. The figure predates the inventory it describes, so build order and retirement drain would be decided on a number nobody has re-measured
+  severity: warning
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/AccountView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AgentProfileEditor.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/AgentProfileEditor.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AuthGate.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/AuthGate.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/AutomationView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/BuildView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/ChannelsView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/ChatView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/CommandPalette.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/CommandPalette.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/DesktopUpdater.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/DesktopUpdater.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/DeviceSettings.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/DeviceSettings.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/EvaluationsView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/InboxHitl.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/InboxHitl.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/IntegrationsView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/LocalDeviceActions.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/LocalDeviceActions.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/OperationsView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/OrganisationView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ParityViews.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/ParityViews.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/PermanentFleetTopology.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/Views.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/Views.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/WorkerGlobalContext.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/WorkerGlobalContext.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/build/McpServersBuild.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/build/McpServersBuild.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+notes:
+- '[reach] limb (c) of VDS S-5(6) IS reached by this run: every register entry''s Figma node id was resolved against the figma ledger, which `vds figma pull` generated out of band because the resolution is a network call VDS S-7(2)(1) forbids inside a proof. A record naming a node that is not in the decided-target file is a finding here (R7). What this does NOT establish is that the ledger is current with the file as it stands NOW: it is current with the file as it was when it was pulled, and its own content digest is recorded on this run so a reader can tell which pull it was.'
+- '[reach] limb (d) of VDS S-5(6), whether prop and state contracts agree between the record and the code, is NOT checked by this run. Comparing them requires reading and analysing the component''s TypeScript source, which this build does not do, so every record with a declared code counterpart was counted and skipped rather than passed. A record whose props have drifted from its component''s signature passes this run.'
+- '[reach] this run establishes limbs (a), (b) and (c) of VDS S-5(6) over the declared surface, and not (d). Limb (c) is reached because a figma ledger was present and current; limb (d), whether prop and state contracts agree between the record and the code, is the `parity` proof''s and is not attempted here. A warrant citing this proof must not be described as covering the limb it did not reach.'
+- '[carve-out] a library file named index.*, *.test.*, *.spec.* or *.stories.* is counted and NOT enforced against the register under limb (b): a barrel re-exports components rather than defining one, and a test or a story is not a shipped component. A component defined inside a file with one of those names is therefore outside this proof, and the skip counts above are where that carve-out is visible rather than assumed.'
+inputs_digest: sha256:d2edc8de23410c95e482a64ba0684652b90ae83e4ea0a832929ef10a1abfad1b
+digest: sha256:80cf43bee2b548010fec1a6bca53e2df077316560576262a1c9fc972293608fc
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-10T12:14:48Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

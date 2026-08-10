@@ -1,0 +1,45 @@
+id: CMP-0014
+name: ConversationControls
+status: proposed
+contractVersion: 1
+figma: null
+code:
+  importPath: ./ConversationControls
+  sourceFile: apps/worker/src/components/ConversationControls.tsx
+  exportName: ConversationControls
+props:
+- name: conversationId
+  type: string
+  required: true
+  figmaProperty: null
+- name: lastAssistantMessageId
+  type: string | null
+  required: false
+  figmaProperty: null
+- name: status
+  type: string
+  required: true
+  figmaProperty: null
+- name: title
+  type: string
+  required: true
+  figmaProperty: null
+states:
+  required: []
+  drawn: []
+  built: []
+a11y:
+  role: null
+  accessibleNameSource: children
+  keyboard: []
+  contrastFloors: []
+demand:
+  routes: 1
+  measuredAt: 2026-08-10T13:48:51Z
+  measuredBy: vds register measure-demand
+supersedes: []
+supersededBy: null
+amendments: []
+basis:
+- ACT-VDS-001:s5
+notes: 'Imported by `vds register import` from apps/worker/src/components/ConversationControls.tsx:14. A CANDIDATE, not a contract: it carries what the code says and nothing the code cannot say. Its required states, contrast floors, role and keyboard contract are decisions nobody has made yet.'

@@ -1,0 +1,22 @@
+id: PROOF-20260810-132848
+kind: retirement_drain
+status: vacuous
+warrant_id: null
+command: vds proof retirement_drain
+script: crates/vds-proof/src/retirement_drain.rs
+exit_code: 3
+rows_considered: 61
+rows_enforced: 0
+rows_skipped_reasons:
+  not_proposed_for_retirement: 61
+violations: []
+notes:
+- 'relies on VDS S-9(9) RESERVED (SUBMISSION-VDS-004): whether a component may be retired against a forced-drain deadline while consumers remain is unsettled, so the drain condition is ABSOLUTE here and no deadline, override or grace period overrides a non-zero measured demand. Any warrant citing this proof must record that reliance in its `reserved` array.'
+- '[reach] demand is measured from the screens ledger and from nothing else, so a zero here is zero consumers on the DECLARED SURFACE ([surface] screen_globs) and not zero in the repository. Three kinds of consumer are outside its reach and are NOT counted: a component consumed by another component rather than by a screen; a route that reaches the component through a re-export or an aliased import path rather than the one the record names; and a dynamic or computed import the scanner cannot resolve to a module. A warrant citing this proof is bounded by the ledger content digest recorded on it and must say so.'
+inputs_digest: sha256:4c5f43394c35a21afdb919c45e26d82c9e6074a4a63266d0c2ec6775486b3ada
+digest: sha256:fa710b2d49afa109f417d9ccb9023ea951583619dc7895cec3c60cab1aeb29e6
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-10T13:28:42Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

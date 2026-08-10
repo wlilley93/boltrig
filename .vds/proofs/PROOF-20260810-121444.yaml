@@ -1,0 +1,22 @@
+id: PROOF-20260810-121444
+kind: screen_parity
+status: vacuous
+warrant_id: null
+command: vds proof screen_parity
+script: crates/vds-proof/src/screen_parity.rs
+exit_code: 3
+rows_considered: 0
+rows_enforced: 0
+rows_skipped_reasons: {}
+violations: []
+notes:
+- '[reach] this run establishes that each registered screen''s required arrangement is the one its AUTHORITATIVE FRAME draws, in the decided-target file, as of the capture the frame ledger was derived from. It does NOT establish what the code renders. Counting a route''s columns from its source means parsing the subject''s own layout components, and there is no general answer to that: in the subject this was derived from it took an AST pass over one component''s three pane props PLUS the rails contributed by every enclosing layout, and both halves were defects before they were features. A subject that can read its own arrangement supplies an `ArrangementSource` and the same rules run over it. Until it does, a pass here is a pass about the FRAME, and saying so is the point: three separate numbers in the subject were reported as parity and none of them was.'
+- '[coverage] 0 of 0 registered screen(s) were SCORED (0%). 0 UNSCORED: a requirement exists and this run could not measure it, which is a finding and never a pass. 0 EXCLUDED: the design states nothing to measure against, which is a different fact from the code being wrong.'
+- no screen is registered and no frame ledger exists, so this run considered nothing. Register a screen with `vds screen add` and capture its frame with `vds figma frames`.
+inputs_digest: sha256:c9d4a6bef2e8652ea72d937b578104117b6d3f29ebbd3dd9ccabd614d0347e5b
+digest: sha256:59d3d054f03f9b4c991ed000bb9515301e173d38b5e6e90562c4efdd4fc6e5f6
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-10T12:14:36Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

@@ -52,6 +52,12 @@ GET /v1/conversations/search searchConversations
 """,
 )
 _surface(
+    "apps/worker/src/components/SettingsSurface.tsx",
+    """
+GET /v1/cost cost
+""",
+)
+_surface(
     "apps/worker/src/components/CommandPalette.tsx",
     """
 POST /v1/search federatedSearch
@@ -456,12 +462,6 @@ INDIRECT_WORKER_ROUTES: dict[Route, IndirectWorkerSurface] = {
         source="apps/worker/src/components/ChatView.tsx",
         rationale="the paged list returns the complete immutable Artifact projection",
     ),
-    ("GET", "/v1/cost"): IndirectWorkerSurface(
-        sdk_method="cost",
-        replacement_method="consoleOverview",
-        source="apps/worker/src/components/OperationsView.tsx",
-        rationale="the overview carries the same scoped totals plus status breakdown",
-    ),
     ("GET", "/v1/calls/{call_id}"): IndirectWorkerSurface(
         sdk_method="getCall",
         replacement_method="calls",
@@ -544,10 +544,6 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
     "artifactDownloadUrl": (
         "internal-helper",
         "downloadArtifact uses this URL helper and Chat calls downloadArtifact.",
-    ),
-    "cost": (
-        "superseded-read",
-        "consoleOverview is a strict superset used by Home and Operate.",
     ),
     "getCall": (
         "superseded-read",

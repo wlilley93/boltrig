@@ -1,0 +1,37 @@
+id: CMP-0024
+name: VoiceCall
+status: proposed
+contractVersion: 1
+figma: null
+code:
+  importPath: ./VoiceCall
+  sourceFile: apps/worker/src/components/VoiceCall.tsx
+  exportName: VoiceCall
+props:
+- name: conversationId
+  type: string | null
+  required: true
+  figmaProperty: null
+- name: modelProfileId
+  type: string
+  required: false
+  figmaProperty: null
+states:
+  required: []
+  drawn: []
+  built: []
+a11y:
+  role: null
+  accessibleNameSource: children
+  keyboard: []
+  contrastFloors: []
+demand:
+  routes: 1
+  measuredAt: 2026-08-10T13:48:51Z
+  measuredBy: vds register measure-demand
+supersedes: []
+supersededBy: null
+amendments: []
+basis:
+- ACT-VDS-001:s5
+notes: 'Imported by `vds register import` from apps/worker/src/components/VoiceCall.tsx:154. A CANDIDATE, not a contract: it carries what the code says and nothing the code cannot say. Its required states, contrast floors, role and keyboard contract are decisions nobody has made yet.'

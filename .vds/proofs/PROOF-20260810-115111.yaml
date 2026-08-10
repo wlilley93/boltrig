@@ -1,0 +1,579 @@
+id: PROOF-20260810-115111
+kind: register_completeness
+status: failed
+warrant_id: null
+command: vds proof register_completeness
+script: crates/vds-proof/src/register_completeness.rs
+exit_code: 1
+rows_considered: 1243
+rows_enforced: 62
+rows_skipped_reasons:
+  bare_element_informational_vds_s9_10: 1151
+  component_reference_with_no_resolvable_import: 28
+  import_outside_governed_prefixes: 2
+violations:
+- location: apps/worker/src/components/AccountView.tsx:43 <Topbar>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Topbar". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:68 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:73 <ProfileSettings>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./AccountProfileSections" and whose code.exportName is "ProfileSettings". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:74 <ActivityAndExport>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./AccountProfileSections" and whose code.exportName is "ActivityAndExport". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:75 <PrivacyPolicyEvidence>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./AccountProfileSections" and whose code.exportName is "PrivacyPolicyEvidence". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:80 <DeveloperTokens>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./AccountSecuritySections" and whose code.exportName is "DeveloperTokens". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:81 <ConnectionInstructions>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./ConnectionInstructions" and whose code.exportName is "ConnectionInstructions". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:82 <AiKeyManagement>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./AiKeyManagement" and whose code.exportName is "AiKeyManagement". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:83 <PasswordSecurity>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./AccountSecuritySections" and whose code.exportName is "PasswordSecurity". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:84 <TwoFactorSecurity>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./AccountSecuritySections" and whose code.exportName is "TwoFactorSecurity". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:85 <SecuritySessions>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./AccountSecuritySections" and whose code.exportName is "SecuritySessions". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:86 <ActiveContext>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./AccountSecuritySections" and whose code.exportName is "ActiveContext". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:90 <NotificationPreferences>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./AccountAutomationSections" and whose code.exportName is "NotificationPreferences". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:93 <PersonalAgentLifecycle>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./AccountAutomationSections" and whose code.exportName is "PersonalAgentLifecycle". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1042 <Topbar>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Topbar". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1053 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./ExactApprovalFinalizer" and whose code.exportName is "ExactApprovalFinalizer". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1054 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1055 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1056 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1090 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1094 <WorkflowEditor>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"WorkflowEditor" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"WorkflowEditor" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1476 <WorkflowTriggersPanel>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"WorkflowTriggersPanel" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"WorkflowTriggersPanel" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:19 <Topbar>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Topbar". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:39 <CapabilityRunner>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./build/CapabilityRunner" and whose code.exportName is "CapabilityRunner". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:40 <RegistryBuild>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./build/RegistryBuild" and whose code.exportName is "RegistryBuild". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:41 <SkillsBuild>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./build/SkillsBuild" and whose code.exportName is "SkillsBuild". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:42 <AdaptersBuild>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./build/AdaptersBuild" and whose code.exportName is "AdaptersBuild". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:43 <ModelEndpointsBuild>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./build/ModelEndpointsBuild" and whose code.exportName is "ModelEndpointsBuild". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:44 <SpawnRulesBuild>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./build/SpawnRulesBuild" and whose code.exportName is "SpawnRulesBuild". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:45 <CapabilityHistory>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"CapabilityHistory" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"CapabilityHistory" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1438 <GatewaySessionRecovery>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"GatewaySessionRecovery" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"GatewaySessionRecovery" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1682 <ChannelSendTest>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ChannelSendTest" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ChannelSendTest" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:2133 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./ExactApprovalFinalizer" and whose code.exportName is "ExactApprovalFinalizer". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:848 <Topbar>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Topbar". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:869 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./ExactApprovalFinalizer" and whose code.exportName is "ExactApprovalFinalizer". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:870 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:871 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:872 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:874 <ConnectChannelForm>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ConnectChannelForm" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ConnectChannelForm" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:889 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:908 <ChannelDetail>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ChannelDetail" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ChannelDetail" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1181 <ConversationControls>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./ConversationControls" and whose code.exportName is "ConversationControls". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:539 <FamiliarStage>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./familiar/FamiliarStage" and whose code.exportName is "FamiliarStage". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:556 <ThemeToggle>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ThemeToggle" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ThemeToggle" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:558 <VoiceCall>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./VoiceCall" and whose code.exportName is "VoiceCall". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:591 <Welcome>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Welcome" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Welcome" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:593 <Message>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Message" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Message" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:614 <LiveTurn>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"LiveTurn" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"LiveTurn" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:633 <Composer>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Composer" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Composer" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:654 <RightRail>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RightRail" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RightRail" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:735 <FamiliarBadge>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./familiar/FamiliarBadge" and whose code.exportName is "FamiliarBadge". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:750 <ReactMarkdown>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: an import inside a governed prefix, or one resolving into a governed library directory
+  actual: imported from "react-markdown", which is outside both
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:761 <TurnActivity>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"TurnActivity" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"TurnActivity" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:773 <FamiliarBadge>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./familiar/FamiliarBadge" and whose code.exportName is "FamiliarBadge". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:788 <ReactMarkdown>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: an import inside a governed prefix, or one resolving into a governed library directory
+  actual: imported from "react-markdown", which is outside both
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:789 <TurnActivity>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"TurnActivity" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"TurnActivity" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:863 <LiveQuestionCard>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./LiveQuestionCard" and whose code.exportName is "LiveQuestionCard". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:304 <Topbar>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Topbar". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:321 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./ExactApprovalFinalizer" and whose code.exportName is "ExactApprovalFinalizer". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:322 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:323 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:324 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:326 <CaseEditor>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"CaseEditor" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"CaseEditor" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:344 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:406 <ResultCard>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ResultCard" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ResultCard" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:336 <Topbar>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Topbar". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:341 <RuntimeAddons>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RuntimeAddons" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RuntimeAddons" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:359 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./ExactApprovalFinalizer" and whose code.exportName is "ExactApprovalFinalizer". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:436 <ManualSecretSetup>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ManualSecretSetup" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ManualSecretSetup" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:147 <Topbar>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Topbar". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:159 <Posture>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Posture" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Posture" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:160 <Audit>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Audit" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Audit" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:161 <Budgets>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Budgets" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Budgets" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:316 <PasswordResetDeliveryCard>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"PasswordResetDeliveryCard" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"PasswordResetDeliveryCard" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:321 <BackupStatusCard>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./BackupStatusCard" and whose code.exportName is "BackupStatusCard". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:322 <MemoryProjectionDeliveryCard>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"MemoryProjectionDeliveryCard" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"MemoryProjectionDeliveryCard" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:58 <Topbar>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Topbar". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:71 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:74 <Pulse>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Pulse" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:743 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:80 <Pulse>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Pulse" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:86 <Pulse>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Pulse" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:891 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./ExactApprovalFinalizer" and whose code.exportName is "ExactApprovalFinalizer". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:92 <Pulse>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Pulse" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:43 <Topbar>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Topbar". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:66 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:70 <OrganisationPolicy>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./OrganisationWorkspaceSections" and whose code.exportName is "OrganisationPolicy". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:75 <OrganisationRoster>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./OrganisationDirectorySections" and whose code.exportName is "OrganisationRoster". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:80 <WorkspaceAdministration>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./OrganisationWorkspaceSections" and whose code.exportName is "WorkspaceAdministration". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:86 <AdminDirectory>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./OrganisationDirectorySections" and whose code.exportName is "AdminDirectory". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:87 <InvitationAdministration>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./OrganisationDirectorySections" and whose code.exportName is "InvitationAdministration". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:90 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./Shell" and whose code.exportName is "Unavailable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+notes:
+- the register holds no records, so every governed reference on the declared surface is about to be reported absent
+- 'this proof establishes EXISTENCE, AND THE MEASUREMENT COVERAGE OF A DIRECTED RECORD (VDS S-7(5) and S-5(9); the widening is recorded by [2026] VJS-CA-VDS 1 order 18 rather than left standing in a scope note the proof has outgrown). A record at `proposed` or `designed` satisfies it and fails `composition`, which is why they are two proofs: W1 REGISTER-COMPLETE is granted on existence alone, before any design work has happened. A warrant citing this run has evidence that the register covers the surface, and no evidence that anything on the surface is fit to be used.'
+- 'the claim is bounded by [surface] screen_globs and [surface] governed_import_prefixes. A screen outside those globs, a reference imported from outside those prefixes, and a reference whose import the ledger could not resolve are each counted and not enforced. This proof cannot say `no unregistered component anywhere`, only `no absent record among the references it reached`. R2 reaches only records that carry `directedAt`. A record naming no direction and no measure is outside this clause, and the count of such records is printed on every run: a rule that fires only on the rows that armed it has a denominator, and an unreported denominator is the defect this clause was written against ([2026] VJS-CA-VDS 1 order 17).'
+- 'relies on VDS S-9(10) RESERVED (SUBMISSION-VDS-005): bare HTML elements are informational rows only, excluded from rows_enforced. Any warrant citing this proof must record that reliance in its `reserved` array.'
+- 28 component reference(s) were NOT reached, because the ledger could not resolve the module their root name was imported from. Each is captured on this record as an informational finding naming its route and line, and none of them was enforced.
+inputs_digest: sha256:f71e675304c40cbfbe12868f23ee7e33c5d6dd5d30ffb827f14060083da19792
+digest: sha256:12d21d8a7440b086b80868916debbd85007fc7c660c14bd9d8be64b5a1c82e3e
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-10T11:51:11Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 1000

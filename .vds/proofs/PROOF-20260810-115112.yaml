@@ -1,0 +1,276 @@
+id: PROOF-20260810-115112
+kind: reconciliation
+status: failed
+warrant_id: null
+command: vds proof reconciliation
+script: crates/vds-proof/src/reconciliation.rs
+exit_code: 1
+rows_considered: 42
+rows_enforced: 42
+rows_skipped_reasons: {}
+violations:
+- location: apps/worker/src/components/AccountAutomationSections.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/AccountAutomationSections.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountProfileSections.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/AccountProfileSections.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountSecuritySections.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/AccountSecuritySections.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/AccountView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AgentProfileEditor.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/AgentProfileEditor.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AiKeyManagement.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/AiKeyManagement.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AuthGate.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/AuthGate.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/AutomationView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BackupStatusCard.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/BackupStatusCard.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/BuildView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/ChannelsView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/ChatView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/CommandPalette.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/CommandPalette.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ConnectionInstructions.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/ConnectionInstructions.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ConversationControls.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/ConversationControls.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/DesktopUpdater.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/DesktopUpdater.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/DeviceSettings.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/DeviceSettings.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/EvaluationsView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ExactApprovalFinalizer.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/ExactApprovalFinalizer.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/InboxHitl.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/InboxHitl.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/IntegrationsView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/LiveQuestionCard.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/LiveQuestionCard.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/LocalDeviceActions.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/LocalDeviceActions.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/OperationsView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationDirectorySections.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/OrganisationDirectorySections.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/OrganisationView.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationWorkspaceSections.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/OrganisationWorkspaceSections.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ParityViews.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/ParityViews.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/PermanentFleetTopology.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/Shell.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/Shell.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/Views.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/Views.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/VoiceCall.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/VoiceCall.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/WorkerGlobalContext.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/WorkerGlobalContext.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/build/AdaptersBuild.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/build/AdaptersBuild.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/build/CapabilityRunner.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/build/CapabilityRunner.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/build/McpServersBuild.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/build/McpServersBuild.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/build/ModelEndpointsBuild.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/build/ModelEndpointsBuild.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/build/RegistryBuild.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/build/RegistryBuild.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/build/SkillsBuild.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/build/SkillsBuild.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/build/SpawnRulesBuild.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/build/SpawnRulesBuild.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/familiar/FamiliarBadge.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/familiar/FamiliarBadge.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/familiar/FamiliarStage.tsx
+  rule: 'VDS S-5(6)(b) reconciliation: a component in a governed library directory with no register entry'
+  expected: a register record whose code.sourceFile is "apps/worker/src/components/familiar/FamiliarStage.tsx", so this file is covered by a contract and reconciles in both directions
+  actual: no register record names this file in code.sourceFile, so it ships from a governed library directory under no contract at all
+  severity: fatal
+  drift: undetermined
+notes:
+- '[reach] limb (c) of VDS S-5(6), whether each register entry''s Figma node id resolves in the pinned file, is NOT checked by this run, because no figma ledger is present. Resolving a node id is a network call and VDS S-7(2)(1) forbids one inside a proof, so the resolution happens out of band: run `vds figma pull` and re-run this proof to have limb (c) reached. Until then a register entry naming a node that was deleted from the decided-target file passes this run, and every record was counted and skipped rather than passed.'
+- '[reach] limb (d) of VDS S-5(6), whether prop and state contracts agree between the record and the code, is NOT checked by this run. Comparing them requires reading and analysing the component''s TypeScript source, which this build does not do, so every record with a declared code counterpart was counted and skipped rather than passed. A record whose props have drifted from its component''s signature passes this run.'
+- '[reach] this run establishes limbs (a) and (b) of VDS S-5(6) over the declared surface, and neither (c) nor (d). docs/GOAL.md D1 lists all four, and a warrant citing this proof must not be described as covering the two it did not reach.'
+- '[carve-out] a library file named index.*, *.test.*, *.spec.* or *.stories.* is counted and NOT enforced against the register under limb (b): a barrel re-exports components rather than defining one, and a test or a story is not a shipped component. A component defined inside a file with one of those names is therefore outside this proof, and the skip counts above are where that carve-out is visible rather than assumed.'
+- '[register] the register holds no records, so limb (a) of VDS S-5(6) enforces nothing. Every finding below is code with no register entry.'
+inputs_digest: sha256:d7f512ab59d667957dbfafe5a899019684d0c7a65741840ad9b69cd83ffacd2a
+digest: sha256:ec1ca25f4dde6c50c8a436d389b5df02147406498b739b8cab71434f9f683802
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-10T11:51:11Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

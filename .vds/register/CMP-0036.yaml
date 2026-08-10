@@ -1,0 +1,29 @@
+id: CMP-0036
+name: AutomationsView
+status: proposed
+contractVersion: 1
+figma: null
+code:
+  importPath: ./components/components/AutomationView
+  sourceFile: apps/worker/src/components/AutomationView.tsx
+  exportName: AutomationsView
+props: []
+states:
+  required: []
+  drawn: []
+  built: []
+a11y:
+  role: null
+  accessibleNameSource: children
+  keyboard: []
+  contrastFloors: []
+demand:
+  routes: 0
+  measuredAt: 2026-08-10T13:48:51Z
+  measuredBy: vds register measure-demand
+supersedes: []
+supersededBy: null
+amendments: []
+basis:
+- ACT-VDS-001:s5
+notes: 'Imported by `vds register import` from apps/worker/src/components/AutomationView.tsx:126. A CANDIDATE, not a contract: it carries what the code says and nothing the code cannot say. Its required states, contrast floors, role and keyboard contract are decisions nobody has made yet.'

@@ -1,0 +1,651 @@
+id: PROOF-20260810-132841
+kind: register_completeness
+status: passed
+warrant_id: null
+command: vds proof register_completeness
+script: crates/vds-proof/src/register_completeness.rs
+exit_code: 0
+rows_considered: 1277
+rows_enforced: 64
+rows_skipped_reasons:
+  bare_element_informational_vds_s9_10: 1173
+  component_reference_with_no_resolvable_import: 38
+  import_outside_governed_prefixes: 2
+violations:
+- location: apps/worker/src/components/AccountView.tsx:43 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:68 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:73 <ProfileSettings>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0005 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0005 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:74 <ActivityAndExport>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0003 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0003 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:75 <PrivacyPolicyEvidence>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0004 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0004 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:80 <DeveloperTokens>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0007 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0007 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:81 <ConnectionInstructions>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0013 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0013 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:82 <AiKeyManagement>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0011 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0011 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:83 <PasswordSecurity>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0008 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0008 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:84 <TwoFactorSecurity>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0010 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0010 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:85 <SecuritySessions>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0009 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0009 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:86 <ActiveContext>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0006 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0006 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:90 <NotificationPreferences>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0001 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0001 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:93 <PersonalAgentLifecycle>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0002 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0002 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1044 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1055 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0015 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0015 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1056 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1057 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1058 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1060 <RoutinePicker>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RoutinePicker" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RoutinePicker" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1101 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1105 <WorkflowEditor>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"WorkflowEditor" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"WorkflowEditor" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1487 <WorkflowTriggersPanel>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"WorkflowTriggersPanel" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"WorkflowTriggersPanel" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1967 <RoutineThumb>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0061 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0061 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:19 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:39 <CapabilityRunner>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0026 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0026 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:40 <RegistryBuild>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0028 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0028 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:41 <SkillsBuild>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0029 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0029 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:42 <AdaptersBuild>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0025 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0025 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:43 <ModelEndpointsBuild>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0027 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0027 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:44 <SpawnRulesBuild>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0030 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0030 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:45 <CapabilityHistory>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"CapabilityHistory" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"CapabilityHistory" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1438 <GatewaySessionRecovery>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"GatewaySessionRecovery" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"GatewaySessionRecovery" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1682 <ChannelSendTest>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ChannelSendTest" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ChannelSendTest" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:2133 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0015 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0015 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:848 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:869 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0015 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0015 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:870 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:871 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:872 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:874 <ConnectChannelForm>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ConnectChannelForm" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ConnectChannelForm" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:889 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:908 <ChannelDetail>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ChannelDetail" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ChannelDetail" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1199 <RailGroup>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailGroup" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailGroup" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1200 <RailRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1205 <RailRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1213 <RailGroup>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailGroup" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailGroup" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1215 <RailRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1218 <RailRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1223 <RailGroup>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailGroup" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailGroup" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1225 <RailRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1228 <FamiliarBadge>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0031 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0031 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1235 <RailGroup>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailGroup" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailGroup" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1281 <ConversationControls>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0014 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0014 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:539 <FamiliarStage>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0032 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0032 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:564 <ThemeToggle>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ThemeToggle" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ThemeToggle" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:566 <VoiceCall>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0024 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0024 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:599 <Welcome>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Welcome" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Welcome" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:601 <Message>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Message" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Message" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:622 <LiveTurn>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"LiveTurn" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"LiveTurn" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:641 <Composer>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Composer" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Composer" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:662 <RightRail>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RightRail" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RightRail" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:743 <FamiliarBadge>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0031 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0031 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:758 <ReactMarkdown>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: an import inside a governed prefix, or one resolving into a governed library directory
+  actual: imported from "react-markdown", which is outside both
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:769 <TurnActivity>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"TurnActivity" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"TurnActivity" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:781 <FamiliarBadge>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0031 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0031 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:796 <ReactMarkdown>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: an import inside a governed prefix, or one resolving into a governed library directory
+  actual: imported from "react-markdown", which is outside both
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:797 <TurnActivity>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"TurnActivity" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"TurnActivity" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:871 <LiveQuestionCard>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0016 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0016 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:304 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:321 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0015 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0015 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:322 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:323 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:324 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:326 <CaseEditor>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"CaseEditor" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"CaseEditor" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:344 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:406 <ResultCard>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ResultCard" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ResultCard" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:336 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:341 <RuntimeAddons>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RuntimeAddons" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RuntimeAddons" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:359 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0015 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0015 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:436 <ManualSecretSetup>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ManualSecretSetup" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ManualSecretSetup" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:147 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:159 <Posture>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Posture" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Posture" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:160 <Audit>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Audit" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Audit" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:161 <Budgets>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Budgets" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Budgets" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:316 <PasswordResetDeliveryCard>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"PasswordResetDeliveryCard" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"PasswordResetDeliveryCard" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:321 <BackupStatusCard>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0012 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0012 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:322 <MemoryProjectionDeliveryCard>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"MemoryProjectionDeliveryCard" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"MemoryProjectionDeliveryCard" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:58 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:71 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:74 <Pulse>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Pulse" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:743 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:80 <Pulse>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Pulse" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:86 <Pulse>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Pulse" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:891 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0015 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0015 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:92 <Pulse>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Pulse" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:43 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:66 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:70 <OrganisationPolicy>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0020 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0020 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:75 <OrganisationRoster>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0019 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0019 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:80 <WorkspaceAdministration>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0021 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0021 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:86 <AdminDirectory>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0017 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0017 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:87 <InvitationAdministration>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0018 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0018 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:90 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+notes:
+- 'this proof establishes EXISTENCE, AND THE MEASUREMENT COVERAGE OF A DIRECTED RECORD (VDS S-7(5) and S-5(9); the widening is recorded by [2026] VJS-CA-VDS 1 order 18 rather than left standing in a scope note the proof has outgrown). A record at `proposed` or `designed` satisfies it and fails `composition`, which is why they are two proofs: W1 REGISTER-COMPLETE is granted on existence alone, before any design work has happened. A warrant citing this run has evidence that the register covers the surface, and no evidence that anything on the surface is fit to be used.'
+- 'the claim is bounded by [surface] screen_globs and [surface] governed_import_prefixes. A screen outside those globs, a reference imported from outside those prefixes, and a reference whose import the ledger could not resolve are each counted and not enforced. This proof cannot say `no unregistered component anywhere`, only `no absent record among the references it reached`. R2 reaches only records that carry `directedAt`. A record naming no direction and no measure is outside this clause, and the count of such records is printed on every run: a rule that fires only on the rows that armed it has a denominator, and an unreported denominator is the defect this clause was written against ([2026] VJS-CA-VDS 1 order 17).'
+- 'relies on VDS S-9(10) RESERVED (SUBMISSION-VDS-005): bare HTML elements are informational rows only, excluded from rows_enforced. Any warrant citing this proof must record that reliance in its `reserved` array.'
+- 38 component reference(s) were NOT reached, because the ledger could not resolve the module their root name was imported from. Each is captured on this record as an informational finding naming its route and line, and none of them was enforced.
+- 64 reference(s) resolve to a record that exists and is not in a status `composition` accepts. This proof passes on them by design, because VDS S-7(5) is the existence question; composition is where they fail.
+inputs_digest: sha256:4c5f43394c35a21afdb919c45e26d82c9e6074a4a63266d0c2ec6775486b3ada
+digest: sha256:7d3754d9cf3f20dffd44b78f80027ac3c7f714c9896710b20f37310df6c689c0
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-10T13:28:41Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

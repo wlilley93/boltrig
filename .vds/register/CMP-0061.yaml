@@ -1,0 +1,63 @@
+id: CMP-0061
+name: RoutineThumb
+status: registered
+contractVersion: 3
+figma: null
+code:
+  importPath: ./RoutineThumb
+  sourceFile: apps/worker/src/components/RoutineThumb.tsx
+  exportName: RoutineThumb
+props:
+- name: steps
+  type: WorkflowStepDefinition[]
+  required: true
+  figmaProperty: null
+states:
+  required: []
+  drawn: []
+  built: []
+a11y:
+  role: img
+  accessibleNameSource: aria_label
+  keyboard: []
+  contrastFloors:
+  - boundary: amber
+    against: inset
+    minRatio: 3.0
+    basis: WCAG 2.2 SC 1.4.11 non-text contrast
+    scope: null
+  - boundary: border-2
+    against: inset
+    minRatio: 3.0
+    basis: WCAG 2.2 SC 1.4.11 non-text contrast
+    scope: null
+  - boundary: orange
+    against: inset
+    minRatio: 3.0
+    basis: WCAG 2.2 SC 1.4.11 non-text contrast
+    scope: null
+  - boundary: text-3
+    against: inset
+    minRatio: 3.0
+    basis: WCAG 2.2 SC 1.4.11 non-text contrast
+    scope: null
+demand:
+  routes: 1
+  measuredAt: 2026-08-10T13:48:51Z
+  measuredBy: vds register measure-demand
+supersedes: []
+supersededBy: null
+amendments:
+- at: 2026-08-10T13:30:02Z
+  by: console parity build
+  kind: non_breaking
+  what: 'state the graphical contrast floors the thumbnail must hold: the node outline and the trigger outline against the thumbnail ground, and the amber pip that marks a step needing a person'
+  contractVersion: 2
+- at: 2026-08-10T13:31:27Z
+  by: console parity build
+  kind: non_breaking
+  what: 'add the floor for the boundary the drawing now uses: --text-3 against the thumbnail ground'
+  contractVersion: 3
+basis:
+- ACT-VDS-001:s5
+notes: 'Imported by `vds register import` from apps/worker/src/components/RoutineThumb.tsx:95. A CANDIDATE, not a contract: it carries what the code says and nothing the code cannot say. Its required states, contrast floors, role and keyboard contract are decisions nobody has made yet.'
