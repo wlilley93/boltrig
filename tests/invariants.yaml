@@ -2083,6 +2083,12 @@ invariants:
     description: 'The appraisal table is data - the runtime tables load from libraries/emotion YAML and changing the parsed data changes behavior with no code edit.'
     tests:
       - tests/emotion/test_engine.py::test_appraisal_table_is_data_and_mutating_it_changes_behavior
+  EMO-7:
+    description: 'The Worker phenotype projection (GET /v1/familiar/phenotype, ADR 0025) is a bounded read of the published phenotype file: whitelisted scalars clamped to 0..1, no free text ever passes through, the route module imports nothing from boltrig.emotion (EMO-1 preserved), and every failure - missing dir, missing/stale/oversized/malformed file - answers the resting shape, never an error.'
+    tests:
+      - tests/emotion/test_phenotype_projection.py::test_missing_stale_or_malformed_files_all_answer_resting
+      - tests/emotion/test_phenotype_projection.py::test_projection_is_whitelisted_clamped_and_content_free
+      - tests/emotion/test_phenotype_projection.py::test_projection_module_never_imports_the_emotion_package
 
   # --- Codex-native Knowledge fabric (decision 0015) ---
   KNO-01:

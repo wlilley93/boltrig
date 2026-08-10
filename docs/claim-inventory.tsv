@@ -1355,6 +1355,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:227	context.run_i
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:307	question	Create a QUESTION HITL, emit a ``question`` run event, and pause the run (US-CHAT-12).
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/dispatch.py:425	result_summary	``result_summary`` keys (K-20), never the raw output.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/events.py:220	since	Yield events for a stream: the backlog first (re-attach), then live events until the stream is closed.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/familiar_phenotype_routes.py:1	boltrig.emotion	GET /v1/familiar/phenotype - the Worker surface's read of the emotion add-on.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/hands_registry.py:1	asyncio.Event	The pending desktop-command registry (decision 0016, DH-1).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/held_call.py:117	hitl_requests	Name the lane that will redeem an approval minted for THIS call, else None.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/held_call.py:359	paused	Retire a held call: drop the seal and mark its checkpoints spent.

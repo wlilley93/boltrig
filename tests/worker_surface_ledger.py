@@ -64,6 +64,7 @@ GET /v1/conversations/{conversation_id} conversation
 GET /v1/conversations/{conversation_id}/events followConversation
 POST /v1/chat streamChat
 GET /v1/chat/config chatConfig
+GET /v1/familiar/phenotype familiarPhenotype
 GET /v1/model-profiles modelProfiles
 GET /v1/artifacts artifacts
 GET /v1/artifacts/{artifact_id}/download downloadArtifact
@@ -567,4 +568,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 }
 
 
-EXPECTED_ROUTE_COUNT = 256
+EXPECTED_ROUTE_COUNT = 257

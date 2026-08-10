@@ -20,3 +20,18 @@ export type {
   ChatQueued,
 } from "./client.js";
 export { WORKER_INTEGRATION_CATALOGUE } from "./integrationCatalogue.js";
+export {
+  RESTING_FAMILIAR_STATE_V2,
+  sanitizeFamiliarState,
+} from "./familiarState.js";
+export type {
+  FamiliarActivityMode,
+  FamiliarPhenotypeResponse,
+  FamiliarPhenotypeScalar,
+  FamiliarGesture,
+  FamiliarGazeSource,
+  FamiliarPhenotypeV2,
+  FamiliarPresentationModeV2,
+  FamiliarStateV2,
+  FamiliarVoiceBands,
+} from "./familiarState.js";

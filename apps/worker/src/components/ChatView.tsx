@@ -17,6 +17,7 @@ import {
   type ChatMessage,
   type ConversationModelContext,
   type FamiliarGenotype,
+  type FamiliarPhenotypeResponse,
   type ModelProfile,
   type NormalizedTurn,
 } from "@wlilley93/boltrig-web-sdk";
@@ -28,6 +29,12 @@ import {
   revealMaterializedArtifact,
 } from "../desktop";
 import { ConversationControls } from "./ConversationControls";
+import { FamiliarBadge, familiarPalette } from "./familiar/FamiliarBadge";
+import { FamiliarStage } from "./familiar/FamiliarStage";
+import {
+  familiarStateFromTurn,
+  type FamiliarPresentationMode,
+} from "./familiar/FamiliarState";
 import { LiveQuestionCard } from "./LiveQuestionCard";
 import { VoiceCall } from "./VoiceCall";
 
@@ -62,6 +69,16 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
   const [continuity, setContinuity] = useState("");
   const [retryFollow, setRetryFollow] = useState(false);
   const compactTaskDetails = useMediaQuery("(max-width: 1020px)");
+  const [voiceActivity, setVoiceActivity] = useState<{
+    speaking: boolean;
+    level: number;
+    bands?: number[];
+    onset?: number;
+  }>({ speaking: false, level: 0 });
+  const [phenotype, setPhenotype] = useState<FamiliarPhenotypeResponse | null>(null);
+  const [pageHidden, setPageHidden] = useState(
+    typeof document !== "undefined" && document.visibilityState === "hidden",
+  );
   const [taskDetailsOpen, setTaskDetailsOpen] = useState(false);
   const taskDetailsTriggerRef = useRef<HTMLButtonElement>(null);
   const taskDetailsPanelRef = useRef<HTMLElement>(null);
@@ -184,6 +201,31 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [compactTaskDetails, taskDetailsOpen]);
+
+  // Cosmetic phenotype poll (A3): ~0.3Hz, paused while hidden; any failure
+  // simply rests the being. The visual layer never gains a second event stream.
+  useEffect(() => {
+    if (pageHidden) return;
+    let cancelled = false;
+    const pull = () => {
+      if (typeof client.familiarPhenotype !== "function") return;
+      void client.familiarPhenotype()
+        .then((result) => { if (!cancelled) setPhenotype(result); })
+        .catch(() => { if (!cancelled) setPhenotype(null); });
+    };
+    pull();
+    const timer = window.setInterval(pull, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [pageHidden]);
+
+  useEffect(() => {
+    const onVisibility = () => setPageHidden(document.visibilityState === "hidden");
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
 
   useEffect(() => {
     void client.modelProfiles().then((result) => {
@@ -463,12 +505,38 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
     window.setTimeout(() => taskDetailsTriggerRef.current?.focus(), 0);
   }
 
+  // One Familiar Stage per client (ADR 0025): hero over the welcome, compact
+  // in the header once the transcript has content, voice while the assistant
+  // speaks, minimised when the tab is hidden. Conditional rendering guarantees
+  // a single renderer session; the hero->conversation move is a remount by
+  // design (the being re-arrives through its aperture in the new position).
+  const stageIsHero = messages.length === 0 && events.length === 0;
+  const stageMode: FamiliarPresentationMode = pageHidden
+    ? "minimised"
+    : voiceActivity.speaking
+      ? "voice"
+      : stageIsHero
+        ? "hero"
+        : "conversation";
+  const stageState = familiarStateFromTurn({
+    loading,
+    hasLiveEvents: events.length > 0,
+    liveEnded: live.ended,
+    voiceSpeaking: voiceActivity.speaking,
+    voiceLevel: voiceActivity.level,
+    voiceBands: voiceActivity.bands ?? null,
+    voiceOnset: voiceActivity.onset,
+  });
+  const stage = <FamiliarStage mode={stageMode} state={stageState} phenotype={phenotype} />;
+
   return (
     <div className="chat-layout">
       <main className="chat-main">
         <header className="chat-header">
           <div className="agent-heading">
-            <Familiar state={loading ? "working" : "ready"} />
+            {stageIsHero
+              ? <FamiliarBadge state={loading ? "working" : "ready"} />
+              : stage}
             <div>
               <p className="eyebrow">Boltrig activity</p>
               <h1>{
@@ -487,6 +555,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
                 modelProfileId={profile || undefined}
                 onConversation={onConversation}
                 onError={setError}
+                onFamiliarActivity={setVoiceActivity}
               />
             )}
             {compactTaskDetails && (
@@ -504,7 +573,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
           </div>
         </header>
         <div className="transcript" aria-live="polite">
-          {messages.length === 0 && events.length === 0 ? <Welcome /> : null}
+          {stageIsHero ? <Welcome stage={stage} /> : null}
           {messages.map((message) => <Message key={message.id} message={message} />)}
           {modelContext?.compacted && (
             <details className="notice model-context-notice">
@@ -585,10 +654,10 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
   );
 }
 
-function Welcome() {
+function Welcome({ stage }: { stage?: React.ReactNode }) {
   return (
     <section className="welcome">
-      <div className="welcome-mark" aria-hidden>ϟ</div>
+      {stage ?? <div className="welcome-mark" aria-hidden>ϟ</div>}
       <h2>Bring me a task, not a prompt.</h2>
       <p>I can plan the work, use the tools your workspace grants, pause for approval, and return the artifact here.</p>
       <div className="suggestions">
@@ -607,7 +676,7 @@ function Message({ message }: { message: ChatMessage }) {
     <article className={`message ${message.role}`}>
       <div className="message-author">
         {message.role === "assistant" ? (
-          <Familiar
+          <FamiliarBadge
             state={turn.ended ? "ready" : "working"}
             genotype={identity?.familiarGenotype}
             label={identity?.name}
@@ -643,7 +712,7 @@ function LiveTurn({ turn }: { turn: NormalizedTurn }) {
   return (
     <article className="message assistant live">
       <div className="message-author">
-        <Familiar
+        <FamiliarBadge
           state={turn.ended ? "ready" : "working"}
           genotype={identity?.familiarGenotype}
           label={identity?.name}
@@ -738,37 +807,6 @@ function TurnActivity({
       })}
     </div>
   );
-}
-
-function Familiar({
-  state,
-  genotype,
-  label,
-}: {
-  state: "ready" | "working";
-  genotype?: FamiliarGenotype | null;
-  label?: string;
-}) {
-  const hasIdentity = genotype?.source === "agent_capability.name.v1";
-  return (
-    <span
-      className={`familiar-orb ${state}`}
-      data-genotype-source={hasIdentity ? genotype.source : "unbound"}
-      role="img"
-      aria-label={hasIdentity
-        ? `${label ?? "Agent"} Familiar · ${state}`
-        : `Boltrig activity · ${state}`}
-      style={hasIdentity ? familiarPalette(genotype.palette) : undefined}
-    ><i /></span>
-  );
-}
-
-function familiarPalette(palette?: string[] | null): React.CSSProperties {
-  const colors = [...(palette ?? [])]
-    .filter((value) => /^#[0-9a-f]{6}$/i.test(value))
-    .slice(0, 3);
-  if (colors.length !== 3) return {};
-  return { background: `radial-gradient(circle at 35% 30%, ${colors.join(", ")})` };
 }
 
 interface ComposerProps {

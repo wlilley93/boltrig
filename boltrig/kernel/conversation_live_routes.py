@@ -143,6 +143,8 @@ def register_worker_query_routes(
 ) -> None:
     """Compose live conversation reads with independently governed search."""
     register_conversation_live_routes(app, principal_dep=principal_dep)
+    from .familiar_phenotype_routes import register_familiar_phenotype_routes
     from .federated_search_routes import register_federated_search_routes
 
+    register_familiar_phenotype_routes(app, principal_dep=principal_dep)
     register_federated_search_routes(app, principal_dep, get_kernel)
