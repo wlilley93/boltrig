@@ -3,6 +3,10 @@ import type { ConversationSummary } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "./client";
 import type { SettingsSection } from "./settingsSections";
+import { useMediaQuery } from "./useMediaQuery";
+import { MobileToday } from "./components/MobileToday";
+import { useWorkerGlobalContext } from "./components/WorkerGlobalContext";
+
 import { ChatView } from "./components/ChatView";
 import { CommandPalette } from "./components/CommandPalette";
 import { Sidebar } from "./components/Shell";
@@ -31,6 +35,13 @@ const RunsView = lazyNamed(() => import("./components/ParityViews"), "RunsView")
 const SettingsView = lazyNamed(() => import("./components/Views"), "SettingsView");
 const WorkView = lazyNamed(() => import("./components/ParityViews"), "WorkView");
 
+// Two initials from whatever the identity gives us — an email, a handle or a
+// name — so the mobile avatar never renders a raw address.
+function initialsOf(user?: string): string {
+  const parts = (user ?? "").split(/[\s@._-]+/).filter(Boolean).slice(0, 2);
+  return parts.map((part) => part[0]!.toUpperCase()).join("") || "—";
+}
+
 export function App() {
   const [route, setRoute] = useState<WorkerRoute>(() => routeFromHash(window.location.hash));
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -45,6 +56,8 @@ export function App() {
   // Which settings section is open. The sidebar and the pane both read it, so
   // it lives above them rather than inside either.
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("you");
+  const phone = useMediaQuery("(max-width: 640px)");
+  const { identity } = useWorkerGlobalContext();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLButtonElement>(null);
   const sidebarWrapRef = useRef<HTMLDivElement>(null);
@@ -233,7 +246,21 @@ export function App() {
       </div>
       <section className="surface" ref={surfaceRef}>
         <Suspense fallback={<div className="route-loading" role="status">Loading Worker surface…</div>}>
-        {route === "home" && <HomeView onRoute={chooseRoute} />}
+        {/* Today is the phone's home. It lives on the `home` route rather than
+            standing in for an empty chat, so the conversation surface — and the
+            task-details trigger that must survive a breakpoint flip — stays
+            exactly where it was at every width. */}
+        {route === "home" && (phone
+          ? (
+            <MobileToday
+              initials={initialsOf(identity?.user)}
+              onNewChat={() => chooseRoute("chat")}
+              onOpenConversation={chooseConversation}
+              onSettings={() => chooseRoute("settings")}
+              workspace={identity ? `${identity.organisation} · ${identity.workspace}` : ""}
+            />
+          )
+          : <HomeView onRoute={chooseRoute} />)}
         {route === "chat" && (
           <ChatView
             conversationId={selectedConversation}

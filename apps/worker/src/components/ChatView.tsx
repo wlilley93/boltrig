@@ -24,6 +24,8 @@ import {
 } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../client";
+import { useMediaQuery } from "../useMediaQuery";
+import { navigate } from "../routes";
 import {
   materializeArtifact,
   openMaterializedArtifact,
@@ -571,7 +573,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
           busy={Boolean(live.runId) && !live.ended}
           composerValue={mobileDraft}
           messages={messages}
-          onBack={() => onConversation("")}
+          onBack={() => navigate("home")}
           onComposerChange={setMobileDraft}
           onSend={() => {
             const text = mobileDraft.trim();
@@ -1458,31 +1460,6 @@ function reasonText(reason: unknown): string {
     if (reason.status === 503) return "This capability is unavailable right now.";
   }
   return reason instanceof Error ? reason.message : "Something went wrong.";
-}
-
-function useMediaQuery(query: string): boolean {
-  const matches = () => (
-    typeof window !== "undefined"
-    && typeof window.matchMedia === "function"
-    && window.matchMedia(query).matches
-  );
-  const [matched, setMatched] = useState(matches);
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") return;
-    const media = window.matchMedia(query);
-    // Commit breakpoint flips synchronously inside the media-change event.
-    // A deferred commit leaves a window where the layout has crossed the
-    // breakpoint but the old surface is still mounted; anything measuring
-    // the page across that window (assistive tech re-querying, the browser
-    // acceptance suite's geometry checks) can catch a control mid-detach.
-    const onChange = (event: MediaQueryListEvent) => flushSync(() => setMatched(event.matches));
-    setMatched(media.matches);
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, [query]);
-
-  return matched;
 }
 
 function focusableElements(container: HTMLElement): HTMLElement[] {
