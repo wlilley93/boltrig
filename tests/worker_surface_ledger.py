@@ -52,7 +52,7 @@ GET /v1/conversations/search searchConversations
 """,
 )
 _surface(
-    "apps/worker/src/components/SettingsSurface.tsx",
+    "apps/worker/src/components/settings/SpendingSection.tsx",
     """
 GET /v1/cost cost
 """,
@@ -236,6 +236,19 @@ PATCH /v1/work/{item_id}/parent reparentWork
 GET /v1/agent-capabilities agentCapabilities
 POST /v1/agent-capabilities/{name}/retire retireAgentCapability
 POST /v1/agent-capabilities/{name}/restore restoreAgentCapability
+GET /v1/memory/facts memoryFacts
+GET /v1/memory/facts/{fact_id} memoryFact
+POST /v1/memory/recall memoryRecall
+POST /v1/memory/remember memoryRemember
+POST /v1/memory/improve memoryImprove
+POST /v1/memory/forget memoryForget
+POST /v1/memory/ingest memoryIngest
+GET /v1/memory/ingestions memoryIngestions
+""",
+)
+_surface(
+    "apps/worker/src/components/knowledge/KnowledgeView.tsx",
+    """
 GET /v1/knowledge/assets knowledgeAssets
 GET /v1/knowledge/assets/{asset_id} knowledgeAsset
 DELETE /v1/knowledge/assets/{asset_id} eraseKnowledgeAsset
@@ -246,14 +259,6 @@ POST /v1/knowledge/search knowledgeSearch
 POST /v1/knowledge/uploads uploadKnowledge
 PUT /v1/knowledge/uploads/{upload_id} uploadKnowledge
 POST /v1/knowledge/uploads/{upload_id}/commit uploadKnowledge
-GET /v1/memory/facts memoryFacts
-GET /v1/memory/facts/{fact_id} memoryFact
-POST /v1/memory/recall memoryRecall
-POST /v1/memory/remember memoryRemember
-POST /v1/memory/improve memoryImprove
-POST /v1/memory/forget memoryForget
-POST /v1/memory/ingest memoryIngest
-GET /v1/memory/ingestions memoryIngestions
 """,
 )
 _surface(
@@ -361,7 +366,7 @@ POST /v1/mcp/servers/{server_id}/restore restoreMcpServer
 """,
 )
 _surface(
-    "apps/worker/src/components/BuildView.tsx",
+    "apps/worker/src/components/build/RecentlyChanged.tsx",
     """
 GET /v1/capabilities/changelog capabilityChangelog
 """,
@@ -548,10 +553,6 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
     "getCall": (
         "superseded-read",
         "calls/currentCall already return the complete call projection.",
-    ),
-    "health": (
-        "service-probe",
-        "The load-balancer liveness probe is not a user lifecycle.",
     ),
     "refreshCallMedia": (
         "compatibility-helper",

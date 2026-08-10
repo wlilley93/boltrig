@@ -791,10 +791,16 @@ _governed_controls(
         "OrganisationDirectorySections.tsx OrganisationWorkspaceSections.tsx "
         "OperationsView.tsx AgentProfileEditor.tsx PermanentFleetTopology.tsx "
         "build/ModelEndpointsBuild.tsx build/RegistryBuild.tsx "
-        "build/SkillsBuild.tsx ParityViews.tsx"
+        "build/SkillsBuild.tsx ParityViews.tsx "
+        "knowledge/KnowledgeView.tsx knowledge/RemembersTab.tsx"
     ),
     ("worker", "worker", "worker", "worker", "worker"),
     "These non-secret controls retain only exact typed route inputs plus an internal approval id, query caller-owned state, replay the same SDK method and invalidate edits, selection changes and refreshes.",
+)
+_governed_controls(
+    "settings/OvernightSection.tsx",
+    ("worker", "worker", "worker", "worker", "worker"),
+    "Read-only. The screen reports that a night is parked awaiting a person by finding a pending distill request, and names the Inbox as where that decision is taken; it issues no approval, retains no request body and can settle nothing itself.",
 )
 _governed_controls(
     "LocalDeviceActions.tsx",
