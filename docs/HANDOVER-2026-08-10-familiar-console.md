@@ -12,10 +12,9 @@ prose-claim gate 0 unresolved, working tree empty. Nothing is known-broken;
 the outstanding work is one push plus three unbuilt mobile screens.
 
 **The one remaining action**: relay-push `feat/console-polish` and merge #265.
-Ten commits are unpushed. Read the "Pushing" note below first — the count and
-the fetch state have both been wrong in this document before, so verify with
-`git log --oneline origin/feat/console-polish..HEAD` rather than trusting any
-number written here.
+Deliberately not stating how many commits that is — every count written into
+this file has been wrong within the hour, including by the act of writing it.
+Run `git fetch origin && git log --oneline origin/feat/console-polish..HEAD`.
 
 ## Shipped (merged to main)
 
@@ -64,15 +63,16 @@ Outstanding to land it:
    checker (`scripts/check_prose_references.py`, run it directly) now passes
    with 0 unresolved. Note this file is still UNTRACKED — it must be committed
    or dropped before the gate means anything in CI.
-5. **Unpushed**: 10 commits sit local on `feat/console-polish` — this
-   session's (`b455da7`, `c847e24`, `280a7b4`, `d3644ae`), the DAG session's
+5. **Unpushed**: this session's mobile and docs commits (`b455da7`,
+   `c847e24`, `280a7b4`, `d3644ae`, `50b0ea8`), the DAG session's
    (`93b3e07`, `ef703be`, `41c4687`, `10cb92f`), and the merge below. The M4
    has no GitHub creds — see the relay recipe.
 
-   Beware the arithmetic here. Counting against `main` gives 27 and counting
-   against a stale `origin/main` gave 21; both were quoted as "unpushed" at
-   points today and both were wrong. The only count that means anything is
-   against the remote BRANCH: `git log --oneline origin/feat/console-polish..HEAD`.
+   Beware the arithmetic. Counting against `main` gives 27; against a stale
+   `origin/main` it gave 21; against the remote branch it was 10 when written
+   and 11 by the time the sentence was committed. Only the last form means
+   anything, and only after a fetch:
+   `git log --oneline origin/feat/console-polish..HEAD`.
 6. **`git fetch` works from the M4** even though pushing does not — read
    access needs no local creds. It had not been run since 10:59 today, which
    is why the numbers above drifted. Fetch before trusting any of them.
