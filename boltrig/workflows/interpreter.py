@@ -172,6 +172,15 @@ async def run_workflow_definition(
 
     ordered, unrunnable = _topological_order(steps)
     results: dict[str, dict[str, Any]] = {}
+    # ``$inputs.<key>`` sugar (graphon-parity namespaced reads): the run inputs
+    # are referenceable directly, without routing through a trigger.start
+    # step's ``$<start>.output.inputs.<key>``. Seeded as a synthetic results
+    # entry so every existing resolver (predicates, items_from, bindings) gets
+    # it for free; a REAL step authored with id "inputs" wins - the synthetic
+    # entry is only seeded when no step claims the name (fail-closed to the
+    # author's graph, never shadowing it).
+    if not any(s.get("id") == "inputs" for s in steps):
+        results["inputs"] = dict(inputs or {})
     # Two skip lineages with different join semantics (graphon-parity OR-join):
     # * ``failed_or_skipped`` is FAILURE lineage - a failed/errored/paused step
     #   and everything skipped because of it. Any failure-lineage parent blocks

@@ -1269,11 +1269,13 @@ ORDINARY	NO-SUBJECT	comment	boltrig/work/store.py:22		cancelled run is never res
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/control_flow.py:249		Excess items beyond the canonical cap are never dispatched: recorded
 ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/control_flow.py:87		Evaluate a declarative comparison.
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:145		step.
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:178		a child (fail-closed: its data genuinely never arrived).
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:211		resumed run;
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:232		A step with a failure-lineage parent cannot run (fail-closed).
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:255		cannot resolve.
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:316		dispatch, many ways to record the outcome (never a second path).
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:180		entry is only seeded when no step claims the name (fail-closed to the
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:181		author's graph, never shadowing it).
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:187		a child (fail-closed: its data genuinely never arrived).
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:220		resumed run;
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:241		A step with a failure-lineage parent cannot run (fail-closed).
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:264		cannot resolve.
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:325		dispatch, many ways to record the outcome (never a second path).
 ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/interpreter.py:76		Order steps so every parent precedes its children (Kahn's algorithm).
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/library.py:200		itself guarantees depends on the executor - see
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/scheduler_loop.py:113		never change the outcome, and a failed write must not stall the loop.

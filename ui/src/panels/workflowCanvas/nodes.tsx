@@ -32,19 +32,32 @@ function configPreview(d: StepNodeData): string {
   return d.action;
 }
 
+const DIFF_GLYPH: Record<string, string> = { added: "+", removed: "−", changed: "~" };
+
 function NodeCard({
   icon,
   consequence,
   runStatus,
+  diff,
 }: {
   icon: string;
   consequence?: string;
   runStatus?: RunNodeStatus;
+  diff?: "added" | "removed" | "changed";
 }) {
   return (
     <div
-      className={`wf3-node__card${runStatus ? ` wf3-node__card--${runStatus}` : ""}`}
+      className={`wf3-node__card${runStatus ? ` wf3-node__card--${runStatus}` : ""}${diff ? ` wf3-node__card--diff-${diff}` : ""}`}
     >
+      {diff && (
+        <span
+          className={`wf3-node__diff wf3-node__diff--${diff}`}
+          aria-label={`Proposed: ${diff}`}
+          title={`Proposed change: ${diff}`}
+        >
+          {DIFF_GLYPH[diff]}
+        </span>
+      )}
       {runStatus && (
         <span
           className={`wf3-node__status wf3-node__status--${runStatus}`}
@@ -91,6 +104,7 @@ function WorkflowNodeView({ data, selected }: NodeProps) {
         icon={meta.icon}
         consequence={d.consequence}
         runStatus={d.runStatus}
+        diff={d.diff}
       />
       <div className="wf3-node__label">
         {d.label}

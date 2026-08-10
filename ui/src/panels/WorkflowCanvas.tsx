@@ -26,6 +26,9 @@ import { BoltChatPanel } from "./workflowCanvas/BoltChatPanel";
 import { StickyNotes } from "./workflowCanvas/StickyNotes";
 import { useStickyNotes } from "./workflowCanvas/useStickyNotes";
 import { useStudioChat } from "./workflowCanvas/useStudioChat";
+import { stepsToGraph } from "./workflowCanvas/graph";
+import { diffSteps } from "./workflowCanvas/workflowDiff";
+import type { WorkflowStep } from "./workflowCanvas/types";
 
 export type {
   WorkflowStep,
@@ -109,19 +112,51 @@ function CanvasSurface({ ctx }: { ctx: Ctx }) {
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [boltOpen, setBoltOpen] = useState(true);
   const [notes, setNotes] = useStickyNotes(meta.wfId);
+  // Proposal preview: the proposed definition read from a pending approval
+  // hold, rendered on the canvas with per-node diff badges. Approving is the
+  // save; this view is what you are approving.
+  const [proposal, setProposal] = useState<WorkflowStep[] | null>(null);
   const chat = useStudioChat(meta.wfId, graph.previewSteps);
 
   const closeModal = () => graph.setSelectedId(null);
 
+  let viewNodes = graph.nodes;
+  let viewEdges = graph.edges;
+  if (proposal) {
+    const diff = diffSteps(graph.previewSteps, proposal);
+    // Removed steps stay visible, ghosted, so a deletion is a decision you
+    // SEE, not an absence you might miss.
+    const removed = graph.previewSteps.filter((s) => diff.byStep.get(s.id) === "removed");
+    const merged = [...proposal, ...removed];
+    const g = stepsToGraph(merged, data.verbsById);
+    viewNodes = g.nodes.map((n) =>
+      n.type === "step" && diff.byStep.has(n.id)
+        ? { ...n, data: { ...n.data, diff: diff.byStep.get(n.id) } }
+        : n,
+    );
+    viewEdges = g.edges;
+  }
+
   return (
     <div className="wf3-canvas-wrap">
+      {proposal && (
+        <div className="wf3-proposal-banner">
+          <span>
+            Previewing proposed change - approve or reject it in the chat panel.
+          </span>
+          <button type="button" className="btn btn--ghost" onClick={() => setProposal(null)}>
+            Back to current
+          </button>
+        </div>
+      )}
       <ReactFlow
-        nodes={graph.nodes}
-        edges={graph.edges}
+        key={proposal ? "proposal" : "current"}
+        nodes={viewNodes}
+        edges={viewEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        onNodesChange={graph.onNodesChange}
-        onNodeClick={onNodeClick}
+        onNodesChange={proposal ? undefined : graph.onNodesChange}
+        onNodeClick={proposal ? undefined : onNodeClick}
         nodesConnectable={false}
         edgesFocusable={false}
         deleteKeyCode={null}
@@ -173,6 +208,7 @@ function CanvasSurface({ ctx }: { ctx: Ctx }) {
         workflowId={meta.wfId}
         steps={graph.previewSteps}
         chat={chat}
+        onPreviewProposal={setProposal}
       />
       <StickyNotes notes={notes} onChange={setNotes} />
     </div>
