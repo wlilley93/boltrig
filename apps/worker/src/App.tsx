@@ -95,6 +95,12 @@ export function App() {
         event.preventDefault();
         setCommandPaletteOpen((current) => !current);
       }
+      // Best effort: browsers may reserve Cmd/Ctrl-N for a new window, but
+      // the desktop shell and permissive browsers land on a fresh chat.
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        chooseDestination("chat", null);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);

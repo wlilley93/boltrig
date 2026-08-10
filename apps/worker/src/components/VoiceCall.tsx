@@ -21,6 +21,9 @@ interface VoiceCallProps {
     centroid?: number;
     onset?: number;
   }): void;
+  // True for the whole life of a call attempt (creating through held), not
+  // just while audio is playing - the Stage takes centre stage for the call.
+  onCallActive?(active: boolean): void;
   conversationId: string | null;
   modelProfileId?: string;
   onConversation(id: string): void;
@@ -154,6 +157,7 @@ export function VoiceCall({
   onConversation,
   onError,
   onFamiliarActivity,
+  onCallActive,
 }: VoiceCallProps) {
   const [call, setCall] = useState<RealtimeCall | null>(null);
   const [status, setStatus] = useState<CallStatus | "idle">("idle");
@@ -173,6 +177,18 @@ export function VoiceCall({
   const playAtRef = useRef(0);
   const onFamiliarActivityRef = useRef(onFamiliarActivity);
   onFamiliarActivityRef.current = onFamiliarActivity;
+  const onCallActiveRef = useRef(onCallActive);
+  onCallActiveRef.current = onCallActive;
+
+  useEffect(() => {
+    const inCall = status === "creating"
+      || status === "joining"
+      || status === "active"
+      || status === "reconnecting"
+      || status === "held";
+    onCallActiveRef.current?.(inCall);
+  }, [status]);
+  useEffect(() => () => onCallActiveRef.current?.(false), []);
   const seenEventIdsRef = useRef(new Set<string>());
   const pendingApprovalsRef = useRef(new Set<string>());
 

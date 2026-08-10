@@ -379,7 +379,10 @@ export class FamiliarWebGLRenderer {
     f("uPresence", 0);
     f("uAperture", this.apertureNow(now));
     gl.uniform2f(u.uCentreDock ?? null, 0, 0);
-    f("uScaleDock", 0.4);
+    // 0.34, not 0.40: the design brief's measured value at which the companion
+    // porthole's edge feather reaches zero before the halo is cut - at 0.40 the
+    // clipped halo reads as a hard blue ring ("pasted on the page").
+    f("uScaleDock", 0.34);
     f("uFitScale", 0.5);
 
     gl.uniform2f(u.uMouse ?? null, 0.5, 0.5);

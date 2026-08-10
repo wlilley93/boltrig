@@ -1261,9 +1261,11 @@ describe("Worker conversation management", () => {
       />,
     );
 
-    const profile = await screen.findByRole("img", {
-      name: "local-worker Familiar · ready",
-    });
+    // The newest turn's avatar slot now hosts the one presiding Familiar
+    // Stage (console placement rule 2), which stays root-neutral; the emitted
+    // identity remains visible on the subagent marker, still derived only
+    // from the canonical genotype.
+    const profile = await screen.findByLabelText("local-worker profile Familiar");
     expect(profile.dataset.genotypeSource).toBe("agent_capability.name.v1");
     expect(profile.getAttribute("style")).toContain("#112233");
     expect(screen.getByText(/policy research-route/)).toBeTruthy();

@@ -28,6 +28,7 @@ import {
   openMaterializedArtifact,
   revealMaterializedArtifact,
 } from "../desktop";
+import { appliedTheme, toggleTheme } from "../theme";
 import { ConversationControls } from "./ConversationControls";
 import { FamiliarBadge, familiarPalette } from "./familiar/FamiliarBadge";
 import { FamiliarStage } from "./familiar/FamiliarStage";
@@ -75,6 +76,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
     bands?: number[];
     onset?: number;
   }>({ speaking: false, level: 0 });
+  const [callActive, setCallActive] = useState(false);
   const [phenotype, setPhenotype] = useState<FamiliarPhenotypeResponse | null>(null);
   const [pageHidden, setPageHidden] = useState(
     typeof document !== "undefined" && document.visibilityState === "hidden",
@@ -505,15 +507,22 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
     window.setTimeout(() => taskDetailsTriggerRef.current?.focus(), 0);
   }
 
-  // One Familiar Stage per client (ADR 0025): hero over the welcome, compact
-  // in the header once the transcript has content, voice while the assistant
-  // speaks, minimised when the tab is hidden. Conditional rendering guarantees
-  // a single renderer session; the hero->conversation move is a remount by
-  // design (the being re-arrives through its aperture in the new position).
+  // One Familiar Stage per client (ADR 0025), placed where the being presides:
+  // large and centred over the hero welcome; as the avatar bullet of the most
+  // recent assistant turn once the conversation has content (older turns keep
+  // static badges); back to the centre, large, for the whole life of a voice
+  // call; minimised sizing while the tab is hidden. Conditional rendering
+  // guarantees a single renderer session; each move is a remount by design
+  // (the being re-arrives through its aperture in the new position).
   const stageIsHero = messages.length === 0 && events.length === 0;
+  const stagePlacement: "hero" | "centre" | "bullet" = callActive
+    ? "centre"
+    : stageIsHero
+      ? "hero"
+      : "bullet";
   const stageMode: FamiliarPresentationMode = pageHidden
     ? "minimised"
-    : voiceActivity.speaking
+    : callActive
       ? "voice"
       : stageIsHero
         ? "hero"
@@ -528,27 +537,23 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
     voiceOnset: voiceActivity.onset,
   });
   const stage = <FamiliarStage mode={stageMode} state={stageState} phenotype={phenotype} />;
+  const bulletStage = stagePlacement === "bullet" ? stage : undefined;
 
   return (
     <div className="chat-layout">
       <main className="chat-main">
         <header className="chat-header">
           <div className="agent-heading">
-            {stageIsHero
-              ? <FamiliarBadge state={loading ? "working" : "ready"} />
-              : stage}
-            <div>
-              <p className="eyebrow">Boltrig activity</p>
-              <h1>{
-                conversationStatus === "closed"
-                  ? "Closed conversation"
-                  : conversationId
-                    ? "Continue the work"
-                    : "What should we get done?"
-              }</h1>
-            </div>
+            <h1>{
+              conversationStatus === "closed"
+                ? "Closed conversation"
+                : conversationId
+                  ? (conversationTitle || "Untitled task")
+                  : "New chat"
+            }</h1>
           </div>
           <div className="chat-header-actions">
+            <ThemeToggle />
             {(!conversationId || conversationStatus === "active") && (
               <VoiceCall
                 conversationId={conversationId}
@@ -556,6 +561,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
                 onConversation={onConversation}
                 onError={setError}
                 onFamiliarActivity={setVoiceActivity}
+                onCallActive={setCallActive}
               />
             )}
             {compactTaskDetails && (
@@ -572,9 +578,26 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
             )}
           </div>
         </header>
-        <div className="transcript" aria-live="polite">
-          {stageIsHero ? <Welcome stage={stage} /> : null}
-          {messages.map((message) => <Message key={message.id} message={message} />)}
+        {stagePlacement === "centre" && (
+          <div className="voice-stage" aria-hidden={false}>{stage}</div>
+        )}
+        <div
+          aria-label="Conversation transcript"
+          aria-live="polite"
+          className="transcript"
+          role="region"
+          tabIndex={0}
+        >
+          {stageIsHero ? <Welcome stage={stagePlacement === "hero" ? stage : undefined} /> : null}
+          {messages.map((message) => (
+            <Message
+              key={message.id}
+              message={message}
+              stage={events.length === 0 && message.id === lastAssistantMessageId
+                ? bulletStage
+                : undefined}
+            />
+          ))}
           {modelContext?.compacted && (
             <details className="notice model-context-notice">
               <summary>
@@ -588,7 +611,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
               <blockquote>{modelContext.summary}</blockquote>
             </details>
           )}
-          {events.length > 0 && <LiveTurn turn={live} />}
+          {events.length > 0 && <LiveTurn turn={live} stage={bulletStage} />}
           {continuity && (
             <p className="notice" role="status">
               {continuity}
@@ -654,36 +677,70 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
   );
 }
 
+function ThemeToggle() {
+  const [theme, setTheme] = useState(appliedTheme);
+  return (
+    <button
+      aria-label="Toggle theme"
+      className="icon-button theme-toggle"
+      onClick={() => setTheme(toggleTheme())}
+      title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+      type="button"
+    >
+      {theme === "dark" ? (
+        <svg aria-hidden fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" viewBox="0 0 24 24" width="15">
+          <path d="M12 7.6a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8z" />
+          <path d="M12 2v2.2M12 19.8V22M4.3 4.3l1.6 1.6M18.1 18.1l1.6 1.6M2 12h2.2M19.8 12H22M4.3 19.7l1.6-1.6M18.1 5.9l1.6-1.6" />
+        </svg>
+      ) : (
+        <svg aria-hidden fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" viewBox="0 0 24 24" width="15">
+          <path d="M20 14.5A8.2 8.2 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 function Welcome({ stage }: { stage?: React.ReactNode }) {
   return (
     <section className="welcome">
       {stage ?? <div className="welcome-mark" aria-hidden>ϟ</div>}
-      <h2>Bring me a task, not a prompt.</h2>
+      <h2>What should we get done?</h2>
       <p>I can plan the work, use the tools your workspace grants, pause for approval, and return the artifact here.</p>
-      <div className="suggestions">
-        <span>Turn these notes into a brief</span>
-        <span>Research and compare options</span>
-        <span>Prepare this week’s update</span>
+      <div className="starters">
+        <span className="starter-card">Turn these notes into a brief</span>
+        <span className="starter-card">Research and compare options</span>
+        <span className="starter-card">Prepare this week’s update</span>
       </div>
     </section>
   );
 }
 
-function Message({ message }: { message: ChatMessage }) {
+function Message({
+  message,
+  stage,
+}: {
+  message: ChatMessage;
+  // The one Familiar Stage, when this is the newest assistant turn it
+  // presides over (ADR 0025); older turns render the static badge.
+  stage?: React.ReactNode;
+}) {
   const turn = useMemo(() => normalizeEvents(message.events ?? []), [message.events]);
   const identity = turn.subagents[0];
   return (
     <article className={`message ${message.role}`}>
-      <div className="message-author">
-        {message.role === "assistant" ? (
-          <FamiliarBadge
-            state={turn.ended ? "ready" : "working"}
-            genotype={identity?.familiarGenotype}
-            label={identity?.name}
-          />
-        ) : <span className="user-avatar">Y</span>}
-        <strong>{message.role === "assistant" ? identity?.name ?? "Boltrig" : "You"}</strong>
-      </div>
+      {message.role === "assistant" && (
+        <div className="message-author">
+          {stage ?? (
+            <FamiliarBadge
+              state={turn.ended ? "ready" : "working"}
+              genotype={identity?.familiarGenotype}
+              label={identity?.name}
+            />
+          )}
+          <strong>{identity?.name ?? "Boltrig"}</strong>
+        </div>
+      )}
       <div className="message-content">
         {turn.degraded && (
           <p className="notice" role="status">
@@ -707,16 +764,18 @@ function Message({ message }: { message: ChatMessage }) {
   );
 }
 
-function LiveTurn({ turn }: { turn: NormalizedTurn }) {
+function LiveTurn({ turn, stage }: { turn: NormalizedTurn; stage?: React.ReactNode }) {
   const identity = turn.subagents[0];
   return (
     <article className="message assistant live">
       <div className="message-author">
-        <FamiliarBadge
-          state={turn.ended ? "ready" : "working"}
-          genotype={identity?.familiarGenotype}
-          label={identity?.name}
-        />
+        {stage ?? (
+          <FamiliarBadge
+            state={turn.ended ? "ready" : "working"}
+            genotype={identity?.familiarGenotype}
+            label={identity?.name}
+          />
+        )}
         <strong>{identity?.name ?? "Boltrig"}</strong>
       </div>
       <div className="message-content">
@@ -933,8 +992,17 @@ function Composer({
               ■ Stop
             </button>
           )}
-          <button className="send-button" type="submit" disabled={disabled || !value.trim()}>
-            {busy ? "Queue next ↑" : "Send ↑"}
+          <button
+            aria-label={busy ? "Queue next ↑" : "Send ↑"}
+            className="send-button"
+            disabled={disabled || !value.trim()}
+            title={busy ? "Queue next" : "Send"}
+            type="submit"
+          >
+            <svg aria-hidden fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.3" viewBox="0 0 24 24" width="14">
+              <line x1="12" x2="12" y1="19" y2="5" />
+              <polyline points="5 12 12 5 19 12" />
+            </svg>
           </button>
         </div>
       </div>
