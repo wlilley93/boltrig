@@ -67,7 +67,7 @@ describe("console format helpers", () => {
         ],
         runtimes: [],
       },
-    } as ConsoleOverview;
+    } as unknown as ConsoleOverview;
 
     expect(gatewaySummary(overview)).toEqual({
       cacheHitRate: 0.8,
@@ -84,7 +84,7 @@ describe("console format helpers", () => {
   it("returns null when gateway status is absent", () => {
     const overview = {
       platform: { components: [component("runpod", "ok")], runtimes: [] },
-    } as ConsoleOverview;
+    } as unknown as ConsoleOverview;
     expect(gatewaySummary(overview)).toBeNull();
   });
 });
