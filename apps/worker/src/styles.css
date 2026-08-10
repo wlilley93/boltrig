@@ -2807,3 +2807,82 @@ button.console-row-main { border: 0; background: transparent; color: inherit; cu
   border-radius: 99px;
   color: var(--m-text-2);
 }
+
+/* Mobile Settings and its detail: an iOS list, on the scoped palette. */
+.m-backbar { flex: 0 0 auto; display: flex; align-items: center; padding: 6px 12px 6px 4px; }
+.m-back {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 10px 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--m-accent);
+  font-size: 17px;
+  cursor: pointer;
+}
+.m-settings-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 0 20px 34px;
+  overflow-y: auto;
+}
+.m-big-title { flex: 0 0 auto; font-size: 32px; font-weight: 700; letter-spacing: -.7px; }
+.m-detail-head { flex: 0 0 auto; display: flex; flex-direction: column; gap: 7px; }
+.m-detail-lead { color: var(--m-text-3); font-size: 16px; line-height: 1.45; }
+.m-identity {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 17px;
+  border-radius: 16px;
+  background: var(--m-card);
+}
+.m-identity-avatar {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 99px;
+  background: var(--m-accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+.m-identity-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.m-identity-name { font-size: 18px; }
+.m-identity-sub { color: var(--m-text-3); font-size: 14.5px; }
+.m-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 15px 17px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.m-settings-row + .m-settings-row { border-top: 1px solid var(--m-sep); }
+.m-settings-label { flex: 1; min-width: 0; font-size: 17px; }
+.m-settings-foot { flex: 0 0 auto; padding: 0 4px; color: var(--m-text-4); font-size: 13.5px; line-height: 1.5; }
+
+/* The reused console pane sits on the mobile card inside this surface, so its
+   own borders stand down and the iOS grouping shows through. */
+.mobile-surface .settings-group { gap: 10px; margin-bottom: 0; }
+.mobile-surface .console-table { border: 0; border-radius: 16px; background: var(--m-card); }
+.mobile-surface .console-section-title { color: var(--m-text-3); font-size: 14px; }
+.mobile-surface .settings-row { padding: 15px 17px; }
+.mobile-surface .settings-row + .settings-row { border-top: 1px solid var(--m-sep); }
+.mobile-surface .settings-row-desc { color: var(--m-text-3); font-size: 14.5px; }
+.mobile-surface .console-row-title > span:first-child { font-size: 17px; }
+.mobile-surface .settings-value, .mobile-surface .settings-state { font-size: 15.5px; }
+.mobile-surface .console-foot { color: var(--m-text-4); font-size: 13.5px; }

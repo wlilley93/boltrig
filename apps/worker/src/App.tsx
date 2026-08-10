@@ -4,6 +4,7 @@ import type { ConversationSummary } from "@wlilley93/boltrig-web-sdk";
 import { client } from "./client";
 import type { SettingsSection } from "./settingsSections";
 import { useMediaQuery } from "./useMediaQuery";
+import { MobileSettings } from "./components/MobileSettings";
 import { MobileToday } from "./components/MobileToday";
 import { useWorkerGlobalContext } from "./components/WorkerGlobalContext";
 
@@ -276,7 +277,16 @@ export function App() {
         {route === "integrations" && <IntegrationsView />}
         {route === "operate" && <OperateView />}
         {route === "organisation" && <OrganisationView />}
-        {route === "settings" && <SettingsView onContextChanged={contextChanged} section={settingsSection} />}
+        {route === "settings" && (phone
+          ? (
+            <MobileSettings
+              initials={initialsOf(identity?.user)}
+              onLeave={() => chooseRoute("home")}
+              role={identity?.role ?? ""}
+              user={identity?.user ?? ""}
+            />
+          )
+          : <SettingsView onContextChanged={contextChanged} section={settingsSection} />)}
         {route === "account" && <AccountView onContextChanged={contextChanged} />}
         {route === "runs" && <RunsView />}
         {route === "work" && <WorkView />}

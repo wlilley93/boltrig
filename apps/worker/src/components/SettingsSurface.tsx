@@ -63,7 +63,7 @@ function SectionHead({ section }: { section: SettingsSection }) {
 
 // --- Spending ---------------------------------------------------------------
 
-function SpendingSection() {
+function SpendingSection({ head = true }: { head?: boolean }) {
   const [budgets, setBudgets] = useState<BudgetItem[]>([]);
   const [cost, setCost] = useState<CostResponse | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "unavailable">("loading");
@@ -88,7 +88,7 @@ function SpendingSection() {
 
   return (
     <>
-      <SectionHead section="spend" />
+      {head && <SectionHead section="spend" />}
       {state === "loading" && <p className="muted small">Reading what work has cost…</p>}
       {state === "unavailable" && (
         <p className="notice">Spending is not readable with your current role.</p>
@@ -142,7 +142,7 @@ function SpendingSection() {
 
 // --- Autonomy ---------------------------------------------------------------
 
-function AutonomySection() {
+function AutonomySection({ head = true }: { head?: boolean }) {
   const [budgets, setBudgets] = useState<BudgetItem[] | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -155,7 +155,7 @@ function AutonomySection() {
   const hardStops = (budgets ?? []).filter((budget) => budget.hard_stop).length;
   return (
     <>
-      <SectionHead section="autonomy" />
+      {head && <SectionHead section="autonomy" />}
       <SettingsGroup title="What stops a run">
         <SettingsRow
           title="Every consequential verb asks first"
@@ -190,7 +190,7 @@ function AutonomySection() {
 
 // --- Health -----------------------------------------------------------------
 
-function HealthSection() {
+function HealthSection({ head = true }: { head?: boolean }) {
   const [checks, setChecks] = useState<Record<string, ReadinessCheck> | null>(null);
   const [status, setStatus] = useState("");
   useEffect(() => {
@@ -213,7 +213,7 @@ function HealthSection() {
   const notReady = entries.filter(([, check]) => !healthy(check.status));
   return (
     <>
-      <SectionHead section="health" />
+      {head && <SectionHead section="health" />}
       <SettingsGroup title="Right now">
         <SettingsRow
           title="Overall"
@@ -263,10 +263,10 @@ const SHORTCUTS: Array<[string, Array<[string, string, string]>]> = [
   ]],
 ];
 
-function ShortcutsSection() {
+function ShortcutsSection({ head = true }: { head?: boolean }) {
   return (
     <>
-      <SectionHead section="shortcuts" />
+      {head && <SectionHead section="shortcuts" />}
       {SHORTCUTS.map(([group, rows]) => (
         <SettingsGroup key={group} title={group}>
           {rows.map(([label, desc, keys]) => (
@@ -289,10 +289,10 @@ function ShortcutsSection() {
 
 // --- Overnight --------------------------------------------------------------
 
-function OvernightSection() {
+function OvernightSection({ head = true }: { head?: boolean }) {
   return (
     <>
-      <SectionHead section="overnight" />
+      {head && <SectionHead section="overnight" />}
       <SettingsGroup title="What this build does">
         <SettingsRow
           title="Nothing runs overnight yet"
@@ -314,7 +314,7 @@ function OvernightSection() {
 
 // --- Archived chats ---------------------------------------------------------
 
-function ArchivedSection() {
+function ArchivedSection({ head = true }: { head?: boolean }) {
   const [rows, setRows] = useState<ConversationSummary[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "unavailable">("loading");
   const [busy, setBusy] = useState("");
@@ -342,7 +342,7 @@ function ArchivedSection() {
 
   return (
     <>
-      <SectionHead section="archived" />
+      {head && <SectionHead section="archived" />}
       {state === "loading" && <p className="muted small">Loading archived chats…</p>}
       {state === "unavailable" && <p className="notice">Archived chats could not be read.</p>}
       {state === "ready" && (
@@ -370,12 +370,16 @@ function ArchivedSection() {
   );
 }
 
-export function SettingsSectionPane({ section }: { section: SettingsSection }) {
-  if (section === "spend") return <SpendingSection />;
-  if (section === "autonomy") return <AutonomySection />;
-  if (section === "health") return <HealthSection />;
-  if (section === "shortcuts") return <ShortcutsSection />;
-  if (section === "overnight") return <OvernightSection />;
-  if (section === "archived") return <ArchivedSection />;
+export function SettingsSectionPane({ section, head = true }: {
+  section: SettingsSection;
+  /** The mobile surface draws its own head, so it suppresses this one. */
+  head?: boolean;
+}) {
+  if (section === "spend") return <SpendingSection head={head} />;
+  if (section === "autonomy") return <AutonomySection head={head} />;
+  if (section === "health") return <HealthSection head={head} />;
+  if (section === "shortcuts") return <ShortcutsSection head={head} />;
+  if (section === "overnight") return <OvernightSection head={head} />;
+  if (section === "archived") return <ArchivedSection head={head} />;
   return null;
 }
