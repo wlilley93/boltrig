@@ -357,3 +357,33 @@ async def test_loop_invalid_on_item_error_fails_at_run_start():
     assert record["status"] == "failed"
     assert by["loop"]["reason"] == "loop_on_item_error_invalid"
     assert not k.calls
+
+
+# --- $inputs reference sugar --------------------------------------------------
+
+
+async def test_inputs_are_referenceable_without_a_start_step():
+    k = StubKernel()
+    record = await _run(k, [
+        {"id": "cond", "parents": [], "action": "flow.branch",
+         "params": {"left": "$inputs.tier", "op": "eq", "right": "gold"}},
+        {"id": "yes", "parents": ["cond"], "branch": "true", "action": "a.yes", "params": {}},
+    ], inputs={"tier": "gold"})
+    by = _by_id(record)
+    assert by["cond"]["output"]["branch"] == "true"
+    assert by["yes"]["status"] == "ok"
+
+
+async def test_a_real_step_named_inputs_wins_over_the_sugar():
+    k = StubKernel({"a.emit": [{"tier": "silver"}]})
+    record = await _run(k, [
+        {"id": "inputs", "parents": [], "action": "a.emit", "params": {}},
+        {"id": "cond", "parents": ["inputs"], "action": "flow.branch",
+         "params": {"left": "$inputs.output.tier", "op": "eq", "right": "silver"}},
+        {"id": "yes", "parents": ["cond"], "branch": "true", "action": "a.yes", "params": {}},
+    ], inputs={"tier": "gold"})
+    by = _by_id(record)
+    # The authored step's record is what "$inputs" resolves against, not the
+    # run inputs - the sugar never shadows a real step.
+    assert by["cond"]["output"]["branch"] == "true"
+    assert by["yes"]["status"] == "ok"

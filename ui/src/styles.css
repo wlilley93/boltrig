@@ -9187,3 +9187,35 @@ body {
   color: #e8b34a;
   background: rgba(255, 190, 80, 0.12);
 }
+.wf3-proposal-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-medium);
+  background: rgba(8, 14, 26, 0.92);
+  font-size: 12px;
+}
+.wf3-node__diff {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0b1220;
+}
+.wf3-node__diff--added { background: #6fd08c; }
+.wf3-node__diff--removed { background: #e0708a; }
+.wf3-node__diff--changed { background: #e8b34a; }
+.wf3-node__card--diff-removed { opacity: 0.45; }

@@ -13,6 +13,7 @@ import { api } from "@/api/client";
 import { navigate } from "@/router";
 import type { WorkflowStep } from "./types";
 import { useStudioChat, type StudioChatMessage, type StudioHitl } from "./useStudioChat";
+import { proposedStepsFromContext } from "./workflowDiff";
 
 const SUGGESTIONS = [
   "Add a retry path",
@@ -26,13 +27,21 @@ interface BoltChatPanelProps {
   workflowId: string;
   steps: WorkflowStep[];
   chat: ReturnType<typeof useStudioChat>;
+  // Lift a pending upsert's proposed steps onto the canvas as a diff preview.
+  onPreviewProposal?: (steps: WorkflowStep[] | null) => void;
 }
 
 // One approval hold, decidable inline. The decision goes through the SAME
 // respond path as the Approvals surface (POST /v1/hitl/{id}/respond), so
 // eligibility (four-eyes, assignee, verb binding) is enforced server-side
 // identically; an ineligible click renders the denial, never a workaround.
-function HitlCard({ hitl }: { hitl: StudioHitl }) {
+function HitlCard({
+  hitl,
+  onPreviewProposal,
+}: {
+  hitl: StudioHitl;
+  onPreviewProposal?: (steps: WorkflowStep[] | null) => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
 
@@ -41,8 +50,29 @@ function HitlCard({ hitl }: { hitl: StudioHitl }) {
     try {
       await api.respondHitl(hitl.requestId, { decision });
       setOutcome(decision === "approve" ? "Approved - resuming." : "Rejected.");
+      onPreviewProposal?.(null);
     } catch (err) {
       setOutcome(err instanceof Error ? err.message : "Could not record the decision.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Only an upsert hold carries a definition to preview; other verbs decide
+  // on the question alone.
+  const canPreview =
+    onPreviewProposal !== undefined && hitl.verb === "control.workflow.upsert";
+
+  const preview = async () => {
+    setBusy(true);
+    try {
+      const list = await api.hitl();
+      const req = list.requests.find((r) => r.id === hitl.requestId);
+      const steps = req ? proposedStepsFromContext(req.context) : null;
+      if (steps) onPreviewProposal?.(steps);
+      else setOutcome("Could not read the proposed definition from the hold.");
+    } catch (err) {
+      setOutcome(err instanceof Error ? err.message : "Could not load the proposal.");
     } finally {
       setBusy(false);
     }
@@ -55,6 +85,17 @@ function HitlCard({ hitl }: { hitl: StudioHitl }) {
         <div className="wf3-bolt__hitl-outcome muted">{outcome}</div>
       ) : (
         <div className="wf3-bolt__hitl-actions">
+          {canPreview && (
+            <button
+              type="button"
+              className="btn wf3-bolt__hitl-btn"
+              disabled={busy}
+              onClick={() => void preview()}
+              title="Render the proposed change on the canvas with diff badges"
+            >
+              Preview
+            </button>
+          )}
           <button
             type="button"
             className="btn btn--primary wf3-bolt__hitl-btn"
@@ -85,7 +126,13 @@ function HitlCard({ hitl }: { hitl: StudioHitl }) {
   );
 }
 
-function Message({ msg }: { msg: StudioChatMessage }) {
+function Message({
+  msg,
+  onPreviewProposal,
+}: {
+  msg: StudioChatMessage;
+  onPreviewProposal?: (steps: WorkflowStep[] | null) => void;
+}) {
   const cls =
     msg.role === "user" ? "wf3-bolt__msg wf3-bolt__msg--user" : "wf3-bolt__msg wf3-bolt__msg--bot";
   return (
@@ -99,13 +146,13 @@ function Message({ msg }: { msg: StudioChatMessage }) {
         </div>
       )}
       {msg.hitls.map((h) => (
-        <HitlCard key={h.requestId} hitl={h} />
+        <HitlCard key={h.requestId} hitl={h} onPreviewProposal={onPreviewProposal} />
       ))}
     </div>
   );
 }
 
-export function BoltChatPanel({ open, onToggle, workflowId, chat }: BoltChatPanelProps) {
+export function BoltChatPanel({ open, onToggle, workflowId, chat, onPreviewProposal }: BoltChatPanelProps) {
   if (!open) {
     return (
       <button
@@ -163,7 +210,7 @@ export function BoltChatPanel({ open, onToggle, workflowId, chat }: BoltChatPane
           </>
         )}
         {chat.messages.map((msg, i) => (
-          <Message key={i} msg={msg} />
+          <Message key={i} msg={msg} onPreviewProposal={onPreviewProposal} />
         ))}
         {chat.error && <div className="wf3-bolt__msg wf3-bolt__msg--bot error">{chat.error}</div>}
       </div>

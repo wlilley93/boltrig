@@ -29,6 +29,9 @@ export type StepNodeData = {
   description?: string;
   consequence?: string;
   runStatus?: RunNodeStatus;
+  // Proposal preview (chat-first authoring): how this node differs from the
+  // current definition when previewing a pending approval's proposed change.
+  diff?: "added" | "removed" | "changed";
 };
 
 export type TriggerNodeData = {

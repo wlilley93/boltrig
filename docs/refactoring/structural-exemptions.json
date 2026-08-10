@@ -319,13 +319,13 @@
       "expires": "2026-12-31"
     },
     "boltrig/workflows/interpreter.py": {
-      "max_file_lines": 358,
-      "max_function_lines": 245,
+      "max_file_lines": 367,
+      "max_function_lines": 254,
       "over_limit_functions": [
         {
           "name": "run_workflow_definition",
           "line": 114,
-          "lines": 245
+          "lines": 254
         }
       ],
       "owner": "workflow-maintainers",
