@@ -13,6 +13,21 @@
   transition: width 480ms ease;
 }
 
+/* Idle buoyancy: the being floats, it is not pinned to the page. Gentle,
+ * incommensurate with the shader's own breathing so nothing visibly loops. */
+@keyframes familiar-bob {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+  100% { transform: translateY(0); }
+}
+.familiar-stage.hero .familiar-stage-canvas,
+.familiar-stage.voice .familiar-stage-canvas {
+  animation: familiar-bob 6.7s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .familiar-stage .familiar-stage-canvas { animation: none; }
+}
+
 .familiar-stage.conversation { width: min(96px, 20vw); margin: 0; }
 .familiar-stage.voice { width: min(420px, 72vw); }
 .familiar-stage.minimised { width: 40px; }
