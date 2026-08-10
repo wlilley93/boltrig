@@ -117,10 +117,15 @@ worker browser suite **22/22** including the axe sweep.
   shared four ways.
 - **This session** (console-redesign/familiar): familiar/ canon, the Worker
   familiar renderer, release mechanics (relay pushes, PRs, merges).
-- Loose in the tree, unowned/mine to clean: `apps/worker/pnpm-workspace.yaml`,
-  `sdks/web/package-lock.json` (artifacts of the broken pnpm store).
-  `tests/integration/test_hatchet_live.py` was the third — the DAG session has
-  since committed it in `41c4687`, so it is no longer an orphan.
+- Loose in the tree: RESOLVED, the working tree is now clean. All three strays
+  are gone — `tests/integration/test_hatchet_live.py` was committed by the DAG
+  session in `41c4687`; `apps/worker/pnpm-workspace.yaml` (an unfilled pnpm
+  stub reading `esbuild: set this to true or false`) and
+  `sdks/web/package-lock.json` (a stray npm lockfile in a pnpm workspace) were
+  debris from the broken pnpm store. Both were moved, not deleted — they are
+  untracked, so git could not bring them back — to this session's scratchpad
+  under `stray-artifacts/`. Typecheck, 349 tests and a production build all
+  pass without them.
 - Also landed by the DAG session today, none touching `apps/worker`: `93b3e07`
   (draft lane: `control.workflow.draft.upsert` low-consequence, publish high),
   `41c4687` (live-test fixes), `10cb92f` and
@@ -203,5 +208,4 @@ worker browser suite **22/22** including the axe sweep.
   warrant (assent event) — see .vds/logs/decisions/DECISION-0002.yaml.
 - Housekeeping: archive boltrig-familiar on GitHub; delete merged local
   branches (grep for the feature first — several stale branches were already
-  reimplemented under other hashes); resolve the two stray untracked files;
-  commit or drop this handover so the claim gate covers it.
+  reimplemented under other hashes).
