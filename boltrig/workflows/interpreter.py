@@ -69,7 +69,12 @@ from typing import Any
 from boltrig.models import InvocationContext
 from . import control_flow, run_events
 from .loop_contract import selected_params
-from .loop_execution import LoopWalk, invalid_loop_run_record, loop_item_error_mode
+from .loop_execution import (
+    LoopWalk,
+    invalid_loop_run_record,
+    loop_item_error_mode,
+    run_parallel_block,
+)
 from .step_execution import run_capability_step
 
 
@@ -207,6 +212,16 @@ async def run_workflow_definition(
 
     paused = False
     loops = LoopWalk()
+    # Shared walk state for the parallel-iteration clone runner: the same
+    # refs the sequential walk mutates, so both paths record identically.
+    walk_env: dict[str, Any] = {
+        "kernel": kernel, "executor": executor,
+        "store": store if checkpointing else None,
+        "wf": wf, "rid": rid, "run_ctx": run_ctx, "prior": prior, "ck": _ck,
+        "results": results, "failed_or_skipped": failed_or_skipped,
+        "benign_skipped": benign_skipped, "failed": failed,
+        "exceptions": exceptions, "emit_step": _emit_step,
+    }
     idx = 0
     while idx < len(ordered):
         step = ordered[idx]
@@ -306,10 +321,21 @@ async def run_workflow_definition(
             # Loop body iteration: a flow.loop with a non-empty items list
             # expands its body into the walk so each item runs the body once.
             # The body is the loop's self-contained descendant sub-graph.
+            expansions_before = len(loops.expanded)
             ordered = loops.expand_outcome(
                 ordered, step_id, coutcome,
                 on_item_error=loop_item_error_mode(params),
             )
+            if len(loops.expanded) > expansions_before:
+                # A parallel-declared, capability-only body runs its
+                # iterations concurrently (windowed) instead of inline.
+                ordered, par_paused, par_stop = await run_parallel_block(
+                    ordered, idx, params, loops, walk_env
+                )
+                if par_paused:
+                    paused = True
+                if par_stop:
+                    break
             idx += 1
             continue
 

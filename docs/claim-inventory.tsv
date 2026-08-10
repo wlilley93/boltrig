@@ -280,7 +280,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/store/distillation_reads.py:78	i
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/store/rls_pool.py:26	assume_role	SET LOCAL app.tenant_id from the request context.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/workflows/library.py:151	LookupError	Start a workflow and return a run descriptor (Hatchet seam).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/workflows/loop_contract.py:1	flow.loop	Closed declarative contract for bounded ``flow.loop`` expansion.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/workflows/step_execution.py:65	None	The deterministic per-step idempotency key, or ``None``.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/workflows/step_execution.py:112	None	The deterministic per-step idempotency key, or ``None``.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/base.py:1	Credential	The single adapter interface (S7.3).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/inbound_webhook.py:1	verify_and_normalise	Inbound webhook receiver helper (US-ADP-05).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/inbound_webhook.py:240	WebhookValidationError	Authenticate and validate an inbound webhook, returning a normalised work-item candidate (US-ADP-05).
@@ -495,6 +495,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/workflows/library.py:78	workspace
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/workflows/library.py:95	select_or_generate_workflow	Best workflow by intent-tag overlap (US-WFL-01).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/workflows/signals.py:1	harvest_reuse_signal	Harvest free feedback into reuse WEIGHTING, never into authority (COUNTY 5).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/workflows/signals.py:42	memory.improve	Reweight memory from a free signal via ``memory.improve`` (reweight-only).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/workflows/step_execution.py:48	resume	How a resumed paused step should proceed: ``resume`` | ``rejected`` | ``timed_out``.
 ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/base.py:107		Declarative mapping from governed verbs to MCP resources.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/browser_cli.py:106		is never echoed into a Result (it could carry secrets or UI
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/browser_cli.py:229		The shared egress guard (INJ-02/SEC-61): refuses unspecified /
@@ -1268,21 +1269,24 @@ ORDINARY	NO-SUBJECT	comment	boltrig/store/work_items.py:250		the already-scoped,
 ORDINARY	NO-SUBJECT	comment	boltrig/work/store.py:22		cancelled run is never resurrected.
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/control_flow.py:249		Excess items beyond the canonical cap are never dispatched: recorded
 ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/control_flow.py:87		Evaluate a declarative comparison.
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:145		step.
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:180		entry is only seeded when no step claims the name (fail-closed to the
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:181		author's graph, never shadowing it).
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:187		a child (fail-closed: its data genuinely never arrived).
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:220		resumed run;
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:241		A step with a failure-lineage parent cannot run (fail-closed).
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:264		cannot resolve.
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:325		dispatch, many ways to record the outcome (never a second path).
-ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/interpreter.py:76		Order steps so every parent precedes its children (Kahn's algorithm).
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:150		step.
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:185		entry is only seeded when no step claims the name (fail-closed to the
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:186		author's graph, never shadowing it).
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:192		a child (fail-closed: its data genuinely never arrived).
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:235		resumed run;
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:256		A step with a failure-lineage parent cannot run (fail-closed).
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:279		cannot resolve.
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:351		dispatch, many ways to record the outcome (never a second path).
+ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/interpreter.py:81		Order steps so every parent precedes its children (Kahn's algorithm).
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/library.py:200		itself guarantees depends on the executor - see
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/loop_execution.py:162		graphon's default so a single loop cannot fan an unbounded number of
+ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/loop_execution.py:167		The loop's declared parallel window, clamped;
+ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/loop_execution.py:240		One loop-body clone under the walk's gates, for parallel iteration.
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/scheduler_loop.py:113		never change the outcome, and a failed write must not stall the loop.
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/scheduler_loop.py:94		due rows cannot make its own inaction look like there was nothing due.
-ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/step_execution.py:144		A held HITL gate is a pause, not a failure - the run can resume.
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/step_execution.py:202		COMPLETED prior record replays inside the kernel and never
-ORDINARY	NO-SUBJECT	comment	boltrig/workflows/step_execution.py:259		Pauses are never retried and never strategy-absorbed: the
+ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/step_execution.py:191		A held HITL gate is a pause, not a failure - the run can resume.
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/step_execution.py:292		COMPLETED prior record replays inside the kernel and never
+ORDINARY	NO-SUBJECT	comment	boltrig/workflows/step_execution.py:357		Pauses are never retried and never strategy-absorbed: the
 ORDINARY	NO-SUBJECT	compose	docker-compose.vm.yml:32		adapter then pins an address a v4-only container cannot route.
 ORDINARY	NO-SUBJECT	compose	docker-compose.vm.yml:8		profile - the kernel then refuses to start rather than run an unproven sandbox
 ORDINARY	NO-SUBJECT	compose	docker-compose.vm.yml:97		[/tmp]` from *app-hardening, and its rootfs is read_only, so it cannot
@@ -1383,6 +1387,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/store/tenant_scope.py:83	pool	Whethe
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/work/store.py:105	cap	Persist discovered child items and write them back, capped (US-WRK-04).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/workflows/control_flow.py:172	flow.branch	Pick the branch label a ``flow.branch`` step records.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/workflows/control_flow.py:268	branch	Whether a step's declared ``branch`` is satisfied by its parents' outputs.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/workflows/loop_execution.py:175	None	Extract per-iteration clone groups for parallel execution.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/workflows/scheduler_loop.py:40	next_due_at	Schedules whose stored ``next_due_at`` has passed.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/desktop.py:1	HandsRegistry	The desktop-hands adapter (source = 'builtin'), binding DH-1.
 ORDINARY	SUBJECT-REACHED	comment	boltrig/adapters/builtin/fish_audio.py:197	bearer_token	Fail closed before the request is built: when `bearer_token` yields None
@@ -1486,4 +1491,4 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/library.py:230	executor.run
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/loop_execution.py:155	fail	The loop's declared item-error mode;
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/scheduler_loop.py:1	reconcile_workflow_schedules	The workflow scheduler's forever-loop, and the progress it publishes.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/step_execution.py:1	IdempotencyConflict	Capability-step execution for the workflow interpreter (DAG parity).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/step_execution.py:59	fail	The step's declared error strategy;
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/step_execution.py:106	fail	The step's declared error strategy;

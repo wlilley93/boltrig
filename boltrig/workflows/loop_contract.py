@@ -174,6 +174,45 @@ def _validated_steps(
     return steps, by_id, None
 
 
+def _validate_loop_params(
+    step_id: str, step: dict[str, Any], ancestors: set[str]
+) -> LoopContractIssue | None:
+    """Validate one flow.loop step's params: item source, error mode, window.
+
+    Every rule fails loudly at authoring time rather than silently falling
+    back at the next run (the schedule_spec precedent).
+    """
+    _, params = selected_params(step)
+    if params is None:
+        return LoopContractIssue(step_id, "loop_params_must_be_object")
+    has_items = "items" in params
+    has_ref = "items_from" in params
+    if has_items == has_ref:
+        return LoopContractIssue(step_id, "loop_requires_one_item_source")
+    # ``on_item_error`` (graphon-parity item error modes).
+    if params.get("on_item_error", "fail") not in ("fail", "continue", "drop"):
+        return LoopContractIssue(step_id, "loop_on_item_error_invalid")
+    # ``parallel`` (graphon-parity windowed iteration): a positive int within
+    # the bounded window.
+    par = params.get("parallel", 1)
+    if isinstance(par, bool) or not isinstance(par, int) or not (1 <= par <= 10):
+        return LoopContractIssue(step_id, "loop_parallel_invalid")
+    if has_items:
+        if not isinstance(params.get("items"), list):
+            return LoopContractIssue(step_id, "loop_items_must_be_array")
+        try:
+            resolve_bounded_items(params["items"])
+        except LoopItemsError as exc:
+            return LoopContractIssue(step_id, exc.reason)
+    else:
+        source_step = _items_ref_step(params.get("items_from"))
+        if source_step is None:
+            return LoopContractIssue(step_id, "loop_items_from_invalid")
+        if source_step not in ancestors:
+            return LoopContractIssue(step_id, "loop_items_from_must_reference_ancestor")
+    return None
+
+
 def validate_loop_contract(definition: dict[str, Any]) -> LoopContractIssue | None:
     """Return the first closed loop-contract violation, without reading values."""
     raw_steps = definition.get("steps", [])
@@ -198,31 +237,9 @@ def validate_loop_contract(definition: dict[str, Any]) -> LoopContractIssue | No
         ancestors = _ancestors(step_id, by_id)
         if any(by_id[parent].get("action") == "flow.loop" for parent in ancestors):
             return LoopContractIssue(step_id, "nested_loop_not_supported")
-        _, params = selected_params(step)
-        if params is None:
-            return LoopContractIssue(step_id, "loop_params_must_be_object")
-        has_items = "items" in params
-        has_ref = "items_from" in params
-        if has_items == has_ref:
-            return LoopContractIssue(step_id, "loop_requires_one_item_source")
-        # ``on_item_error`` (graphon-parity item error modes) fails loudly at
-        # definition time rather than silently falling back at the next run.
-        mode = params.get("on_item_error", "fail")
-        if mode not in ("fail", "continue", "drop"):
-            return LoopContractIssue(step_id, "loop_on_item_error_invalid")
-        if has_items:
-            if not isinstance(params.get("items"), list):
-                return LoopContractIssue(step_id, "loop_items_must_be_array")
-            try:
-                resolve_bounded_items(params["items"])
-            except LoopItemsError as exc:
-                return LoopContractIssue(step_id, exc.reason)
-        else:
-            source_step = _items_ref_step(params.get("items_from"))
-            if source_step is None:
-                return LoopContractIssue(step_id, "loop_items_from_invalid")
-            if source_step not in ancestors:
-                return LoopContractIssue(step_id, "loop_items_from_must_reference_ancestor")
+        issue = _validate_loop_params(step_id, step, ancestors)
+        if issue is not None:
+            return issue
         body = loop_body_ids(steps, step_id)
         if any(by_id[body_id].get("action") == "flow.loop" for body_id in body):
             return LoopContractIssue(step_id, "nested_loop_not_supported")

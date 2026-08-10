@@ -39,6 +39,53 @@ MAX_RETRY_INTERVAL_MS = 60_000
 ERROR_STRATEGIES = frozenset({"fail", "branch", "default"})
 # Kernel reasons that mean "held for a human", not "failed".
 PAUSE_REASONS = frozenset({"pending_human", "approval_required"})
+# Mirrors the kernel's approving-decision vocabulary (kernel/hitl.py). Used
+# READ-ONLY here to classify an answered request; the consume-if-approved CAS
+# remains the sole authority for executing a gated verb (SEC-14 untouched).
+_APPROVING = frozenset({"approve", "approved", "yes", "ok", "allow"})
+
+
+async def resolve_pause_disposition(
+    store: Any | None, tenant_id: str, hitl_request_id: str | None
+) -> str:
+    """How a resumed paused step should proceed: ``resume`` | ``rejected`` | ``timed_out``.
+
+    A read-only pre-check on the checkpointed HITL request (graphon-parity
+    branch handles: a human's rejection or a timeout become ROUTABLE outcomes
+    instead of re-asking forever). Fail-closed: anything unreadable, pending,
+    consumed, or approvingly answered resolves ``resume`` - the kernel's gate
+    then decides exactly as before. This function never writes and never
+    bypasses the consume CAS; it only stops the interpreter from re-dispatching
+    a verb whose authorisation a human explicitly declined or let lapse.
+    """
+    if store is None or not hitl_request_id:
+        return "resume"
+    get_req = getattr(store, "get_hitl_request", None)
+    if get_req is None:
+        return "resume"
+    try:
+        req = await get_req(tenant_id, hitl_request_id)
+    except Exception:
+        return "resume"
+    if req is None:
+        return "resume"
+    status = getattr(getattr(req, "status", None), "value", None) or str(
+        getattr(req, "status", "") or ""
+    )
+    if status == "timed_out":
+        return "timed_out"
+    if status == "answered":
+        get_resp = getattr(store, "get_hitl_response", None)
+        if get_resp is None:
+            return "resume"
+        try:
+            resp = await get_resp(tenant_id, hitl_request_id)
+        except Exception:
+            return "resume"
+        decision = str(getattr(resp, "decision", "") or "").strip().lower()
+        if resp is not None and decision and decision not in _APPROVING:
+            return "rejected"
+    return "resume"
 
 StepEmitter = Callable[[dict[str, Any]], None]
 
@@ -178,6 +225,49 @@ async def _record_success(ctx: "StepRun", output: Any) -> None:
     ctx.emit_step({"step_id": ctx.step_id, "action": ctx.action, "status": "ok"})
 
 
+async def _resolve_decided_pause(
+    *,
+    store: Any | None,
+    wf: Any,
+    rid: str | None,
+    step: dict[str, Any],
+    step_id: str,
+    action: str,
+    approval_id: str,
+    results: dict[str, dict[str, Any]],
+    failed_or_skipped: set[str],
+    failed: set[str],
+    exceptions: list[str],
+    emit_step: StepEmitter,
+    ck: Callable[[str], str],
+) -> bool:
+    """Branch handles for human decisions (graphon parity, SEC-14 preserved).
+
+    An explicitly rejected or timed-out approval resolves through the step's
+    error strategy (``on_error: branch`` routes the "fail" arm) instead of
+    re-dispatching into a gate that would re-ask forever. Approved, pending,
+    consumed, or unreadable states return ``False`` - the normal dispatch and
+    the consume CAS decide exactly as before. Returns ``True`` when the step
+    was resolved here.
+    """
+    disposition = await resolve_pause_disposition(store, wf.tenant_id, approval_id)
+    if disposition == "resume":
+        return False
+    reason = "approval_rejected" if disposition == "rejected" else "approval_timeout"
+    strategy = error_strategy(step)
+    resolve_step_failure(
+        results, failed_or_skipped, failed, exceptions,
+        step=step, step_id=step_id, action=action, status="failed",
+        reason=reason, strategy=strategy, emit_step=emit_step,
+    )
+    if strategy != "fail" and store is not None:
+        await store.upsert_checkpoint(
+            wf.tenant_id, rid, ck(step_id), "ok",
+            output=results[step_id].get("output"),
+        )
+    return True
+
+
 class StepRun:
     """One capability step's dispatch context (plain attribute bag)."""
 
@@ -233,6 +323,14 @@ async def run_capability_step(
 
     ``store`` is the checkpoint seam - ``None`` when checkpointing is off.
     """
+    if approval_id is not None and await _resolve_decided_pause(
+        store=store, wf=wf, rid=rid, step=step, step_id=step_id, action=action,
+        approval_id=approval_id, results=results,
+        failed_or_skipped=failed_or_skipped, failed=failed, exceptions=exceptions,
+        emit_step=emit_step, ck=ck,
+    ):
+        return False, False
+
     idempotency_key = await compute_idempotency_key(store, wf, rid, step_id, verb)
     _dispatch = _make_dispatch(kernel, run_ctx, noun, verb, params, approval_id, idempotency_key)
     max_retries, retry_interval = step_retry(step)

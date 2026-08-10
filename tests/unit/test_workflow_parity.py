@@ -387,3 +387,201 @@ async def test_a_real_step_named_inputs_wins_over_the_sugar():
     # run inputs - the sugar never shadows a real step.
     assert by["cond"]["output"]["branch"] == "true"
     assert by["yes"]["status"] == "ok"
+
+
+# --- parallel loop iterations -------------------------------------------------
+
+
+class ConcurrencyKernel(StubKernel):
+    """Tracks peak in-flight invokes; each call yields so iterations interleave."""
+
+    def __init__(self, script=None):
+        super().__init__(script)
+        self.in_flight = 0
+        self.peak = 0
+
+    async def invoke(self, noun, verb, params, context, *, idempotency_key=None, approval_id=None):
+        import asyncio
+
+        self.in_flight += 1
+        self.peak = max(self.peak, self.in_flight)
+        try:
+            await asyncio.sleep(0)
+            return await super().invoke(
+                noun, verb, params, context,
+                idempotency_key=idempotency_key, approval_id=approval_id,
+            )
+        finally:
+            self.in_flight -= 1
+
+
+async def test_parallel_loop_runs_iterations_concurrently():
+    k = ConcurrencyKernel()
+    record = await _run(k, [
+        {"id": "loop", "parents": [], "action": "flow.loop",
+         "params": {"items": [1, 2, 3, 4], "parallel": 4}},
+        {"id": "body", "parents": ["loop"], "action": "a.item",
+         "params": {"n": None}, "loop_bindings": {"n": "item"}},
+    ])
+    by = _by_id(record)
+    assert record["status"] == "completed"
+    assert by["body"]["status"] == "ok"
+    assert by["body"]["output"]["count"] == 4
+    assert len(by["body"]["output"]["iterations"]) == 4
+    # The window genuinely interleaved dispatches.
+    assert k.peak > 1
+
+
+async def test_parallel_loop_window_caps_concurrency():
+    k = ConcurrencyKernel()
+    record = await _run(k, [
+        {"id": "loop", "parents": [], "action": "flow.loop",
+         "params": {"items": [1, 2, 3, 4, 5, 6], "parallel": 2}},
+        {"id": "body", "parents": ["loop"], "action": "a.item",
+         "params": {"n": None}, "loop_bindings": {"n": "item"}},
+    ])
+    assert record["status"] == "completed"
+    assert k.peak <= 2
+
+
+async def test_parallel_loop_item_error_continue_absorbs():
+    k = StubKernel({"a.item": [_StubError("boom"), {"ok": True}]})
+    record = await _run(k, [
+        {"id": "loop", "parents": [], "action": "flow.loop",
+         "params": {"items": [1, 2], "parallel": 2, "on_item_error": "continue"}},
+        {"id": "body", "parents": ["loop"], "action": "a.item",
+         "params": {"n": None}, "loop_bindings": {"n": "item"}},
+    ])
+    by = _by_id(record)
+    assert record["status"] == "completed"
+    assert record["exceptions_count"] == 1
+    assert by["body"]["status"] == "ok"
+
+
+async def test_parallel_loop_with_control_body_falls_back_sequential():
+    k = StubKernel()
+    # A branch step in the body -> control clone -> sequential walk (safe path).
+    record = await _run(k, [
+        {"id": "loop", "parents": [], "action": "flow.loop",
+         "params": {"items": ["x"], "parallel": 4}},
+        {"id": "gate", "parents": ["loop"], "action": "flow.branch", "params": {}},
+        {"id": "act", "parents": ["gate"], "branch": "true", "action": "a.item", "params": {}},
+    ])
+    by = _by_id(record)
+    assert record["status"] == "completed"
+    assert by["act"]["status"] == "ok"
+
+
+async def test_invalid_parallel_fails_at_run_start():
+    k = StubKernel()
+    record = await _run(k, [
+        {"id": "loop", "parents": [], "action": "flow.loop",
+         "params": {"items": [1], "parallel": 99}},
+        {"id": "body", "parents": ["loop"], "action": "a.item", "params": {}},
+    ])
+    by = _by_id(record)
+    assert record["status"] == "failed"
+    assert by["loop"]["reason"] == "loop_parallel_invalid"
+    assert not k.calls
+
+
+# --- approval rejection / timeout routing -------------------------------------
+
+
+class _Req:
+    def __init__(self, status):
+        self.status = status
+
+
+class _Resp:
+    def __init__(self, decision):
+        self.decision = decision
+
+
+class HitlStore:
+    """Checkpoint store + readable HITL state for resume-disposition tests."""
+
+    def __init__(self, checkpoints, req_status=None, decision=None):
+        self._checkpoints = checkpoints
+        self._req_status = req_status
+        self._decision = decision
+        self.upserts = []
+
+    async def list_checkpoints(self, tenant_id, run_id):
+        return list(self._checkpoints)
+
+    async def upsert_checkpoint(self, tenant_id, run_id, step, status, output=None,
+                                hitl_request_id=None):
+        self.upserts.append((step, status))
+
+    async def get_hitl_request(self, tenant_id, req_id):
+        return _Req(self._req_status) if self._req_status else None
+
+    async def get_hitl_response(self, tenant_id, req_id):
+        return _Resp(self._decision) if self._decision is not None else None
+
+
+class _Ck:
+    def __init__(self, step, status, hitl_request_id=None, output=None):
+        self.step = step
+        self.status = status
+        self.hitl_request_id = hitl_request_id
+        self.output = output
+
+
+async def _run_resumed(kernel, steps, store):
+    from boltrig.workflows.interpreter import run_workflow_definition
+
+    return await run_workflow_definition(
+        kernel, _wf(steps), {}, _ctx(), run_id="run-parity", store=store,
+    )
+
+
+async def test_rejected_approval_routes_the_fail_arm():
+    store = HitlStore(
+        [_Ck("wf-parity:held", "paused", hitl_request_id="h1")],
+        req_status="answered", decision="reject",
+    )
+    k = StubKernel()
+    record = await _run_resumed(k, [
+        {"id": "held", "parents": [], "action": "a.gated", "params": {},
+         "on_error": "branch"},
+        {"id": "recover", "parents": ["held"], "branch": "fail", "action": "a.recover", "params": {}},
+    ], store)
+    by = _by_id(record)
+    assert record["status"] == "completed"
+    assert by["held"]["status"] == "exception"
+    assert by["held"]["output"]["error_message"] == "approval_rejected"
+    assert by["recover"]["status"] == "ok"
+    # The gated verb was NEVER dispatched - a declined authorisation cannot run.
+    assert "a.gated" not in k.calls
+
+
+async def test_timed_out_approval_fails_without_strategy():
+    store = HitlStore(
+        [_Ck("wf-parity:held", "paused", hitl_request_id="h1")],
+        req_status="timed_out",
+    )
+    k = StubKernel()
+    record = await _run_resumed(k, [
+        {"id": "held", "parents": [], "action": "a.gated", "params": {}},
+    ], store)
+    by = _by_id(record)
+    assert record["status"] == "failed"
+    assert by["held"]["reason"] == "approval_timeout"
+    assert "a.gated" not in k.calls
+
+
+async def test_approved_pause_still_dispatches_with_the_approval():
+    store = HitlStore(
+        [_Ck("wf-parity:held", "paused", hitl_request_id="h1")],
+        req_status="answered", decision="approve",
+    )
+    k = StubKernel()
+    record = await _run_resumed(k, [
+        {"id": "held", "parents": [], "action": "a.gated", "params": {}},
+    ], store)
+    by = _by_id(record)
+    # Approving answers fall through to the normal dispatch + consume CAS.
+    assert by["held"]["status"] == "ok"
+    assert k.calls.count("a.gated") == 1
