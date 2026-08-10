@@ -841,6 +841,35 @@ h1, h2, h3, p { margin-top: 0; }
   color: var(--text-4); background: var(--inset); font-size: 26px;
 }
 .welcome h2 { margin: 0; font-size: 27px; font-weight: 500; letter-spacing: -.4px; }
+.welcome-glyph { color: var(--text-4); }
+.welcome .starters {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 11px;
+  width: 100%;
+  max-width: 760px;
+}
+.welcome .starter-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 15px 15px 17px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.welcome .starter-card:hover { border-color: var(--border-2); }
+.starter-title { font-size: 13.5px; line-height: 1.35; }
+.starter-desc { color: var(--text-3); font-size: 12px; line-height: 1.45; }
+@media (max-width: 900px) {
+  .welcome .starters { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .welcome .starters { grid-template-columns: minmax(0, 1fr); }
+}
 .welcome > p { max-width: 540px; margin: 0; color: var(--text-3); font-size: 13.5px; line-height: 1.6; }
 .starters {
   display: grid;

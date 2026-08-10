@@ -27,7 +27,7 @@ a11y:
   contrastFloors: []
 demand:
   routes: 6
-  measuredAt: 2026-08-10T13:48:51Z
+  measuredAt: 2026-08-10T14:23:03Z
   measuredBy: vds register measure-demand
 supersedes: []
 supersededBy: null

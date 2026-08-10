@@ -78,21 +78,22 @@ function Icon({ name, size = 16 }: { name: keyof typeof ICON_PATHS; size?: numbe
 // inside the run section view) are not built yet.
 const primary: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
   { route: "chat", label: "Chat", icon: "chat" },
-  { route: "inbox", label: "Inbox", icon: "inbox" },
   { route: "agents", label: "Agents", icon: "agents" },
   { route: "integrations", label: "Plugins", icon: "plug" },
   { route: "automations", label: "Routines", icon: "flow" },
 ];
 
-const workspace: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
+// Everything the decided target does not put in the sidebar stays reachable
+// from the account menu and the command palette. What used to be the Workspace
+// group lives here: the target reaches those records through the rail and the
+// run view rather than through a second nav list.
+const menuSurfaces: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
+  { route: "home", label: "Home", icon: "home" },
+  { route: "inbox", label: "Inbox", icon: "inbox" },
   { route: "runs", label: "Runs", icon: "clock" },
   { route: "work", label: "Work", icon: "work" },
   { route: "knowledge", label: "Knowledge", icon: "book" },
   { route: "memory", label: "Memory", icon: "brain" },
-];
-
-const menuSurfaces: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
-  { route: "home", label: "Home", icon: "home" },
   { route: "build", label: "Build", icon: "registry" },
   { route: "evaluations", label: "Evaluations", icon: "skill" },
   { route: "channels", label: "Channels", icon: "monitor" },
@@ -398,32 +399,6 @@ export function Sidebar({
           >
             <span className="nav-icon"><Icon name={item.icon} /></span>
             <span>{item.label}</span>
-            {item.route === "inbox"
-              && pendingStatus === "ready"
-              && pendingCount !== null
-              && pendingCount > 0 && (
-                <span
-                  className="nav-badge"
-                  aria-label={`${pendingCount} pending decisions`}
-                >
-                  {pendingCount}
-                </span>
-              )}
-          </button>
-        ))}
-      </nav>
-
-      <p className="side-recents-label">Workspace</p>
-      <nav className="side-nav" aria-label="Workspace surfaces">
-        {workspace.map((item) => (
-          <button
-            className={route === item.route ? "nav-row active" : "nav-row"}
-            key={item.route}
-            onClick={() => onRoute(item.route)}
-            type="button"
-          >
-            <span className="nav-icon"><Icon name={item.icon} /></span>
-            <span>{item.label}</span>
           </button>
         ))}
       </nav>
@@ -531,6 +506,18 @@ export function Sidebar({
           </button>
         )}
       </div>
+
+      {pendingStatus === "ready" && pendingCount !== null && pendingCount > 0 && (
+        <button
+          aria-label={`${pendingCount} pending decisions`}
+          className="side-status"
+          onClick={() => onRoute("inbox")}
+          type="button"
+        >
+          <span aria-hidden className="side-status-dot amber" />
+          <span>{pendingCount === 1 ? "One thing needs you" : `${pendingCount} things need you`}</span>
+        </button>
+      )}
 
       <button
         className="side-status"

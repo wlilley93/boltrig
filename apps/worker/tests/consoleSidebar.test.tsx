@@ -42,16 +42,14 @@ describe("console sidebar", () => {
     api.readiness.mockResolvedValue({ status: "ready", checks: {} });
     const onRoute = renderSidebar();
 
+    // The decided target's sidebar carries four surfaces and no second group.
+    // Everything else stays reachable from the account menu and the palette,
+    // which the "reaches the rest" case below covers.
     const expectations: Array<[string, WorkerRoute]> = [
       ["Chat", "chat"],
-      ["Inbox", "inbox"],
       ["Agents", "agents"],
       ["Plugins", "integrations"],
       ["Routines", "automations"],
-      ["Runs", "runs"],
-      ["Work", "work"],
-      ["Knowledge", "knowledge"],
-      ["Memory", "memory"],
       ["New chat ⌘N", "chat"],
     ];
     for (const [label, route] of expectations) {

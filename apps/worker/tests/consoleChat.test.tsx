@@ -68,22 +68,34 @@ function renderChat(conversationId: string | null) {
 }
 
 describe("console chat surface", () => {
-  it("greets a fresh chat with one centred hero Stage and a clean header", async () => {
+  it("greets a fresh chat the way the decided target does, and keeps the header clean", async () => {
     renderChat(null);
 
-    expect(screen.getByRole("heading", { level: 2, name: "What should we get done?" }))
+    // The decided target opens on a quiet mark, one question and four starters.
+    // It does NOT open on the Stage at hero size: ADR 0025 placement rule 1 is
+    // superseded here by the target, and the unbounded square it put in the
+    // welcome was what pushed the composer off a short window.
+    expect(screen.getByRole("heading", { level: 2, name: "What needs doing?" }))
       .toBeTruthy();
-    // Placement rule 1: the hero orb is the presence - one Stage, centred in
-    // the welcome, and no familiar of any kind in the chat header.
+    expect(document.querySelectorAll(".welcome .starter-card").length).toBe(4);
     await waitFor(() => {
-      const stages = document.querySelectorAll(".familiar-stage");
-      expect(stages.length).toBe(1);
-      expect(stages[0]!.classList.contains("hero")).toBeTruthy();
-      expect(stages[0]!.closest(".welcome")).toBeTruthy();
+      expect(document.querySelector(".welcome .familiar-stage")).toBeNull();
     });
+    // Rules 2 and 3 still hold: no familiar of any kind in the chat header.
     expect(document.querySelector(".chat-header .familiar-stage")).toBeNull();
     expect(document.querySelector(".chat-header .familiar-orb")).toBeNull();
     expect(screen.getByRole("heading", { level: 1, name: "New chat" })).toBeTruthy();
+  });
+
+  it("keeps voice reachable from the composer, not the title row", async () => {
+    renderChat(null);
+    // Voice moved out of the header, but it must stay reachable in an ACTIVE
+    // conversation too, so it lives with the composer tools rather than in a
+    // banner that only the empty state renders.
+    await waitFor(() => {
+      expect(document.querySelector(".composer-tools")).toBeTruthy();
+    });
+    expect(document.querySelector(".chat-header-actions .voice-call")).toBeNull();
   });
 
   it("moves the one Stage to the newest assistant turn's avatar bullet", async () => {

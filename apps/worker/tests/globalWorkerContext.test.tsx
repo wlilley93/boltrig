@@ -96,7 +96,10 @@ describe("global Worker identity and decision context", () => {
     expect(await within(topbar).findByText("Alice")).toBeTruthy();
     expect(within(topbar).getByText("Acme / Operations")).toBeTruthy();
     expect(within(topbar).getByText("2 pending")).toBeTruthy();
-    expect(screen.getByLabelText("2 pending decisions").textContent).toBe("2");
+    // The decided target has no Inbox nav row, so the count that used to ride on
+    // it now states itself on the sidebar's status line. Same signal, same label.
+    expect(screen.getByLabelText("2 pending decisions").textContent)
+      .toBe("2 things need you");
 
     fireEvent.click(within(topbar).getByRole("button", {
       name: "Open Inbox, 2 pending decisions",

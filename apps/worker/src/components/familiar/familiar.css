@@ -7,8 +7,11 @@
   display: grid;
   place-items: center;
   aspect-ratio: 1;
-  /* Mobile: hero shrinks with the viewport; the same rules serve both shells. */
-  width: min(340px, 60vw);
+  /* Mobile: hero shrinks with the viewport; the same rules serve both shells.
+     The 38vh bound is load-bearing: the stage is square, so a width-only bound
+     let it grow taller than a short window and push the transcript, heading and
+     composer out of view entirely. */
+  width: min(340px, 60vw, 38vh);
   margin: 0 auto;
   transition: width 480ms ease;
 }

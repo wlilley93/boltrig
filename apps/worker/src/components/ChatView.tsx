@@ -655,16 +655,6 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
           </div>
           <div className="chat-header-actions">
             <ThemeToggle />
-            {(!conversationId || conversationStatus === "active") && (
-              <VoiceCall
-                conversationId={conversationId}
-                modelProfileId={profile || undefined}
-                onConversation={onConversation}
-                onError={setError}
-                onFamiliarActivity={setVoiceActivity}
-                onCallActive={setCallActive}
-              />
-            )}
           </div>
         </header>
         {stagePlacement === "centre" && (
@@ -677,7 +667,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
           role="region"
           tabIndex={0}
         >
-          {stageIsHero ? <Welcome stage={stagePlacement === "hero" ? stage : undefined} /> : null}
+          {stageIsHero ? <Welcome /> : null}
           {messages.map((message) => (
             <Message
               key={message.id}
@@ -730,6 +720,16 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
           onProfile={setProfile}
           onSend={send}
           onStop={stop}
+          voice={(!conversationId || conversationStatus === "active") ? (
+            <VoiceCall
+              conversationId={conversationId}
+              modelProfileId={profile || undefined}
+              onConversation={onConversation}
+              onError={setError}
+              onFamiliarActivity={setVoiceActivity}
+              onCallActive={setCallActive}
+            />
+          ) : undefined}
         />
       </main>
       {compactTaskDetails && taskDetailsOpen && (
@@ -791,16 +791,38 @@ function ThemeToggle() {
   );
 }
 
-function Welcome({ stage }: { stage?: React.ReactNode }) {
+const STARTERS: Array<[string, string]> = [
+  ["Turn these notes into a brief", "Paste what you have and it writes the brief"],
+  ["Research and compare options", "It reads what it may reach and lays them side by side"],
+  ["Prepare this week\u2019s update", "From the work that actually happened"],
+  ["Read a run that went well", "And keep it as a routine you can repeat"],
+];
+
+// The decided target opens a new chat with a quiet mark, one question and four
+// starters. It does NOT open with the Stage at hero size: that placement came
+// from ADR 0025 and the new target supersedes it here, which also removes the
+// unbounded square that pushed the composer off a short window.
+function Welcome({ onStarter }: { onStarter?(text: string): void }) {
   return (
     <section className="welcome">
-      {stage ?? <div className="welcome-mark" aria-hidden>ϟ</div>}
-      <h2>What should we get done?</h2>
-      <p>I can plan the work, use the tools your workspace grants, pause for approval, and return the artifact here.</p>
+      <svg className="welcome-glyph" viewBox="0 0 24 24" width="42" height="42" fill="none" aria-hidden>
+        <path d="M7.5 3.5H4.5V20.5H7.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M16.5 3.5H19.5V20.5H16.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M13.2 4.8L8.8 12.4H12L10.9 19.2L15.3 11.6H12.1L13.2 4.8Z" fill="currentColor" />
+      </svg>
+      <h2>What needs doing?</h2>
       <div className="starters">
-        <span className="starter-card">Turn these notes into a brief</span>
-        <span className="starter-card">Research and compare options</span>
-        <span className="starter-card">Prepare this week’s update</span>
+        {STARTERS.map(([title, desc]) => (
+          <button
+            className="starter-card"
+            key={title}
+            onClick={() => onStarter?.(title)}
+            type="button"
+          >
+            <span className="starter-title">{title}</span>
+            <span className="starter-desc">{desc}</span>
+          </button>
+        ))}
       </div>
     </section>
   );
@@ -969,6 +991,9 @@ interface ComposerProps {
   onProfile(value: string): void;
   onSend(message: string, files: ChatAttachment[]): Promise<boolean>;
   onStop(): Promise<void>;
+  /** The voice control, so it sits with the other composer tools rather than
+      crowding the title row. */
+  voice?: React.ReactNode;
 }
 
 function Composer({
@@ -982,6 +1007,7 @@ function Composer({
   onProfile,
   onSend,
   onStop,
+  voice,
 }: ComposerProps) {
   const [value, setValue] = useState("");
   const [files, setFiles] = useState<ChatAttachment[]>([]);
@@ -1069,6 +1095,7 @@ function Composer({
         <div>
           <input ref={input} hidden type="file" multiple onChange={(event) => void addFiles(event.target.files)} />
           <button type="button" className="icon-button" disabled={disabled} onClick={() => input.current?.click()} aria-label="Attach files">＋</button>
+          {voice}
         </div>
         <div>
           {profiles.length > 0 && (
