@@ -1047,6 +1047,7 @@ h1, h2, h3, p { margin-top: 0; }
 .rail-meta { color: var(--text-4); font-size: 12px; }
 .rail-body { padding: 0 14px 11px; }
 .task-details-trigger, .task-details-scrim, .task-details-header { display: none; }
+.surface { position: relative; }
 .artifact-card {
   display: flex; align-items: center; gap: 8px; width: 100%;
   margin-bottom: 7px; padding: 9px; border: 1px solid var(--line); border-radius: 9px;
@@ -2007,7 +2008,16 @@ h1, h2, h3, p { margin-top: 0; }
 
 @media (max-width: 1020px) {
   .chat-layout { grid-template-columns: minmax(0, 1fr); }
-  .task-details-trigger { display: inline-flex; }
+  /* The trigger is hoisted above the mobile/console swap (one node for every
+     width), so it floats into the header's corner rather than flowing in it. */
+  .task-details-trigger {
+    position: absolute;
+    z-index: 6;
+    top: 6px;
+    right: 16px;
+    display: inline-flex;
+  }
+  .chat-header { padding-right: 118px; }
   .task-details-scrim {
     position: fixed;
     z-index: 20;
@@ -2089,14 +2099,16 @@ h1, h2, h3, p { margin-top: 0; }
   .identity-chip small { display: none; }
   .chat-header .secondary-button { font-size: 0; }
   .chat-header .secondary-button::after { content: "◉"; font-size: 13px; }
-  .chat-header .task-details-trigger {
+    .task-details-trigger {
     flex: 0 0 40px;
     width: 40px;
     min-width: 40px;
     min-height: 40px;
     padding: 0;
+    right: 14px;
+    font-size: 0;
   }
-  .chat-header .task-details-trigger::after { content: "☷"; font-size: 15px; }
+  .task-details-trigger::after { content: "☷"; font-size: 15px; }
   .voice-call { min-width: 150px; }
   .voice-call .secondary-button { font-size: 8px; }
   .voice-call .secondary-button::after { content: none; }
@@ -2525,6 +2537,16 @@ button.console-row-main { border: 0; background: transparent; color: inherit; cu
   --m-red: #ff453a;
 }
 
+:root[data-mobile-surface] .task-details-trigger {
+  top: 6px;
+  right: 14px;
+  width: 46px;
+  min-height: 46px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--m-text-2, var(--text-2));
+  background: var(--m-card-2, var(--card-2));
+}
 :root[data-mobile-surface] .mobile-menu,
 :root[data-mobile-surface] .topbar { display: none; }
 :root[data-mobile-surface] .surface { padding: 0; }

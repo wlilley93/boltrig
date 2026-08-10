@@ -5,6 +5,7 @@ import {
   useState,
   type RefObject,
 } from "react";
+import { flushSync } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -544,30 +545,94 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
   const stage = <FamiliarStage mode={stageMode} state={stageState} phenotype={phenotype} />;
   const bulletStage = stagePlacement === "bullet" ? stage : undefined;
 
+  // The task-details trigger renders once, at the same tree position for
+  // every width, so a breakpoint flip never detaches the node mid-measure:
+  // the mobile/console swap happens beneath it. Its placement is CSS.
   if (phone) {
+    // The mobile surface replaces the console conversation, not the chat
+    // contract: the task-details sheet (artifacts, run facts, conversation
+    // controls) stays reachable through the same trigger/scrim/inert cycle
+    // the compact console uses.
     return (
-      <MobileChat
-        busy={Boolean(live.runId) && !live.ended}
-        composerValue={mobileDraft}
-        messages={messages}
-        onBack={() => onConversation("")}
-        onComposerChange={setMobileDraft}
-        onSend={() => {
-          const text = mobileDraft.trim();
-          if (!text) return;
-          setMobileDraft("");
-          void send(text, []);
-        }}
-        subtitle={live.subagents.length > 0
-          ? `${live.subagents.length} working`
-          : conversationStatus === "closed" ? "Closed" : ""}
-        title={conversationId ? (conversationTitle || "Untitled task") : "New chat"}
-        turn={live}
-      />
+      <>
+      {compactTaskDetails && (
+        <button
+          aria-controls="worker-task-details"
+          aria-expanded={taskDetailsOpen}
+          className="secondary-button task-details-trigger"
+          onClick={() => setTaskDetailsOpen(true)}
+          ref={taskDetailsTriggerRef}
+          type="button"
+        >
+          Task details
+        </button>
+      )}
+        <MobileChat
+          busy={Boolean(live.runId) && !live.ended}
+          composerValue={mobileDraft}
+          messages={messages}
+          onBack={() => onConversation("")}
+          onComposerChange={setMobileDraft}
+          onSend={() => {
+            const text = mobileDraft.trim();
+            if (!text) return;
+            setMobileDraft("");
+            void send(text, []);
+          }}
+          subtitle={live.subagents.length > 0
+            ? `${live.subagents.length} working`
+            : conversationStatus === "closed" ? "Closed" : ""}
+          title={conversationId ? (conversationTitle || "Untitled task") : "New chat"}
+          turn={live}
+        />
+        {taskDetailsOpen && (
+          <button
+            aria-label="Dismiss task details"
+            className="task-details-scrim"
+            onClick={closeTaskDetails}
+            type="button"
+          />
+        )}
+        <RightRail
+          artifacts={artifacts}
+          turn={live}
+          conversation={conversationId && conversationStatus ? {
+            id: conversationId,
+            title: conversationTitle || "Untitled task",
+            status: conversationStatus,
+            lastAssistantMessageId,
+          } : null}
+          artifactCursor={artifactCursor}
+          loadingArtifacts={loadingArtifacts}
+          onLoadMoreArtifacts={loadMoreArtifacts}
+          onConversationChanged={controlsChanged}
+          compact
+          open={taskDetailsOpen}
+          panelRef={taskDetailsPanelRef}
+          onClose={closeTaskDetails}
+          onConversationDeleted={() => {
+            closeTaskDetails();
+            void controlsChanged().catch((reason) => setError(reasonText(reason)));
+          }}
+        />
+      </>
     );
   }
 
   return (
+    <>
+      {compactTaskDetails && (
+        <button
+          aria-controls="worker-task-details"
+          aria-expanded={taskDetailsOpen}
+          className="secondary-button task-details-trigger"
+          onClick={() => setTaskDetailsOpen(true)}
+          ref={taskDetailsTriggerRef}
+          type="button"
+        >
+          Task details
+        </button>
+      )}
     <div className="chat-layout">
       <main className="chat-main">
         <header className="chat-header">
@@ -599,18 +664,6 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
                 onFamiliarActivity={setVoiceActivity}
                 onCallActive={setCallActive}
               />
-            )}
-            {compactTaskDetails && (
-              <button
-                aria-controls="worker-task-details"
-                aria-expanded={taskDetailsOpen}
-                className="secondary-button task-details-trigger"
-                onClick={() => setTaskDetailsOpen(true)}
-                ref={taskDetailsTriggerRef}
-                type="button"
-              >
-                Task details
-              </button>
             )}
           </div>
         </header>
@@ -710,6 +763,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
         }}
       />
     </div>
+    </>
   );
 }
 
@@ -1390,7 +1444,12 @@ function useMediaQuery(query: string): boolean {
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
     const media = window.matchMedia(query);
-    const onChange = (event: MediaQueryListEvent) => setMatched(event.matches);
+    // Commit breakpoint flips synchronously inside the media-change event.
+    // A deferred commit leaves a window where the layout has crossed the
+    // breakpoint but the old surface is still mounted; anything measuring
+    // the page across that window (assistive tech re-querying, the browser
+    // acceptance suite's geometry checks) can catch a control mid-detach.
+    const onChange = (event: MediaQueryListEvent) => flushSync(() => setMatched(event.matches));
     setMatched(media.matches);
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);

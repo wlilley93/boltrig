@@ -142,6 +142,30 @@ describe("console chat surface", () => {
     expect(newest?.querySelector(".familiar-stage")).toBeNull();
   });
 
+  it("keeps the one task-details trigger mounted on the phone surface", async () => {
+    // The trigger sits above the mobile/console swap so a breakpoint flip
+    // never detaches it mid-measure; on the phone it must coexist with the
+    // MobileChat surface and still control the sheet.
+    vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(max-width: 1020px)" || query === "(max-width: 640px)",
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })));
+    try {
+      renderChat(null);
+      expect(document.querySelector(".mobile-surface")).toBeTruthy();
+      const trigger = screen.getByRole("button", { name: "Task details" });
+      expect(trigger.getAttribute("aria-controls")).toBe("worker-task-details");
+      fireEvent.click(trigger);
+      expect(await screen.findByRole("dialog", { name: "Task details" })).toBeTruthy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("titles the header with the real conversation, not a slogan", async () => {
     api.conversation.mockResolvedValue({ messages: [], active_run_id: null });
     renderChat("conversation-a");
