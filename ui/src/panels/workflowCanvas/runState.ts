@@ -16,6 +16,9 @@ export function edgeVariantForStatus(
     case "running":
       return "running";
     case "ok":
+    // An absorbed failure delivered a defined output and traversal continued -
+    // the wire is taken; the node's own badge carries the caveat.
+    case "exception":
       return "ok";
     case "failed":
     case "error":

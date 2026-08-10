@@ -312,6 +312,53 @@ services:
       # for the whole of a normal boot.
       start_period: 90s
 
+  hatchet-worker:
+    # Serves the Hatchet task bodies (boltrig-workflow-run, boltrig-work-item,
+    # boltrig-invoke, ...). Without this service, every run enqueued through
+    # HatchetExecutor.enqueue sits unclaimed and a pushed approval event has no
+    # waiter - the durable path enqueues and nothing executes. That gap was
+    # discovered and recorded in docs/decisions/0018-held-write-resume.md
+    # ("no process in the shipped stack serves the Hatchet tasks"); this
+    # service closes it. Same image, hardening, env and mounts as fleet-worker
+    # (it bootstraps the same kernel/org), different entry point.
+    build:
+      context: .
+      dockerfile: deploy/fleet.Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    image: boltrig/fleet:0.1.0
+    restart: unless-stopped
+    <<: *app-hardening
+    command: ["python", "-m", "boltrig.fleet.hatchet_worker"]
+    # Same codex-cells tmpfs as fleet-worker, deliberately: the worker
+    # bootstrap runs the same codex trust gate and probes the same root.
+    tmpfs:
+      - /tmp
+      - /var/lib/boltrig/codex-cells:mode=0711,uid=10001,gid=10001,noexec,nosuid,nodev
+    env_file: ${BOLTRIG_ENV_FILE:-.env}
+    environment:
+      BOLTRIG_OPENCODE_HOME: ${BOLTRIG_OPENCODE_HOME:-/var/lib/boltrig/opencode}
+      BOLTRIG_BROWSER_CLI_HOME: ${BOLTRIG_BROWSER_CLI_HOME:-/var/lib/boltrig/browser-cli}
+      BOLTRIG_BROWSER_CLI_BIN: ${BOLTRIG_BROWSER_CLI_BIN:-/usr/local/bin/browser-use}
+      BOLTRIG_REFLECT: ${BOLTRIG_REFLECT:-}
+    volumes:
+      - ./manifest.yaml:/app/manifest.yaml:ro
+      - ./libraries:/app/libraries:ro
+      - opencode_data:/var/lib/boltrig/opencode
+      - browser_cli_data:/var/lib/boltrig/browser-cli
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      hatchet-engine:
+        condition: service_started
+    # No healthcheck yet: this worker serves no HTTP and publishes no receipt
+    # of its own. Its liveness is observable through the Hatchet dashboard's
+    # worker list; a fleet-health-style receipt is a follow-up, not a blocker.
+
   hatchet-engine:
     # Optional durable execution (US-FLT-06). The kernel and fleet run WITHOUT
     # it (P9 degrade); enable it to get durable resume of paused/long runs.

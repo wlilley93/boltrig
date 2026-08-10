@@ -37,6 +37,10 @@ export interface EditorHeaderProps {
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
+  // Chat-first authoring: the canvas is read-only, so the header drops the
+  // editing affordances (name input, undo/redo, Save). Run stays - triggering
+  // is not editing. Mutation happens in the chat lane via governed verbs.
+  readOnly?: boolean;
 }
 
 export function EditorHeader(props: EditorHeaderProps) {
@@ -61,41 +65,49 @@ export function EditorHeader(props: EditorHeaderProps) {
             <BackIcon />
           </button>
         )}
-        <input
-          className="wf3-header__name"
-          value={meta.wfId}
-          placeholder="Untitled workflow"
-          onChange={(e) => meta.setWfId(e.target.value)}
-          spellCheck={false}
-        />
+        {props.readOnly ? (
+          <span className="wf3-header__name" title="workflow id">
+            {meta.wfId || "Untitled workflow"}
+          </span>
+        ) : (
+          <input
+            className="wf3-header__name"
+            value={meta.wfId}
+            placeholder="Untitled workflow"
+            onChange={(e) => meta.setWfId(e.target.value)}
+            spellCheck={false}
+          />
+        )}
         <span className="wf3-header__version" title="workflow version">
           v{meta.version}
         </span>
       </div>
 
       <div className="wf3-header__right">
-        <div className="wf3-header__group">
-          <button
-            type="button"
-            className="wf3-header__iconbtn"
-            title="Undo"
-            aria-label="Undo"
-            disabled={!props.canUndo}
-            onClick={props.onUndo}
-          >
-            <UndoIcon />
-          </button>
-          <button
-            type="button"
-            className="wf3-header__iconbtn"
-            title="Redo"
-            aria-label="Redo"
-            disabled={!props.canRedo}
-            onClick={props.onRedo}
-          >
-            <RedoIcon />
-          </button>
-        </div>
+        {!props.readOnly && (
+          <div className="wf3-header__group">
+            <button
+              type="button"
+              className="wf3-header__iconbtn"
+              title="Undo"
+              aria-label="Undo"
+              disabled={!props.canUndo}
+              onClick={props.onUndo}
+            >
+              <UndoIcon />
+            </button>
+            <button
+              type="button"
+              className="wf3-header__iconbtn"
+              title="Redo"
+              aria-label="Redo"
+              disabled={!props.canRedo}
+              onClick={props.onRedo}
+            >
+              <RedoIcon />
+            </button>
+          </div>
+        )}
 
         <span className="wf3-header__count">{stepCount} steps</span>
 
@@ -110,15 +122,17 @@ export function EditorHeader(props: EditorHeaderProps) {
         )}
 
         <div className="wf3-header__group">
-          <button
-            type="button"
-            className="btn btn--primary wf3-header__action"
-            disabled={meta.saveBusy}
-            onClick={() => void api.save()}
-          >
-            {meta.saveBusy ? <Spinner /> : <SaveIcon />}
-            <span>Save</span>
-          </button>
+          {!props.readOnly && (
+            <button
+              type="button"
+              className="btn btn--primary wf3-header__action"
+              disabled={meta.saveBusy}
+              onClick={() => void api.save()}
+            >
+              {meta.saveBusy ? <Spinner /> : <SaveIcon />}
+              <span>Save</span>
+            </button>
+          )}
           <button
             type="button"
             className="btn wf3-header__action"

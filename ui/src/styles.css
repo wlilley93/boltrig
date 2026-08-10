@@ -9120,3 +9120,70 @@ body {
     flex-direction: column;
   }
 }
+
+/* Chat-first Workflow Studio (canvas read-only; the side panel is the writer).
+   The docked variant pins the chat as a full-height right sidepanel instead of
+   the old floating bubble; activity lines and approval-hold cards render the
+   agent's governed actions honestly inside the thread. */
+.wf3-bolt--docked {
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  height: auto;
+  width: 340px;
+}
+.wf3-bolt__msg--user {
+  align-self: flex-end;
+  background: var(--color-accent-soft, rgba(64, 120, 255, 0.18));
+}
+.wf3-bolt__activity {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.wf3-bolt__hitl {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  background: rgba(255, 190, 80, 0.08);
+}
+.wf3-bolt__hitl-q {
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.wf3-bolt__hitl-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.wf3-console-toggle {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 5;
+}
+.wf3-bolt__hitl-actions {
+  display: flex;
+  gap: 6px;
+}
+.wf3-bolt__hitl-outcome {
+  font-size: 12px;
+}
+.wf3-console__exceptions {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  color: #e8b34a;
+  background: rgba(255, 190, 80, 0.12);
+}
+.wf3-console__agent--exception {
+  color: #e8b34a;
+}
+.wf3-modal__status--exception {
+  color: #e8b34a;
+  background: rgba(255, 190, 80, 0.12);
+}

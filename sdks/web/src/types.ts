@@ -813,6 +813,12 @@ export interface ChatWorkflowStep {
   step_id: string;
   action: string;
   status: "running" | "ok" | "failed" | "skipped" | "paused" | "error";
+  // WHY the step is in that status, when the interpreter said: a skip's cause
+  // ("branch_mismatch" | "parents_skipped" | "parent_failed" | ...), a retry
+  // tick ("retry_1"), or an absorbed failure ("error_strategy_branch" |
+  // "error_strategy_default"). Free text, bounded server-side; render as a
+  // hint, never parse for control flow.
+  reason?: string;
 }
 
 // The interpreter's run-level state marker. A completed or failed marker lets
@@ -2027,9 +2033,14 @@ export interface WorkflowStatsResponse {
 export interface WorkflowStepResult {
   id: string;
   action?: string;
-  status: "ok" | "failed" | "skipped" | "paused" | "error" | string;
+  // "exception" = the step failed but a declared error strategy absorbed it
+  // (on_error: branch|default) - the run continues, honestly marked.
+  status: "ok" | "failed" | "skipped" | "paused" | "error" | "exception" | string;
   output?: unknown;
   reason?: string;
+  // Present on a checkpoint-replayed step of a resumed run.
+  replayed?: boolean;
+  hitl_request_id?: string;
 }
 
 export interface WorkflowRunRecord {
@@ -2037,6 +2048,9 @@ export interface WorkflowRunRecord {
   workflow_id: string;
   version: string;
   status: "completed" | "failed" | "paused" | string;
+  // Failures absorbed by step error strategies or loop item-error modes:
+  // the run completed, but not cleanly - partial success stays observable.
+  exceptions_count?: number;
   steps: WorkflowStepResult[];
   inputs: Record<string, unknown>;
 }

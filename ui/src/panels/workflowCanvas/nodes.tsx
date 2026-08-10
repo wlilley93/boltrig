@@ -16,6 +16,8 @@ const RUN_GLYPH: Record<RunNodeStatus, string> = {
   error: "!",
   skipped: "−",
   paused: "‖",
+  // Absorbed failure (on_error strategy): delivered, but not cleanly.
+  exception: "~",
 };
 
 function configPreview(d: StepNodeData): string {
