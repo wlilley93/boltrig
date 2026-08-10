@@ -111,7 +111,9 @@ control.work.create	control	script
 control.work.reparent	control	script
 control.work.status	control	script
 control.workflow.archive	control	script
+control.workflow.draft.upsert	control	script
 control.workflow.execute	control	script
+control.workflow.publish	control	script
 control.workflow.restore	control	script
 control.workflow.schedule	control	script
 control.workflow.schedule_occurrence.retry	control	script
