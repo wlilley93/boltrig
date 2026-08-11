@@ -34,6 +34,7 @@ import {
 import { appliedTheme, toggleTheme } from "../theme";
 import { FamiliarBadge } from "./familiar/FamiliarBadge";
 import { FamiliarStage } from "./familiar/FamiliarStage";
+import { StageBody, type StageTurnInput } from "./StageBody";
 import {
   familiarStateFromTurn,
   type FamiliarPresentationMode,
@@ -910,7 +911,8 @@ export function ChatView({
     : callActive
       ? "voice"
       : "conversation";
-  const stageState = familiarStateFromTurn({
+  // The turn facts both bodies read. StageBody picks which one depicts them.
+  const stageInput: StageTurnInput = {
     loading,
     hasLiveEvents: events.length > 0,
     liveEnded: live.ended,
@@ -918,8 +920,11 @@ export function ChatView({
     voiceLevel: voiceActivity.level,
     voiceBands: voiceActivity.bands ?? null,
     voiceOnset: voiceActivity.onset,
-  });
-  const stage = <FamiliarStage mode={stageMode} state={stageState} phenotype={phenotype} />;
+  };
+  const stageState = familiarStateFromTurn(stageInput);
+  const stage = (
+    <StageBody input={stageInput} mode={stageMode} phenotype={phenotype} turn={live} />
+  );
 
   // The decided target's New screen is chrome-free: no header row, the glyph
   // and question are the top of the surface. A conversation (or a live call)
@@ -1369,11 +1374,12 @@ export function ChatView({
         {!isNewState && composer}
         {isNewState && !callActive && voiceAvailable && voiceBanner && (
           <div className="voice-intro">
-            <FamiliarStage
+            <StageBody
+              input={stageInput}
               label="chief of staff"
               mode="conversation"
               phenotype={phenotype}
-              state={stageState}
+              turn={live}
             />
             <span className="voice-intro-copy">
               <strong>Talk to boltrig</strong>

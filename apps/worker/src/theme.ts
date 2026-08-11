@@ -8,6 +8,9 @@ export type ThemePreference = WorkerTheme | "system";
 export type AppearanceDensity = "comfortable" | "compact";
 export type FontScale = "0.9" | "1" | "1.1" | "1.25";
 
+// NOTE: the Stage character deliberately does not live here. It has its own
+// persistence and change event in src/character.ts.
+
 
 export interface Appearance {
   theme: ThemePreference;

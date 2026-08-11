@@ -1,0 +1,150 @@
+/* Jarvis Stage. Unlike the Familiar's square porthole, the instrument fills
+ * whatever box it is given: the dial is centred by the shader, and the circuit
+ * field is meant to run out to the edges of the surface. The canvas is opaque
+ * (it paints its own near-black), so it does not inherit the view behind it. */
+
+.jarvis-stage {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Portrait by default, which is the shape the instrument was designed in.
+     A host that wants another aspect should set both dimensions itself. */
+  min-height: min(70vh, 620px);
+  overflow: hidden;
+}
+
+.jarvis-stage-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Buoyancy: the one phenotype scalar carried by CSS rather than a uniform.
+ * It has to move the canvas AND the SVG labels together — the labels are
+ * registered to the dial centre, so bobbing the dial inside the shader would
+ * slide it out from under its own words. The renderer publishes --jarvis-bob
+ * (an amplitude in px) only when the value moves materially. */
+.jarvis-stage {
+  animation: jarvis-bob 7.3s ease-in-out infinite;
+}
+
+@keyframes jarvis-bob {
+  50% { transform: translateY(calc(var(--jarvis-bob, 5px) * -1)); }
+}
+
+/* The bob is decorative motion, so it is the first thing to go. The dial's
+ * readings keep updating — reduced motion means do not animate, not do not
+ * inform (see the note in JarvisRenderer.frame). */
+@media (prefers-reduced-motion: reduce) {
+  .jarvis-stage { animation: none; }
+}
+
+/* Mobile shares these rules with the desktop shell: the dial is drawn from the
+ * viewport's SHORT side, so it stays a circle and keeps its proportions at any
+ * aspect. Only the surrounding circuit field gains or loses room. */
+@media (max-width: 600px) {
+  .jarvis-stage { min-height: min(62vh, 520px); }
+}
+
+/* No WebGL2: the host is expected to show its own affordance. Collapsing to
+ * nothing is deliberate — a half-drawn instrument is worse than none. */
+.jarvis-stage.fallback { min-height: 0; }
+
+/* ---------------------------------------------------------------------------
+ * SVG label overlay (labels="svg").
+ *
+ * The viewBox is -50 -50 100 100 with xMidYMid meet, which reproduces the
+ * shader's own normalisation: 100 units span the SHORT side, centred on the
+ * long one. So the type scales with the dial for free and never needs
+ * measuring. Sizes below are in those units — 1.25 is the shader atlas's cap
+ * height, which is what makes the two versions directly comparable.
+ * ------------------------------------------------------------------------ */
+.jarvis-labels {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.jarvis-labels text {
+  font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, sans-serif);
+  font-size: 1.9px;
+  font-weight: 500;
+  /* The wide tracking is the whole character of these labels; without it they
+     read as a caption rather than as an instrument legend. */
+  letter-spacing: 1.15px;
+  fill: #fff;
+}
+
+.jarvis-labels__bottom {
+  font-size: 1.7px;
+  letter-spacing: 1px;
+  fill: #b9a6ff;
+}
+
+/* Gauge legends: quieter than the state label, because they name a track
+ * rather than announce a change. They sit at 9 o'clock, clear of the two
+ * label arcs at 12 and 6. */
+.jarvis-labels__legend text {
+  font-size: 1.35px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  fill: #8d82b8;
+}
+
+/* Interrogation. The tracks themselves are the hit targets — a transparent
+ * stroke means only the ring is live, so the dial underneath stays inert and
+ * the canvas keeps its pointer events. */
+.jarvis-labels { pointer-events: none; }
+
+.jarvis-labels__probes circle {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 2.6;
+  pointer-events: stroke;
+  cursor: help;
+}
+
+.jarvis-labels__probes circle:hover,
+.jarvis-labels__probes circle:focus-visible {
+  stroke: color-mix(in srgb, #b9a6ff 42%, transparent);
+  outline: none;
+}
+
+/* The answer. Sits under the dial where the readout does, so questioning a
+ * track never covers the track being questioned. */
+.jarvis-labels__asked {
+  font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif);
+  font-size: 1.6px;
+  font-weight: 500;
+  letter-spacing: .12px;
+  fill: #fff;
+  paint-order: stroke;
+  stroke: rgba(6, 6, 12, .85);
+  stroke-width: .7;
+}
+
+/* The accessible half of interrogation. Visually hidden but focusable — the
+ * SVG probe serves the mouse, this serves everyone else. Not display:none,
+ * which would take it out of the tab order and defeat the point. */
+.jarvis-readouts {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.jarvis-readouts button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+}
