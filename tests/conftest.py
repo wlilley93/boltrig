@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 
 import pytest
 
@@ -77,7 +78,35 @@ _LOUD: tuple[tuple[str, str], ...] = (
     # halves of a court-ordered security boundary is not something to discover by
     # reading -rs output.
     ("root can write everything", "the codex cell-isolation boundary (running as root)"),
+    # Marked linux_only and running somewhere else. These are the cell, proxy and
+    # peer-identity legs: they read /proc/sys/kernel/yama/ptrace_scope, bind
+    # abstract AF_UNIX names, read SO_PEERCRED, or drive bubblewrap. macOS has
+    # none of those, so on a Mac they used to FAIL - which put a developer in
+    # front of thirty red tests that said nothing about their change, and made
+    # the pre-push hook unpassable on the machine most of this work happens on.
+    ("linux-only", "the Linux kernel-facility legs (yama, SO_PEERCRED, bubblewrap)"),
 )
+
+# Skipped on the OS, never on whether the facility happens to be readable.
+#
+# A capability probe would be the obvious implementation and the wrong one: an
+# unprivileged container, a kernel with yama unreadable, a CI runner missing a
+# mount would all silently skip a court-ordered security boundary and report
+# green. That is the exact shape scripts/check_no_vacuous_greens.py exists to
+# catch. Keying on sys.platform means these ALWAYS run on Linux - if they cannot
+# pass there, that is a real failure and it stays red.
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item],
+) -> None:
+    if sys.platform == "linux":
+        return
+    skip = pytest.mark.skip(
+        reason=f"linux-only: needs a Linux kernel facility, running on {sys.platform}",
+    )
+    for item in items:
+        if item.get_closest_marker("linux_only"):
+            item.add_marker(skip)
+
 
 _skipped: dict[str, set[str]] = {}
 

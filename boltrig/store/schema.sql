@@ -2372,6 +2372,8 @@ CREATE TABLE IF NOT EXISTS camera_bindings (
     CONSTRAINT camera_binding_evidence_array CHECK (jsonb_typeof(evidence)='array'),
     FOREIGN KEY (tenant_id,device_id) REFERENCES devices(tenant_id,id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS camera_bindings_owner_idx
+  ON camera_bindings(tenant_id,owner_id,device_id,camera_id);
 CREATE TABLE IF NOT EXISTS camera_leases (
     id TEXT NOT NULL, tenant_id TEXT NOT NULL, device_id TEXT NOT NULL,
     camera_id TEXT NOT NULL, owner_id TEXT NOT NULL, verb TEXT NOT NULL,

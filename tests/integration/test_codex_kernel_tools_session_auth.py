@@ -34,6 +34,13 @@ from boltrig.kernel import Kernel
 from boltrig.models import GrantSet, InvocationContext, TenantPermissions
 from boltrig.store import InMemoryStore
 
+# Every leg here needs a Linux kernel facility macOS does not have: yama
+# ptrace_scope, abstract AF_UNIX names, SO_PEERCRED, or bubblewrap. Marked so a
+# non-Linux box reports them as unverified instead of failing; on Linux the
+# marker is inert and they always run.
+pytestmark = pytest.mark.linux_only
+
+
 T = "acme"
 _MCP_URL = "http://kernel:8000/v1/mcp"
 

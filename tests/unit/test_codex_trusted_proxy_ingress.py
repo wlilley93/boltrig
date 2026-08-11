@@ -58,6 +58,13 @@ from boltrig.fleet.infrastructure.model_proxy_peer_listener import (
 
 from .model_proxy_peer_fakes import ScriptedProcReader, install_process
 
+# Every leg here needs a Linux kernel facility macOS does not have: yama
+# ptrace_scope, abstract AF_UNIX names, SO_PEERCRED, or bubblewrap. Marked so a
+# non-Linux box reports them as unverified instead of failing; on Linux the
+# marker is inert and they always run.
+pytestmark = pytest.mark.linux_only
+
+
 # The two credentials the 2026-07-27 cv-boltrig-kernel-1 reject was between: the
 # spawner's, which a freshly forked cell still carries, and slot-0's, which it holds
 # for the rest of its life. _SIBLING_UID is a third, lawful nowhere.

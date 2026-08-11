@@ -11,11 +11,18 @@ import pytest
 
 from boltrig.fleet.infrastructure.linux_peer_identity import LinuxPeerIdentityError
 from boltrig.fleet.infrastructure.linux_peer_process_handle import (
+
     AcceptedUnixPeer,
     LinuxSocketPeerProcessHandleReader,
     SO_PEERPIDFD_OPTION,
     accept_model_proxy_unix_peer,
 )
+
+# Every leg here needs a Linux kernel facility macOS does not have: yama
+# ptrace_scope, abstract AF_UNIX names, SO_PEERCRED, or bubblewrap. Marked so a
+# non-Linux box reports them as unverified instead of failing; on Linux the
+# marker is inert and they always run.
+pytestmark = pytest.mark.linux_only
 
 
 def _filesystem_listener() -> tuple[socket.socket, str, str]:

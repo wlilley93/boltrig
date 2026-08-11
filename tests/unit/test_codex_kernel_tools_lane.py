@@ -553,14 +553,21 @@ def _every_ancestor_is_foreign(path: str) -> bool:
     return True
 
 
-pytestmark = pytest.mark.skipif(
+# Two conditions, both of which must hold, so this is a LIST: a second
+# `pytestmark = ...` assignment would rebind the name and silently drop
+# whichever came first. linux_only covers the kernel facilities; the skipif
+# below covers the file-mode boundary these tests rest on.
+pytestmark = [
+    pytest.mark.linux_only,
+    pytest.mark.skipif(
     not _every_ancestor_is_foreign(os.path.realpath("/bin/sh")),
     reason=(
         f"an ancestor of {os.path.realpath('/bin/sh')} is owned by this account "
         f"(euid {os.geteuid()}), so the file-mode boundary the trusted-Codex lane "
         "rests on does not exist here and these tests would prove nothing"
     ),
-)
+),
+]
 
 import httpx  # noqa: E402
 
@@ -824,6 +831,8 @@ async def test_read_only_thread_still_fails_on_any_mcp_startup_update() -> None:
 import boltrig.fleet.codex_trusted_wall as _wall  # noqa: E402
 
 from boltrig.fleet.codex_trusted_wall import CodexTrustedPostureError  # noqa: E402
+
+
 
 _SESSION_ENV = {
     "BOLTRIG_CODEX_TRUSTED": "1",

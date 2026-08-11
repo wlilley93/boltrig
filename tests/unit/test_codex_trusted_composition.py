@@ -21,8 +21,15 @@ import pytest
 from boltrig.api.codex_trusted import build_trusted_codex_config
 from boltrig.config.settings import Settings
 from boltrig.fleet.infrastructure.codex_trusted_proxy_provider import (
+
     TrustedProxyCodexPhaseCellProvider,
 )
+
+# Every leg here needs a Linux kernel facility macOS does not have: yama
+# ptrace_scope, abstract AF_UNIX names, SO_PEERCRED, or bubblewrap. Marked so a
+# non-Linux box reports them as unverified instead of failing; on Linux the
+# marker is inert and they always run.
+pytestmark = pytest.mark.linux_only
 
 # Any real file that is absolute; the supervisor only records the path at
 # construction (binary existence/pinning is verified later, at cell start).

@@ -14,6 +14,13 @@ from scripts import check_codex_protocol
 from boltrig.fleet.infrastructure import codex_runtime_config_argv as argv
 from tests.unit.codex_process_fakes import make_layout
 
+# Every leg here needs a Linux kernel facility macOS does not have: yama
+# ptrace_scope, abstract AF_UNIX names, SO_PEERCRED, or bubblewrap. Marked so a
+# non-Linux box reports them as unverified instead of failing; on Linux the
+# marker is inert and they always run.
+pytestmark = pytest.mark.linux_only
+
+
 
 def test_runtime_pin_exactly_matches_checked_in_protocol_checker() -> None:
     assert policy.CODEX_CLI_VERSION == check_codex_protocol.PIN_VERSION == "0.144.3"

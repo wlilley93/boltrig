@@ -113,6 +113,7 @@ markers = [
     "security: grant enforcement, credential isolation, tenant isolation, HITL gates, PII",
     "store: store-contract parity across InMemoryStore and PostgresStore",
     "invariant(id): a binding invariant (P-/SEC-/K-) the test covers",
+    "linux_only: needs a Linux kernel facility (yama ptrace_scope, SO_PEERCRED, bubblewrap)",
 ]
 
 [tool.ruff]
