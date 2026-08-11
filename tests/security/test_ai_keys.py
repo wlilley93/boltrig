@@ -62,11 +62,12 @@ async def _seal(store, cred_id: str, key: str) -> None:
     await store.set_credential_ref(T, cred_id, {"secret": key})
 
 
-async def _put_config(store, level, scope_id, cred_id, key) -> None:
+async def _put_config(store, level, scope_id, cred_id, key, *, modality="text") -> None:
     await _seal(store, cred_id, key)
     await store.set_ai_config(AiConfig(
         tenant_id=T, level=level, scope_id=scope_id,
         provider="openai", model="gpt", credential_ref=cred_id,
+        modality=modality,
     ))
 
 
@@ -99,6 +100,27 @@ def test_resolve_precedence_user_workspace_org_default():
         r = await resolve_ai_key(store, T, workspace_id="ws1", user_id="u1")
         assert r.level == "default" and r.credential_ref is None and r.is_default
         assert await load_ai_key_material(store, T, r) is None
+
+    _run(go())
+
+
+@pytest.mark.invariant("FR-AIKEY-VISION-01")
+def test_vision_key_is_optional_and_falls_back_to_the_main_text_key():
+    async def go():
+        store = await _store(allow_own=False)
+        await _put_config(store, "org", T, "cred-text", "sk-main")
+
+        fallback = await resolve_ai_key(store, T, modality="vision")
+        assert fallback.level == "org"
+        assert await load_ai_key_material(store, T, fallback) == "sk-main"
+
+        await _put_config(
+            store, "org", T, "cred-vision", "sk-vision", modality="vision"
+        )
+        dedicated = await resolve_ai_key(store, T, modality="vision")
+        assert dedicated.level == "org"
+        assert dedicated.credential_ref == "cred-vision"
+        assert await load_ai_key_material(store, T, dedicated) == "sk-vision"
 
     _run(go())
 

@@ -1,25 +1,14 @@
 import { client } from "../client";
 import { isDesktop } from "../desktop";
-import type { WorkerRoute } from "../routes";
 import { DeviceSettings } from "./DeviceSettings";
+import { CameraDiscoverySettings } from "./CameraDiscoverySettings";
 import { DesktopUpdater } from "./DesktopUpdater";
-import { InboxQueue } from "./InboxHitl";
-import { Topbar, Unavailable } from "./Shell";
+import { Unavailable } from "./Shell";
 import { SettingsSectionPane } from "./SettingsSurface";
 import { DeveloperDetailsRow } from "./settings/rowKit";
 import type { SettingsSection } from "../settingsSections";
 
-export function InboxView() {
-  return <InboxQueue />;
-}
-
-export function SettingsView({
-  section = "you",
-  onContextChanged,
-}: {
-  section?: SettingsSection;
-  onContextChanged?(): void;
-}) {
+export function SettingsView({ section = "you" }: { section?: SettingsSection }) {
   // Settings uses one calm row-based surface. The larger legacy account,
   // organisation and knowledge dashboards are still available from their
   // dedicated app routes where they are needed, but are not the default
@@ -54,6 +43,7 @@ export function SettingsView({
             </section>
             <DesktopUpdater />
             <DeviceSettings />
+            <CameraDiscoverySettings />
             <section className="settings-card">
               <p className="eyebrow">Security defaults</p>
               <ul>
@@ -88,29 +78,6 @@ export function SettingsView({
     <div className="page">
       <div className="page-content narrow">
         <SettingsSectionPane section={section} />
-      </div>
-    </div>
-  );
-}
-
-const advancedCopy: Record<Exclude<WorkerRoute, "home" | "chat" | "inbox" | "automations" | "integrations" | "channels" | "build" | "evaluations" | "operate" | "account" | "organisation" | "settings">, { title: string; body: string; operator: string }> = {
-  runs: { title: "Runs", body: "Inspect execution trees, structured events, tools, costs, checkpoints, and child runs.", operator: "runs" },
-  work: { title: "Work", body: "Track canonical work items and the workflow state projected from Boltrig.", operator: "work" },
-  agents: { title: "Agents", body: "Author profiles, skill selection, grant ceilings, and Familiar identity.", operator: "agents" },
-  knowledge: { title: "Knowledge", body: "Browse governed assets, revisions, citations, provider health, and erasure state.", operator: "knowledge" },
-  memory: { title: "Memory", body: "Recall with provenance, remember, inspect ingestion, and forget exact sources.", operator: "memory" },
-};
-
-export function AdvancedView({ route }: { route: keyof typeof advancedCopy }) {
-  const copy = advancedCopy[route];
-  return (
-    <div className="page">
-      <Topbar title={copy.title} />
-      <div className="page-content narrow">
-        <Unavailable title={`${copy.title} is available in Operator`}>
-          {copy.body}
-        </Unavailable>
-        <a className="primary-button centered" href={`/operator/#/${copy.operator}`}>Open {copy.title} in Operator</a>
       </div>
     </div>
   );

@@ -84,6 +84,10 @@ class AgentCapability:
     is_ephemeral: bool
     cost_tier: str  # cheap | standard | expensive
     model_endpoint: str | None = None
+    # Optional vision override. When absent, ``model_endpoint`` must be a
+    # multimodal endpoint for vision work; this keeps old profiles valid while
+    # making split text/vision routing explicit and auditable.
+    vision_model_endpoint: str | None = None
     # Provenance for scoped-declarative reconciliation ([2026] LEXBY LOG-2026-07-17):
     # 'manifest' rows are authored by the fleet manifest and are reconciled
     # declaratively (a name dropped from a redeployed manifest is deactivated);
@@ -155,7 +159,7 @@ class WorkflowDefinition:
 class ModelEndpoint:
     id: str  # "anthropic-prod", "local-vllm"
     tenant_id: TenantId
-    kind: str  # 'anthropic' | 'openai' | 'ollama' | 'vllm'
+    kind: str  # 'bifrost' | 'anthropic' | 'openai' | 'ollama' | 'vllm'
     model: str  # pinned model/version
     base_url: str | None = None
     # Stored reference for an explicit, future health-based failover decision.
@@ -164,6 +168,25 @@ class ModelEndpoint:
     fallback: str | None = None
     data_class: str = "standard"  # standard | sensitive (sensitive => local only)
     is_active: bool = True
+    # Old rows default to text-only. An endpoint must explicitly advertise
+    # vision before an agent can use it for image-bearing work.
+    modalities: tuple[str, ...] = ("text",)
+
+    def __post_init__(self) -> None:
+        values = tuple(
+            dict.fromkeys(
+                str(item).strip().lower()
+                for item in self.modalities
+                if str(item).strip()
+            )
+        )
+        invalid = set(values) - {"text", "vision"}
+        if invalid:
+            raise ValueError(f"unsupported model modalities: {sorted(invalid)}")
+        object.__setattr__(self, "modalities", values or ("text",))
+
+    def supports(self, modality: str) -> bool:
+        return str(modality).strip().lower() in self.modalities
 
 
 @dataclass

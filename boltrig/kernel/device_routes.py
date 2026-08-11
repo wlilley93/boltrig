@@ -16,6 +16,10 @@ from boltrig.models.devices import (
 )
 
 from .device_agent_routes import register_device_agent_routes
+from .camera_agent_routes import (
+    list_owner_bindings as list_owner_camera_bindings,
+    list_owner_leases as list_owner_camera_leases,
+)
 from .device_crypto import mint_scoped_token, token_digest
 from .device_route_support import (
     ENROLLMENT_TTL,
@@ -240,6 +244,16 @@ def register_device_routes(app, *, principal_dep, get_kernel) -> None:
         "/v1/devices/{device_id}/leases",
         _device_endpoint(list_owner_leases, principal, kernel),
         methods=["GET"], name="list_owner_device_leases",
+    )
+    app.add_api_route(
+        "/v1/devices/{device_id}/camera-bindings",
+        _device_endpoint(list_owner_camera_bindings, principal, kernel),
+        methods=["GET"], name="list_owner_camera_bindings",
+    )
+    app.add_api_route(
+        "/v1/devices/{device_id}/camera-leases",
+        _device_endpoint(list_owner_camera_leases, principal, kernel),
+        methods=["GET"], name="list_owner_camera_leases",
     )
     app.add_api_route(
         "/v1/devices/{device_id}/roots", _root_endpoint(principal, kernel),

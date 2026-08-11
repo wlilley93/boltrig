@@ -59,20 +59,40 @@ def _app():
     return store, kernel, TestClient(create_app(kernel, platform={}))
 
 
-def _stage(client, *, secret=SECRET, headers=None):
+def _stage(client, *, secret=SECRET, headers=None, modality=None):
+    body = {
+        "level": "org",
+        "provider": "openai",
+        "model": "gpt-5",
+        "base_url": "https://api.openai.example/v1",
+        "api_key": secret,
+    }
+    if modality is not None:
+        body["modality"] = modality
     response = client.put(
         "/v1/ai-keys",
         headers=headers or _headers(),
-        json={
-            "level": "org",
-            "provider": "openai",
-            "model": "gpt-5",
-            "base_url": "https://api.openai.example/v1",
-            "api_key": secret,
-        },
+        json=body,
     )
     assert response.status_code == 202, response.text
     return response
+
+
+@pytest.mark.security
+def test_vision_key_proposal_is_sealed_and_stored_as_a_separate_route() -> None:
+    store, kernel, client = _app()
+    staged = _stage(client, modality="vision")
+    proposal_id = staged.json()["proposal"]["id"]
+    assert staged.json()["proposal"]["modality"] == "vision"
+    proposal = _run(store.get_ai_key_secret_proposal(T, proposal_id))
+    _run(kernel.hitl.answer(T, proposal.approval_id, "approve", "reviewer"))
+    applied = client.post(
+        f"/v1/ai-keys/proposals/{proposal_id}/finalize", headers=_headers()
+    )
+    assert applied.status_code == 200
+    config = _run(store.get_ai_config(T, "org", T, "vision"))
+    assert config is not None and config.modality == "vision"
+    assert _run(store.get_ai_config(T, "org", T)) is None
 
 
 @pytest.mark.security

@@ -16,7 +16,7 @@ from boltrig.kernel.ai_key_proposal_routes import (
     register_ai_key_proposal_routes,
 )
 from boltrig.kernel.control_routes import dispatch_control_route
-from boltrig.models import AI_CONFIG_LEVELS, AiKeySecretProposal, utcnow
+from boltrig.models import AI_CONFIG_LEVELS, AI_CONFIG_MODALITIES, AiKeySecretProposal, utcnow
 from boltrig.store.ai_key_proposals import AI_KEY_PROPOSAL_MAX_TTL
 
 
@@ -61,11 +61,14 @@ def _parse_ai_key_intake(body: dict, principal):
     scope_id = str(body.get("scope_id") or default_scope or "").strip()
     provider = str(body.get("provider") or "").strip()
     model = str(body.get("model") or "").strip()
+    modality = str(body.get("modality") or "text").strip().lower()
     api_key = str(body.pop("api_key", None) or "").strip()
     base_url = str(body.get("base_url") or "").strip() or None
+    if modality not in AI_CONFIG_MODALITIES:
+        return None, _invalid("modality must be text or vision")
     if not scope_id or not provider or not model or not api_key:
         return None, _invalid("scope_id, provider, model and api_key are required")
-    return (level, scope_id, provider, model, api_key, base_url), None
+    return (level, scope_id, provider, model, modality, api_key, base_url), None
 
 
 def _invalid(reason):
@@ -73,7 +76,7 @@ def _invalid(reason):
 
 
 def _new_proposal(principal, parsed):
-    level, scope_id, provider, model, api_key, base_url = parsed
+    level, scope_id, provider, model, modality, api_key, base_url = parsed
     now = utcnow()
     proposal_id = f"akp_{uuid.uuid4().hex}"
     proposal = AiKeySecretProposal(
@@ -86,6 +89,7 @@ def _new_proposal(principal, parsed):
         scope_id=scope_id,
         provider=provider,
         model=model,
+        modality=modality,
         base_url=base_url,
         secret_ref=f"staged_ai_key:{proposal_id}",
         secret_digest=hashlib.sha256(api_key.encode("utf-8")).hexdigest(),
@@ -167,6 +171,7 @@ def _applied_response(proposal):
             "scope_id": proposal.scope_id,
             "provider": proposal.provider,
             "model": proposal.model,
+            "modality": proposal.modality,
             "base_url": proposal.base_url,
             "proposal_id": proposal.id,
         }
@@ -211,19 +216,27 @@ def _register_ai_key_delete_route(app, P, K, audit, admin_roles, workspace_admin
         denied = await _authorize_ai_key(k, p, level, scope_id, admin_roles, workspace_admin_roles)
         if denied is not None:
             return denied
-        if await k.store.get_ai_config(p.tenant_id, level, scope_id) is None:
+        modality = str(request.query_params.get("modality") or "text").strip().lower()
+        if modality not in AI_CONFIG_MODALITIES:
+            return _invalid("unknown modality")
+        if await k.store.get_ai_config(p.tenant_id, level, scope_id, modality) is None:
             return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
         _, pending = await dispatch_control_route(
             k,
             p,
             "control.ai_key.delete",
-            {"level": level, "scope_id": scope_id},
+            {"level": level, "scope_id": scope_id, "modality": modality},
             request=request,
         )
         if pending is not None:
             return pending
-        await audit(k, p, "ai_key.delete", {"level": level, "scope_id": scope_id})
-        return JSONResponse({"status": "ok", "level": level, "scope_id": scope_id})
+        await audit(
+            k, p, "ai_key.delete",
+            {"level": level, "scope_id": scope_id, "modality": modality},
+        )
+        return JSONResponse(
+            {"status": "ok", "level": level, "scope_id": scope_id, "modality": modality}
+        )
 
 
 def register_ai_key_routes(

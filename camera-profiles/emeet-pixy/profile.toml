@@ -1,0 +1,31 @@
+id = "emeet.pixy.v1"
+label = "EMEET PIXY"
+
+[match]
+vid = 0x328f
+pid = 0x00c0
+
+[standard]
+video = "uvc"
+audio = "uac"
+ptz = "uvc"
+
+[known]
+hid_present = true
+uvc_version = "0x0100"
+
+[unsupported_until_proven]
+tracking = true
+privacy = true
+gesture_control = true
+
+[quirks.pan_tilt]
+ignore_get_len = true
+fixed_length = 8
+
+[quirks.privacy]
+descriptor_invalid = true
+disable_write = true
+
+[capabilities.tracking]
+implementation = "pixy_tracking_v1"

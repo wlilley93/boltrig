@@ -263,16 +263,36 @@ async def capability_upsert_context(
         None,
     )
     endpoint_id = str(params.get("model_endpoint") or "").strip() or None
-    endpoint = (
-        await store.get_model_endpoint(context.tenant_id, endpoint_id)
-        if endpoint_id
+    vision_endpoint_id = (
+        str(params.get("vision_model_endpoint") or "").strip() or None
+    )
+    endpoint = await store.get_model_endpoint(context.tenant_id, endpoint_id) if endpoint_id else None
+    vision_endpoint = (
+        await store.get_model_endpoint(context.tenant_id, vision_endpoint_id)
+        if vision_endpoint_id
         else None
     )
-    if endpoint_id and (endpoint is None or not endpoint.is_active):
+    for role, selected_id, selected in (
+        ("text", endpoint_id, endpoint),
+        ("vision", vision_endpoint_id, vision_endpoint),
+    ):
+        if selected_id and (selected is None or not selected.is_active):
+            raise AdapterFailure(
+                "model endpoint binding is missing or retired",
+                status_code=409,
+                reason="model_endpoint_binding_unavailable",
+            )
+        if selected_id and not selected.supports(role):
+            raise AdapterFailure(
+                f"{role} model endpoint does not advertise {role} modality",
+                status_code=409,
+                reason="model_endpoint_modality_unavailable",
+            )
+    if endpoint_id and not vision_endpoint_id and not endpoint.supports("vision"):
         raise AdapterFailure(
-            "model endpoint binding is missing or retired",
+            "a single agent model must advertise both text and vision modalities",
             status_code=409,
-            reason="model_endpoint_binding_unavailable",
+            reason="multimodal_model_required",
         )
     return {
         "capability": (
@@ -286,6 +306,7 @@ async def capability_upsert_context(
                 "is_ephemeral": current.is_ephemeral,
                 "cost_tier": current.cost_tier,
                 "model_endpoint": current.model_endpoint,
+                "vision_model_endpoint": current.vision_model_endpoint,
                 "source": current.source,
                 "is_active": current.is_active,
             }

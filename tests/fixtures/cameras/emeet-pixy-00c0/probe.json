@@ -1,0 +1,110 @@
+{
+  "device": {
+    "present": true,
+    "manufacturer": "EMEET",
+    "product_name": "EMEET PIXY",
+    "vendor_id": "0x328F",
+    "product_id": "0x00C0"
+  },
+  "usb": {
+    "vendor_id": "0x328F",
+    "product_id": "0x00C0",
+    "interfaces": [
+      {"number": 0, "class": "video", "subclass": 1, "protocol": 0},
+      {"number": 1, "class": "video", "subclass": 2, "protocol": 0},
+      {"number": 2, "class": "audio", "subclass": 1, "protocol": 0},
+      {"number": 3, "class": "audio", "subclass": 2, "protocol": 0},
+      {"number": 4, "class": "hid", "subclass": 0, "protocol": 0}
+    ],
+    "video": {
+      "uvc": true,
+      "uvc_version": "0x0100",
+      "audio_interface_present": true,
+      "controls": {
+        "pan_tilt_absolute": {
+          "supported": true,
+          "readable": true,
+          "writable": true,
+          "width": 8,
+          "min": [-540000, -324000],
+          "max": [540000, 324000],
+          "step": [3600, 3600],
+          "default": [0, 0],
+          "current": [0, 0]
+        },
+        "zoom_absolute": {
+          "supported": true,
+          "readable": true,
+          "writable": true,
+          "width": 2,
+          "min": 100,
+          "max": 150,
+          "step": 1,
+          "default": 100,
+          "current": 100
+        },
+        "focus_absolute": {
+          "supported": true,
+          "readable": true,
+          "writable": true,
+          "width": 2,
+          "min": 0,
+          "max": 1023,
+          "step": 1,
+          "default": 192,
+          "current": 454
+        },
+        "privacy": {
+          "supported": true,
+          "readable": true,
+          "writable": true,
+          "width": 1,
+          "min": 3,
+          "max": 3,
+          "step": 3,
+          "default": 3,
+          "current": 3
+        }
+      }
+    },
+    "audio": {
+      "uac": true,
+      "formats": [{"sample_rate": 48000, "channels": 1}]
+    },
+    "hid": {
+      "present": true,
+      "collections": [{"usage_page": "0x0083", "usage": "0x0083"}],
+      "reports": [{"report_id": 9, "direction": "input", "bytes": 32}, {"report_id": 9, "direction": "output", "bytes": 32}]
+    },
+    "network_interface": false,
+    "other_interfaces": []
+  },
+  "video": {
+    "uvc": true,
+    "devices": [{
+      "name": "EMEET PIXY",
+      "formats": [
+        {"width": 3840, "height": 2160, "frame_rates": [{"max_fps": 30}]},
+        {"width": 1920, "height": 1080, "frame_rates": [{"max_fps": 60}]}
+      ]
+    }]
+  },
+  "audio": {"uac": true},
+  "physical_tests": {
+    "snapshot": {
+      "passed": true,
+      "restoration_succeeded": true,
+      "evidence": ["one_frame_capture", "decode_success", "frame_discarded"]
+    },
+    "pan": {
+      "passed": true,
+      "restoration_succeeded": true,
+      "evidence": ["uvc_descriptor", "get_info_read", "get_info_write", "range_read", "set_cur_success", "readback_match", "physical_verification", "restoration_match"]
+    },
+    "tilt": {
+      "passed": true,
+      "restoration_succeeded": true,
+      "evidence": ["uvc_descriptor", "get_info_read", "get_info_write", "range_read", "set_cur_success", "readback_match", "physical_verification", "restoration_match"]
+    }
+  }
+}

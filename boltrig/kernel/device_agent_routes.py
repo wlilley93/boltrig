@@ -26,6 +26,7 @@ from .device_route_support import (
     public_key_fingerprint,
     signer_for,
 )
+from .camera_agent_routes import register_camera_agent_routes
 
 
 def _error(reason: str, status: int = 400) -> JSONResponse:
@@ -224,3 +225,4 @@ def register_device_agent_routes(app, *, get_kernel) -> None:
         _device_endpoint(rotate_session, kernel), methods=["POST"],
         name="rotate_device_session",
     )
+    register_camera_agent_routes(app, get_kernel=get_kernel)

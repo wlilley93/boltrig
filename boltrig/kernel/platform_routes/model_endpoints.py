@@ -20,6 +20,7 @@ async def _references(store: Any, tenant_id: str, endpoint_id: str) -> dict:
             item.name
             for item in await store.list_all_capabilities(tenant_id)
             if item.model_endpoint == endpoint_id
+            or item.vision_model_endpoint == endpoint_id
         ),
         "fallbacks": sorted(
             item.id
@@ -147,6 +148,7 @@ def _register_inventory_routes(app, P, K) -> None:
                     "kind": endpoint.kind,
                     "model": endpoint.model,
                     "data_class": endpoint.data_class,
+                    "modalities": list(endpoint.modalities),
                     "is_active": endpoint.is_active,
                     "status": "active" if endpoint.is_active else "retired",
                 }
@@ -175,6 +177,7 @@ def _register_inventory_routes(app, P, K) -> None:
                     "base_url": endpoint.base_url,
                     "fallback": endpoint.fallback,
                     "data_class": endpoint.data_class,
+                    "modalities": list(endpoint.modalities),
                     "is_active": endpoint.is_active,
                     "status": "active" if endpoint.is_active else "retired",
                     "references": await _references(k.store, p.tenant_id, endpoint.id),

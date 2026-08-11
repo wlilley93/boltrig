@@ -42,14 +42,34 @@ async def execute_capability_operation(
         )
 
     endpoint_id = str(params.get("model_endpoint") or "").strip() or None
-    if endpoint_id:
-        endpoint = await store.get_model_endpoint(context.tenant_id, endpoint_id)
-        if endpoint is None:
+    vision_endpoint_id = (
+        str(params.get("vision_model_endpoint") or "").strip() or None
+    )
+    endpoint = None
+    for role, selected_id in (("text", endpoint_id), ("vision", vision_endpoint_id)):
+        if not selected_id:
+            continue
+        selected = await store.get_model_endpoint(context.tenant_id, selected_id)
+        if selected is None:
             raise LookupError("model endpoint not found")
-        if not endpoint.is_active:
+        if not selected.is_active:
             from .control_safety import ControlConflict
 
             raise ControlConflict("model endpoint is retired")
+        if not selected.supports(role):
+            from .control_safety import ControlConflict
+
+            raise ControlConflict(
+                f"{role} model endpoint does not advertise {role} modality"
+            )
+        if role == "text":
+            endpoint = selected
+    if endpoint_id and not vision_endpoint_id and not endpoint.supports("vision"):
+        from .control_safety import ControlConflict
+
+        raise ControlConflict(
+            "a single agent model must advertise both text and vision modalities"
+        )
     capability = AgentCapability(
         name=params["name"],
         tenant_id=context.tenant_id,
@@ -59,6 +79,7 @@ async def execute_capability_operation(
         is_ephemeral=bool(params.get("is_ephemeral", True)),
         cost_tier=params.get("cost_tier", "standard"),
         model_endpoint=endpoint_id,
+        vision_model_endpoint=vision_endpoint_id,
         source="control-plane",
     )
     await store.upsert_capability(capability, preserve_status=True)

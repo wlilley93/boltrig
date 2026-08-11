@@ -44,6 +44,8 @@ pub(crate) struct StoredDeviceAgent {
     #[serde(default)]
     pub(crate) root_ids: Vec<String>,
     pub(crate) pending_claim: Option<PendingClaim>,
+    #[serde(default)]
+    pub(crate) pending_camera_claim: Option<PendingClaim>,
 }
 
 fn is_loopback(host: Option<Host<&str>>) -> bool {
@@ -128,26 +130,34 @@ fn validate_record(record: &StoredDeviceAgent) -> Result<(), String> {
         return Err("device_session_reenrollment_required".to_string());
     }
     if let Some(claim) = &record.pending_claim {
-        let valid_receipt_state = match (&claim.terminal_status, &claim.receipt) {
-            (None, None) => true,
-            (Some(_), Some(receipt)) => {
-                receipt.is_object()
-                    && serde_json::to_vec(receipt)
-                        .map(|encoded| encoded.len() <= 32_000)
-                        .unwrap_or(false)
-            }
-            _ => false,
-        };
-        if !valid_identifier(&claim.lease_id)
-            || validate_token(&claim.claim_token).is_err()
-            || !valid_receipt_state
-            || !matches!(
-                claim.terminal_status.as_deref(),
-                None | Some("completed") | Some("failed")
-            )
-        {
-            return Err("device_session_reenrollment_required".to_string());
+        validate_pending_claim(claim)?;
+    }
+    if let Some(claim) = &record.pending_camera_claim {
+        validate_pending_claim(claim)?;
+    }
+    Ok(())
+}
+
+fn validate_pending_claim(claim: &PendingClaim) -> Result<(), String> {
+    let valid_receipt_state = match (&claim.terminal_status, &claim.receipt) {
+        (None, None) => true,
+        (Some(_), Some(receipt)) => {
+            receipt.is_object()
+                && serde_json::to_vec(receipt)
+                    .map(|encoded| encoded.len() <= 32_000)
+                    .unwrap_or(false)
         }
+        _ => false,
+    };
+    if !valid_identifier(&claim.lease_id)
+        || validate_token(&claim.claim_token).is_err()
+        || !valid_receipt_state
+        || !matches!(
+            claim.terminal_status.as_deref(),
+            None | Some("completed") | Some("failed")
+        )
+    {
+        return Err("device_session_reenrollment_required".to_string());
     }
     Ok(())
 }
@@ -219,6 +229,7 @@ mod tests {
             },
             root_ids: vec!["root_1".to_string()],
             pending_claim: None,
+            pending_camera_claim: None,
         }
     }
 

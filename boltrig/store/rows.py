@@ -96,7 +96,9 @@ def _endpoint(r):
         return None
     return ModelEndpoint(
         id=r["id"], tenant_id=r["tenant_id"], kind=r["kind"], model=r["model"],
-        base_url=r["base_url"], fallback=r["fallback"], data_class=r["data_class"], is_active=bool(r["is_active"]),
+        base_url=r["base_url"], fallback=r["fallback"], data_class=r["data_class"],
+        is_active=bool(r["is_active"]),
+        modalities=tuple(r["modalities"] or ["text"]) if "modalities" in r else ("text",),
     )
 
 
@@ -425,6 +427,7 @@ def _ai_config(r):
         provider=r["provider"], model=r["model"], credential_ref=r["credential_ref"],
         base_url=r["base_url"],
         created_at=r["created_at"], updated_at=r["updated_at"],
+        modality=r["modality"] if "modality" in r else "text",
     )
 
 

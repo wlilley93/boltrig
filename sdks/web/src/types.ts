@@ -60,6 +60,7 @@ export interface AgentCapabilityInfo {
   is_ephemeral: boolean;
   cost_tier: string;
   model_endpoint?: string | null;
+  vision_model_endpoint?: string | null;
   familiar_genotype: FamiliarGenotype;
 }
 
@@ -157,6 +158,7 @@ export interface ModelEndpointInfo {
   kind: string;
   model: string;
   data_class: string;
+  modalities?: Array<"text" | "vision" | string>;
   is_active: boolean;
   status: "active" | "retired";
 }
@@ -3767,6 +3769,7 @@ export interface OrgMembersResponse {
 }
 
 export type AiKeyLevel = "org" | "workspace" | "user";
+export type AiKeyModality = "text" | "vision";
 
 // An AI-config row for listing: provider/model + WHETHER a key is set, NEVER the
 // key itself (the secret lives only in the sealed credential store).
@@ -3775,6 +3778,7 @@ export interface AiKeyView {
   scope_id: string;
   provider: string;
   model: string;
+  modality?: AiKeyModality;
   base_url?: string | null;
   has_key: boolean;
   updated_at?: string | null;
@@ -3791,6 +3795,7 @@ export interface SetAiKeyRequest {
   scope_id?: string;
   provider: string;
   model: string;
+  modality?: AiKeyModality;
   base_url?: string;
   api_key: string;
 }
@@ -3810,6 +3815,7 @@ export interface AiKeyProposalView {
   scope_id: string;
   provider: string;
   model: string;
+  modality?: AiKeyModality;
   base_url?: string | null;
   status: AiKeyProposalStatus;
   created_at: string;
@@ -3824,6 +3830,7 @@ export interface SetAiKeyResponse {
   scope_id?: string;
   provider?: string;
   model?: string;
+  modality?: AiKeyModality;
   reason?: string;
 }
 
@@ -3839,6 +3846,7 @@ export interface AiKeyProposalResponse {
   scope_id?: string;
   provider?: string;
   model?: string;
+  modality?: AiKeyModality;
   base_url?: string | null;
   reason?: string;
 }
@@ -3848,5 +3856,6 @@ export interface DeleteAiKeyResponse {
   hitl_request_id?: string;
   level?: string;
   scope_id?: string;
+  modality?: AiKeyModality;
   reason?: string;
 }

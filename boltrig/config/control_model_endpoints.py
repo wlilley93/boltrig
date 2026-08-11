@@ -73,6 +73,7 @@ async def execute_model_endpoint_operation(
         base_url=params.get("base_url"),
         fallback=fallback_id,
         data_class=params.get("data_class", "standard"),
+        modalities=tuple(params.get("modalities") or ("text",)),
     )
     await store.upsert_model_endpoint(endpoint)
     current = await store.get_model_endpoint(context.tenant_id, endpoint.id)

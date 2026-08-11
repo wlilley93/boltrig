@@ -217,6 +217,7 @@ PUBLIC_MODEL_EXPORTS = [
     "RuntimeKind",
     "WORKSPACE_ROLES",
     "AI_CONFIG_LEVELS",
+    "AI_CONFIG_MODALITIES",
     "AiConfig",
     "AI_KEY_PROPOSAL_STATUSES",
     "AiKeySecretProposal",

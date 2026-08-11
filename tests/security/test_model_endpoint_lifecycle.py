@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from boltrig.config.manifest import ModelsConfig
 from boltrig.config.control_plane import build_control_plane_adapter
 from boltrig.fleet.model_router import select_model_endpoint
+from boltrig.fleet.model_router import endpoint_id_for_modality
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.models import (
@@ -51,6 +52,89 @@ def _context(label: str) -> InvocationContext:
         run_id=f"run-{label}",
         extra={"principal_role": "org-admin", "principal_scope": {"all": True}},
     )
+
+
+@pytest.mark.security
+async def test_agent_accepts_multimodal_or_explicit_text_and_vision_routes() -> None:
+    kernel = await _kernel()
+    await kernel.store.upsert_model_endpoint(
+        ModelEndpoint(
+            id="multimodal",
+            tenant_id=T,
+            kind="bifrost",
+            model="vision-model",
+            modalities=("text", "vision"),
+        )
+    )
+    await kernel.store.upsert_model_endpoint(
+        ModelEndpoint(
+            id="text-only",
+            tenant_id=T,
+            kind="bifrost",
+            model="text-model",
+            modalities=("text",),
+        )
+    )
+    await kernel.store.upsert_model_endpoint(
+        ModelEndpoint(
+            id="vision-only",
+            tenant_id=T,
+            kind="bifrost",
+            model="vision-model-2",
+            modalities=("vision",),
+        )
+    )
+
+    with pytest.raises(AdapterFailure) as invalid:
+        await kernel.invoke(
+            "control",
+            "control.capability.upsert",
+            {
+                "name": "invalid-single",
+                "runtime": "codex",
+                "model_endpoint": "text-only",
+            },
+            _context("invalid-single"),
+        )
+    assert invalid.value.reason == "multimodal_model_required"
+
+    await _approved(
+        kernel,
+        "control.capability.upsert",
+        {
+            "name": "multimodal-agent",
+            "runtime": "codex",
+            "model_endpoint": "multimodal",
+        },
+    )
+    split = await _approved(
+        kernel,
+        "control.capability.upsert",
+        {
+            "name": "split-agent",
+            "runtime": "codex",
+            "model_endpoint": "text-only",
+            "vision_model_endpoint": "vision-only",
+        },
+    )
+    assert split["capability_status"] == "active"
+    stored = next(
+        item
+        for item in await kernel.store.list_all_capabilities(T)
+        if item.name == "split-agent"
+    )
+    assert stored.model_endpoint == "text-only"
+    assert stored.vision_model_endpoint == "vision-only"
+    assert endpoint_id_for_modality(stored, "text") == "text-only"
+    assert endpoint_id_for_modality(stored, "vision") == "vision-only"
+    with pytest.raises(ModelEndpointUnavailable):
+        await select_model_endpoint(
+            kernel.store,
+            T,
+            "text-only",
+            sensitive=False,
+            modality="vision",
+        )
 
 
 async def _kernel() -> Kernel:

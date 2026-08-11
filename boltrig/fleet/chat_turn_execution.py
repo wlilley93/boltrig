@@ -81,6 +81,7 @@ def _invocation_context(
     workspace_id,
     scope,
     model_profile_id,
+    attachments,
 ) -> InvocationContext:
     return InvocationContext(
         tenant_id=tenant_id,
@@ -92,6 +93,14 @@ def _invocation_context(
         workspace_id=workspace_id,
         extra={
             "conversation_id": conversation_id,
+            "input_modality": (
+                "vision"
+                if any(
+                    str(item.get("media_type") or "").lower().startswith("image/")
+                    for item in attachments or []
+                )
+                else "text"
+            ),
             "principal_role": role,
             **({"principal_scope": dict(scope)} if scope is not None else {}),
             **({"model_profile": model_profile_id} if model_profile_id else {}),
@@ -144,6 +153,7 @@ async def _spawn_turn(
     kernel,
     spawner,
     relay,
+    cfg,
     item,
     tenant_id,
     task,
@@ -153,7 +163,13 @@ async def _spawn_turn(
 ):
     try:
         result = await spawner.spawn(
-            tenant_id, task, skills, {}, context, partial_on_budget=True
+            tenant_id,
+            task,
+            skills,
+            ({"capability": cfg.default_capability} if cfg.default_capability else {}),
+            context,
+            partial_on_budget=True,
+            announce_child=False,
         )
         _publish_reply(relay, item.id, model_profile_id, result, item)
         await persist_new_work_items(
@@ -227,6 +243,7 @@ async def _execute_turn(
         workspace_id=workspace_id,
         scope=scope,
         model_profile_id=model_profile_id,
+        attachments=attachments,
     )
     task = await _turn_task(
         kernel,
@@ -242,6 +259,7 @@ async def _execute_turn(
         kernel,
         spawner,
         relay,
+        cfg,
         item,
         tenant_id,
         task,

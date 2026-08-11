@@ -53,21 +53,25 @@ async def _store(*, allow_own: bool = True) -> InMemoryStore:
     return store
 
 
-async def _put_config(store, *, provider, model, base_url=None, key="sk-user") -> None:
+async def _put_config(
+    store, *, provider, model, base_url=None, key="sk-user", modality="text",
+    level="user", scope_id="u1"
+) -> None:
     await store.set_credential_ref(T, "cred-user", {"secret": key})
     await store.set_ai_config(AiConfig(
-        tenant_id=T, level="user", scope_id="u1",
+        tenant_id=T, level=level, scope_id=(T if level == "org" else scope_id),
         provider=provider, model=model, credential_ref="cred-user", base_url=base_url,
+        modality=modality,
     ))
 
 
-async def _capability(store, *, runtime="claude-api") -> AgentCapability:
+async def _capability(store, *, runtime="claude-api", endpoint_id="ep") -> AgentCapability:
     await store.upsert_model_endpoint(
         ModelEndpoint(id="ep", tenant_id=T, kind="anthropic", model="claude",
                       base_url="http://default/v1", data_class="standard")
     )
     return AgentCapability("w", T, runtime, ["*"], 2, True, "standard",
-                           model_endpoint="ep")
+                           model_endpoint=endpoint_id)
 
 
 def _ctx(**extra) -> InvocationContext:
@@ -104,7 +108,7 @@ def test_ai_config_provider_and_model_select_runtime_and_endpoint():
     # endpoint to the config's model + base_url - not the capability's claude default.
     async def go():
         store = await _store()
-        cap = await _capability(store, runtime="claude-api")
+        cap = await _capability(store, runtime="claude-api", endpoint_id=None)
         await _put_config(store, provider="openai", model="gpt-4o",
                           base_url="http://byo/v1", key="sk-user")
         rt = await Spawner(Kernel(store))._runtime_for(T, cap, _ctx())
@@ -122,11 +126,93 @@ def test_config_without_base_url_keeps_the_endpoint_host():
     # + model but keeps the resolved endpoint's own host (no base_url override).
     async def go():
         store = await _store()
-        cap = await _capability(store, runtime="claude-api")
+        cap = await _capability(store, runtime="claude-api", endpoint_id=None)
         await _put_config(store, provider="openai", model="gpt-4o", base_url=None)
         rt = await Spawner(Kernel(store))._runtime_for(T, cap, _ctx())
         assert rt.runtime == "openai" and rt.endpoint.model == "gpt-4o"
-        assert rt.endpoint.base_url == "http://default/v1"  # endpoint host retained
+        assert rt.endpoint.base_url is None  # the inherited key names no host
+
+    _run(go())
+
+
+@pytest.mark.invariant("FR-AGENT-MODEL-OVERRIDE-01")
+def test_explicit_agent_endpoint_overrides_the_main_key_model():
+    async def go():
+        store = await _store()
+        await store.upsert_model_endpoint(
+            ModelEndpoint(
+                id="agent-override", tenant_id=T, kind="bifrost",
+                model="agent-vision-aware", base_url="http://agent/v1",
+                data_class="standard", modalities=("text", "vision"),
+            )
+        )
+        cap = AgentCapability(
+            "w", T, "claude-api", ["*"], 2, True, "standard",
+            model_endpoint="agent-override",
+        )
+        await _put_config(store, provider="openai", model="main-model", key="sk-main")
+        rt = await Spawner(Kernel(store))._runtime_for(T, cap, _ctx())
+        assert rt.runtime == "openai"
+        assert rt.endpoint.model == "agent-vision-aware"
+        assert rt.endpoint.base_url == "http://agent/v1"
+        assert rt._api_key() == "sk-main"
+
+    _run(go())
+
+
+@pytest.mark.invariant("FR-AGENT-MODEL-OVERRIDE-01")
+def test_explicit_endpoint_does_not_replace_the_codex_execution_host():
+    async def go():
+        store = await _store()
+        await store.upsert_model_endpoint(
+            ModelEndpoint(
+                id="codex-model",
+                tenant_id=T,
+                kind="openai",
+                model="glm-5.2",
+                base_url="https://models.example/v1",
+                data_class="standard",
+            )
+        )
+        cap = AgentCapability(
+            "chat-worker", T, "codex", ["*"], 2, True, "standard",
+            model_endpoint="codex-model",
+        )
+
+        rt = await Spawner(Kernel(store))._runtime_for(T, cap, _ctx())
+
+        # The test composition has no trusted Codex provider, so the honest
+        # result is the typed Codex-unavailable runtime. It must never become
+        # the legacy OpenAI transport merely because Codex's model endpoint is
+        # OpenAI-shaped.
+        result = await rt.run("hello", _ctx(), tools=[])
+        assert result.degraded is True
+        assert result.output["_degraded"] == {
+            "runtime": "codex",
+            "reason": "runtime_unavailable",
+        }
+
+    _run(go())
+
+
+@pytest.mark.invariant("FR-AIKEY-VISION-01")
+def test_inherited_vision_route_uses_the_optional_main_vision_key():
+    async def go():
+        store = await _store(allow_own=False)
+        cap = await _capability(store, runtime="claude-api", endpoint_id=None)
+        await _put_config(
+            store, provider="openai", model="main-text", key="sk-main", level="org"
+        )
+        await _put_config(
+            store, provider="openai", model="main-vision", key="sk-vision",
+            modality="vision", level="org",
+        )
+        ctx = _ctx(input_modality="vision")
+        rt = await Spawner(Kernel(store))._runtime_for(T, cap, ctx)
+        assert rt.runtime == "openai"
+        assert rt.endpoint.model == "main-vision"
+        assert rt.endpoint.modalities == ("vision",)
+        assert rt._api_key() == "sk-vision"
 
     _run(go())
 

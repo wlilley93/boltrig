@@ -17,6 +17,7 @@ def proposal_params(proposal: AiKeySecretProposal) -> dict:
         "scope_id": proposal.scope_id,
         "provider": proposal.provider,
         "model": proposal.model,
+        "modality": proposal.modality,
         **({"base_url": proposal.base_url} if proposal.base_url is not None else {}),
         "proposal_id": proposal.id,
         "secret_digest": proposal.secret_digest,
@@ -30,6 +31,7 @@ def proposal_view(proposal: AiKeySecretProposal, status: str) -> dict:
         "scope_id": proposal.scope_id,
         "provider": proposal.provider,
         "model": proposal.model,
+        "modality": proposal.modality,
         "base_url": proposal.base_url,
         "status": status,
         "created_at": proposal.created_at.isoformat(),
@@ -44,6 +46,7 @@ def proposal_audit(proposal: AiKeySecretProposal) -> dict:
         "scope_id": proposal.scope_id,
         "provider": proposal.provider,
         "model": proposal.model,
+        "modality": proposal.modality,
         "base_url": proposal.base_url,
     }
 

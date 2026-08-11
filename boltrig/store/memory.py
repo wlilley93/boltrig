@@ -66,6 +66,7 @@ from boltrig.models import (
     MemoryProjectionStatus,
     ModelEndpoint,
     AI_CONFIG_LEVELS,
+    AI_CONFIG_MODALITIES,
     AiConfig,
     Organisation,
     OrgMember,
@@ -225,7 +226,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         # [2026] VJS-COUNTY 8, D5: per-org/workspace/user AI keys. Keyed
         # (tenant, level, scope_id); each value carries a credential_ref, never a raw
         # key. Tenant stays the isolation key.
-        self._ai_configs: dict[tuple[str, str, str], AiConfig] = {}
+        self._ai_configs: dict[tuple[str, str, str, str], AiConfig] = {}
 
     # --- permissions ---
     async def get_tenant_permissions(self, tenant_id):
@@ -1119,16 +1120,21 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
                 f"invalid ai-config level: {config.level!r}",
                 errors=[f"level must be one of {sorted(AI_CONFIG_LEVELS)}"],
             )
+        if config.modality not in AI_CONFIG_MODALITIES:
+            raise SchemaValidationError(
+                f"invalid ai-config modality: {config.modality!r}",
+                errors=[f"modality must be one of {sorted(AI_CONFIG_MODALITIES)}"],
+            )
         config.updated_at = utcnow()
-        self._ai_configs[(config.tenant_id, config.level, config.scope_id)] = config
+        self._ai_configs[(config.tenant_id, config.level, config.scope_id, config.modality)] = config
 
-    async def get_ai_config(self, tenant_id, level, scope_id):
+    async def get_ai_config(self, tenant_id, level, scope_id, modality="text"):
         # Tenant-scoped: the key includes tenant_id, so a lookup under another tenant
         # never returns this tenant's row (fail-closed, never crosses the boundary).
-        return self._ai_configs.get((tenant_id, level, scope_id))
+        return self._ai_configs.get((tenant_id, level, scope_id, modality))
 
     async def list_ai_configs(self, tenant_id):
-        return [c for (t, _, _), c in self._ai_configs.items() if t == tenant_id]
+        return [c for (t, _, _, _), c in self._ai_configs.items() if t == tenant_id]
 
-    async def delete_ai_config(self, tenant_id, level, scope_id):
-        self._ai_configs.pop((tenant_id, level, scope_id), None)
+    async def delete_ai_config(self, tenant_id, level, scope_id, modality="text"):
+        self._ai_configs.pop((tenant_id, level, scope_id, modality), None)

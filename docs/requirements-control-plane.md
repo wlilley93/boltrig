@@ -31,12 +31,23 @@ anywhere - one image, many tenants, everything org-specific as manifest + env.
   construction and routes against that in-memory list; it does not re-read the
   store per call, so a department edit needs the object reconstructed.
 - **2.2 Model endpoints.** Upserted the same way (`store.upsert_model_endpoint`);
+  each endpoint carries explicit `modalities` metadata (`text`, `vision`, or
+  both), which the Agents tab uses to prevent an image route from being bound to
+  a text-only model. A profile may bind one multimodal endpoint or a text
+  endpoint plus `vision_model_endpoint`; the runtime sends the resolved route
+  through Bifrost when the gateway is configured.
+- **2.3 Agent model defaults and overrides.** A profile with no endpoint binding
+  inherits the governed main text/API key and, for image turns, the optional
+  vision key when configured. An explicit `model_endpoint` or
+  `vision_model_endpoint` is a per-agent override: it owns its advertised model,
+  host and provider while the scoped credential remains kernel-only. Existing
+  text-key rows remain the backward-compatible default.
   `PiRuntime` resolves its endpoint per run from what the spawner hands it, so a
   gateway base_url is just another upsertable record.
-- **2.3 Workflow selection.** `workflows/library.py` `WorkflowLibrary.register`
+- **2.4 Workflow selection.** `workflows/library.py` `WorkflowLibrary.register`
   persists a `WorkflowDefinition` via `store.upsert_workflow`; `match()` picks the
   best-overlapping definition by intent tag, against store records.
-- **2.4 Workflow definitions are already a small generic shape, not code.** The
+- **2.5 Workflow definitions are already a small generic shape, not code.** The
   `definition` field is a small JSON dict: name, version, trigger, and a list of
   steps, each with id, parent ids, an action string, a description.
   `workflows/generator.py` builds this shape two ways - a deterministic

@@ -74,6 +74,7 @@ from boltrig.models import (
     HITLStatus,
     ModelEndpoint,
     AI_CONFIG_LEVELS,
+    AI_CONFIG_MODALITIES,
     AiConfig,
     Organisation,
     OrgMember,
@@ -343,13 +344,14 @@ class PostgresStore(
     async def upsert_model_endpoint(self, e: ModelEndpoint):
         await self._pool.execute(
             """INSERT INTO model_endpoints
-                 (id, tenant_id, kind, base_url, model, fallback, data_class, is_active)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                 (id, tenant_id, kind, base_url, model, fallback, data_class, is_active, modalities)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  kind=EXCLUDED.kind, base_url=EXCLUDED.base_url, model=EXCLUDED.model,
-                 fallback=EXCLUDED.fallback, data_class=EXCLUDED.data_class, updated_at=now()""",
+                 fallback=EXCLUDED.fallback, data_class=EXCLUDED.data_class,
+                 modalities=EXCLUDED.modalities, updated_at=now()""",
             e.id, e.tenant_id, e.kind, e.base_url, e.model, e.fallback, e.data_class,
-            e.is_active,
+            e.is_active, list(e.modalities),
         )
 
     async def get_model_endpoint(self, tenant_id, ep_id):
@@ -1730,26 +1732,32 @@ class PostgresStore(
                 f"invalid ai-config level: {config.level!r}",
                 errors=[f"level must be one of {sorted(AI_CONFIG_LEVELS)}"],
             )
+        if config.modality not in AI_CONFIG_MODALITIES:
+            raise SchemaValidationError(
+                f"invalid ai-config modality: {config.modality!r}",
+                errors=[f"modality must be one of {sorted(AI_CONFIG_MODALITIES)}"],
+            )
         await self._pool.execute(
             """INSERT INTO ai_configs
                (tenant_id, level, scope_id, provider, model, credential_ref,
-                base_url, created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
-               ON CONFLICT (tenant_id, level, scope_id) DO UPDATE SET
+                base_url, modality, created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())
+               ON CONFLICT (tenant_id, level, scope_id, modality) DO UPDATE SET
                  provider=EXCLUDED.provider, model=EXCLUDED.model,
                  credential_ref=EXCLUDED.credential_ref,
                  base_url=EXCLUDED.base_url, updated_at=now()""",
             config.tenant_id, config.level, config.scope_id, config.provider,
-            config.model, config.credential_ref, config.base_url, config.created_at,
+            config.model, config.credential_ref, config.base_url, config.modality,
+            config.created_at,
         )
 
-    async def get_ai_config(self, tenant_id, level, scope_id):
+    async def get_ai_config(self, tenant_id, level, scope_id, modality="text"):
         # Tenant-scoped: the WHERE binds tenant_id, so it can never return another
         # tenant's AI-config row (None when absent, fail-closed).
         row = await self._pool.fetchrow(
             """SELECT * FROM ai_configs
-               WHERE tenant_id=$1 AND level=$2 AND scope_id=$3""",
-            tenant_id, level, scope_id,
+               WHERE tenant_id=$1 AND level=$2 AND scope_id=$3 AND modality=$4""",
+            tenant_id, level, scope_id, modality,
         )
         return _ai_config(row)
 
@@ -1760,10 +1768,10 @@ class PostgresStore(
         )
         return [_ai_config(r) for r in rows]
 
-    async def delete_ai_config(self, tenant_id, level, scope_id):
+    async def delete_ai_config(self, tenant_id, level, scope_id, modality="text"):
         await self._pool.execute(
-            "DELETE FROM ai_configs WHERE tenant_id=$1 AND level=$2 AND scope_id=$3",
-            tenant_id, level, scope_id,
+            "DELETE FROM ai_configs WHERE tenant_id=$1 AND level=$2 AND scope_id=$3 AND modality=$4",
+            tenant_id, level, scope_id, modality,
         )
 
 

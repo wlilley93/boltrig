@@ -546,9 +546,13 @@ export class BoltrigClient {
     level: string,
     scopeId: string,
     approvalId?: string,
+    modality: "text" | "vision" = "text",
   ): Promise<DeleteAiKeyResponse> {
+    const suffix = modality === "text"
+      ? ""
+      : `?modality=${encodeURIComponent(modality)}`;
     return this.governedJson(
-      `/v1/ai-keys/${encodeURIComponent(level)}/${encodeURIComponent(scopeId)}`,
+      `/v1/ai-keys/${encodeURIComponent(level)}/${encodeURIComponent(scopeId)}${suffix}`,
       "DELETE",
       undefined,
       approvalId,

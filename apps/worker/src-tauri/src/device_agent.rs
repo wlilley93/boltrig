@@ -11,9 +11,11 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
+use crate::camera_discovery::CameraRuntime;
+use crate::camera_protocol::{verify_lease as verify_camera_lease, CameraLease};
 use crate::device_protocol::{
-    expires_within, validate_verifier, verify_lease, AgentApi, ApiError, ClaimResponse,
-    DeviceLease, EnrollmentResponse, ReceiptSubmission,
+    expires_within, validate_verifier, verify_lease, AgentApi, ApiError, CameraClaimResponse,
+    ClaimResponse, DeviceLease, EnrollmentResponse, ReceiptSubmission,
 };
 use crate::device_roots::{
     delete_root, execute, load_root, new_root, store_root, DeviceBuffers, ExecutionOutcome,
@@ -112,6 +114,7 @@ pub(crate) async fn complete_enrollment(
         lease_verifier: response.lease_verifier.clone(),
         root_ids: Vec::new(),
         pending_claim: None,
+        pending_camera_claim: None,
     };
     save_agent(&agent)?;
     emit_status(app, "enrolled", Some(agent.device_id.clone()), None);
@@ -274,6 +277,12 @@ async fn run_cycle(app: &AppHandle, runtime: &DeviceRuntime) -> Result<(), Strin
             return Ok(());
         }
     }
+    if agent.pending_camera_claim.is_some() {
+        settle_persisted_camera_claim(app, runtime, &mut agent).await?;
+        if agent.pending_camera_claim.is_some() {
+            return Ok(());
+        }
+    }
     if expires_within(&agent.session_expires_at, ROTATE_WITHIN_SECONDS).unwrap_or(true) {
         match runtime
             .api
@@ -343,7 +352,281 @@ async fn run_cycle(app: &AppHandle, runtime: &DeviceRuntime) -> Result<(), Strin
     if agent.pending_claim.is_some() {
         return Ok(());
     }
+    publish_camera_bindings(app, runtime, &agent).await?;
+    let camera_leases = match runtime
+        .api
+        .pending_camera(&agent.api_origin, &agent.device_id, &agent.session_token)
+        .await
+    {
+        Ok(leases) => leases,
+        Err(ApiError::Unauthorized) => {
+            invalidate_agent(app, runtime, "device_session_rejected")?;
+            return Ok(());
+        }
+        Err(error) => {
+            emit_status(
+                app,
+                "degraded",
+                Some(agent.device_id.clone()),
+                Some(error.code().to_string()),
+            );
+            return Ok(());
+        }
+    };
+    for lease in camera_leases {
+        if let Err(reason) = process_camera_lease(app, runtime, &mut agent, lease).await {
+            if reason == "device_session_rejected" {
+                return Ok(());
+            }
+            emit_status(
+                app,
+                "camera_lease_refused",
+                Some(agent.device_id.clone()),
+                Some(reason),
+            );
+        }
+        if agent.pending_camera_claim.is_some() {
+            break;
+        }
+    }
+    if agent.pending_camera_claim.is_some() {
+        return Ok(());
+    }
     emit_status(app, "online", Some(agent.device_id), None);
+    Ok(())
+}
+
+async fn publish_camera_bindings(
+    app: &AppHandle,
+    runtime: &DeviceRuntime,
+    agent: &StoredDeviceAgent,
+) -> Result<(), String> {
+    let camera_runtime = app
+        .try_state::<CameraRuntime>()
+        .ok_or_else(|| "camera_runtime_unavailable".to_string())?;
+    let status = camera_runtime.status()?;
+    for camera in status.cameras {
+        let pan_state = camera
+            .capabilities
+            .get("pan")
+            .map(|capability| capability.state.as_str())
+            .unwrap_or("unknown");
+        let tilt_state = camera
+            .capabilities
+            .get("tilt")
+            .map(|capability| capability.state.as_str())
+            .unwrap_or("unknown");
+        let state_rank = |state: &str| match state {
+            "proven" => 4,
+            "writable" => 3,
+            "readable" => 2,
+            "advertised" => 1,
+            _ => 0,
+        };
+        let joint_state = if pan_state == "invalid_descriptor" || tilt_state == "invalid_descriptor"
+        {
+            "invalid_descriptor"
+        } else if state_rank(pan_state) == 0 || state_rank(tilt_state) == 0 {
+            "unknown"
+        } else if state_rank(pan_state) <= state_rank(tilt_state) {
+            pan_state
+        } else {
+            tilt_state
+        };
+        let mut evidence = camera.warnings.clone();
+        for axis in ["pan", "tilt"] {
+            if let Some(capability) = camera.capabilities.get(axis) {
+                evidence.extend(capability.evidence.clone());
+            }
+        }
+        evidence.sort();
+        evidence.dedup();
+        let binding = json!({
+            "camera_id": camera.camera_id,
+            "descriptor_fingerprint": camera.descriptor_fingerprint,
+            "label": camera.label,
+            "manufacturer": camera.manufacturer,
+            "product": camera.product,
+            "transport": camera.transport,
+            "connection_state": camera.connection_state,
+            "ptz_get_state": joint_state,
+            "ptz_set_state": joint_state,
+            "capabilities": camera.capabilities,
+            "evidence": evidence,
+        });
+        match runtime
+            .api
+            .publish_camera_binding(
+                &agent.api_origin,
+                &agent.device_id,
+                &agent.session_token,
+                &binding,
+            )
+            .await
+        {
+            Ok(()) => {}
+            Err(ApiError::Unauthorized) => {
+                invalidate_agent(app, runtime, "device_session_rejected")?;
+                return Err("device_session_rejected".to_string());
+            }
+            Err(error) => {
+                emit_status(
+                    app,
+                    "camera_binding_publish_degraded",
+                    Some(agent.device_id.clone()),
+                    Some(error.code().to_string()),
+                );
+                return Ok(());
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn process_camera_lease(
+    app: &AppHandle,
+    runtime: &DeviceRuntime,
+    agent: &mut StoredDeviceAgent,
+    lease: CameraLease,
+) -> Result<(), String> {
+    verify_camera_lease(&lease, &agent.device_id, &agent.lease_verifier)?;
+    let claim = match runtime
+        .api
+        .claim_camera(
+            &agent.api_origin,
+            &agent.device_id,
+            &agent.session_token,
+            &lease,
+        )
+        .await
+    {
+        Ok(claim) => claim,
+        Err(ApiError::Unauthorized) => {
+            invalidate_agent(app, runtime, "device_session_rejected")?;
+            return Err("device_session_rejected".to_string());
+        }
+        Err(error) => return Err(error.code().to_string()),
+    };
+    validate_camera_claim(&claim, &lease, agent)?;
+    agent.pending_camera_claim = Some(PendingClaim {
+        lease_id: lease.id.clone(),
+        claim_token: claim.claim_token,
+        terminal_status: None,
+        receipt: None,
+    });
+    if let Err(error) = save_agent(agent) {
+        agent.pending_camera_claim = None;
+        return Err(error);
+    }
+    let camera_runtime = app
+        .try_state::<CameraRuntime>()
+        .ok_or_else(|| "camera_runtime_unavailable".to_string())?;
+    let (terminal_status, receipt) = match camera_runtime.execute_camera_lease(
+        &lease,
+        &agent.device_id,
+        &agent.lease_verifier,
+    ) {
+        Ok(receipt) => ("completed".to_string(), receipt),
+        Err(reason) => ("failed".to_string(), json!({"code": reason})),
+    };
+    if let Some(pending) = agent.pending_camera_claim.as_mut() {
+        pending.terminal_status = Some(terminal_status.clone());
+        pending.receipt = Some(receipt.clone());
+    }
+    save_agent(agent)?;
+    let _ = app.emit(
+        "boltrig://camera-lease-terminal",
+        json!({
+            "lease_id": lease.id,
+            "camera_id": lease.camera_id,
+            "verb": lease.verb,
+            "status": terminal_status,
+            "receipt": receipt,
+        }),
+    );
+    settle_persisted_camera_claim(app, runtime, agent).await
+}
+
+async fn settle_persisted_camera_claim(
+    app: &AppHandle,
+    runtime: &DeviceRuntime,
+    agent: &mut StoredDeviceAgent,
+) -> Result<(), String> {
+    let Some(mut pending) = agent.pending_camera_claim.clone() else {
+        return Ok(());
+    };
+    if pending.terminal_status.is_none() || pending.receipt.is_none() {
+        pending.terminal_status = Some("failed".to_string());
+        pending.receipt = Some(json!({"code": "agent_restart_after_camera_claim_uncertain"}));
+        agent.pending_camera_claim = Some(pending.clone());
+        save_agent(agent)?;
+    }
+    let status = pending
+        .terminal_status
+        .as_deref()
+        .ok_or_else(|| "invalid_pending_camera_claim".to_string())?;
+    let receipt = pending
+        .receipt
+        .as_ref()
+        .ok_or_else(|| "invalid_pending_camera_claim".to_string())?;
+    match runtime
+        .api
+        .camera_receipt(
+            &agent.api_origin,
+            &agent.device_id,
+            &agent.session_token,
+            ReceiptSubmission {
+                lease_id: &pending.lease_id,
+                claim_token: &pending.claim_token,
+                status,
+                receipt,
+            },
+        )
+        .await
+    {
+        Ok(()) | Err(ApiError::Conflict) | Err(ApiError::Rejected) => {
+            agent.pending_camera_claim = None;
+            save_agent(agent)?;
+            Ok(())
+        }
+        Err(ApiError::Unauthorized) => {
+            invalidate_agent(app, runtime, "device_session_rejected")?;
+            agent.pending_camera_claim = None;
+            Ok(())
+        }
+        Err(error) => {
+            emit_status(
+                app,
+                "camera_receipt_pending",
+                Some(agent.device_id.clone()),
+                Some(error.code().to_string()),
+            );
+            Ok(())
+        }
+    }
+}
+
+fn validate_camera_claim(
+    claim: &CameraClaimResponse,
+    issued: &CameraLease,
+    agent: &StoredDeviceAgent,
+) -> Result<(), String> {
+    if claim.lease.id != issued.id
+        || claim.lease.signature != issued.signature
+        || claim.lease.status != "claimed"
+        || claim.claim_token.is_empty()
+        || claim.claim_token.len() > 16_384
+        || !claim
+            .claim_token
+            .bytes()
+            .all(|byte| byte.is_ascii_graphic())
+        || expires_within(&claim.claim_expires_at, 0).unwrap_or(true)
+    {
+        return Err("invalid_camera_claim_response".to_string());
+    }
+    let mut envelope = claim.lease.clone();
+    envelope.status = "issued".to_string();
+    verify_camera_lease(&envelope, &agent.device_id, &agent.lease_verifier)?;
     Ok(())
 }
 

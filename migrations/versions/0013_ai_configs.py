@@ -35,9 +35,10 @@ CREATE TABLE IF NOT EXISTS ai_configs (
     provider       TEXT NOT NULL,
     model          TEXT NOT NULL,
     credential_ref TEXT NOT NULL,
+    modality       TEXT NOT NULL DEFAULT 'text',
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (tenant_id, level, scope_id)
+    PRIMARY KEY (tenant_id, level, scope_id, modality)
 );
 """
 

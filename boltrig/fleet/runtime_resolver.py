@@ -11,8 +11,16 @@ from boltrig.models import AgentCapability, CredentialResolution, InvocationCont
 
 from .model_gateway import ModelGateway, apply_gateway, gateway_config
 from .model_profiles import apply_model_profile, select_model_profile
-from .model_router import select_model_endpoint
+from .model_router import endpoint_id_for_modality, select_model_endpoint
 from .runtime import Runtime, build_runtime, runtime_for_provider
+
+
+# Only provider-native runtimes let an explicitly selected endpoint choose the
+# transport. Codex, OpenCode, Rivet and script capabilities own their execution
+# host; their model endpoint is configuration *inside* that host. Treating an
+# ordinary OpenAI endpoint as a transport override silently turns the shipped
+# Codex chat worker (and Rivet's AgentOS bridge) into the legacy OpenAI lane.
+_PROVIDER_NATIVE_RUNTIMES = frozenset({"openai", "claude-api"})
 
 
 class PinnedRuntimePolicyUnavailable(RuntimeError):
@@ -43,7 +51,9 @@ def served_model_route(endpoint: ModelEndpoint | None) -> dict[str, str] | None:
     return route
 
 
-def _routed_endpoint(tenant_id: str, base: ModelEndpoint | None, resolution: Any) -> ModelEndpoint:
+def _routed_endpoint(
+    tenant_id: str, base: ModelEndpoint | None, resolution: Any, modality: str = "text"
+) -> ModelEndpoint:
     """Apply an AI-config provider/model/base-url selection to an endpoint."""
     model = resolution.model or (base.model if base is not None else "")
     base_url = resolution.base_url or (base.base_url if base is not None else None)
@@ -56,6 +66,7 @@ def _routed_endpoint(tenant_id: str, base: ModelEndpoint | None, resolution: Any
         model=model,
         base_url=base_url,
         data_class="standard",
+        modalities=("vision",) if modality == "vision" else ("text",),
     )
 
 
@@ -144,28 +155,49 @@ class RuntimeResolver:
         pinned_policy: bool,
     ) -> tuple[ModelEndpoint | None, str | None, str | None, dict[str, str] | None]:
         sensitive = bool(context is not None and context.extra.get("data_class") == "sensitive")
+        modality = str(
+            (context.extra if context is not None else {}).get("input_modality")
+            or "text"
+        )
         endpoint = await select_model_endpoint(
             self._kernel.store,
             tenant_id,
-            capability.model_endpoint,
+            endpoint_id_for_modality(capability, modality),
             sensitive=sensitive,
+            modality=modality,
             sensitive_endpoint_id=self._sensitive_endpoint_id,
             audit=self._kernel.audit,
             actor=capability.name,
         )
-        api_key, resolution = await self._resolve_ai_key(tenant_id, context)
+        api_key, resolution = await self._resolve_ai_key(tenant_id, context, modality)
         runtime_override: str | None = None
         model_route: dict[str, str] | None = None
+        explicit_endpoint = endpoint_id_for_modality(capability, modality) is not None
 
-        if (
-            not pinned_policy
-            and resolution is not None
-            and not resolution.is_default
-            and not sensitive
-        ):
-            runtime_override = runtime_for_provider(resolution.provider)
-            if runtime_override is not None:
-                endpoint = _routed_endpoint(tenant_id, endpoint, resolution)
+        if not pinned_policy and not sensitive:
+            if (
+                explicit_endpoint
+                and endpoint is not None
+                and capability.runtime in _PROVIDER_NATIVE_RUNTIMES
+            ):
+                # A profile-level endpoint is the deliberate per-agent override:
+                # keep its model and host, while the resolved scoped key remains
+                # the credential for this modality. This applies only to the two
+                # provider-native runtimes; execution-host runtimes keep owning
+                # their transport and consume the endpoint as model config.
+                runtime_override = runtime_for_provider(endpoint.kind)
+                if runtime_override is None and endpoint.kind in {
+                    "local", "openai-compatible"
+                }:
+                    runtime_override = "openai"
+            elif resolution is not None and not resolution.is_default:
+                # No agent override: the main text/vision key owns provider/model
+                # routing, preserving the existing scoped-key precedence.
+                runtime_override = runtime_for_provider(resolution.provider)
+                if runtime_override is not None:
+                    endpoint = _routed_endpoint(
+                        tenant_id, endpoint, resolution, modality
+                    )
 
         if context is not None and not sensitive and not pinned_policy:
             profile = select_model_profile(dict(context.extra or {}))
@@ -262,7 +294,7 @@ class RuntimeResolver:
             setattr(runtime, "model_route", model_route)
 
     async def _resolve_ai_key(
-        self, tenant_id: str, context: InvocationContext | None
+        self, tenant_id: str, context: InvocationContext | None, modality: str = "text"
     ) -> tuple[str | None, Any | None]:
         production = production_signal() is not None
         if context is None:
@@ -279,6 +311,7 @@ class RuntimeResolver:
                 tenant_id,
                 workspace_id=context.workspace_id,
                 user_id=context.on_behalf_of,
+                modality=modality,
             )
             material = await load_ai_key_material(self._kernel.store, tenant_id, resolution)
         except Exception as exc:

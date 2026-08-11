@@ -4,6 +4,8 @@
 //! starts no local agent or Python server, receives no model/integration
 //! credential, and exposes no arbitrary filesystem or command primitive.
 
+mod camera_discovery;
+mod camera_protocol;
 mod desktop_oauth;
 mod desktop_updater;
 mod device_agent;
@@ -19,6 +21,46 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use materialized::MaterializedArtifacts;
+
+#[tauri::command]
+fn camera_discover(
+    runtime: tauri::State<'_, camera_discovery::CameraRuntime>,
+) -> Result<camera_discovery::CameraDiscoveryStatus, String> {
+    runtime.refresh()
+}
+
+#[tauri::command]
+fn camera_status(
+    runtime: tauri::State<'_, camera_discovery::CameraRuntime>,
+) -> Result<camera_discovery::CameraDiscoveryStatus, String> {
+    runtime.status()
+}
+
+#[tauri::command]
+fn camera_verify_snapshot(
+    runtime: tauri::State<'_, camera_discovery::CameraRuntime>,
+    camera_id: String,
+) -> Result<camera_discovery::CameraVerification, String> {
+    runtime.verify_snapshot(&camera_id)
+}
+
+#[tauri::command]
+fn camera_verify_ptz(
+    runtime: tauri::State<'_, camera_discovery::CameraRuntime>,
+    camera_id: String,
+) -> Result<camera_discovery::CameraVerification, String> {
+    runtime.verify_ptz(&camera_id)
+}
+
+#[tauri::command]
+fn camera_validate_lease(
+    runtime: tauri::State<'_, camera_discovery::CameraRuntime>,
+    lease: camera_protocol::CameraLease,
+    expected_device_id: String,
+    verifier: session::LeaseVerifier,
+) -> Result<camera_discovery::CameraLeaseValidation, String> {
+    runtime.validate_lease(lease, &expected_device_id, &verifier)
+}
 
 const MAX_ARTIFACT_BYTES: usize = 100 * 1024 * 1024;
 
@@ -230,8 +272,10 @@ fn cancel_desktop_oauth_return(
 pub fn run() {
     let runtime = device_agent::DeviceRuntime::new()
         .expect("Boltrig Worker device HTTP client failed to initialize");
+    let camera_runtime = camera_discovery::CameraRuntime::new();
     tauri::Builder::default()
         .manage(runtime)
+        .manage(camera_runtime)
         .manage(MaterializedArtifacts::default())
         .manage(desktop_updater::UpdateRuntime::default())
         .manage(desktop_oauth::OAuthReturnRuntime::default())
@@ -253,12 +297,19 @@ pub fn run() {
             desktop_oauth::configure(app);
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(device_agent::run_loop(handle));
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(camera_discovery::run_loop(handle));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             complete_device_enrollment,
             clear_device_session,
             device_agent_status,
+            camera_discover,
+            camera_status,
+            camera_verify_snapshot,
+            camera_verify_ptz,
+            camera_validate_lease,
             bind_device_root,
             unbind_device_root,
             stage_device_write,

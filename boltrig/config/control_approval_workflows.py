@@ -259,6 +259,7 @@ async def capability_context(
             "is_ephemeral": capability.is_ephemeral,
             "cost_tier": capability.cost_tier,
             "model_endpoint": capability.model_endpoint,
+            "vision_model_endpoint": capability.vision_model_endpoint,
             "source": capability.source,
             "is_active": capability.is_active,
         }
@@ -276,6 +277,7 @@ def model_endpoint_view(endpoint: Any) -> dict[str, Any] | None:
         "fallback": endpoint.fallback,
         "data_class": endpoint.data_class,
         "is_active": endpoint.is_active,
+        "modalities": list(endpoint.modalities),
     }
 
 
@@ -285,7 +287,7 @@ async def _model_endpoint_references(
     capabilities = sorted(
         item.name
         for item in await store.list_all_capabilities(context.tenant_id)
-        if item.model_endpoint == endpoint_id
+        if item.model_endpoint == endpoint_id or item.vision_model_endpoint == endpoint_id
     )
     fallbacks = sorted(
         item.id

@@ -34,6 +34,9 @@ WORKSPACE_ROLES: frozenset[str] = frozenset(
 # keys, [2026] VJS-COUNTY 8 D5). ``org`` is keyed by the tenant_id (the org id IS
 # the tenant boundary), ``workspace`` by a workspace id, ``user`` by a user id.
 AI_CONFIG_LEVELS: frozenset[str] = frozenset({"org", "workspace", "user"})
+# A scope may carry the normal text/API credential and, independently, an
+# optional vision credential. Existing rows default to ``text``.
+AI_CONFIG_MODALITIES: frozenset[str] = frozenset({"text", "vision"})
 
 
 @dataclass
@@ -120,11 +123,12 @@ class WorkspaceMember:
 class AiConfig:
     """A per-org / workspace / user AI-key configuration row ([2026] VJS-COUNTY 8 D5).
 
-    ONE unified table keyed by ``(tenant_id, level, scope_id)`` where ``level`` is
-    one of ``AI_CONFIG_LEVELS`` and ``scope_id`` is the tenant_id (org level), a
-    workspace id (workspace level) or a user id (user level). The row holds a
-    provider/model SELECTION plus a ``credential_ref`` - the id of a row in the
-    sealed credential store (``credential_refs``) that holds the actual key. The
+    ONE unified table keyed by ``(tenant_id, level, scope_id, modality)`` where
+    ``level`` is one of ``AI_CONFIG_LEVELS`` and ``scope_id`` is the tenant_id
+    (org level), a workspace id (workspace level) or a user id (user level). The
+    ``text`` row is the main API route; an optional ``vision`` row is the vision
+    route. The row holds a provider/model SELECTION plus a ``credential_ref`` -
+    the id of a row in the sealed credential store (``credential_refs``) that holds the actual key. The
     RAW KEY IS NEVER STORED HERE: this table carries only the reference, so a key
     can never leak through an AI-config read/export. Tenant-scoped (RLS).
 
@@ -146,3 +150,4 @@ class AiConfig:
     base_url: str | None = None
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)
+    modality: str = "text"  # text = main API route; vision = optional vision route

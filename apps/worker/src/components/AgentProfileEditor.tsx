@@ -21,6 +21,8 @@ interface AgentDraft {
   ephemeral: boolean;
   costTier: string;
   modelEndpoint: string;
+  visionModelEndpoint: string;
+  modelRouteMode: "multimodal" | "separate";
 }
 
 const blank: AgentDraft = {
@@ -31,6 +33,8 @@ const blank: AgentDraft = {
   ephemeral: true,
   costTier: "standard",
   modelEndpoint: "",
+  visionModelEndpoint: "",
+  modelRouteMode: "multimodal",
 };
 
 type AgentProfileMutation = {
@@ -48,6 +52,8 @@ function draftFor(initial?: AgentCapabilityInfo | null): AgentDraft {
     ephemeral: initial.is_ephemeral,
     costTier: initial.cost_tier,
     modelEndpoint: initial.model_endpoint ?? "",
+    visionModelEndpoint: initial.vision_model_endpoint ?? "",
+    modelRouteMode: initial.vision_model_endpoint ? "separate" : "multimodal",
   } : { ...blank };
 }
 
@@ -63,6 +69,7 @@ function profileParams(draft: AgentDraft): Record<string, unknown> {
     is_ephemeral: draft.ephemeral,
     cost_tier: draft.costTier,
     model_endpoint: draft.modelEndpoint || undefined,
+    vision_model_endpoint: draft.visionModelEndpoint || undefined,
   };
 }
 
@@ -133,10 +140,46 @@ export function AgentProfileEditor({
     setDraft(next);
   }
 
+  function endpointSupports(endpoint: ModelEndpointInfo, modality: "text" | "vision") {
+    return (endpoint.modalities ?? ["text"]).includes(modality);
+  }
+
+  const activeEndpoints = modelEndpoints.filter(
+    (endpoint) => endpoint.is_active || endpoint.id === draft.modelEndpoint || endpoint.id === draft.visionModelEndpoint,
+  );
+  const multimodalEndpoints = activeEndpoints.filter(
+    (endpoint) => endpointSupports(endpoint, "text") && endpointSupports(endpoint, "vision"),
+  );
+  const textEndpoints = activeEndpoints.filter((endpoint) => endpointSupports(endpoint, "text"));
+  const visionEndpoints = activeEndpoints.filter((endpoint) => endpointSupports(endpoint, "vision"));
+
   async function save(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     setMessage("");
+    const textEndpoint = modelEndpoints.find((endpoint) => endpoint.id === draft.modelEndpoint);
+    const visionEndpoint = modelEndpoints.find((endpoint) => endpoint.id === draft.visionModelEndpoint);
+    if (draft.modelRouteMode === "multimodal" && textEndpoint && (
+      !endpointSupports(textEndpoint, "text") || !endpointSupports(textEndpoint, "vision")
+    )) {
+      setMessage("Choose a Bifrost endpoint that advertises both text and vision, or switch to separate models.");
+      setBusy(false);
+      return;
+    }
+    if (draft.modelRouteMode === "separate" && (
+      (draft.modelEndpoint && (!textEndpoint || !endpointSupports(textEndpoint, "text")))
+      || (draft.visionModelEndpoint && (!visionEndpoint || !endpointSupports(visionEndpoint, "vision")))
+    )) {
+      setMessage("The selected text and vision endpoints do not advertise the required modalities.");
+      setBusy(false);
+      return;
+    }
+    if (draft.modelRouteMode === "separate" && draft.modelEndpoint && !draft.visionModelEndpoint
+      && textEndpoint && !endpointSupports(textEndpoint, "vision")) {
+      setMessage("This text endpoint is not multimodal. Select a vision override, or leave both routes on the main API defaults.");
+      setBusy(false);
+      return;
+    }
     const params = profileParams(draft);
     const input: AgentProfileMutation = {
       params,
@@ -151,7 +194,7 @@ export function AgentProfileEditor({
     try {
       const result = await client.invoke(input.request);
       if (finalizer.begin(input, result, "Agent profile change")) {
-        setMessage("Profile change is waiting for approval in Inbox.");
+        setMessage("Profile change is waiting for approval in the originating chat.");
         return;
       }
       if (
@@ -163,7 +206,7 @@ export function AgentProfileEditor({
         return;
       }
       setMessage(result.status === "degraded"
-        ? "The change applied in degraded state; inspect its receipt in Operator."
+        ? "The change applied in degraded state; inspect its receipt in the originating chat or Runs."
         : "Agent profile saved.");
       onSaved();
     } catch {
@@ -185,7 +228,15 @@ export function AgentProfileEditor({
         <label><span>Runtime</span><select className="field-control" required value={draft.runtime} onChange={(event) => updateDraft({ ...draft, runtime: event.target.value })}>{draft.runtime !== "codex" && <option value={draft.runtime}>{draft.runtime} (legacy)</option>}<option value="codex">Codex</option></select></label>
         <label><span>Maximum delegation depth</span><input className="field-control" type="number" min={1} max={5} value={draft.maxDepth} onChange={(event) => updateDraft({ ...draft, maxDepth: Number(event.target.value) })} /></label>
         <label><span>Cost tier</span><select className="field-control" value={draft.costTier} onChange={(event) => updateDraft({ ...draft, costTier: event.target.value })}><option value="cheap">Cheap</option><option value="standard">Standard</option><option value="expensive">Expensive</option></select></label>
-        <label><span>Model endpoint</span><select className="field-control" value={draft.modelEndpoint} onChange={(event) => updateDraft({ ...draft, modelEndpoint: event.target.value })}><option value="">Automatic routing</option>{modelEndpoints.filter((endpoint) => endpoint.is_active || endpoint.id === draft.modelEndpoint).map((endpoint) => <option disabled={!endpoint.is_active} value={endpoint.id} key={endpoint.id}>{endpoint.id} · {endpoint.model}{endpoint.is_active ? "" : " (retired)"}</option>)}</select></label>
+        <fieldset className="agent-model-routing">
+          <legend>Bifrost model routing</legend>
+          <p className="muted small">Choose one multimodal model, or route text and vision through separate governed endpoints.</p>
+          <label><span>Model arrangement</span><select className="field-control" value={draft.modelRouteMode} onChange={(event) => updateDraft({ ...draft, modelRouteMode: event.target.value as AgentDraft["modelRouteMode"], visionModelEndpoint: event.target.value === "multimodal" ? "" : draft.visionModelEndpoint })}><option value="multimodal">One multimodal model</option><option value="separate">Text + separate vision models</option></select></label>
+          <label><span>{draft.modelRouteMode === "multimodal" ? "Multimodal model" : "Text model"}</span><select className="field-control" value={draft.modelEndpoint} onChange={(event) => updateDraft({ ...draft, modelEndpoint: event.target.value })}><option value="">Main API key (default)</option>{(draft.modelRouteMode === "multimodal" ? multimodalEndpoints : textEndpoints).map((endpoint) => <option disabled={!endpoint.is_active} value={endpoint.id} key={endpoint.id}>{endpoint.id} · {endpoint.model}{endpoint.is_active ? "" : " (retired)"}</option>)}</select></label>
+          {draft.modelRouteMode === "separate" && <label><span>Vision model</span><select className="field-control" value={draft.visionModelEndpoint} onChange={(event) => updateDraft({ ...draft, visionModelEndpoint: event.target.value })}><option value="">Main vision key (if configured)</option>{visionEndpoints.map((endpoint) => <option disabled={!endpoint.is_active} value={endpoint.id} key={endpoint.id}>{endpoint.id} · {endpoint.model}{endpoint.is_active ? "" : " (retired)"}</option>)}</select></label>}
+          {modelEndpoints.length === 0 && <p className="muted small">No per-agent override selected. This agent will inherit the main API key, and the optional main vision key for image turns.</p>}
+          {draft.modelRouteMode === "multimodal" && modelEndpoints.length > 0 && multimodalEndpoints.length === 0 && <p className="notice">No per-agent endpoint advertises both modalities. The main API key remains available as the default; choose separate overrides if this agent needs explicit endpoints.</p>}
+        </fieldset>
         <label className="check-label"><input type="checkbox" checked={draft.ephemeral} onChange={(event) => updateDraft({ ...draft, ephemeral: event.target.checked })} />Ephemeral worker</label>
       </div>
       <label><span>Supported skill patterns</span><textarea className="field-control code-field" rows={4} value={draft.supportedSkills} onChange={(event) => updateDraft({ ...draft, supportedSkills: event.target.value })} /></label>

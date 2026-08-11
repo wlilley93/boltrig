@@ -191,3 +191,60 @@ it("refreshes canonical profiles without inferring success for consumed approval
   expect(onSaved).not.toHaveBeenCalled();
   expect(api.invoke).toHaveBeenCalledTimes(1);
 });
+
+it("authors separate text and vision model bindings through the governed profile", async () => {
+  api.modelEndpoints.mockResolvedValue({
+    endpoints: [
+      {
+        id: "bifrost-text",
+        kind: "bifrost",
+        model: "text-model",
+        data_class: "standard",
+        modalities: ["text"],
+        is_active: true,
+        status: "active",
+      },
+      {
+        id: "bifrost-vision",
+        kind: "bifrost",
+        model: "vision-model",
+        data_class: "standard",
+        modalities: ["vision"],
+        is_active: true,
+        status: "active",
+      },
+    ],
+  });
+  api.invoke.mockResolvedValue({ status: "ok", result: {} });
+
+  render(
+    <AgentProfileEditor
+      onSaved={vi.fn()}
+      onCancel={vi.fn()}
+    />,
+  );
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "vision-worker" },
+  });
+  fireEvent.change(screen.getByLabelText("Model arrangement"), {
+    target: { value: "separate" },
+  });
+  await screen.findByRole("option", { name: /bifrost-text/ });
+  fireEvent.change(screen.getByLabelText("Text model"), {
+    target: { value: "bifrost-text" },
+  });
+  fireEvent.change(screen.getByLabelText("Vision model"), {
+    target: { value: "bifrost-vision" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Request profile change" }));
+
+  await waitFor(() => expect(api.invoke).toHaveBeenCalledWith(
+    expect.objectContaining({
+      verb: "control.capability.upsert",
+      params: expect.objectContaining({
+        model_endpoint: "bifrost-text",
+        vision_model_endpoint: "bifrost-vision",
+      }),
+    }),
+  ));
+});

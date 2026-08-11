@@ -17,6 +17,7 @@ from boltrig.api.birth_profile_startup import (
     publish_birth_profile_startup as _publish_birth_profile_startup_impl,
 )
 from boltrig.api.device_bootstrap import register_device_actions
+from boltrig.api.camera_bootstrap import register_camera_actions
 from boltrig.api.hitl_resume_bridge import resume_held_write_route
 from boltrig.config import apply_manifest, load_manifest, load_settings, production_signal
 
@@ -122,6 +123,7 @@ async def _seed_default(kernel: Kernel) -> None:
     await _register_skill_shelf(kernel, _DEFAULT_TENANT)
     await _register_channel_send(kernel, _DEFAULT_TENANT)
     await register_device_actions(kernel, _DEFAULT_TENANT)
+    await register_camera_actions(kernel, _DEFAULT_TENANT)
     # Keep knowledge opt-in while preserving the demo tenant's vault.
     await register_knowledge(kernel, _DEFAULT_TENANT, {"enabled": True})
 
@@ -275,6 +277,7 @@ async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
     await _register_skill_shelf(kernel, manifest.tenant_id)
     await _register_channel_send(kernel, manifest.tenant_id, manifest)
     await register_device_actions(kernel, manifest.tenant_id)
+    await register_camera_actions(kernel, manifest.tenant_id)
     if os.environ.get("BOLTRIG_EMOTION", "").strip() == "1":
         # desktop-only: the same box that publishes the phenotype accepts voluntary gestures (WL-3).
         from boltrig.adapters.builtin.familiar import build as build_familiar

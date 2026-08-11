@@ -1,6 +1,6 @@
 # Caddy TLS terminator for Boltrig (deploy/compose.secure.yml).
 #
-# Caddy terminates TLS and reverse-proxies to the kernel API and the UI over the
+# Caddy terminates TLS and reverse-proxies to the kernel API and the Worker over the
 # internal compose network. For a public domain Caddy auto-provisions a
 # certificate; for `localhost` it uses its built-in internal CA (self-signed). To
 # use an internal-CA / corporate certificate instead, replace the auto-TLS with:
@@ -10,11 +10,11 @@
 {$BOLTRIG_DOMAIN:localhost} {
 	encode gzip
 
-	# First-party browser surfaces share one restrictive edge policy. Voice media
+	# The first-party browser surface shares one restrictive edge policy. Voice media
 	# stays same-origin through Worker's /voice WebSocket proxy, so microphone may
 	# be granted to self without opening camera, geolocation or arbitrary connect
-	# destinations. style-src keeps inline declarations because both maintained
-	# React clients use bounded component style props.
+	# destinations. style-src keeps inline declarations because the maintained
+	# React client uses bounded component style props.
 	header {
 		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
@@ -32,12 +32,9 @@
 		reverse_proxy kernel:8000
 	}
 
-	# Everything else is the selected first-party presentation. The ordinary
-	# deployment leaves this unset and reaches the maintained Operator image.
-	# Decision 0021's explicit worker-primary overlay sets it to worker-ui:80;
-	# that image still packages Operator at /operator/ for rollback and advanced
-	# administration. This is deployment data, never a client-side redirect.
+	# Everything else is the Worker presentation. This is deployment data, never
+	# a client-side redirect.
 	handle {
-		reverse_proxy {$BOLTRIG_FRONTEND_UPSTREAM:ui:80}
+		reverse_proxy {$BOLTRIG_FRONTEND_UPSTREAM:worker-ui:80}
 	}
 }

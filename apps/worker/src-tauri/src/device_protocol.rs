@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
+use crate::camera_protocol::CameraLease;
 use crate::session::{valid_identifier, LeaseVerifier};
 
 const MAX_RESPONSE_BYTES: usize = 256 * 1024;
@@ -123,6 +124,20 @@ pub(crate) struct ClaimResponse {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct CameraClaimResponse {
+    pub(crate) lease: CameraLease,
+    pub(crate) claim_token: String,
+    pub(crate) claim_expires_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CameraPendingResponse {
+    leases: Vec<CameraLease>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct RotateResponse {
     pub(crate) session_token: String,
     pub(crate) session_expires_at: String,
@@ -206,6 +221,105 @@ impl AgentApi {
             .await
             .map_err(|_| ApiError::Transport)?;
         decode_success(response).await
+    }
+
+    pub(crate) async fn publish_camera_binding(
+        &self,
+        origin: &str,
+        device_id: &str,
+        token: &str,
+        binding: &Value,
+    ) -> Result<(), ApiError> {
+        let response = self
+            .client
+            .post(endpoint(
+                origin,
+                &format!("/v1/device-agent/{device_id}/camera-bindings"),
+            ))
+            .bearer_auth(token)
+            .json(binding)
+            .send()
+            .await
+            .map_err(|_| ApiError::Transport)?;
+        let _: Value = decode_success(response).await?;
+        Ok(())
+    }
+
+    pub(crate) async fn pending_camera(
+        &self,
+        origin: &str,
+        device_id: &str,
+        token: &str,
+    ) -> Result<Vec<CameraLease>, ApiError> {
+        let response = self
+            .client
+            .get(endpoint(
+                origin,
+                &format!("/v1/device-agent/{device_id}/camera-leases"),
+            ))
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(|_| ApiError::Transport)?;
+        decode_success::<CameraPendingResponse>(response)
+            .await
+            .map(|body| body.leases)
+    }
+
+    pub(crate) async fn claim_camera(
+        &self,
+        origin: &str,
+        device_id: &str,
+        token: &str,
+        lease: &CameraLease,
+    ) -> Result<CameraClaimResponse, ApiError> {
+        let response = self
+            .client
+            .post(endpoint(
+                origin,
+                &format!(
+                    "/v1/device-agent/{device_id}/camera-leases/{}/claim",
+                    lease.id
+                ),
+            ))
+            .bearer_auth(token)
+            .json(&json!({"signature": lease.signature}))
+            .send()
+            .await
+            .map_err(|_| ApiError::Transport)?;
+        decode_success(response).await
+    }
+
+    pub(crate) async fn camera_receipt(
+        &self,
+        origin: &str,
+        device_id: &str,
+        token: &str,
+        submission: ReceiptSubmission<'_>,
+    ) -> Result<(), ApiError> {
+        let response = self
+            .client
+            .post(endpoint(
+                origin,
+                &format!(
+                    "/v1/device-agent/{device_id}/camera-leases/{}/receipt",
+                    submission.lease_id
+                ),
+            ))
+            .bearer_auth(token)
+            .json(&json!({
+                "claim_token": submission.claim_token,
+                "status": submission.status,
+                "receipt": submission.receipt,
+            }))
+            .send()
+            .await
+            .map_err(|_| ApiError::Transport)?;
+        if response.status().is_success() {
+            let _: Value = decode_success(response).await?;
+            return Ok(());
+        }
+        Err(classify_status(response.status()))
     }
 
     pub(crate) async fn receipt(

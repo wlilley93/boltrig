@@ -1,0 +1,22 @@
+{
+  "device": {
+    "present": true,
+    "manufacturer": "Generic",
+    "product_name": "USB Camera",
+    "vendor_id": "0x1234",
+    "product_id": "0x5678"
+  },
+  "usb": {
+    "interfaces": [{"number": 0, "class": "video", "subclass": 1, "protocol": 0}],
+    "video": {"uvc": true, "controls": {}},
+    "audio": {"uac": false},
+    "hid": {"present": false},
+    "network_interface": false,
+    "other_interfaces": []
+  },
+  "video": {
+    "uvc": true,
+    "devices": [{"name": "USB Camera", "formats": [{"width": 1920, "height": 1080, "frame_rates": [{"max_fps": 30}]}]}]
+  },
+  "audio": {"uac": false}
+}

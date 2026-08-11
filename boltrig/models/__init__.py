@@ -277,6 +277,7 @@ from .runtime_identity import (
 )
 from .tenancy import (
     AI_CONFIG_LEVELS as AI_CONFIG_LEVELS,
+    AI_CONFIG_MODALITIES as AI_CONFIG_MODALITIES,
     WORKSPACE_ROLES as WORKSPACE_ROLES,
     AiConfig as AiConfig,
     OrgMember as OrgMember,
