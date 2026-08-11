@@ -615,9 +615,9 @@ ORDINARY	NO-SUBJECT	comment	boltrig/api/worker.py:55		attests - the exact drift 
 ORDINARY	NO-SUBJECT	docstring	boltrig/api/worker.py:63		Start the HITL expiry janitor (SEC-14), or None when disabled.
 ORDINARY	NO-SUBJECT	docstring	boltrig/camera/backend.py:1		Manufacturer-neutral semantic camera backend contract.
 ORDINARY	NO-SUBJECT	docstring	boltrig/camera/cache.py:20		Persist discovery summaries, never raw frames, serials, or code.
+ORDINARY	NO-SUBJECT	docstring	boltrig/camera/capabilities.py:18		Raised when a native probe result cannot be safely interpreted.
 ORDINARY	NO-SUBJECT	docstring	boltrig/camera/discovery.py:1		Pure standards-first camera capability negotiation.
-ORDINARY	NO-SUBJECT	comment	boltrig/camera/discovery.py:100		Current focus/PTZ/exposure values must never make a new hardware family.
-ORDINARY	NO-SUBJECT	docstring	boltrig/camera/discovery.py:20		Raised when a native probe result cannot be safely interpreted.
+ORDINARY	NO-SUBJECT	comment	boltrig/camera/discovery.py:87		Current focus/PTZ/exposure values must never make a new hardware family.
 ORDINARY	NO-SUBJECT	docstring	boltrig/camera/platform.py:14		One safe native observation;
 ORDINARY	NO-SUBJECT	docstring	boltrig/camera/profiles.py:1		Declarative, local-only camera profile metadata.
 ORDINARY	NO-SUBJECT	docstring	boltrig/camera/profiles.py:224		Load only local TOML metadata;

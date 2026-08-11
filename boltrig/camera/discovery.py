@@ -9,38 +9,25 @@ code. Descriptor support and physical proof remain separate fields.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
 import hashlib
 import json
 from typing import Any, Mapping
 
+from .capabilities import (
+    CameraDiscoveryError,
+    Capability,
+    CapabilityState,
+    _bool,
+    _capability_map,
+    _control,
+    _control_supported,
+    _invalid_boolean_descriptor,
+    _object,
+    _physical_test,
+)
 from .profiles import CameraProfileRegistry
 
 
-class CameraDiscoveryError(ValueError):
-    """Raised when a native probe result cannot be safely interpreted."""
-
-
-class CapabilityState(StrEnum):
-    UNSUPPORTED = "unsupported"
-    ADVERTISED = "advertised"
-    READABLE = "readable"
-    PROVEN = "proven"
-    UNKNOWN = "unknown"
-    INVALID_DESCRIPTOR = "invalid_descriptor"
-    PERMISSION_REQUIRED = "permission_required"
-    DEVICE_BUSY = "device_busy"
-    UNAVAILABLE = "unavailable"
-
-
-def _object(value: object, name: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
-        raise CameraDiscoveryError(f"{name}_must_be_object")
-    return value
-
-
-def _bool(value: object) -> bool:
-    return value is True or value == 1
 
 
 def _usb_id(value: object, name: str) -> int:
@@ -122,47 +109,6 @@ def descriptor_fingerprint(probe: Mapping[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-@dataclass(frozen=True)
-class Capability:
-    state: CapabilityState
-    source: str
-    evidence: tuple[str, ...] = ()
-    implementation: str | None = None
-    reason: str | None = None
-    limits: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def supported(self) -> bool:
-        return self.state not in {
-            CapabilityState.UNSUPPORTED,
-            CapabilityState.UNKNOWN,
-            CapabilityState.UNAVAILABLE,
-        }
-
-    @property
-    def proven(self) -> bool:
-        return self.state is CapabilityState.PROVEN
-
-    def __post_init__(self) -> None:
-        if not self.source:
-            raise CameraDiscoveryError("capability_source_required")
-        if self.state is CapabilityState.PROVEN and not self.evidence:
-            raise CameraDiscoveryError("proven_capability_requires_evidence")
-
-    def as_dict(self) -> dict[str, Any]:
-        result: dict[str, Any] = {
-            "state": self.state.value,
-            "source": self.source,
-        }
-        if self.evidence:
-            result["evidence"] = list(self.evidence)
-        if self.implementation is not None:
-            result["implementation"] = self.implementation
-        if self.reason is not None:
-            result["reason"] = self.reason
-        if self.limits:
-            result["limits"] = dict(self.limits)
-        return result
 
 
 @dataclass(frozen=True)
@@ -248,17 +194,10 @@ def discover_camera(
     usb_video = _object(usb.get("video", {}), "usb_video")
     video = _object(root.get("video", {}), "video")
     audio = _object(root.get("audio", {}), "audio")
-    manufacturer = str(device.get("manufacturer") or "Unknown")
-    product = str(device.get("product_name") or "USB Camera")
-    usb_vid = _usb_id(device.get("vendor_id") or usb.get("vendor_id"), "vendor_id")
-    usb_pid = _usb_id(device.get("product_id") or usb.get("product_id"), "product_id")
     fingerprint = descriptor_fingerprint(root)
-    if camera_id is None:
-        camera_id = "camera_" + hashlib.sha256(
-            f"{usb_vid:04x}:{usb_pid:04x}:{fingerprint}".encode("ascii")
-        ).hexdigest()[:32]
-    if not isinstance(camera_id, str) or not camera_id.startswith("camera_"):
-        raise CameraDiscoveryError("invalid_camera_id")
+    camera_id, manufacturer, product, usb_vid, usb_pid = _identity(
+        device, usb, fingerprint, camera_id,
+    )
 
     profile = profiles.match(usb_vid, usb_pid) if profiles is not None else None
     controls = _object(usb_video.get("controls", {}), "controls")
@@ -267,13 +206,7 @@ def discover_camera(
     zoom = _control(controls, "zoom_absolute")
     privacy = _control(controls, "privacy")
     hid = _object(usb.get("hid", {}), "hid")
-    interface_summary = _interface_summary(usb)
-    video_supported = _bool(usb_video.get("uvc")) or _bool(video.get("uvc"))
-    audio_supported = _bool(audio.get("uac")) or _bool(usb_video.get("audio_interface_present"))
-    formats: list[Any] = []
-    for item in video.get("devices", []) if isinstance(video.get("devices"), list) else []:
-        if isinstance(item, Mapping):
-            formats.extend(item.get("formats", []) if isinstance(item.get("formats"), list) else [])
+    video_supported, audio_supported, formats = _media_support(usb_video, video, audio)
     snapshot_supported = video_supported and bool(formats)
     snapshot_proven = _physical_test(root, "snapshot")
     pan_proven = _physical_test(root, "pan")
@@ -284,57 +217,31 @@ def discover_camera(
         warnings.append("matching_profile_untrusted_vendor_metadata_inactive")
     if _control_supported(privacy) and _invalid_boolean_descriptor(privacy):
         warnings.append("privacy_descriptor_invalid")
-    capabilities = {
-        "video": _video_capability(video_supported, formats, snapshot_proven),
-        "audio": Capability(
-            state=CapabilityState.READABLE if audio_supported else CapabilityState.UNSUPPORTED,
-            source="uac_descriptor" if audio_supported else "native_discovery",
-            evidence=("uac_interface", "audio_formats") if audio_supported else (),
-            implementation="uac" if audio_supported else None,
-            reason=None if audio_supported else "no_standard_uac_audio",
-        ),
-        "snapshot": Capability(
-            state=CapabilityState.PROVEN if snapshot_proven else (CapabilityState.ADVERTISED if snapshot_supported else CapabilityState.UNSUPPORTED),
-            source="capture_test" if snapshot_proven else "uvc_descriptor",
-            evidence=("one_frame_capture", "decode_success", "frame_discarded") if snapshot_proven else (("uvc_video_device",) if snapshot_supported else ()),
-            implementation="uvc" if snapshot_supported else None,
-            reason=None if snapshot_supported else "video_capture_not_available",
-        ),
-        "pan": _ptz_capability(
-            pan_tilt,
-            axis="pan",
-            proven=pan_proven,
-            test_evidence=_test_evidence(root, "pan"),
-        ),
-        "tilt": _ptz_capability(
-            pan_tilt,
-            axis="tilt",
-            proven=tilt_proven,
-            test_evidence=_test_evidence(root, "tilt"),
-        ),
-        "zoom": _scalar_capability(zoom),
-        "focus": _scalar_capability(focus),
-        "privacy": _privacy_capability(privacy),
-        "tracking": Capability(
-            state=CapabilityState.UNKNOWN if _bool(hid.get("present")) else CapabilityState.UNSUPPORTED,
-            source="vendor_hid_descriptor" if _bool(hid.get("present")) else "native_discovery",
-            evidence=("hid_present", "hid_descriptor_read") if _bool(hid.get("present")) else (),
-            implementation=(profile.vendor_capabilities.get("tracking") if profile is not None and profile.trusted else None),
-            reason="vendor_test_required" if _bool(hid.get("present")) else "no_vendor_tracking_evidence",
-        ),
-    }
+    capabilities = _capability_map(
+        root,
+        profile=profile,
+        hid=hid,
+        pan_tilt=pan_tilt,
+        zoom=zoom,
+        focus=focus,
+        privacy=privacy,
+        video_supported=video_supported,
+        audio_supported=audio_supported,
+        snapshot_supported=snapshot_supported,
+        snapshot_proven=snapshot_proven,
+        pan_proven=pan_proven,
+        tilt_proven=tilt_proven,
+        formats=formats,
+    )
     control_transports = []
     if _control_supported(pan_tilt) or _control_supported(zoom) or _control_supported(focus) or _control_supported(privacy):
         control_transports.append("uvc")
     if _bool(hid.get("present")):
         control_transports.append("hid")
-    driver: dict[str, Any] = {
-        "video": profile_standard.get("video", "uvc") if video_supported else "none",
-        "audio": profile_standard.get("audio", "uac") if audio_supported else "none",
-        "controls": control_transports,
-    }
-    if profile is not None and profile.trusted:
-        driver["extras"] = f"vendor-profile:{profile.id}"
+    driver = _driver_map(
+        profile, profile_standard, control_transports,
+        video_supported=video_supported, audio_supported=audio_supported,
+    )
     return CameraDiscovery(
         schema_version=1,
         camera_id=camera_id,
@@ -348,10 +255,80 @@ def discover_camera(
         profile_trusted=profile.trusted if profile is not None else False,
         driver=driver,
         capabilities=capabilities,
-        interfaces=interface_summary,
+        interfaces=_interface_summary(usb),
         warnings=tuple(warnings),
         profile_quirks=profile.quirks if profile is not None and profile.trusted else {},
     )
+
+
+
+
+
+def _media_support(
+    usb_video: Mapping[str, Any],
+    video: Mapping[str, Any],
+    audio: Mapping[str, Any],
+) -> tuple[bool, bool, list[Any]]:
+    """Whether the standard video/audio classes are present, and the formats offered.
+
+    Both descriptor locations are consulted: a camera may declare UVC on the USB
+    interface, on the video node, or both, and disagreeing on which one counts
+    would make the same device read differently on different platforms.
+    """
+    video_supported = _bool(usb_video.get("uvc")) or _bool(video.get("uvc"))
+    audio_supported = _bool(audio.get("uac")) or _bool(usb_video.get("audio_interface_present"))
+    formats: list[Any] = []
+    devices = video.get("devices", [])
+    for item in devices if isinstance(devices, list) else []:
+        if isinstance(item, Mapping):
+            entries = item.get("formats", [])
+            formats.extend(entries if isinstance(entries, list) else [])
+    return video_supported, audio_supported, formats
+
+
+def _identity(
+    device: Mapping[str, Any],
+    usb: Mapping[str, Any],
+    fingerprint: str,
+    camera_id: str | None,
+) -> tuple[str, str, str, int, int]:
+    """Names, USB ids, and the id this camera is keyed by.
+
+    A caller may supply the id (rebinding a known camera); otherwise it is
+    derived from vid/pid plus the descriptor fingerprint, so the same physical
+    device keys the same way and a changed descriptor keys differently.
+    """
+    manufacturer = str(device.get("manufacturer") or "Unknown")
+    product = str(device.get("product_name") or "USB Camera")
+    usb_vid = _usb_id(device.get("vendor_id") or usb.get("vendor_id"), "vendor_id")
+    usb_pid = _usb_id(device.get("product_id") or usb.get("product_id"), "product_id")
+    if camera_id is None:
+        camera_id = "camera_" + hashlib.sha256(
+            f"{usb_vid:04x}:{usb_pid:04x}:{fingerprint}".encode("ascii")
+        ).hexdigest()[:32]
+    if not isinstance(camera_id, str) or not camera_id.startswith("camera_"):
+        raise CameraDiscoveryError("invalid_camera_id")
+    return camera_id, manufacturer, product, usb_vid, usb_pid
+
+
+def _driver_map(
+    profile: Any,
+    profile_standard: Mapping[str, Any],
+    control_transports: list[str],
+    *,
+    video_supported: bool,
+    audio_supported: bool,
+) -> dict[str, Any]:
+    """Which standard transport carries each stream. Vendor extras only when trusted."""
+    driver: dict[str, Any] = {
+        "video": profile_standard.get("video", "uvc") if video_supported else "none",
+        "audio": profile_standard.get("audio", "uac") if audio_supported else "none",
+        "controls": control_transports,
+    }
+    if profile is not None and profile.trusted:
+        driver["extras"] = f"vendor-profile:{profile.id}"
+    return driver
+
 
 
 def _interface_summary(usb: Mapping[str, Any]) -> dict[str, Any]:
@@ -379,106 +356,3 @@ def _interface_summary(usb: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _control(controls: Mapping[str, Any], name: str) -> Mapping[str, Any]:
-    value = controls.get(name, {})
-    return value if isinstance(value, Mapping) else {}
-
-
-def _control_supported(control: Mapping[str, Any]) -> bool:
-    return _bool(control.get("supported"))
-
-
-def _control_readable(control: Mapping[str, Any]) -> bool:
-    return _bool(control.get("readable"))
-
-
-def _physical_test(probe: Mapping[str, Any], name: str) -> bool:
-    tests = probe.get("physical_tests", {})
-    if not isinstance(tests, Mapping):
-        return False
-    evidence = tests.get(name, {})
-    if not isinstance(evidence, Mapping):
-        return False
-    if name == "snapshot":
-        return _bool(evidence.get("passed"))
-    return _bool(evidence.get("passed")) and _bool(evidence.get("restoration_succeeded"))
-
-
-def _test_evidence(probe: Mapping[str, Any], name: str) -> tuple[str, ...]:
-    tests = probe.get("physical_tests", {})
-    evidence = tests.get(name, {}) if isinstance(tests, Mapping) else {}
-    values = evidence.get("evidence", []) if isinstance(evidence, Mapping) else []
-    return tuple(str(value) for value in values if isinstance(value, str))
-
-
-def _video_capability(supported: bool, formats: list[Any], snapshot_proven: bool) -> Capability:
-    if not supported:
-        return Capability(CapabilityState.UNSUPPORTED, "native_discovery", reason="no_standard_uvc_video")
-    return Capability(
-        CapabilityState.PROVEN if snapshot_proven else CapabilityState.ADVERTISED,
-        "capture_test" if snapshot_proven else "uvc_descriptor",
-        evidence=("one_frame_capture",) if snapshot_proven else ("uvc_video_device",),
-        implementation="uvc",
-        limits={"formats": formats[:128]},
-    )
-
-
-def _ptz_capability(
-    control: Mapping[str, Any],
-    *,
-    axis: str,
-    proven: bool,
-    test_evidence: tuple[str, ...],
-) -> Capability:
-    supported = _control_supported(control)
-    readable = _control_readable(control)
-    if not supported:
-        return Capability(CapabilityState.UNSUPPORTED, "uvc_descriptor", reason="ptz_not_advertised")
-    limits: dict[str, Any] = {}
-    for key in ("min", "max", "step"):
-        value = control.get(key)
-        if isinstance(value, list) and len(value) == 2:
-            limits[key] = value[0 if axis == "pan" else 1]
-    state = CapabilityState.PROVEN if proven and readable else CapabilityState.READABLE if readable else CapabilityState.ADVERTISED
-    evidence = ["uvc_descriptor", "get_info_read"]
-    if _bool(control.get("writable")):
-        evidence.append("get_info_write")
-    if readable and all(key in control for key in ("min", "max", "step", "current")):
-        evidence.append("range_read")
-    if proven:
-        evidence.extend(test_evidence or ("set_cur_success", "readback_match", "physical_verification", "restoration_match"))
-    return Capability(state, "uvc_descriptor", tuple(dict.fromkeys(evidence)), "uvc", limits=limits)
-
-
-def _scalar_capability(control: Mapping[str, Any]) -> Capability:
-    if not _control_supported(control):
-        return Capability(CapabilityState.UNSUPPORTED, "uvc_descriptor", reason="control_not_advertised")
-    readable = _control_readable(control)
-    return Capability(
-        CapabilityState.READABLE if readable else CapabilityState.ADVERTISED,
-        "uvc_descriptor",
-        ("uvc_descriptor", "get_info_read") if readable else ("uvc_descriptor",),
-        "uvc",
-        limits={key: control[key] for key in ("min", "max", "step", "default", "current") if control.get(key) is not None},
-    )
-
-
-def _invalid_boolean_descriptor(control: Mapping[str, Any]) -> bool:
-    values = [control.get(key) for key in ("min", "max", "step", "default", "current")]
-    return any(isinstance(value, int) and value not in {0, 1} for value in values)
-
-
-def _privacy_capability(control: Mapping[str, Any]) -> Capability:
-    if not _control_supported(control):
-        return Capability(CapabilityState.UNSUPPORTED, "uvc_descriptor", reason="privacy_not_advertised")
-    if _invalid_boolean_descriptor(control):
-        return Capability(
-            CapabilityState.INVALID_DESCRIPTOR,
-            "uvc_descriptor",
-            ("uvc_descriptor", "get_info_read", "boolean_domain_invalid"),
-            "uvc",
-            reason="boolean_values_outside_0_or_1",
-        )
-    if _control_readable(control):
-        return Capability(CapabilityState.READABLE, "uvc_descriptor", ("uvc_descriptor", "get_info_read"), "uvc")
-    return Capability(CapabilityState.ADVERTISED, "uvc_descriptor", ("uvc_descriptor",), "uvc")
