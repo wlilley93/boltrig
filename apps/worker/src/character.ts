@@ -2,10 +2,17 @@
 // event because it switches renderer families rather than restyling one theme.
 // The current production contract is presentational: this value is not sent in
 // Chat requests and does not alter response prose or dispatch.
+//
+// THIS MODULE NAMES NO CHARACTER BUT THE DEFAULT. The id is an open string
+// validated only for shape, because characters are a registry (see
+// components/characters.ts) that a plugin can add to without editing boltrig.
+// A stored id whose character is not registered — an uninstalled plugin, or a
+// build that never shipped it — resolves to the default at render time rather
+// than being rejected here, so removing a character degrades the Stage instead
+// of breaking the setting.
 
-export type CharacterId = "familiar" | "jarvis";
-
-export const CHARACTER_IDS: readonly CharacterId[] = ["familiar", "jarvis"] as const;
+/** An id in the character registry. Open by design; see components/characters.ts. */
+export type CharacterId = string;
 
 /** Key inside the kernel's /v1/me/settings bag. */
 export const CHARACTER_SETTING_KEY = "agent.character";
@@ -19,10 +26,12 @@ export const DEFAULT_CHARACTER: CharacterId = "familiar";
 
 const STORAGE_KEY = "boltrig.character";
 
+// Shape only. Whether the id names a character anyone can draw is the
+// registry's question, asked at render time.
 function normalise(value: unknown): CharacterId {
-  return typeof value === "string" && CHARACTER_IDS.includes(value as CharacterId)
-    ? (value as CharacterId)
-    : DEFAULT_CHARACTER;
+  if (typeof value !== "string") return DEFAULT_CHARACTER;
+  const trimmed = value.trim();
+  return /^[a-z][a-z0-9-]{0,63}$/.test(trimmed) ? trimmed : DEFAULT_CHARACTER;
 }
 
 export function loadCharacter(): CharacterId {

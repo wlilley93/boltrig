@@ -17,6 +17,7 @@ import {
   saveCharacterLocal,
   type CharacterId,
 } from "../../character";
+import { listCharacters } from "../characters";
 import { isDesktop } from "../../desktop";
 import {
   ExactApprovalFinalizer,
@@ -51,7 +52,9 @@ import {
 const THEME_OPTIONS = ["System", "Dark", "Light"];
 const DENSITY_OPTIONS = ["Comfortable", "Compact"];
 const TEXT_SIZE_OPTIONS = ["Small", "Normal", "Large"];
-const BODY_OPTIONS = ["Familiar", "Jarvis"];
+// Built from the registry, not from a list here: a character that installs
+// itself must appear in its own setting without editing this file.
+const BODY_OPTIONS = listCharacters().map((character) => character.name);
 const APPEARANCE_TITLES = new Set([
   "Theme",
   "Companion",
@@ -66,10 +69,9 @@ const themeValues: Record<string, ThemePreference> = {
   Dark: "dark",
   Light: "light",
 };
-const bodyValues: Record<string, CharacterId> = {
-  Familiar: "familiar",
-  Jarvis: "jarvis",
-};
+const bodyValues: Record<string, CharacterId> = Object.fromEntries(
+  listCharacters().map((character) => [character.name, character.id]),
+);
 const densityValues: Record<string, AppearanceDensity> = {
   Comfortable: "comfortable",
   Compact: "compact",

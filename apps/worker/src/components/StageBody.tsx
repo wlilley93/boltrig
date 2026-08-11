@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import type {
   BudgetItem,
   FamiliarGenotype,
@@ -11,35 +11,18 @@ import {
   loadCharacter,
   type CharacterId,
 } from "../character";
-import { characterFor } from "./characters";
-import { FamiliarStage } from "./familiar/FamiliarStage";
-import {
-  familiarStateFromTurn,
-  type FamiliarPresentationMode,
-} from "./familiar/FamiliarState";
-import { JarvisStage } from "./jarvis/JarvisStage";
-import { jarvisStateFromTurn } from "./jarvis/JarvisState";
+import { characterFor, type StageTurnInput } from "./characters";
+import type { FamiliarPresentationMode } from "./familiar/FamiliarState";
 
-// The one place that decides WHICH body is on the Stage.
+// The one place that decides WHICH body is on the Stage — and it does so
+// without naming any of them.
 //
-// The Familiar and Jarvis are two answers to the same question and are never
-// shown at once, so this is a switch rather than a composition. Both derive
-// their state from the same turn facts — the choice changes how the agent is
-// depicted, never what is true about it, and neither body can influence
-// dispatch (ADR 0025).
+// Characters are a registry (components/characters.ts). This file resolves the
+// chosen id, gates the phenotype on whether that character can honestly read it,
+// polls budgets only if it asked for them, and hands the result to the
+// character's own renderer. Adding a character touches nothing here.
 
-/** The turn facts both bodies read. Neither carries text, audio or identity. */
-export interface StageTurnInput {
-  loading: boolean;
-  hasLiveEvents: boolean;
-  liveEnded: boolean;
-  voiceSpeaking: boolean;
-  voiceLevel: number;
-  voiceBands?: number[] | null;
-  voiceOnset?: number;
-  micActive?: boolean;
-  micLevel?: number;
-}
+export type { StageTurnInput };
 
 /** Reactive read of the chosen character; applyCharacter announces every change. */
 export function useFamiliarBody(): CharacterId {
@@ -56,10 +39,10 @@ export function useFamiliarBody(): CharacterId {
 }
 
 /**
- * Budgets for the Jarvis gauges. Only polled when the instrument is actually
- * showing — the Familiar has no use for them, and a body nobody chose should
- * not cost a request. Any failure leaves the tracks as ghosts, which is the
- * honest rendering of "no reading".
+ * Budgets, for characters that display them. Only polled when such a character
+ * is actually showing — a body nobody chose should not cost a request. Any
+ * failure leaves the reading absent, which is the honest rendering of "no
+ * reading" rather than a gauge at zero.
  */
 function useBudgets(enabled: boolean): BudgetItem[] | null {
   const [budgets, setBudgets] = useState<BudgetItem[] | null>(null);
@@ -97,42 +80,35 @@ export function StageBody({
   mode: FamiliarPresentationMode;
   input: StageTurnInput;
   phenotype?: FamiliarPhenotypeResponse | null;
-  /** The streaming turn — its tools, subagents and steps light Jarvis's board. */
+  /** The streaming turn — its tools, subagents and steps light an instrument's board. */
   turn?: Pick<NormalizedTurn, "tools" | "subagents" | "steps"> | null;
   genotype?: FamiliarGenotype | null;
   label?: string;
 }) {
   const body = useFamiliarBody();
   const character = characterFor(body);
-  const isJarvis = body === "jarvis";
-  const budgets = useBudgets(isJarvis);
+  const budgets = useBudgets(character.wantsBudgets === true);
 
   // Emotion is per-character, not per-installation. A character that does not
   // read the phenotype is handed null rather than a live one — the Familiar
   // then falls back to wandering its own mood, which is its inner life and
   // always was. Passing it the machine's appraisal would attribute a state to a
   // creature that has no access to it.
-  const inner = character.readsPhenotype ? phenotype : null;
+  const inner = character.readsPhenotype ? (phenotype ?? null) : null;
 
-  if (isJarvis) {
-    return (
-      <JarvisStage
-        budgets={budgets}
-        phenotype={inner}
-        state={jarvisStateFromTurn(input)}
-        suspended={mode === "minimised"}
-        turn={turn}
-      />
-    );
-  }
-
+  // Suspense because a character's renderer may be lazy: a plugin registers
+  // cheaply at load and pulls its heavy body in only once it is chosen.
   return (
-    <FamiliarStage
-      genotype={genotype}
-      label={label}
-      mode={mode}
-      phenotype={inner}
-      state={familiarStateFromTurn(input)}
-    />
+    <Suspense fallback={null}>
+      {character.render({
+        budgets,
+        genotype,
+        input,
+        label,
+        mode,
+        phenotype: inner,
+        turn,
+      })}
+    </Suspense>
   );
 }

@@ -25,7 +25,19 @@ describe("the character on the Stage", () => {
     expect(DEFAULT_CHARACTER).toBe("familiar");
     expect(loadCharacter()).toBe("familiar");
     expect(characterFromSettings({})).toBe("familiar");
-    expect(characterFromSettings({ [CHARACTER_SETTING_KEY]: "nonsense" })).toBe("familiar");
+  });
+
+  // The store validates SHAPE, not existence. Whether an id names a character
+  // anyone can draw belongs to the registry, which resolves an unknown id to
+  // the default at render time — so uninstalling a character's plugin costs the
+  // Stage its body without corrupting the setting or losing the choice if it is
+  // installed again.
+  it("rejects a malformed id but keeps a well-formed one it does not know", () => {
+    for (const bad of [42, null, "", "Not An Id!", "x".repeat(80)]) {
+      expect(characterFromSettings({ [CHARACTER_SETTING_KEY]: bad })).toBe("familiar");
+    }
+    expect(characterFromSettings({ [CHARACTER_SETTING_KEY]: "some-plugin" }))
+      .toBe("some-plugin");
   });
 
   it("round-trips through the kernel settings bag", () => {
