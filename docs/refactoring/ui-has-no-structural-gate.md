@@ -22,10 +22,11 @@ make them bite — cover the Python kernel package and **nothing else**.
 
 Nothing takes their place on the front end:
 
-- `make ui-quality` runs `pnpm audit`, `typecheck`, `test:coverage` and `build`.
-  None of those measure file length, function length or complexity.
-- there is no eslint config in `ui/` at all, so there is no `max-lines`,
-  `max-statements` or `complexity` rule to violate.
+- The former frontend quality target ran package audit, typecheck, coverage and
+  build, but none of those measured file length, function length or complexity.
+- The former frontend had no eslint config, so there was no `max-lines`,
+  `max-statements` or `complexity` rule to violate. That frontend is now
+  retired; the Worker is the maintained browser source.
 
 `apps/worker/` and `site/` are in the same position.
 

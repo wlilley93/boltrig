@@ -1,9 +1,0 @@
-node_modules
-dist
-.git
-.gitignore
-*.log
-npm-debug.log*
-.DS_Store
-.vite
-README.md
