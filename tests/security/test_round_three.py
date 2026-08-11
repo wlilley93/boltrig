@@ -174,6 +174,7 @@ def test_author_replacement_views_are_complete_and_role_gated():
         "kind": "local",
         "model": "pinned",
         "data_class": "sensitive",
+        "modalities": ["text"],
         "is_active": True,
         "status": "active",
     }]

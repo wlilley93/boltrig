@@ -247,14 +247,19 @@ GET /v1/memory/ingestions memoryIngestions
 """,
 )
 _surface(
+    "apps/worker/src/components/settings/CompactSections.tsx",
+    """
+GET /v1/knowledge/providers knowledgeProviders
+POST /v1/knowledge/providers/{provider_id} setKnowledgeProvider
+""",
+)
+_surface(
     "apps/worker/src/components/knowledge/KnowledgeView.tsx",
     """
 GET /v1/knowledge/assets knowledgeAssets
 GET /v1/knowledge/assets/{asset_id} knowledgeAsset
 DELETE /v1/knowledge/assets/{asset_id} eraseKnowledgeAsset
 GET /v1/knowledge/assets/{asset_id}/original knowledgeOriginal
-GET /v1/knowledge/providers knowledgeProviders
-POST /v1/knowledge/providers/{provider_id} setKnowledgeProvider
 POST /v1/knowledge/search knowledgeSearch
 POST /v1/knowledge/uploads uploadKnowledge
 PUT /v1/knowledge/uploads/{upload_id} uploadKnowledge
@@ -531,9 +536,21 @@ POST /v1/device-agent/enrollment/complete
 GET /v1/device-agent/{device_id}/leases
 POST /v1/device-agent/{device_id}/leases/{lease_id}/claim
 POST /v1/device-agent/{device_id}/leases/{lease_id}/receipt
+GET /v1/device-agent/{device_id}/camera-bindings
+POST /v1/device-agent/{device_id}/camera-bindings
+GET /v1/device-agent/{device_id}/camera-leases
+POST /v1/device-agent/{device_id}/camera-leases/{lease_id}/claim
+POST /v1/device-agent/{device_id}/camera-leases/{lease_id}/receipt
 POST /v1/device-agent/{device_id}/session/rotate
 GET /v1/hands/commands
 POST /v1/hands/commands/{cmd_id}/receipt
+""",
+)
+_non_ui(
+    "operator-only",
+    """
+GET /v1/devices/{device_id}/camera-bindings
+GET /v1/devices/{device_id}/camera-leases
 """,
 )
 _non_ui("internal-composition", "POST /v1/knowledge/context")
@@ -565,4 +582,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 }
 
 
-EXPECTED_ROUTE_COUNT = 257
+EXPECTED_ROUTE_COUNT = 264

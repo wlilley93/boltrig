@@ -209,6 +209,7 @@ def test_discovery_catalogue_is_grant_tenant_and_workspace_scoped():
             "is_ephemeral": True,
             "cost_tier": "cheap",
             "model_endpoint": "local-model",
+            "vision_model_endpoint": None,
             "familiar_genotype": {
                 "source": "agent_capability.name.v1",
                 "seed": 104173362,

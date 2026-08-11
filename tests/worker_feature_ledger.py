@@ -372,6 +372,15 @@ _nested(
 )
 _nested(
     "ModelEndpoint",
+    "modalities",
+    "boltrig/models/libraries.py",
+    ("worker", "worker", "worker", "worker", "worker"),
+    "Which modalities an endpoint serves; authored alongside the other endpoint "
+    "fields in the Worker's model-endpoint surface and read by runtime resolution "
+    "when routing a turn that needs vision.",
+)
+_nested(
+    "ModelEndpoint",
     "tenant_id",
     "boltrig/models/libraries.py",
     ("worker", "deployment", "worker", "worker", "deployment"),
@@ -655,6 +664,42 @@ NATIVE_COMMANDS: dict[str, FeatureCoverage] = {
         ("missing", "missing", "missing", "missing", "missing"),
         "A bounded cancellation primitive exists, but it is unreachable from production Worker until the OAuth lifecycle contract exists.",
     ),
+    "camera_discover": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("missing", "missing", "missing", "missing", "missing"),
+        "The read-only USB/AVFoundation probe whose bounded JSON result "
+        "boltrig/camera/discovery.py turns into a capability map. It never "
+        "captures, writes controls, opens HID or loads vendor code. No production "
+        "Worker callsite yet.",
+    ),
+    "camera_status": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("missing", "missing", "missing", "missing", "missing"),
+        "Reports whether the native layer can see the camera at all, separately "
+        "from what the descriptors claim. No production Worker callsite yet.",
+    ),
+    "camera_validate_lease": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("missing", "missing", "missing", "missing", "missing"),
+        "Checks a kernel-issued camera lease before any operation that touches "
+        "hardware, so exclusive UVC access cannot be taken on the device agent's "
+        "say-so. No production Worker callsite yet.",
+    ),
+    "camera_verify_snapshot": _coverage(
+        "apps/worker/src-tauri/src/camera_protocol.rs",
+        ("missing", "missing", "missing", "missing", "missing"),
+        "A read-only native capture probe: it takes one frame, proves decode, and "
+        "discards it, which is what promotes snapshot from ADVERTISED to PROVEN. "
+        "No production Worker callsite yet - CameraDiscoverySettings reads the "
+        "discovery result rather than driving the probe.",
+    ),
+    "camera_verify_ptz": _coverage(
+        "apps/worker/src-tauri/src/camera_protocol.rs",
+        ("missing", "missing", "missing", "missing", "missing"),
+        "The physical pan/tilt proof behind the PROVEN state for those axes. Native "
+        "primitive only; no production Worker callsite yet, and it stays lease-gated "
+        "because it moves hardware.",
+    ),
 }
 
 
@@ -796,6 +841,16 @@ _governed_controls(
     ),
     ("worker", "worker", "worker", "worker", "worker"),
     "These non-secret controls retain only exact typed route inputs plus an internal approval id, query caller-owned state, replay the same SDK method and invalidate edits, selection changes and refreshes.",
+)
+_governed_controls(
+    "ChatView.tsx chat/WorkDisclosure.tsx",
+    ("worker", "worker", "worker", "worker", "worker"),
+    "The chat surface renders HITL requests raised BY a turn: it shows the question and the options the kernel supplied, and replays the operator's decision through the same respondHitl method. It composes no approval of its own, retains only the request id, and settles nothing locally - a decision that never reaches the kernel leaves the turn parked, which is the correct failure.",
+)
+_governed_controls(
+    "settings/CompactSections.tsx",
+    ("worker", "worker", "worker", "worker", "worker"),
+    "Settings rows that mutate governed configuration surface the kernel's pending_human receipt rather than reporting success: the row keeps its prior value until the change is approved, so a person cannot read a queued change as a made one. It retains no request body beyond the exact typed inputs it sent.",
 )
 _governed_controls(
     "settings/OvernightSection.tsx",
