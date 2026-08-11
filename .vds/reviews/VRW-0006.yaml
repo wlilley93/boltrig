@@ -1,0 +1,50 @@
+id: VRW-0006
+routes:
+- apps/worker/src/components/SettingsSurface.tsx
+fileKey: iVQBKFc3NpRH3zdOOxfPqr
+nodeId: 22:2
+shippedScreenshotDigest: sha256:00d8aa74d9a26e0415fef9309063cd8695249ee742cd7276b676ef152c419252
+screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png
+servedBuild: "feat/console-target@23238fab5acf1bb888421360f40f14b17bde79ae; dirty; capture-source sha256:91585a25a0a3651786219e6a4a3aa2712d46358d0e43a95f6710b1b6a0d325e0; capture-manifest sha256:629af0b56c03bff108df56048f095f775e1cd43a525ce5ae9e271472b0f048a0"
+shippedSourceDigest: sha256:e54f89235a00b939a52682743f5fc60c0ea6295f4f5c5e3e7ca3b944e6de5808
+frameImageDigest: sha256:b1d04f772b8f54a22ad02fa3e7917262f7ffecffeb65106c187bb0f5b0758213
+frameDigest: sha256:e9aca9ab0c191069ecb2a0e78d157287d9a9dbac94f4bf2ea3235bb0279db909
+verdict: no_authority
+regions:
+- region: header
+  examined: true
+  finding: Heading, explanatory copy, section labels and measured main-pane stack align closely.
+- region: facets
+  examined: true
+  finding: Search and settings navigation align broadly; the shipped shell retains an identity footer the frame omits.
+- region: body_rows
+  examined: true
+  finding: Appearance, notification and call-preference row geometry aligns closely while backend-derived values and availability states differ.
+- region: rail
+  examined: false
+  finding: The settings screen declares no independent rail band.
+- region: footer
+  examined: false
+  finding: The settings screen declares no main-content footer band.
+- region: empty_state
+  examined: false
+  finding: The compared settings section is populated, not empty.
+- region: keyboard
+  examined: false
+  finding: The static pair exposes no focused search or keyboard-navigation state.
+deltas:
+- describes: Notification-route detail, quiet-hours availability and voice-preference states follow captured contracts rather than the frame's illustrative values.
+  disposition: forbidden_by_policy
+  owedBy: DIR-0007
+- describes: The settings shell retains the signed-in identity footer that the frame omits.
+  disposition: belongs_to_app_chrome
+  owedBy: SCR-0006
+reviewedBy: Codex deterministic current-capture evidence rebind v2
+reviewedAt: 2026-08-11T15:36:50Z
+basis:
+- DIR-0007
+- SCR-0006
+- apps/worker/tests/visual/states.json
+- docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json
+- docs/design/evidence/2026-08-11-console-parity/current/metrics.json
+notes: The frame digest comes from the existing depth-limited ledger and is not eligible for sign-off. The current capture measured the main pane at the governing geometry, while real values and unsupported states still differ. This no_authority row binds the deterministic current screenshot and current route source only.

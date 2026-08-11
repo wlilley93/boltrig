@@ -82,15 +82,15 @@ def test_the_header_is_honoured_when_the_edge_is_trusted():
     assert forwarded_prefix(_Req("/boltrig/"), env=env) == "/boltrig"
 
 
-@pytest.mark.parametrize("value", ["/boltrig/operator", "/apps/boltrig", "/a/b/c/d"])
+@pytest.mark.parametrize("value", ["/boltrig/legacy", "/apps/boltrig", "/a/b/c/d"])
 def test_a_NESTED_mount_is_honoured(value):
     """This assertion used to be its opposite, and the opposite failed OPEN.
 
-    A single-segment pattern rejects `/boltrig/operator`, and rejecting means
+    A single-segment pattern rejects `/boltrig/legacy`, and rejecting means
     falling back to `Path=/` - the whole-host scope this middleware exists to
     close. So the conservative-looking choice quietly reinstated the widening.
-    Decision 0021 nests the operator console under /operator/ inside the worker
-    image, so that is not a hypothetical shape; it is the one the next mount has.
+    The Worker is the root presentation, so a legacy nested mount is still a
+    real shape this middleware must handle.
 
     The rule this encodes: when the fallback for "unrecognised" is the PERMISSIVE
     branch, narrowing what you recognise makes the control weaker, not stronger.

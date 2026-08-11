@@ -16,7 +16,7 @@
 #   fleet-worker      the fleet runtime + durable workers (Epics F/G)
 #   hatchet-engine    optional durable execution engine (US-FLT-06, seam)
 #   hatchet-dashboard optional Hatchet web console (seam)
-#   ui                the React console: Router, Kanban, Approvals (Epic L)
+#   worker-ui         the first-party React console (the only browser surface)
 #   bifrost           optional model cost/cache gateway (profile: gateway)
 #   local-model       optional on-box inference for sensitive data (profile: local)
 
@@ -148,7 +148,7 @@ services:
       - /var/lib/boltrig/codex-cells/slot-2:mode=0700,uid=20003,gid=20003,noexec,nosuid,nodev
       - /var/lib/boltrig/codex-cells/slot-3:mode=0700,uid=20004,gid=20004,noexec,nosuid,nodev
     command: ["uvicorn", "boltrig.api.asgi:app", "--host", "0.0.0.0", "--port", "8000"]
-    # Local/operator runs keep the conventional .env default. Validation and CI
+    # Local administrative runs keep the conventional .env default. Validation and CI
     # can point at the checked non-secret fixture without creating an ignored
     # file in a clean checkout.
     env_file: ${BOLTRIG_ENV_FILE:-.env}
@@ -407,43 +407,11 @@ services:
     depends_on:
       - hatchet-engine
 
-  ui:
-    build:
-      context: ./ui
-      dockerfile: Dockerfile
-      secrets:
-        # Token-bearing .npmrc so `pnpm install` can read @wlilley93/boltrig-web-sdk
-        # (the shared UI-SDK) from GitHub Packages, which requires auth even for a
-        # public package. Only the CENTRAL build needs this; release/demo overlays
-        # `build: !reset null` and pull the pinned image, so tenants never build.
-        - gh_npmrc
-    image: boltrig/ui:0.1.0
-    restart: unless-stopped
-    ports:
-      - "${UI_PORT:-8080}:80"
-    depends_on:
-      - kernel
-    healthcheck:
-      # 127.0.0.1 (not "localhost"): nginx binds IPv4 0.0.0.0:80, but localhost
-      # can resolve to IPv6 ::1 first in the container -> connection refused.
-      test:
-        - CMD-SHELL
-        - wget -q --spider http://127.0.0.1/index.html || exit 1
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
   worker-ui:
-    # Decision 0021 candidate topology. This remains explicitly profile-gated
-    # until parity, connector, device, call and accessibility acceptance pass.
-    # It serves Worker at / and the maintained Operator at /operator/.
-    profiles: ["worker"]
+    # The Worker is the only first-party browser surface.
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
-      secrets:
-        - gh_npmrc
     image: boltrig/worker-ui:0.1.0
     restart: unless-stopped
     networks:
@@ -456,7 +424,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - wget -q --spider http://127.0.0.1/index.html && wget -q --spider http://127.0.0.1/operator/index.html || exit 1
+        - wget -q --spider http://127.0.0.1/index.html || exit 1
       interval: 30s
       timeout: 5s
       retries: 5
@@ -711,13 +679,6 @@ networks:
   # forces Pi to route model traffic through the sandbox peers (bifrost/local-model).
   sandbox:
     driver: bridge
-
-secrets:
-  # Build-only secret for the central `ui` image build (see ui.build.secrets).
-  # Provide a user .npmrc carrying `//npm.pkg.github.com/:_authToken=<read:packages token>`.
-  # Defaults to a gitignored .secrets/gh_npmrc; override with GH_NPMRC_FILE.
-  gh_npmrc:
-    file: ${GH_NPMRC_FILE:-./.secrets/gh_npmrc}
 
 volumes:
   pgdata:

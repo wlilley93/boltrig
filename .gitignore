@@ -40,13 +40,12 @@ venv/
 .coverage.*
 htmlcov/
 coverage.xml
-ui/coverage/
 site/coverage/
 
-# --- node / ui ---
+# --- node / frontend ---
 node_modules/
-ui/dist/
-ui/node_modules/
+apps/worker/dist/
+apps/worker/node_modules/
 # sdks/web installs its deps as a SYMLINK, and `node_modules/` (trailing slash)
 # only matches real directories - so the symlink needs its own entry.
 sdks/web/node_modules

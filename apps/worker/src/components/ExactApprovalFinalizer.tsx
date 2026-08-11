@@ -190,7 +190,7 @@ export function useExactApprovalFinalizer<
         // kernel then refuses that stale fingerprint and issues a fresh exact
         // request. Retain the same cloned route input with only the new opaque
         // approval handle; otherwise the caller would strand a valid second
-        // request in Inbox with no lane able to apply it.
+        // request with no lane able to apply it.
         setPending({
           input: pending.input,
           approvalId: result.hitl_request_id,
@@ -263,7 +263,7 @@ function finalizationCopy(
   if (state === "waiting") {
     return [
       `${label} is waiting for approval`,
-      "After an independent Inbox decision, continue only the exact component-held route inputs.",
+      "After an independent decision in the originating chat, continue only the exact component-held route inputs.",
     ];
   }
   if (state === "checking") {

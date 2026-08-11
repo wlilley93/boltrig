@@ -1,3 +1,7 @@
+import {
+  CompactAppearanceSearchResults,
+  isAppearanceSettingsRow,
+} from "./CompactSections";
 import { useDeveloperDetails } from "./devDetails";
 import { searchSettings } from "./searchRegistry";
 import type { SettingsSection } from "../../settingsSections";
@@ -15,12 +19,28 @@ export function SettingsSearchResults({ query, onOpenSection }: {
   const showTech = useDeveloperDetails();
   const groups = searchSettings(query);
   if (!query.trim()) return null;
-  if (groups.length === 0) {
-    return <div className="settings-results-empty">Nothing matches that. Try a plainer word.</div>;
-  }
+  const hasAppearanceRows = groups.some((group) => group.section === "you"
+    && group.rows.some((row) => isAppearanceSettingsRow(row.title)));
+  const appearanceTitles = groups
+    .flatMap((group) => group.rows)
+    .filter((row) => isAppearanceSettingsRow(row.title))
+    .map((row) => row.title);
+  const destinationGroups = groups
+    .map((group) => ({
+      ...group,
+      rows: group.rows.filter((row) => !isAppearanceSettingsRow(row.title)),
+    }))
+    .filter((group) => group.rows.length > 0);
   return (
     <>
-      {groups.map((group) => (
+      <div className="settings-head">
+        <h1>Results</h1>
+      </div>
+      {hasAppearanceRows && <CompactAppearanceSearchResults titles={appearanceTitles} />}
+      {!hasAppearanceRows && destinationGroups.length === 0 && (
+        <div className="settings-results-empty">Nothing matches that. Try a plainer word.</div>
+      )}
+      {destinationGroups.map((group) => (
         <div className="settings-group" key={group.section}>
           <div className="console-section-title">{group.label}</div>
           <div className="console-table">

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Refuse a supply-chain exclusion list that cannot do what it says.
 
-WHY THIS EXISTS. `ui/pnpm-workspace.yaml` carried two `minimumReleaseAgeExclude`
+WHY THIS EXISTS. The former console workspace carried two `minimumReleaseAgeExclude`
 entries for the same package, `@wlilley93/boltrig-web-sdk@0.1.0` and `@0.1.1`.
 pnpm evaluates that list by FIRST MATCHING NAME PATTERN and consults no later
 entry for the package, so the 0.1.0 entry - stale, not even resolved by the
@@ -97,7 +97,7 @@ def check(path: Path) -> list[str]:
 
 def main() -> int:
     root = Path(__file__).resolve().parent.parent
-    targets = [p for p in (root / "ui" / "pnpm-workspace.yaml",) if p.exists()]
+    targets = [p for p in (root / "apps" / "worker" / "pnpm-workspace.yaml",) if p.exists()]
     if not targets:
         # Nothing to check is not the same as a pass. Say so rather than exit 0
         # quietly: a gate that silently passes when its subject is missing is how

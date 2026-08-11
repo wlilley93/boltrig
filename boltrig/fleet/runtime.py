@@ -426,11 +426,11 @@ def build_runtime(
     D5): a network runtime uses it instead of the env-configured provider key; None
     falls back to the env key so an existing single-tenant deploy is unchanged.
 
-    ``runtime_override`` / ``endpoint_override`` carry the model/provider ROUTING an
-    ai_config selects (D5): a known provider's mapped runtime kind + endpoint win over
-    ``capability.runtime`` and the lookup. Both default to None (dispatch EXACTLY as
-    before), the spawner only passes a KNOWN override, and never routes sensitive data
-    this way (SEC-12).
+    ``runtime_override`` / ``endpoint_override`` carry either the inherited
+    ai_config route or an explicit agent endpoint override. The latter keeps its
+    model/host while the resolved scoped key remains the credential for the call.
+    Both default to None (dispatch EXACTLY as before), and sensitive routing never
+    takes the hosted-provider path (SEC-12).
 
     Legacy lanes (everything except codex and the script family) are gated behind
     ``BOLTRIG_ENABLE_LEGACY_RUNTIMES`` (decision 0012, default OFF): with the flag

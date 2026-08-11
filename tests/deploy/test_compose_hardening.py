@@ -86,7 +86,7 @@ def test_hatchet_ports_are_loopback_only_in_base_compose():
 @pytest.mark.invariant("SEC-70")
 def test_secure_overlay_drops_hatchet_host_ports():
     # M8: the secure overlay removes the Hatchet host ports entirely (reachable
-    # only over the compose network), matching how it already strips kernel/ui.
+    # only over the compose network), matching how it already strips kernel/Worker.
     services = _secure()["services"]
     for name in _HATCHET_SERVICES:
         assert name in services, f"secure overlay has no {name} override"
@@ -347,7 +347,7 @@ def test_release_publishes_only_scanned_signed_digest_images_with_sboms():
     for image in (
         "deploy/kernel.Dockerfile",
         "deploy/fleet.Dockerfile",
-        "ui/Dockerfile",
+        "apps/worker/Dockerfile",
         "deploy/backup.Dockerfile",
     ):
         assert f"dockerfile: {image}" in workflow
@@ -374,7 +374,7 @@ def test_release_publishes_only_scanned_signed_digest_images_with_sboms():
     for variable in (
         "BOLTRIG_KERNEL_IMAGE",
         "BOLTRIG_FLEET_IMAGE",
-        "BOLTRIG_UI_IMAGE",
+        "BOLTRIG_WORKER_UI_IMAGE",
         "BOLTRIG_BACKUP_IMAGE",
     ):
         assert variable in workflow
@@ -427,7 +427,7 @@ def test_release_compose_uses_only_required_digest_images_without_builds():
     variables = {
         "kernel": "BOLTRIG_KERNEL_IMAGE",
         "fleet-worker": "BOLTRIG_FLEET_IMAGE",
-        "ui": "BOLTRIG_UI_IMAGE",
+        "worker-ui": "BOLTRIG_WORKER_UI_IMAGE",
         "backup": "BOLTRIG_BACKUP_IMAGE",
     }
     for service, variable in variables.items():

@@ -90,7 +90,7 @@ describe("Worker human-decision Inbox", () => {
     expect(screen.getByText("Clarify the intended audience")).toBeTruthy();
     expect(screen.getByText("Choose an escalation owner")).toBeTruthy();
     expect(screen.getByRole("link", { name: "run/a" }).getAttribute("href"))
-      .toBe("/operator/#/runs/run%2Fa");
+      .toBe("#/runs/run%2Fa");
     expect(screen.getByRole("button", { name: "Latest" })).toBeTruthy();
     expect(document.body.textContent).toContain('"amount": 42');
     expect(document.body.textContent).toContain('"policy": "four-eyes"');

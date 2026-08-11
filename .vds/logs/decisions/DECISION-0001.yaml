@@ -1,28 +1,34 @@
 id: DECISION-0001
-date: 2026-08-10
+at: 2026-08-10T11:55:16Z
+by: console-parity session
 decision: token_pin stays VACUOUS and is blocked on the Figma plan tier, a Principal-owned dependency. Not routed around, not faked.
-subject: the pin between the shipped stylesheet and the decided-target Figma file
+court_required: false
 why: >-
+  This concerns the pin between the shipped stylesheet and the decided-target
+  Figma file. The call was reversible and kept the proof visibly vacuous rather
+  than fabricating a target record, so its blast radius was confined to reporting
+  the external plan-tier block.
+
   A token pin is derived out of band because one of its two records is a Figma file
   behind a network call, and VDS S-7(2)(1) forbids a network call inside a proof.
-  FIGMA_TOKEN is present and authenticates: `vds figma pull` succeeded and wrote
-  .vds/ledgers/figma.yaml against file iVQBKFc3NpRH3zdOOxfPqr. What fails is
+  FIGMA_TOKEN was present and authenticated: `vds figma pull` succeeded and wrote
+  .vds/ledgers/figma.yaml against file iVQBKFc3NpRH3zdOOxfPqr. What failed was
   narrower and external: `vds pin generate` reads GET /v1/files/:key/variables/local,
-  which needs an Enterprise plan and the file_variables:read scope. This account is
-  on the "My Files" plan at tier `pro`, so the endpoint returns 403 rather than an
-  empty result. No token change fixes it; only a plan change does.
-  The pin was NOT hand-written from the values I could read by eye. A pin that VDS
-  did not derive is a realisation stored in .vds/, which S-2(4) forbids and
-  no_stored_values would then correctly fail.
-what_is_true_anyway: >-
-  The token layer was verified by direct comparison outside VDS: all 22 tokens in
-  apps/worker/src/styles.css match the decided target's [data-ui="dark"] and
-  [data-ui="light"] blocks exactly, in both themes, including --shadow. So the
-  risk this proof exists to catch is measured as absent today; what is missing is
-  the machine-derived record that keeps it absent tomorrow.
-evidence:
-  - vds figma pull --file-key iVQBKFc3NpRH3zdOOxfPqr = wrote .vds/ledgers/figma.yaml, file version 2386064713862372315
-  - vds pin generate --file-key iVQBKFc3NpRH3zdOOxfPqr = REFUSED, Figma API 403 on the local-variables endpoint
-  - mcp Figma whoami = plans[0].tier "pro"
-  - vds proof token_pin = vacuous, exit 3
-unblocks_on: an Enterprise plan with file_variables:read, after which `vds pin generate` needs no code change
+  which needs an Enterprise plan and the file_variables:read scope. This account was
+  on the "My Files" plan at tier `pro`, so the endpoint returned 403 rather than an
+  empty result. No token change fixed it; only a plan change could.
+
+  The pin was not hand-written from values read by eye. A pin VDS did not derive is
+  a realisation stored in .vds/, which S-2(4) forbids and no_stored_values would
+  correctly fail. Direct comparison outside VDS found all 22 stylesheet tokens
+  matched the decided target in both themes, including --shadow, but the
+  machine-derived record that keeps them aligned was still missing.
+
+  Evidence: `vds figma pull` wrote file version 2386064713862372315; `vds pin
+  generate` was refused with a Figma 403 on the local-variables endpoint; Figma
+  reported the account tier as `pro`; and `vds proof token_pin` was vacuous with
+  exit 3. An Enterprise plan with `file_variables:read` would unblock the same
+  derivation without a code change.
+basis:
+  - VDS S-7(2)(1)
+  - VDS S-2(4)

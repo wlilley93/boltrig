@@ -163,28 +163,16 @@ worker browser suite **22/22** including the axe sweep.
   protected, PRs only). The pre-push gate validates the WORKING TREE — push
   from a `git worktree` matching the branch (detached at the tip works;
   a branch checked out elsewhere can't get a second worktree).
-- **Worker e2e locally**: pnpm store is broken (`make worker-e2e` dies).
-  Recipe that ran green today (22/22), from `apps/worker`:
+- **Worker locally**: the former browser harness was retired with the old
+  Operator client. The Worker build recipe that ran green today was, from
+  `apps/worker`:
 
       ./node_modules/.bin/vite build
       BOLTRIG_KERNEL_URL=http://127.0.0.1:8792 \
         ./node_modules/.bin/vite preview --host 127.0.0.1 --port 4180 --strictPort
 
-  then from `ui/`: `BOLTRIG_E2E_PYTHON=$HOME/Projects/boltrig/.venv/bin/python3
-  ./node_modules/.bin/playwright test --config=playwright.worker.config.ts`.
-
-  **The trap that cost time today**: `BOLTRIG_KERNEL_URL` is read by
-  `apps/worker/vite.config.ts` to configure the PREVIEW PROXY, so it must be
-  set on the `vite preview` command, not just at build. Omit it and the proxy
-  points at the default `localhost:8000`, the app renders the sign-in screen,
-  and five specs fail on a missing `Worker navigation` sidebar — which reads
-  exactly like a render crash in your own code. If specs fail that way, load
-  the preview URL and look at the page before debugging components.
-
-  Other traps: stale preview on reuse (kill the port between builds); the
-  in-memory kernel accumulates seeded HITLs (restart between runs). Vitest's
-  reporter is `dot`/`verbose` — `--reporter=line` is Playwright's and dies with
-  an unrelated `ERR_LOAD_URL`.
+  The former Playwright harness and its separate frontend working directory no
+  longer exist; build and typecheck the Worker directly.
 - **Dev stack**: kernel runs in OrbStack `boltrig-vm`, host port **18000**
   (`orb start boltrig-vm` if stopped). Dev worker:
   `BOLTRIG_KERNEL_URL=http://192.168.139.14:18000 vite --port 1420`.
@@ -202,8 +190,8 @@ worker browser suite **22/22** including the axe sweep.
   deleted from the M4; the FamiliarUE project + MCP authoring pipeline remain
   in boltrig-familiar as the experiment record. boltrig-familiar is otherwise
   an archive candidate.
-- **Canon lives here**: `familiar/` is the source of truth; the Worker copy is
-  held byte-identical by `apps/worker/tests/familiarShaderParity.test.ts`.
+- **Canon lives here**: `familiar/` is the source of truth; the Worker Familiar
+  surface is covered by `apps/worker/tests/familiarStage.test.tsx`.
 - **ADR 0025 placement, as amended by the decided target** (recorded in
   `e378f74` and the Figma/VDS register): empty state opens quiet (no hero
   Stage); the one Stage is the newest assistant turn's bullet (bob 2.5px/7.9s,

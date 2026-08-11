@@ -4,7 +4,6 @@ import {
   type AgentCapabilityAuthorInfo,
   type AuditNode,
   type CapabilityLifecycleResponse,
-  type FamiliarGenotype,
   type MemoryFactView,
   type MemoryIngestionRow,
   type RunRow,
@@ -18,12 +17,12 @@ import { client } from "../client";
 import { useRouteSelection } from "../useRouteSelection";
 import { AgentProfileEditor } from "./AgentProfileEditor";
 import { AgentTabsStrip } from "./build/AgentTabsStrip";
-import { RecentlyChanged } from "./build/RecentlyChanged";
 import {
   ExactApprovalFinalizer,
   useExactApprovalFinalizer,
 } from "./ExactApprovalFinalizer";
 import { PermanentFleetTopology } from "./PermanentFleetTopology";
+import { CreateMethodIcon, GovernedCreateModal } from "./GovernedCreateModal";
 import { Topbar, Unavailable } from "./Shell";
 
 type SurfaceState = "loading" | "ready" | "denied" | "not-found" | "unavailable";
@@ -172,7 +171,7 @@ export function RunsView() {
         <div className="page-intro">
           <div>
             <h2>Execution history</h2>
-            <p>Scope-filtered runs with their durable execution tree. Raw tool events remain available in Operator.</p>
+            <p>Scope-filtered runs with their durable execution tree and recorded execution events.</p>
           </div>
           <div className="inline-actions">
             <input className="search" aria-label="Search runs" placeholder="Search runs…" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -242,7 +241,6 @@ export function RunsView() {
                   {cancelArmed ? "Confirm cancel run" : "Cancel run"}
                 </button>
               )}
-              {selected.run_id && <a className="secondary-button" href={`/operator/#/runs/${encodeURIComponent(selected.run_id)}`}>Open full event stream</a>}
             </aside>
           )}
         </div>}
@@ -442,7 +440,7 @@ export function WorkView() {
         load();
         inspect(result.item);
       } else if (createFinalizer.begin(input, result, "Work creation")) {
-        setMutationMessage("Work creation is waiting for approval in Inbox.");
+        setMutationMessage("Work creation is waiting for approval in the originating chat.");
       } else {
         setMutationMessage(workMutationNotice(result, "Work creation"));
       }
@@ -709,7 +707,7 @@ function WorkDetail({ detail, onClose, onSelect, onChanged }: { detail: WorkDeta
             : `Parent updated to ${result.item.parent_id ?? "root"}.`;
         onChanged(result.item, message);
       } else if (finalizer.begin(input, result, "Work update")) {
-        setNotice("Work update is waiting for approval in Inbox.");
+        setNotice("Work update is waiting for approval in the originating chat.");
       } else {
         setNotice(workMutationNotice(result, "Work update"));
       }
@@ -798,7 +796,7 @@ const MANUAL_WORK_TRANSITIONS: Record<WorkStatus, WorkStatus[]> = {
 };
 
 function workMutationNotice(result: { status: string; reason?: string }, action: string): string {
-  if (result.status === "pending_human") return `${action} is waiting for approval in Inbox.`;
+  if (result.status === "pending_human") return `${action} is waiting for approval in the originating chat.`;
   if (result.status === "denied") return result.reason ?? `${action} was denied.`;
   if (result.status === "degraded") return `${action} could not complete because the control plane is degraded.`;
   return result.reason ?? `${action} failed.`;
@@ -853,15 +851,16 @@ export function AgentsView() {
   const [agents, setAgents] = useState<AgentCapabilityAuthorInfo[]>([]);
   const [surfaceState, setSurfaceState] = useState<SurfaceState>("loading");
   const loadedAgents = useRef(false);
-  // Names with a pending Inbox decision they raised (HITL requested_by /
+  // Names with a pending decision they raised (HITL requested_by /
   // requested_on_behalf_of). This is the only real per-agent "asking" signal
-  // this client has; when the Inbox list is not visible to this role the set
+  // this client has; when the decision is not visible to this role the set
   // stays empty and no waiting state is claimed.
-  const [askingActors, setAskingActors] = useState<ReadonlySet<string>>(new Set());
+  const [askingActors, setAskingActors] = useState<ReadonlySet<string> | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState("");
   const [editing, setEditing] = useState<AgentCapabilityAuthorInfo | null | undefined>(undefined);
+  const [creatingAgent, setCreatingAgent] = useState(false);
   const lifecycleFinalizer = useExactApprovalFinalizer<
     { name: string; action: "retire" | "restore" },
     CapabilityLifecycleResponse
@@ -913,7 +912,7 @@ export function AgentsView() {
             .filter((value): value is string => Boolean(value))
         ))));
       })
-      .catch(() => setAskingActors(new Set()));
+      .catch(() => setAskingActors(null));
   }
   useEffect(refresh, []);
   useEffect(() => {
@@ -941,7 +940,7 @@ export function AgentsView() {
         result,
         action === "retire" ? "Profile retirement" : "Profile restore",
       )) {
-        setMessage(`${action === "retire" ? "Retirement" : "Restore"} is waiting for approval in Inbox.`);
+        setMessage(`${action === "retire" ? "Retirement" : "Restore"} is waiting for approval in the originating chat.`);
       } else if (result.status === "ok") {
         setMessage(`${agent.name} ${action === "retire" ? "retired" : "restored"}.`);
         refresh();
@@ -955,24 +954,24 @@ export function AgentsView() {
     }
   }
 
-  const skillCount = new Set(agents.flatMap((agent) => agent.supported_skills)).size;
-  const activeCount = agents.filter((agent) => agent.is_active).length;
   const unknownAgent = surfaceState === "ready"
     && Boolean(selectedAgentName)
     && !agents.some((agent) => agent.name === selectedAgentName);
   return (
-    <div className="page">
-      <div className="console-page">
-        <AgentTabsStrip active="agents" />
-        <div className="console-head">
-          <div>
-            <h1>Agents</h1>
-            <p>Who does what. Each one can only do what the person or agent above it can do, and usually less.</p>
-          </div>
+    <div className="page agents-fleet-shell">
+      <div className="agents-fleet-page">
+        <div className="agents-fleet-topbar">
+          <AgentTabsStrip active="agents" />
           {surfaceState === "ready" && (
             <button
               className="console-primary"
-              onClick={() => { lifecycleFinalizer.invalidate(); setSelectedAgentName(null); setEditing(null); }}
+              onClick={() => {
+                lifecycleFinalizer.invalidate();
+                setMessage("");
+                setSelectedAgentName(null);
+                setEditing(undefined);
+                setCreatingAgent(true);
+              }}
               type="button"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
@@ -982,120 +981,83 @@ export function AgentsView() {
             </button>
           )}
         </div>
-        {error && <p className="notice">{error}</p>}
-        {message && <p className="notice" role="status">{message}</p>}
-        <ExactApprovalFinalizer controller={lifecycleFinalizer} />
+
+        {(error || message || lifecycleFinalizer.state !== null) && (
+          <div className="agents-fleet-alerts">
+            {error && <p className="notice">{error}</p>}
+            {message && <p className="notice" role="status">{message}</p>}
+            <ExactApprovalFinalizer controller={lifecycleFinalizer} />
+          </div>
+        )}
+
         {surfaceState === "loading" && <Unavailable title="Loading agent profiles">Checking the author-visible agent inventory.</Unavailable>}
         {surfaceState === "denied" && <Unavailable title="Agent access denied">Your current role cannot view or author agent profiles.</Unavailable>}
         {surfaceState === "not-found" && <Unavailable title="Agent inventory not found">This deployment does not expose the canonical agent inventory route.</Unavailable>}
         {surfaceState === "unavailable" && <Unavailable title="Agents unavailable">The governed agent inventory could not be reached.</Unavailable>}
         {surfaceState === "ready" && unknownAgent && <Unavailable title="Agent profile not found">No visible agent profile matches “{selectedAgentName}”.</Unavailable>}
-        {surfaceState === "ready" && <PermanentFleetTopology />}
-        {surfaceState === "ready" && !unknownAgent && editing !== undefined && <AgentProfileEditor initial={editing} onCancel={() => { setEditing(undefined); setSelectedAgentName(null); }} onSaved={refresh} />}
-        {surfaceState === "ready" && !unknownAgent && (agents.length === 0 ? <Unavailable title="No agent profiles visible">Your workspace has not approved a durable or ephemeral agent profile for this role.</Unavailable> : (
-          <div className="console-table-wrap">
-            <div className="console-table">
-              <div className="console-table-head">
-                <span style={{ flex: 1 }}>Agent</span>
-                <span className="console-cell">What it may do</span>
-                <span className="console-state">State</span>
-                <span className="console-far">Tier</span>
-                <span aria-hidden className="agents-actions-spacer" />
-              </div>
-              {agents.map((agent) => (
-                <AgentRow
-                  agent={agent}
-                  asking={agent.is_active && askingActors.has(agent.name)}
-                  busy={busy === agent.name}
-                  key={agent.name}
-                  onEdit={() => setSelectedAgentName(agent.name)}
-                  onLifecycle={() => void changeLifecycle(agent)}
-                />
-              ))}
-            </div>
-            {/* The decided target puts a "Today" spend column here. This client
-                has no per-agent spend windowed to today (client.cost().by_actor
-                is total-window micros), so the column states the cost tier it
-                does have rather than a figure it does not. */}
-            <p className="console-foot">
-              Each agent&rsquo;s picture is drawn from what it is and how its work is going.
-              Nothing in it is decoration. {skillCount} skills are visible to this role.
-            </p>
+        {surfaceState === "ready" && !unknownAgent && (
+          <PermanentFleetTopology
+            askingActors={askingActors}
+            lifecycleBusy={busy}
+            onCreateProfile={(parentName) => {
+              lifecycleFinalizer.invalidate();
+              setSelectedAgentName(null);
+              setEditing(null);
+              setMessage(parentName
+                ? `Profile author opened from ${parentName}. This profile API does not persist a parent edge.`
+                : "");
+            }}
+            onEditProfile={(agent) => setSelectedAgentName(agent.name)}
+            onLifecycle={(agent) => void changeLifecycle(agent)}
+            profiles={agents}
+          />
+        )}
+        {surfaceState === "ready" && !unknownAgent && editing !== undefined && (
+          <div className="agents-profile-editor-scrim" role="presentation">
+            <AgentProfileEditor
+              initial={editing}
+              onCancel={() => { setEditing(undefined); setSelectedAgentName(null); }}
+              onSaved={refresh}
+            />
           </div>
-        ))}
-        {surfaceState === "ready" && <RecentlyChanged />}
+        )}
+        {surfaceState === "ready" && !unknownAgent && creatingAgent && (
+          <GovernedCreateModal
+            lead="An agent is someone to hand work to. It can only ever do what you can."
+            methods={[
+              {
+                available: false,
+                description: "Start from an agent already doing the job well, then narrow it. Nothing is widened by copying.",
+                icon: <CreateMethodIcon kind="copy" />,
+                tag: "Recommended",
+                title: "Copy one that works",
+                unavailableReason: "The capability API does not expose profile cloning.",
+              },
+              {
+                available: false,
+                description: "Say what it should look after, then review a proposed capability profile.",
+                icon: <CreateMethodIcon kind="describe" />,
+                title: "Describe the job",
+                unavailableReason: "No proposal-from-description route is exposed.",
+              },
+              {
+                available: true,
+                description: "An empty agent with no permissions at all. Grant each capability deliberately in the governed author.",
+                icon: <CreateMethodIcon kind="empty" />,
+                onSelect: () => {
+                  setCreatingAgent(false);
+                  setEditing(null);
+                },
+                title: "Start from nothing",
+              },
+            ]}
+            onClose={() => setCreatingAgent(false)}
+            title="New agent"
+          />
+        )}
       </div>
     </div>
   );
-}
-
-function AgentRow({ agent, asking, busy, onEdit, onLifecycle }: {
-  agent: AgentCapabilityAuthorInfo;
-  asking: boolean;
-  busy: boolean;
-  onEdit(): void;
-  onLifecycle(): void;
-}) {
-  const genotype = agent.familiar_genotype;
-  const hasIdentity = genotype?.source === "agent_capability.name.v1";
-  const skills = agent.supported_skills;
-  // The row is a div carrying two buttons rather than one clickable row, because
-  // the lifecycle control has to stay a real button: it is the entry to the
-  // exact-approval replay, and a control nested inside a button is neither valid
-  // nor reachable.
-  return (
-    <div className="console-row">
-      <span
-        aria-label={hasIdentity
-          ? `${agent.name} profile Familiar`
-          : `${agent.name} profile identity unavailable`}
-        className="console-mark profile-familiar"
-        data-genotype-source={hasIdentity ? genotype.source : "unavailable"}
-        role="img"
-        style={hasIdentity ? familiarStyle(genotype) : undefined}
-      ><i /></span>
-      <button className="console-row-main" onClick={onEdit} type="button">
-        <span className="console-row-title">
-          <span>{agent.name}</span>
-          <span className="console-tech">{agent.runtime}</span>
-        </span>
-        <span className="console-row-sub">
-          {agent.is_ephemeral ? "Ephemeral worker profile" : "Persistent profile"}
-        </span>
-      </button>
-      <span className="console-cell">
-        {skills.length === 0
-          ? "No named skills"
-          : `${skills.slice(0, 3).join(", ")}${skills.length > 3 ? ` +${skills.length - 3}` : ""}`}
-      </span>
-      <span
-        className="console-state"
-        data-tone={asking ? "asking" : undefined}
-        title={asking ? "This profile raised a decision that is waiting in Inbox." : undefined}
-      >
-        {asking ? "asking" : agent.status}
-      </span>
-      <span className="console-far">{agent.cost_tier}</span>
-      <button
-        className="console-lifecycle"
-        disabled={busy}
-        onClick={onLifecycle}
-        type="button"
-      >
-        {busy ? "Requesting\u2026" : agent.is_active ? "Retire profile" : "Restore profile"}
-      </button>
-    </div>
-  );
-}
-
-function familiarStyle(genotype: FamiliarGenotype): React.CSSProperties {
-  const colors = (genotype.palette ?? [])
-    .filter((value) => /^#[0-9a-f]{6}$/i.test(value))
-    .slice(0, 3);
-  if (colors.length !== 3) return {};
-  return {
-    background: `radial-gradient(circle at 35% 30%, ${colors.join(", ")})`,
-  };
 }
 
 // The Knowledge surface was recast to the decided target's file-table +
@@ -1395,7 +1357,7 @@ export function MemoryView() {
       result.status === "ok"
         ? "The selected fact was forgotten."
         : result.status === "pending_human"
-          ? "Forgetting this fact is waiting for approval in Inbox."
+          ? "Forgetting this fact is waiting for approval in the originating chat."
           : result.status
     ));
     approval.clear();
@@ -1435,7 +1397,7 @@ export function MemoryView() {
       result.status === "ok"
         ? `Ingestion ${result.id ?? ""} added ${result.facts_added ?? 0} facts after screening.`
         : result.status === "pending_human"
-          ? "Ingestion is waiting for approval in Inbox."
+          ? "Ingestion is waiting for approval in the originating chat."
           : `Ingestion status: ${result.status}.`
     ));
     if (result.status === "ok") {

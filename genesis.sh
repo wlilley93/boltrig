@@ -164,7 +164,7 @@ fi
 
 # ---------------------------------------------------------------- Phase 5: verify
 echo "==> Phase 5: verify (kernel health + a real login round-trip)"
-BASE="http://localhost:${UI_PORT:-8080}"
+BASE="http://localhost:${WORKER_PORT:-8082}"
 HZ="$(curl -s -o /dev/null -w '%{http_code}' "$BASE/healthz" || true)"
 echo "  GET /healthz -> $HZ"
 LOGIN="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/v1/auth/login" \

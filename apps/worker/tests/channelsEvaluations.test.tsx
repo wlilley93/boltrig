@@ -504,7 +504,7 @@ describe("Worker channel administration", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
     await screen.findByText(
-      "Channel configuration is waiting for human approval in Inbox.",
+      "Channel configuration is waiting for human approval in the originating chat.",
     );
     expect(api.configureChannel).toHaveBeenNthCalledWith(1, channel.id, {
       name: "Priority support",
@@ -811,7 +811,7 @@ describe("Worker channel administration", () => {
       "delivery-terminal",
       "2026-07-30T08:05:00+00:00",
     ));
-    await screen.findByText("Delivery retry is waiting for human approval in Inbox.");
+    await screen.findByText("Delivery retry is waiting for human approval in the originating chat.");
     fireEvent.click(screen.getByRole("button", {
       name: "Check approval and continue exact retry",
     }));
@@ -853,7 +853,7 @@ describe("Worker channel administration", () => {
     const channelButton = await screen.findByRole("button", { name: /Support intake/ });
     fireEvent.click(channelButton);
     fireEvent.click(await screen.findByRole("button", { name: "Request retry" }));
-    await screen.findByText("Waiting for an Inbox decision");
+    await screen.findByText("Waiting for a decision in the originating chat");
 
     fireEvent.click(channelButton);
     await screen.findByText("Pending delivery retry changed");
@@ -975,7 +975,7 @@ describe("Worker evaluations", () => {
       assertions: { must_not_call: ["ticket.delete"] },
       labels: ["security", "regression"],
     }));
-    expect(await screen.findByText("This evaluation case is waiting for human approval in Inbox.")).toBeTruthy();
+    expect(await screen.findByText("This evaluation case is waiting for human approval in the originating chat.")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Labels (comma separated)"), {
       target: { value: "security, regression, approved" },
     });
@@ -1093,7 +1093,7 @@ describe("Worker evaluations", () => {
 
     await waitFor(() => expect(api.restoreEvalCase).toHaveBeenCalledWith("safe-triage"));
     expect(await screen.findByText(
-      "This evaluation restore is waiting for human approval in Inbox.",
+      "This evaluation restore is waiting for human approval in the originating chat.",
     )).toBeTruthy();
     fireEvent.click(screen.getByRole("button", {
       name: "Check approval and apply exact change",

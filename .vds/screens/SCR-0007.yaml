@@ -1,0 +1,23 @@
+id: SCR-0007
+route: apps/worker/src/components/ChatView.tsx
+status: registered
+contractVersion: 1
+frame:
+  fileKey: iVQBKFc3NpRH3zdOOxfPqr
+  nodeId: 13:2
+  capturedAt: 2026-08-11T05:14:18Z
+arrangement:
+  columns: 1
+  regions:
+  - sidebar
+  - body
+  bands:
+  - header
+  - body_rows
+  - empty_state
+  - footer
+  - keyboard
+basis:
+- USER-DIRECTION-2026-08-11
+- ACT-VDS-001:s5a
+notes: New chat is a distinct visual state of ChatView. VDS currently keys stage-four coverage by route, so this state shares its shipped-source key with SCR-0001 and requires separate state evidence outside the route ledger.

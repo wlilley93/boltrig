@@ -1,0 +1,9 @@
+id: DECISION-0004
+at: 2026-08-11T05:19:33Z
+by: williamlilley
+decision: Component-level Figma linkage remains unavailable; this parity run may claim only the screen-frame integration it can evidence.
+court_required: false
+why: Live Figma reads resolve all seven CURRENT SOURCE frames, but Code Connect rejects the current seat and every component register row has no Figma node. The shell also has no FIGMA_TOKEN for a fresh REST ledger pull. Inventing component mappings or refreshing a ledger from reduced metadata would turn an external limitation into false evidence, so the blocked linkage remains explicit until the required seat and credential are available.
+basis:
+- USER-DIRECTION-2026-08-11
+- ACT-VDS-001:s7

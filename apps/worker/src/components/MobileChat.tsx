@@ -1,8 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import type { ChatMessage, HitlEntry, NormalizedTurn } from "@wlilley93/boltrig-web-sdk";
+import { useEffect, useId, useRef, useState } from "react";
+import {
+  normalizeEvents,
+  type ChatMessage,
+  type HitlEntry,
+  type NormalizedTurn,
+} from "@wlilley93/boltrig-web-sdk";
 
 import { FamiliarBadge } from "./familiar/FamiliarBadge";
+import { LiveQuestionCard } from "./LiveQuestionCard";
 import "./chat/chat.css";
+import "./MobileChatParity.css";
 
 // The mobile conversation surface.
 //
@@ -13,10 +20,19 @@ import "./chat/chat.css";
 // authorities behind the same variable names, which is the one shape the token
 // layer may not take.
 
-function StateWord({ state }: { state: "done" | "waiting" | "running" }) {
+function statusTone(status: string): "done" | "waiting" | "running" | "failed" | undefined {
+  const value = status.toLowerCase();
+  if (["ok", "done", "completed", "answered"].includes(value)) return "done";
+  if (["waiting", "pending", "paused", "degraded"].includes(value)) return "waiting";
+  if (["running", "working", "started"].includes(value)) return "running";
+  if (["failed", "error", "rejected"].includes(value)) return "failed";
+  return undefined;
+}
+
+function StateWord({ state }: { state: string }) {
   return (
-    <span className="m-state" data-tone={state}>
-      {state === "done" ? "done" : state === "waiting" ? "waiting" : "running"}
+    <span className="m-state" data-tone={statusTone(state)}>
+      {state}
     </span>
   );
 }
@@ -28,9 +44,11 @@ function StateWord({ state }: { state: "done" | "waiting" | "running" }) {
 function MobilePendingRow({
   hitl,
   onRespond,
+  settled,
 }: {
   hitl: HitlEntry;
   onRespond?(id: string, decision: string): Promise<boolean>;
+  settled?: boolean;
 }) {
   const [phase, setPhase] = useState<"open" | "sending" | "done" | "failed">("open");
   const [decision, setDecision] = useState("");
@@ -79,9 +97,45 @@ function MobilePendingRow({
       )}
       {phase === "failed" && (
         <p className="m-pending-note" role="alert">
-          The response was not accepted. It may already be settled; check the Inbox.
+          The response was not accepted. It may already be settled; return to the originating chat.
         </p>
       )}
+      {settled && (
+        <p className="m-pending-note">This request belongs to a completed turn and is no longer answerable.</p>
+      )}
+    </div>
+  );
+}
+
+function MobileDecisions({
+  turn,
+  answerable,
+  onRespondHitl,
+}: {
+  turn: NormalizedTurn;
+  answerable: boolean;
+  onRespondHitl?(id: string, decision: string): Promise<boolean>;
+}) {
+  if (turn.hitls.length === 0 && turn.questions.length === 0) return null;
+  return (
+    <div className="m-card m-pending">
+      {turn.hitls.map((hitl) => (
+        <MobilePendingRow
+          hitl={hitl}
+          key={hitl.hitlRequestId}
+          onRespond={answerable ? onRespondHitl : undefined}
+          settled={!answerable}
+        />
+      ))}
+      {turn.questions.map((question) => answerable ? (
+        <LiveQuestionCard key={question.questionId} question={question} />
+      ) : (
+        <div className="m-settled-question" key={question.questionId}>
+          <strong>Question from this run</strong>
+          <p>{question.prompt}</p>
+          <p>This question belongs to a completed turn and is no longer answerable.</p>
+        </div>
+      ))}
     </div>
   );
 }
@@ -91,8 +145,23 @@ export function MobileChat({
   subtitle,
   messages,
   turn,
+  turnIsLive,
+  turnIsAnswerable,
+  newState,
+  loadingConversation,
+  conversationLoadError,
+  error,
+  continuity,
+  retryFollow,
+  queuedMessages,
+  composerDisabled,
+  closed,
   onBack,
   onSend,
+  onStop,
+  onRetryConversation,
+  onReconnect,
+  onSteerQueued,
   busy,
   composerValue,
   onComposerChange,
@@ -102,8 +171,23 @@ export function MobileChat({
   subtitle: string;
   messages: ChatMessage[];
   turn: NormalizedTurn;
+  turnIsLive: boolean;
+  turnIsAnswerable: boolean;
+  newState: boolean;
+  loadingConversation: boolean;
+  conversationLoadError: string;
+  error: string;
+  continuity: string;
+  retryFollow: boolean;
+  queuedMessages: ChatMessage[];
+  composerDisabled: boolean;
+  closed: boolean;
   onBack(): void;
   onSend(): void;
+  onStop(): void;
+  onRetryConversation(): void;
+  onReconnect(): void;
+  onSteerQueued(message: ChatMessage): void;
   busy: boolean;
   composerValue: string;
   onComposerChange(value: string): void;
@@ -122,13 +206,33 @@ export function MobileChat({
 
   const [traceOpen, setTraceOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(true);
-
-  const lastUser = [...messages].reverse().find((message) => message.role === "user");
-  const lastAssistant = [...messages].reverse().find(
-    (message) => message.role === "assistant" && !message.superseded_by,
-  );
+  const traceId = useId();
+  const planId = useId();
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const followLatestRef = useRef(true);
+  const visibleMessages = messages.filter((message) => !message.superseded_by);
+  const renderedMessages = visibleMessages.map((message) => ({
+    message,
+    durableTurn: message.events?.length ? normalizeEvents(message.events) : null,
+  }));
+  const hasDurableDecisions = renderedMessages.some(({ durableTurn }) => Boolean(
+    durableTurn && (durableTurn.hitls.length > 0 || durableTurn.questions.length > 0),
+  ));
   const steps = turn.steps;
   const doneSteps = steps.filter((step) => step.status === "ok").length;
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body && followLatestRef.current) body.scrollTop = body.scrollHeight;
+  }, [messages, turn.text, turn.timeline.length, continuity, error, queuedMessages.length]);
+
+  const composerPlaceholder = closed
+    ? "This conversation is closed"
+    : conversationLoadError
+      ? "Conversation unavailable — retry above"
+      : loadingConversation
+        ? "Loading conversation state…"
+        : "Follow up";
 
   return (
     <div className="mobile-surface">
@@ -144,36 +248,86 @@ export function MobileChat({
         </div>
       </header>
 
-      <div className="m-body">
-        {messages.length === 0 && (
+      <div
+        aria-label="Conversation transcript"
+        aria-live="polite"
+        className="m-body"
+        onScroll={(event) => {
+          const body = event.currentTarget;
+          followLatestRef.current = body.scrollHeight - body.scrollTop - body.clientHeight < 80;
+        }}
+        ref={bodyRef}
+        role="log"
+        tabIndex={0}
+      >
+        {newState && visibleMessages.length === 0 && !loadingConversation && !conversationLoadError && (
           <p className="m-empty">Say what needs doing. It will plan the work, use the tools this
             workspace grants, and stop for you before anything consequential.</p>
         )}
 
-        {lastUser && (
-          <div className="m-user-row">
-            <div className="m-bubble">{lastUser.content}</div>
+        {loadingConversation && (
+          <p className="m-notice" role="status">Loading conversation…</p>
+        )}
+
+        {conversationLoadError && (
+          <div className="m-notice" role="alert">
+            <p>Could not load this conversation. {conversationLoadError}</p>
+            <button className="m-inline-action" onClick={onRetryConversation} type="button">
+              Retry conversation
+            </button>
           </div>
         )}
 
-        {(turn.tools.length > 0 || turn.subagents.length > 0) && (
+        {renderedMessages.map(({ message, durableTurn }) => {
+          const role = message.role === "user"
+            ? "user"
+            : message.role === "assistant" ? "assistant" : "other";
+          return (
+            <article className={`m-message m-message-${role}`} key={message.id}>
+              {role === "other" && <span className="m-message-role">{message.role}</span>}
+              <p>{message.content}</p>
+              {(message.attachments?.length ?? 0) > 0 && (
+                <ul aria-label="Message attachments" className="m-message-attachments">
+                  {message.attachments!.map((attachment, index) => (
+                    <li key={`${attachment.name}-${index}`}>{attachment.name}</li>
+                  ))}
+                </ul>
+              )}
+              {durableTurn && (
+                <MobileDecisions turn={durableTurn} answerable={false} />
+              )}
+            </article>
+          );
+        })}
+
+        {turnIsLive && (
+          <article aria-label="Live response" className="m-message m-message-assistant m-message-live">
+            <p>{turn.text || "Working…"}</p>
+          </article>
+        )}
+
+        {turn.tools.length > 0 && (
           <>
-            <button className="m-trace" onClick={() => setTraceOpen((open) => !open)} type="button">
+            <button
+              aria-controls={traceId}
+              aria-expanded={traceOpen}
+              className="m-trace"
+              onClick={() => setTraceOpen((open) => !open)}
+              type="button"
+            >
               <svg fill="none" height="18" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" viewBox="0 0 24 24" width="18">
                 <circle cx="11" cy="11" r="7" /><line x1="16.5" x2="21" y1="16.5" y2="21" />
               </svg>
-              <span>
-                {`Read ${turn.tools.length} ${turn.tools.length === 1 ? "tool" : "tools"}`}
-                {turn.subagents.length > 0 ? `, ${turn.subagents.length} working` : ""}
-              </span>
+              <span>{turn.tools.length} {turn.tools.length === 1 ? "tool" : "tools"}</span>
               <span className="m-caret" data-open={traceOpen ? "true" : undefined}>›</span>
             </button>
             {traceOpen && (
-              <div className="m-card m-trace-list">
+              <div className="m-card m-trace-list" id={traceId}>
                 {turn.tools.map((tool, index) => (
                   <div className="m-trace-row" key={tool.callId ?? `${tool.key}-${index}`}>
-                    <span className="m-dot" data-tone={tool.status === "ok" ? "done" : tool.status === "pending" ? "running" : "failed"} />
+                    <span className="m-dot" data-tone={statusTone(tool.status)} />
                     <span className="m-trace-label">{tool.verb}</span>
+                    <StateWord state={tool.status} />
                   </div>
                 ))}
               </div>
@@ -181,48 +335,55 @@ export function MobileChat({
           </>
         )}
 
-        <div className="m-sep" />
-
-        {lastAssistant && <p className="m-para">{lastAssistant.content}</p>}
-
         {turn.subagents.length > 0 && (
           <div className="m-tree">
             <div className="m-lead">
-              <FamiliarBadge state={turn.ended ? "ready" : "working"} label="lead" />
-              <span className="m-lead-label">{turn.subagents.length} working</span>
-              <span className="m-lead-sub">leading this</span>
+              <span className="m-lead-label">
+                {turn.subagents.length} {turn.subagents.length === 1 ? "subagent" : "subagents"}
+              </span>
             </div>
             <div className="m-fanout">
-              {turn.subagents.map((agent) => (
-                <div className="m-fan-row" key={agent.key}>
-                  <FamiliarBadge
-                    state={turn.ended ? "ready" : "working"}
-                    label={agent.name ?? agent.task}
-                  />
-                  <span className="m-fan-label">{agent.name ?? agent.task}</span>
-                  <StateWord state={turn.ended ? "done" : "running"} />
-                </div>
-              ))}
+              {turn.subagents.map((agent) => {
+                const status = agent.status ?? (turnIsAnswerable ? "running" : "status unavailable");
+                return (
+                  <div className="m-fan-row" key={agent.key}>
+                    <FamiliarBadge
+                      genotype={agent.familiarGenotype}
+                      state={status === "running" ? "working" : "ready"}
+                      label={agent.name ?? agent.task}
+                    />
+                    <span className="m-fan-label">{agent.name ?? agent.task}</span>
+                    <StateWord state={status} />
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
         {steps.length > 0 && (
           <div className="m-card">
-            <button className="m-plan-head" onClick={() => setPlanOpen((open) => !open)} type="button">
+            <button
+              aria-controls={planId}
+              aria-expanded={planOpen}
+              className="m-plan-head"
+              onClick={() => setPlanOpen((open) => !open)}
+              type="button"
+            >
               <span className="m-plan-title">The plan</span>
               <span className="m-plan-progress">{doneSteps} of {steps.length}</span>
               <span className="m-caret" data-open={planOpen ? "true" : undefined}>›</span>
             </button>
             {planOpen && (
-              <div className="m-plan-rows">
+              <div className="m-plan-rows" id={planId}>
                 {steps.map((step, index) => (
                   <div className="m-plan-row" key={step.stepId}>
-                    <span className="m-dot" data-tone={step.status === "ok" ? "done" : step.status === "failed" || step.status === "error" ? "failed" : "running"} />
+                    <span className="m-dot" data-tone={statusTone(step.status)} />
                     <span className="m-plan-n">{index + 1}</span>
                     <span className="m-plan-label" data-done={step.status === "ok" ? "true" : undefined}>
                       {step.action}
                     </span>
+                    <StateWord state={step.status} />
                   </div>
                 ))}
               </div>
@@ -230,36 +391,52 @@ export function MobileChat({
           </div>
         )}
 
-        {turn.hitls.length > 0 && (
-          <div className="m-card m-pending">
-            {turn.hitls.map((hitl) => (
-              <MobilePendingRow
-                hitl={hitl}
-                key={hitl.hitlRequestId}
-                onRespond={onRespondHitl}
-              />
-            ))}
+        {(turnIsLive || !hasDurableDecisions) && (
+          <MobileDecisions
+            answerable={turnIsAnswerable}
+            onRespondHitl={onRespondHitl}
+            turn={turn}
+          />
+        )}
+
+        {continuity && (
+          <div className="m-notice" role="status">
+            <p>{continuity}</p>
+            {retryFollow && (
+              <button className="m-inline-action" onClick={onReconnect} type="button">Reconnect</button>
+            )}
           </div>
+        )}
+
+        {error && <p className="m-notice" role="alert">{error}</p>}
+
+        {queuedMessages.length > 0 && (
+          <section aria-label="Queued messages" className="m-queued">
+            <h2>Queued</h2>
+            {queuedMessages.map((message) => (
+              <div className="m-queued-row" key={message.id}>
+                <p>{message.content || "Queued instruction"}</p>
+                <button onClick={() => onSteerQueued(message)} type="button">Load</button>
+              </div>
+            ))}
+          </section>
         )}
       </div>
 
       <div className="m-composer">
-        <button aria-label="Attach" className="m-round-sm" type="button">
-          <svg fill="none" height="21" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" viewBox="0 0 24 24" width="21">
-            <line x1="12" x2="12" y1="5" y2="19" /><line x1="5" x2="19" y1="12" y2="12" />
-          </svg>
-        </button>
         <input
           aria-label="Follow up"
           className="m-input"
+          disabled={composerDisabled}
           onChange={(event) => onComposerChange(event.target.value)}
-          placeholder="Follow up"
+          placeholder={composerPlaceholder}
           value={composerValue}
         />
         <button
           aria-label={busy ? "Stop" : "Send"}
           className="m-send"
-          onClick={onSend}
+          disabled={!busy && (composerDisabled || !composerValue.trim())}
+          onClick={busy ? onStop : onSend}
           type="button"
         >
           {busy ? (

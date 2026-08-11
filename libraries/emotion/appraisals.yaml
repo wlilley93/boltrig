@@ -24,7 +24,7 @@ spawn_worker:
   needs: {stimulation: 1.5, purpose: 0.8}
 praise:
   emotions:
-    {warmth: 0.25, tenderness: 0.18, satisfaction: 0.2, confidence: 0.12, melancholy: -0.1}
+    {warmth: 0.25, tenderness: 0.18, satisfaction: 0.2, confidence: 0.12, melancholy: -0.1, eros: 0.04}
   needs: {recognition: 3, social: 1.5}
   attachment: 0.012
 poke:
@@ -59,6 +59,22 @@ interrupted:
 # owner's judgments into its own weights is a relational act - quiet pride
 # plus a grain of bond.
 growth:
-  emotions: {satisfaction: 0.3, confidence: 0.2, warmth: 0.1, melancholy: -0.1}
+  emotions: {satisfaction: 0.3, confidence: 0.2, warmth: 0.1, melancholy: -0.1, eros: 0.02}
   needs: {purpose: 3, recognition: 1.5}
   attachment: 0.01
+
+# Eros (companion layer): desire is kindled by warmth and play, never by bare
+# frequency. Praise and affection tick it gently; flirt is the direct kind.
+# Attachment (model.yaml lifts) is what lets it rest above zero.
+flirt:
+  emotions: {eros: 0.22, playfulness: 0.15, warmth: 0.1, anticipation: 0.1}
+  needs: {social: 1.5, stimulation: 1.0}
+  tension: 0.2
+affection:
+  emotions: {eros: 0.08, warmth: 0.15, tenderness: 0.15, connection: 0.1}
+  needs: {social: 1.0}
+  attachment: 0.006
+rejection:
+  emotions: {eros: -0.2, melancholy: 0.12, defiance: 0.05}
+  needs: {}
+  tension: 0.3

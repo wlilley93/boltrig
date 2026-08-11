@@ -93,7 +93,7 @@ export function HealthSection({ head = true }: { head?: boolean }) {
     if (typeof client.hitl === "function") {
       void client.hitl()
         .then((result) => { if (!cancelled) setPending((result.requests ?? []).length); })
-        .catch(() => { /* a role that cannot read the inbox shows a dash */ });
+        .catch(() => { /* a role that cannot read approval state shows a dash */ });
     }
     if (typeof client.budgets === "function") {
       void client.budgets()
@@ -156,7 +156,7 @@ export function HealthSection({ head = true }: { head?: boolean }) {
           <span className="settings-stat-label">Waiting on a person</span>
           <span className="settings-stat-value">{pending === null ? "—" : pending}</span>
           <span className="settings-stat-note">
-            {pending === null ? "not readable with your role" : "approvals and questions in the inbox"}
+            {pending === null ? "not readable with your role" : "approvals and questions in chat"}
           </span>
         </div>
         <div className="settings-stat">

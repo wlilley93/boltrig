@@ -4,12 +4,12 @@ import {
   type KnowledgeAsset,
   type KnowledgeAssetDetailResponse,
   type KnowledgeMutationResponse,
-  type KnowledgeProvider,
   type KnowledgeSearchHit,
   type KnowledgeUploadResponse,
 } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../../client";
+import { navigate } from "../../routes";
 import { useRouteSelection } from "../../useRouteSelection";
 import { AgentTabsStrip } from "../build/AgentTabsStrip";
 import {
@@ -20,19 +20,21 @@ import { Unavailable } from "../Shell";
 import { RemembersTab } from "./RemembersTab";
 
 import "./knowledge.css";
+import "./KnowledgeParity.css";
 
 // The decided target's Knowledge surface (design lines 897-1045): a file
 // table with a persistent right detail rail, a staged upload card, a search
 // box, and a "What it remembers" tab. Deviations from the design are honesty
 // decisions, each reported to the orchestrator:
-//   - No Quoted counts (per file or per passage) and no Size column: neither
-//     figure exists on any endpoint.
+//   - Quoted counts and file sizes remain in the decided table geometry, but
+//     render an explicit unavailable dash because neither figure exists on an
+//     endpoint.
 //   - No tombstone row and no "removed, still quotable" copy: erasure is a
 //     hard delete, so the rail says the opposite, truthfully.
 //   - The upload card shows one real in-flight state and then a receipt of
 //     what the commit reported, never timer-driven fake stages.
-//   - Providers keeps its governed tab; the design gives it no home but it is
-//     a working enable/disable surface with approval flow.
+//   - Provider health and governed enablement live in Settings > Knowledge,
+//     keeping this primary surface to the decided Files/What it remembers pair.
 
 type SurfaceState = "loading" | "ready" | "denied" | "not-found" | "unavailable";
 type DetailState = "idle" | "loading" | "ready" | "denied" | "not-found" | "unavailable";
@@ -90,7 +92,7 @@ function FileIcon() {
 
 export function KnowledgeView() {
   const [selectedAssetId, setSelectedAssetId] = useRouteSelection("knowledge");
-  const [tab, setTab] = useState<"files" | "remembers" | "providers">("files");
+  const [tab, setTab] = useState<"files" | "remembers">("files");
   const [assets, setAssets] = useState<KnowledgeAsset[]>([]);
   const [surfaceState, setSurfaceState] = useState<SurfaceState>("loading");
   const loadedKnowledge = useRef(false);
@@ -99,40 +101,27 @@ export function KnowledgeView() {
   const [assetDetailState, setAssetDetailState] = useState<DetailState>("idle");
   const selectedAssetIdRef = useRef(selectedAssetId);
   const assetDetailSequence = useRef(0);
-  const [providers, setProviders] = useState<KnowledgeProvider[]>([]);
   const [filter, setFilter] = useState("");
   const [hits, setHits] = useState<KnowledgeSearchHit[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const searchSequence = useRef(0);
+  const activeSearchQuery = useRef<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [receipt, setReceipt] = useState<UploadReceipt | null>(null);
   const [eraseArmed, setEraseArmed] = useState(false);
+  const [eraseBusy, setEraseBusy] = useState(false);
+  const eraseBusyRef = useRef(false);
   const fileInput = useRef<HTMLInputElement | null>(null);
   const mutationFinalizer = useExactApprovalFinalizer<
-    | { kind: "erase"; assetId: string }
-    | { kind: "provider"; providerId: string; enabled: boolean },
+    { kind: "erase"; assetId: string },
     KnowledgeMutationResponse
   >({
-    isCurrent: (input) => (
-      input.kind === "erase"
-        ? assets.some((asset) => asset.id === input.assetId)
-        : providers.some((provider) => (
-          provider.id === input.providerId
-          && provider.enabled !== input.enabled
-        ))
-    ),
-    replay: (input, approvalId) => (
-      input.kind === "erase"
-        ? client.eraseKnowledgeAsset(input.assetId, approvalId)
-        : client.setKnowledgeProvider(input.providerId, input.enabled, approvalId)
-    ),
+    isCurrent: (input) => assets.some((asset) => asset.id === input.assetId),
+    replay: (input, approvalId) => client.eraseKnowledgeAsset(input.assetId, approvalId),
     onApplied: async (_result, input) => {
-      setMessage(
-        input.kind === "erase"
-          ? "The source was erased."
-          : `Provider ${input.enabled ? "enabled" : "disabled"}.`,
-      );
-      if (input.kind === "erase" && selectedAssetIdRef.current === input.assetId) {
+      setMessage("The source was erased.");
+      if (selectedAssetIdRef.current === input.assetId) {
         setSelectedAssetId(null);
       }
       refresh();
@@ -161,10 +150,8 @@ export function KnowledgeView() {
       setError("");
       setAssets([]);
       setAssetOffset(null);
-      setProviders([]);
       setSurfaceState(state);
     });
-    void client.knowledgeProviders().then((result) => setProviders(result.providers)).catch(() => {});
   }
 
   async function loadMoreAssets() {
@@ -223,15 +210,24 @@ export function KnowledgeView() {
 
   async function search(event: React.FormEvent) {
     event.preventDefault();
-    if (!filter.trim() || searching) return;
+    const query = filter.trim();
+    if (!query || activeSearchQuery.current === query) return;
+    const sequence = ++searchSequence.current;
+    activeSearchQuery.current = query;
     setSearching(true);
     setError("");
     try {
-      setHits((await client.knowledgeSearch(filter.trim())).hits);
+      const result = await client.knowledgeSearch(query);
+      if (searchSequence.current === sequence) setHits(result.hits);
     } catch {
-      setError("Knowledge search is unavailable.");
+      if (searchSequence.current === sequence) {
+        setError("Knowledge search is unavailable.");
+      }
     } finally {
-      setSearching(false);
+      if (searchSequence.current === sequence) {
+        activeSearchQuery.current = null;
+        setSearching(false);
+      }
     }
   }
 
@@ -263,56 +259,45 @@ export function KnowledgeView() {
   }
 
   async function eraseAsset(assetId: string) {
+    if (eraseBusyRef.current) return;
     if (!eraseArmed) {
       setEraseArmed(true);
       return;
     }
+    eraseBusyRef.current = true;
+    setEraseBusy(true);
+    setMessage("");
     const input = { kind: "erase", assetId } as const;
-    const result = await client.eraseKnowledgeAsset(assetId);
-    setEraseArmed(false);
-    if (mutationFinalizer.begin(input, result, "Knowledge source erasure")) {
-      setMessage("Erasure is waiting for approval in Inbox.");
-      return;
-    }
-    setMessage(
-      result.reason ?? (
-        result.status === "ok"
-          ? "The source was erased."
-          : `Erasure status: ${result.status ?? "unknown"}.`
-      ),
-    );
-    if (result.status === "ok") {
-      if (selectedAssetIdRef.current === assetId) setSelectedAssetId(null);
-      refresh();
-    }
-  }
-
-  async function setProvider(provider: KnowledgeProvider) {
-    if (provider.status === "unavailable") {
+    try {
+      const result = await client.eraseKnowledgeAsset(assetId);
+      setEraseArmed(false);
+      if (mutationFinalizer.begin(input, result, "Knowledge source erasure")) {
+        setMessage("Erasure is waiting for approval in the originating chat.");
+        return;
+      }
       setMessage(
-        provider.last_error
-          ? `${provider.display_name} is unavailable: ${provider.last_error}`
-          : `${provider.display_name} is unavailable in this build.`,
+        result.reason ?? (
+          result.status === "ok"
+            ? "The source was erased."
+            : `Erasure status: ${result.status ?? "unknown"}.`
+        ),
       );
-      return;
+      if (result.status === "ok") {
+        if (selectedAssetIdRef.current === assetId) setSelectedAssetId(null);
+        refresh();
+      }
+    } catch {
+      const stillSelected = selectedAssetIdRef.current === assetId;
+      setEraseArmed(stillSelected);
+      setMessage(
+        stillSelected
+          ? "Removal could not be confirmed. No success is shown; confirm removal to retry."
+          : "Removal could not be confirmed. No success is shown.",
+      );
+    } finally {
+      eraseBusyRef.current = false;
+      setEraseBusy(false);
     }
-    const input = {
-      kind: "provider",
-      providerId: provider.id,
-      enabled: !provider.enabled,
-    } as const;
-    const result = await client.setKnowledgeProvider(
-      input.providerId,
-      input.enabled,
-    );
-    if (mutationFinalizer.begin(input, result, "Knowledge provider change")) {
-      setMessage("Provider change is waiting for approval in Inbox.");
-      return;
-    }
-    setMessage(
-      result.reason ?? `Provider ${provider.enabled ? "disabled" : "enabled"}.`,
-    );
-    if (result.status === "ok") refresh();
   }
 
   const storageLine = `${assets.length}${assetOffset !== null ? "+" : ""} `
@@ -329,10 +314,10 @@ export function KnowledgeView() {
           <div className="console-head">
             <div>
               <h1>Knowledge</h1>
-              <p>Everything Boltrig has read. Drop a file in and it becomes quotable, with the passage it came from.</p>
+              <p>Everything boltrig has read. Drop a file in and it becomes quotable, with the page it came from.</p>
             </div>
             <nav aria-label="Knowledge sections" className="console-seg">
-              {([["files", "Files"], ["remembers", "What it remembers"], ["providers", "Providers"]] as const).map(([id, label]) => (
+              {([["files", "Files"], ["remembers", "What it remembers"]] as const).map(([id, label]) => (
                 <button
                   aria-current={tab === id ? "page" : undefined}
                   data-active={tab === id ? "true" : undefined}
@@ -362,10 +347,13 @@ export function KnowledgeView() {
                   <input
                     aria-label="Search Knowledge"
                     onChange={(event) => {
+                      searchSequence.current += 1;
+                      activeSearchQuery.current = null;
+                      setSearching(false);
                       setFilter(event.target.value);
-                      if (!event.target.value.trim()) setHits(null);
+                      setHits(null);
                     }}
-                    placeholder="Filter titles, or press Enter to search inside everything it has read"
+                    placeholder="Search inside everything it has read"
                     value={filter}
                   />
                 </form>
@@ -419,6 +407,8 @@ export function KnowledgeView() {
                       <span aria-hidden className="knowledge-icon-col" />
                       <span style={{ flex: 1 }}>File</span>
                       <span className="knowledge-num">Passages</span>
+                      <span className="knowledge-quoted">Quoted</span>
+                      <span className="knowledge-size">Size</span>
                       <span className="knowledge-when">Added</span>
                     </div>
                     {visibleAssets.map((asset) => (
@@ -435,6 +425,16 @@ export function KnowledgeView() {
                           <span className="console-row-sub">{asset.filename}</span>
                         </span>
                         <span className="knowledge-num">{asset.segment_count}</span>
+                        <span
+                          aria-label="Quoted count unavailable"
+                          className="knowledge-quoted"
+                          title="Quote counts are not exposed by the Knowledge API"
+                        >—</span>
+                        <span
+                          aria-label="File size unavailable"
+                          className="knowledge-size"
+                          title="File sizes are not exposed by the Knowledge API"
+                        >—</span>
                         <span className="knowledge-when">{addedAge(asset.created_at)}</span>
                       </button>
                     ))}
@@ -447,17 +447,20 @@ export function KnowledgeView() {
                       Load more sources
                     </button>
                   )}
-                  <p className="console-foot">{storageLine}</p>
+                  <div className="knowledge-storage-foot">
+                    <span>{storageLine}</span>
+                    <button
+                      onClick={() => navigate("settings", "knowledge")}
+                      type="button"
+                    >
+                      Change where files are kept
+                    </button>
+                  </div>
                 </div>
               )}
             </>
           )}
           {surfaceState === "ready" && tab === "remembers" && <RemembersTab />}
-          {surfaceState === "ready" && tab === "providers" && (
-            <div className="data-list">{providers.map((provider) => (
-              <div className="data-row static" key={provider.id}><span className={`activity-dot ${provider.health === "ok" ? "ok" : provider.health}`} /><span className="data-row-copy"><strong>{provider.display_name}</strong><small>{provider.role.replaceAll("_", " ")}{provider.last_error ? ` · ${provider.last_error}` : ""}</small></span><span className="row-meta">{provider.status}</span><button className="secondary-button" disabled={provider.status === "unavailable"} title={provider.status === "unavailable" ? provider.last_error ?? "Unavailable in this build" : undefined} onClick={() => void setProvider(provider)}>{provider.status === "unavailable" ? "Unavailable" : provider.enabled ? "Disable" : "Enable"}</button></div>
-            ))}</div>
-          )}
         </div>
       </div>
       {surfaceState === "ready" && tab === "files" && (
@@ -538,15 +541,16 @@ export function KnowledgeView() {
               <button
                 className="knowledge-remove"
                 data-armed={eraseArmed ? "true" : undefined}
+                disabled={eraseBusy}
                 onClick={() => void eraseAsset(assetDetail.asset.id)}
                 type="button"
               >
-                {eraseArmed ? "Confirm removal" : "Remove this file"}
+                {eraseBusy ? "Removing…" : eraseArmed ? "Confirm removal" : "Remove this file"}
               </button>
               <p className="knowledge-remove-note">
                 Removal is permanent: its passages stop being quotable and
                 citations to it stop resolving. High-consequence removals wait
-                for your approval in Inbox first.
+                for your approval in the originating chat first.
               </p>
             </>
           )}

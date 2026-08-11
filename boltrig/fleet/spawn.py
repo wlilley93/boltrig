@@ -81,8 +81,15 @@ class Spawner:
         *,
         partial_on_budget: bool = True,
         grant_ceiling: GrantSet | None = None,
+        announce_child: bool = True,
     ) -> dict[str, Any]:
-        """Spawn one ephemeral agent for ``task`` with ``skills``."""
+        """Spawn one ephemeral agent for ``task`` with ``skills``.
+
+        ``announce_child`` is false only when this spawn *is* the public root
+        execution already represented by ``context.run_id`` (the direct chat
+        lane). Delegated callers keep the default so their real child lifecycle
+        remains visible and paired.
+        """
         kernel = self._kernel
         intake = await prepare_spawn_intake(
             kernel.store,
@@ -130,6 +137,7 @@ class Spawner:
             tokens_est=tokens_est,
             micros_est=micros_est,
             spawn_rule=spawn_rule,
+            announce_child=announce_child,
         )
         return await complete_spawn(
             self,
@@ -199,6 +207,7 @@ class Spawner:
         tokens_est: int,
         micros_est: int,
         spawn_rule: SpawnRuleSelection | None,
+        announce_child: bool,
     ) -> tuple[AgentResult, dict[str, Any] | None, int]:
         """Resolve the runtime and run the turn, refunding the reservation on a raise.
 
@@ -219,7 +228,7 @@ class Spawner:
         try:
             runtime = await self._runtime_for(tenant_id, capability, context)
             model_route = getattr(runtime, "model_route", None)
-            if context.run_id:
+            if context.run_id and announce_child:
                 self._publish_subagent_event(context, task, skills, run_id, capability, spawn_rule)
                 opened = True
             started = time.monotonic()

@@ -212,7 +212,7 @@ export function EvaluationsView() {
         exactApproval.begin(
           mutation, result, "Evaluation fixture save",
         );
-        setNotice({ text: "This evaluation case is waiting for human approval in Inbox." });
+        setNotice({ text: "This evaluation case is waiting for human approval in the originating chat." });
       } else {
         setNotice({ text: result.reason ?? "The evaluation case was refused.", error: true });
       }
@@ -281,7 +281,7 @@ export function EvaluationsView() {
             : "Evaluation fixture restore",
         );
         setNotice({
-          text: `This evaluation ${action} is waiting for human approval in Inbox.`,
+          text: `This evaluation ${action} is waiting for human approval in the originating chat.`,
         });
       } else {
         setNotice({

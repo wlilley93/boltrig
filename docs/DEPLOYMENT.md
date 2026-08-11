@@ -10,8 +10,8 @@ Production runs the exact first-party image digests verified by the release
 workflow; it does not rebuild mutable source on the target host. Check out or
 transfer the protected release tag so its Compose manifests and migration chain
 match the images, then download `boltrig-images.env` from that GitHub release.
-The file contains exactly the kernel, fleet, Operator UI, Worker UI, and backup
-`image@sha256` references.
+The file contains exactly the kernel, fleet, Worker UI, and backup `image@sha256`
+references.
 
 With the normal production configuration in `.env`:
 
@@ -28,29 +28,12 @@ uses `--no-build`. The release overlay also removes the developer bind mount of
 host source. Set `RELEASE_PROFILES=` only when backup scheduling is provided and
 verified by an external operator mechanism.
 
-### Reversible Worker primary-surface cutover
+### Worker presentation
 
-Worker is shipped and signed with every release, but the ordinary release
-continues to serve standalone Operator. After Worker acceptance has passed for
-the deployment, validate and select the explicit final overlay:
-
-```bash
-make worker-primary-validate \
-  RELEASE_IMAGES_ENV=boltrig-images.env RELEASE_ENV=.env
-make worker-primary-up \
-  RELEASE_IMAGES_ENV=boltrig-images.env RELEASE_ENV=.env
-```
-
-This changes only Caddy's internal presentation upstream. Worker becomes `/`,
-while the maintained Operator build remains available at `/operator/` from the
-same image. The kernel, dispatcher, database, identities, conversations and run
-state do not move.
-
-Rollback is presentation-only: remove `deploy/compose.worker-primary.yml` from
-the Compose invocation and run the ordinary `make release-up` target. The
-Caddyfile's default upstream is still the standalone `ui:80` service. Keep the
-standalone Operator image and its `operator-standalone` profile through the
-Worker operational soak.
+Worker is the sole first-party browser surface and is the default Caddy upstream.
+The old Operator application, image, deployment overlay and browser path have
+been removed. The kernel, dispatcher, database, identities, conversations and
+run state remain unchanged by this presentation cleanup.
 
 ### Channel-gateway bootstrap and failover
 

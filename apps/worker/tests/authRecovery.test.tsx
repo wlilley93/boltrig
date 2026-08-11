@@ -25,15 +25,39 @@ beforeEach(() => {
   api.meSettings.mockRejectedValue(new Error("no session"));
   api.refreshSession.mockResolvedValue({ status: "ok" });
   native.clearDesktopSession.mockResolvedValue(undefined);
+  localStorage.clear();
+  document.documentElement.removeAttribute("data-character");
 });
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   vi.unstubAllEnvs();
+  localStorage.clear();
 });
 
 describe("Worker password recovery", () => {
+  it("applies the authoritative character before private UI first renders", async () => {
+    api.meSettings.mockResolvedValue({
+      profile: { id: "owner", email: "owner@example.io", role: "owner" },
+      settings: { "agent.character": "jarvis" },
+    });
+    function PrivateWorker() {
+      return (
+        <div data-character-at-render={document.documentElement.dataset.character}>
+          Private Worker
+        </div>
+      );
+    }
+
+    render(<AuthGate><PrivateWorker /></AuthGate>);
+
+    const privateWorker = await screen.findByText("Private Worker");
+    expect(privateWorker.getAttribute("data-character-at-render")).toBe("jarvis");
+    expect(document.documentElement.dataset.character).toBe("jarvis");
+    expect(api.meSettings).toHaveBeenCalledTimes(1);
+  });
+
   it("can clear broken local enrollment before cookie authentication", async () => {
     render(<AuthGate><div>Private Worker</div></AuthGate>);
     await screen.findByLabelText("Email");

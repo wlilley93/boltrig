@@ -106,7 +106,7 @@ def test_channel_gateway_imports_no_boltrig_package_code():
 
 # --- The stack layer-dependency rule (Round Nine, ARCHITECTURE-stack.md) -------
 # Boltrig is a stack: foundation (models) -> data (store) / capability (adapters)
-# -> kernel -> runtime (fleet) -> api/ui. The foundation layers must never depend
+# -> kernel -> runtime (fleet) -> API/Worker. The foundation layers must never depend
 # UPWARD on the kernel or the runtime, so the seam a future repo-split would cleave
 # along stays clean. The kernel is the integration layer and may pull lower layers;
 # this rule pins only the lower layers (SEC-54).

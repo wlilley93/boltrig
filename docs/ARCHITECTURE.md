@@ -37,7 +37,7 @@ architectural principles P1-P10 are enforced.
 | Identity | `boltrig/identity/` | Token verification + principal resolver (`auth.py`), IdP-group to role/scope (`rbac.py`), delegation (`delegation.py`). |
 | Config | `boltrig/config/` | Process settings from env (`settings.py`) and the fleet manifest loader/applier (`manifest.py`). |
 | Observability | `boltrig/observability/` | Execution-tree reconstruction from the audit log (`tree.py`). |
-| UI | `ui/` | The React console: Router, Kanban, Approvals. |
+| Worker UI | `apps/worker/` | The React/Tauri console: chat, inbox and governed controls. |
 
 ## The dispatch flow (the fixed order)
 

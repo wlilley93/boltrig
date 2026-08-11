@@ -1521,6 +1521,64 @@ async def test_integration_catalogue_and_connection_state_match_on_both_stores(s
 
 @pytest.mark.store
 @pytest.mark.invariant("SEC-WRK-06")
+@pytest.mark.invariant("SEC-08")
+async def test_integration_health_update_cannot_resurrect_a_revoked_connection(store):
+    from boltrig.models.integrations import (
+        IntegrationCatalogueRecord,
+        IntegrationConnection,
+    )
+
+    await store.upsert_integration_catalogue(
+        IntegrationCatalogueRecord(
+            id="github",
+            tenant_id=T,
+            label="GitHub",
+            category="work",
+            transport="rest",
+            auth=["manual_secret"],
+            description="Health/revoke race fixture.",
+            certification="certified",
+            adapter_id="github-adapter",
+        )
+    )
+
+    connection = IntegrationConnection(
+        id="conn-health-revoke-race",
+        tenant_id=T,
+        integration_id="github",
+        adapter_id="github-adapter",
+        label="Engineering",
+        health="pending",
+        credential_ref="cred-health-revoke-race",
+        credential_owned=True,
+    )
+    assert await store.create_integration_connection(connection)
+
+    first_check = utcnow()
+    checked = await store.update_integration_connection_health_if_active(
+        T, connection.id, "ok", first_check
+    )
+    assert checked is not None
+    assert checked.health == "ok"
+    assert checked.credential_ref == connection.credential_ref
+    assert checked.last_checked_at == first_check
+
+    revoked = await store.revoke_integration_connection(T, connection.id)
+    assert revoked is not None and revoked.health == "revoked"
+    assert revoked.credential_ref is None
+
+    stale_check = await store.update_integration_connection_health_if_active(
+        T, connection.id, "degraded", utcnow()
+    )
+    assert stale_check is None
+    stored = await store.get_integration_connection(T, connection.id)
+    assert stored is not None
+    assert stored.health == "revoked"
+    assert stored.credential_ref is None
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-06")
 @pytest.mark.invariant("SEC-140")
 async def test_atomic_integration_credential_lifecycle_matches_on_both_stores(store):
     from boltrig.kernel.credentials import CredentialResolver

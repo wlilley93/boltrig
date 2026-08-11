@@ -156,26 +156,21 @@ describe("Automation primary-surface honesty", () => {
     expect(screen.queryByText("No saved workflows yet.")).toBeNull();
   });
 
-  it("keeps the last authorized workflow list on a temporary refresh failure", async () => {
-    api.workflows
-      .mockResolvedValueOnce({
-        workflows: [{
-          id: "retained-workflow",
-          version: "1.0.0",
-          source: "precreated",
-          status: "active",
-          schedule: null,
-        }],
-      })
-      .mockRejectedValueOnce(new BoltrigApiError(503, {}));
+  it("keeps the authorized workflow list without exposing a duplicate refresh bar", async () => {
+    api.workflows.mockResolvedValueOnce({
+      workflows: [{
+        id: "retained-workflow",
+        version: "1.0.0",
+        source: "precreated",
+        status: "active",
+        schedule: null,
+      }],
+    });
 
     render(<AutomationsView />);
     expect(await screen.findByText("retained-workflow")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Refresh workflows" }));
-
-    expect(await screen.findByText(/Showing the last loaded definitions/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Refresh workflows" })).toBeNull();
     expect(screen.getByText("retained-workflow")).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Automations unavailable" })).toBeNull();
   });
 
   it("never renders workflow A after workflow B is selected", async () => {

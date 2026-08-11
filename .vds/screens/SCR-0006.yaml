@@ -1,0 +1,19 @@
+id: SCR-0006
+route: apps/worker/src/components/SettingsSurface.tsx
+status: registered
+contractVersion: 1
+frame:
+  fileKey: iVQBKFc3NpRH3zdOOxfPqr
+  nodeId: 22:2
+  capturedAt: 2026-08-11T04:36:20Z
+arrangement:
+  columns: 2
+  regions:
+  - body
+  bands:
+  - header
+  - facets
+  - body_rows
+  - keyboard
+basis:
+- USER-DIRECTION-2026-08-11

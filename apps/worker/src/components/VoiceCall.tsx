@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
+import { createPortal } from "react-dom";
 import type {
   CallCreateResponse,
   CallEvent,
@@ -12,6 +13,9 @@ import type {
 import { configuredApiOrigin } from "../apiOrigin";
 import { client } from "../client";
 import { isDesktop } from "../desktop";
+import { FamiliarBadge } from "./familiar/FamiliarBadge";
+import { FamiliarStage } from "./familiar/FamiliarStage";
+import "./VoiceCall.css";
 
 interface VoiceCallProps {
   onFamiliarActivity?(activity: {
@@ -25,9 +29,14 @@ interface VoiceCallProps {
   // just while audio is playing - the Stage takes centre stage for the call.
   onCallActive?(active: boolean): void;
   conversationId: string | null;
+  conversationTitle?: string;
   modelProfileId?: string;
   onConversation(id: string): void;
   onError(message: string): void;
+  /** Chat embeds the service behind the round composer call control. */
+  embedded?: boolean;
+  /** Call history/profile choices belong in settings when embedded. */
+  showOptions?: boolean;
 }
 
 interface VoiceLine {
@@ -59,6 +68,13 @@ interface MediaResources {
   rejectReady: ((reason: Error) => void) | null;
 }
 
+interface ModalBackgroundSnapshot {
+  element: HTMLElement;
+  ariaHidden: string | null;
+  inertAttribute: string | null;
+  inertProperty: boolean | undefined;
+}
+
 const VOICE_READY_TIMEOUT_MS = 15_000;
 
 export interface VoiceFeatures {
@@ -68,6 +84,16 @@ export interface VoiceFeatures {
   centroid: number;
   onset: number;
 }
+
+const QUIET_VOICE_FEATURES: VoiceFeatures = {
+  speaking: false,
+  level: 0,
+  bands: [0, 0, 0, 0, 0, 0, 0, 0],
+  centroid: 0,
+  onset: 0,
+};
+
+const RECOVERED_CALL_NOTICE = "A voice call from this conversation can be resumed.";
 
 /** Bounded spectral features from the playback analyser: level, eight log
  * bands, centroid, onset (positive spectral flux). Numbers only, all 0..1. */
@@ -153,11 +179,14 @@ class VoiceConnectionCancelledError extends Error {
 
 export function VoiceCall({
   conversationId,
+  conversationTitle,
   modelProfileId,
   onConversation,
   onError,
   onFamiliarActivity,
   onCallActive,
+  embedded = false,
+  showOptions = true,
 }: VoiceCallProps) {
   const [call, setCall] = useState<RealtimeCall | null>(null);
   const [status, setStatus] = useState<CallStatus | "idle">("idle");
@@ -169,12 +198,25 @@ export function VoiceCall({
   const [agentProfileId, setAgentProfileId] = useState("");
   const [recovered, setRecovered] = useState(false);
   const [recentCalls, setRecentCalls] = useState<RealtimeCall[]>([]);
+  const [muted, setMuted] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [dismissedNotice, setDismissedNotice] = useState("");
+  const [focusedParticipantId, setFocusedParticipantId] = useState<string | null>(null);
+  const [familiarActivity, setFamiliarActivity] = useState<VoiceFeatures>({
+    ...QUIET_VOICE_FEATURES,
+    bands: [...QUIET_VOICE_FEATURES.bands],
+  });
   const mediaRef = useRef<MediaResources | null>(null);
   const callRef = useRef<RealtimeCall | null>(null);
   const readyRef = useRef(false);
   const endingRef = useRef(false);
+  const mutedRef = useRef(false);
+  const callStartedAtRef = useRef<number | null>(null);
   const connectionAttemptRef = useRef(0);
   const playAtRef = useRef(0);
+  const callScreenRef = useRef<HTMLElement | null>(null);
+  const endCallRef = useRef<() => Promise<void>>(async () => undefined);
+  const modalOpenerRef = useRef<HTMLElement | null>(null);
   const onFamiliarActivityRef = useRef(onFamiliarActivity);
   onFamiliarActivityRef.current = onFamiliarActivity;
   const onCallActiveRef = useRef(onCallActive);
@@ -191,6 +233,143 @@ export function VoiceCall({
   useEffect(() => () => onCallActiveRef.current?.(false), []);
   const seenEventIdsRef = useRef(new Set<string>());
   const pendingApprovalsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    setFocusedParticipantId(null);
+  }, [call?.id]);
+
+  const callScreenOpen = status !== "idle"
+    && status !== "ended"
+    && status !== "realtime_unavailable";
+
+  useLayoutEffect(() => {
+    if (!callScreenOpen || typeof document === "undefined") return;
+    const dialog = callScreenRef.current;
+    if (!dialog) return;
+
+    const activeElement = document.activeElement;
+    modalOpenerRef.current = activeElement instanceof HTMLElement
+      && activeElement !== document.body
+      && !dialog.contains(activeElement)
+      ? activeElement
+      : null;
+
+    const background = new Map<HTMLElement, ModalBackgroundSnapshot>();
+    const isDialogBranch = (element: HTMLElement) => (
+      element === dialog || element.contains(dialog)
+    );
+    const makeBackgroundModal = (element: HTMLElement) => {
+      if (isDialogBranch(element) || background.has(element)) return;
+      background.set(element, {
+        element,
+        ariaHidden: element.getAttribute("aria-hidden"),
+        inertAttribute: element.getAttribute("inert"),
+        inertProperty: "inert" in element ? element.inert : undefined,
+      });
+      element.setAttribute("aria-hidden", "true");
+      element.setAttribute("inert", "");
+      if ("inert" in element) element.inert = true;
+    };
+
+    for (const child of document.body.children) {
+      if (child instanceof HTMLElement) makeBackgroundModal(child);
+    }
+
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const added of record.addedNodes) {
+          if (added instanceof HTMLElement && added.parentElement === document.body) {
+            makeBackgroundModal(added);
+          }
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true });
+
+    const focusDialog = () => dialog.focus({ preventScroll: true });
+    const focusFirstControl = () => {
+      const first = modalFocusableElements(dialog)[0];
+      if (first) first.focus({ preventScroll: true });
+      else focusDialog();
+    };
+    const handleFocusIn = (event: FocusEvent) => {
+      if (!(event.target instanceof Node) || dialog.contains(event.target)) return;
+      focusFirstControl();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        void endCallRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const controls = modalFocusableElements(dialog);
+      if (controls.length === 0) {
+        event.preventDefault();
+        focusDialog();
+        return;
+      }
+      const first = controls[0]!;
+      const last = controls[controls.length - 1]!;
+      const focused = document.activeElement;
+      if (event.shiftKey && (focused === first || !dialog.contains(focused))) {
+        event.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!event.shiftKey && focused === last) {
+        event.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+    };
+
+    document.addEventListener("focusin", handleFocusIn, true);
+    document.addEventListener("keydown", handleKeyDown, true);
+    focusDialog();
+
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("focusin", handleFocusIn, true);
+      document.removeEventListener("keydown", handleKeyDown, true);
+      for (const snapshot of background.values()) {
+        restoreAttribute(snapshot.element, "aria-hidden", snapshot.ariaHidden);
+        if (snapshot.inertProperty !== undefined && "inert" in snapshot.element) {
+          snapshot.element.inert = snapshot.inertProperty;
+        }
+        restoreAttribute(snapshot.element, "inert", snapshot.inertAttribute);
+      }
+      const opener = modalOpenerRef.current;
+      modalOpenerRef.current = null;
+      if (opener?.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, [callScreenOpen]);
+
+  useEffect(() => {
+    if (!callScreenOpen) return;
+    const recorded = call?.status === "ended" ? null : callStartMilliseconds(call);
+    if (recorded !== null) callStartedAtRef.current = recorded;
+    if (callStartedAtRef.current === null) callStartedAtRef.current = Date.now();
+    const update = () => setElapsedSeconds(Math.max(
+      0,
+      Math.floor((Date.now() - (callStartedAtRef.current ?? Date.now())) / 1_000),
+    ));
+    update();
+    const timer = window.setInterval(update, 1_000);
+    return () => window.clearInterval(timer);
+  }, [call?.created_at, call?.id, call?.started_at, callScreenOpen]);
+
+  // A non-urgent freezone notice clears itself after the same quiet interval as
+  // the decided target. Approval notices are sticky because dismissing a card
+  // must never imply that the underlying request was answered.
+  useEffect(() => {
+    setDismissedNotice("");
+    if (!eventNotice || approvalCount > 0) return;
+    const pinVisualRecoveryNotice =
+      document.documentElement.dataset.visualPinRecoveredCallNotice === "true"
+      && eventNotice === RECOVERED_CALL_NOTICE;
+    if (pinVisualRecoveryNotice) return;
+    const timer = window.setTimeout(() => setDismissedNotice(eventNotice), 9_800);
+    return () => window.clearTimeout(timer);
+  }, [approvalCount, eventNotice]);
 
   useEffect(() => () => {
     connectionAttemptRef.current += 1;
@@ -223,26 +402,39 @@ export function VoiceCall({
     ) {
       return () => { cancelled = true; };
     }
-    connectionAttemptRef.current += 1;
+    const attempt = ++connectionAttemptRef.current;
     closeMedia(mediaRef, readyRef, playAtRef);
     callRef.current = null;
     setCall(null);
     setStatus("idle");
     setRecovered(false);
+    mutedRef.current = false;
+    setMuted(false);
+    callStartedAtRef.current = null;
+    setElapsedSeconds(0);
+    setFamiliarActivity({ ...QUIET_VOICE_FEATURES, bands: [...QUIET_VOICE_FEATURES.bands] });
     setLines([]);
+    setUsage(null);
+    setEventNotice("");
+    setApprovalCount(0);
     seenEventIdsRef.current.clear();
+    pendingApprovalsRef.current.clear();
     if (!conversationId) return () => { cancelled = true; };
     if (typeof client.currentCall !== "function") {
       return () => { cancelled = true; };
     }
     void client.currentCall(conversationId).then(async (result) => {
-      if (cancelled || !result.call) return;
+      if (
+        cancelled
+        || connectionAttemptRef.current !== attempt
+        || !result.call
+      ) return;
       setCall(result.call);
       callRef.current = result.call;
       setStatus("reconnecting");
       setRecovered(true);
-      setEventNotice("A voice call from this conversation can be resumed.");
-      await restoreCallHistory(result.call.id);
+      setEventNotice(RECOVERED_CALL_NOTICE);
+      await restoreCallHistory(result.call.id, attempt);
     }).catch(() => {
       // Voice recovery is supplementary to text continuity.
     });
@@ -253,6 +445,11 @@ export function VoiceCall({
     const attempt = ++connectionAttemptRef.current;
     onError("");
     endingRef.current = false;
+    mutedRef.current = false;
+    setMuted(false);
+    callStartedAtRef.current = Date.now();
+    setElapsedSeconds(0);
+    setFamiliarActivity({ ...QUIET_VOICE_FEATURES, bands: [...QUIET_VOICE_FEATURES.bands] });
     setLines([]);
     setUsage(null);
     setEventNotice("");
@@ -287,6 +484,7 @@ export function VoiceCall({
       await connect(result, attempt);
       void refreshRecentCalls();
     } catch (reason) {
+      if (connectionAttemptRef.current !== attempt) return;
       reportConnectionFailure(reason);
     }
   }
@@ -304,6 +502,7 @@ export function VoiceCall({
       await connect(result, attempt);
       void refreshRecentCalls();
     } catch (reason) {
+      if (connectionAttemptRef.current !== attempt) return;
       reportConnectionFailure(reason);
     }
   }
@@ -324,6 +523,9 @@ export function VoiceCall({
     callRef.current = selected;
     setStatus("reconnecting");
     setRecovered(true);
+    mutedRef.current = false;
+    setMuted(false);
+    callStartedAtRef.current = callStartMilliseconds(selected) ?? Date.now();
     if (selected.conversation_id !== conversationId) {
       onConversation(selected.conversation_id);
     }
@@ -333,6 +535,7 @@ export function VoiceCall({
       await connect(result, attempt);
       void refreshRecentCalls();
     } catch (reason) {
+      if (connectionAttemptRef.current !== attempt) return;
       reportConnectionFailure(reason);
     }
   }
@@ -358,7 +561,7 @@ export function VoiceCall({
     setCall(result.call);
     callRef.current = result.call;
     setStatus("joining");
-    await restoreCallHistory(result.call.id);
+    await restoreCallHistory(result.call.id, attempt);
     ensureConnectionAttempt(attempt);
     setStatus(pendingApprovalsRef.current.size > 0 ? "held" : "joining");
 
@@ -380,6 +583,7 @@ export function VoiceCall({
         video: false,
       });
       ensureConnectionAttempt(attempt);
+      for (const track of audioTracks(stream)) track.enabled = !mutedRef.current;
       context = new AudioContext();
       playAtRef.current = 0;
       await context.resume();
@@ -403,10 +607,16 @@ export function VoiceCall({
         source,
         mute,
         playbackSources: new Set(),
-        onPlayback: (speaking) => onFamiliarActivityRef.current?.({
-          speaking,
-          level: speaking ? 0.6 : 0,
-        }),
+        onPlayback: (speaking) => {
+          const features = {
+            ...QUIET_VOICE_FEATURES,
+            bands: [...QUIET_VOICE_FEATURES.bands],
+            speaking,
+            level: speaking ? 0.6 : 0,
+          };
+          setFamiliarActivity(features);
+          onFamiliarActivityRef.current?.(features);
+        },
         analyser: (() => {
           const analyser = context.createAnalyser();
           analyser.fftSize = 1024;
@@ -416,14 +626,21 @@ export function VoiceCall({
         })(),
         voiceTimer: null,
         prevSpectrum: null,
-        onVoiceFeatures: (features) => onFamiliarActivityRef.current?.(features),
+        onVoiceFeatures: (features) => {
+          setFamiliarActivity(features);
+          onFamiliarActivityRef.current?.(features);
+        },
         readyTimeout: null,
         rejectReady: null,
       };
       mediaRef.current = resources;
 
       processor.onaudioprocess = (event) => {
-        if (!readyRef.current || socket?.readyState !== WebSocket.OPEN) return;
+        if (
+          mutedRef.current
+          || !readyRef.current
+          || socket?.readyState !== WebSocket.OPEN
+        ) return;
         const input = event.inputBuffer.getChannelData(0);
         const pcm = resamplePcm16(input, context?.sampleRate ?? 24_000, 24_000);
         if (pcm.byteLength) socket.send(pcm);
@@ -561,7 +778,7 @@ export function VoiceCall({
 
   async function end() {
     const current = callRef.current;
-    connectionAttemptRef.current += 1;
+    const attempt = ++connectionAttemptRef.current;
     endingRef.current = true;
     closeMedia(mediaRef, readyRef, playAtRef);
     if (!current) {
@@ -570,19 +787,34 @@ export function VoiceCall({
     }
     try {
       const ended = await client.endCall(current.id);
+      ensureConnectionAttempt(attempt);
       setCall(ended);
       callRef.current = ended;
       setStatus("ended");
+      mutedRef.current = false;
+      setMuted(false);
       setEventNotice("Call ended.");
       await Promise.all([
-        refreshUsage(current.id),
-        restoreCallHistory(current.id),
+        refreshUsage(current.id, attempt),
+        restoreCallHistory(current.id, attempt),
         refreshRecentCalls(),
       ]);
     } catch (reason) {
+      if (connectionAttemptRef.current !== attempt) return;
       setStatus("failed");
       onError(reasonText(reason));
     }
+  }
+
+  endCallRef.current = end;
+
+  function toggleMute() {
+    const next = !mutedRef.current;
+    mutedRef.current = next;
+    setMuted(next);
+    const stream = mediaRef.current?.stream;
+    if (!stream) return;
+    for (const track of audioTracks(stream)) track.enabled = !next;
   }
 
   async function refreshRecentCalls() {
@@ -594,25 +826,40 @@ export function VoiceCall({
     }
   }
 
-  async function refreshUsage(callId: string) {
+  function isCurrentCallGeneration(callId: string, attempt: number) {
+    return connectionAttemptRef.current === attempt
+      && callRef.current?.id === callId;
+  }
+
+  async function refreshUsage(
+    callId: string,
+    attempt = connectionAttemptRef.current,
+  ) {
     try {
-      setUsage((await client.callUsage(callId)).usage);
+      const result = await client.callUsage(callId);
+      if (!isCurrentCallGeneration(callId, attempt)) return;
+      setUsage(result.usage);
     } catch {
       // Usage is supplementary to the call. Its absence must not turn an
       // otherwise successful voice session into a failed one.
     }
   }
 
-  async function restoreCallHistory(callId: string) {
+  async function restoreCallHistory(
+    callId: string,
+    attempt = connectionAttemptRef.current,
+  ) {
     try {
       const history = await client.callEvents(callId);
+      if (!isCurrentCallGeneration(callId, attempt)) return;
       let includesUsage = false;
       for (const event of history.events) {
         includesUsage ||= event.type === "usage";
         applyCallEvent(event, false);
       }
-      if (includesUsage) await refreshUsage(callId);
+      if (includesUsage) await refreshUsage(callId, attempt);
     } catch {
+      if (!isCurrentCallGeneration(callId, attempt)) return;
       setEventNotice("Call history could not be restored. New live events will still appear.");
     }
   }
@@ -655,7 +902,7 @@ export function VoiceCall({
         if (requestId) pendingApprovalsRef.current.add(requestId);
         setApprovalCount(pendingApprovalsRef.current.size || 1);
         updateCallStatus("held");
-        setEventNotice(`Approval needed for ${verb}. Review it in Inbox to continue.`);
+        setEventNotice(`Approval needed for ${verb}. Review it in the originating chat to continue.`);
       } else {
         if (requestId) pendingApprovalsRef.current.delete(requestId);
         setApprovalCount(pendingApprovalsRef.current.size);
@@ -699,32 +946,49 @@ export function VoiceCall({
 
   if (status === "idle" || status === "realtime_unavailable") {
     return (
-      <div className="voice-idle">
+      <div className={`voice-idle${embedded ? " voice-idle-embedded" : ""}`}>
         {call && usage && <CallReceipt usage={usage} />}
-        <RecentCalls
-          calls={recentCalls}
-          currentCallId={call?.id}
-          currentStatus={status}
-          onResume={resumeRecentCall}
-        />
-        {agentProfiles.length > 0 && (
-          <label className="voice-profile">
-            <span className="sr-only">Voice agent</span>
-            <select
-              aria-label="Voice agent"
-              value={agentProfileId}
-              onChange={(event) => setAgentProfileId(event.target.value)}
-            >
-              <option value="">Default voice</option>
-              {agentProfiles.map((profile) => (
-                <option key={profile.name} value={profile.name}>{profile.name}</option>
-              ))}
-            </select>
-          </label>
-        )}
-        <button className="secondary-button" onClick={() => void start()}>
-          ◉ Start call
+        <button
+          aria-label={embedded ? "Talk to the chief of staff" : undefined}
+          className="primary-button"
+          onClick={() => void start()}
+          title={embedded ? "Talk to the chief of staff instead" : undefined}
+        >
+          {embedded ? (
+            <svg aria-hidden fill="currentColor" height="15" viewBox="0 0 24 24" width="15">
+              <rect height="4" rx="1.1" width="2.2" x="4" y="10" />
+              <rect height="10" rx="1.1" width="2.2" x="8.2" y="7" />
+              <rect height="15" rx="1.1" width="2.2" x="12.4" y="4.5" />
+              <rect height="6" rx="1.1" width="2.2" x="16.6" y="9" />
+            </svg>
+          ) : "◉ Start call"}
         </button>
+        {showOptions && <details className="voice-options">
+          <summary>Call options</summary>
+          <div className="voice-options-body">
+            <RecentCalls
+              calls={recentCalls}
+              currentCallId={call?.id}
+              currentStatus={status}
+              onResume={resumeRecentCall}
+            />
+            {agentProfiles.length > 0 && (
+              <label className="voice-profile">
+                <span className="sr-only">Voice agent</span>
+                <select
+                  aria-label="Voice agent"
+                  value={agentProfileId}
+                  onChange={(event) => setAgentProfileId(event.target.value)}
+                >
+                  <option value="">Default voice</option>
+                  {agentProfiles.map((profile) => (
+                    <option key={profile.name} value={profile.name}>{profile.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+        </details>}
       </div>
     );
   }
@@ -740,12 +1004,14 @@ export function VoiceCall({
         <VoiceTranscript lines={lines} />
         <div className="voice-actions">
           {call && usage && <CallReceipt usage={usage} />}
-          <RecentCalls
-            calls={recentCalls}
-            currentCallId={call?.id}
-            currentStatus={status}
-            onResume={resumeRecentCall}
-          />
+          {showOptions && (
+            <RecentCalls
+              calls={recentCalls}
+              currentCallId={call?.id}
+              currentStatus={status}
+              onResume={resumeRecentCall}
+            />
+          )}
           <button className="secondary-button compact-button" onClick={() => void start()}>
             Start another call
           </button>
@@ -754,46 +1020,152 @@ export function VoiceCall({
     );
   }
 
-  return (
-    <section className="voice-call" aria-live="polite">
-      <div className="voice-call-heading">
-        <span className={`voice-dot ${status === "active" ? "is-live" : ""}`} />
-        <strong>{voiceStatus(status)}</strong>
-        {call?.participants.filter((participant) => participant.kind === "agent").map((participant) => (
-          <span
-            className="mini-familiar"
-            style={participantPalette(participant.familiar_genotype?.palette)}
-            title={participant.label}
-            aria-label={`${participant.label} familiar`}
-            key={participant.id}
-          />
-        ))}
-      </div>
-      {eventNotice && (
-        <p className={approvalCount > 0 ? "voice-event-notice approval" : "voice-event-notice"} role="status">
-          {eventNotice}
-          {approvalCount > 0 && <> <a href="#/inbox">Open Inbox</a></>}
-        </p>
-      )}
-      <VoiceTranscript lines={lines} />
-      <div className="voice-actions">
-        <RecentCalls
-          calls={recentCalls}
-          currentCallId={call?.id}
-          currentStatus={status}
-          onResume={resumeRecentCall}
-        />
-        {(recovered || status === "reconnecting" || status === "failed") && (
-          <button className="secondary-button compact-button" onClick={() => void reconnect()}>
-            {recovered ? "Resume call" : "Reconnect"}
-          </button>
-        )}
-        <button className="danger-button compact-button" onClick={() => void end()}>
-          End
+  const agentParticipants = call?.participants.filter(
+    (participant) => participant.kind === "agent",
+  ) ?? [];
+  const primaryAgent = agentParticipants[0];
+  const focusedAgent = agentParticipants.find(
+    (participant) => participant.id === focusedParticipantId,
+  ) ?? primaryAgent;
+  const otherAgents = agentParticipants
+    .filter((participant) => participant.id !== focusedAgent?.id)
+    .slice(0, 3);
+  const profileGenotype = agentProfiles.find(
+    (profile) => profile.name === call?.agent_profile_id,
+  )?.familiar_genotype;
+  const focusedGenotype = focusedAgent?.familiar_genotype
+    ?? (focusedAgent?.id === primaryAgent?.id ? profileGenotype : null);
+  const latestAssistantLine = [...lines].reverse().find(
+    (line) => line.speaker === "Boltrig",
+  );
+  const focusedOnPrimary = focusedAgent?.id === primaryAgent?.id;
+  const stageState = {
+    working: focusedOnPrimary && !familiarActivity.speaking && (
+      status === "creating" || status === "joining" || status === "reconnecting"
+    ),
+    speaking: focusedOnPrimary && familiarActivity.speaking,
+    level: focusedOnPrimary ? familiarActivity.level : 0,
+    bands: focusedOnPrimary ? familiarActivity.bands : QUIET_VOICE_FEATURES.bands,
+    onset: focusedOnPrimary ? familiarActivity.onset : 0,
+  };
+  const noticeVisible = Boolean(eventNotice && eventNotice !== dismissedNotice);
+  const primaryAgentPhrase = callParticipantPhrase(primaryAgent?.label ?? "Boltrig");
+  const callScreen = (
+    <section
+      aria-label="Voice call"
+      aria-modal="true"
+      className="voice-call-screen"
+      data-screen-label="Call"
+      ref={callScreenRef}
+      role="dialog"
+      tabIndex={-1}
+    >
+      <header className="voice-call-screen-header">
+        <div className="voice-call-title">
+          {conversationTitle
+            ? `${conversationTitle} · you and ${primaryAgentPhrase}`
+            : `Voice call · you and ${primaryAgentPhrase}`}
+        </div>
+        <time className="voice-call-elapsed" dateTime={`PT${elapsedSeconds}S`}>
+          {formatElapsed(elapsedSeconds)}
+        </time>
+        <button className="voice-call-leave" onClick={() => void end()} type="button">
+          Leave
         </button>
+      </header>
+
+      <div className="voice-call-freezone">
+        {noticeVisible && (
+          <article
+            className="voice-call-notice"
+            data-urgent={approvalCount > 0 ? "true" : "false"}
+            role="status"
+          >
+            <div className="voice-call-notice-header">
+              <span>{approvalCount > 0 ? "Waiting for you" : "Voice connection"}</span>
+              <button
+                aria-label="Dismiss call notice"
+                onClick={() => setDismissedNotice(eventNotice)}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <p>{eventNotice}</p>
+          </article>
+        )}
+
+        <div className="voice-call-presence">
+          <div className="voice-call-primary-familiar">
+            <FamiliarStage
+              genotype={focusedGenotype}
+              label={focusedAgent?.label ?? "Boltrig"}
+              mode="voice"
+              state={stageState}
+            />
+          </div>
+          <strong>{focusedAgent?.label ?? "Boltrig"}</strong>
+          {latestAssistantLine && focusedOnPrimary && (
+            <p className="voice-call-saying">{latestAssistantLine.text}</p>
+          )}
+          {!focusedOnPrimary && (
+            <span className="sr-only" role="status">
+              Viewing {focusedAgent?.label}. Call audio and routing are unchanged.
+            </span>
+          )}
+          <p className="voice-call-state" aria-live="polite">{voiceStatus(status)}</p>
+        </div>
+
+        <div className="voice-call-transcript-sr">
+          <VoiceTranscript
+            lines={latestAssistantLine && focusedOnPrimary
+              ? lines.filter((line) => line.id !== latestAssistantLine.id)
+              : lines}
+          />
+        </div>
       </div>
+
+      <footer className="voice-call-screen-footer">
+        <div className="voice-call-participants" aria-label="Other agents in this call">
+          {otherAgents.map((participant) => (
+            <button
+              aria-label={`Show ${participant.label} in the call centre`}
+              className="voice-call-participant"
+              key={participant.id}
+              onClick={() => setFocusedParticipantId(participant.id)}
+              type="button"
+            >
+              <FamiliarBadge
+                genotype={participant.familiar_genotype}
+                label={participant.label}
+                size={30}
+                state="ready"
+              />
+              <span>{participant.label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="voice-call-controls">
+          {(recovered || status === "reconnecting" || status === "failed") && (
+            <button onClick={() => void reconnect()} type="button">
+              {recovered ? "Resume call" : "Reconnect"}
+            </button>
+          )}
+          <button
+            aria-pressed={muted}
+            onClick={toggleMute}
+            type="button"
+          >
+            {muted ? "Unmute" : "Mute"}
+          </button>
+        </div>
+      </footer>
     </section>
   );
+
+  return typeof document === "undefined"
+    ? callScreen
+    : createPortal(callScreen, document.body);
 }
 
 function RecentCalls({
@@ -913,6 +1285,55 @@ function formatDuration(seconds: number) {
   return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
 }
 
+function callStartMilliseconds(call: RealtimeCall | null): number | null {
+  const value = call?.started_at ?? call?.created_at;
+  if (!value) return null;
+  const milliseconds = new Date(value).getTime();
+  return Number.isFinite(milliseconds) ? milliseconds : null;
+}
+
+function formatElapsed(totalSeconds: number) {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function callParticipantPhrase(label: string) {
+  const trimmed = label.trim() || "Boltrig";
+  return /^[a-z]/.test(trimmed) && !/^(?:a|an|the)\s/i.test(trimmed)
+    ? `the ${trimmed}`
+    : trimmed;
+}
+
+function modalFocusableElements(dialog: HTMLElement): HTMLElement[] {
+  const selector = [
+    "a[href]",
+    "area[href]",
+    "button:not([disabled])",
+    "input:not([disabled]):not([type='hidden'])",
+    "select:not([disabled])",
+    "textarea:not([disabled])",
+    "iframe",
+    "object",
+    "embed",
+    "[contenteditable='true']",
+    "[tabindex]:not([tabindex='-1'])",
+  ].join(",");
+  return [...dialog.querySelectorAll<HTMLElement>(selector)].filter((element) => {
+    if (element.closest("[hidden], [inert], [aria-hidden='true']")) return false;
+    const style = window.getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden";
+  });
+}
+
+function restoreAttribute(
+  element: HTMLElement,
+  name: "aria-hidden" | "inert",
+  value: string | null,
+) {
+  if (value === null) element.removeAttribute(name);
+  else element.setAttribute(name, value);
+}
+
 function formatMicros(value: number) {
   return new Intl.NumberFormat(undefined, {
     style: "currency",
@@ -922,13 +1343,13 @@ function formatMicros(value: number) {
   }).format(value / 1_000_000);
 }
 
-function participantPalette(palette?: string[] | null): React.CSSProperties {
-  const colors = (palette ?? [])
-    .filter((value) => /^#[0-9a-f]{3,8}$/i.test(value))
-    .slice(0, 3);
-  if (colors.length === 0) return {};
-  if (colors.length === 1) return { background: colors[0] };
-  return { background: `radial-gradient(circle at 35% 30%, ${colors.join(", ")})` };
+function audioTracks(stream: MediaStream): MediaStreamTrack[] {
+  const getAudioTracks = (stream as MediaStream & {
+    getAudioTracks?: () => MediaStreamTrack[];
+  }).getAudioTracks;
+  return typeof getAudioTracks === "function"
+    ? getAudioTracks.call(stream)
+    : stream.getTracks();
 }
 
 function closeMedia(

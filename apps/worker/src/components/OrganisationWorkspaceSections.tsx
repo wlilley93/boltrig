@@ -118,7 +118,7 @@ export function OrganisationPolicy({
       });
       const result = await client.updateCurrentOrg(input);
       if (finalizer.begin(input, result, "Organisation policy change")) {
-        setMessage("Pending approval in your Inbox.");
+        setMessage("Pending approval. Continue in the originating chat.");
         return;
       }
       setMessage(responseMessage(result, "Organisation policy saved."));
@@ -283,7 +283,7 @@ export function WorkspaceAdministration({
     };
     const result = await client.createWorkspace(input.body);
     if (finalizer.begin(input, result, "Workspace creation")) {
-      setMessage("Pending approval in your Inbox.");
+      setMessage("Pending approval. Continue in the originating chat.");
       return;
     }
     setMessage(responseMessage(result, "Workspace created."));
@@ -455,7 +455,7 @@ function WorkspaceMemberPanel({
     };
     const result = await client.addWorkspaceMember(workspace.id, input.body);
     if (finalizer.begin(input, result, "Workspace member addition")) {
-      onMessage("Pending approval in your Inbox.");
+      onMessage("Pending approval. Continue in the originating chat.");
       return;
     }
     onMessage(responseMessage(result, input.success));
@@ -479,7 +479,7 @@ function WorkspaceMemberPanel({
     };
     const result = await client.removeWorkspaceMember(workspace.id, memberId);
     if (finalizer.begin(input, result, "Workspace member removal")) {
-      onMessage("Pending approval in your Inbox.");
+      onMessage("Pending approval. Continue in the originating chat.");
       setArmedId(null);
       return;
     }
@@ -514,7 +514,7 @@ function WorkspaceMemberPanel({
     };
     const result = await client.updateWorkspace(workspace.id, input.body);
     if (finalizer.begin(input, result, "Workspace status change")) {
-      onMessage("Pending approval in your Inbox.");
+      onMessage("Pending approval. Continue in the originating chat.");
       return;
     }
     onMessage(responseMessage(result, success));
@@ -538,7 +538,7 @@ function WorkspaceMemberPanel({
       };
       const result = await client.updateWorkspace(workspace.id, input.body);
       if (finalizer.begin(input, result, "Workspace detail change")) {
-        onMessage("Pending approval in your Inbox.");
+        onMessage("Pending approval. Continue in the originating chat.");
         return;
       }
       onMessage(responseMessage(result, input.success));
@@ -560,7 +560,7 @@ function WorkspaceMemberPanel({
     };
     const result = await client.addWorkspaceMember(workspace.id, body);
     if (finalizer.begin(input, result, "Workspace membership change")) {
-      onMessage("Pending approval in your Inbox.");
+      onMessage("Pending approval. Continue in the originating chat.");
       return;
     }
     onMessage(responseMessage(result, input.success));
@@ -731,7 +731,7 @@ function WorkspaceMemberRow({
 
 function responseMessage(result: { status?: string; reason?: string }, success: string): string {
   if (result.status === "ok") return success;
-  if (result.status === "pending_human") return "Pending approval in your Inbox.";
+  if (result.status === "pending_human") return "Pending approval. Continue in the originating chat.";
   return result.reason ?? result.status ?? "Unexpected server response.";
 }
 

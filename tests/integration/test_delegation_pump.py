@@ -369,7 +369,7 @@ async def test_chat_turn_persists_new_work_items_and_stamps_degraded():
 
     class _StubSpawner:
         async def spawn(self, tenant_id, task, skills, prefer, context, *,
-                        partial_on_budget=True, grant_ceiling=None):
+                        partial_on_budget=True, grant_ceiling=None, announce_child=True):
             return {
                 "summary": "did it",
                 "degraded": True,

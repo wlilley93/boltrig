@@ -21,21 +21,40 @@ function turnWith(patch: Partial<NormalizedTurn>): NormalizedTurn {
   return { ...EMPTY_TURN, ...patch };
 }
 
-function renderMobile(props: Partial<Parameters<typeof MobileChat>[0]> = {}) {
-  return render(
+function mobileChat(props: Partial<Parameters<typeof MobileChat>[0]> = {}) {
+  return (
     <MobileChat
       busy={false}
+      closed={false}
+      composerDisabled={false}
       composerValue=""
+      continuity=""
+      conversationLoadError=""
+      error=""
+      loadingConversation={false}
       messages={[]}
+      newState={false}
       onBack={vi.fn()}
       onComposerChange={vi.fn()}
+      onReconnect={vi.fn()}
+      onRetryConversation={vi.fn()}
       onSend={vi.fn()}
+      onSteerQueued={vi.fn()}
+      onStop={vi.fn()}
+      queuedMessages={[]}
+      retryFollow={false}
       subtitle=""
       title="Renewal outreach"
       turn={EMPTY_TURN}
+      turnIsAnswerable={false}
+      turnIsLive={false}
       {...props}
-    />,
+    />
   );
+}
+
+function renderMobile(props: Partial<Parameters<typeof MobileChat>[0]> = {}) {
+  return render(mobileChat(props));
 }
 
 describe("mobile surface", () => {
@@ -94,6 +113,8 @@ describe("mobile surface", () => {
     const onRespondHitl = vi.fn().mockResolvedValue(true);
     renderMobile({
       onRespondHitl,
+      turnIsAnswerable: true,
+      turnIsLive: true,
       turn: turnWith({
         hitls: [{
           hitlRequestId: "h1",
@@ -115,6 +136,8 @@ describe("mobile surface", () => {
     const onRespondHitl = vi.fn().mockResolvedValue(false);
     renderMobile({
       onRespondHitl,
+      turnIsAnswerable: true,
+      turnIsLive: true,
       turn: turnWith({
         hitls: [{
           hitlRequestId: "h1",
@@ -129,20 +152,233 @@ describe("mobile surface", () => {
     expect(await screen.findByText(/was not accepted/)).toBeTruthy();
   });
 
-  it("offers stop while a run is live and send otherwise", () => {
-    const view = renderMobile({ busy: true });
-    expect(screen.getByRole("button", { name: "Stop" })).toBeTruthy();
+  it("stops a live run instead of invoking the send callback", () => {
+    const onSend = vi.fn();
+    const onStop = vi.fn();
+    const view = renderMobile({ busy: true, onSend, onStop });
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(onSend).not.toHaveBeenCalled();
     view.unmount();
-    renderMobile({ busy: false });
-    expect(screen.getByRole("button", { name: "Send" })).toBeTruthy();
+    renderMobile({ busy: false, composerValue: "Follow up", onSend, onStop });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onStop).toHaveBeenCalledTimes(1);
   });
 
-  it("does not send an empty follow up", () => {
+  it("does not offer an empty follow up", () => {
     const onSend = vi.fn();
     renderMobile({ composerValue: "", onSend });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    // The guard lives in the caller, so what this asserts is that the control is
-    // wired at all; the empty-string guard is covered by ChatView's own tests.
-    expect(onSend).toHaveBeenCalled();
+    const send = screen.getByRole("button", { name: "Send" }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    fireEvent.click(send);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("renders every unsuperseded durable message followed by live turn text", () => {
+    renderMobile({
+      messages: [
+        { id: "u1", role: "user", content: "First request", created_at: "2026-08-11T10:00:00Z" },
+        { id: "a1", role: "assistant", content: "First answer", created_at: "2026-08-11T10:00:01Z" },
+        { id: "u2", role: "user", content: "Second request", created_at: "2026-08-11T10:00:02Z" },
+        {
+          id: "a-old",
+          role: "assistant",
+          content: "Superseded answer",
+          superseded_by: "a2",
+          created_at: "2026-08-11T10:00:03Z",
+        },
+        { id: "a2", role: "assistant", content: "Current answer", created_at: "2026-08-11T10:00:04Z" },
+      ],
+      turn: turnWith({ runId: "run-2", text: "Live continuation" }),
+      turnIsLive: true,
+    });
+
+    expect(screen.getByText("First request")).toBeTruthy();
+    expect(screen.getByText("First answer")).toBeTruthy();
+    expect(screen.getByText("Second request")).toBeTruthy();
+    expect(screen.getByText("Current answer")).toBeTruthy();
+    expect(screen.getByText("Live continuation")).toBeTruthy();
+    expect(screen.queryByText("Superseded answer")).toBeNull();
+  });
+
+  it("follows a same-count durable message replacement while the reader is at the bottom", () => {
+    const first = [{
+      id: "assistant-a",
+      role: "assistant" as const,
+      content: "First durable answer",
+      created_at: "2026-08-11T10:00:00Z",
+    }];
+    const view = renderMobile({ messages: first });
+    const transcript = screen.getByRole("log", { name: "Conversation transcript" });
+    let scrollTop = 0;
+    Object.defineProperty(transcript, "scrollHeight", { configurable: true, value: 480 });
+    Object.defineProperty(transcript, "scrollTop", {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => { scrollTop = value; },
+    });
+
+    view.rerender(mobileChat({
+      messages: [{
+        id: "assistant-b",
+        role: "assistant",
+        content: "Replacement durable answer",
+        created_at: "2026-08-11T10:01:00Z",
+      }],
+    }));
+
+    expect(scrollTop).toBe(480);
+    expect(screen.getByText("Replacement durable answer")).toBeTruthy();
+  });
+
+  it("surfaces retry, reconnect, queued and read-only state without a dead attach control", () => {
+    const onRetryConversation = vi.fn();
+    const onReconnect = vi.fn();
+    const onSteerQueued = vi.fn();
+    const queued = {
+      id: "queued-1",
+      role: "user",
+      content: "Queue this next",
+      created_at: "2026-08-11T10:00:00Z",
+    };
+    renderMobile({
+      composerDisabled: true,
+      conversationLoadError: "summary offline",
+      continuity: "Live updates paused.",
+      error: "The stream disconnected.",
+      onReconnect,
+      onRetryConversation,
+      onSteerQueued,
+      queuedMessages: [queued],
+      retryFollow: true,
+    });
+
+    const alerts = screen.getAllByRole("alert");
+    expect(alerts.some((item) => item.textContent?.includes("summary offline"))).toBe(true);
+    expect(alerts.some((item) => item.textContent?.includes("stream disconnected"))).toBe(true);
+    expect((screen.getByLabelText("Follow up") as HTMLInputElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Attach" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry conversation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));
+    fireEvent.click(screen.getByRole("button", { name: "Load" }));
+    expect(onRetryConversation).toHaveBeenCalledTimes(1);
+    expect(onReconnect).toHaveBeenCalledTimes(1);
+    expect(onSteerQueued).toHaveBeenCalledWith(queued);
+  });
+
+  it("keeps live questions answerable and durable question receipts read-only", () => {
+    const question = {
+      questionId: "q1",
+      prompt: "Which account owner?",
+      choices: ["Noether"],
+    };
+    const live = renderMobile({
+      turn: turnWith({ questions: [question] }),
+      turnIsAnswerable: true,
+      turnIsLive: true,
+    });
+    expect(screen.getByRole("textbox", { name: "Live question answer" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Noether" })).toBeTruthy();
+
+    live.unmount();
+    renderMobile({ turn: turnWith({ ended: true, questions: [question] }) });
+    expect(screen.getByText("Which account owner?")).toBeTruthy();
+    expect(screen.getByText(/completed turn and is no longer answerable/)).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "Live question answer" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Noether" })).toBeNull();
+  });
+
+  it("keeps a durable HITL receipt read-only even when a responder is available", () => {
+    const onRespondHitl = vi.fn().mockResolvedValue(true);
+    renderMobile({
+      onRespondHitl,
+      turn: turnWith({
+        ended: true,
+        hitls: [{
+          hitlRequestId: "h-settled",
+          kind: "approval",
+          question: "Publish the report?",
+          options: ["approve", "deny"],
+        }],
+      }),
+      turnIsAnswerable: false,
+      turnIsLive: true,
+    });
+
+    expect(screen.getByText("Publish the report?")).toBeTruthy();
+    expect(screen.getByText(/completed turn and is no longer answerable/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Deny" })).toBeNull();
+    expect(onRespondHitl).not.toHaveBeenCalled();
+  });
+
+  it("retains read-only decisions from earlier durable turns", () => {
+    renderMobile({
+      messages: [{
+        id: "assistant-earlier",
+        role: "assistant",
+        content: "I paused for an owner choice.",
+        created_at: "2026-08-11T10:00:00Z",
+        events: [{
+          type: "question",
+          run_id: "run-earlier",
+          question_id: "question-earlier",
+          prompt: "Who should own the account?",
+          choices: ["Noether"],
+        }, { type: "message_end", run_id: "run-earlier" }],
+      }, {
+        id: "assistant-latest",
+        role: "assistant",
+        content: "Later work completed.",
+        created_at: "2026-08-11T10:01:00Z",
+        events: [
+          { type: "tool_call", call_id: "latest-tool", tool: "file.read" },
+          { type: "tool_result", call_id: "latest-tool", verb: "file.read", status: "ok" },
+        ],
+      }],
+      turn: turnWith({ tools: [{ key: "latest-tool", verb: "file.read", status: "ok" }] }),
+    });
+
+    expect(screen.getByText("Who should own the account?")).toBeTruthy();
+    expect(screen.getByText(/completed turn and is no longer answerable/)).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "Live question answer" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Noether" })).toBeNull();
+  });
+
+  it("exposes disclosure state and preserves exact activity statuses", () => {
+    renderMobile({
+      turn: turnWith({
+        tools: [{ key: "tool-1", verb: "figma.read", status: "degraded" }],
+        subagents: [{
+          key: "agent-1",
+          childRunId: "child-1",
+          task: "Inspect the design",
+          skills: [],
+          name: "Lyell",
+          status: "degraded",
+        }],
+        steps: [{ stepId: "step-1", action: "Compare frames", status: "paused" }],
+      }),
+    });
+
+    const tools = screen.getByRole("button", { name: /1 tool/ });
+    expect(tools.getAttribute("aria-expanded")).toBe("false");
+    const toolControls = tools.getAttribute("aria-controls");
+    fireEvent.click(tools);
+    expect(tools.getAttribute("aria-expanded")).toBe("true");
+    expect(document.getElementById(toolControls!)).toBeTruthy();
+    expect(screen.getAllByText("degraded").length).toBeGreaterThanOrEqual(2);
+
+    const plan = screen.getByRole("button", { name: /The plan/ });
+    expect(plan.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("paused")).toBeTruthy();
+  });
+
+  it("announces an existing conversation load without showing the New-chat welcome", () => {
+    renderMobile({ composerDisabled: true, loadingConversation: true, newState: false });
+    expect(screen.getByRole("status").textContent).toContain("Loading conversation");
+    expect(screen.queryByText(/Say what needs doing/)).toBeNull();
+    expect((screen.getByLabelText("Follow up") as HTMLInputElement).disabled).toBe(true);
   });
 });

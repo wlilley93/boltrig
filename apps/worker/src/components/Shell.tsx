@@ -1,18 +1,25 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import type {
   ConversationSearchResult,
   ConversationSummary,
 } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../client";
-import { navigate, type WorkerRoute } from "../routes";
+import type { WorkerRoute } from "../routes";
 import { SETTINGS_SECTIONS, type SettingsSection } from "../settingsSections";
 import { useWorkerGlobalContext } from "./WorkerGlobalContext";
+import "./ShellParity.css";
 
 // Stroke-path icons carried over from the Boltrig Console design component so
 // the sidebar reads exactly like the design. Each entry is one or more SVG
 // path `d` strings drawn at 24x24 with a 1.7 stroke.
 const ICON_PATHS: Record<string, string[]> = {
+  plus: ["M12 5v14M5 12h14"],
   chat: ["M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H9l-4.5 4V6A1.5 1.5 0 0 1 5 4.5z"],
   agents: [
     "M12 3.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z",
@@ -21,7 +28,6 @@ const ICON_PATHS: Record<string, string[]> = {
   ],
   plug: ["M8 3v5M16 3v5", "M5.5 8h13v3a6.5 6.5 0 0 1-13 0z", "M12 17.5V21"],
   flow: ["M4.5 5.5h5v4h-5zM14.5 5.5h5v4h-5zM9.5 14.5h5v4h-5z", "M7 9.5v2.5h10V9.5M12 12v2.5"],
-  inbox: ["M3.5 13.5l3-8h11l3 8v6h-17z", "M3.5 13.5h5l1.5 2.5h4l1.5-2.5h5"],
   home: ["M4.5 10.5l7.5-6.5 7.5 6.5V20h-15z"],
   clock: ["M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16z", "M12 7.8V12l2.8 1.8"],
   work: ["M4 5.5h16v13H4z", "M4 10h16M10 5.5v13"],
@@ -38,6 +44,13 @@ const ICON_PATHS: Record<string, string[]> = {
   skill: ["M12 3.5l2.4 5 5.6.8-4 3.9 1 5.5-5-2.6-5 2.6 1-5.5-4-3.9 5.6-.8z"],
   monitor: ["M3.5 5h17v10h-17z", "M9 19h6M12 15v4"],
   pulse: ["M3 12h4l2-5 4 10 2-5h6"],
+  pin: ["M8 4h8v4l2.5 3.5H5.5L8 8z", "M12 11.5V21"],
+  shield: ["M12 3l7 3v5.5c0 4.6-3 7.2-7 8.5-4-1.3-7-3.9-7-8.5V6z"],
+  gauge: ["M12 3.5a8.5 8.5 0 1 0 8.5 8.5", "M12 12l4.5-3.5"],
+  invite: ["M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z", "M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5M18.5 8.5v5M16 11h5"],
+  keyboard: ["M3.5 6.5h17v11h-17z", "M7 10h.01M11 10h.01M15 10h.01M8 14h8"],
+  moon: ["M20 14.5A8.2 8.2 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"],
+  archive: ["M3.5 4.5h17v4h-17z", "M5 8.5v11h14v-11M10 12.5h4"],
   user: ["M12 4.6a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8z", "M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"],
   org: [
     "M6.5 7.5v9",
@@ -49,10 +62,19 @@ const ICON_PATHS: Record<string, string[]> = {
     "M19.9 14.6a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4.1 14H4a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1A2 2 0 1 1 7.9 4.4l.1.1A1.6 1.6 0 0 0 10.7 3.4V3a2 2 0 0 1 4 0v.4a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1 .6z",
   ],
   code: ["M8.5 7.5L4 12l4.5 4.5M15.5 7.5L20 12l-4.5 4.5"],
-  logout: ["M10 17l5-5-5-5M15 12H3", "M15 5h5v14h-5"],
+  logout: ["M10 4.5H5.5v15H10", "M14 8l4 4-4 4M18 12H9"],
+  question: ["M9.2 9.2a2.9 2.9 0 1 1 4.3 2.6c-.9.5-1.5 1.1-1.5 2.1", "M12 17.6v.1"],
 };
 
-function Icon({ name, size = 16 }: { name: keyof typeof ICON_PATHS; size?: number }) {
+function Icon({
+  name,
+  size = 16,
+  strokeWidth = 1.7,
+}: {
+  name: keyof typeof ICON_PATHS;
+  size?: number;
+  strokeWidth?: number;
+}) {
   return (
     <svg
       aria-hidden
@@ -61,7 +83,7 @@ function Icon({ name, size = 16 }: { name: keyof typeof ICON_PATHS; size?: numbe
       stroke="currentColor"
       strokeLinecap="round"
       strokeLinejoin="round"
-      strokeWidth={1.7}
+      strokeWidth={strokeWidth}
       viewBox="0 0 24 24"
       width={size}
     >
@@ -72,13 +94,23 @@ function Icon({ name, size = 16 }: { name: keyof typeof ICON_PATHS; size?: numbe
 
 // The console nav holds the task-first surfaces under the names the decided
 // target gives them — Plugins and Routines, not Integrations and Automations
-// (the browser acceptance contract in ui/e2e-worker/worker.spec.ts names them
-// exactly, so it moves with this list). The design carries only these four; the
-// Workspace group below is the honest remainder, kept visible because the
-// destinations that would absorb it (Knowledge inside settings, Runs and Work
-// inside the run section view) are not built yet.
-const primary: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
-  { route: "chat", label: "Chat", icon: "chat" },
+// (the browser acceptance contract names them exactly, so it moves with this
+// list). The design carries only these four; deeper operational records stay
+// in their dedicated surfaces.
+const primary: Array<{
+  route: WorkerRoute;
+  label: string;
+  icon: keyof typeof ICON_PATHS;
+  shortcut?: string;
+  title?: string;
+}> = [
+  {
+    route: "chat",
+    label: "New chat",
+    icon: "plus",
+    shortcut: "⌘N",
+    title: "Start something new. Anything running carries on",
+  },
   { route: "agents", label: "Agents", icon: "agents" },
   { route: "integrations", label: "Plugins", icon: "plug" },
   { route: "automations", label: "Routines", icon: "flow" },
@@ -91,30 +123,24 @@ const accountMenuItems: Array<{
   action: "spend" | "invite" | "settings" | "logout";
   label: string;
   icon: keyof typeof ICON_PATHS;
+  tail?: string;
 }> = [
-  { action: "spend", label: "Spend remaining", icon: "pulse" },
-  { action: "invite", label: "Invite someone", icon: "org" },
-  { action: "settings", label: "Settings", icon: "gear" },
+  { action: "spend", label: "Spend remaining", icon: "gauge", tail: "›" },
+  { action: "invite", label: "Invite someone", icon: "invite" },
+  { action: "settings", label: "Settings", icon: "gear", tail: "⌘," },
   { action: "logout", label: "Log out", icon: "logout" },
 ];
 
-// The remainder, below a divider in the same menu. The design's sidebar draws
-// only the four primary surfaces because it assumes these are absorbed into
-// the rail and the run view; in this build they are real, working routes, so
-// they keep an affordance rather than becoming reachable by ⌘K alone.
-const menuSurfaces: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
-  { route: "home", label: "Home", icon: "home" },
-  { route: "inbox", label: "Inbox", icon: "inbox" },
-  { route: "runs", label: "Runs", icon: "clock" },
-  { route: "work", label: "Work", icon: "work" },
-  { route: "knowledge", label: "Knowledge", icon: "book" },
-  { route: "memory", label: "Memory", icon: "brain" },
-  { route: "build", label: "Build", icon: "registry" },
-  { route: "evaluations", label: "Evaluations", icon: "skill" },
-  { route: "channels", label: "Channels", icon: "monitor" },
-  { route: "operate", label: "Operate", icon: "pulse" },
-  { route: "account", label: "Account", icon: "user" },
-  { route: "organisation", label: "Organisation", icon: "org" },
+// Claude's concept also contains hard-coded release notes and support links.
+// This build has neither a changelog feed nor a help destination, so its menu
+// keeps the same shell treatment while exposing only destinations that exist.
+const helpMenuItems: Array<{
+  section: "shortcuts" | "health";
+  label: string;
+  icon: keyof typeof ICON_PATHS;
+}> = [
+  { section: "shortcuts", label: "Keyboard shortcuts", icon: "keyboard" },
+  { section: "health", label: "Health and diagnostics", icon: "pulse" },
 ];
 
 interface SidebarProps {
@@ -124,7 +150,11 @@ interface SidebarProps {
   selectedConversation: string | null;
   onRoute(route: WorkerRoute): void;
   onConversation(id: string): void;
-  onConversationRestored(id: string): void;
+  /** @deprecated Recovery lives in Settings > Archived chats. */
+  onConversationRestored?(id: string): void;
+  onConversationArchived?(id: string): void;
+  /** Conversation ids whose server-owned turn is currently active. */
+  workingConversationIds?: readonly string[];
   onLoadMore(): void;
   onRetryConversations?(): void;
   hasMoreConversations: boolean;
@@ -143,11 +173,6 @@ interface ConversationSearchState {
   results: ConversationSearchResult[];
 }
 
-interface HealthState {
-  status: "loading" | "ready" | "degraded" | "unavailable";
-  failing: number;
-}
-
 export function Sidebar({
   route,
   conversations,
@@ -155,7 +180,8 @@ export function Sidebar({
   selectedConversation,
   onRoute,
   onConversation,
-  onConversationRestored,
+  onConversationArchived,
+  workingConversationIds = [],
   onLoadMore,
   onRetryConversations,
   hasMoreConversations,
@@ -171,8 +197,6 @@ export function Sidebar({
   const {
     identity,
     identityStatus,
-    pendingCount,
-    pendingStatus,
   } = useWorkerGlobalContext();
   const [conversationQuery, setConversationQuery] = useState("");
   const [searchAttempt, setSearchAttempt] = useState(0);
@@ -181,13 +205,44 @@ export function Sidebar({
     status: "idle",
     results: [],
   });
-  const [restoring, setRestoring] = useState<string | null>(null);
-  const [restoreError, setRestoreError] = useState("");
+  const [conversationAction, setConversationAction] = useState<string | null>(null);
+  const [conversationActionError, setConversationActionError] = useState("");
+  const [pinnedConversationIds, setPinnedConversationIds] = useState<string[]>(readPinnedConversationIds);
   const [accountOpen, setAccountOpen] = useState(false);
-  const [health, setHealth] = useState<HealthState>({ status: "loading", failing: 0 });
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [relativeNow, setRelativeNow] = useState(() => Date.now());
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+  const helpMenuRef = useRef<HTMLDivElement>(null);
+  const accountTriggerRef = useRef<HTMLButtonElement>(null);
+  const helpTriggerRef = useRef<HTMLButtonElement>(null);
+  const routeMenuOriginRef = useRef<"account" | "help" | null>(null);
 
   useEffect(() => {
-    const query = conversationQuery.trim();
+    const timer = window.setInterval(() => setRelativeNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // Overlay-menu state belongs to the route where it was opened. A keyboard
+  // shortcut, browser history change, or host-driven navigation can replace
+  // that route without clicking the scrim/menu item; never project the old
+  // menu over the new surface when that happens.
+  useEffect(() => {
+    const origin = routeMenuOriginRef.current
+      ?? (accountOpen ? "account" : helpOpen ? "help" : null);
+    setAccountOpen(false);
+    setHelpOpen(false);
+    routeMenuOriginRef.current = null;
+    if (!origin) return;
+    const destination = route === "settings"
+      ? document.querySelector<HTMLButtonElement>(".settings-back")
+      : origin === "account"
+        ? accountTriggerRef.current
+        : helpTriggerRef.current;
+    destination?.focus();
+  }, [route]);
+
+  useEffect(() => {
+    const query = route === "chat" ? conversationQuery.trim() : "";
     if (!query) {
       setSearchState({ query: "", status: "idle", results: [] });
       return;
@@ -219,77 +274,83 @@ export function Sidebar({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [conversationQuery, searchAttempt]);
-
-  // The status line at the foot of the rail reads the same /readyz projection
-  // Operate renders in full; it never invents health it did not measure.
-  useEffect(() => {
-    if (typeof client.readiness !== "function") {
-      setHealth({ status: "unavailable", failing: 0 });
-      return;
-    }
-    let cancelled = false;
-    const pull = () => {
-      void client.readiness()
-        .then((result) => {
-          if (cancelled) return;
-          const failing = Object.values(result.checks ?? {})
-            .filter((check) => check.status !== "ok" && check.status !== "ready").length;
-          setHealth(result.status === "ready"
-            ? { status: "ready", failing: 0 }
-            : { status: "degraded", failing });
-        })
-        .catch(() => {
-          if (!cancelled) setHealth({ status: "unavailable", failing: 0 });
-        });
-    };
-    pull();
-    const timer = window.setInterval(pull, 60_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, []);
+  }, [conversationQuery, route, searchAttempt]);
 
   useEffect(() => {
-    if (!accountOpen) return;
+    if (route !== "chat" && conversationQuery) setConversationQuery("");
+  }, [conversationQuery, route]);
+
+  useEffect(() => {
+    if (!accountOpen && !helpOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAccountOpen(false);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        const trigger = accountOpen ? accountTriggerRef.current : helpTriggerRef.current;
+        setAccountOpen(false);
+        setHelpOpen(false);
+        trigger?.focus();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [accountOpen]);
+  }, [accountOpen, helpOpen]);
 
-  const query = conversationQuery.trim();
+  useEffect(() => {
+    const menu = accountOpen ? accountMenuRef.current : helpOpen ? helpMenuRef.current : null;
+    menu?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+  }, [accountOpen, helpOpen]);
+
+  const query = route === "chat" ? conversationQuery.trim() : "";
   const activeSearch = searchState.query === query
     ? searchState
     : { query, status: "loading" as const, results: [] };
   const visibleConversations = query ? activeSearch.results : conversations;
+  // Closed tasks live in Settings > Archived chats. Recents is shared by the
+  // primary shell routes, so filter it at the list boundary instead of letting
+  // a multi-line restore card leak back in whenever Chat is not selected.
+  const recentConversations = visibleConversations.filter(
+    (conversation) => conversation.status !== "closed",
+  );
+  const onlyClosedConversations = visibleConversations.length > 0
+    && recentConversations.length === 0;
+  const orderedConversations = [...recentConversations].sort((left, right) => (
+    Number(pinnedConversationIds.includes(right.id))
+    - Number(pinnedConversationIds.includes(left.id))
+  ));
 
-  async function restoreConversation(id: string) {
-    setRestoring(id);
-    setRestoreError("");
+  function togglePinnedConversation(id: string) {
+    setPinnedConversationIds((current) => {
+      const next = current.includes(id)
+        ? current.filter((conversationId) => conversationId !== id)
+        : [...current, id];
+      persistPinnedConversationIds(next);
+      return next;
+    });
+  }
+
+  async function archiveConversation(id: string) {
+    setConversationAction(id);
+    setConversationActionError("");
     try {
-      const result = await client.restoreMyConversation(id);
+      const result = await client.deleteMyConversation(id);
       if (result.status !== "ok") {
-        setRestoreError(result.reason ?? "The conversation could not be restored.");
+        setConversationActionError(result.reason ?? "The conversation could not be archived.");
         return;
       }
       setSearchState((current) => ({
         ...current,
-        results: current.results.map((conversation) => (
-          conversation.id === id ? { ...conversation, status: "active" } : conversation
-        )),
+        results: current.results.filter((conversation) => conversation.id !== id),
       }));
-      onConversationRestored(id);
+      onConversationArchived?.(id);
     } catch {
-      setRestoreError("The conversation could not be restored.");
+      setConversationActionError("The conversation could not be archived. It is safe to retry.");
     } finally {
-      setRestoring(null);
+      setConversationAction(null);
     }
   }
 
   function chooseAccountAction(action: (typeof accountMenuItems)[number]["action"]) {
+    routeMenuOriginRef.current = "account";
     setAccountOpen(false);
     if (action === "spend") {
       onSettingsSection?.("spend");
@@ -308,22 +369,82 @@ export function Sidebar({
     void client.logout().finally(() => window.location.reload());
   }
 
-  const initials = (identity?.user ?? "?").slice(0, 1).toUpperCase();
+  function chooseHelpAction(section: (typeof helpMenuItems)[number]["section"]) {
+    routeMenuOriginRef.current = "help";
+    setHelpOpen(false);
+    onSettingsSection?.(section);
+    onRoute("settings");
+  }
+
+  const initials = (identity?.user ?? "?")
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "?";
   const workspaceLabel = identity
-    ? `${identity.organisation} / ${identity.workspace}`
+    ? `${identity.organisation} · ${identity.workspace}`
     : (identityStatus === "unavailable" ? "Workspace unavailable" : "Loading workspace…");
-  const healthLabel = health.status === "loading"
-    ? "Checking health…"
-    : health.status === "ready"
-      ? "Everything responding"
-      : health.status === "degraded"
-        ? (health.failing > 0
-          ? `${health.failing} check${health.failing === 1 ? "" : "s"} not ready`
-          : "Some checks not ready")
-        : "Health unavailable";
-  const healthTone = health.status === "ready"
-    ? "green"
-    : health.status === "degraded" ? "amber" : "unknown";
+
+  function moveMenuFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>(
+      '[role="menuitem"]:not(:disabled)',
+    )];
+    if (items.length === 0) return;
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const next = event.key === "ArrowDown"
+      ? (current + 1) % items.length
+      : current < 0
+        ? items.length - 1
+        : (current - 1 + items.length) % items.length;
+    event.preventDefault();
+    items[next]?.focus();
+  }
+
+  function leaveMenuWithTab(
+    event: ReactKeyboardEvent<HTMLDivElement>,
+    trigger: HTMLButtonElement | null,
+  ) {
+    if (event.key !== "Tab") return false;
+    event.preventDefault();
+    const tabStops = [...document.querySelectorAll<HTMLElement>([
+      "a[href]",
+      "button:not(:disabled)",
+      "input:not(:disabled)",
+      "select:not(:disabled)",
+      "textarea:not(:disabled)",
+      "summary",
+      "[contenteditable='true']",
+      "[tabindex]",
+    ].join(", "))].filter((element) => {
+      if (element.tabIndex < 0 || element.closest("[hidden], [aria-hidden='true'], [inert]")) {
+        return false;
+      }
+      for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+        const style = window.getComputedStyle(current);
+        if (style.display === "none" || style.visibility === "hidden") return false;
+      }
+      return true;
+    });
+    const triggerIndex = trigger ? tabStops.indexOf(trigger) : -1;
+    const offset = event.shiftKey ? -1 : 1;
+    const destination = triggerIndex >= 0 ? tabStops[triggerIndex + offset] : null;
+    setAccountOpen(false);
+    setHelpOpen(false);
+    // Moving relative to the originating trigger reproduces normal document
+    // Tab order even though focus is currently on a programmatic menuitem.
+    (destination ?? trigger)?.focus();
+    return true;
+  }
+
+  function handleMenuKeyDown(
+    event: ReactKeyboardEvent<HTMLDivElement>,
+    trigger: HTMLButtonElement | null,
+  ) {
+    if (leaveMenuWithTab(event, trigger)) return;
+    moveMenuFocus(event);
+  }
 
   function renderAccountMenu() {
     if (!accountOpen) return null;
@@ -332,44 +453,84 @@ export function Sidebar({
         <button
           aria-label="Close account menu"
           className="side-menu-scrim"
-          onClick={() => setAccountOpen(false)}
+          onClick={() => {
+            setAccountOpen(false);
+            accountTriggerRef.current?.focus();
+          }}
+          tabIndex={-1}
           type="button"
         />
-        <div className="side-menu" role="menu">
+        <div
+          aria-label="Account"
+          className="side-menu shell-overlay-menu"
+          onKeyDown={(event) => handleMenuKeyDown(event, accountTriggerRef.current)}
+          ref={accountMenuRef}
+          role="menu"
+        >
           <div className="side-menu-identity">
             <span aria-hidden className="side-avatar">{initials}</span>
             <span className="side-menu-name">
               {identity
-                ? `${identity.user}${identity.role ? ` (${identity.role})` : ""}`
+                ? identity.user
                 : (identityStatus === "unavailable" ? "Identity unavailable" : "Loading identity…")}
             </span>
           </div>
           {accountMenuItems.map((item) => (
             <button
-              className="side-menu-row"
+              className="side-menu-row shell-parity-menu-row"
               key={item.action}
               onClick={() => chooseAccountAction(item.action)}
               role="menuitem"
+              tabIndex={-1}
               type="button"
             >
               <span className="nav-icon"><Icon name={item.icon} size={15} /></span>
-              <span>{item.label}</span>
+              <span className="shell-menu-label">{item.label}</span>
+              {item.tail && (
+                <span aria-hidden className={`shell-menu-tail${item.action === "spend" ? " disclosure" : ""}`}>
+                  {item.tail}
+                </span>
+              )}
             </button>
           ))}
-          <div className="side-menu-divider" role="separator" />
-          {menuSurfaces.map((item) => (
+        </div>
+      </>
+    );
+  }
+
+  function renderHelpMenu() {
+    if (!helpOpen) return null;
+    return (
+      <>
+        <button
+          aria-label="Close help menu"
+          className="side-menu-scrim"
+          onClick={() => {
+            setHelpOpen(false);
+            helpTriggerRef.current?.focus();
+          }}
+          tabIndex={-1}
+          type="button"
+        />
+        <div
+          aria-label="Help"
+          className="side-menu shell-overlay-menu shell-help-menu"
+          onKeyDown={(event) => handleMenuKeyDown(event, helpTriggerRef.current)}
+          ref={helpMenuRef}
+          role="menu"
+        >
+          <p className="shell-help-heading">Help</p>
+          {helpMenuItems.map((item) => (
             <button
-              className="side-menu-row"
-              key={item.route}
-              onClick={() => {
-                setAccountOpen(false);
-                onRoute(item.route);
-              }}
+              className="side-menu-row shell-parity-menu-row"
+              key={item.section}
+              onClick={() => chooseHelpAction(item.section)}
               role="menuitem"
+              tabIndex={-1}
               type="button"
             >
               <span className="nav-icon"><Icon name={item.icon} size={15} /></span>
-              <span>{item.label}</span>
+              <span className="shell-menu-label">{item.label}</span>
             </button>
           ))}
         </div>
@@ -382,14 +543,19 @@ export function Sidebar({
       <div className="sidebar-footer">
         <button
           aria-expanded={accountOpen}
+          aria-haspopup="menu"
           aria-label={identity
             ? `Signed in as ${identity.user}${identity.role ? `, role ${identity.role}` : ""}, ${identity.organisation}, ${identity.workspace}. Account menu`
             : `Account menu, identity ${identityStatus}`}
           className="side-account"
-          onClick={() => setAccountOpen((current) => !current)}
+          onClick={() => {
+            setAccountOpen((current) => !current);
+            setHelpOpen(false);
+          }}
           title={identity
             ? `${identity.user} · ${identity.role ?? "member"} · ${identity.organisation} / ${identity.workspace}`
             : undefined}
+          ref={accountTriggerRef}
           type="button"
         >
           <span aria-hidden className="side-avatar">{initials}</span>
@@ -399,24 +565,29 @@ export function Sidebar({
           </span>
         </button>
         <button
-          aria-label="Open settings"
+          aria-expanded={helpOpen}
+          aria-haspopup="menu"
+          aria-label="Help and shortcuts"
           className="side-round-button"
           onClick={() => {
-            onSettingsSection?.("you");
-            onRoute("settings");
+            setHelpOpen((current) => !current);
+            setAccountOpen(false);
           }}
+          title="Help and shortcuts"
+          ref={helpTriggerRef}
           type="button"
         >
-          <Icon name="gear" size={13} />
+          <Icon name="question" size={12} strokeWidth={2.1} />
         </button>
       </div>
     );
   }
 
-  // In settings the sidebar becomes the settings nav, as the decided target
-  // draws it: a way back, one search over every setting, and the ten sections
-  // under their heads. The identity footer remains anchored at the bottom so
-  // the user's menu and settings entry never disappear during navigation.
+  // In settings the sidebar becomes the self-contained settings rail drawn by
+  // the decided target: back, search, the ten sections, and its quiet help
+  // copy. Account and global-help controls remain one click away via Back to
+  // app; repeating them here adds a second footer the signed frame does not
+  // contain.
   if (route === "settings" && onSettingsSection) {
     return (
       <aside className="sidebar" aria-label="Settings navigation">
@@ -442,13 +613,9 @@ export function Sidebar({
           </div>
         </div>
         <nav aria-label="Settings sections" className="settings-side-nav">
-          {SETTINGS_SECTIONS.filter((entry) => {
-            const needle = settingsQuery.trim().toLowerCase();
-            if (!needle) return true;
-            return `${entry.label} ${entry.title} ${entry.lead}`.toLowerCase().includes(needle);
-          }).map((entry) => (
+          {SETTINGS_SECTIONS.map((entry) => (
             <div key={entry.id}>
-              {entry.head && !settingsQuery.trim() && (
+              {entry.head && (
                 <p className="settings-side-head">{entry.head}</p>
               )}
               <button
@@ -466,14 +633,15 @@ export function Sidebar({
         <p className="settings-side-foot">
           Every setting is one search away. Nothing is hidden, only quiet.
         </p>
-        {renderAccountMenu()}
-        {renderSidebarFooter()}
       </aside>
     );
   }
 
   return (
-    <aside className="sidebar" aria-label="Worker navigation">
+    <aside
+      className={route === "chat" ? "sidebar shell-parity" : "sidebar"}
+      aria-label="Worker navigation"
+    >
       <div className="side-top">
         <span className="side-brand">boltrig</span>
         {onCommandPalette && (
@@ -495,10 +663,9 @@ export function Sidebar({
       <button
         className="side-workspace"
         onClick={() => {
-          onSettingsSection?.("you");
-          onRoute("settings");
+          onRoute("organisation");
         }}
-        title="Open workspace settings"
+        title="Open organisation and workspace administration"
         type="button"
       >
         <span>{workspaceLabel}</span>
@@ -507,38 +674,34 @@ export function Sidebar({
         </svg>
       </button>
 
-      <button className="side-new-chat" onClick={() => onRoute("chat")} type="button">
-        <svg aria-hidden fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15">
-          <line x1="12" x2="12" y1="5" y2="19" />
-          <line x1="5" x2="19" y1="12" y2="12" />
-        </svg>
-        <span>New chat</span>
-        <kbd>⌘N</kbd>
-      </button>
-
       <nav className="side-nav">
         {primary.map((item) => (
           <button
+            aria-label={item.label}
             className={route === item.route ? "nav-row active" : "nav-row"}
             key={item.route}
             onClick={() => onRoute(item.route)}
+            title={item.title}
             type="button"
           >
             <span className="nav-icon"><Icon name={item.icon} /></span>
             <span>{item.label}</span>
+            {item.shortcut && <span className="nav-key">{item.shortcut}</span>}
           </button>
         ))}
       </nav>
 
       <p className="side-recents-label">Recents</p>
       <div className="sessions">
-        <input
-          className="conversation-search"
-          aria-label="Search conversations"
-          placeholder="Search conversations…"
-          value={conversationQuery}
-          onChange={(event) => setConversationQuery(event.target.value)}
-        />
+        {route === "chat" && (
+          <input
+            className="conversation-search"
+            aria-label="Search conversations"
+            placeholder="Search conversations…"
+            value={conversationQuery}
+            onChange={(event) => setConversationQuery(event.target.value)}
+          />
+        )}
         {!query && conversationStatus === "loading" && (
           <p className="muted small" role="status">
             {conversations.length > 0 ? "Refreshing conversations…" : "Loading conversations…"}
@@ -585,48 +748,78 @@ export function Sidebar({
         )}
         {!query
           && conversationStatus === "ready"
-          && visibleConversations.length === 0 && (
-          <p className="muted small">No conversations yet</p>
+          && recentConversations.length === 0 && (
+          <p className="muted small">
+            {onlyClosedConversations ? "No recent conversations" : "No conversations yet"}
+          </p>
         )}
         {query
           && activeSearch.status === "ready"
-          && visibleConversations.length === 0 && (
-          <p className="muted small">No matching conversations</p>
+          && recentConversations.length === 0 && (
+          <p className="muted small">
+            {onlyClosedConversations ? "No matching recent conversations" : "No matching conversations"}
+          </p>
         )}
-        {visibleConversations.map((conversation) => (
-          conversation.status === "closed" ? (
-            <div className="session-row closed" data-status="closed" key={conversation.id}>
-              <span>{conversation.title || "Untitled task"}</span>
-              <time>{relativeTime(conversation.updated_at)}</time>
-              <small>Closed · retained during the recovery window</small>
-              <button
-                type="button"
-                className="session-restore"
-                disabled={restoring === conversation.id}
-                onClick={() => void restoreConversation(conversation.id)}
-              >
-                {restoring === conversation.id ? "Restoring…" : "Restore"}
-              </button>
-            </div>
-          ) : (
+        {orderedConversations.map((conversation) => (
+          <div
+            className={`session-row${selectedConversation === conversation.id ? " active" : ""}${pinnedConversationIds.includes(conversation.id) ? " pinned" : ""}`}
+            key={conversation.id}
+          >
             <button
-              className={
-                selectedConversation === conversation.id
-                  ? "session-row active"
-                  : "session-row"
-              }
-              key={conversation.id}
+              aria-current={selectedConversation === conversation.id ? "page" : undefined}
+              className="session-main"
               onClick={() => onConversation(conversation.id)}
               type="button"
             >
-              <span>{conversation.title || "Untitled task"}</span>
-              <time>{relativeTime(conversation.updated_at)}</time>
+              <span className="session-title">
+                <span>{conversation.title || "Untitled task"}</span>
+                {workingConversationIds.includes(conversation.id) && (
+                  <span
+                    aria-label="Working on this chat"
+                    className="session-working-indicator"
+                    role="status"
+                    title="Working on this chat"
+                  />
+                )}
+              </span>
+              <time className="shell-recent-meta" dateTime={conversation.updated_at}>
+                {relativeTime(conversation.updated_at, relativeNow)}
+              </time>
               {typeof (conversation as ConversationSearchResult).snippet === "string"
-                && <small>{(conversation as ConversationSearchResult).snippet}</small>}
+                && <small className="shell-recent-meta">{(conversation as ConversationSearchResult).snippet}</small>}
             </button>
-          )
+            <div className="session-actions" aria-label={`Actions for ${conversation.title || "Untitled task"}`}>
+              <button
+                aria-label={pinnedConversationIds.includes(conversation.id)
+                  ? `Unpin ${conversation.title || "conversation"}`
+                  : `Pin ${conversation.title || "conversation"}`}
+                className="session-action session-pin-action"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  togglePinnedConversation(conversation.id);
+                }}
+                title={pinnedConversationIds.includes(conversation.id) ? "Unpin conversation" : "Pin conversation"}
+                type="button"
+              >
+                <Icon name="pin" size={13} />
+              </button>
+              <button
+                aria-label={`Archive ${conversation.title || "conversation"}`}
+                className="session-action"
+                disabled={conversationAction === conversation.id}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void archiveConversation(conversation.id);
+                }}
+                title="Archive conversation"
+                type="button"
+              >
+                <Icon name="archive" size={13} />
+              </button>
+            </div>
+          </div>
         ))}
-        {restoreError && <p className="session-error" role="alert">{restoreError}</p>}
+        {conversationActionError && <p className="session-error" role="alert">{conversationActionError}</p>}
         {!query && conversationStatus === "ready" && hasMoreConversations && (
           <button className="secondary-button" onClick={onLoadMore} type="button">
             Load more conversations
@@ -634,34 +827,8 @@ export function Sidebar({
         )}
       </div>
 
-      {pendingStatus === "ready" && pendingCount !== null && pendingCount > 0 && (
-        <button
-          aria-label={`${pendingCount} pending decisions`}
-          className="side-status"
-          onClick={() => onRoute("inbox")}
-          type="button"
-        >
-          <span aria-hidden className="side-status-dot amber" />
-          <span>{pendingCount === 1 ? "One thing needs you" : `${pendingCount} things need you`}</span>
-        </button>
-      )}
-
-      <button
-        className="side-status"
-        onClick={() => onRoute("operate")}
-        title="Open Operate"
-        type="button"
-      >
-        <span aria-hidden className={`side-status-dot ${healthTone}`} />
-        <span>{healthLabel}</span>
-      </button>
-
-      <a className="side-status side-operator" href="/operator/">
-        <span className="nav-icon"><Icon name="code" size={13} /></span>
-        <span>Open Operator</span>
-      </a>
-
       {renderAccountMenu()}
+      {renderHelpMenu()}
       {renderSidebarFooter()}
     </aside>
   );
@@ -669,25 +836,48 @@ export function Sidebar({
 
 const settingsIcons: Record<SettingsSection, keyof typeof ICON_PATHS> = {
   you: "user",
-  autonomy: "pulse",
-  spend: "pulse",
-  shortcuts: "code",
+  autonomy: "shield",
+  spend: "gauge",
+  shortcuts: "keyboard",
   knowledge: "book",
-  overnight: "clock",
-  health: "monitor",
+  overnight: "moon",
+  health: "pulse",
+  operations: "pulse",
   organisation: "org",
-  advanced: "gear",
-  archived: "inbox",
+  advanced: "code",
+  archived: "archive",
 };
+
+const PINNED_CONVERSATIONS_KEY = "boltrig-worker-pinned-conversations";
+
+function readPinnedConversationIds(): string[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(PINNED_CONVERSATIONS_KEY) ?? "[]");
+    return Array.isArray(value)
+      ? value.filter((id): id is string => typeof id === "string" && id.length > 0)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistPinnedConversationIds(ids: string[]): void {
+  try {
+    localStorage.setItem(PINNED_CONVERSATIONS_KEY, JSON.stringify(ids));
+  } catch {
+    // Pinning is a presentation preference; the action still applies for the
+    // current render when storage is unavailable.
+  }
+}
 
 function settingsIcon(section: SettingsSection): keyof typeof ICON_PATHS {
   return settingsIcons[section];
 }
 
-function relativeTime(value: string): string {
+function relativeTime(value: string, now = Date.now()): string {
   const time = Date.parse(value);
   if (!Number.isFinite(time)) return "";
-  const minutes = Math.max(0, Math.round((Date.now() - time) / 60_000));
+  const minutes = Math.max(0, Math.round((now - time) / 60_000));
   if (minutes < 1) return "now";
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.round(minutes / 60);
@@ -696,19 +886,7 @@ function relativeTime(value: string): string {
 }
 
 export function Topbar({ title, status }: { title: string; status?: string }) {
-  const {
-    identity,
-    identityStatus,
-    pendingCount,
-    pendingStatus,
-  } = useWorkerGlobalContext();
-  const hasPending = pendingStatus === "ready" && pendingCount !== null && pendingCount > 0;
-  const pendingLabel = pendingStatus === "ready"
-    ? (hasPending ? `${pendingCount} pending` : "Inbox clear")
-    : (pendingStatus === "unavailable" ? "Inbox unavailable" : "Checking Inbox");
-  const pendingAriaLabel = pendingStatus === "ready"
-    ? `Open Inbox, ${pendingCount ?? 0} pending decisions`
-    : `Open Inbox, status ${pendingStatus}`;
+  const { identity, identityStatus } = useWorkerGlobalContext();
   const identityTitle = identity
     ? [
       `Signed in as ${identity.user}${identity.role ? ` (${identity.role})` : ""}`,
@@ -718,30 +896,17 @@ export function Topbar({ title, status }: { title: string; status?: string }) {
 
   return (
     <header className="topbar">
-      <div>
+      <div className="topbar-heading">
         <h1>{title}</h1>
+        {status && <span className="topbar-context">{status}</span>}
       </div>
       <div className="topbar-actions">
-        {status && <span className="status-pill"><i />{status}</span>}
-        <button
-          type="button"
-          className={`inbox-pill ${pendingStatus}${hasPending ? " has-pending" : ""}`}
-          aria-label={pendingAriaLabel}
-          onClick={() => navigate("inbox")}
-        >
-          <i aria-hidden />
-          {pendingLabel}
-        </button>
         <span
           className={`identity-chip ${identityStatus}`}
           title={identityTitle}
         >
-          <strong>
-            {identity?.user ?? (identityStatus === "unavailable" ? "Identity unavailable" : "You")}
-          </strong>
-          {identity && (
-            <small>{identity.organisation} / {identity.workspace}</small>
-          )}
+          <strong>{identity?.user ?? (identityStatus === "unavailable" ? "Identity unavailable" : "You")}</strong>
+          {identity && <small className="identity-context">{identity.organisation} / {identity.workspace}</small>}
         </span>
       </div>
     </header>

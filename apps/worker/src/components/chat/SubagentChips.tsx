@@ -1,36 +1,64 @@
 import type { SubagentEntry } from "@wlilley93/boltrig-web-sdk";
 
 import { FamiliarBadge } from "../familiar/FamiliarBadge";
+import "./TranscriptDensity.css";
 
 interface SubagentChipsProps {
   subagents: SubagentEntry[];
   /** The parent turn has settled (durable transcript or ended live turn). */
   turnEnded: boolean;
-  /** Developer detail: monospace skill/policy chips on fan-out rows. */
+  /** Developer detail: real skills/policy receipts stay compact in the chip. */
   tech: boolean;
-  /** Mount point for the subagent tab strip (SubagentTabs): when provided,
-      every chip and fan-out row becomes a button that opens that subagent's
-      own pane. Absent, the rows render as plain rows - never a dead button. */
+  /** When provided, each chip opens the real subagent pane. Without it the
+      chip is static rather than becoming a dead button. */
   onOpenSubagent?(agent: SubagentEntry): void;
 }
 
 function badgeState(agent: SubagentEntry, turnEnded: boolean): "ready" | "working" {
-  if (agent.status && agent.status !== "running") return "ready";
+  if (agent.status === "running") return "working";
+  if (agent.status) return "ready";
   return turnEnded ? "ready" : "working";
 }
 
-/** The settled state word. `status` is set only by a `subagent_end` frame, so
- * an un-upgraded kernel that never emits one honestly shows nothing settled:
- * "working" while the turn is live, and no claim at all once it is not. */
+/** Only claim a state the event contract actually supplied. An ended parent
+ * with no subagent_end has no visible state word; it must not become updated. */
 function stateWord(agent: SubagentEntry, turnEnded: boolean): {
   word: string;
   tone?: "red" | "amber" | "muted";
 } {
-  if (agent.status === "ok") return { word: "finished" };
+  if (agent.status === "ok") return { word: "updated" };
   if (agent.status === "error") return { word: "failed", tone: "red" };
   if (agent.status === "degraded") return { word: "degraded", tone: "amber" };
-  if (!turnEnded) return { word: "working", tone: "muted" };
+  if (agent.status === "running" || !turnEnded) return { word: "working", tone: "muted" };
   return { word: "" };
+}
+
+function groupState(subagents: SubagentEntry[], turnEnded: boolean): {
+  label: string;
+  tone?: "red" | "amber" | "muted";
+} | null {
+  const words = subagents.map((agent) => stateWord(agent, turnEnded));
+  const known = words.filter((state) => state.word);
+  if (known.length === 0) return null;
+  const unique = [...new Set(known.map((state) => state.word))];
+  if (known.length === subagents.length && unique.length === 1) {
+    return { label: unique[0]!, tone: known[0]!.tone };
+  }
+  const order = ["updated", "working", "degraded", "failed"];
+  const parts = order.flatMap((word) => {
+    const count = known.filter((state) => state.word === word).length;
+    return count > 0 ? [`${count} ${word}`] : [];
+  });
+  const unknown = subagents.length - known.length;
+  if (unknown > 0) parts.push(`${unknown} status unknown`);
+  return {
+    label: parts.join(", "),
+    tone: known.some((state) => state.tone === "red")
+      ? "red"
+      : known.some((state) => state.tone === "amber")
+        ? "amber"
+        : "muted",
+  };
 }
 
 export function SubagentChips({
@@ -40,88 +68,69 @@ export function SubagentChips({
   onOpenSubagent,
 }: SubagentChipsProps) {
   if (subagents.length === 0) return null;
-  const shown = subagents.slice(0, 3);
-  const rest = subagents.slice(3);
-  // The tail only claims "finished" when every remaining subagent actually
-  // reported a settle frame; otherwise it counts without a verdict.
-  const restLabel = rest.length === 0
-    ? ""
-    : rest.every((agent) => agent.status && agent.status !== "running")
-      ? `and ${rest.length} other ${rest.length === 1 ? "subagent" : "subagents"} finished`
-      : `and ${rest.length} more ${rest.length === 1 ? "subagent" : "subagents"}`;
-
+  const aggregate = groupState(subagents, turnEnded);
   return (
-    <>
-      <div className="subagent-chips">
-        {shown.map((agent) => {
-          const inner = (
-            <>
-              <FamiliarBadge
-                state={badgeState(agent, turnEnded)}
-                genotype={agent.familiarGenotype}
-                label={agent.name ?? agent.task}
-              />
-              <span>{agent.name ?? agent.task}</span>
-            </>
-          );
-          if (!onOpenSubagent) {
-            return <span className="subagent-chip" key={agent.key}>{inner}</span>;
-          }
+    <div className="subagent-chips transcript-subagent-chips">
+      {subagents.map((agent) => {
+        const name = agent.name ?? agent.task;
+        const state = stateWord(agent, turnEnded);
+        const techBits = [
+          ...agent.skills,
+          ...(agent.spawnRule ? [`policy ${agent.spawnRule.id}`] : []),
+        ];
+        const accessible = [
+          name,
+          agent.name ? agent.task : "",
+          state.word,
+          tech && techBits.length > 0 ? techBits.join(", ") : "",
+        ].filter(Boolean).join(" · ");
+        const inner = (
+          <>
+            <FamiliarBadge
+              decorative
+              state={badgeState(agent, turnEnded)}
+              genotype={agent.familiarGenotype}
+              label={name}
+            />
+            <span className="transcript-subagent-name">{name}</span>
+            {tech && techBits.length > 0 && (
+              <code className="transcript-subagent-tech">{techBits.join(" · ")}</code>
+            )}
+          </>
+        );
+        if (!onOpenSubagent) {
+          const supplemental = [
+            agent.name ? agent.task : "",
+            state.word,
+            tech && techBits.length > 0 ? techBits.join(", ") : "",
+          ].filter(Boolean).join(" · ");
           return (
-            <button
-              aria-label={`Open subagent ${agent.name ?? agent.task}`}
-              className="subagent-chip"
-              key={agent.key}
-              onClick={() => onOpenSubagent(agent)}
-              type="button"
-            >
+            <span className="subagent-chip transcript-subagent-chip" key={agent.key}>
               {inner}
-            </button>
-          );
-        })}
-        {restLabel && <span className="subagent-chips-rest">{restLabel}</span>}
-      </div>
-      <div className="subagent-fanout">
-        {subagents.map((agent) => {
-          const state = stateWord(agent, turnEnded);
-          const techBits = [
-            ...agent.skills,
-            ...(agent.spawnRule ? [`policy ${agent.spawnRule.id}`] : []),
-          ];
-          const inner = (
-            <>
-              <FamiliarBadge
-                state={badgeState(agent, turnEnded)}
-                genotype={agent.familiarGenotype}
-                label={agent.name ?? agent.task}
-              />
-              <span className="subagent-fan-name">{agent.name ?? "Subagent"}</span>
-              <span className="subagent-fan-task">{agent.task}</span>
-              {tech && techBits.length > 0 && (
-                <span className="verb-chip">{techBits.join(" · ")}</span>
+              {supplemental && (
+                <span className="transcript-subagent-sr">{supplemental}</span>
               )}
-              {state.word && (
-                <span className="subagent-fan-state" data-tone={state.tone}>
-                  {state.word}
-                </span>
-              )}
-            </>
+            </span>
           );
-          if (!onOpenSubagent) {
-            return <div className="subagent-fan-row" key={agent.key}>{inner}</div>;
-          }
-          return (
-            <button
-              className="subagent-fan-row"
-              key={agent.key}
-              onClick={() => onOpenSubagent(agent)}
-              type="button"
-            >
-              {inner}
-            </button>
-          );
-        })}
-      </div>
-    </>
+        }
+        return (
+          <button
+            aria-label={`Open subagent ${accessible}`}
+            className="subagent-chip transcript-subagent-chip"
+            key={agent.key}
+            onClick={() => onOpenSubagent(agent)}
+            title={agent.task}
+            type="button"
+          >
+            {inner}
+          </button>
+        );
+      })}
+      {aggregate && (
+        <small className="transcript-subagent-group-state" data-tone={aggregate.tone}>
+          {aggregate.label}
+        </small>
+      )}
+    </div>
   );
 }

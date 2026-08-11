@@ -82,9 +82,8 @@ describe("subagent tabs", () => {
     renderTabs();
     expect(screen.getByText(/3 steps recorded/)).toBeTruthy();
     // The design's fabricated per-step rows ("Read 20 account records", …)
-    // must not appear; the full log is linked out instead.
-    const operator = screen.getByRole("link", { name: "Open full event stream" });
-    expect(operator.getAttribute("href")).toBe("/operator/#/runs/child-1");
+    // must not appear; the stream exposes only the count it actually carries.
+    expect(screen.queryByRole("link", { name: "Open full event stream" })).toBeNull();
   });
 
   it("fills the allowed-to-do card with real skills and real audit spend", async () => {

@@ -15,10 +15,11 @@ from boltrig.fleet.chat import (
     ConversationForbidden,
     build_turn_executor,
 )
+from boltrig.fleet import build_spawner
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.kernel.events import EventRelay
-from boltrig.models import GrantSet, TenantPermissions
+from boltrig.models import AgentCapability, GrantSet, TenantPermissions
 from boltrig.store import InMemoryStore
 
 T = "acme"
@@ -64,6 +65,38 @@ async def test_chat_streams_events_and_persists():
     msgs = await store.list_messages(T, convs[0].id)
     assert [m.role.value for m in msgs] == ["user", "assistant"]
     assert msgs[1].content == "Created ticket 1."
+
+
+@pytest.mark.invariant("FR-CONV-04")
+async def test_direct_chat_worker_is_not_rendered_as_a_delegated_subagent():
+    """The worker answering the turn is the root, not a child in its own transcript.
+
+    Real delegated work still uses Spawner's default announcement behaviour; only
+    the direct chat entrypoint suppresses the synthetic child projection.
+    """
+    store, relay = InMemoryStore(), EventRelay()
+    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
+    await store.upsert_capability(
+        AgentCapability("chat-worker", T, "python-script", ["*"], 2, True, "cheap")
+    )
+    kernel = Kernel(store)
+    chat = ChatService(
+        store,
+        relay,
+        turn_executor=build_turn_executor(
+            kernel,
+            build_spawner(kernel),
+            continuity=False,
+            chat_config=ChatConfig(default_capability="chat-worker"),
+        ),
+    )
+
+    out = await _collect(
+        chat.handle_turn(tenant_id=T, user_id="alice", role="engineer", message="hello")
+    )
+
+    assert not any(event["type"] in {"subagent", "subagent_end"} for event in out)
+    assert any(event["type"] == "text_delta" for event in out)
 
 
 @pytest.mark.invariant("FR-CONV-04")
@@ -246,7 +279,7 @@ async def test_consumed_steer_enters_the_prompt_inside_the_untrusted_envelope():
     captured: list[str] = []
 
     async def spawn(tenant_id, task, skills, prefer, context, *,
-                    partial_on_budget=True, grant_ceiling=None):
+                    partial_on_budget=True, grant_ceiling=None, announce_child=True):
         captured.append(task)
         if len(captured) == 1:
             await gate.wait()
@@ -605,7 +638,7 @@ async def test_a_long_reply_is_persisted_in_full_not_capped_at_the_summary_bound
     long_text = "The full answer. " * 30  # 510 chars, comfortably over the 256 bound
 
     async def spawn(tenant_id, task, skills, prefer, context, *,
-                    partial_on_budget=True, grant_ceiling=None):
+                    partial_on_budget=True, grant_ceiling=None, announce_child=True):
         # Mirrors the codex lane: full text in output, a short line in summary.
         return {"output": {"runtime": "codex_app_server", "text": long_text},
                 "summary": long_text[:256]}
@@ -640,7 +673,7 @@ async def test_a_degraded_turn_still_falls_back_to_the_summary_line():
     store, relay = InMemoryStore(), EventRelay()
 
     async def spawn(tenant_id, task, skills, prefer, context, *,
-                    partial_on_budget=True, grant_ceiling=None):
+                    partial_on_budget=True, grant_ceiling=None, announce_child=True):
         return {"output": {"_degraded": True}, "summary": "backend unavailable",
                 "degraded": True}
 
@@ -681,7 +714,7 @@ def test_the_channel_a_turn_arrived_through_is_recorded_without_steering_routing
     store, relay = InMemoryStore(), EventRelay()
 
     async def spawn(tenant_id, task, skills, prefer, context, *,
-                    partial_on_budget=True, grant_ceiling=None):
+                    partial_on_budget=True, grant_ceiling=None, announce_child=True):
         return {"output": {"text": "done"}, "summary": "done"}
 
     kernel = types.SimpleNamespace(store=store)

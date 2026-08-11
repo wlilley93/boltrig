@@ -1,0 +1,165 @@
+{
+  "metrics": [
+    {
+      "changed_pixel_ratio_gt_16": 0.01642746913580247,
+      "changed_pixel_ratio_gt_32": 0.012201388888888888,
+      "changed_pixel_ratio_gt_8": 0.027978395061728396,
+      "diff_path": "docs/design/evidence/2026-08-11-console-parity/diff/new-chat.png",
+      "diff_sha256": "e9bd0a375706c46fdf4f2ada42e2e5f27b09604ee6510fc163e885a5039e5bc6",
+      "exact_changed_pixel_ratio": 0.8457060185185186,
+      "mean_absolute_channel_delta": 4.518080504115226,
+      "psnr_db": 26.42589225662021,
+      "root_mean_square_channel_delta": 12.168738756835022,
+      "shipped_path": "docs/design/evidence/2026-08-11-console-parity/shipped/new-chat.png",
+      "shipped_sha256": "4c92dd982c7776dc5931b6cce4bd89db421852c5d28a1c7f33bdde500c2dfa51",
+      "state": "new-chat",
+      "target_path": "docs/design/evidence/2026-08-11-console-parity/figma/new-chat__13-2.png",
+      "target_sha256": "8c51c188fa0e2e42c00487baa65db70dfdba88b8bd931c344f9040c3778979fb",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "changed_pixel_ratio_gt_16": 0.057743055555555554,
+      "changed_pixel_ratio_gt_32": 0.0440679012345679,
+      "changed_pixel_ratio_gt_8": 0.08691666666666667,
+      "diff_path": "docs/design/evidence/2026-08-11-console-parity/diff/chat-run.png",
+      "diff_sha256": "065ec362c3686e0c08bb01fbbf35daf3b44870310ddd304cabdbf7f9f59083b0",
+      "exact_changed_pixel_ratio": 0.8307878086419753,
+      "mean_absolute_channel_delta": 8.063656378600824,
+      "psnr_db": 20.511449782332928,
+      "root_mean_square_channel_delta": 24.041839377174536,
+      "shipped_path": "docs/design/evidence/2026-08-11-console-parity/shipped/chat-run.png",
+      "shipped_sha256": "0756f6bde341cb3f2097b6f3a8620172e4001d92ba71a986c187ffe49681ddb0",
+      "state": "chat-run",
+      "target_path": "docs/design/evidence/2026-08-11-console-parity/figma/chat-run__5-2.png",
+      "target_sha256": "f6a92ec2b856bf772cd95bafb65d8fa2b137ae4eb906339555d18e6425c667be",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "changed_pixel_ratio_gt_16": 0.034443672839506174,
+      "changed_pixel_ratio_gt_32": 0.022185956790123456,
+      "changed_pixel_ratio_gt_8": 0.05994907407407407,
+      "diff_path": "docs/design/evidence/2026-08-11-console-parity/diff/agents.png",
+      "diff_sha256": "5d33dfe48d84483d62bb3b360a9173c6732d81781b0ee188daa6a28ead987a9f",
+      "exact_changed_pixel_ratio": 0.8139560185185185,
+      "mean_absolute_channel_delta": 4.286229681069959,
+      "psnr_db": 25.131744234956727,
+      "root_mean_square_channel_delta": 14.123845841262098,
+      "shipped_path": "docs/design/evidence/2026-08-11-console-parity/shipped/agents.png",
+      "shipped_sha256": "4c2545f4495ccbfa0edc999b7e04c4e1b5d99ce91ddbd5c812ecc58be7d8cd28",
+      "state": "agents",
+      "target_path": "docs/design/evidence/2026-08-11-console-parity/figma/agents__15-2.png",
+      "target_sha256": "d1f626cb5451162f4ec46f3d0eac063c9b920447b530e46834e4a201f924a70e",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "changed_pixel_ratio_gt_16": 0.0377908950617284,
+      "changed_pixel_ratio_gt_32": 0.024381944444444446,
+      "changed_pixel_ratio_gt_8": 0.06428086419753086,
+      "diff_path": "docs/design/evidence/2026-08-11-console-parity/diff/plugins.png",
+      "diff_sha256": "352f6d635ed5a24aab7feab4dac8fb34190c33122442142a73fecbeb5e4f16ba",
+      "exact_changed_pixel_ratio": 0.8369429012345679,
+      "mean_absolute_channel_delta": 4.1627476851851855,
+      "psnr_db": 25.136093433315153,
+      "root_mean_square_channel_delta": 14.116775519935384,
+      "shipped_path": "docs/design/evidence/2026-08-11-console-parity/shipped/plugins.png",
+      "shipped_sha256": "f6c58fecf2ebd6ea490aac757d49e13c56ed33f83cbb3863350c05c109c8f7c0",
+      "state": "plugins",
+      "target_path": "docs/design/evidence/2026-08-11-console-parity/figma/plugins__14-2.png",
+      "target_sha256": "97c4dcd61311526d8ddfddfce01936bad6804ffd5da9d756fb93db2d8e549344",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "changed_pixel_ratio_gt_16": 0.04376157407407407,
+      "changed_pixel_ratio_gt_32": 0.03203395061728395,
+      "changed_pixel_ratio_gt_8": 0.07553549382716049,
+      "diff_path": "docs/design/evidence/2026-08-11-console-parity/diff/command-palette.png",
+      "diff_sha256": "fdf3f170053059c821e662989ce45800767c754fab22cc90bc17b9d4d781e98e",
+      "exact_changed_pixel_ratio": 0.8239189814814815,
+      "mean_absolute_channel_delta": 4.596897633744856,
+      "psnr_db": 25.02295310244195,
+      "root_mean_square_channel_delta": 14.301860094424566,
+      "shipped_path": "docs/design/evidence/2026-08-11-console-parity/shipped/command-palette.png",
+      "shipped_sha256": "3c9e7d9bbd84128d2c47da456ec9e7c0b315dd31b98c7eac272264f5cab41cc2",
+      "state": "command-palette",
+      "target_path": "docs/design/evidence/2026-08-11-console-parity/figma/command-palette__16-2.png",
+      "target_sha256": "d6db445fc5f144ce7e69fb413e54a520e5b1a7a7c3453825543661634fa387d4",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "changed_pixel_ratio_gt_16": 0.03428009259259259,
+      "changed_pixel_ratio_gt_32": 0.027440586419753086,
+      "changed_pixel_ratio_gt_8": 0.043395061728395065,
+      "diff_path": "docs/design/evidence/2026-08-11-console-parity/diff/call.png",
+      "diff_sha256": "8b3e4a0a6f280605496c254dc01029a009c8f7d9e66209d67117563ff983d23a",
+      "exact_changed_pixel_ratio": 0.9983827160493827,
+      "mean_absolute_channel_delta": 3.5965702160493827,
+      "psnr_db": 23.848360879841756,
+      "root_mean_square_channel_delta": 16.37276907336171,
+      "shipped_path": "docs/design/evidence/2026-08-11-console-parity/shipped/call.png",
+      "shipped_sha256": "79686e9c082e7451f93496851e070ba697a52c4f413e342e9af05d5dfe50d4d5",
+      "state": "call",
+      "target_path": "docs/design/evidence/2026-08-11-console-parity/figma/call__17-2.png",
+      "target_sha256": "31b55e68eadb7f0a1d8767c9b7435d668b531f2ae38c915ea976bc893d67f45e",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "changed_pixel_ratio_gt_16": 0.02789891975308642,
+      "changed_pixel_ratio_gt_32": 0.02179706790123457,
+      "changed_pixel_ratio_gt_8": 0.04784567901234568,
+      "diff_path": "docs/design/evidence/2026-08-11-console-parity/diff/settings-you.png",
+      "diff_sha256": "2cd4ce9b190407aad7da1017ccd2a8f6879e8e3cdf5d74f32ff185182116d44e",
+      "exact_changed_pixel_ratio": 0.8458695987654321,
+      "mean_absolute_channel_delta": 5.204179526748971,
+      "psnr_db": 24.788764590253827,
+      "root_mean_square_channel_delta": 14.69271149551828,
+      "shipped_path": "docs/design/evidence/2026-08-11-console-parity/shipped/settings-you.png",
+      "shipped_sha256": "ad8ff7f0671a92b1f8c618ca954962135ad539b617fdaf92355a968c867f914a",
+      "state": "settings-you",
+      "target_path": "docs/design/evidence/2026-08-11-console-parity/figma/settings-you__22-2.png",
+      "target_sha256": "b1d04f772b8f54a22ad02fa3e7917262f7ffecffeb65106c187bb0f5b0758213",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    }
+  ],
+  "schema": "boltrig-console-visual-diff.v1",
+  "states_compared": [
+    "new-chat",
+    "chat-run",
+    "agents",
+    "plugins",
+    "command-palette",
+    "call",
+    "settings-you"
+  ],
+  "states_expected": [
+    "new-chat",
+    "chat-run",
+    "agents",
+    "plugins",
+    "command-palette",
+    "call",
+    "settings-you"
+  ],
+  "states_missing": [],
+  "viewport": "1440x900"
+}

@@ -9,4 +9,4 @@ Task-oriented onboarding for a tenant admin standing up and running a Boltrig bo
 5. [Audit and compliance](04-audit-and-compliance.md) - the tamper-evident hash-chained audit, the SecurityEvent stream, the rollup anchor (and the Principal-gated external-anchoring seam), and how to search and verify.
 6. [Security model](05-security-model.md) - the one-page trust model for a security reviewer: the dispatch chokepoint, deny-by-default grants, sealed credentials, the HITL gate, session + CSRF, edge-auth options, and what is Principal-gated (external audit anchoring).
 
-All route examples assume the console at `http://localhost:8080` (the `UI_PORT`). Mutating requests over a first-party session must echo the `boltrig_csrf` cookie in the `x-boltrig-csrf` header.
+All route examples assume the Worker at `http://localhost:8082` (the `WORKER_PORT`). Mutating requests over a first-party session must echo the `boltrig_csrf` cookie in the `x-boltrig-csrf` header.

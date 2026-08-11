@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import threading
 
 import pytest
 from fastapi.testclient import TestClient
@@ -542,3 +543,53 @@ def test_health_is_registry_derived_and_revoke_drops_only_the_owned_reference():
         ).json()["status"]
         == "revoked"
     )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-06")
+def test_health_probe_cannot_resurrect_a_connection_revoked_while_refreshing(
+    monkeypatch,
+):
+    kernel, store = asyncio.run(_kernel())
+    client = TestClient(create_app(kernel))
+    refresh_started = threading.Event()
+    allow_refresh = threading.Event()
+    original_refresh = kernel.loader.refresh_health
+
+    async def delayed_refresh():
+        refresh_started.set()
+        assert await asyncio.to_thread(allow_refresh.wait, 5)
+        await original_refresh()
+
+    monkeypatch.setattr(kernel.loader, "refresh_health", delayed_refresh)
+    result: dict[str, object] = {}
+
+    def request_health() -> None:
+        result["response"] = client.get(
+            "/v1/integrations/connections/conn-tickets/health",
+            headers=_headers(),
+        )
+
+    request_thread = threading.Thread(target=request_health)
+    request_thread.start()
+    assert refresh_started.wait(5)
+    revoked, credential_ref, deleted = asyncio.run(
+        store.revoke_integration_connection_with_credential(T, "conn-tickets")
+    )
+    assert revoked is not None and revoked.health == "revoked"
+    assert credential_ref == "integration:tickets:credential"
+    assert deleted is True
+    allow_refresh.set()
+    request_thread.join(5)
+    assert not request_thread.is_alive()
+
+    response = result["response"]
+    assert response.status_code == 200
+    assert response.json()["connection"]["health"] == "revoked"
+    assert response.json()["connection"]["credential_ref_present"] is False
+    stored = asyncio.run(store.get_integration_connection(T, "conn-tickets"))
+    assert stored is not None and stored.health == "revoked"
+    assert stored.credential_ref is None
+    assert asyncio.run(
+        store.get_credential_ref(T, "integration:tickets:credential")
+    ) is None

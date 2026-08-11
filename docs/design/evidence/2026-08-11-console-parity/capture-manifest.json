@@ -1,0 +1,181 @@
+{
+  "schema": "boltrig-console-capture-manifest.v1",
+  "captureStatus": "complete",
+  "currentSourceBinding": {
+    "status": "stale",
+    "invalidatedAt": "2026-08-11T13:52:46Z",
+    "reason": "Worker and visual-fixture source changed after this historical capture. These images and metrics must not be presented as evidence of the current working tree; recapture all seven states losslessly and regenerate every digest before rebinding VDS review evidence."
+  },
+  "currentFigmaSourceObservation": {
+    "path": "docs/design/evidence/2026-08-11-console-parity/figma-connected-inventory.json",
+    "sha256": "a0cfe8a4a3dd8303d1afdce0b751123558fe6d6b1595d13f4e328bf85b2a6f77",
+    "recordedAt": "2026-08-11T15:05:02Z",
+    "metadataNodesResolved": 7,
+    "liveRenderTargetByteMatches": 7,
+    "vdsFrameLedgerEligible": false
+  },
+  "visualVerdict": "measured_deviations_present",
+  "authority": {
+    "archive": "/Users/williamlilley/Downloads/Theme control and settings design (1).zip",
+    "archiveSha256": "330fd389ecb4e7485c90207e0a2eb8fc0885c16cbed01a6a3d20a0e945c5ad5b",
+    "executable": "Boltrig Console.dc.html",
+    "executableSha256": "fbc2fa7a6bb73eeca19bbec2622e24c113a45c974b8b723e738e287436ba0c4f",
+    "figmaFileKey": "iVQBKFc3NpRH3zdOOxfPqr",
+    "figmaUrl": "https://www.figma.com/design/iVQBKFc3NpRH3zdOOxfPqr",
+    "frameExports": "live connected-file node renders at natural size"
+  },
+  "servedBuild": {
+    "kind": "vite-development-server",
+    "origin": "http://127.0.0.1:4173",
+    "branch": "feat/console-target",
+    "head": "0e234e2796854861227087c0bfdb219ebc8dd341",
+    "dirty": true,
+    "trackedPatchSha256": "623704060941fd67b32e62020621c352828f0e31d2adb4b0def3cb336c01140c",
+    "fullSourceTreeSha256": "8e8edd137f240fdfcfeface789f77003e634c72a8b80c438d7c9420341b824ed",
+    "sourceScope": [
+      "apps/worker/src",
+      "apps/worker/tests/visual"
+    ],
+    "sourceDigestBeforeCapture": "8e8edd137f240fdfcfeface789f77003e634c72a8b80c438d7c9420341b824ed",
+    "sourceDigestAfterCapture": "8e8edd137f240fdfcfeface789f77003e634c72a8b80c438d7c9420341b824ed",
+    "sourceUnchangedDuringCapture": true,
+    "packageManifestSha256": "f519db54844e2066aaa42747456584a0dd3d0c083a6554848a9c3b52be06e63a",
+    "packageLockSha256": "c8b350c8c87f6f195a59a214ebf6aee84a44b1ba566f36fa5686a9a6a3af33f5",
+    "nodeVersion": "v24.18.0",
+    "viteVersion": "6.4.3"
+  },
+  "capture": {
+    "startedAt": "2026-08-11T06:41:30.943Z",
+    "completedAt": "2026-08-11T06:42:06.714Z",
+    "runner": "Codex in-app Browser",
+    "browserUserAgent": null,
+    "browserUserAgentNote": "The isolated browser automation wrapper does not expose navigator metadata.",
+    "viewport": {
+      "width": 1440,
+      "height": 900,
+      "devicePixelRatio": 1
+    },
+    "theme": "dark",
+    "frozenDateNow": "2026-08-11T03:30:00Z",
+    "reducedMotionClassAppliedBeforeAppImport": true,
+    "cssAnimationsDisabled": true,
+    "cssTransitionsDisabled": true,
+    "fixtureMisses": 0,
+    "readinessRule": "Each settled selector is emitted only after the state's required request prefixes complete, no requests remain pending, no fixture miss exists, and the real surface-specific DOM is mounted.",
+    "pairedCaptureDelayMs": 1100,
+    "allPairedRawCapturesByteIdentical": true,
+    "transportEncoding": "jpeg",
+    "storedEncoding": "png",
+    "transcodeNote": "The browser wrapper returned 1440x900 JPEG bytes despite a PNG request. Each first stable capture was decoded and re-encoded as a true RGB PNG with macOS sips; the stored PNG preserves those decoded pixels without an additional lossy step."
+  },
+  "comparison": {
+    "metricsPath": "docs/design/evidence/2026-08-11-console-parity/metrics.json",
+    "generatorPath": "docs/design/evidence/2026-08-11-console-parity/compare.py",
+    "statesCompared": 7,
+    "statesMissing": 0,
+    "acceptanceRule": "Pixel deltas are measurements, not conformance. Runtime-truth and accessibility deviations are retained and classified rather than replaced with static sample facts."
+  },
+  "states": [
+    {
+      "state": "new-chat",
+      "figmaNodeId": "13:2",
+      "url": "http://127.0.0.1:4173/tests/visual/parity.html?state=new-chat&theme=dark",
+      "settledSelector": "html[data-visual-ready=\"new-chat\"]",
+      "capturedAt": "2026-08-11T06:41:30.943Z",
+      "rawCaptureSha256": "ca25b6e0245b0e4371670a3bed7b8398b770040a79ccc5888b9160c394d592be",
+      "pairedRawCaptureSha256": "ca25b6e0245b0e4371670a3bed7b8398b770040a79ccc5888b9160c394d592be",
+      "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/new-chat__13-2.png",
+      "targetSha256": "8c51c188fa0e2e42c00487baa65db70dfdba88b8bd931c344f9040c3778979fb",
+      "shippedPath": "docs/design/evidence/2026-08-11-console-parity/shipped/new-chat.png",
+      "shippedSha256": "4c92dd982c7776dc5931b6cce4bd89db421852c5d28a1c7f33bdde500c2dfa51"
+    },
+    {
+      "state": "chat-run",
+      "figmaNodeId": "5:2",
+      "url": "http://127.0.0.1:4173/tests/visual/parity.html?state=chat-run&theme=dark",
+      "settledSelector": "html[data-visual-ready=\"chat-run\"]",
+      "capturedAt": "2026-08-11T06:41:33.803Z",
+      "rawCaptureSha256": "d7b670af5c6a99a30f26598655b677044bd6527c34b6f3bce284b19cbcab6168",
+      "pairedRawCaptureSha256": "d7b670af5c6a99a30f26598655b677044bd6527c34b6f3bce284b19cbcab6168",
+      "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/chat-run__5-2.png",
+      "targetSha256": "f6a92ec2b856bf772cd95bafb65d8fa2b137ae4eb906339555d18e6425c667be",
+      "shippedPath": "docs/design/evidence/2026-08-11-console-parity/shipped/chat-run.png",
+      "shippedSha256": "0756f6bde341cb3f2097b6f3a8620172e4001d92ba71a986c187ffe49681ddb0"
+    },
+    {
+      "state": "agents",
+      "figmaNodeId": "15:2",
+      "url": "http://127.0.0.1:4173/tests/visual/parity.html?state=agents&theme=dark",
+      "settledSelector": "html[data-visual-ready=\"agents\"]",
+      "capturedAt": "2026-08-11T06:41:46.848Z",
+      "rawCaptureSha256": "b655b69f0efa1cfd5beebce3724ba7ceb1e05e1155ec115a4b7a4a810a2868a3",
+      "pairedRawCaptureSha256": "b655b69f0efa1cfd5beebce3724ba7ceb1e05e1155ec115a4b7a4a810a2868a3",
+      "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/agents__15-2.png",
+      "targetSha256": "d1f626cb5451162f4ec46f3d0eac063c9b920447b530e46834e4a201f924a70e",
+      "shippedPath": "docs/design/evidence/2026-08-11-console-parity/shipped/agents.png",
+      "shippedSha256": "4c2545f4495ccbfa0edc999b7e04c4e1b5d99ce91ddbd5c812ecc58be7d8cd28"
+    },
+    {
+      "state": "plugins",
+      "figmaNodeId": "14:2",
+      "url": "http://127.0.0.1:4173/tests/visual/parity.html?state=plugins&theme=dark",
+      "settledSelector": "html[data-visual-ready=\"plugins\"]",
+      "capturedAt": "2026-08-11T06:41:49.602Z",
+      "rawCaptureSha256": "7d58544c3775fb78130db1e0ca9ec2831b78ccc94297b3c68b22b0c2ef2d4491",
+      "pairedRawCaptureSha256": "7d58544c3775fb78130db1e0ca9ec2831b78ccc94297b3c68b22b0c2ef2d4491",
+      "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/plugins__14-2.png",
+      "targetSha256": "97c4dcd61311526d8ddfddfce01936bad6804ffd5da9d756fb93db2d8e549344",
+      "shippedPath": "docs/design/evidence/2026-08-11-console-parity/shipped/plugins.png",
+      "shippedSha256": "f6c58fecf2ebd6ea490aac757d49e13c56ed33f83cbb3863350c05c109c8f7c0"
+    },
+    {
+      "state": "command-palette",
+      "figmaNodeId": "16:2",
+      "url": "http://127.0.0.1:4173/tests/visual/parity.html?state=command-palette&theme=dark",
+      "settledSelector": "html[data-visual-ready=\"command-palette\"]",
+      "capturedAt": "2026-08-11T06:41:57.342Z",
+      "rawCaptureSha256": "0b68a7f1c97866c9b4f0869bc48d64d0ae6d17aa1ff0dbe1936a0447bbd9588b",
+      "pairedRawCaptureSha256": "0b68a7f1c97866c9b4f0869bc48d64d0ae6d17aa1ff0dbe1936a0447bbd9588b",
+      "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/command-palette__16-2.png",
+      "targetSha256": "d6db445fc5f144ce7e69fb413e54a520e5b1a7a7c3453825543661634fa387d4",
+      "shippedPath": "docs/design/evidence/2026-08-11-console-parity/shipped/command-palette.png",
+      "shippedSha256": "3c9e7d9bbd84128d2c47da456ec9e7c0b315dd31b98c7eac272264f5cab41cc2"
+    },
+    {
+      "state": "call",
+      "figmaNodeId": "17:2",
+      "url": "http://127.0.0.1:4173/tests/visual/parity.html?state=call&theme=dark",
+      "settledSelector": "html[data-visual-ready=\"call\"]",
+      "capturedAt": "2026-08-11T06:42:00.196Z",
+      "rawCaptureSha256": "3407947c136d8499ffed9190bc1bf8a395a1bb6ffa9108c906334814b0efc2c0",
+      "pairedRawCaptureSha256": "3407947c136d8499ffed9190bc1bf8a395a1bb6ffa9108c906334814b0efc2c0",
+      "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/call__17-2.png",
+      "targetSha256": "31b55e68eadb7f0a1d8767c9b7435d668b531f2ae38c915ea976bc893d67f45e",
+      "shippedPath": "docs/design/evidence/2026-08-11-console-parity/shipped/call.png",
+      "shippedSha256": "79686e9c082e7451f93496851e070ba697a52c4f413e342e9af05d5dfe50d4d5"
+    },
+    {
+      "state": "settings-you",
+      "figmaNodeId": "22:2",
+      "url": "http://127.0.0.1:4173/tests/visual/parity.html?state=settings-you&theme=dark",
+      "settledSelector": "html[data-visual-ready=\"settings-you\"]",
+      "capturedAt": "2026-08-11T06:42:06.714Z",
+      "rawCaptureSha256": "9aa8216875a7c3d7b06697ddd207c4551ed3193728d0951eb2809e03c87d203d",
+      "pairedRawCaptureSha256": "9aa8216875a7c3d7b06697ddd207c4551ed3193728d0951eb2809e03c87d203d",
+      "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/settings-you__22-2.png",
+      "targetSha256": "b1d04f772b8f54a22ad02fa3e7917262f7ffecffeb65106c187bb0f5b0758213",
+      "shippedPath": "docs/design/evidence/2026-08-11-console-parity/shipped/settings-you.png",
+      "shippedSha256": "ad8ff7f0671a92b1f8c618ca954962135ad539b617fdaf92355a968c867f914a"
+    }
+  ],
+  "authorityDivergences": [
+    "The command-palette Figma frame clips an 1880px source canvas and therefore places the 560px dialog at x=660, y=135 in its 1440x900 CURRENT SOURCE frame. The shipped comparison now matches that frame exactly, while the latest executable HTML would centre the dialog at x=440; DECISION-0003 makes the verified Figma frame govern this measured state.",
+    "The command-palette background is the truthful completed Chat-run fixture. It omits the Figma sample's live HITL, computer-use and spend details because this fixture has no receipts for those states."
+  ],
+  "formalEvidenceLimits": [
+    "The available Figma REST ledger is depth-limited and omits New chat node 13:2, so it is not eligible for a new VDS contract sign-off. A separate authenticated MCP metadata observation confirms that 13:2 exists, but MCP metadata is not a saved REST nodes response and cannot lawfully supply the missing frame digest.",
+    "The connected account currently reports a Full seat in a Pro My Files plan, but the connector does not expose a raw nodes response and this shell has no FIGMA_TOKEN for a fresh full-depth REST capture. Earlier Code Connect and Variables attempts did not produce eligible linkage evidence.",
+    "Chat run and New chat share one code route while VDS visual reviews are route-scoped; both state comparisons remain here even though only one could occupy the route's live VDS slot.",
+    "No VDS conform verdict or component/token linkage is implied by this capture manifest."
+  ]
+}

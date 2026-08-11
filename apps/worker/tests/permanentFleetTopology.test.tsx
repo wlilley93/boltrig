@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -64,7 +64,263 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+async function openTopologyEditor() {
+  fireEvent.click(await screen.findByRole("button", { name: "Inspect chief-of-staff" }));
+  fireEvent.click(screen.getByRole("button", { name: "Edit topology" }));
+}
+
+type FleetOverlayKind = "inspector" | "handoff" | "editor";
+
+const modalCases: ReadonlyArray<{
+  kind: FleetOverlayKind;
+  label: string;
+  initialFocus: string;
+  leavesInspectorOpen: boolean;
+}> = [
+  {
+    kind: "inspector",
+    label: "chief-of-staff fleet inspector",
+    initialFocus: "Close fleet inspector",
+    leavesInspectorOpen: false,
+  },
+  {
+    kind: "handoff",
+    label: "Create a profile from chief-of-staff",
+    initialFocus: "Open profile author",
+    leavesInspectorOpen: false,
+  },
+  {
+    kind: "editor",
+    label: "Permanent fleet topology editor",
+    initialFocus: "Request hierarchy change",
+    leavesInspectorOpen: true,
+  },
+];
+
+async function openFleetOverlay(kind: FleetOverlayKind) {
+  const { container } = render(
+    <PermanentFleetTopology onCreateProfile={vi.fn()} />,
+  );
+  const inspectChief = await screen.findByRole("button", {
+    name: "Inspect chief-of-staff",
+  });
+  const backgroundControl = screen.getByRole("button", {
+    name: "Inspect research-head",
+  });
+  let opener: HTMLElement;
+
+  if (kind === "handoff") {
+    opener = screen.getByRole("button", {
+      name: "Start child profile handoff from chief-of-staff",
+    });
+    opener.focus();
+    fireEvent.click(opener);
+  } else {
+    inspectChief.focus();
+    fireEvent.click(inspectChief);
+    if (kind === "inspector") {
+      opener = inspectChief;
+    } else {
+      const inspector = screen.getByRole("dialog", {
+        name: "chief-of-staff fleet inspector",
+      });
+      opener = within(inspector).getByRole("button", { name: "Edit topology" });
+      opener.focus();
+      fireEvent.click(opener);
+    }
+  }
+
+  return {
+    backgroundControl,
+    container,
+    opener,
+  };
+}
+
 describe("Permanent fleet exact approval continuation", () => {
+  it.each(modalCases)(
+    "makes the $kind overlay modal, traps focus, and restores its exact opener",
+    async ({ kind, label, initialFocus, leavesInspectorOpen }) => {
+      const { backgroundControl, container, opener } = await openFleetOverlay(kind);
+      const dialog = screen.getByRole("dialog", { name: label });
+      const surface = container.querySelector<HTMLElement>(".fleet-surface")!;
+
+      expect(dialog.getAttribute("aria-modal")).toBe("true");
+      expect(surface.hasAttribute("inert")).toBe(true);
+      expect(surface.getAttribute("aria-hidden")).toBe("true");
+      expect(document.activeElement).toBe(within(dialog).getByRole("button", {
+        name: initialFocus,
+      }));
+      if (leavesInspectorOpen) {
+        const underlyingInspector = screen.getByRole("dialog", {
+          hidden: true,
+          name: "chief-of-staff fleet inspector",
+        });
+        expect(underlyingInspector.getAttribute("aria-modal")).toBeNull();
+        expect(underlyingInspector.parentElement?.hasAttribute("inert")).toBe(true);
+        expect(screen.queryByRole("dialog", {
+          name: "chief-of-staff fleet inspector",
+        })).toBeNull();
+      }
+
+      const focusable = [...dialog.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+      )];
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      expect(first).toBeTruthy();
+      expect(last).toBeTruthy();
+
+      first.focus();
+      fireEvent.keyDown(first, { key: "Tab", shiftKey: true });
+      expect(document.activeElement).toBe(last);
+      fireEvent.keyDown(last, { key: "Tab" });
+      expect(document.activeElement).toBe(first);
+
+      // Even synthetic clicks cannot punch through the inert fleet surface.
+      fireEvent.click(backgroundControl);
+      expect(screen.getByRole("dialog", { name: label })).toBe(dialog);
+
+      fireEvent.keyDown(document.activeElement ?? dialog, { key: "Escape" });
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: label })).toBeNull());
+      await waitFor(() => expect(document.activeElement).toBe(opener));
+      expect(surface.hasAttribute("inert")).toBe(leavesInspectorOpen);
+    },
+  );
+
+  it.each(modalCases)(
+    "closes the $kind overlay only when the scrim itself is pressed",
+    async ({ kind, label }) => {
+      const { opener } = await openFleetOverlay(kind);
+      const dialog = screen.getByRole("dialog", { name: label });
+      const scrim = dialog.parentElement!;
+
+      fireEvent.mouseDown(dialog);
+      expect(screen.getByRole("dialog", { name: label })).toBe(dialog);
+      fireEvent.mouseDown(scrim);
+
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: label })).toBeNull());
+      await waitFor(() => expect(document.activeElement).toBe(opener));
+    },
+  );
+
+  it("centres a narrow authored hierarchy in the scroll plane", async () => {
+    const { container } = render(<PermanentFleetTopology />);
+
+    await screen.findByRole("button", { name: "Inspect chief-of-staff" });
+    const wraps = [...container.querySelectorAll<HTMLElement>(".fleet-node-wrap")];
+    expect(wraps).toHaveLength(2);
+    expect(wraps.map((node) => node.style.left)).toEqual(["380px", "380px"]);
+  });
+
+  it("centres the truthful six-head row within the framed target canvas", async () => {
+    api.permanentFleet.mockResolvedValue({
+      ...canonical,
+      hierarchy: {
+        ...hierarchy,
+        departments: Array.from({ length: 6 }, (_, index) => ({
+          ...hierarchy.departments[0],
+          name: `department-${index + 1}`,
+          routing_id: `department-${index + 1}`,
+        })),
+      },
+    });
+
+    const { container } = render(<PermanentFleetTopology />);
+    const canvas = container.querySelector<HTMLElement>(".fleet-canvas")!;
+    Object.defineProperties(canvas, {
+      // The 1,142px target border box has a 1px border on either side.
+      clientWidth: { configurable: true, value: 1140 },
+      scrollWidth: { configurable: true, value: 1178 },
+    });
+
+    await screen.findByRole("button", { name: "Inspect department-6" });
+    await waitFor(() => expect(canvas.scrollLeft).toBe(19));
+    const plane = container.querySelector<HTMLElement>(".fleet-plane")!;
+    expect(plane.style.width).toBe("1178px");
+    const first = screen.getByRole("button", { name: "Inspect department-1" })
+      .closest<HTMLElement>(".fleet-node-wrap")!;
+    const last = screen.getByRole("button", { name: "Inspect department-6" })
+      .closest<HTMLElement>(".fleet-node-wrap")!;
+    const clippedAtStart = Number.parseFloat(first.style.left) - 98 - canvas.scrollLeft;
+    const clippedAtEnd = Number.parseFloat(last.style.left) + 98
+      - canvas.scrollLeft - canvas.clientWidth;
+    expect(canvas.clientWidth + 2).toBe(1142);
+    expect(clippedAtStart).toBe(-18);
+    expect(clippedAtEnd).toBe(18);
+  });
+
+  it("keeps a narrower six-head viewport centred and horizontally scrollable", async () => {
+    api.permanentFleet.mockResolvedValue({
+      ...canonical,
+      hierarchy: {
+        ...hierarchy,
+        departments: Array.from({ length: 6 }, (_, index) => ({
+          ...hierarchy.departments[0],
+          name: `department-${index + 1}`,
+          routing_id: `department-${index + 1}`,
+        })),
+      },
+    });
+
+    const { container } = render(<PermanentFleetTopology />);
+    const canvas = container.querySelector<HTMLElement>(".fleet-canvas")!;
+    Object.defineProperties(canvas, {
+      clientWidth: { configurable: true, value: 900 },
+      scrollWidth: { configurable: true, value: 1178 },
+    });
+
+    await screen.findByRole("button", { name: "Inspect department-6" });
+    await waitFor(() => expect(canvas.scrollLeft).toBe(139));
+    expect(canvas.scrollWidth).toBeGreaterThan(canvas.clientWidth);
+  });
+
+  it("uses exact lowercase authority labels", async () => {
+    render(<PermanentFleetTopology />);
+
+    const legend = await screen.findByLabelText("Authority legend");
+    expect([...legend.querySelectorAll(".fleet-authority-key-item")].map((item) => (
+      item.textContent
+    ))).toEqual(["read", "write", "send", "spend", "delegate"]);
+    expect(within(legend).queryByText("Read")).toBeNull();
+  });
+
+  it("uses a genotype-backed badge inside Fleet nodes without mounting a premium Stage", async () => {
+    const genotype = {
+      source: "agent_capability.name.v1" as const,
+      seed: 898153330,
+      body: "kepler",
+      palette: ["#ffedd5", "#f97316", "#7c2d12"],
+      markings: ["orbit"],
+      accessories: ["antenna"],
+      voice_id: null,
+    };
+    render(<PermanentFleetTopology profiles={[{
+      name: "research-head",
+      runtime: "codex",
+      supported_skills: ["research/*"],
+      max_depth: 2,
+      is_ephemeral: false,
+      cost_tier: "cheap",
+      model_endpoint: null,
+      source: "control-plane",
+      is_active: true,
+      status: "active",
+      familiar_genotype: genotype,
+    }]} />);
+
+    const familiar = await screen.findByRole("img", {
+      name: "research-head profile Familiar",
+    });
+    expect(familiar.dataset.genotypeSource).toBe("agent_capability.name.v1");
+    const badge = familiar.querySelector<HTMLElement>(".familiar-orb");
+    expect(badge).toBeTruthy();
+    expect(badge?.dataset.familiarBody).toBe("kepler");
+    expect(badge?.dataset.renderer).toBe("badge");
+    expect(badge?.style.width).toBe("32px");
+    expect(familiar.querySelector(".familiar-stage")).toBeNull();
+  });
+
   it("renders construction evidence without claiming runtime liveness", async () => {
     api.permanentFleet.mockResolvedValue({
       ...canonical,
@@ -105,7 +361,7 @@ describe("Permanent fleet exact approval continuation", () => {
       });
 
     render(<PermanentFleetTopology />);
-    fireEvent.click(await screen.findByRole("button", { name: "Edit topology" }));
+    await openTopologyEditor();
     fireEvent.change(screen.getAllByLabelText("Purpose")[0], {
       target: { value: "Coordinate exact approved work" },
     });
@@ -139,7 +395,7 @@ describe("Permanent fleet exact approval continuation", () => {
     });
 
     render(<PermanentFleetTopology />);
-    fireEvent.click(await screen.findByRole("button", { name: "Edit topology" }));
+    await openTopologyEditor();
     fireEvent.click(screen.getByRole("button", {
       name: "Request hierarchy change",
     }));
@@ -175,7 +431,7 @@ describe("Permanent fleet exact approval continuation", () => {
     api.invokeApprovalState.mockResolvedValue({ status: "consumed" });
 
     render(<PermanentFleetTopology />);
-    fireEvent.click(await screen.findByRole("button", { name: "Edit topology" }));
+    await openTopologyEditor();
     fireEvent.click(screen.getByRole("button", {
       name: "Request hierarchy change",
     }));
@@ -195,7 +451,7 @@ describe("Permanent fleet exact approval continuation", () => {
 
   it("keeps the department routing-identity input mounted while it is edited", async () => {
     render(<PermanentFleetTopology />);
-    fireEvent.click(await screen.findByRole("button", { name: "Edit topology" }));
+    await openTopologyEditor();
     const routingInput = screen.getAllByLabelText("Routing identity")[1];
     fireEvent.change(routingInput, { target: { value: "researchops" } });
     expect(screen.getAllByLabelText("Routing identity")[1]).toBe(routingInput);

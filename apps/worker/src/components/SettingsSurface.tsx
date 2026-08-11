@@ -3,6 +3,7 @@ import type { BudgetItem } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../client";
 import type { SettingsSection } from "../settingsSections";
+import { OperationsSection } from "./OperationsView";
 import { ArchivedSection } from "./settings/ArchivedSection";
 import {
   CompactAdvancedSection,
@@ -16,11 +17,12 @@ import { SectionHead } from "./settings/SectionHead";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { SpendingSection } from "./settings/SpendingSection";
 import { SettingsGroup, SettingsRow } from "./settings/rowKit";
+import "./settings/settings-you.css";
 
 // The settings pane, recast onto the typed row-control kit in
 // ./settings/rowKit.tsx. Every section uses the same calm row idiom. Larger
-// operational surfaces remain available from their dedicated app routes, but
-// the settings route does not force most users through those dense dashboards.
+// the operations evidence surface lives here as well, so settings is the single
+// place for workspace posture, audit evidence and budget controls.
 
 // Re-exported so other surfaces (the Plugins pane shares this renderer) keep
 // importing the row idiom from here.
@@ -83,11 +85,17 @@ export function SettingsSectionPane({ section, head = true }: {
   if (section === "spend") return <SpendingSection head={head} />;
   if (section === "autonomy") return <AutonomySection head={head} />;
   if (section === "health") return <HealthSection head={head} />;
+  if (section === "operations") return <OperationsSection head={head} />;
   if (section === "shortcuts") return <ShortcutsSection head={head} />;
   if (section === "overnight") return <OvernightSection head={head} />;
   if (section === "archived") return <ArchivedSection head={head} />;
   if (section === "you") {
-    return <>{head && <SectionHead section={section} />}<CompactYouSection /></>;
+    return (
+      <div className="settings-you-pane">
+        {head && <SectionHead section={section} />}
+        <CompactYouSection />
+      </div>
+    );
   }
   if (section === "organisation") {
     return <>{head && <SectionHead section={section} />}<CompactOrganisationSection /></>;

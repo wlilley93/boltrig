@@ -197,7 +197,7 @@ def test_sandbox_network_egress_is_enforced_in_manifests():
     # The secure overlay makes the sandbox internal: true => no arbitrary egress.
     secure = _compose_yaml(_REPO / "deploy" / "compose.secure.yml")
     assert secure["networks"]["sandbox"]["internal"] is True
-    for service in ("kernel", "ui", "hatchet-engine", "hatchet-dashboard", "bifrost"):
+    for service in ("kernel", "worker-ui", "hatchet-engine", "hatchet-dashboard", "bifrost"):
         assert secure["services"][service].get("ports") == []
 
 
@@ -212,7 +212,7 @@ async def test_continuity_only_composes_the_callers_own_conversation():
     captured: list[str] = []
 
     async def spawn(tenant_id, task, skills, prefer, context, *,
-                    partial_on_budget=True, grant_ceiling=None):
+                    partial_on_budget=True, grant_ceiling=None, announce_child=True):
         captured.append(task)
         return {"summary": "ok"}
 

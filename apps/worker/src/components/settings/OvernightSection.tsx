@@ -115,7 +115,7 @@ export function OvernightSection({ head = true }: { head?: boolean }) {
   if (pending) {
     badge = { tone: "amber", word: "Waiting on you" };
     headline = "A night is parked, waiting for a person";
-    lead = "Nightly practice stops at a human gate. Approve or decline it from the Inbox; nothing is kept until you do.";
+    lead = "Nightly practice stops at a human gate. Approve or decline it in the originating chat; nothing is kept until you do.";
   } else if (!latest && receipts.length > 0) {
     badge = null;
     headline = "Gate activity, but no readable verdict";

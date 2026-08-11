@@ -21,7 +21,8 @@ D1 - the identity command set stays exactly {initiate, set-password,
      subparser later.
 D5 - the shipped ``control.*`` approval window is at least 24 hours, at BOTH
      the dataclass default and the parser fallback, and the two agree.
-D7 - the Python and TypeScript ``AUTHOR_ROLES`` sets are equal.
+D7 - the Worker client has no separate Operator role vocabulary to drift from
+     the server's ``AUTHOR_ROLES``.
 
 These read the SHIPPED artefacts - the parser this CLI actually builds, the
 constants this module actually compiles, the two source files as they are on
@@ -45,7 +46,6 @@ from boltrig.config.manifest import (
     HitlConfig,
     _parse_hitl,
 )
-from boltrig.identity.rbac import AUTHOR_ROLES
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -210,34 +210,3 @@ def test_a_stated_window_is_still_honoured(stated: int) -> None:
     write, taking effect unannounced.
     """
     assert _parse_hitl({"approval_timeout_seconds": stated}).approval_timeout_seconds == stated
-
-
-# --- D7: one name, one set --------------------------------------------------
-
-
-def _typescript_author_roles() -> set[str]:
-    """Parse the shipped TypeScript source; do not restate it here."""
-    src = (REPO_ROOT / "ui" / "src" / "deck" / "deckMap.ts").read_text()
-    match = re.search(
-        r"export const AUTHOR_ROLES\s*:\s*ReadonlySet<string>\s*=\s*new Set\(\[(.*?)\]\)",
-        src,
-        re.S,
-    )
-    assert match, "AUTHOR_ROLES is no longer declared in ui/src/deck/deckMap.ts"
-    return set(re.findall(r'"([^"]+)"', match.group(1)))
-
-
-def test_python_and_typescript_author_roles_are_equal() -> None:
-    """Divergence in EITHER direction fails: each is a different live bug.
-
-    Missing in TypeScript hides a studio from someone the kernel would let in
-    (which is what shipped: `superadmin` and `admin` were absent). Missing in
-    Python offers a studio the kernel then 403s.
-    """
-    ts = _typescript_author_roles()
-    py = set(AUTHOR_ROLES)
-    assert ts == py, (
-        f"AUTHOR_ROLES has drifted. Only in TypeScript: {sorted(ts - py)}; "
-        f"only in Python: {sorted(py - ts)}. One name must not mean two sets "
-        "([2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001, D7)."
-    )

@@ -220,7 +220,7 @@ describe("Worker external MCP operations", () => {
       body,
       undefined,
     ));
-    expect(await screen.findByText(/waiting for approval in Inbox/i)).toBeTruthy();
+    expect(await screen.findByText(/waiting for approval in the originating chat/i)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", {
       name: "Check approval and apply exact change",
@@ -405,7 +405,7 @@ describe("Worker external MCP operations", () => {
     fireEvent.click(await screen.findByText("external-docs"));
     fireEvent.click(await screen.findByRole("button", { name: "Probe server" }));
     expect(api.probeMcpServer).toHaveBeenCalledWith("external-docs", undefined);
-    expect(await screen.findByText(/waiting for approval in Inbox/i)).toBeTruthy();
+    expect(await screen.findByText(/waiting for approval in the originating chat/i)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", {
       name: "Check approval and apply exact change",

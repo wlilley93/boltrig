@@ -1,0 +1,355 @@
+{
+  "schema": "boltrig-console-current-capture-manifest.v1",
+  "status": "captured_unreviewed",
+  "visualVerdict": "not_assessed",
+  "vdsReviewsUpdated": false,
+  "capturedAt": "2026-08-11T15:36:50.486Z",
+  "viewport": {
+    "width": 1440,
+    "height": 900,
+    "deviceScaleFactor": 1
+  },
+  "sourceBinding": {
+    "status": "current_at_capture",
+    "scope": [
+      "apps/worker/src",
+      "apps/worker/tests/visual"
+    ],
+    "digestAlgorithm": "sha256-path-type-content-v1",
+    "digestBeforeCapture": "91585a25a0a3651786219e6a4a3aa2712d46358d0e43a95f6710b1b6a0d325e0",
+    "digestAfterCapture": "91585a25a0a3651786219e6a4a3aa2712d46358d0e43a95f6710b1b6a0d325e0",
+    "sourceUnchangedDuringCapture": true,
+    "branch": "feat/console-target",
+    "head": "23238fab5acf1bb888421360f40f14b17bde79ae",
+    "dirty": true
+  },
+  "runner": {
+    "script": "apps/worker/tests/visual/capture-current.mjs",
+    "node": "v24.18.0",
+    "browser": "chromium",
+    "browserVersion": "149.0.7827.55",
+    "browserExecutable": "/Users/williamlilley/Library/Caches/ms-playwright/chromium-1228/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    "origin": "http://127.0.0.1:1420",
+    "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
+  },
+  "states": [
+    {
+      "state": "new-chat",
+      "figmaNodeId": "13:2",
+      "target": "docs/design/evidence/2026-08-11-console-parity/figma/new-chat__13-2.png",
+      "url": "http://127.0.0.1:1420/tests/visual/parity.html?state=new-chat&theme=dark",
+      "hash": "#/chat",
+      "settledSelector": "html[data-visual-ready=\"new-chat\"]",
+      "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
+      "sha256": "4198b0a208a3e9658cb046b1aa461ef2bc04abd956fec7405a6d624e143088d1",
+      "width": 1440,
+      "height": 900,
+      "captureContract": {
+        "schema": "boltrig-worker-visual-capture-contract.v1",
+        "state": "new-chat",
+        "expectedHash": "#/chat",
+        "actualHash": "#/chat",
+        "viewport": {
+          "width": 1440,
+          "height": 900,
+          "devicePixelRatio": 1
+        },
+        "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
+        "ready": true,
+        "settledAt": "2026-08-11T03:30:00Z",
+        "stableFrames": 4,
+        "pendingRequests": 0,
+        "missingRequestPrefixes": [],
+        "fixtureMisses": [],
+        "contractMisses": [],
+        "requestedPaths": [
+          "/v1/capabilities",
+          "/v1/calls?limit=10",
+          "/v1/me/settings",
+          "/v1/familiar/phenotype",
+          "/v1/model-profiles",
+          "/v1/chat/config",
+          "/v1/conversations?limit=25&offset=0",
+          "/v1/me/settings",
+          "/v1/orgs/current",
+          "/v1/workspaces",
+          "/v1/console/overview?limit=1"
+        ]
+      }
+    },
+    {
+      "state": "chat-run",
+      "figmaNodeId": "5:2",
+      "target": "docs/design/evidence/2026-08-11-console-parity/figma/chat-run__5-2.png",
+      "url": "http://127.0.0.1:1420/tests/visual/parity.html?state=chat-run&theme=dark",
+      "hash": "#/chat/run-thread",
+      "settledSelector": "html[data-visual-ready=\"chat-run\"]",
+      "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
+      "sha256": "ab6f6bc624e64db9578e860e42260dca401cdd72f8df43051e1c1619122fffac",
+      "width": 1440,
+      "height": 900,
+      "captureContract": {
+        "schema": "boltrig-worker-visual-capture-contract.v1",
+        "state": "chat-run",
+        "expectedHash": "#/chat/run-thread",
+        "actualHash": "#/chat/run-thread",
+        "viewport": {
+          "width": 1440,
+          "height": 900,
+          "devicePixelRatio": 1
+        },
+        "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
+        "ready": true,
+        "settledAt": "2026-08-11T03:30:00Z",
+        "stableFrames": 3,
+        "pendingRequests": 0,
+        "missingRequestPrefixes": [],
+        "fixtureMisses": [],
+        "contractMisses": [],
+        "requestedPaths": [
+          "/v1/conversations/run-thread",
+          "/v1/artifacts?conversation_id=run-thread&limit=25",
+          "/v1/conversations",
+          "/v1/me/settings",
+          "/v1/familiar/phenotype",
+          "/v1/model-profiles",
+          "/v1/chat/config",
+          "/v1/conversations?limit=25&offset=0",
+          "/v1/me/settings",
+          "/v1/orgs/current",
+          "/v1/workspaces",
+          "/v1/console/overview?limit=1",
+          "/v1/capabilities",
+          "/v1/calls?limit=10",
+          "/v1/calls/current?conversation_id=run-thread"
+        ]
+      }
+    },
+    {
+      "state": "agents",
+      "figmaNodeId": "15:2",
+      "target": "docs/design/evidence/2026-08-11-console-parity/figma/agents__15-2.png",
+      "url": "http://127.0.0.1:1420/tests/visual/parity.html?state=agents&theme=dark",
+      "hash": "#/agents",
+      "settledSelector": "html[data-visual-ready=\"agents\"]",
+      "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/agents.png",
+      "sha256": "3a6da2cbdee40277a6e3dd7af9348ec4a36693efb273d63216804a8b7c691e50",
+      "width": 1440,
+      "height": 900,
+      "captureContract": {
+        "schema": "boltrig-worker-visual-capture-contract.v1",
+        "state": "agents",
+        "expectedHash": "#/agents",
+        "actualHash": "#/agents",
+        "viewport": {
+          "width": 1440,
+          "height": 900,
+          "devicePixelRatio": 1
+        },
+        "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/agents.png",
+        "ready": true,
+        "settledAt": "2026-08-11T03:30:00Z",
+        "stableFrames": 2,
+        "pendingRequests": 0,
+        "missingRequestPrefixes": [],
+        "fixtureMisses": [],
+        "contractMisses": [],
+        "requestedPaths": [
+          "/v1/conversations?limit=25&offset=0",
+          "/v1/me/settings",
+          "/v1/orgs/current",
+          "/v1/workspaces",
+          "/v1/console/overview?limit=1",
+          "/v1/agent-capabilities",
+          "/v1/hitl",
+          "/v1/permanent-fleet",
+          "/v1/model-endpoints"
+        ]
+      }
+    },
+    {
+      "state": "plugins",
+      "figmaNodeId": "14:2",
+      "target": "docs/design/evidence/2026-08-11-console-parity/figma/plugins__14-2.png",
+      "url": "http://127.0.0.1:1420/tests/visual/parity.html?state=plugins&theme=dark",
+      "hash": "#/integrations",
+      "settledSelector": "html[data-visual-ready=\"plugins\"]",
+      "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
+      "sha256": "26ab717a72afcc36a6c25aa1dcc816508f273375ff5fc964dc0329fbe2d48e30",
+      "width": 1440,
+      "height": 900,
+      "captureContract": {
+        "schema": "boltrig-worker-visual-capture-contract.v1",
+        "state": "plugins",
+        "expectedHash": "#/integrations",
+        "actualHash": "#/integrations",
+        "viewport": {
+          "width": 1440,
+          "height": 900,
+          "devicePixelRatio": 1
+        },
+        "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
+        "ready": true,
+        "settledAt": "2026-08-11T03:30:00Z",
+        "stableFrames": 4,
+        "pendingRequests": 0,
+        "missingRequestPrefixes": [],
+        "fixtureMisses": [],
+        "contractMisses": [],
+        "requestedPaths": [
+          "/v1/conversations?limit=25&offset=0",
+          "/v1/me/settings",
+          "/v1/orgs/current",
+          "/v1/workspaces",
+          "/v1/console/overview?limit=1",
+          "/v1/integrations/catalogue",
+          "/v1/integrations/connections",
+          "/v1/mcp/servers",
+          "/v1/addons"
+        ]
+      }
+    },
+    {
+      "state": "command-palette",
+      "figmaNodeId": "16:2",
+      "target": "docs/design/evidence/2026-08-11-console-parity/figma/command-palette__16-2.png",
+      "url": "http://127.0.0.1:1420/tests/visual/parity.html?state=command-palette&theme=dark",
+      "hash": "#/chat/run-thread",
+      "settledSelector": "html[data-visual-ready=\"command-palette\"]",
+      "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png",
+      "sha256": "74b12530668c1a7ca17da1d1172c7ee3e0307799d3cb0678a906a4826bd53b56",
+      "width": 1440,
+      "height": 900,
+      "captureContract": {
+        "schema": "boltrig-worker-visual-capture-contract.v1",
+        "state": "command-palette",
+        "expectedHash": "#/chat/run-thread",
+        "actualHash": "#/chat/run-thread",
+        "viewport": {
+          "width": 1440,
+          "height": 900,
+          "devicePixelRatio": 1
+        },
+        "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png",
+        "ready": true,
+        "settledAt": "2026-08-11T03:30:00Z",
+        "stableFrames": 3,
+        "pendingRequests": 0,
+        "missingRequestPrefixes": [],
+        "fixtureMisses": [],
+        "contractMisses": [],
+        "requestedPaths": [
+          "/v1/conversations/run-thread",
+          "/v1/artifacts?conversation_id=run-thread&limit=25",
+          "/v1/conversations",
+          "/v1/me/settings",
+          "/v1/familiar/phenotype",
+          "/v1/model-profiles",
+          "/v1/chat/config",
+          "/v1/conversations?limit=25&offset=0",
+          "/v1/me/settings",
+          "/v1/orgs/current",
+          "/v1/workspaces",
+          "/v1/console/overview?limit=1",
+          "/v1/capabilities",
+          "/v1/calls?limit=10",
+          "/v1/calls/current?conversation_id=run-thread"
+        ]
+      }
+    },
+    {
+      "state": "call",
+      "figmaNodeId": "17:2",
+      "target": "docs/design/evidence/2026-08-11-console-parity/figma/call__17-2.png",
+      "url": "http://127.0.0.1:1420/tests/visual/parity.html?state=call&theme=dark",
+      "hash": "#/chat/voice-thread",
+      "settledSelector": "html[data-visual-ready=\"call\"]",
+      "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
+      "sha256": "51aa65e725cb4fc624cf9c202b17f96263f85de098c6cf03bb7bb1d509799f43",
+      "width": 1440,
+      "height": 900,
+      "captureContract": {
+        "schema": "boltrig-worker-visual-capture-contract.v1",
+        "state": "call",
+        "expectedHash": "#/chat/voice-thread",
+        "actualHash": "#/chat/voice-thread",
+        "viewport": {
+          "width": 1440,
+          "height": 900,
+          "devicePixelRatio": 1
+        },
+        "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
+        "ready": true,
+        "settledAt": "2026-08-11T03:30:00Z",
+        "stableFrames": 3,
+        "pendingRequests": 0,
+        "missingRequestPrefixes": [],
+        "fixtureMisses": [],
+        "contractMisses": [],
+        "requestedPaths": [
+          "/v1/conversations/voice-thread",
+          "/v1/artifacts?conversation_id=voice-thread&limit=25",
+          "/v1/conversations",
+          "/v1/me/settings",
+          "/v1/familiar/phenotype",
+          "/v1/model-profiles",
+          "/v1/chat/config",
+          "/v1/conversations?limit=25&offset=0",
+          "/v1/me/settings",
+          "/v1/orgs/current",
+          "/v1/workspaces",
+          "/v1/console/overview?limit=1",
+          "/v1/capabilities",
+          "/v1/calls?limit=10",
+          "/v1/calls/current?conversation_id=voice-thread",
+          "/v1/calls/call-visual/events"
+        ]
+      }
+    },
+    {
+      "state": "settings-you",
+      "figmaNodeId": "22:2",
+      "target": "docs/design/evidence/2026-08-11-console-parity/figma/settings-you__22-2.png",
+      "url": "http://127.0.0.1:1420/tests/visual/parity.html?state=settings-you&theme=dark",
+      "hash": "#/settings/you",
+      "settledSelector": "html[data-visual-ready=\"settings-you\"]",
+      "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png",
+      "sha256": "00d8aa74d9a26e0415fef9309063cd8695249ee742cd7276b676ef152c419252",
+      "width": 1440,
+      "height": 900,
+      "captureContract": {
+        "schema": "boltrig-worker-visual-capture-contract.v1",
+        "state": "settings-you",
+        "expectedHash": "#/settings/you",
+        "actualHash": "#/settings/you",
+        "viewport": {
+          "width": 1440,
+          "height": 900,
+          "devicePixelRatio": 1
+        },
+        "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png",
+        "ready": true,
+        "settledAt": "2026-08-11T03:30:00Z",
+        "stableFrames": 3,
+        "pendingRequests": 0,
+        "missingRequestPrefixes": [],
+        "fixtureMisses": [],
+        "contractMisses": [],
+        "requestedPaths": [
+          "/v1/conversations?limit=25&offset=0",
+          "/v1/me/settings",
+          "/v1/orgs/current",
+          "/v1/workspaces",
+          "/v1/console/overview?limit=1",
+          "/v1/me/settings",
+          "/v1/me/settings",
+          "/v1/me/notifications"
+        ]
+      }
+    }
+  ],
+  "reviewPolicy": {
+    "pixelsClaimed": false,
+    "instruction": "Regenerate comparisons and complete authority review before changing a VDS verdict."
+  }
+}

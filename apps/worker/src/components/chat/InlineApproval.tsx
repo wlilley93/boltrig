@@ -42,14 +42,14 @@ interface InlineApprovalProps {
   entry: HitlEntry;
   /** Developer detail: show the monospace verb chip. */
   tech: boolean;
-  /** The live turn has already ended: point at the Inbox instead of offering
-      buttons against a request whose run has moved on. */
+  /** The live turn has already ended: keep the card read-only instead of
+      offering buttons against a request whose run has moved on. */
   disabled?: boolean;
 }
 
 /** The inline approval card: Approve / the other real options, straight from
  * the stream's HITL request, answered through the same governed
- * client.respondHitl the Inbox uses. The card settles optimistically on click
+ * client.respondHitl uses. The card settles optimistically on click
  * and reverts with the kernel's reason if the response is not accepted -
  * a request already settled elsewhere can never be double-answered into
  * success. "See exactly what runs" pulls the request's recorded inputs and
@@ -140,8 +140,8 @@ export function InlineApproval({ entry, tech, disabled = false }: InlineApproval
       <div className="inline-approval-body" ref={bodyRef} tabIndex={-1}>
         {disabled ? (
           <p className="muted small">
-            This turn has settled. If the request is still pending it is
-            waiting in the <a href="#/inbox">Inbox</a>.
+            This turn has settled. If the request is still pending, reopen the
+            originating chat to continue.
           </p>
         ) : phase === "settled" || phase === "sending" ? (
           <p role="status">
@@ -163,8 +163,8 @@ export function InlineApproval({ entry, tech, disabled = false }: InlineApproval
             ))}
             {choices.length === 0 && (
               <p className="muted small">
-                This request needs a written response. Answer it in the{" "}
-                <a href="#/inbox">Inbox</a>.
+                This request needs a written response. Answer it in the
+                originating chat.
               </p>
             )}
             <button

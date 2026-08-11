@@ -1,6 +1,23 @@
 /* Chat-family delta styles (console redesign). Owned by the chat cluster;
    tokens come from styles.css and are never redefined here. */
 
+/* Announce only the lifecycle of the active response. The scrollable history
+ * itself is intentionally not a live region: hydrating it must not replay an
+ * entire task to screen-reader users, and cumulative text deltas must not be
+ * re-announced word by word. */
+.chat-live-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}
+
 /* --- New screen ------------------------------------------------------------ */
 
 .starter-icon { display: flex; color: var(--text-3); }

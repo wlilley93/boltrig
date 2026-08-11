@@ -138,5 +138,6 @@ async def test_sensitive_ignores_external_ai_config_and_routes_local(monkeypatch
     # NON-sensitive: the very same config now DOES route (provider + model applied),
     # so the suppression above is the residency guard, not an inert config.
     std_ctx = InvocationContext(tenant_id=T, actor="worker", on_behalf_of="u1")
-    rt2 = await spawner._runtime_for(T, cap, std_ctx)
+    cap_default = AgentCapability("worker-default", T, "openai", ["*"], 2, True, "standard")
+    rt2 = await spawner._runtime_for(T, cap_default, std_ctx)
     assert rt2.runtime == "claude-api" and rt2.endpoint.model == "claude-remote"

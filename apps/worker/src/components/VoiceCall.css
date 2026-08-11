@@ -1,0 +1,342 @@
+/* Full-window call treatment from the latest Boltrig Console target. The
+ * component is portalled to body, so it covers the complete console rather
+ * than becoming another card inside the chat composer. */
+
+.voice-call-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.voice-call-screen-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 18px;
+}
+
+.voice-call-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-call-elapsed {
+  flex: 0 0 auto;
+  color: var(--text-4);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-call-leave {
+  margin-left: auto;
+  padding: 7px 15px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--card-2);
+  cursor: pointer;
+  font: 13px/1.35 inherit;
+}
+
+.voice-call-leave:hover,
+.voice-call-controls button:hover {
+  filter: brightness(.97);
+}
+
+.voice-call-freezone {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 0 24px;
+}
+
+.voice-call-notice {
+  position: fixed;
+  top: 649px;
+  right: 24px;
+  left: auto;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  box-sizing: border-box;
+  width: 236px;
+  max-width: 26vw;
+  margin: 0;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  color: var(--text-2);
+  background: var(--card);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 5%);
+  animation: voice-surface-arrive 420ms cubic-bezier(.22, .9, .3, 1) both;
+}
+
+.voice-call-notice[data-urgent="true"] {
+  border-color: var(--amber-line);
+  background: var(--amber-bg);
+}
+
+.voice-call-notice-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-call-notice-header::before {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  border-radius: 999px;
+  background: var(--text-4);
+  content: "";
+}
+
+.voice-call-notice[data-urgent="true"] .voice-call-notice-header::before {
+  background: var(--amber);
+}
+
+.voice-call-notice-header span {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-4);
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.voice-call-notice-header button {
+  padding: 0 2px;
+  border: 0;
+  color: var(--text-4);
+  background: transparent;
+  cursor: pointer;
+  font: 14px/1 inherit;
+}
+
+.voice-call-notice p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.voice-call-presence {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  max-width: min(520px, 80vw);
+  text-align: center;
+}
+
+.voice-call-primary-familiar {
+  display: flex;
+  width: 150px;
+  height: 150px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 11px;
+}
+
+.voice-call-primary-familiar .familiar-stage {
+  width: 150px;
+  height: 150px;
+  margin: 0;
+}
+
+/* Figma's 150px layout wrapper clips neither the 129.177 x 168.301 body nor
+ * its halo. Keep the already-matched 184px WebGL render surface centred over
+ * that smaller layout box; resizing the canvas would shrink the body itself. */
+.voice-call-primary-familiar .familiar-stage-canvas {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 184px;
+  height: 184px;
+  margin-top: -92px;
+  margin-left: -92px;
+  max-width: none;
+  max-height: none;
+}
+
+/* The shader's Cassini axis is corrected in the genotype packer. This final
+ * Call-camera offset keeps its full portrait and halo clear of the square
+ * porthole while aligning that portrait with the signed 150px-stage target. */
+.voice-call-primary-familiar
+  .familiar-stage.voice[data-familiar-body="cassini"]
+  .familiar-stage-canvas {
+  animation: voice-call-familiar-bob 6.7s ease-in-out infinite;
+  transform: translateY(15px) scale(1.08, .95);
+}
+
+@keyframes voice-call-familiar-bob {
+  0%, 100% { transform: translateY(15px) scale(1.08, .95); }
+  50% { transform: translateY(6px) scale(1.08, .95); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-call-primary-familiar
+    .familiar-stage.voice[data-familiar-body="cassini"]
+    .familiar-stage-canvas {
+    animation: none;
+  }
+}
+
+.voice-call-presence strong {
+  font-size: 16px;
+  font-weight: 400;
+}
+
+.voice-call-saying {
+  max-width: 42ch;
+  margin: 0;
+  color: var(--text-3);
+  font-size: 14px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.voice-call-state {
+  margin: 1px 0 0;
+  color: var(--text-4);
+  font-size: 12px;
+}
+
+.voice-call-screen-footer {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 13px;
+  min-height: 68px;
+  padding: 8px 24px 26px;
+}
+
+.voice-call-participants {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  min-height: 0;
+}
+
+.voice-call-participant {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  color: var(--text-2);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.voice-call-participant .familiar-stage {
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  transition: transform 160ms ease;
+}
+
+.voice-call-participant:hover .familiar-stage {
+  transform: translateY(-2px);
+}
+
+.voice-call-participant:focus-visible {
+  border-radius: 7px;
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.voice-call-controls {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.voice-call-controls button {
+  padding: 9px 17px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  color: var(--text-2);
+  background: transparent;
+  cursor: pointer;
+  font: 13px/1.35 inherit;
+}
+
+.voice-call-controls button[aria-pressed="false"] {
+  border-color: var(--text);
+  color: var(--bg);
+  background: var(--text);
+}
+
+.voice-call-controls button[aria-pressed="true"] {
+  border-color: transparent;
+  color: var(--text);
+  background: var(--card-2);
+}
+
+.voice-call-transcript-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@keyframes voice-surface-arrive {
+  from {
+    opacity: 0;
+    transform: translate(-16px, -8px) scale(.96);
+  }
+}
+
+@media (max-width: 700px) {
+  .voice-call-notice {
+    top: 10px;
+    right: 14px;
+    left: 14px;
+    width: auto;
+    max-width: none;
+  }
+
+  .voice-call-primary-familiar,
+  .voice-call-primary-familiar .familiar-stage {
+    width: 118px;
+    height: 118px;
+  }
+
+  .voice-call-presence {
+    padding-top: 76px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-call-notice {
+    animation: none;
+  }
+}

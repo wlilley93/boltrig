@@ -352,7 +352,7 @@ describe("Worker local-device dispatcher actions", () => {
       target: { value: "reports/final.txt" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Request exact-action lease" }));
-    expect(await screen.findByText(/needs an independent approval in Inbox/i)).toBeTruthy();
+    expect(await screen.findByText(/needs an independent approval in the originating chat/i)).toBeTruthy();
     const first = api.invoke.mock.calls[0][0];
     fireEvent.click(screen.getByRole("button", { name: "Retry approved action" }));
     await waitFor(() => expect(api.invoke).toHaveBeenCalledTimes(2));

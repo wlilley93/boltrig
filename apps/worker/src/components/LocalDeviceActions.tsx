@@ -364,7 +364,7 @@ export function LocalDeviceActions({
         session.pending = retained;
         setPending(retained);
         setMessage(
-          `Exact action ${result.hitl_request_id} needs an independent approval in Inbox. `
+          `Exact action ${result.hitl_request_id} needs an independent approval in the originating chat. `
           + "After it is approved, retry this unchanged action.",
         );
         return;
@@ -377,7 +377,7 @@ export function LocalDeviceActions({
         // The SDK synthesizes denied (401/403) and unavailable (transport)
         // receipts for failures the dispatcher never processed. The single-use
         // approval is then still unconsumed; discarding it here would strand a
-        // granted Inbox decision, so keep the exact action retryable until the
+        // granted originating chat decision, so keep the exact action retryable until the
         // kernel confirms the approval is spent.
         if (
           pending
@@ -496,7 +496,7 @@ export function LocalDeviceActions({
         <button className="primary-button" disabled={!localDevice || eligibleRoots.length === 0 || busy} onClick={() => void dispatch()}>
           {pending ? "Retry approved action" : busy ? "Submitting…" : "Request exact-action lease"}
         </button>
-        {pending && <button className="secondary-button" disabled={busy} onClick={() => { session.pending = null; setPending(null); setMessage("Local retry cleared. The Inbox request was not withdrawn."); }}>Clear local retry</button>}
+        {pending && <button className="secondary-button" disabled={busy} onClick={() => { session.pending = null; setPending(null); setMessage("Local retry cleared. The originating chat request was not withdrawn."); }}>Clear local retry</button>}
       </div>
       {message && <p className="notice" role="status">{message}</p>}
       {pending && (

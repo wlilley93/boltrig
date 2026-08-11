@@ -102,8 +102,13 @@ export interface RoutineCanvasProps {
   problems: GraphProblem[];
   runSteps: Map<string, WorkflowStepResult> | null;
   tryWalk: TryWalkState | null;
+  /** Controlled by the single editor chrome above the canvas. */
+  zoom: number;
+  /** Incremented when that chrome asks this canvas to fit its live viewport. */
+  fitRequest: number;
   /** Read-only definition: selection and zoom only, no mutation. */
   locked: boolean;
+  onZoomChange(zoom: number): void;
   onSelectStep(id: string | null): void;
   onSelectEdge(edge: CanvasEdgeRef | null): void;
   onLinkSteps(from: string, to: string): void;
@@ -140,7 +145,10 @@ export function RoutineCanvas(props: RoutineCanvasProps) {
     problems,
     runSteps,
     tryWalk,
+    zoom,
+    fitRequest,
     locked,
+    onZoomChange,
     onSelectStep,
     onSelectEdge,
     onLinkSteps,
@@ -159,13 +167,11 @@ export function RoutineCanvas(props: RoutineCanvasProps) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [linking, setLinking] = useState<LinkState | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(1);
 
   useEffect(() => {
     setPositions({});
     setDrag(null);
     setLinking(null);
-    setZoom(1);
   }, [layoutKey]);
 
   const grid = useMemo(() => layoutGrid(
@@ -313,13 +319,11 @@ export function RoutineCanvas(props: RoutineCanvasProps) {
     onSelectStep(id);
   }
 
-  const zoomBy = (delta: number) => setZoom((current) => (
-    Math.min(1.4, Math.max(0.4, Math.round((current + delta) * 100) / 100))
-  ));
-  const zoomFit = useCallback(() => {
+  useEffect(() => {
+    if (fitRequest === 0) return;
     const wrap = wrapRef.current;
     if (!wrap || wrap.clientWidth === 0 || wrap.clientHeight === 0) {
-      setZoom(1);
+      onZoomChange(1);
       return;
     }
     const fit = Math.min(
@@ -327,8 +331,8 @@ export function RoutineCanvas(props: RoutineCanvasProps) {
       (wrap.clientWidth - 24) / canvasW,
       (wrap.clientHeight - 24) / canvasH,
     );
-    setZoom(Math.max(0.4, Math.round(fit * 100) / 100));
-  }, [canvasW, canvasH]);
+    onZoomChange(Math.max(0.4, Math.round(fit * 100) / 100));
+  }, [canvasH, canvasW, fitRequest, onZoomChange]);
 
   // Delete/duplicate/save shortcuts, ignored while typing in a field. The
   // listener mutates through the same callbacks as the pointer chrome, so
@@ -746,19 +750,6 @@ export function RoutineCanvas(props: RoutineCanvasProps) {
         })}
       </div>
     </div>
-      <div className="rc-zoom rc-zoom-overlay">
-        <button aria-label="Zoom out" onClick={() => zoomBy(-0.1)} type="button">−</button>
-        <button
-          aria-label="Fit the whole routine"
-          className="rc-zoom-fit"
-          onClick={zoomFit}
-          title="Fit the whole routine"
-          type="button"
-        >
-          {Math.round(zoom * 100)}%
-        </button>
-        <button aria-label="Zoom in" onClick={() => zoomBy(0.1)} type="button">+</button>
-      </div>
     </div>
   );
 }

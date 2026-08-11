@@ -435,6 +435,10 @@ chat:
   panel: true                                # show the Chat panel in the UI
   continuity: true                           # compose prior turns into the prompt
                                              # (Round Six gap 3.1; BOLTRIG_CONTINUITY)
+  # Direct chat stays on the designated conversational worker instead of the
+  # generic cheapest-capability fallback. Deployments may name a different
+  # active conversational capability here.
+  default_capability: worker-cheap
   # Bare-turn authority ([2026] VJS-COUNTY 1): the skill set a bare chat turn
   # spawns with, per caller role; an unmapped role gets default_skills. This
   # example manifest carries the shipped default (policy-as-data, P7; the

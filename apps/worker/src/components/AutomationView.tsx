@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   BoltrigApiError,
   type ChannelSummary,
@@ -67,20 +74,48 @@ import { StepInspector } from "./routine/StepInspector";
 import { RoutineThumb } from "./RoutineThumb";
 import { Unavailable } from "./Shell";
 
+import "./AutomationViewParity.css";
+
 type PendingTriggerMutation =
   | {
       kind: "create";
       requestId: string;
       name: string;
       source: "webhook";
-      state: "waiting" | "ready";
+      state: PendingTriggerState;
     }
   | {
       kind: "rotate";
       requestId: string;
       trigger: WorkflowTriggerSummary;
-      state: "waiting" | "ready";
+      state: PendingTriggerState;
     };
+type PendingTriggerState = "waiting" | "checking" | "ready" | "unavailable";
+
+function samePendingTrigger(
+  left: PendingTriggerMutation | null,
+  right: PendingTriggerMutation,
+): boolean {
+  if (!left || left.kind !== right.kind || left.requestId !== right.requestId) {
+    return false;
+  }
+  if (left.kind === "create" && right.kind === "create") {
+    return left.name === right.name && left.source === right.source;
+  }
+  return left.kind === "rotate" && right.kind === "rotate"
+    && left.trigger.id === right.trigger.id;
+}
+
+function pendingTriggerWithState(
+  current: PendingTriggerMutation | null,
+  expected: PendingTriggerMutation,
+  state: PendingTriggerState,
+): PendingTriggerMutation | null {
+  if (!samePendingTrigger(current, expected) || !current) return current;
+  return current.kind === "create"
+    ? { ...current, state }
+    : { ...current, state };
+}
 type AutomationState = "loading" | "ready" | "denied" | "unavailable";
 type OccurrenceFinalizationState =
   | "waiting"
@@ -178,13 +213,31 @@ export function AutomationsView() {
     webhookPath?: string;
   } | null>(null);
   const [pendingTrigger, setPendingTrigger] = useState<PendingTriggerMutation | null>(null);
+  const pendingTriggerRef = useRef<PendingTriggerMutation | null>(pendingTrigger);
+  const triggerDeliveryLoadSequence = useRef(0);
   const [listNotice, setListNotice] = useState("");
   const [detailError, setDetailError] = useState("");
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   // A picker card with a problem opens the editor with that step selected, so
   // the State word and the canvas agree about what to fix first.
   const [focusStepId, setFocusStepId] = useState<string | null>(null);
   const exactApprovalInvalidator = useRef<() => void>(() => undefined);
+  const discardDialogRef = useRef<HTMLElement>(null);
+  const discardCancelRef = useRef<HTMLButtonElement>(null);
+  const discardConfirmRef = useRef<HTMLButtonElement>(null);
+  const discardOpenerRef = useRef<HTMLElement | null>(null);
   selectedWorkflowIdRef.current = selectedWorkflowId;
+  pendingTriggerRef.current = pendingTrigger;
+
+  useEffect(() => {
+    if (!discardDialogOpen) return;
+    discardCancelRef.current?.focus();
+    const opener = discardOpenerRef.current;
+    return () => {
+      if (opener?.isConnected) opener.focus();
+      discardOpenerRef.current = null;
+    };
+  }, [discardDialogOpen]);
 
   const invalidatePendingOccurrenceRetry = useCallback(() => {
     setPendingOccurrenceRetry((current) => (
@@ -218,8 +271,10 @@ export function AutomationsView() {
       } else {
         loadedWorkflows.current = false;
         workflowLoadSequence.current += 1;
+        triggerDeliveryLoadSequence.current += 1;
         setWorkflows([]);
         setDraft(null);
+        setTriggerDeliveries([]);
         setSurfaceState(denied ? "denied" : "unavailable");
       }
     }
@@ -245,10 +300,12 @@ export function AutomationsView() {
     invalidateExactApproval();
     invalidatePendingOccurrenceRetry();
     const sequence = ++workflowLoadSequence.current;
+    triggerDeliveryLoadSequence.current += 1;
     setBusy(true);
     setMessage("");
     setDetailError("");
     setDraft(null);
+    setTriggerDeliveries([]);
     try {
       const [
         detail,
@@ -513,6 +570,7 @@ export function AutomationsView() {
   function newWorkflow() {
     invalidateExactApproval();
     invalidatePendingOccurrenceRetry();
+    triggerDeliveryLoadSequence.current += 1;
     // An in-flight openWorkflow load can no longer clear busy once the
     // selection moves to the blank draft; settle it here.
     setBusy(false);
@@ -548,24 +606,52 @@ export function AutomationsView() {
     invalidateExactApproval();
     invalidatePendingOccurrenceRetry();
     workflowLoadSequence.current += 1;
+    triggerDeliveryLoadSequence.current += 1;
+    setDiscardDialogOpen(false);
     setSelectedWorkflowId(null);
     setDraft(null);
+    setTriggerDeliveries([]);
     setDirty(false);
     setFocusStepId(null);
     setBusy(false);
     setMessage("");
   }
 
-  // Discard reloads the saved baseline through the same governed read that
-  // opened the editor; an unsaved new draft has no baseline, so it closes.
-  function discardDraft() {
-    if (!draft) return;
-    if (selectedWorkflowIdRef.current && draft.id === selectedWorkflowIdRef.current) {
-      setDirty(false);
-      void openWorkflow(draft.id);
+  function requestEditorExit() {
+    if (!dirty) {
+      closeEditor();
       return;
     }
-    closeEditor();
+    discardOpenerRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    setDiscardDialogOpen(true);
+  }
+
+  function cancelEditorExit() {
+    setDiscardDialogOpen(false);
+  }
+
+  function handleDiscardDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelEditorExit();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const first = discardCancelRef.current;
+    const last = discardConfirmRef.current;
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    } else if (!discardDialogRef.current?.contains(document.activeElement)) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   function updateStep(index: number, patch: Partial<WorkflowStepDraft>) {
@@ -628,7 +714,7 @@ export function AutomationsView() {
       };
       const result = await client.upsertWorkflow(input.body);
       if (exactApproval.begin(input, result, "Workflow save")) {
-        setMessage("Save is waiting for approval in Inbox.");
+        setMessage("Save is waiting for approval in the originating chat.");
       } else if (result.status === "ok") {
         setDirty(false);
         setMessage("Workflow saved through the governed authoring route.");
@@ -663,7 +749,7 @@ export function AutomationsView() {
         input.workflowId, input.body,
       );
       if (exactApproval.begin(input, result, "Workflow schedule change")) {
-        setMessage("Schedule change is waiting for approval in Inbox.");
+        setMessage("Schedule change is waiting for approval in the originating chat.");
       } else if (result.status === "ok") {
         await openWorkflow(draft.id);
         setMessage(scheduleMutationMessage(result));
@@ -700,7 +786,7 @@ export function AutomationsView() {
       if (exactApproval.begin(
         input, result, `Workflow ${actionLabel(action).toLowerCase()}`,
       )) {
-        setMessage(`${actionLabel(action)} is waiting for approval in Inbox.`);
+        setMessage(`${actionLabel(action)} is waiting for approval in the originating chat.`);
       } else if (result.status === "ok") {
         setMessage(`Workflow ${lifecyclePastTense(action)}.`);
         await Promise.all([openWorkflow(draft.id), refreshList()]);
@@ -737,7 +823,7 @@ export function AutomationsView() {
         setOccurrenceFinalization(
           result.hitl_request_id ? "waiting" : "unavailable",
         );
-        setMessage("Occurrence retry is waiting for approval in Inbox.");
+        setMessage("Occurrence retry is waiting for approval in the originating chat.");
       } else if (result.status === "ok") {
         setPendingOccurrenceRetry(null);
         setOccurrenceFinalization(null);
@@ -806,14 +892,14 @@ export function AutomationsView() {
       } else if (result.status === "pending_human" && result.hitl_request_id) {
         // The kernel refused the stale fingerprint and issued a fresh exact
         // request. Retain the same occurrence with the new approval handle so
-        // the second Inbox decision stays redeemable.
+        // the second originating chat decision stays redeemable.
         setPendingOccurrenceRetry({
           ...pending,
           approvalId: result.hitl_request_id,
           invalidated: false,
         });
         setOccurrenceFinalization("waiting");
-        setMessage("Occurrence retry is waiting for a fresh approval in Inbox.");
+        setMessage("Occurrence retry is waiting for a fresh approval in the originating chat.");
       } else {
         setOccurrenceFinalization("invalidated");
         setMessage(
@@ -863,7 +949,7 @@ export function AutomationsView() {
       const refusal = isPendingHuman(result) ? null : governedRouteRefusal(result);
       if (isPendingHuman(result)) {
         exactApproval.begin(input, result, "Workflow queue request");
-        setMessage("Run is waiting for approval in Inbox.");
+        setMessage("Run is waiting for approval in the originating chat.");
       } else if (refusal) {
         setMessage(refusal.reason);
       } else if (result.error) {
@@ -899,7 +985,7 @@ export function AutomationsView() {
       );
       if (isPendingHuman(result)) {
         exactApproval.begin(input, result, "Immediate workflow execution");
-        setMessage("Execution is waiting for approval in Inbox.");
+        setMessage("Execution is waiting for approval in the originating chat.");
       } else {
         const refusal = governedRouteRefusal(result);
         if (refusal) {
@@ -948,15 +1034,18 @@ export function AutomationsView() {
         : await client.createWorkflowTrigger(draft.id, body);
       if (result.status === "pending_human") {
         if (source === "webhook") {
+          const requestId = result.hitl_request_id ?? "";
           setPendingTrigger({
             kind: "create",
-            requestId: result.hitl_request_id ?? "",
+            requestId,
             name,
             source,
-            state: "waiting",
+            state: requestId ? "waiting" : "unavailable",
           });
           setMessage(
-            "Webhook binding is waiting for approval. After approval, finalize it here to receive the one-time secret.",
+            requestId
+              ? "Webhook binding is waiting for approval. Check its exact request here after approval to receive the one-time secret."
+              : "Webhook binding requires approval, but no request id was returned. Finalization is unavailable and no binding is inferred.",
           );
         } else {
           const input: ExactAutomationMutation = {
@@ -969,7 +1058,7 @@ export function AutomationsView() {
             },
           };
           exactApproval.begin(input, result, "Channel trigger binding");
-          setMessage("Trigger binding is waiting for approval in Inbox.");
+          setMessage("Trigger binding is waiting for approval in the originating chat.");
         }
       } else if (result.status === "ok") {
         setPendingTrigger(null);
@@ -1023,14 +1112,17 @@ export function AutomationsView() {
       );
       if (result.status === "pending_human") {
         if (action === "rotate") {
+          const requestId = result.hitl_request_id ?? "";
           setPendingTrigger({
             kind: "rotate",
-            requestId: result.hitl_request_id ?? "",
+            requestId,
             trigger,
-            state: "waiting",
+            state: requestId ? "waiting" : "unavailable",
           });
           setMessage(
-            "Secret rotation is waiting for approval. After approval, finalize it here to receive the new one-time secret.",
+            requestId
+              ? "Secret rotation is waiting for approval. Check its exact request here after approval to receive the new one-time secret."
+              : "Secret rotation requires approval, but no request id was returned. Finalization is unavailable and no rotation is inferred.",
           );
         } else {
           exactApproval.begin({
@@ -1039,7 +1131,7 @@ export function AutomationsView() {
             triggerId: trigger.id,
             action,
           }, result, `Trigger ${action}`);
-          setMessage(`${actionLabel(action)} is waiting for approval in Inbox.`);
+          setMessage(`${actionLabel(action)} is waiting for approval in the originating chat.`);
         }
       } else if (result.status === "ok") {
         setPendingTrigger(null);
@@ -1062,16 +1154,121 @@ export function AutomationsView() {
 
   async function loadTriggerDeliveries(triggerId: string) {
     if (!draft) return;
+    const workflowId = draft.id;
+    const sequence = ++triggerDeliveryLoadSequence.current;
+    setTriggerDeliveries([]);
     try {
-      const result = await client.workflowTriggerDeliveries(draft.id, triggerId);
+      const result = await client.workflowTriggerDeliveries(workflowId, triggerId);
+      if (
+        triggerDeliveryLoadSequence.current !== sequence
+        || selectedWorkflowIdRef.current !== workflowId
+        || result.workflow_id !== workflowId
+        || result.trigger_id !== triggerId
+      ) return;
       setTriggerDeliveries(result.deliveries);
     } catch {
+      if (
+        triggerDeliveryLoadSequence.current !== sequence
+        || selectedWorkflowIdRef.current !== workflowId
+      ) return;
       setMessage("Trigger delivery history is unavailable in this workspace.");
+    }
+  }
+
+  async function refreshTriggerApproval() {
+    const pending = pendingTrigger;
+    if (!draft || !pending) return;
+    const workflowId = draft.id;
+    const action = pending.kind === "create" ? "Webhook binding" : "Secret rotation";
+    if (!pending.requestId.trim()) {
+      setPendingTrigger((current) => (
+        pendingTriggerWithState(current, pending, "unavailable")
+      ));
+      setMessage(
+        `${action} approval cannot be checked because no request id was returned. No trigger change is inferred.`,
+      );
+      return;
+    }
+    if (dirty || selectedWorkflowIdRef.current !== workflowId) {
+      setMessage(
+        `${action} approval cannot be checked after the routine selection or draft changed. No trigger change is inferred.`,
+      );
+      return;
+    }
+
+    setPendingTrigger((current) => (
+      pendingTriggerWithState(current, pending, "checking")
+    ));
+    try {
+      const result = await client.workflowTriggerFinalizations(workflowId);
+      if (
+        selectedWorkflowIdRef.current !== workflowId
+        || !samePendingTrigger(pendingTriggerRef.current, pending)
+      ) return;
+      const exact = result.workflow_id === workflowId
+        ? result.finalizations.find((finalization) => (
+            finalization.request_id === pending.requestId
+            && (
+              pending.kind === "create"
+                ? finalization.action === "create"
+                  && finalization.name === pending.name
+                  && finalization.source === pending.source
+                : finalization.action === "rotate"
+                  && finalization.trigger_id === pending.trigger.id
+            )
+          ))
+        : undefined;
+      if (exact?.state === "ready") {
+        setPendingTrigger((current) => (
+          pendingTriggerWithState(current, pending, "ready")
+        ));
+        setMessage(
+          `${action} approval is ready. Finalize the exact request here to receive the one-time secret.`,
+        );
+      } else if (exact?.state === "waiting") {
+        setPendingTrigger((current) => (
+          pendingTriggerWithState(current, pending, "waiting")
+        ));
+        setMessage(`${action} is still waiting for approval in the originating chat.`);
+      } else {
+        setPendingTrigger((current) => (
+          pendingTriggerWithState(current, pending, "unavailable")
+        ));
+        setMessage(
+          `${action} approval is not available for this exact request. No trigger change is inferred.`,
+        );
+      }
+    } catch {
+      if (
+        selectedWorkflowIdRef.current !== workflowId
+        || !samePendingTrigger(pendingTriggerRef.current, pending)
+      ) return;
+      setPendingTrigger((current) => (
+        pendingTriggerWithState(current, pending, "unavailable")
+      ));
+      setMessage(
+        `${action} approval status is unavailable. No trigger change is inferred.`,
+      );
     }
   }
 
   function finalizeTriggerMutation() {
     if (!pendingTrigger) return;
+    const action = pendingTrigger.kind === "create"
+      ? "Webhook binding"
+      : "Secret rotation";
+    if (!pendingTrigger.requestId.trim()) {
+      setMessage(
+        `${action} cannot be finalized because no request id was returned. No trigger change is inferred.`,
+      );
+      return;
+    }
+    if (pendingTrigger.state !== "ready") {
+      setMessage(
+        `${action} cannot be finalized until its exact approval is checked and ready.`,
+      );
+      return;
+    }
     if (pendingTrigger.kind === "create") {
       void createTrigger(
         pendingTrigger.name,
@@ -1089,18 +1286,18 @@ export function AutomationsView() {
   }
 
   return (
-    <div className="page">
+    <div className={draft ? "page automation-editor-page" : "page"}>
       {/* The console idiom, as on Build and the parity views: one head, one
           title. The Topbar's status line is folded into the lead so the word
           "Routines" is not printed twice down the same column. */}
-      <div className="console-page">
-        <div className="console-head">
+      <div className={draft ? "automation-editor-viewport" : "console-page"}>
+        {!draft && <div className="console-head">
           <div>
             <h1>Routines</h1>
             <p>
-              Repeat a task automatically. Start with a routine, add the steps
-              you need, and run it when you are ready.
-              {surfaceState === "ready" && ` ${workflows.length} saved here.`}
+              Steps boltrig repeats the same way every time, held as data rather
+              than code. Each one is a graph: what starts it, then steps that
+              wait on the steps before them. Open one to draw it.
             </p>
           </div>
           {surfaceState === "ready" && (
@@ -1111,10 +1308,16 @@ export function AutomationsView() {
               <span>New routine</span>
             </button>
           )}
+        </div>}
+        <div
+          aria-hidden={draft && discardDialogOpen ? true : undefined}
+          className={draft ? "automation-editor-feedback" : "automation-list-feedback"}
+          {...(draft && discardDialogOpen ? { inert: "" } : {})}
+        >
+          {listNotice && <p className="notice" role="status">{listNotice}</p>}
+          {detailError && <p className="notice" role="alert">{detailError}</p>}
+          <ExactApprovalFinalizer controller={exactApproval} />
         </div>
-        {listNotice && <p className="notice" role="status">{listNotice}</p>}
-        {detailError && <p className="notice" role="alert">{detailError}</p>}
-        <ExactApprovalFinalizer controller={exactApproval} />
         {surfaceState === "loading" && <Unavailable title="Loading automations">Loading the governed workflow library.</Unavailable>}
         {surfaceState === "denied" && <Unavailable title="Automation access denied">Your current role cannot view or author workflows.</Unavailable>}
         {surfaceState === "unavailable" && <Unavailable title="Automations unavailable">The governed workflow library could not be reached.</Unavailable>}
@@ -1126,108 +1329,123 @@ export function AutomationsView() {
               setFocusStepId(focusStep ?? null);
               setSelectedWorkflowId(id);
             }}
-            onRefresh={() => void refreshList()}
             stats={stats}
             workflows={workflows}
           />
         )}
         {surfaceState === "ready" && draft && (
-          <div className="automation-studio editor-open">
-            <aside className="workflow-library" aria-label="Workflow library">
-              <div className="workflow-library-head">
-                <strong>Library</strong>
-                <button className="icon-button" aria-label="Refresh workflows" onClick={() => void refreshList()}>↻</button>
-              </div>
-              {workflows.length === 0 && <p>No saved workflows yet.</p>}
-              {workflows.map((workflow) => (
+          <div
+            aria-label="Routine editor viewport"
+            aria-hidden={discardDialogOpen ? true : undefined}
+            className="automation-editor-stage"
+            role="region"
+            {...(discardDialogOpen ? { inert: "" } : {})}
+          >
+            <WorkflowEditor
+              draft={draft}
+              verbs={verbs}
+              dirty={dirty}
+              busy={busy}
+              message={message}
+              cron={cron}
+              timezone={timezone}
+              runIds={runIds}
+              runStat={stats[draft.id]}
+              lastExecution={lastExecution}
+              status={workflowStatus}
+              hasSchedule={hasSchedule}
+              scheduleState={scheduleState}
+              scheduleOccurrences={scheduleOccurrences}
+              scheduleHistoryTruncated={scheduleHistoryTruncated}
+              occurrenceFinalization={occurrenceFinalization}
+              triggers={triggers}
+              channels={channels}
+              triggerDeliveries={triggerDeliveries}
+              triggerSecret={triggerSecret}
+              pendingTrigger={pendingTrigger}
+              sessionKey={selectedWorkflowId ?? "new-draft"}
+              initialFocusStepId={focusStepId}
+              onFocusStepConsumed={() => setFocusStepId(null)}
+              onBack={requestEditorExit}
+              onDiscard={requestEditorExit}
+              onDraft={changeDraft}
+              onStep={updateStep}
+              onAddStep={addStep}
+              onRemoveStep={removeStep}
+              onSave={() => void saveWorkflow()}
+              onQueue={() => void queueWorkflow()}
+              onRunNow={() => void runWorkflowNow()}
+              onSchedule={() => void scheduleWorkflow()}
+              onUnschedule={() => void changeLifecycle("unschedule")}
+              onRetryOccurrence={(occurrence) => (
+                void retryScheduleOccurrence(occurrence)
+              )}
+              onFinalizeOccurrenceRetry={() => (
+                void finalizeScheduleOccurrenceRetry()
+              )}
+              onArchive={() => void changeLifecycle("archive")}
+              onRestore={() => void changeLifecycle("restore")}
+              onCreateTrigger={(name, source, channelId) => (
+                void createTrigger(name, source, channelId)
+              )}
+              onTriggerAction={(trigger, action) => (
+                void changeTrigger(trigger, action)
+              )}
+              onLoadTriggerDeliveries={(triggerId) => (
+                void loadTriggerDeliveries(triggerId)
+              )}
+              onDismissTriggerSecret={() => setTriggerSecret(null)}
+              onFinalizeTrigger={finalizeTriggerMutation}
+              onRefreshTriggerApproval={() => void refreshTriggerApproval()}
+              onCron={(value) => {
+                invalidateExactApproval();
+                invalidatePendingOccurrenceRetry();
+                setCron(value);
+              }}
+              onTimezone={(value) => {
+                invalidateExactApproval();
+                invalidatePendingOccurrenceRetry();
+                setTimezone(value);
+              }}
+              onTriggerDraftChange={invalidateExactApproval}
+            />
+          </div>
+        )}
+        {surfaceState === "ready" && draft && discardDialogOpen && (
+          <div className="routine-discard-scrim">
+            <section
+              aria-describedby="routine-discard-description"
+              aria-labelledby="routine-discard-title"
+              aria-modal="true"
+              className="routine-discard-dialog"
+              onKeyDown={handleDiscardDialogKeyDown}
+              ref={discardDialogRef}
+              role="alertdialog"
+            >
+              <h2 id="routine-discard-title">Discard unsaved changes?</h2>
+              <p id="routine-discard-description">
+                This routine has changes that have not been saved. Discard them
+                and return to Routines?
+              </p>
+              <div className="routine-discard-actions">
                 <button
-                  className={draft?.id === workflow.id ? "workflow-library-row active" : "workflow-library-row"}
-                  key={workflow.id}
-                  onClick={() => {
-                    invalidateExactApproval();
-                    setSelectedWorkflowId(workflow.id);
-                  }}
+                  className="secondary-button"
+                  onClick={cancelEditorExit}
+                  ref={discardCancelRef}
+                  type="button"
                 >
-                  <strong>{workflow.id}</strong>
-                  <small>
-                    v{workflow.version} · {workflow.status ?? "active"}
-                  </small>
+                  Cancel
                 </button>
-              ))}
-            </aside>
-            {!draft ? (
-              <Unavailable title="Choose or create a workflow">
-                Worker now supports native dependency and step authoring. Operator remains available for advanced live-canvas inspection.
-              </Unavailable>
-            ) : (
-              <WorkflowEditor
-                draft={draft}
-                verbs={verbs}
-                dirty={dirty}
-                busy={busy}
-                message={message}
-                cron={cron}
-                timezone={timezone}
-                runIds={runIds}
-                runStat={stats[draft.id]}
-                lastExecution={lastExecution}
-                status={workflowStatus}
-                hasSchedule={hasSchedule}
-                scheduleState={scheduleState}
-                scheduleOccurrences={scheduleOccurrences}
-                scheduleHistoryTruncated={scheduleHistoryTruncated}
-                occurrenceFinalization={occurrenceFinalization}
-                triggers={triggers}
-                channels={channels}
-                triggerDeliveries={triggerDeliveries}
-                triggerSecret={triggerSecret}
-                pendingTrigger={pendingTrigger}
-                sessionKey={selectedWorkflowId ?? "new-draft"}
-                initialFocusStepId={focusStepId}
-                onFocusStepConsumed={() => setFocusStepId(null)}
-                onBack={closeEditor}
-                onDiscard={discardDraft}
-                onDraft={changeDraft}
-                onStep={updateStep}
-                onAddStep={addStep}
-                onRemoveStep={removeStep}
-                onSave={() => void saveWorkflow()}
-                onQueue={() => void queueWorkflow()}
-                onRunNow={() => void runWorkflowNow()}
-                onSchedule={() => void scheduleWorkflow()}
-                onUnschedule={() => void changeLifecycle("unschedule")}
-                onRetryOccurrence={(occurrence) => (
-                  void retryScheduleOccurrence(occurrence)
-                )}
-                onFinalizeOccurrenceRetry={() => (
-                  void finalizeScheduleOccurrenceRetry()
-                )}
-                onArchive={() => void changeLifecycle("archive")}
-                onRestore={() => void changeLifecycle("restore")}
-                onCreateTrigger={(name, source, channelId) => (
-                  void createTrigger(name, source, channelId)
-                )}
-                onTriggerAction={(trigger, action) => (
-                  void changeTrigger(trigger, action)
-                )}
-                onLoadTriggerDeliveries={(triggerId) => (
-                  void loadTriggerDeliveries(triggerId)
-                )}
-                onDismissTriggerSecret={() => setTriggerSecret(null)}
-                onFinalizeTrigger={finalizeTriggerMutation}
-                onCron={(value) => {
-                  invalidateExactApproval();
-                  invalidatePendingOccurrenceRetry();
-                  setCron(value);
-                }}
-                onTimezone={(value) => {
-                  invalidateExactApproval();
-                  invalidatePendingOccurrenceRetry();
-                  setTimezone(value);
-                }}
-                onTriggerDraftChange={invalidateExactApproval}
-              />
-            )}
+                <button
+                  className="routine-discard-confirm"
+                  onClick={closeEditor}
+                  ref={discardConfirmRef}
+                  type="button"
+                >
+                  Discard changes
+                </button>
+              </div>
+            </section>
           </div>
         )}
       </div>
@@ -1288,6 +1506,7 @@ interface WorkflowEditorProps {
   onLoadTriggerDeliveries: (triggerId: string) => void;
   onDismissTriggerSecret: () => void;
   onFinalizeTrigger: () => void;
+  onRefreshTriggerApproval: () => void;
   onCron: (value: string) => void;
   onTimezone: (value: string) => void;
   onTriggerDraftChange: () => void;
@@ -1302,6 +1521,8 @@ function WorkflowEditor(props: WorkflowEditorProps) {
   const [mode, setMode] = useState<CanvasMode>("edit");
   const [specOpen, setSpecOpen] = useState(false);
   const [tryValues, setTryValues] = useState<Record<string, string>>({});
+  const [zoom, setZoom] = useState(1);
+  const [fitRequest, setFitRequest] = useState(0);
 
   useEffect(() => {
     setSelectedStepId(null);
@@ -1309,6 +1530,8 @@ function WorkflowEditor(props: WorkflowEditorProps) {
     setMode("edit");
     setSpecOpen(false);
     setTryValues({});
+    setZoom(1);
+    setFitRequest(0);
   }, [props.sessionKey]);
 
   // A picker card opened through a problem lands with that step selected.
@@ -1589,35 +1812,100 @@ function WorkflowEditor(props: WorkflowEditorProps) {
     setMode("edit");
   }
 
+  function zoomBy(delta: number) {
+    setZoom((current) => (
+      Math.min(1.4, Math.max(0.4, Math.round((current + delta) * 100) / 100))
+    ));
+  }
+
   const problemsVisible = mode === "edit" && problems.length > 0;
   return (
-    <main className="workflow-editor">
+    <main aria-label="Routine workflow editor" className="workflow-editor">
       <header className="workflow-editor-head">
-        <div>
-          <button className="rc-back" onClick={props.onBack} type="button">
-            <svg aria-hidden fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="14"><polyline points="15 18 9 12 15 6" /></svg>
-            <span>Routines</span>
-          </button>
-          <p className="eyebrow">{props.dirty ? "Unsaved draft" : "Saved definition"}</p>
-          <input
-            aria-label="Workflow id"
-            className="workflow-title-input"
-            placeholder="workflow-id"
-            value={draft.id}
-            onChange={(event) => props.onDraft((current) => ({ ...current, id: event.target.value }))}
-          />
+        <button className="rc-back" onClick={props.onBack} type="button">
+          <svg aria-hidden fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="14"><polyline points="15 18 9 12 15 6" /></svg>
+          <span>Routines</span>
+        </button>
+        <div className="workflow-editor-identity">
+          <div className="workflow-editor-title-line">
+            <input
+              aria-label="Workflow id"
+              className="workflow-title-input"
+              placeholder="workflow-id"
+              value={draft.id}
+              onChange={(event) => props.onDraft((current) => ({ ...current, id: event.target.value }))}
+            />
+            <span className="workflow-editor-version">v{draft.version}</span>
+            <span className="workflow-editor-source">{draft.source}</span>
+          </div>
           <div className="rc-head-sub">
             <span className="rc-head-trigger">{triggerSummary}</span>
             {touchesSummary && <span>{touchesSummary}</span>}
           </div>
         </div>
-        <div className="inline-actions">
+        <div
+          aria-label="Routine canvas controls"
+          className="workflow-editor-controls"
+          role="toolbar"
+        >
           {props.dirty && (
-            <button className="secondary-button" disabled={props.busy} onClick={props.onDiscard}>Discard</button>
+            <div className="workflow-editor-dirty-actions">
+              <span className="workflow-editor-change-state">unsaved changes</span>
+              <button className="secondary-button" disabled={props.busy} onClick={props.onDiscard}>Discard</button>
+              <button
+                aria-label="Save"
+                className="workflow-save-version"
+                disabled={props.busy || draft.preservationErrors.length > 0}
+                onClick={props.onSave}
+                type="button"
+              >
+                {props.busy ? "Working…" : "Save a new version"}
+              </button>
+            </div>
           )}
-          <button className="secondary-button" disabled={props.busy || props.dirty || props.status === "archived"} onClick={props.onQueue}>Queue run</button>
-          <button className="secondary-button" disabled={props.busy || props.dirty || props.status === "archived"} onClick={props.onRunNow}>Run now</button>
-          <button className="primary-button" disabled={props.busy || draft.preservationErrors.length > 0} onClick={props.onSave}>{props.busy ? "Working…" : "Save"}</button>
+          <div aria-label="Canvas mode" className="rc-seg" role="group">
+            {(["edit", "last", "try"] as CanvasMode[]).map((value) => (
+              <button
+                data-active={mode === value ? "true" : undefined}
+                key={value}
+                onClick={() => setMode(value)}
+                type="button"
+              >
+                {value === "edit" ? "Edit" : value === "last" ? "Last run" : "Try it"}
+              </button>
+            ))}
+          </div>
+          <div aria-label="Canvas zoom" className="rc-zoom" role="group">
+            <button aria-label="Zoom out" onClick={() => zoomBy(-0.1)} title="Zoom out" type="button">−</button>
+            <button
+              aria-label="Fit the whole routine"
+              className="rc-zoom-fit"
+              onClick={() => setFitRequest((request) => request + 1)}
+              title="Fit the whole routine"
+              type="button"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button aria-label="Zoom in" onClick={() => zoomBy(0.1)} title="Zoom in" type="button">+</button>
+          </div>
+          <button
+            className="workflow-spec-button"
+            data-active={specOpen ? "true" : undefined}
+            onClick={() => setSpecOpen((open) => !open)}
+            type="button"
+          >
+            {specOpen ? "Hide the spec" : "Show the spec"}
+          </button>
+          <button
+            aria-label="Run now"
+            className="workflow-start-button"
+            disabled={props.busy || props.dirty || props.status === "archived"}
+            onClick={props.onRunNow}
+            type="button"
+          >
+            <svg aria-hidden fill="currentColor" height="12" viewBox="0 0 24 24" width="12"><polygon points="6 4 20 12 6 20" /></svg>
+            <span>Start it now</span>
+          </button>
         </div>
       </header>
       <details className="workflow-meta-details">
@@ -1634,10 +1922,6 @@ function WorkflowEditor(props: WorkflowEditorProps) {
         </section>
       </details>
       <section className="dag-section">
-        <div className="dag-heading">
-          <div><p className="eyebrow">What this routine does</p><p>Add the steps in the order they should happen.</p></div>
-          <button className="secondary-button" onClick={addStepAtEnd}>Add step</button>
-        </div>
         {draft.preservationErrors.length > 0 && (
           <div className="workflow-preservation-warning" role="alert">
             <strong>Read-only definition</strong>
@@ -1645,31 +1929,7 @@ function WorkflowEditor(props: WorkflowEditorProps) {
             <span>Worker has disabled Save so the original step data cannot be lost.</span>
           </div>
         )}
-        <div className="rc-section">
-          <div className="rc-toolbar">
-            <div aria-label="Canvas mode" className="rc-seg" role="group">
-              {([["edit", "Edit"], ["last", "Last run"], ["try", "Try it"]] as [CanvasMode, string][]).map(([value, label]) => (
-                <button
-                  data-active={mode === value ? "true" : undefined}
-                  key={value}
-                  onClick={() => setMode(value)}
-                  type="button"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <span className="rc-toolbar-spacer" />
-            <div className="rc-seg">
-              <button
-                data-active={specOpen ? "true" : undefined}
-                onClick={() => setSpecOpen((open) => !open)}
-                type="button"
-              >
-                {specOpen ? "Hide the spec" : "Show the spec"}
-              </button>
-            </div>
-          </div>
+        <div aria-label="Routine canvas editor" className="rc-section" role="region">
           <div className="rc-body">
             {draft.steps.length === 0 ? (
               <p className="dag-empty" style={{ flex: 1, margin: 16 }}>
@@ -1687,6 +1947,7 @@ function WorkflowEditor(props: WorkflowEditorProps) {
                 steps={draft.steps}
                 tryWalk={tryWalk}
                 verbById={verbById}
+                fitRequest={fitRequest}
                 onAddAfter={addStepAfter}
                 onDuplicateStep={duplicateStep}
                 onLinkSteps={linkSteps}
@@ -1702,9 +1963,25 @@ function WorkflowEditor(props: WorkflowEditorProps) {
                   setSelectedStepId(id);
                   if (id !== null) setSelectedEdge(null);
                 }}
+                onZoomChange={setZoom}
+                zoom={zoom}
               />
             )}
             <aside aria-label="Routine rail" className="rc-rail">
+              <div aria-label="Routine rail views" className="rc-rail-tabs" role="tablist">
+                <button aria-selected="true" data-active="true" role="tab" type="button">Step</button>
+                <button
+                  aria-label="Build with chat (unavailable)"
+                  aria-selected="false"
+                  disabled
+                  role="tab"
+                  title="Unavailable in this build — no governed routine-chat authoring API is exposed."
+                  type="button"
+                >
+                  Build with chat
+                </button>
+              </div>
+              <div className="rc-rail-scroll">
               {specOpen ? (
                 <div className="rc-spec">
                   <span style={{ fontSize: "13px" }}>The spec</span>
@@ -1748,7 +2025,7 @@ function WorkflowEditor(props: WorkflowEditorProps) {
                         <span>
                           No run record is readable here. A per-step record is
                           returned only when a run starts from this screen with
-                          Run now; queued and scheduled runs keep their receipts
+                          Start it now; queued and scheduled runs keep their receipts
                           in Schedule occurrences below.
                         </span>
                       </p>
@@ -1769,6 +2046,7 @@ function WorkflowEditor(props: WorkflowEditorProps) {
                     triggers={props.triggers}
                     verbById={verbById}
                     verbs={verbs}
+                    onAddStep={addStepAtEnd}
                     onDuplicateStep={duplicateStep}
                     onRemoveEdge={removeEdge}
                     onRemoveStep={(index) => {
@@ -1783,9 +2061,10 @@ function WorkflowEditor(props: WorkflowEditorProps) {
                   />
                 </>
               )}
+              </div>
             </aside>
           </div>
-          <div className="rc-foot">
+          <div aria-label="Routine validation footer" className="rc-foot" role="region">
             {problemsVisible ? (
               <>
                 <span className="rc-problems-head">
@@ -1955,6 +2234,7 @@ function WorkflowEditor(props: WorkflowEditorProps) {
         onLoadDeliveries={props.onLoadTriggerDeliveries}
         onDismissSecret={props.onDismissTriggerSecret}
         onFinalize={props.onFinalizeTrigger}
+        onRefreshApproval={props.onRefreshTriggerApproval}
         onDraftChange={props.onTriggerDraftChange}
       />
       <section className="workflow-run-history">
@@ -1967,7 +2247,17 @@ function WorkflowEditor(props: WorkflowEditorProps) {
                 : "No recorded runs for this workflow."}
             </p>
           </div>
-          <a className="secondary-button" href="#/runs">Inspect runs</a>
+          <div className="inline-actions">
+            <button
+              className="secondary-button"
+              disabled={props.busy || props.dirty || props.status === "archived"}
+              onClick={props.onQueue}
+              type="button"
+            >
+              Queue run
+            </button>
+            <a className="secondary-button" href="#/runs">Inspect runs</a>
+          </div>
         </div>
         {props.runIds.length > 0 && (
           <div className="skill-list" aria-label="Recent workflow run identifiers">
@@ -1987,7 +2277,6 @@ function WorkflowEditor(props: WorkflowEditorProps) {
         )}
       </section>
       {props.message && <p className="notice workflow-notice" role="status">{props.message}</p>}
-      <p className="advanced-handoff">Advanced run-event canvas and authoring diagnostics remain in <a href="/operator/#/automations">Operator</a>.</p>
         </div>
       </details>
     </main>
@@ -2016,6 +2305,7 @@ interface WorkflowTriggersPanelProps {
   onLoadDeliveries: (triggerId: string) => void;
   onDismissSecret: () => void;
   onFinalize: () => void;
+  onRefreshApproval: () => void;
   onDraftChange: () => void;
 }
 
@@ -2030,6 +2320,26 @@ function WorkflowTriggersPanel(props: WorkflowTriggersPanelProps) {
     || !name.trim()
     || (source === "channel" && !channelId)
   );
+  const pendingStatusCopy = !props.pending
+    ? ""
+    : props.pending.state === "ready"
+      ? "It is approved and ready to finalize."
+      : props.pending.state === "checking"
+        ? "Checking the exact originator-owned approval request."
+        : props.pending.state === "unavailable"
+          ? props.pending.requestId
+            ? "Its exact approval status is unavailable. Retry the check before finalizing."
+            : "No approval request id was returned, so finalization is unavailable."
+          : "An independent author must approve it in the originating chat first.";
+  const pendingButtonLabel = props.pending?.state === "ready"
+    ? "Finalize after approval"
+    : props.pending?.state === "checking"
+      ? "Checking approval…"
+      : props.pending?.state === "unavailable"
+        ? props.pending.requestId
+          ? "Retry approval check"
+          : "Approval check unavailable"
+        : "Check approval status";
 
   return (
     <section className="workflow-triggers">
@@ -2117,17 +2427,25 @@ function WorkflowTriggersPanel(props: WorkflowTriggersPanelProps) {
               : "Finalize the approved secret rotation"}
           </strong>
           <p>
-            Request {props.pending.requestId}. {props.pending.state === "ready"
-              ? "It is approved and ready to finalize."
-              : "An independent author must approve it in Inbox first."} Finalization
+            {props.pending.requestId
+              ? `Request ${props.pending.requestId}. `
+              : "No request id is available. "}
+            {pendingStatusCopy} Finalization
             replays the exact approved action and returns the one-time secret here.
           </p>
           <button
             className="secondary-button"
-            disabled={props.busy || props.pending.state !== "ready"}
-            onClick={props.onFinalize}
+            disabled={
+              props.busy
+              || props.pending.state === "checking"
+              || !props.pending.requestId
+            }
+            onClick={props.pending.state === "ready"
+              ? props.onFinalize
+              : props.onRefreshApproval}
+            type="button"
           >
-            Finalize after approval
+            {pendingButtonLabel}
           </button>
         </div>
       )}
@@ -2306,7 +2624,7 @@ function occurrenceFinalizationCopy(
 ): [string, string] {
   if (state === "waiting") {
     return [
-      "Waiting for an Inbox decision",
+      "Waiting for a decision in the originating chat",
       "After an independent decision, check again to replay only this exact failed occurrence.",
     ];
   }
@@ -2378,51 +2696,69 @@ export function RoutinePicker({
   stats,
   onOpen,
   onNew,
-  onRefresh,
 }: {
   workflows: WorkflowSummary[];
   stats: Record<string, WorkflowRunStat>;
   onOpen(id: string, focusStep?: string): void;
   onNew(): void;
-  onRefresh(): void;
 }) {
-  const [steps, setSteps] = useState<Record<string, WorkflowStepDefinition[]>>({});
+  type PreviewState =
+    | { status: "loading" }
+    | { status: "ready"; steps: WorkflowStepDefinition[] }
+    | { status: "unavailable" };
+  const [previews, setPreviews] = useState<Record<string, PreviewState>>({});
+  const previewRequests = useRef<Record<string, number>>({});
+
+  const loadPreview = useCallback(async (id: string) => {
+    const request = (previewRequests.current[id] ?? 0) + 1;
+    previewRequests.current[id] = request;
+    setPreviews((current) => ({
+      ...current,
+      [id]: { status: "loading" },
+    }));
+    let next: PreviewState;
+    try {
+      const detail = await client.workflow(id);
+      const list = detail.definition?.steps;
+      next = Array.isArray(list)
+        ? { status: "ready", steps: list as WorkflowStepDefinition[] }
+        : { status: "unavailable" };
+    } catch {
+      next = { status: "unavailable" };
+    }
+    if (previewRequests.current[id] !== request) return;
+    setPreviews((current) => ({ ...current, [id]: next }));
+  }, []);
 
   // The State word runs the same shared graph checks as the canvas Problems
   // strip, over the same steps already fetched for the thumbnail, so the card
   // and the editor can never disagree about what needs fixing.
   const problemsById = useMemo(() => {
     const map: Record<string, GraphProblem[]> = {};
-    for (const [id, list] of Object.entries(steps)) {
-      map[id] = checkDefinitionSteps(list);
+    for (const [id, preview] of Object.entries(previews)) {
+      if (preview.status === "ready") {
+        map[id] = checkDefinitionSteps(preview.steps);
+      }
     }
     return map;
-  }, [steps]);
+  }, [previews]);
 
-  // Summaries carry no steps, so the graph has to be read from each detail. A
-  // failed read leaves that card without a drawing rather than inventing one.
+  // Summaries carry no steps, so every graph is read from its detail. Loading
+  // and failed reads remain explicit states: neither may be projected as an
+  // empty, healthy routine.
   useEffect(() => {
-    let cancelled = false;
-    void Promise.all(workflows.map(async (workflow) => {
-      try {
-        const detail = await client.workflow(workflow.id);
-        const list = (detail.definition?.steps ?? []) as WorkflowStepDefinition[];
-        return [workflow.id, Array.isArray(list) ? list : []] as const;
-      } catch {
-        return [workflow.id, []] as const;
+    const ids = workflows.map((workflow) => workflow.id);
+    setPreviews(Object.fromEntries(ids.map((id) => [id, { status: "loading" }])));
+    for (const id of ids) void loadPreview(id);
+    return () => {
+      for (const id of ids) {
+        previewRequests.current[id] = (previewRequests.current[id] ?? 0) + 1;
       }
-    })).then((entries) => {
-      if (cancelled) return;
-      setSteps(Object.fromEntries(entries));
-    });
-    return () => { cancelled = true; };
-  }, [workflows]);
+    };
+  }, [loadPreview, workflows]);
 
   return (
     <>
-    <div className="routine-picker-bar">
-      <button className="icon-button" aria-label="Refresh workflows" onClick={onRefresh} type="button">↻</button>
-    </div>
     {workflows.length === 0 && <p className="muted small">No saved workflows yet.</p>}
     <div className="console-cards">
       <button className="routine-new" onClick={onNew} type="button">
@@ -2433,10 +2769,12 @@ export function RoutinePicker({
         </span>
         <span className="routine-new-title">New routine</span>
         <span className="routine-new-sub">
-          Start with a few steps and save it when you are ready.
+          An empty routine with a chat in it. Ask it to read a run that went
+          well, or say what should happen.
         </span>
       </button>
       {workflows.map((workflow) => {
+        const preview = previews[workflow.id] ?? { status: "loading" as const };
         const stat = stats[workflow.id];
         const runs = stat?.run_count ?? 0;
         const failed = runs > 0 && (stat?.success_count ?? 0) < runs;
@@ -2447,59 +2785,94 @@ export function RoutinePicker({
         const problems = problemsById[workflow.id] ?? [];
         // Precedence: broken graph > scheduler waiting on a person > archived
         // > runs unattended on a schedule > started by hand.
-        const stateWord = problems.length > 0
-          ? `${problems.length} to fix`
-          : needsYou
-            ? "needs you"
-            : workflow.status === "archived"
-              ? "archived"
-              : scheduled ? "unattended" : "manual";
+        const stateWord = preview.status === "loading"
+          ? "Loading preview"
+          : preview.status === "unavailable"
+            ? "Preview unavailable"
+            : problems.length > 0
+              ? `${problems.length} to fix`
+              : needsYou
+                ? "needs you"
+                : workflow.status === "archived"
+                  ? "archived"
+                  : scheduled ? "unattended" : "manual";
         return (
-          <button
-            className="routine-card"
-            key={workflow.id}
-            onClick={() => onOpen(workflow.id, problems[0]?.stepId)}
-            type="button"
-          >
-            <span className="routine-thumb">
-              <RoutineThumb steps={steps[workflow.id] ?? []} />
-            </span>
-            <span className="routine-body">
-              <span className="routine-name-row">
-                <span className="rail-dot" style={{ background: `var(--${tone})` }} />
-                <span className="routine-name">{workflow.id}</span>
-                <span className="routine-version">v{workflow.version}</span>
+          <div className="routine-card-shell" key={workflow.id}>
+            <button
+              className="routine-card"
+              onClick={() => onOpen(workflow.id, problems[0]?.stepId)}
+              type="button"
+            >
+              <span className="routine-thumb">
+                {preview.status === "ready" ? (
+                  <RoutineThumb steps={preview.steps} />
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className="routine-preview-state"
+                    data-state={preview.status}
+                  >
+                    {preview.status === "loading" ? "loading…" : "not available"}
+                  </span>
+                )}
               </span>
-              <span className="routine-sub">
-                {(workflow.intent_tags ?? []).length > 0
-                  ? (workflow.intent_tags ?? []).join(", ")
-                  : `Held as data, from ${workflow.source}`}
+              <span className="routine-body">
+                <span className="routine-name-row">
+                  <span className="rail-dot" style={{ background: `var(--${tone})` }} />
+                  <span className="routine-name">{workflow.id}</span>
+                  <span className="routine-version">v{workflow.version}</span>
+                </span>
+                <span className="routine-sub">
+                  {(workflow.intent_tags ?? []).length > 0
+                    ? (workflow.intent_tags ?? []).join(", ")
+                    : `Held as data, from ${workflow.source}`}
+                </span>
+                <span style={{ flex: 1 }} />
+                <span className="routine-foot-row">
+                  <span className="routine-starts">
+                    {scheduled
+                      ? `${workflow.schedule?.cron} ${workflow.schedule?.timezone}`
+                      : "Nothing starts it on a schedule"}
+                    {workflow.schedule_state?.desired.status === "active"
+                      ? ` \u00b7 scheduler ${workflow.schedule_state.observed.status.replace("_", " ")}`
+                      : ""}
+                  </span>
+                  <span
+                    className="routine-state"
+                    data-tone={preview.status === "ready" && (problems.length > 0 || needsYou)
+                      ? "needs"
+                      : undefined}
+                  >
+                    {stateWord}
+                  </span>
+                  <span className="routine-when" data-tone={failed ? "failed" : undefined}>
+                    {routineWhen(stat?.last_run_at)}
+                  </span>
+                </span>
               </span>
-              <span style={{ flex: 1 }} />
-              <span className="routine-foot-row">
-                <span className="routine-starts">
-                  {scheduled
-                    ? `${workflow.schedule?.cron} ${workflow.schedule?.timezone}`
-                    : "Nothing starts it on a schedule"}
-                  {workflow.schedule_state?.desired.status === "active"
-                    ? ` \u00b7 scheduler ${workflow.schedule_state.observed.status.replace("_", " ")}`
-                    : ""}
-                </span>
-                <span
-                  className="routine-state"
-                  data-tone={problems.length > 0 || needsYou ? "needs" : undefined}
-                >
-                  {stateWord}
-                </span>
-                <span className="routine-when" data-tone={failed ? "failed" : undefined}>
-                  {routineWhen(stat?.last_run_at)}
-                </span>
-              </span>
-            </span>
-          </button>
+            </button>
+            {preview.status === "unavailable" && (
+              <button
+                aria-label={`Retry preview for ${workflow.id}`}
+                className="routine-preview-retry"
+                onClick={() => void loadPreview(workflow.id)}
+                type="button"
+              >
+                Retry
+              </button>
+            )}
+          </div>
         );
       })}
     </div>
+    <p className="console-foot routine-grid-foot">
+      A due schedule is reconciled on a loop that reports what it saw against
+      what it queued, so a scheduler with work due and nothing queued reads as
+      stalled rather than idle. The dot is how the last run ended, and the state
+      is what the routine still needs from you — opening one lands on whatever
+      that is. Nothing here was learned on its own: a run becomes a routine when
+      you save it.
+    </p>
     <RecentlyChanged />
     </>
   );

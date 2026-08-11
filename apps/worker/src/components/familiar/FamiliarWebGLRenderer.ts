@@ -5,6 +5,8 @@
 // same being as the proven web port. The shader itself is vendored verbatim
 // (familiar.frag); visual changes flow from boltrig-familiar, never start here.
 import fragSrc from "./familiar.frag?raw";
+import type { FamiliarGenotype } from "@wlilley93/boltrig-web-sdk";
+import { packFamiliarGenotype } from "./FamiliarGenotype";
 import {
   clampStageState,
   RESTING_STAGE_STATE,
@@ -26,6 +28,7 @@ const UNIFORMS = [
   "uGestureAmt", "uPresence", "uCentreDock", "uScaleDock", "uFitScale",
   "uGaze", "uWorldRes", "uOrigin", "uPxScale", "uFill", "uPortWide",
   "uHover", "uCompanion", "uAperture",
+  "uGene",
 ] as const;
 
 type UniformName = (typeof UNIFORMS)[number];
@@ -43,6 +46,16 @@ const rand = (a: number, b: number) => a + Math.random() * (b - a);
 // celebrate. Ids match the shader's gesture enum.
 const GESTURES_COMMON = [1, 6, 8, 2];
 
+/** Voice owns a portrait, not the compact companion porthole used elsewhere. */
+export function familiarCompositionForMode(mode: FamiliarPresentationMode): {
+  fitScale: number;
+  scaleDock: number;
+} {
+  return mode === "voice"
+    ? { scaleDock: 0.45, fitScale: 0.62 }
+    : { scaleDock: 0.34, fitScale: 0.5 };
+}
+
 export class FamiliarWebGLRenderer {
   readonly kind = "webgl2" as const;
 
@@ -54,6 +67,9 @@ export class FamiliarWebGLRenderer {
   private startTime = 0;
   private lastReducedFrame = -Infinity;
   private readonly reducedMotion: boolean;
+  private readonly onFirstPaint?: () => void;
+  private painted = false;
+  private mode: FamiliarPresentationMode = "hero";
 
   private state: FamiliarStageState = RESTING_STAGE_STATE;
 
@@ -76,12 +92,15 @@ export class FamiliarWebGLRenderer {
     | { at: number; scalars: Partial<Record<MoodKey, number>> }
     | null = null;
   private aperture = { value: 0, from: 0, to: 1, start: 0, dur: 1400 };
+  private packedGenotype = packFamiliarGenotype(null);
 
-  constructor(options?: { reducedMotion?: boolean }) {
+  constructor(options?: { reducedMotion?: boolean; onFirstPaint?: () => void }) {
     this.reducedMotion = options?.reducedMotion
       ?? (typeof window !== "undefined"
-        && typeof window.matchMedia === "function"
-        && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+        && ((typeof window.matchMedia === "function"
+          && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+          || document.documentElement.classList.contains("reduce-motion")));
+    this.onFirstPaint = options?.onFirstPaint;
   }
 
   mount(container: HTMLElement): void {
@@ -113,23 +132,10 @@ export class FamiliarWebGLRenderer {
       gl.useProgram(prog);
       for (const name of UNIFORMS) this.uniforms[name] = gl.getUniformLocation(prog, name);
 
-    // GENOTYPE. The canonical shader shapes the whole body from uGene; absent
-    // is NOT a circle for the silk theme (bodyScale lives in a gene), so the
-    // canonical defaults from boltrig-familiar/familiar/genotype.h are uploaded
-    // verbatim. Identity variation is a later, deliberate feature.
-    const geneLoc = gl.getUniformLocation(prog, "uGene");
-    if (geneLoc) {
-      gl.uniform4fv(geneLoc, new Float32Array([
-        0.0, 0.0, 0.0, 0.75,
-        0.0, 4.0, 1.0, 1.0,
-        1.0, 1.0, 1.0, 1.0,
-        0.0, 0.0, 0.0, 0.0,
-        1.0, 1.0, 1.0, 1.0,
-        1.0, 1.0, 1.0, 1.0,
-        1.0, 1.0, 1.0, 1.0,
-        0.0, 1.0, 1.0, 1.0,
-      ]));
-    }
+      // GENOTYPE. The shader's 32 positional slots are packed from the
+      // authoritative capability identity. Missing identity stays the exact
+      // neutral defaults, including multiplier defaults in reserved slots.
+      gl.uniform4fv(this.uniforms.uGene ?? null, this.packedGenotype);
 
     } catch (error) {
       // Per the design brief: never rewrite the look to survive a failure —
@@ -152,6 +158,11 @@ export class FamiliarWebGLRenderer {
     this.state = clampStageState(next);
   }
 
+  setGenotype(genotype?: FamiliarGenotype | null): void {
+    this.packedGenotype = packFamiliarGenotype(genotype);
+    if (this.gl) this.gl.uniform4fv(this.uniforms.uGene ?? null, this.packedGenotype);
+  }
+
   /**
    * Live phenotype from the server projection (A3). While fresh it OWNS the
    * mood targets (the wandering baseline stands down); when it goes null or
@@ -165,6 +176,7 @@ export class FamiliarWebGLRenderer {
   }
 
   setMode(mode: FamiliarPresentationMode): void {
+    this.mode = mode;
     if (mode === "minimised") this.suspend();
     else this.resume();
   }
@@ -286,6 +298,9 @@ export class FamiliarWebGLRenderer {
   }
 
   private apertureNow(now: number): number {
+    // Reduced motion starts fully present and stays there. Replaying the
+    // aperture once per throttled frame made visual captures timing-dependent.
+    if (this.reducedMotion) return 1;
     const a = this.aperture;
     const t = Math.min(1, (now - a.start) / a.dur);
     const e = t * t * (3 - 2 * t);
@@ -307,7 +322,10 @@ export class FamiliarWebGLRenderer {
 
   /** 0..1 warmth from local time, peaking mid-afternoon. */
   private dayWarmth(): number {
-    const d = new Date();
+    // Date.now is the existing visual-fixture clock seam. Passing it
+    // explicitly keeps captures fixed while remaining the live clock in
+    // production; `new Date()` alone ignores a frozen Date.now implementation.
+    const d = new Date(Date.now());
     const h = d.getHours() + d.getMinutes() / 60;
     return 0.15 + 0.85 * Math.max(0, Math.sin(((h - 9) / 12) * Math.PI));
   }
@@ -332,7 +350,7 @@ export class FamiliarWebGLRenderer {
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    const t = (now - this.startTime) / 1000;
+    const t = this.reducedMotion ? 0 : (now - this.startTime) / 1000;
     if (!this.reducedMotion) {
       this.moodTick(now);
       this.gestureTick(now);
@@ -379,11 +397,12 @@ export class FamiliarWebGLRenderer {
     f("uPresence", 0);
     f("uAperture", this.apertureNow(now));
     gl.uniform2f(u.uCentreDock ?? null, 0, 0);
-    // 0.34, not 0.40: the design brief's measured value at which the companion
-    // porthole's edge feather reaches zero before the halo is cut - at 0.40 the
-    // clipped halo reads as a hard blue ring ("pasted on the page").
-    f("uScaleDock", 0.34);
-    f("uFitScale", 0.5);
+    // Compact modes keep the measured porthole recipe. Voice uses the full
+    // portrait radius from the Call design; the larger fit boundary preserves
+    // genotype corners and halo instead of cropping them back into a circle.
+    const composition = familiarCompositionForMode(this.mode);
+    f("uScaleDock", composition.scaleDock);
+    f("uFitScale", composition.fitScale);
 
     gl.uniform2f(u.uMouse ?? null, 0.5, 0.5);
     f("uGaze", 0); // autonomous gaze; cursor tracking is a later, deliberate step
@@ -408,5 +427,9 @@ export class FamiliarWebGLRenderer {
     f("uHover", 0);
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+    if (!this.painted) {
+      this.painted = true;
+      this.onFirstPaint?.();
+    }
   };
 }

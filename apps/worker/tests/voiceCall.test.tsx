@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -39,6 +39,38 @@ const mediaResult = {
   media_token: "one-time-media-token",
   websocket_url: "/voice/v1/calls/call-a/media",
 };
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+function VoiceCallWithPersistentOpener({ onError = vi.fn() }: { onError?: (message: string) => void }) {
+  const openerRef = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <button
+        onClick={() => document.querySelector<HTMLButtonElement>(
+          ".voice-idle > button.primary-button",
+        )?.click()}
+        ref={openerRef}
+        type="button"
+      >
+        Open voice call
+      </button>
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onError={onError}
+      />
+    </>
+  );
+}
 
 class FakeWebSocket {
   static CONNECTING = 0;
@@ -157,6 +189,7 @@ const approved = {
 };
 
 beforeEach(() => {
+  delete document.documentElement.dataset.visualPinRecoveredCallNotice;
   native.isDesktop = false;
   FakeWebSocket.instances = [];
   FakeAudioContext.instances = [];
@@ -212,12 +245,502 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  document.querySelectorAll("[data-voice-modal-test-sibling]").forEach((element) => element.remove());
+  delete document.documentElement.dataset.visualPinRecoveredCallNotice;
+  vi.useRealTimers();
   vi.clearAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
 describe("Worker realtime voice continuity", () => {
+  it("uses a definite article for a common-noun call participant", async () => {
+    api.currentCall.mockResolvedValue({
+      call: {
+        ...call,
+        status: "active",
+        participants: [
+          call.participants[0]!,
+          { id: "chief", label: "chief of staff", kind: "agent" as const },
+        ],
+      },
+    });
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+
+    render(
+      <VoiceCall
+        conversationId="conversation-a"
+        conversationTitle="Renewal outreach"
+        onConversation={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText(
+      "Renewal outreach · you and the chief of staff",
+    )).toBeTruthy();
+  });
+
+  it("auto-dismisses a recovered-call notice after the production quiet interval", async () => {
+    vi.useFakeTimers();
+    api.currentCall.mockResolvedValue({ call: { ...call, status: "active" } });
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+
+    render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const recoveryCopy = "A voice call from this conversation can be resumed.";
+    expect(screen.getByText(recoveryCopy)).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(9_799);
+    });
+    expect(screen.getByText(recoveryCopy)).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(screen.queryByText(recoveryCopy)).toBeNull();
+  });
+
+  it("pins only the visual fixture's recovered-call notice until explicit dismissal", async () => {
+    vi.useFakeTimers();
+    document.documentElement.dataset.visualPinRecoveredCallNotice = "true";
+    api.currentCall.mockResolvedValue({ call: { ...call, status: "active" } });
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+
+    render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const recoveryCopy = "A voice call from this conversation can be resumed.";
+    expect(screen.getByText(recoveryCopy)).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect(screen.getByText(recoveryCopy)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss call notice" }));
+    expect(screen.queryByText(recoveryCopy)).toBeNull();
+  });
+
+  it("does not reopen a stale recovered call after navigating from conversation A to B", async () => {
+    const historyA = deferred<{ events: Array<typeof transcript | typeof pending> }>();
+    api.currentCall.mockImplementation((requestedConversationId: string) => Promise.resolve({
+      call: requestedConversationId === "conversation-a"
+        ? { ...call, status: "active" as const }
+        : null,
+    }));
+    api.callEvents.mockReset().mockReturnValue(historyA.promise);
+    const onConversation = vi.fn();
+    const onError = vi.fn();
+    const view = render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={onConversation}
+        onError={onError}
+      />,
+    );
+
+    await waitFor(() => expect(api.callEvents).toHaveBeenCalledWith(call.id));
+    expect(screen.getByRole("dialog", { name: "Voice call" })).toBeTruthy();
+
+    view.rerender(
+      <VoiceCall
+        conversationId="conversation-b"
+        onConversation={onConversation}
+        onError={onError}
+      />,
+    );
+    await waitFor(() => expect(api.currentCall).toHaveBeenCalledWith("conversation-b"));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Voice call" })).toBeNull());
+
+    await act(async () => {
+      historyA.resolve({ events: [transcript, pending] });
+      await historyA.promise;
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText("Earlier question")).toBeNull();
+    expect(screen.queryByText("Waiting for approval")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Voice call" })).toBeNull();
+    expect(screen.getByRole("button", { name: "◉ Start call" })).toBeTruthy();
+  });
+
+  it("does not attach deferred recovered-call usage to conversation B", async () => {
+    const usageA = deferred<{
+      call_id: string;
+      usage: {
+        input_audio_bytes: number;
+        output_audio_bytes: number;
+        tool_calls: number;
+        provider_input_tokens: number;
+        provider_output_tokens: number;
+        estimated_cost_micros: number;
+        pricing_revision: string;
+        cost_status: "estimated";
+      };
+    }>();
+    const callB = {
+      ...call,
+      id: "call-b",
+      conversation_id: "conversation-b",
+      status: "active" as const,
+    };
+    const usageEvent = {
+      id: "event-usage-a",
+      call_id: call.id,
+      type: "usage" as const,
+      participant_id: "agent",
+      payload: {},
+      created_at: "2026-07-29T10:00:04Z",
+    };
+    const endedB = {
+      id: "event-ended-b",
+      call_id: callB.id,
+      type: "ended" as const,
+      participant_id: "agent",
+      payload: {},
+      created_at: "2026-07-29T10:00:05Z",
+    };
+    api.currentCall.mockImplementation((requestedConversationId: string) => Promise.resolve({
+      call: requestedConversationId === "conversation-a"
+        ? { ...call, status: "active" as const }
+        : callB,
+    }));
+    api.callEvents.mockReset().mockImplementation((callId: string) => Promise.resolve({
+      events: callId === call.id ? [usageEvent] : [endedB],
+    }));
+    api.callUsage.mockReset().mockReturnValue(usageA.promise);
+    const onConversation = vi.fn();
+    const onError = vi.fn();
+    const view = render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={onConversation}
+        onError={onError}
+      />,
+    );
+
+    await waitFor(() => expect(api.callUsage).toHaveBeenCalledWith(call.id));
+    view.rerender(
+      <VoiceCall
+        conversationId="conversation-b"
+        onConversation={onConversation}
+        onError={onError}
+      />,
+    );
+    expect(await screen.findByText("Call ended")).toBeTruthy();
+
+    await act(async () => {
+      usageA.resolve({
+        call_id: call.id,
+        usage: {
+          input_audio_bytes: 48_000,
+          output_audio_bytes: 48_000,
+          tool_calls: 9,
+          provider_input_tokens: 100,
+          provider_output_tokens: 200,
+          estimated_cost_micros: 9_000,
+          pricing_revision: "stale-a",
+          cost_status: "estimated",
+        },
+      });
+      await usageA.promise;
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText("Provider tokens")).toBeNull();
+    expect(screen.queryByText("stale-a")).toBeNull();
+  });
+
+  it("keeps conversation B's notice when recovered history for A fails late", async () => {
+    const historyA = deferred<{ events: [] }>();
+    const callB = {
+      ...call,
+      id: "call-b",
+      conversation_id: "conversation-b",
+      status: "active" as const,
+    };
+    api.currentCall.mockImplementation((requestedConversationId: string) => Promise.resolve({
+      call: requestedConversationId === "conversation-a"
+        ? { ...call, status: "active" as const }
+        : callB,
+    }));
+    api.callEvents.mockReset().mockImplementation((callId: string) => (
+      callId === call.id ? historyA.promise : Promise.resolve({ events: [] })
+    ));
+    const onConversation = vi.fn();
+    const onError = vi.fn();
+    const view = render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={onConversation}
+        onError={onError}
+      />,
+    );
+
+    await waitFor(() => expect(api.callEvents).toHaveBeenCalledWith(call.id));
+    view.rerender(
+      <VoiceCall
+        conversationId="conversation-b"
+        onConversation={onConversation}
+        onError={onError}
+      />,
+    );
+    await waitFor(() => expect(api.callEvents).toHaveBeenCalledWith(callB.id));
+
+    await act(async () => {
+      historyA.reject(new Error("late history failure"));
+      try {
+        await historyA.promise;
+      } catch {
+        // The component owns this rejection; act waits for its guarded catch.
+      }
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("A voice call from this conversation can be resumed.")).toBeTruthy();
+    expect(screen.queryByText(
+      "Call history could not be restored. New live events will still appear.",
+    )).toBeNull();
+  });
+
+  it("centres the bound genotype and lets participant buttons change only visual focus", async () => {
+    const multiAgentCall = {
+      ...call,
+      participants: [
+        call.participants[0]!,
+        {
+          id: "chief",
+          label: "Chief of staff",
+          kind: "agent" as const,
+          familiar_genotype: {
+            source: "agent_capability.name.v1" as const,
+            seed: 11,
+            body: "cassini",
+            palette: ["#dbeafe", "#3b82f6", "#172554"],
+            markings: ["arc"],
+            accessories: [],
+          },
+        },
+        {
+          id: "lyell",
+          label: "Lyell",
+          kind: "agent" as const,
+          familiar_genotype: {
+            source: "agent_capability.name.v1" as const,
+            seed: 22,
+            body: "kepler",
+            palette: ["#dcfce7", "#22c55e", "#14532d"],
+            markings: ["orbit"],
+            accessories: ["antenna"],
+          },
+        },
+      ],
+    };
+    api.createCall.mockResolvedValue({ ...mediaResult, call: multiAgentCall });
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+
+    render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "◉ Start call" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    act(() => {
+      FakeWebSocket.instances[0]?.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({ type: "ready" }),
+      }));
+    });
+
+    const chief = await screen.findByRole("img", { name: "Chief of staff Familiar · ready" });
+    expect(chief.getAttribute("data-familiar-body")).toBe("cassini");
+    const lyellButton = screen.getByRole("button", { name: "Show Lyell in the call centre" });
+    const lyellBadge = lyellButton.querySelector<HTMLElement>(".familiar-orb");
+    expect(lyellBadge?.dataset.renderer).toBe("badge");
+    expect(lyellBadge?.style.width).toBe("30px");
+    expect(document.querySelectorAll(".familiar-stage")).toHaveLength(1);
+    fireEvent.click(lyellButton);
+    const lyell = await screen.findByRole("img", { name: "Lyell Familiar · ready" });
+    expect(lyell.getAttribute("data-familiar-body")).toBe("kepler");
+    expect(document.querySelectorAll(".familiar-stage")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Show Chief of staff in the call centre" })
+      .querySelector<HTMLElement>(".familiar-orb")?.dataset.renderer).toBe("badge");
+    expect(screen.getByText("Viewing Lyell. Call audio and routing are unchanged.")).toBeTruthy();
+    expect(api.createCall).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens a full-window call surface and mutes the real microphone track", async () => {
+    const microphoneTrack = { enabled: true, stop: vi.fn() };
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn().mockResolvedValue({
+          getAudioTracks: () => [microphoneTrack],
+          getTracks: () => [microphoneTrack],
+        }),
+      },
+    });
+
+    render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "◉ Start call" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    act(() => {
+      FakeWebSocket.instances[0]?.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({ type: "ready" }),
+      }));
+    });
+
+    const dialog = await screen.findByRole("dialog", { name: "Voice call" });
+    expect(dialog.getAttribute("data-screen-label")).toBe("Call");
+    expect(screen.getByText("Voice call · you and Boltrig")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Leave" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Hold everything" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Mute" }));
+    expect(microphoneTrack.enabled).toBe(false);
+    expect(screen.getByRole("button", { name: "Unmute" }).getAttribute(
+      "aria-pressed",
+    )).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Unmute" }));
+    expect(microphoneTrack.enabled).toBe(true);
+  });
+
+  it("makes the full-window call truly modal and restores exact background state on Escape", async () => {
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+    const legacySibling = document.createElement("aside");
+    legacySibling.dataset.voiceModalTestSibling = "legacy";
+    legacySibling.setAttribute("aria-hidden", "false");
+    legacySibling.setAttribute("inert", "legacy");
+    document.body.append(legacySibling);
+
+    const rendered = render(<VoiceCallWithPersistentOpener />);
+    const opener = screen.getByRole("button", { name: "Open voice call" });
+    opener.focus();
+    expect(document.activeElement).toBe(opener);
+    fireEvent.click(opener);
+
+    const dialog = await screen.findByRole("dialog", { name: "Voice call" });
+    expect(document.activeElement).toBe(dialog);
+    expect(rendered.container.getAttribute("aria-hidden")).toBe("true");
+    expect(rendered.container.hasAttribute("inert")).toBe(true);
+    expect(rendered.container.inert).toBe(true);
+    expect(legacySibling.getAttribute("aria-hidden")).toBe("true");
+    expect(legacySibling.inert).toBe(true);
+
+    const lateSibling = document.createElement("div");
+    lateSibling.dataset.voiceModalTestSibling = "late";
+    const lateButton = document.createElement("button");
+    lateButton.textContent = "Background action";
+    lateSibling.append(lateButton);
+    document.body.append(lateSibling);
+    await waitFor(() => expect(lateSibling.getAttribute("aria-hidden")).toBe("true"));
+    expect(lateSibling.inert).toBe(true);
+
+    const leave = screen.getByRole("button", { name: "Leave" });
+    const mute = screen.getByRole("button", { name: "Mute" });
+    mute.focus();
+    fireEvent.keyDown(mute, { key: "Tab" });
+    expect(document.activeElement).toBe(leave);
+    leave.focus();
+    fireEvent.keyDown(leave, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(mute);
+    lateButton.focus();
+    expect(document.activeElement).toBe(mute);
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(api.endCall).toHaveBeenCalledWith(call.id));
+    expect(await screen.findByText("Call ended")).toBeTruthy();
+
+    expect(rendered.container.hasAttribute("aria-hidden")).toBe(false);
+    expect(rendered.container.hasAttribute("inert")).toBe(false);
+    expect(rendered.container.inert).toBe(false);
+    expect(legacySibling.getAttribute("aria-hidden")).toBe("false");
+    expect(legacySibling.getAttribute("inert")).toBe("legacy");
+    expect(legacySibling.inert).toBe(true);
+    expect(lateSibling.hasAttribute("aria-hidden")).toBe(false);
+    expect(lateSibling.hasAttribute("inert")).toBe(false);
+    expect(lateSibling.inert).toBe(false);
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("restores focus to the persistent opener after Leave", async () => {
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+    render(<VoiceCallWithPersistentOpener />);
+    const opener = screen.getByRole("button", { name: "Open voice call" });
+    opener.focus();
+    fireEvent.click(opener);
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Leave" }));
+
+    expect(await screen.findByText("Call ended")).toBeTruthy();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("restores focus when the active call closes from a live event", async () => {
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+    render(<VoiceCallWithPersistentOpener />);
+    const opener = screen.getByRole("button", { name: "Open voice call" });
+    opener.focus();
+    fireEvent.click(opener);
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    act(() => {
+      FakeWebSocket.instances[0]?.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({ type: "ready" }),
+      }));
+    });
+    expect(await screen.findByText("Live voice")).toBeTruthy();
+
+    act(() => {
+      FakeWebSocket.instances[0]?.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({
+          type: "call_event",
+          event: {
+            id: "event-ended-remotely",
+            call_id: call.id,
+            type: "ended",
+            participant_id: "agent",
+            payload: {},
+            created_at: "2026-07-29T10:05:00Z",
+          },
+        }),
+      }));
+    });
+
+    expect(await screen.findByText("Call ended")).toBeTruthy();
+    expect(api.endCall).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(opener);
+  });
+
   it("keeps the newly created call connected while adopting its conversation", async () => {
     const stopTrack = vi.fn();
     api.callEvents.mockReset().mockResolvedValue({ events: [] });
@@ -306,9 +829,14 @@ describe("Worker realtime voice continuity", () => {
     fireEvent.click(screen.getByRole("button", { name: "◉ Start call" }));
     await waitFor(() => expect(api.callEvents).toHaveBeenCalledWith(call.id));
     expect(await screen.findByText("Waiting for approval")).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Voice call" }).getAttribute(
+      "data-screen-label",
+    )).toBe("Call");
+    expect(screen.getByText(
+      "Approval needed for ticket.create. Review it in the originating chat to continue.",
+    ).closest("article")?.getAttribute("data-urgent")).toBe("true");
     expect(screen.getByText("Earlier question")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open Inbox" }).getAttribute("href"))
-      .toBe("#/inbox");
+    expect(screen.queryByRole("link", { name: "Open Inbox" })).toBeNull();
 
     act(() => {
       FakeWebSocket.instances[0]?.onclose?.(new CloseEvent("close"));
@@ -346,7 +874,7 @@ describe("Worker realtime voice continuity", () => {
     });
     expect(await screen.findByText("Voice reconnected.")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "End" }));
+    fireEvent.click(screen.getByRole("button", { name: "Leave" }));
     expect(await screen.findByText("Call ended")).toBeTruthy();
     expect(screen.getByText("Earlier question")).toBeTruthy();
     expect(screen.getByText("Continuing now")).toBeTruthy();
@@ -548,7 +1076,7 @@ describe("Worker realtime voice continuity", () => {
     });
     expect(await screen.findByText("Live voice")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "End" }));
+    fireEvent.click(screen.getByRole("button", { name: "Leave" }));
     expect(await screen.findByText("Call interrupted")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));

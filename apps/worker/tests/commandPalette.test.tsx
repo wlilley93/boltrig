@@ -1,5 +1,8 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { useState } from "react";
 import {
   act,
@@ -19,6 +22,11 @@ vi.mock("../src/client", () => ({ client: api }));
 
 import { CommandPalette } from "../src/components/CommandPalette";
 
+const commandPaletteCss = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "../src/components/CommandPalette.css"),
+  "utf8",
+);
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -26,6 +34,56 @@ afterEach(() => {
 });
 
 describe("Worker command palette", () => {
+  it("pins the 1440px CURRENT SOURCE panel geometry without breaking narrow layouts", () => {
+    expect(commandPaletteCss).toMatch(/padding:\s*15vh 5vw 0/);
+    expect(commandPaletteCss).toMatch(/transform:\s*translateX\(220px\)/);
+    expect(commandPaletteCss).toMatch(/width:\s*min\(560px, 90vw\)/);
+    expect(commandPaletteCss).toMatch(/max-width:\s*960px[\s\S]*transform:\s*none/);
+  });
+
+  it("matches the target command surface vocabulary and bounded opening list", () => {
+    render(<CommandPalette open onClose={vi.fn()} onNavigate={vi.fn()} />);
+
+    const dialog = screen.getByRole("dialog", { name: "Worker commands" });
+    expect(dialog.getAttribute("data-screen-label")).toBe("Command palette");
+    expect(screen.getByPlaceholderText("Go anywhere, change anything")).toBeTruthy();
+    expect(screen.getByText("esc")).toBeTruthy();
+    expect(screen.queryByText("Commands")).toBeNull();
+    expect(screen.getAllByRole("option")).toHaveLength(8);
+    expect(screen.getAllByRole("option").slice(0, 4).map((option) => (
+      option.textContent
+    ))).toEqual(expect.arrayContaining([
+      expect.stringContaining("New chat"),
+      expect.stringContaining("Agents"),
+      expect.stringContaining("Plugins"),
+      expect.stringContaining("Routines"),
+    ]));
+  });
+
+  it("uses the canonical icon for each settings destination", () => {
+    render(<CommandPalette open onClose={vi.fn()} onNavigate={vi.fn()} />);
+    const input = screen.getByRole("combobox");
+    const firstPath = (label: string) => {
+      fireEvent.change(input, { target: { value: label } });
+      return screen.getByRole("option", { name: new RegExp(label, "i") })
+        .querySelector("path")
+        ?.getAttribute("d");
+    };
+
+    expect(firstPath("You settings")).toBe(
+      "M12 4.6a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8z",
+    );
+    expect(firstPath("Autonomy settings")).toBe(
+      "M12 3l7 3v5.5c0 4.6-3 7.2-7 8.5-4-1.3-7-3.9-7-8.5V6z",
+    );
+    expect(firstPath("Spending settings")).toBe(
+      "M12 3.5a8.5 8.5 0 1 0 8.5 8.5",
+    );
+    expect(firstPath("Keyboard shortcuts settings")).toBe(
+      "M3.5 6.5h17v11h-17z",
+    );
+  });
+
   it("finds capability destinations without implying content-wide search", () => {
     const onNavigate = vi.fn();
     const onClose = vi.fn();
@@ -78,6 +136,35 @@ describe("Worker command palette", () => {
     expect(options.at(-1)?.getAttribute("aria-selected")).toBe("true");
     fireEvent.keyDown(input, { key: "Home" });
     expect(input.getAttribute("aria-activedescendant")).toBe(options[0].id);
+  });
+
+  it("keeps keyboard-selected results inside the scrolling result well", () => {
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    try {
+      render(<CommandPalette open onClose={vi.fn()} onNavigate={vi.fn()} />);
+      const input = screen.getByRole("combobox", { name: "Search Worker" });
+      const options = screen.getAllByRole("option");
+      scrollIntoView.mockClear();
+
+      fireEvent.keyDown(input, { key: "End" });
+
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+      expect(scrollIntoView.mock.instances.at(-1)).toBe(options.at(-1));
+    } finally {
+      if (originalScrollIntoView) {
+        Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+          configurable: true,
+          value: originalScrollIntoView,
+        });
+      } else {
+        delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+      }
+    }
   });
 
   it("keeps zero-result navigation bounded and ignores IME composition", () => {
@@ -141,6 +228,90 @@ describe("Worker command palette", () => {
     fireEvent.click(opener);
     fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("makes only background siblings inert and restores them before opener focus", () => {
+    const openerFocusState = vi.fn();
+
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button
+            onClick={() => setOpen(true)}
+            onFocus={() => {
+              const background = document.querySelector<HTMLElement>(
+                '[data-testid="command-background"]',
+              );
+              openerFocusState({
+                ariaHidden: background?.getAttribute("aria-hidden") ?? null,
+                inert: background?.inert ?? false,
+              });
+            }}
+            type="button"
+          >
+            Open commands
+          </button>
+          <section aria-hidden="false" data-testid="command-background">
+            <button data-testid="background-action" type="button">
+              Background action
+            </button>
+          </section>
+          <aside
+            aria-hidden="true"
+            data-testid="already-inert"
+            ref={(element) => {
+              if (element) element.inert = true;
+            }}
+          >
+            Existing modal background
+          </aside>
+          <CommandPalette
+            open={open}
+            onClose={() => setOpen(false)}
+            onNavigate={vi.fn()}
+          />
+        </>
+      );
+    }
+
+    render(<Harness />);
+    const opener = screen.getByRole("button", { name: "Open commands" });
+    const background = screen.getByTestId("command-background");
+    const backgroundAction = screen.getByTestId("background-action");
+    const alreadyInert = screen.getByTestId("already-inert");
+    opener.focus();
+    openerFocusState.mockClear();
+    fireEvent.click(opener);
+
+    const paletteSurface = document.querySelector<HTMLElement>(
+      "[data-command-surface]",
+    );
+    expect(paletteSurface?.inert).toBe(false);
+    expect(paletteSurface?.hasAttribute("aria-hidden")).toBe(false);
+    expect(opener.inert).toBe(true);
+    expect(opener.getAttribute("aria-hidden")).toBe("true");
+    expect(background.inert).toBe(true);
+    expect(background.getAttribute("aria-hidden")).toBe("true");
+    expect(alreadyInert.inert).toBe(true);
+    expect(alreadyInert.getAttribute("aria-hidden")).toBe("true");
+    expect(screen.queryByRole("button", { name: "Background action" })).toBeNull();
+    expect(backgroundAction.closest("[inert]")).toBe(background);
+
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(opener.inert).toBe(false);
+    expect(opener.hasAttribute("aria-hidden")).toBe(false);
+    expect(background.inert).toBe(false);
+    expect(background.getAttribute("aria-hidden")).toBe("false");
+    expect(alreadyInert.inert).toBe(true);
+    expect(alreadyInert.getAttribute("aria-hidden")).toBe("true");
+    expect(openerFocusState).toHaveBeenLastCalledWith({
+      ariaHidden: "false",
+      inert: false,
+    });
     expect(document.activeElement).toBe(opener);
   });
 
@@ -308,7 +479,7 @@ describe("Worker command palette", () => {
     fireEvent.click(screen.getByRole("option", { name: /Audit event/ }));
 
     expect(onNavigate).toHaveBeenNthCalledWith(1, "memory", null);
-    expect(onNavigate).toHaveBeenNthCalledWith(2, "operate", null);
+    expect(onNavigate).toHaveBeenNthCalledWith(2, "settings", "operations");
   });
 });
 

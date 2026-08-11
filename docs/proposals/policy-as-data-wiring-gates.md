@@ -38,7 +38,7 @@ budget scopes that have a real enforcement consumer. It may display an existing
 workflow-scope row, but must label it stored and unenforced. Window values are
 shown as tags with manual reset, not automatic periods.
 
-Operator remains the advanced manifest/revision surface. Its Spawn Rules editor
+Worker remains the governed manifest/revision surface. Its Spawn Rules editor
 describes the live matcher and required priority; parsed-only fields still say
 “stored” and name the missing consumer. A typed schema is proof of authoring
 shape only; the matrix above names the actual runtime consumer.

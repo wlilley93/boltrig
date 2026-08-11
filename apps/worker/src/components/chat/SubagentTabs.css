@@ -128,17 +128,6 @@
 }
 .subtabs-steps span { color: var(--text-4); }
 
-.subtabs-operator {
-  align-self: flex-start;
-  font-size: 12.5px;
-  color: var(--text-3);
-  text-decoration: none;
-  border: 1px solid var(--border-2);
-  border-radius: 8px;
-  padding: 5px 11px;
-}
-.subtabs-operator:hover { background: var(--hover); color: var(--text); }
-
 .subtabs-allowed { display: flex; flex-direction: column; gap: 9px; }
 .subtabs-allowed-title { font-size: 13px; color: var(--text-2); }
 .subtabs-allowed-card {

@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import type { ConversationSummary } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "./client";
-import type { SettingsSection } from "./settingsSections";
+import { isSettingsSection, type SettingsSection } from "./settingsSections";
 import { useMediaQuery } from "./useMediaQuery";
 import { MobileSettings } from "./components/MobileSettings";
 import { MobileToday } from "./components/MobileToday";
@@ -16,6 +16,7 @@ import {
   conversationFromHash,
   navigate,
   routeFromHash,
+  selectionFromHash,
   type WorkerRoute,
 } from "./routes";
 
@@ -25,11 +26,9 @@ const BuildView = lazyNamed(() => import("./components/BuildView"), "BuildView")
 const ChannelsView = lazyNamed(() => import("./components/ChannelsView"), "ChannelsView");
 const EvaluationsView = lazyNamed(() => import("./components/EvaluationsView"), "EvaluationsView");
 const HomeView = lazyNamed(() => import("./components/OperationsView"), "HomeView");
-const InboxView = lazyNamed(() => import("./components/Views"), "InboxView");
 const IntegrationsView = lazyNamed(() => import("./components/IntegrationsView"), "IntegrationsView");
 const KnowledgeView = lazyNamed(() => import("./components/ParityViews"), "KnowledgeView");
 const MemoryView = lazyNamed(() => import("./components/ParityViews"), "MemoryView");
-const OperateView = lazyNamed(() => import("./components/OperationsView"), "OperateView");
 const OrganisationView = lazyNamed(() => import("./components/OrganisationView"), "OrganisationView");
 const RunsView = lazyNamed(() => import("./components/ParityViews"), "RunsView");
 const SettingsView = lazyNamed(() => import("./components/Views"), "SettingsView");
@@ -43,9 +42,15 @@ function initialsOf(user?: string): string {
   return parts.map((part) => part[0]!.toUpperCase()).join("") || "—";
 }
 
+function settingsSectionFromHash(hash: string): SettingsSection {
+  const selection = selectionFromHash(hash, "settings");
+  return selection && isSettingsSection(selection) ? selection : "you";
+}
+
 export function App() {
   const [route, setRoute] = useState<WorkerRoute>(() => routeFromHash(window.location.hash));
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [workingConversationIds, setWorkingConversationIds] = useState<string[]>([]);
   const [conversationOffset, setConversationOffset] = useState<number | null>(0);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(
     () => conversationFromHash(window.location.hash),
@@ -56,7 +61,9 @@ export function App() {
   const [railOpen, setRailOpen] = useState(false);
   // Which settings section is open. The sidebar and the pane both read it, so
   // it lives above them rather than inside either.
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("you");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>(
+    () => settingsSectionFromHash(window.location.hash),
+  );
   // The settings search query lives here too: the sidebar input feeds it and
   // the page swaps the section pane for row-level results while it is set.
   const [settingsQuery, setSettingsQuery] = useState("");
@@ -64,30 +71,46 @@ export function App() {
     if (route !== "settings") setSettingsQuery("");
   }, [route]);
   const phone = useMediaQuery("(max-width: 640px)");
+  // This breakpoint is also the authority for the CSS navigation drawer.
+  // Keep it separate from the phone surface breakpoint: widths from 641–760px
+  // still use desktop content inside the modal navigation shell.
+  const compactNavigation = useMediaQuery("(max-width: 760px)");
   const { identity } = useWorkerGlobalContext();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLButtonElement>(null);
+  const compactNavigationRef = useRef(compactNavigation);
+  const previousCompactNavigationRef = useRef(compactNavigation);
+  compactNavigationRef.current = compactNavigation;
+  // A refresh starts a new authoritative list generation. Pagination may add
+  // only to the generation it began from, so a slower older page can never
+  // append into (or mark unavailable) a newer page-zero snapshot.
+  const conversationEpochRef = useRef(0);
   const sidebarWrapRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLElement>(null);
 
   const refreshConversations = useCallback(() => {
+    const epoch = ++conversationEpochRef.current;
     setConversationStatus("loading");
     void client.conversationsPage(25, 0)
       .then((result) => {
+        if (conversationEpochRef.current !== epoch) return;
         setConversations(result.conversations);
         setConversationOffset(result.next_offset);
         setConversationStatus("ready");
       })
       .catch(() => {
+        if (conversationEpochRef.current !== epoch) return;
         setConversationStatus("unavailable");
       });
   }, []);
 
   const loadMoreConversations = useCallback(() => {
     if (conversationOffset === null) return;
+    const epoch = conversationEpochRef.current;
     setConversationStatus("loading");
     void client.conversationsPage(25, conversationOffset)
       .then((result) => {
+        if (conversationEpochRef.current !== epoch) return;
         setConversations((current) => [
           ...current,
           ...result.conversations.filter(
@@ -97,8 +120,18 @@ export function App() {
         setConversationOffset(result.next_offset);
         setConversationStatus("ready");
       })
-      .catch(() => setConversationStatus("unavailable"));
+      .catch(() => {
+        if (conversationEpochRef.current !== epoch) return;
+        setConversationStatus("unavailable");
+      });
   }, [conversationOffset]);
+
+  const setConversationWorking = useCallback((id: string, working: boolean) => {
+    setWorkingConversationIds((current) => {
+      if (working) return current.includes(id) ? current : [...current, id];
+      return current.filter((conversationId) => conversationId !== id);
+    });
+  }, []);
 
   useEffect(() => {
     refreshConversations();
@@ -108,6 +141,10 @@ export function App() {
       setSelectedConversation(
         next === "chat" ? conversationFromHash(window.location.hash) : null,
       );
+      if (next === "settings") {
+        const section = selectionFromHash(window.location.hash, "settings");
+        if (section && isSettingsSection(section)) setSettingsSection(section);
+      }
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
@@ -121,6 +158,10 @@ export function App() {
       if (!hit) return;
       if (hit.id === "command-palette") {
         event.preventDefault();
+        // The compact rail is itself modal. Dismiss it before mounting the
+        // command dialog so its lower focus trap cannot consume the palette's
+        // Tab or Escape events.
+        setRailOpen(false);
         setCommandPaletteOpen((current) => !current);
       }
       // Best effort: browsers may reserve Cmd/Ctrl-N for a new window, but
@@ -138,8 +179,47 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const wasCompact = previousCompactNavigationRef.current;
+    previousCompactNavigationRef.current = compactNavigation;
+    if (wasCompact === compactNavigation) return;
+
     const surface = surfaceRef.current;
-    if (!railOpen) {
+    const sidebar = sidebarWrapRef.current?.querySelector<HTMLElement>(".sidebar") ?? null;
+    const activeElement = document.activeElement;
+
+    if (!compactNavigation) {
+      // CSS has made the sidebar persistent. Close the former modal state and
+      // release the route immediately; waiting for the rail state update would
+      // leave the now-visible desktop surface hidden from assistive technology.
+      if (surface) {
+        surface.inert = false;
+        surface.removeAttribute("aria-hidden");
+      }
+      if (railOpen) setRailOpen(false);
+
+      // A focused sidebar control remains a visible, logical desktop target.
+      // The mobile scrim does not, so hand that exceptional case to the current
+      // conversation/route control (or the first real sidebar control).
+      if (!sidebar?.contains(activeElement)) {
+        const destination = sidebar?.querySelector<HTMLElement>(
+          '.session-main[aria-current="page"], .nav-row.active',
+        ) ?? (sidebar ? focusableElements(sidebar)[0] : null);
+        destination?.focus();
+      }
+      return;
+    }
+
+    // The persistent desktop sidebar has just moved off-canvas. If it owned
+    // focus, move focus to the newly visible drawer opener rather than leaving
+    // keyboard users on an unreachable control. Surface focus is left alone.
+    if (!railOpen && sidebarWrapRef.current?.contains(activeElement)) {
+      mobileMenuRef.current?.focus();
+    }
+  }, [compactNavigation, railOpen]);
+
+  useEffect(() => {
+    const surface = surfaceRef.current;
+    if (!railOpen || !compactNavigation) {
       if (surface) {
         surface.inert = false;
         surface.removeAttribute("aria-hidden");
@@ -190,16 +270,29 @@ export function App() {
         surface.inert = false;
         surface.removeAttribute("aria-hidden");
       }
-      mobileMenuRef.current?.focus();
+      // On an ordinary mobile dismissal focus returns to the opener. Across a
+      // desktop breakpoint the opener is hidden, while the now-persistent
+      // sidebar already contains the active navigation focus.
+      if (compactNavigationRef.current) mobileMenuRef.current?.focus();
     };
-  }, [railOpen]);
+  }, [compactNavigation, railOpen]);
 
   function chooseRoute(next: WorkerRoute) {
     chooseDestination(next, null);
   }
 
+  function openCommandPalette() {
+    // Keep exactly one modal owner. The rail cleanup restores the visible
+    // mobile opener before CommandPalette records its focus-return target.
+    setRailOpen(false);
+    setCommandPaletteOpen(true);
+  }
+
   function chooseDestination(next: WorkerRoute, routeId: string | null) {
     const boundedId = routeId && routeId.length <= 256 ? routeId : null;
+    if (next === "settings" && boundedId && isSettingsSection(boundedId)) {
+      setSettingsSection(boundedId);
+    }
     navigate(next, boundedId);
     setRoute(next);
     setRailOpen(false);
@@ -245,12 +338,18 @@ export function App() {
           onRoute={chooseRoute}
           onConversation={chooseConversation}
           onConversationRestored={() => refreshConversations()}
+          workingConversationIds={workingConversationIds}
+          onConversationArchived={(id) => {
+            setConversations((current) => current.filter((conversation) => conversation.id !== id));
+            setConversationWorking(id, false);
+            if (selectedConversation === id) chooseDestination("chat", null);
+          }}
           onLoadMore={loadMoreConversations}
           onRetryConversations={refreshConversations}
           hasMoreConversations={conversationOffset !== null}
-          onCommandPalette={() => setCommandPaletteOpen(true)}
+          onCommandPalette={openCommandPalette}
           onSettingsSection={(section) => {
-            setSettingsSection(section);
+            chooseDestination("settings", section);
             setSettingsQuery("");
           }}
           settingsSection={settingsSection}
@@ -274,21 +373,23 @@ export function App() {
               workspace={identity ? `${identity.organisation} · ${identity.workspace}` : ""}
             />
           )
-          : <HomeView onRoute={chooseRoute} />)}
+          : <HomeView
+            onRoute={chooseRoute}
+            onSettingsSection={(section) => setSettingsSection(section)}
+          />)}
         {route === "chat" && (
           <ChatView
             conversationId={selectedConversation}
             onConversation={chooseConversation}
             onChanged={refreshConversations}
+            onWorkingChange={setConversationWorking}
           />
         )}
-        {route === "inbox" && <InboxView />}
         {route === "automations" && <AutomationsView />}
         {route === "channels" && <ChannelsView />}
         {route === "build" && <BuildView />}
         {route === "evaluations" && <EvaluationsView />}
         {route === "integrations" && <IntegrationsView />}
-        {route === "operate" && <OperateView />}
         {route === "organisation" && <OrganisationView />}
         {route === "settings" && (phone
           ? (
@@ -305,7 +406,7 @@ export function App() {
                 <div className="page-content narrow">
                   <SettingsSearchResults
                     onOpenSection={(section) => {
-                      setSettingsSection(section);
+                      chooseDestination("settings", section);
                       setSettingsQuery("");
                     }}
                     query={settingsQuery}

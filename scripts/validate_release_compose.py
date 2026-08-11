@@ -16,9 +16,7 @@ FIRST_PARTY_SERVICES = ("kernel", "fleet-worker", "backup")
 _DIGEST_IMAGE = re.compile(r"^[^\s@=]+@sha256:[0-9a-f]{64}$")
 
 
-def validate_release_compose(
-    document: dict[str, Any], *, secure: bool, worker_primary: bool = False
-) -> None:
+def validate_release_compose(document: dict[str, Any], *, secure: bool) -> None:
     """Reject builds, mutable images, source-mounted backup code, or exposed models."""
     services = document.get("services")
     if not isinstance(services, dict):
@@ -32,22 +30,10 @@ def validate_release_compose(
         image = service.get("image")
         if not isinstance(image, str) or not _DIGEST_IMAGE.fullmatch(image):
             raise ValueError(f"release service {name} is not pinned by image digest")
-    required_presentations = ("worker-ui",) if worker_primary else ("ui",)
-    optional_presentations = ("ui",) if worker_primary else ("worker-ui",)
-    if worker_primary:
-        for name in ("kernel", "fleet-worker"):
-            environment = services[name].get("environment") or {}
-            if environment.get("BOLTRIG_PRODUCTION") != "1":
-                raise ValueError(f"worker-primary {name} lacks production signal")
-            if not str(environment.get("REDIS_URL") or "").strip():
-                raise ValueError(f"worker-primary {name} lacks REDIS_URL")
-    for name in (*required_presentations, *optional_presentations):
+    for name in ("worker-ui",):
         service = services.get(name)
         if service is None:
-            if name in required_presentations:
-                prefix = "worker-primary " if worker_primary else ""
-                raise ValueError(f"{prefix}release has no {name} service")
-            continue
+            raise ValueError(f"release has no {name} service")
         if not isinstance(service, dict):
             raise ValueError(f"merged Compose model has invalid {name} service")
         if service.get("build") is not None:
@@ -73,13 +59,10 @@ def validate_release_compose(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--secure", action="store_true")
-    parser.add_argument("--worker-primary", action="store_true")
     args = parser.parse_args()
     try:
         document = json.load(sys.stdin)
-        validate_release_compose(
-            document, secure=args.secure, worker_primary=args.worker_primary
-        )
+        validate_release_compose(document, secure=args.secure)
     except (json.JSONDecodeError, ValueError) as exc:
         parser.error(str(exc))
     print("merged release Compose model valid")

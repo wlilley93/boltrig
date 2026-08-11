@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -93,6 +93,70 @@ describe("Worker safe capability invocation", () => {
     expect(screen.getByText(/"ticket_id": "T-42"/)).toBeTruthy();
     expect(screen.queryByText(/raw_adapter_payload/)).toBeNull();
     expect(screen.queryByText(/not-for-worker/)).toBeNull();
+  });
+
+  it("discards a late result after another capability is selected", async () => {
+    const alternateVerb = {
+      ...safeVerb,
+      id: "report.inspect",
+      noun: "report",
+      consequence: "low",
+      input_schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {},
+      },
+      output_schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          diagnostic: { type: "string" },
+        },
+      },
+    };
+    api.capabilities.mockResolvedValue({
+      verbs: [{
+        ...safeVerb,
+        output_schema: {
+          type: "object",
+          properties: {
+            ticket_id: { type: "string" },
+          },
+        },
+      }, alternateVerb],
+    });
+    let resolveInvoke: (result: unknown) => void = () => undefined;
+    api.invoke.mockImplementation(() => new Promise((resolve) => {
+      resolveInvoke = resolve;
+    }));
+
+    render(<CapabilityRunner />);
+    const picker = await screen.findByRole("combobox", { name: "Capability" });
+    fireEvent.change(screen.getByLabelText("Title (required)"), {
+      target: { value: "Investigate outage" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run through kernel" }));
+    await waitFor(() => expect(api.invoke).toHaveBeenCalledTimes(1));
+
+    fireEvent.change(picker, {
+      target: { value: JSON.stringify([alternateVerb.noun, alternateVerb.id]) },
+    });
+    expect(await screen.findByRole("heading", {
+      name: "report.inspect",
+    })).toBeTruthy();
+
+    await act(async () => {
+      resolveInvoke({
+        status: "ok",
+        output: {
+          ticket_id: "T-42",
+          diagnostic: "A-only output must not be projected through B",
+        },
+      });
+    });
+
+    expect(screen.queryByLabelText("Completed receipt")).toBeNull();
+    expect(screen.queryByText(/A-only output/)).toBeNull();
   });
 
   it("renders secret or unsupported schemas as unavailable without a raw bypass", async () => {
@@ -267,7 +331,7 @@ describe("Worker safe capability invocation", () => {
     [
       { status: "pending_human", hitl_request_id: "approval/42" },
       "Pending human receipt",
-      "Waiting for approval in Inbox",
+      "Waiting for approval in the originating chat",
     ],
     [
       { status: "denied", reason: "grant revoked" },

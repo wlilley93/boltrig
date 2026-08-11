@@ -1,0 +1,25 @@
+id: PROOF-20260811-043051
+kind: ledger_staleness
+status: passed
+warrant_id: null
+command: vds proof ledger_staleness
+script: crates/vds-proof/src/ledger_staleness.rs
+exit_code: 0
+rows_considered: 3
+rows_enforced: 3
+rows_skipped_reasons: {}
+violations: []
+notes:
+- the screens ledger's staleness test REGENERATES the ledger from its sources and compares the content, rather than comparing the source digest the ledger records. A source-digest comparison answers only whether the screens moved, so it certifies a hand-edited ledger clean, and a proof reading that ledger can then be flipped from failing to passing without touching a screen (VDS S-2(5)(4)).
+- 'what this run does NOT reach: this build holds one REGENERATING staleness test, the screens ledger''s. The figma ledger (R3), the frame ledger (R4) and the CI run ledger (R6) have self-consistency tests instead, because their source is behind a network call and there is no generator here to re-run against it. For every other file in the ledgers directory it establishes only that no staleness test exists, never that the file is current. It reaches nothing outside the configured ledgers directory. And where the declared screens ledger is absent the run is a precondition failure at exit 2, so the other files in that directory go unexamined rather than passing.'
+- '[figma-ledger] the figma ledger''s staleness test settles three things and cannot settle the fourth. It settles that the ledger is SELF-CONSISTENT (its content digest matches its contents, so it was not hand-edited), that it agrees with the decided-target file the register names (two files is two opinions about what is decided), and that it is not OLDER than the register records that read it (a record pointed at a node after the pull is a record the ledger has never seen). It cannot settle whether the decided-target file has changed since the pull, because that is a network read VDS S-7(2)(1) forbids inside a proof. Its `generated_at` is reported so a reader can weigh how old the reading is, and a warrant citing anything downstream of it is bounded by that instant.'
+- '[figma-ledger-age] this ledger was generated at 2026-08-10T11:55:16Z, from file iVQBKFc3NpRH3zdOOxfPqr version 2386064713862372315. Nothing          offline can establish whether that file has changed since.'
+- '[frame-ledger] the frame ledger''s staleness test settles three things and cannot settle the fourth. It settles that the ledger is SELF-CONSISTENT (its content digest matches its contents, so it was not hand-edited), that it agrees with the decided-target file the SCREEN register names, and that it is not OLDER than the screen records that read it. It cannot settle whether the decided-target file has changed since the capture, because that is a network read VDS S-7(2)(1) forbids inside a proof. It also cannot settle whether the capture went DEEP ENOUGH: the ledger records the depth it derived and marks every reading taken at the boundary, and `screen_parity` refuses to enforce those rows, which is the furthest an offline test can go.'
+- '[frame-ledger-age] this ledger was derived at 2026-08-11T04:30:27Z from a capture of file iVQBKFc3NpRH3zdOOxfPqr at depth 3, in which 85 leaf node(s) sat on the boundary. Nothing offline can establish whether that file has changed since, nor whether the depth was enough.'
+inputs_digest: sha256:dbdf51e199a5f7f7f02e07cedb255685714447f0506cb514c41b18cf5098528f
+digest: sha256:3b3c6bfbaa951e92aa32accd79aaa82a02dd92d0fa0bfa3f52982edf0fc22a64
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-11T04:30:50Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

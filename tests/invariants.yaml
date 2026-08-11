@@ -1620,6 +1620,16 @@ invariants:
       - tests/security/test_model_routing.py::test_ai_config_provider_and_model_select_runtime_and_endpoint
       - tests/security/test_model_routing.py::test_config_without_base_url_keeps_the_endpoint_host
       - tests/security/test_model_routing.py::test_unknown_provider_degrades_to_the_env_default_without_crashing
+  FR-AGENT-MODEL-OVERRIDE-01:
+    description: 'An agent capability with an explicit model endpoint keeps that endpoint model and host while still resolving the configured sealed provider key; the endpoint may select a model but can never replace the Codex execution host with a legacy OpenAI-shaped runtime.'
+    tests:
+      - tests/security/test_model_routing.py::test_explicit_agent_endpoint_overrides_the_main_key_model
+      - tests/security/test_model_routing.py::test_explicit_endpoint_does_not_replace_the_codex_execution_host
+  FR-AIKEY-VISION-01:
+    description: 'Vision routing uses an optional modality-specific org AI key and model endpoint when configured, and otherwise falls back to the main text key without weakening key sealing, scope precedence, or provider routing.'
+    tests:
+      - tests/security/test_ai_keys.py::test_vision_key_is_optional_and_falls_back_to_the_main_text_key
+      - tests/security/test_model_routing.py::test_inherited_vision_route_uses_the_optional_main_vision_key
   SEC-112:
     description: 'allow_own_ai_keys=False makes a workspace/user AI key IGNORED at resolution (D5) - when the org forbids member-owned keys, resolve_ai_key skips any workspace/user row and uses only the org key (or the env default when the org has none), so a workspace or a user can never bring their own key unless the org opts in; flipping the org to allow own keys immediately restores the user-key precedence.'
     tests:
@@ -1851,13 +1861,12 @@ invariants:
       - tests/deploy/test_python_version_is_one_version.py::test_every_python_declaration_agrees_on_one_version
       - tests/deploy/test_python_version_is_one_version.py::test_the_channel_gateway_lock_is_compiled_for_that_same_version
   IAC-005:
-    description: 'The release workflow can actually publish, and fails FAST when it cannot. Registry write access is probed in the preflight job - before ten minutes of candidate builds - by opening and cancelling a blob upload, which proves write without creating a tag, a layer or (critically) the package itself. A bad credential reports the remedy instead of dying in a JSON parser on the 401 body. Every registry login prefers an optional GHCR_PUSH_TOKEN over the built-in token, so the one blocker that cannot be fixed in code closes by adding a secret rather than by another change. The ui candidate is given the GitHub Packages token its Dockerfile mounts, and the release vulnerability gate reads the SAME .trivyignore.yaml acceptances the security gate does, so the two cannot disagree about an identical image. Promotion still happens only after every candidate is cosign-verified.'
+    description: 'The release workflow can actually publish, and fails FAST when it cannot. Registry write access is probed in the preflight job - before ten minutes of candidate builds - by opening and cancelling a blob upload, which proves write without creating a tag, a layer or (critically) the package itself. A bad credential reports the remedy instead of dying in a JSON parser on the 401 body. Every registry login prefers an optional GHCR_PUSH_TOKEN over the built-in token, so the one blocker that cannot be fixed in code closes by adding a secret rather than by another change. The release vulnerability gate reads the SAME .trivyignore.yaml acceptances the security gate does, so the two cannot disagree about an identical image. Promotion still happens only after every candidate is cosign-verified.'
     tests:
       - tests/deploy/test_release_can_actually_publish.py::test_registry_write_access_is_checked_before_the_builds
       - tests/deploy/test_release_can_actually_publish.py::test_the_write_probe_creates_nothing
       - tests/deploy/test_release_can_actually_publish.py::test_a_bad_credential_reports_the_remedy_rather_than_crashing
       - tests/deploy/test_release_can_actually_publish.py::test_every_registry_login_prefers_a_pat_when_one_exists
-      - tests/deploy/test_release_can_actually_publish.py::test_frontend_candidates_receive_the_packages_token_they_mount
       - tests/deploy/test_release_can_actually_publish.py::test_the_release_vuln_gate_reads_the_same_acceptances_as_the_security_gate
       - tests/deploy/test_release_can_actually_publish.py::test_promotion_still_happens_only_after_every_candidate_is_verified
   IAC-006:

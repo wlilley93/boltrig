@@ -17,21 +17,21 @@ services:
     ports:
       # Loopback-only single front door. Reach the console at http://localhost:8080
       # and the API at http://localhost:8080/v1/... (same origin). Override with
-      # UI_PORT in .env.
-      - "127.0.0.1:${UI_PORT:-8080}:80"
+      # WORKER_PORT in .env.
+      - "127.0.0.1:${WORKER_PORT:-8080}:80"
     environment:
       # ":80" makes Caddy serve PLAIN HTTP on :80 with no auto-HTTPS redirect - the
       # right posture for a loopback dev door mapped to a single host port. (The
       # secure overlay instead sets a real domain here to get auto-TLS on :443.)
       BOLTRIG_DOMAIN: ${BOLTRIG_DOMAIN:-:80}
     volumes:
-      # Same routing as the secure overlay: /v1 + /healthz -> kernel, everything -> ui.
+      # Same routing as the secure overlay: /v1 + /healthz -> kernel, everything -> Worker.
       - ./deploy/Caddyfile.example:/etc/caddy/Caddyfile:ro
       - caddy_dev_data:/data
       - caddy_dev_config:/config
     depends_on:
       - kernel
-      - ui
+      - worker-ui
 
   kernel:
     # Bind the kernel API to LOOPBACK only in dev. The base stack publishes
@@ -44,8 +44,8 @@ services:
     ports: !override
       - "127.0.0.1:${KERNEL_PORT:-8000}:8000"
 
-  ui:
-    # The console is reachable only through the dev Caddy now (no direct host port).
+  worker-ui:
+    # The Worker is reachable only through the dev Caddy now (no direct host port).
     # !override replaces the base list entirely (a plain [] would merge-append and
     # leave the base 8080:80, colliding with Caddy).
     ports: !override []

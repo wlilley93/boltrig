@@ -50,6 +50,7 @@ export interface StepInspectorProps {
   scheduleState: WorkflowScheduleState | null;
   triggers: WorkflowTriggerSummary[];
   onStep(index: number, patch: Partial<WorkflowStepDraft>): void;
+  onAddStep(): void;
   onRemoveStep(index: number): void;
   onDuplicateStep(id: string): void;
   onRemoveEdge(from: string, to: string): void;
@@ -129,6 +130,13 @@ export function StepInspector(props: StepInspectorProps) {
             another, and the + adds a step after it.
           </span>
         </p>
+        {draft.steps.length === 0 && (
+          <div className="rc-inline-actions">
+            <button className="secondary-button" onClick={props.onAddStep} type="button">
+              Add step
+            </button>
+          </div>
+        )}
         {draft.steps.map((item, itemIndex) => {
           const record = props.mode === "last"
             ? props.runSteps?.get(item.id.trim())
@@ -466,8 +474,9 @@ function TriggerFacts(
         <p className="rc-fact">
           <span className="rc-fact-dot" />
           <span>
-            You start it, from here or from a chat, with Run now or Queue run.
-            That path always exists, whatever else is bound.
+            You start it here with Start it now, or use Queue run in the
+            scheduling and history disclosure. Those governed paths always
+            exist, whatever else is bound.
           </span>
         </p>
       )}

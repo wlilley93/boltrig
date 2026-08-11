@@ -8,14 +8,13 @@ import {
 } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../client";
+import { routeHash } from "../routes";
 import { Topbar, Unavailable } from "./Shell";
-import { useWorkerGlobalContext } from "./WorkerGlobalContext";
 
 const POLL_MS = 15_000;
 type InboxState = "loading" | "ready" | "denied" | "unavailable";
 
 export function InboxQueue() {
-  const { refreshPending } = useWorkerGlobalContext();
   const [items, setItems] = useState<HITLRequest[]>([]);
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -70,7 +69,6 @@ export function InboxQueue() {
       if (wasAnswered(result)) {
         settled.current.add(item.id);
         setItems((current) => current.filter((candidate) => candidate.id !== item.id));
-        void refreshPending();
       } else {
         setErrors((current) => ({
           ...current,
@@ -192,7 +190,7 @@ function RequestReferences({ item }: { item: HITLRequest }) {
       {item.run_id && (
         <div>
           <dt>Run</dt>
-          <dd><a href={`/operator/#/runs/${encodeURIComponent(item.run_id)}`}>{item.run_id}</a></dd>
+          <dd><a href={routeHash("runs", item.run_id)}>{item.run_id}</a></dd>
         </div>
       )}
       {item.work_item_id && <div><dt>Work item</dt><dd>{item.work_item_id}</dd></div>}

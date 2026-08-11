@@ -1,0 +1,22 @@
+id: SCR-0003
+route: apps/worker/src/components/IntegrationsView.tsx
+status: registered
+contractVersion: 2
+frame:
+  fileKey: iVQBKFc3NpRH3zdOOxfPqr
+  nodeId: 14:2
+  capturedAt: 2026-08-11T04:30:27Z
+arrangement:
+  columns: 1
+  regions:
+  - sidebar
+  - body
+  bands:
+  - header
+  - facets
+  - body_rows
+  - empty_state
+  - keyboard
+basis:
+- USER-DIRECTION-2026-08-11
+- ACT-VDS-001:s5a

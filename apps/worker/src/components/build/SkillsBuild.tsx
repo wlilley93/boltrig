@@ -163,7 +163,7 @@ export function SkillsBuild({ initialSkillId }: { initialSkillId?: string | null
       };
       const result = await client.upsertSkill(input.body);
       if (finalizer.begin(input, result, "Skill definition change")) {
-        setMessage("Skill change is waiting for human approval in Inbox.");
+        setMessage("Skill change is waiting for human approval in the originating chat.");
         return;
       }
       setMessage(resultMessage(result, `Skill ${id.trim()} saved.`));
@@ -220,7 +220,7 @@ export function SkillsBuild({ initialSkillId }: { initialSkillId?: string | null
         ? await client.archiveSkill(input.selected.id)
         : await client.restoreSkill(input.selected.id);
       if (finalizer.begin(input, result, `Skill ${action}`)) {
-        setMessage(`Skill ${action} is waiting for human approval in Inbox.`);
+        setMessage(`Skill ${action} is waiting for human approval in the originating chat.`);
         return;
       }
       if (result.status === "ok") {
@@ -231,7 +231,7 @@ export function SkillsBuild({ initialSkillId }: { initialSkillId?: string | null
         );
         await refresh(false);
       } else if (result.status === "pending_human") {
-        setMessage(`Skill ${action} is waiting for human approval in Inbox.`);
+        setMessage(`Skill ${action} is waiting for human approval in the originating chat.`);
       } else {
         setMessage(result.reason ?? `Skill ${action} was refused.`);
       }

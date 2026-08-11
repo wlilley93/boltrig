@@ -98,7 +98,7 @@ export function NotificationPreferences() {
     };
     const result = await client.putMeNotification(input.body);
     if (finalizer.begin(input, result, "Notification route change")) {
-      setMessage("Pending approval in your Inbox.");
+      setMessage("Pending approval. Continue in the originating chat.");
       return;
     }
     setMessage(outcomeMessage(result, input.success));
@@ -129,7 +129,7 @@ export function NotificationPreferences() {
     };
     const result = await client.putMeNotification(input.body);
     if (finalizer.begin(input, result, "Notification route change")) {
-      setMessage("Pending approval in your Inbox.");
+      setMessage("Pending approval. Continue in the originating chat.");
       return;
     }
     setMessage(outcomeMessage(result, input.success));
@@ -365,7 +365,7 @@ export function PersonalAgentLifecycle() {
 
 function outcomeMessage(result: { status: string; reason?: string }, success: string): string {
   if (result.status === "ok") return success;
-  if (result.status === "pending_human") return "Pending approval in your Inbox.";
+  if (result.status === "pending_human") return "Pending approval. Continue in the originating chat.";
   return result.reason ?? result.status;
 }
 

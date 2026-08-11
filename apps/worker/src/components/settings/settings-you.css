@@ -1,0 +1,49 @@
+/* Settings / You is the one long, narrow target pane. Keep its stack explicit
+ * and hide only the scrollbar paint: scrolling remains available, while the
+ * 720px container is centred in the full 1178px main canvas from the design. */
+.settings-you-pane {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.settings-you-pane > .settings-head,
+.settings-you-pane > .settings-group {
+  margin-bottom: 0;
+}
+
+.settings-you-pane > .settings-head {
+  min-height: 61px;
+}
+
+/* The decided cards put their one-pixel separators on the bottom edge of each
+ * control row. Keeping the separator on the following row makes rows two and
+ * three a pixel taller and leaves the disclosure a pixel too tall. */
+.settings-you-pane .settings-row {
+  border-bottom: 0;
+  box-shadow: inset 0 -1px var(--border);
+}
+
+.settings-you-pane .settings-row + .settings-row {
+  border-top: 0;
+}
+
+.settings-you-pane .settings-row:last-child {
+  border-bottom: 0;
+  box-shadow: none;
+}
+
+.settings-you-pane .settings-row + .settings-disclose {
+  border-top: 0;
+}
+
+.page:has(.settings-you-pane) {
+  background: var(--bg);
+  scrollbar-width: none;
+}
+
+.page:has(.settings-you-pane)::-webkit-scrollbar {
+  display: none;
+}

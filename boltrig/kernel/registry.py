@@ -120,6 +120,7 @@ class KernelRegistry:
                 "is_ephemeral": capability.is_ephemeral,
                 "cost_tier": capability.cost_tier,
                 "model_endpoint": capability.model_endpoint,
+                "vision_model_endpoint": capability.vision_model_endpoint,
                 "familiar_genotype": derive_familiar_genotype(
                     capability.name
                 ).as_view(),

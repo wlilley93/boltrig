@@ -39,7 +39,7 @@ jobs:
       # by hand outside this protected path instead: unsigned, unscanned, no SBOM.
       #
       # The cause is specific, and that run proved it by accident: pi-sidecar
-      # pushed fine while kernel, fleet and ui were denied. The sidecar package was
+      # pushed fine while kernel and fleet were denied. The sidecar package was
       # LINKED to this repository; the others are user-owned packages that predate
       # this workflow and grant it nothing. GitHub links a package via the
       # org.opencontainers.image.source label only when the push CREATES it, so an
@@ -60,7 +60,7 @@ jobs:
           owner="${GITHUB_REPOSITORY%%/*}"
           name="$(echo "${GITHUB_REPOSITORY#*/}" | tr '[:upper:]' '[:lower:]')"
           denied=""
-          for image in kernel fleet ui worker-ui backup; do
+          for image in kernel fleet worker-ui backup; do
             pkg="$name-$image"
             # sed, not a JSON parser: on a bad credential the body is not JSON at
             # all, and a parser would die here with a stack trace instead of the
@@ -217,9 +217,6 @@ jobs:
           - image: fleet
             dockerfile: deploy/fleet.Dockerfile
             context: .
-          - image: ui
-            dockerfile: ui/Dockerfile
-            context: ui
           - image: worker-ui
             dockerfile: apps/worker/Dockerfile
             context: .
@@ -245,22 +242,6 @@ jobs:
         with:
           cosign-release: v3.0.6
 
-      # The Operator and combined Worker/Operator images need the private-package
-      # token their Dockerfiles mount as `gh_npmrc`.
-      # Nothing in this workflow ever supplied that secret, so the mount was
-      # empty and every ui candidate died on ERR_PNPM_FETCH_401 - which is why
-      # no tag has ever produced a published release. ci.yml's ui-build proves
-      # the built-in GITHUB_TOKEN can read the package, so this introduces no
-      # new credential class; `packages: write` above already implies read.
-      - name: Authenticate frontend builds to GitHub Packages
-        if: matrix.image == 'ui' || matrix.image == 'worker-ui'
-        env:
-          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          umask 077
-          printf '//npm.pkg.github.com/:_authToken=%s\n' "$GH_PACKAGES_TOKEN" > "$RUNNER_TEMP/gh_npmrc"
-
       - name: Build release candidate locally
         env:
           BUILD_CONTEXT: ${{ matrix.context }}
@@ -268,24 +249,13 @@ jobs:
           DOCKER_BUILDKIT: "1"
         run: |
           set -euo pipefail
-          secret_args=()
-          # Only frontend matrix legs write this file, so every other image
-          # builds with no secret mounted.
-          if [ -f "$RUNNER_TEMP/gh_npmrc" ]; then
-            secret_args+=(--secret "id=gh_npmrc,src=$RUNNER_TEMP/gh_npmrc")
-          fi
           docker build --pull \
-            "${secret_args[@]}" \
             --file "$DOCKERFILE" \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$RELEASE_COMMIT" \
             --label "org.opencontainers.image.version=$RELEASE_TAG" \
             --tag "$LOCAL_IMAGE" \
             "$BUILD_CONTEXT"
-
-      - name: Remove the registry token
-        if: always()
-        run: rm -f "$RUNNER_TEMP/gh_npmrc"
 
       - name: Block fixable high or critical vulnerabilities before publication
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -426,11 +396,11 @@ jobs:
             --pattern 'image-ref-*.txt' \
             --pattern 'sbom-*.cdx.json' \
             --dir release-evidence
-          test "$(find release-evidence -name 'image-ref-*.txt' -type f | wc -l)" -eq 5
-          test "$(find release-evidence -name 'sbom-*.cdx.json' -type f | wc -l)" -eq 5
+          test "$(find release-evidence -name 'image-ref-*.txt' -type f | wc -l)" -eq 4
+          test "$(find release-evidence -name 'sbom-*.cdx.json' -type f | wc -l)" -eq 4
           image_env=release-evidence/boltrig-images.env
           : > "$image_env"
-          for image in kernel fleet ui worker-ui backup; do
+          for image in kernel fleet worker-ui backup; do
             image_name="$(printf 'ghcr.io/%s-%s' "$GITHUB_REPOSITORY" "$image" | tr '[:upper:]' '[:lower:]')"
             image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
             digest="${image_ref##*@}"
@@ -440,19 +410,18 @@ jobs:
             case "$image" in
               kernel) variable=BOLTRIG_KERNEL_IMAGE ;;
               fleet) variable=BOLTRIG_FLEET_IMAGE ;;
-              ui) variable=BOLTRIG_UI_IMAGE ;;
               worker-ui) variable=BOLTRIG_WORKER_UI_IMAGE ;;
               backup) variable=BOLTRIG_BACKUP_IMAGE ;;
             esac
             printf '%s=%s\n' "$variable" "$image_ref" >> "$image_env"
           done
-          test "$(wc -l < "$image_env")" -eq 5
+          test "$(wc -l < "$image_env")" -eq 4
 
       - name: Refuse to move an existing public image tag
         shell: bash
         run: |
           set -euo pipefail
-          for image in kernel fleet ui worker-ui backup; do
+          for image in kernel fleet worker-ui backup; do
             image_name="$(printf 'ghcr.io/%s-%s' "$GITHUB_REPOSITORY" "$image" | tr '[:upper:]' '[:lower:]')"
             for tag in "$RELEASE_TAG" "$COMMIT_TAG"; do
               if docker buildx imagetools inspect "$image_name:$tag" >/dev/null 2>&1; then
@@ -466,7 +435,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for image in kernel fleet ui worker-ui backup; do
+          for image in kernel fleet worker-ui backup; do
             image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
             cosign verify \
               --certificate-identity "$CERTIFICATE_IDENTITY" \
@@ -502,7 +471,7 @@ jobs:
           accept="$accept,application/vnd.docker.distribution.manifest.v2+json"
           basic="$(printf '%s:%s' "$GHCR_USER" "$GHCR_TOKEN" | base64 -w0)"
 
-          for image in kernel fleet ui worker-ui backup; do
+          for image in kernel fleet worker-ui backup; do
             image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
             image_name="${image_ref%@*}"
             digest="${image_ref##*@}"

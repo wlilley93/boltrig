@@ -826,7 +826,7 @@ Also registered at boot but living elsewhere: the control-plane adapter (1.16), 
 | fleet-worker | deploy/fleet.Dockerfile | none | `python -m boltrig.api.worker` |
 | hatchet-engine | hatchet-lite (optional) | 7077 grpc, 8888 api | durable execution backbone |
 | hatchet-dashboard | hatchet-dashboard | 8889 | Hatchet UI |
-| ui | ui/Dockerfile (nginx) | 8080 | the React console, proxying `/v1/` to the kernel |
+| worker-ui | apps/worker/Dockerfile (nginx) | 8080 | the React/Tauri Worker console, proxying `/v1/` to the kernel |
 | bifrost | maximhq/bifrost (profile `gateway`) | 8080 | the model gateway seam's target |
 | local-model | vllm/vllm-openai (profile `local`) | 8001 | on-box inference for sensitive data |
 | pi_sidecar | services/pi_sidecar/Dockerfile | expose 8090, `sandbox` network only | the sandboxed agent loop |
@@ -843,7 +843,7 @@ First-party containers run read-only rootfs, all capabilities dropped, no-new-pr
 
 **Plain language.** The reception screens: routing, kanban, approvals, chat, memory, admin, evals, the studios, and registry/workflow canvases, all talking to the same `/v1/` API everyone else uses (nginx proxies it to the kernel in containers). A dev identity bar sets trust headers that only the dev resolver honours.
 
-**Key files.** `ui/src/` (panels, `router.ts`, `api/client.ts`), `ui/nginx.conf`. The separate `site/` directory is the Next.js marketing site, unrelated to the console.
+**Key files.** `apps/worker/src/` (views, routes, `client.ts`), `apps/worker/nginx.conf`. The separate `site/` directory is the Next.js marketing site, unrelated to the console.
 
 **Maturity.** Production-grade thin client by its own description.
 

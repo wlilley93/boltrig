@@ -113,7 +113,11 @@ SANCTIONED_DIRECT_WRITES: frozenset[tuple[str, str, str]] = frozenset(
         # A GET health probe persists only server-derived adapter health and its
         # observation timestamp. It changes no authority, credentials, binding,
         # or user-selected configuration.
-        ("integrations.py", "connection_health", "upsert_integration_connection"),
+        (
+            "integrations.py",
+            "connection_health",
+            "update_integration_connection_health_if_active",
+        ),
     }
 )
 

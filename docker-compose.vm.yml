@@ -105,3 +105,11 @@ services:
     tmpfs:
       - /tmp
       - /var/lib/boltrig/codex-cells:mode=0711,uid=10001,gid=10001,noexec,nosuid,nodev
+
+  # The dev.boltrig.io tunnel runs on the Mac and dials Mac localhost:8080.
+  # Publish the Worker surface on the VM's external interface so OrbStack
+  # forwards it to the Mac. The base binding is loopback-only inside the VM,
+  # which is correct for the ordinary VM stack but unreachable by the tunnel.
+  worker-ui:
+    ports: !override
+      - "0.0.0.0:${VM_WORKER_PORT:-8080}:80"

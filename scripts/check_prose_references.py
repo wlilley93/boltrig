@@ -158,7 +158,7 @@ LIVE_SOURCE_PREFIXES: tuple[str, ...] = ("boltrig/", "scripts/")
 # as a file the command is about to create.
 PATH_ROOTS = {
     ".github", ".vjs", "boltrig", "deploy", "docs", "libraries", "migrations",
-    "schemas", "scripts", "sdks", "services", "site", "tests", "ui",
+    "apps", "schemas", "scripts", "sdks", "services", "site", "tests",
 }
 
 _PATH_RE = re.compile(
@@ -468,7 +468,7 @@ CODE_GLOBS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("deploy", ("**/*.yml", "**/*.yaml", "**/*.sh", "**/*.txt", "**/*.conf")),
     ("migrations", ("**/*.py",)),
     (".github", ("**/*.yml", "**/*.yaml")),
-    ("ui", ("src/**/*.ts", "src/**/*.tsx", "*.ts", "*.json")),
+    ("apps", ("worker/src/**/*.ts", "worker/src/**/*.tsx", "worker/*.ts", "worker/*.json")),
     ("site", ("src/**/*.ts", "src/**/*.tsx", "*.ts", "*.json")),
     ("sdks", ("**/src/**/*.ts", "**/*.py")),
 )

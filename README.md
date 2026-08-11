@@ -263,8 +263,7 @@ service or credentials to exercise):
 ```
 boltrig/        kernel, models, store, adapters, fleet, skills, workflows,
                knowledge, work, identity, config, observability
-ui/            React console (Router, Kanban, Approvals)
-apps/worker/   task-first React/Tauri client (primary-surface candidate)
+apps/worker/   task-first React/Tauri client (the first-party browser surface)
 site/          Next.js site + lightweight console overview
 libraries/     skills + workflows + prompts (data, not code)
 deploy/        kernel.Dockerfile, fleet.Dockerfile

@@ -24,9 +24,9 @@ manifest.yaml
 deploy/rclone/
 **/rclone.conf
 
-# The UI builds from its own context (./ui); exclude its node_modules here.
-ui/node_modules
-ui/dist
+# Worker and site build contexts exclude their local dependencies and output.
+apps/worker/node_modules
+apps/worker/dist
 apps/worker/node_modules
 apps/worker/dist
 apps/worker/src-tauri/target
@@ -36,3 +36,13 @@ node_modules
 docs
 tests
 *.md
+# The Worker build imports the shared VDS token source. Re-allow only the
+# three token files used by that build; the rest of the documentation remains
+# outside image contexts.
+!docs/
+!docs/design/
+!docs/design/imported/
+!docs/design/imported/tokens/
+!docs/design/imported/tokens/colors.css
+!docs/design/imported/tokens/spacing.css
+!docs/design/imported/tokens/typography.css

@@ -18,6 +18,11 @@ emotions:
   melancholy: {baseline: 0.1, half_life_h: 4}
   focus: {baseline: 0.5, half_life_h: 1}
   defiance: {baseline: 0.1, half_life_h: 1}
+  # Eros (companion layer): desire. Rests at ZERO - it does not exist in a
+  # stranger. Warm appraisals tick it (see appraisals.yaml); attachment lifts
+  # its resting point, so the bond is what makes desire ambient. Presentation
+  # only (EMO-1); any gating is computed downstream from the snapshot.
+  eros: {baseline: 0.0, half_life_h: 2}
 needs:
   stimulation: {default: 5.0, decay_h: 6}
   expression: {default: 5.0, decay_h: 8}
@@ -33,4 +38,4 @@ needs:
 # engine is the 0013 engine verbatim.
 attachment:
   half_life_days: 30
-  lifts: {connection: 0.3, warmth: 0.25, tenderness: 0.2}
+  lifts: {connection: 0.3, warmth: 0.25, tenderness: 0.2, eros: 0.15}

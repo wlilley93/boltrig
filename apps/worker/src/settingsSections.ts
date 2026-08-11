@@ -1,5 +1,7 @@
-// The settings surface the decided target draws: ten sections under four heads,
-// reachable from a nav that replaces the app sidebar while you are in settings.
+// The settings surface the decided target draws: ten sections under four heads.
+// Operations remains a valid deep-linked pane for the workspace home, but it
+// is deliberately not a settings-navigation entry in the canonical console,
+// whose nav replaces the app sidebar while Settings is open.
 // The list lives here rather than inside a component because the sidebar and the
 // pane both read it, and a surface whose nav and content disagree about what
 // sections exist is the defect that split Account, Organisation and Device in
@@ -13,6 +15,7 @@ export type SettingsSection =
   | "knowledge"
   | "overnight"
   | "health"
+  | "operations"
   | "organisation"
   | "advanced"
   | "archived";
@@ -26,19 +29,26 @@ export interface SettingsEntry {
   lead: string;
 }
 
+const OPERATIONS_ENTRY: SettingsEntry = {
+  id: "operations",
+  label: "Operations",
+  title: "Operations",
+  lead: "Runtime posture, audit evidence and budget controls from the kernel.",
+};
+
 export const SETTINGS_SECTIONS: SettingsEntry[] = [
   {
     id: "you",
     label: "You",
     head: "You",
     title: "You",
-    lead: "Your profile, how you sign in, and the sessions that are open right now.",
+    lead: "How boltrig looks, speaks and reaches you.",
   },
   {
     id: "autonomy",
     label: "Autonomy",
     title: "Autonomy",
-    lead: "How much boltrig may do before it stops and asks. Nothing here grants a permission it does not already have.",
+    lead: "One decision governs the rest: how far boltrig may go before it asks.",
   },
   {
     id: "spend",
@@ -57,13 +67,13 @@ export const SETTINGS_SECTIONS: SettingsEntry[] = [
     label: "Knowledge",
     head: "Its work",
     title: "Knowledge",
-    lead: "The files it may read, where their bytes live, and what it may quote.",
+    lead: "What it can read, and what it is allowed to remember.",
   },
   {
     id: "overnight",
     label: "Overnight",
     title: "Overnight",
-    lead: "What it consolidates while nothing is running, and what it had to prove before anything was kept.",
+    lead: "Once a day it practises on your work, and keeps only what holds up.",
   },
   {
     id: "health",
@@ -78,13 +88,13 @@ export const SETTINGS_SECTIONS: SettingsEntry[] = [
     label: "Organisation",
     head: "The organisation",
     title: "Organisation",
-    lead: "Who is in this workspace, and what the workspace itself allows.",
+    lead: "People, keys and the record. Admin-only.",
   },
   {
     id: "advanced",
     label: "Advanced",
     title: "Advanced",
-    lead: "The device this client runs on, and the controls that are only safe when you know why you want them.",
+    lead: "The workings. Safe to ignore, honest when you look.",
   },
   {
     id: "archived",
@@ -96,9 +106,10 @@ export const SETTINGS_SECTIONS: SettingsEntry[] = [
 ];
 
 export function settingsEntry(id: string): SettingsEntry {
+  if (id === "operations") return OPERATIONS_ENTRY;
   return SETTINGS_SECTIONS.find((entry) => entry.id === id) ?? SETTINGS_SECTIONS[0];
 }
 
 export function isSettingsSection(value: string): value is SettingsSection {
-  return SETTINGS_SECTIONS.some((entry) => entry.id === value);
+  return value === "operations" || SETTINGS_SECTIONS.some((entry) => entry.id === value);
 }

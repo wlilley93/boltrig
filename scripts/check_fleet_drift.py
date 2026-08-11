@@ -188,7 +188,8 @@ def _registry_auth(registry: str) -> str | None:
     """The operator's own credential for `registry`, from ~/.docker/config.json.
 
     ANONYMOUS IS NOT ENOUGH, and assuming it was would have made this whole check
-    inert on exactly the images that matter. boltrig-kernel, -fleet and -ui are
+    inert on exactly the images that matter. boltrig-kernel, -fleet and
+    -worker-ui are
     PRIVATE packages: an anonymous GHCR token gets HTTP 403 on their manifests, so
     every one of them would have reported NOT CHECKED while the public sidecar
     reported fine - a check that cannot fail on its real subject, wearing the

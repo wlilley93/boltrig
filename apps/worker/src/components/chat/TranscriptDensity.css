@@ -1,0 +1,159 @@
+/* Compact transcript-only activity. Higher-specificity selectors deliberately
+ * override the older disclosure/fan-out rules without changing global Chat or
+ * any run/operations surface. */
+
+.work-disclosure.transcript-tool-disclosure {
+  display: block;
+  margin: 0;
+}
+
+.transcript-tool-summary {
+  display: flex;
+  min-width: 0;
+  min-height: 24px;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.45;
+  list-style: none;
+}
+
+.transcript-tool-summary::-webkit-details-marker { display: none; }
+.transcript-tool-summary::marker { content: ""; }
+.transcript-tool-summary:hover { color: var(--text-2); }
+.transcript-tool-summary:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.transcript-tool-copy {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transcript-tool-glyph {
+  display: grid;
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  color: var(--text-3);
+}
+.transcript-tool-glyph > svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.65;
+}
+.transcript-tool-glyph[data-kind="figma"] > svg { stroke: none; }
+.transcript-tool-glyph[data-kind="read"],
+.transcript-tool-glyph[data-kind="command"] { color: var(--text-2); }
+.transcript-tool-summary > small {
+  flex: 0 0 auto;
+  color: var(--text-4);
+  font-size: 11.5px;
+}
+.transcript-tool-summary > small[data-tone="amber"] { color: var(--amber); }
+.transcript-tool-summary > small[data-tone="red"] { color: var(--red); }
+
+.transcript-tool-details {
+  display: grid;
+  gap: 3px;
+  margin-top: 7px;
+  padding-left: 4px;
+}
+.transcript-tool-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 20px;
+  color: var(--text-4);
+  font-size: 11px;
+}
+.transcript-tool-detail code {
+  overflow: hidden;
+  color: var(--text-3);
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transcript-tool-detail > span { font-variant-numeric: tabular-nums; }
+.transcript-tool-detail > span[data-status="degraded"],
+.transcript-tool-detail > span[data-status="pending_human"] { color: var(--amber); }
+.transcript-tool-detail > span[data-status="error"],
+.transcript-tool-detail > span[data-status="failed"] { color: var(--red); }
+
+.subagent-chips.transcript-subagent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.subagent-chip.transcript-subagent-chip {
+  display: inline-flex;
+  max-width: 100%;
+  height: 24px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--card) 72%, transparent);
+  font-size: 12.5px;
+  line-height: 1;
+}
+button.transcript-subagent-chip { cursor: pointer; }
+button.transcript-subagent-chip:hover { border-color: var(--border-2); color: var(--text); }
+button.transcript-subagent-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.subagent-chip.transcript-subagent-chip .familiar-orb { width: 14px; height: 14px; }
+.transcript-subagent-name {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transcript-subagent-state {
+  flex: 0 0 auto;
+  color: var(--text-4);
+  font-size: 11px;
+}
+.transcript-subagent-state[data-tone="amber"] { color: var(--amber); }
+.transcript-subagent-state[data-tone="red"] { color: var(--red); }
+.transcript-subagent-group-state {
+  flex: 0 0 auto;
+  color: var(--text-4);
+  font-size: 12.5px;
+}
+.transcript-subagent-group-state[data-tone="amber"] { color: var(--amber); }
+.transcript-subagent-group-state[data-tone="red"] { color: var(--red); }
+.transcript-subagent-tech {
+  overflow: hidden;
+  max-width: 150px;
+  color: var(--text-4);
+  font: 10.5px/1 ui-monospace, "SF Mono", Menlo, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transcript-subagent-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}

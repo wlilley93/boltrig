@@ -425,7 +425,7 @@ export function ChannelsView() {
           invalidated: !result.hitl_request_id,
         });
         setDeliveryFinalization(result.hitl_request_id ? "waiting" : "unavailable");
-        setNotice({ text: "Delivery retry is waiting for human approval in Inbox." });
+        setNotice({ text: "Delivery retry is waiting for human approval in the originating chat." });
       } else if (result.status === "ok") {
         setPendingDeliveryRetry(null);
         setDeliveryFinalization(null);
@@ -527,7 +527,7 @@ export function ChannelsView() {
         mutation, result, "Channel connection",
       )) {
         setNotice({
-          text: "Channel connection is waiting for human approval in Inbox.",
+          text: "Channel connection is waiting for human approval in the originating chat.",
         });
       } else if (result.status === "ok") {
         setCreating(false);
@@ -571,7 +571,7 @@ export function ChannelsView() {
         mutation, result, "Channel configuration",
       )) {
         setNotice({
-          text: "Channel configuration is waiting for human approval in Inbox.",
+          text: "Channel configuration is waiting for human approval in the originating chat.",
         });
       } else if (result.status === "ok") {
         await refreshChannels(selected.id);
@@ -610,7 +610,7 @@ export function ChannelsView() {
         mutation, result, "Channel disconnect",
       )) {
         setNotice({
-          text: "Channel disconnect is waiting for human approval in Inbox.",
+          text: "Channel disconnect is waiting for human approval in the originating chat.",
         });
       } else if (result.status === "ok") {
         setBindings([]);
@@ -707,7 +707,7 @@ export function ChannelsView() {
           mutation, result, "Sender binding",
         )) {
           setNotice({
-            text: "Sender binding is waiting for human approval in Inbox.",
+            text: "Sender binding is waiting for human approval in the originating chat.",
           });
         } else if (result.status === "ok") {
           setBindingDraft(blankBinding);
@@ -824,7 +824,7 @@ export function ChannelsView() {
         mutation, result, "Sender unbind",
       )) {
         setNotice({
-          text: "Sender unbind is waiting for human approval in Inbox.",
+          text: "Sender unbind is waiting for human approval in the originating chat.",
         });
       } else if (result.status === "ok") {
         setDeleteArmed(null);
@@ -1986,7 +1986,7 @@ function deliveryFinalizationCopy(
 ): [string, string] {
   if (state === "waiting") {
     return [
-      "Waiting for an Inbox decision",
+      "Waiting for a decision in the originating chat",
       "After an independent decision, check again to continue only this exact failed delivery snapshot.",
     ];
   }
@@ -2115,7 +2115,7 @@ function ChannelSendTest({ channel }: { channel: ChannelSummary }) {
       });
       if (result.status === "pending_human") {
         exactApproval.begin(input, result, "Channel test message");
-        setMessage("Waiting for approval in Inbox.");
+        setMessage("Waiting for approval in the originating chat.");
       } else {
         applyResult(result);
       }

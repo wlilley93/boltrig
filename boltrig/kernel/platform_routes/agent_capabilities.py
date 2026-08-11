@@ -22,6 +22,7 @@ def _view(capability: Any) -> dict[str, Any]:
         "is_ephemeral": capability.is_ephemeral,
         "cost_tier": capability.cost_tier,
         "model_endpoint": capability.model_endpoint,
+        "vision_model_endpoint": capability.vision_model_endpoint,
         "source": capability.source,
         "is_active": capability.is_active,
         "status": "active" if capability.is_active else "retired",

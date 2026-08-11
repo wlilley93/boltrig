@@ -297,7 +297,7 @@ export function RegistryBuild({ initialVerbId }: { initialVerbId?: string | null
       };
       const result = await client.upsertNoun(input.body);
       if (finalizer.begin(input, result, "Noun definition change")) {
-        setMessage("Noun change is waiting for human approval in Inbox.");
+        setMessage("Noun change is waiting for human approval in the originating chat.");
         return;
       }
       setMessage(resultMessage(result, `Noun ${nounId.trim()} saved.`));
@@ -325,7 +325,7 @@ export function RegistryBuild({ initialVerbId }: { initialVerbId?: string | null
       };
       const result = await client.upsertVerb(input.body);
       if (finalizer.begin(input, result, "Verb definition change")) {
-        setMessage("Verb change is waiting for human approval in Inbox.");
+        setMessage("Verb change is waiting for human approval in the originating chat.");
         return;
       }
       setMessage(resultMessage(result, `Verb ${verbId.trim()} saved.`));
@@ -358,7 +358,7 @@ export function RegistryBuild({ initialVerbId }: { initialVerbId?: string | null
       };
       const result = await client.setBinding(input.verbId, input.body);
       if (finalizer.begin(input, result, "Verb binding change")) {
-        setMessage("Binding change is waiting for human approval in Inbox.");
+        setMessage("Binding change is waiting for human approval in the originating chat.");
         return;
       }
       setMessage(resultMessage(result, `Binding for ${bindingVerb.trim()} saved.`));
@@ -428,14 +428,14 @@ export function RegistryBuild({ initialVerbId }: { initialVerbId?: string | null
         ? await client.archiveNoun(hydratedNounRecord.id)
         : await client.restoreNoun(hydratedNounRecord.id);
       if (finalizer.begin(input, result, `Noun ${action}`)) {
-        setMessage(`Noun ${action} is waiting for human approval in Inbox.`);
+        setMessage(`Noun ${action} is waiting for human approval in the originating chat.`);
         return;
       }
       setMessage(
         result.status === "ok"
           ? `Noun ${hydratedNounRecord.id} ${action}d without deleting its verbs.`
           : result.status === "pending_human"
-            ? `Noun ${action} is waiting for human approval in Inbox.`
+            ? `Noun ${action} is waiting for human approval in the originating chat.`
             : result.reason ?? `Noun ${action} was refused.`,
       );
       if (result.status === "ok") await refresh(false);
@@ -460,14 +460,14 @@ export function RegistryBuild({ initialVerbId }: { initialVerbId?: string | null
         ? await client.archiveVerb(hydratedVerbRecord.id)
         : await client.restoreVerb(hydratedVerbRecord.id);
       if (finalizer.begin(input, result, `Verb ${action}`)) {
-        setMessage(`Verb ${action} is waiting for human approval in Inbox.`);
+        setMessage(`Verb ${action} is waiting for human approval in the originating chat.`);
         return;
       }
       setMessage(
         result.status === "ok"
           ? `Verb ${hydratedVerbRecord.id} ${action}d with its binding retained.`
           : result.status === "pending_human"
-            ? `Verb ${action} is waiting for human approval in Inbox.`
+            ? `Verb ${action} is waiting for human approval in the originating chat.`
             : result.reason ?? `Verb ${action} was refused.`,
       );
       if (result.status === "ok") await refresh(false);

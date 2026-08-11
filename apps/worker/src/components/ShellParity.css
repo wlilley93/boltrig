@@ -1,0 +1,160 @@
+/*
+ * Desktop console-shell adjustments derived from the canonical Claude Design
+ * export. These selectors are deliberately scoped to the console rail so the
+ * independently evolving Settings sidebar does not inherit its row geometry.
+ */
+
+/* The rail is a glass layer over the application's own canvas. Alpha is
+ * intentional: an opaque --side strip reads as a separate product band and
+ * is the visible defect in the desktop Chat captures. */
+.sidebar.shell-parity {
+  border-right: 0;
+  background: color-mix(in srgb, var(--side) 82%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.05);
+  backdrop-filter: blur(22px) saturate(1.05);
+}
+
+/* The Codex rail keeps search nearly flush with the canvas; its edge is a
+ * quiet separator, not the brighter generic console-input border. */
+:root[data-theme="dark"] .shell-parity .conversation-search {
+  border-color: #262626;
+  background: #171717;
+}
+
+.shell-parity .session-row {
+  position: relative;
+  display: block;
+  gap: 0;
+  max-height: 44px;
+}
+
+.shell-parity .session-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 31px;
+  max-height: 44px;
+  min-height: 0;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+
+/* Ordinary recents stay at the compact 31px density. The selected task gets
+ * the reference's 44px resting target so its persistent actions do not crowd
+ * the title or timestamp. */
+.shell-parity .session-row.active,
+.shell-parity .session-row.active .session-main {
+  height: 44px;
+  max-height: 44px;
+}
+
+.shell-parity .session-row.active .session-main {
+  padding-right: 61px;
+}
+
+/* Actions on a pinned or revealed ordinary row occupy the same right-hand
+ * slot as the selected row. Reserve that slot while they are visible so the
+ * timestamp and title cannot paint underneath the controls. */
+.shell-parity .session-row.pinned .session-main,
+.shell-parity .session-row:hover .session-main,
+.shell-parity .session-row:focus-within .session-main {
+  padding-right: 61px;
+}
+
+.shell-parity .session-title {
+  flex: 1;
+}
+
+/* Recents remain one line: the reference keeps the relative time at the right,
+ * while search-result snippets stay out of the compact rail. */
+.shell-parity small.shell-recent-meta {
+  display: none;
+}
+
+.shell-parity time.shell-recent-meta {
+  display: inline;
+  flex: 0 0 auto;
+}
+
+.shell-parity .session-working-indicator {
+  width: 8px;
+  height: 8px;
+  border: 0;
+  color: var(--green);
+  background: currentColor;
+  opacity: 1;
+  animation: none;
+}
+
+/* Pin/archive remain real controls without changing the canonical resting
+ * chrome. Pointer and keyboard focus reveal them in-place. */
+.shell-parity .session-actions {
+  position: absolute;
+  top: 4px;
+  right: 12px;
+  gap: 1px;
+  padding: 0;
+  border-radius: 7px;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.shell-parity .session-row.pinned .session-actions {
+  opacity: 1;
+}
+
+.shell-parity .session-row.active .session-actions {
+  top: 10px;
+  opacity: 1;
+}
+
+.shell-parity .session-row:hover .session-actions,
+.shell-parity .session-row:focus-within .session-actions {
+  opacity: 1;
+}
+
+.shell-overlay-menu {
+  overflow: hidden;
+}
+
+.shell-parity-menu-row {
+  padding: 8px 10px;
+}
+
+.shell-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-menu-tail {
+  color: var(--text-4);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.shell-menu-tail.disclosure {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.shell-help-heading {
+  margin: 0;
+  padding: 8px 10px 6px;
+  color: var(--text-4);
+  font-size: 12px;
+}
+
+@media (hover: none) {
+  .shell-parity .session-row.pinned .session-actions,
+  .shell-parity .session-row.active .session-actions,
+  .shell-parity .session-actions {
+    opacity: 1;
+  }
+}

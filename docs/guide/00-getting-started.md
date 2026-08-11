@@ -60,7 +60,7 @@ Genesis is idempotent and resume-safe: secret fills only touch blanks, and re-ru
 
 ## Log in
 
-Open the console at `http://localhost:8080` (the `UI_PORT`, `8080` by default). The login page posts to `POST /v1/auth/login` with your email and password. On success the kernel sets an httpOnly session cookie (`boltrig_session`) plus a readable CSRF cookie (`boltrig_csrf`) and returns your user record.
+Open the Worker at `http://localhost:8082` (the `WORKER_PORT`, `8082` by default). The login page posts to `POST /v1/auth/login` with your email and password. On success the kernel sets an httpOnly session cookie (`boltrig_session`) plus a readable CSRF cookie (`boltrig_csrf`) and returns your user record.
 
 From a headless client you can hit the same endpoint directly:
 

@@ -52,14 +52,10 @@ authority basis = Principal authorisation, human checkpoint = the authorising me
 
 ## Post-publish wiring (unblocks once published)
 
-1. **boltrig console** (`ui/`): DONE (commit 3547712). `src/api/types.ts`,
-   `src/panels/chatTurnTypes.ts`, `src/panels/chatTurnNormalizer.ts` are now thin
-   re-exports of the package subpaths; the ~2100 duplicated lines are gone; the
-   drift guard is retired. GitHub Packages needs auth even to read a public
-   package, so the central build mounts a token-bearing `.npmrc` as a BuildKit
-   secret (`gh_npmrc`); release/demo overlays `build: !reset null` and pull the
-   pinned image, so tenants never build. Gates green: tsc, vite build, 244
-   vitest, `docker build --secret`, `docker compose build ui`.
+1. **Boltrig Worker** (`apps/worker/`): the maintained first-party browser
+   client. It consumes the shared event contract from `sdks/web/src/`; the
+   former separate console and its package-authenticated build path have been
+   retired.
 
 2. **opbox** — DECISION: keep the translation adapter; do NOT hard-depend for a
    type. `opbox-frontend/src/lib/ai/boltrig-frames.ts` is a deliberately

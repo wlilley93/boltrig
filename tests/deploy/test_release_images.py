@@ -42,7 +42,7 @@ def test_release_image_environment_requires_every_first_party_digest(tmp_path: P
         validate_release_image_environment(path)
 
     mutable = dict(values)
-    mutable["BOLTRIG_UI_IMAGE"] = "ghcr.io/example/boltrig-ui:v1.2.3"
+    mutable["BOLTRIG_WORKER_UI_IMAGE"] = "ghcr.io/example/boltrig-worker-ui:v1.2.3"
     _write_environment(path, mutable)
     with pytest.raises(ValueError, match="immutable image@sha256"):
         validate_release_image_environment(path)
@@ -56,7 +56,7 @@ def test_release_image_environment_requires_every_first_party_digest(tmp_path: P
 def _compose_document() -> dict:
     services = {
         name: {"image": f"registry.invalid/boltrig/{name}@sha256:{'1' * 64}"}
-        for name in ("kernel", "fleet-worker", "ui", "worker-ui", "backup")
+        for name in ("kernel", "fleet-worker", "worker-ui", "backup")
     }
     for name in ("kernel", "fleet-worker"):
         services[name]["environment"] = {
@@ -79,10 +79,10 @@ def test_release_compose_validator_rejects_builds_tags_and_source_mounts() -> No
         validate_release_compose(document, secure=False)
     document["services"]["kernel"].pop("build")
 
-    document["services"]["ui"]["image"] = "registry.invalid/boltrig/ui:v1.2.3"
+    document["services"]["worker-ui"]["image"] = "registry.invalid/boltrig/worker-ui:v1.2.3"
     with pytest.raises(ValueError, match="not pinned by image digest"):
         validate_release_compose(document, secure=False)
-    document["services"]["ui"]["image"] = f"registry.invalid/boltrig/ui@sha256:{'2' * 64}"
+    document["services"]["worker-ui"]["image"] = f"registry.invalid/boltrig/worker-ui@sha256:{'2' * 64}"
 
     document["services"]["backup"]["volumes"].append(
         {"target": "/usr/local/bin/backup.sh"}
@@ -99,24 +99,15 @@ def test_release_compose_validator_rejects_builds_tags_and_source_mounts() -> No
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-137")
-def test_worker_primary_release_requires_a_pinned_worker_image() -> None:
+def test_release_requires_a_pinned_worker_image() -> None:
     document = _compose_document()
-    validate_release_compose(document, secure=False, worker_primary=True)
+    validate_release_compose(document, secure=False)
 
     document["services"].pop("worker-ui")
-    with pytest.raises(ValueError, match="worker-primary release has no worker-ui"):
-        validate_release_compose(document, secure=False, worker_primary=True)
+    with pytest.raises(ValueError, match="release has no worker-ui"):
+        validate_release_compose(document, secure=False)
 
     document = _compose_document()
     document["services"]["worker-ui"]["image"] = "registry.invalid/worker-ui:latest"
     with pytest.raises(ValueError, match="not pinned by image digest"):
-        validate_release_compose(document, secure=False, worker_primary=True)
-
-    for key, reason in (
-        ("BOLTRIG_PRODUCTION", "production signal"),
-        ("REDIS_URL", "REDIS_URL"),
-    ):
-        document = _compose_document()
-        document["services"]["kernel"]["environment"].pop(key)
-        with pytest.raises(ValueError, match=reason):
-            validate_release_compose(document, secure=False, worker_primary=True)
+        validate_release_compose(document, secure=False)

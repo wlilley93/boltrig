@@ -227,11 +227,12 @@ def test_desktop_oauth_return_accepts_only_kernel_brokered_opaque_results():
 
 
 @pytest.mark.invariant("WRK-01")
-def test_worker_and_operator_decision_is_landed_with_attribution():
+def test_worker_only_decision_is_landed_with_attribution():
     decision = ROOT / "docs" / "decisions" / "0021-worker-primary-surface-and-realtime-voice.md"
     text = decision.read_text(encoding="utf-8")
     notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
-    assert "**Worker**" in text and "**Operator**" in text
+    assert "Worker is the sole first-party browser surface" in text
+    assert "there is no second browser client" in text
     assert "realtime_voice" in text
     assert "f96ad4c8e6865f0aec519681a3717b6bcdd81546" in text
     assert "MIT License" in notices
@@ -239,46 +240,26 @@ def test_worker_and_operator_decision_is_landed_with_attribution():
 
 
 @pytest.mark.invariant("WRK-01")
-def test_worker_candidate_image_preserves_operator_subpath_without_cutover():
+def test_worker_image_is_the_only_first_party_browser_surface():
     dockerfile = (WORKER / "Dockerfile").read_text(encoding="utf-8")
     nginx = (WORKER / "nginx.conf").read_text(encoding="utf-8")
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    vite = (ROOT / "ui" / "vite.config.ts").read_text(encoding="utf-8")
-
-    assert 'profiles: ["worker"]' in compose
+    assert 'profiles: ["worker"]' not in compose
     assert "worker-ui:" in compose
     assert "COPY --from=worker-build" in dockerfile
-    assert "COPY --from=operator-build" in dockerfile
-    assert "ENV BOLTRIG_UI_BASE=/operator/" in dockerfile
-    assert 'process.env.BOLTRIG_UI_BASE || "/"' in vite
+    assert "operator-build" not in dockerfile
+    assert "BOLTRIG_UI_BASE" not in dockerfile
     assert "absolute_redirect off;" in nginx
-    assert "location /operator/" in nginx
-    assert "try_files $uri $uri/ /operator/index.html;" in nginx
+    assert "location = /operator { return 404; }" in nginx
+    assert "location ^~ /operator/ { return 404; }" in nginx
 
 
 @pytest.mark.invariant("WRK-02")
-def test_worker_primary_cutover_is_explicit_edge_only_and_reversible():
-    overlay = (ROOT / "deploy" / "compose.worker-primary.yml").read_text(
-        encoding="utf-8"
-    )
+def test_worker_is_the_default_edge_presentation():
     caddy = (ROOT / "deploy" / "Caddyfile.example").read_text(encoding="utf-8")
-    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-
-    # The ordinary Caddy posture remains Operator. Only selecting the overlay
-    # changes the server-side upstream; no browser redirect or data migration is
-    # part of the cutover.
-    assert "{$BOLTRIG_FRONTEND_UPSTREAM:ui:80}" in caddy
-    assert "BOLTRIG_FRONTEND_UPSTREAM: worker-ui:80" in overlay
-    assert "profiles: !reset []" in overlay
-    assert "ports: !override []" in overlay
-    assert overlay.count('BOLTRIG_PRODUCTION: "1"') == 2
-    assert overlay.count("Worker-primary production requires REDIS_URL") == 2
-
-    # The maintained Operator stays packaged under /operator and its standalone
-    # image is retained behind an explicit rollback profile.
-    assert 'profiles: ["operator-standalone"]' in overlay
-    assert "worker-primary-validate:" in makefile
-    assert "worker-primary-up:" in makefile
+    assert "{$BOLTRIG_FRONTEND_UPSTREAM:worker-ui:80}" in caddy
+    assert "{$BOLTRIG_FRONTEND_UPSTREAM:ui:80}" not in caddy
+    assert not (ROOT / "deploy" / "compose.worker-primary.yml").exists()
 
 
 @pytest.mark.invariant("WRK-02")
@@ -298,28 +279,18 @@ def test_worker_is_a_signed_digest_pinned_first_party_release_image():
 
 
 @pytest.mark.invariant("WRK-03")
-def test_worker_built_artifact_has_a_gating_browser_and_accessibility_acceptance():
+def test_worker_built_artifact_has_a_gating_build_acceptance():
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
         encoding="utf-8"
     )
-    config = (ROOT / "ui" / "playwright.worker.config.ts").read_text(
-        encoding="utf-8"
-    )
-    smoke = (ROOT / "ui" / "e2e-worker" / "worker.spec.ts").read_text(
-        encoding="utf-8"
-    )
+    package = (WORKER / "package.json").read_text(encoding="utf-8")
 
-    assert "worker-e2e:" in makefile
-    assert "playwright.worker.config.ts" in makefile
-    assert "pnpm --dir ../apps/worker run build" in config
-    assert "127.0.0.1" in config
-    assert 'projects: [{ name: "chromium"' in config
-    assert "AxeBuilder" in smoke
-    assert "serious" in smoke and "critical" in smoke
-    assert "Worker chat streams through the governed kernel" in smoke
-    assert "worker-e2e:" in workflow
-    assert "needs.worker-e2e.result" in workflow
+    assert "worker-quality" in makefile
+    assert '"build": "tsc && vite build"' in package
+    assert '"typecheck": "tsc --noEmit"' in package
+    assert "worker-build:" in workflow
+    assert "make worker-quality" in workflow
 
 
 @pytest.mark.invariant("WRK-04")
@@ -349,7 +320,7 @@ def test_worker_preserves_audit_anchor_evidence_and_labels_its_strength():
 def test_worker_parity_includes_every_non_http_lifecycle_dimension():
     parity = (ROOT / "docs" / "WORKER-PARITY.md").read_text(encoding="utf-8")
     section = parity.split("## Non-HTTP completeness audit", 1)[1].split(
-        "## Intentionally Operator-only", 1
+        "## Intentionally unavailable in the browser", 1
     )[0]
     rows = {
         line.split("|", 2)[1].strip(): line
@@ -413,17 +384,21 @@ def test_worker_edge_allows_same_origin_voice_without_opening_browser_capabiliti
 
 
 @pytest.mark.invariant("SEC-WRK-13")
-def test_worker_renders_closed_conversations_as_restore_only():
+def test_worker_renders_closed_conversations_in_archived_as_restore_only():
     shell = (WORKER / "src" / "components" / "Shell.tsx").read_text(encoding="utf-8")
+    archived = (
+        WORKER / "src" / "components" / "settings" / "ArchivedSection.tsx"
+    ).read_text(encoding="utf-8")
     chat = (WORKER / "src" / "components" / "ChatView.tsx").read_text(encoding="utf-8")
     controls = (
         WORKER / "src" / "components" / "ConversationControls.tsx"
     ).read_text(encoding="utf-8")
     sdk = (ROOT / "sdks" / "web" / "src" / "client.ts").read_text(encoding="utf-8")
 
-    assert 'conversation.status === "closed"' in shell
-    assert 'data-status="closed"' in shell
-    assert "restoreMyConversation" in shell and "onConversationRestored" in shell
+    assert 'conversation.status !== "closed"' in shell
+    assert 'row.status === "closed"' in archived
+    assert "restoreMyConversation" in archived
+    assert "Bring back" in archived
     assert 'conversationStatus === "closed"' in chat
     assert 'closed={conversationStatus === "closed"}' in chat
     assert 'status === "closed"' in controls

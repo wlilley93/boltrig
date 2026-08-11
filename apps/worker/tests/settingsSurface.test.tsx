@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -14,7 +14,11 @@ const api = vi.hoisted(() => ({
   searchConversations: vi.fn(),
   auditSearch: vi.fn(),
   meSettings: vi.fn(),
+  meNotifications: vi.fn(),
   putMeSettings: vi.fn(),
+  knowledgeProviders: vi.fn(),
+  setKnowledgeProvider: vi.fn(),
+  invokeApprovalState: vi.fn(),
 }));
 
 vi.mock("../src/client", () => ({ client: api }));
@@ -32,17 +36,62 @@ beforeEach(() => {
   api.cost.mockResolvedValue({ total_cost_micros: 0, by_actor: {}, scope: "all" });
   api.conversations.mockResolvedValue({ conversations: [] });
   api.auditSearch.mockResolvedValue({ results: [], scope: "all", limit: 50, offset: 0, next_offset: null });
-  api.meSettings.mockResolvedValue({ profile: { id: "u" }, settings: {} });
+  api.meSettings.mockResolvedValue({
+    profile: { id: "u", email: "will@acme.co", role: "org-admin" },
+    settings: {
+      theme: "system",
+      density: "comfortable",
+      font_scale: "1",
+      "a11y.reduced_motion": false,
+      "a11y.high_contrast": false,
+    },
+  });
+  api.meNotifications.mockResolvedValue({
+    prefs: [{
+      id: "notification-1",
+      event_type: "approval",
+      channel: "slack",
+      target: "ops",
+      enabled: true,
+      deliverable: true,
+    }],
+    catalogue: {
+      events: [
+        { id: "approval", label: "Approvals", description: "Needs you" },
+        { id: "escalation", label: "Escalations", description: "Needs authority" },
+        { id: "work_status", label: "Work status", description: "Lane changes" },
+      ],
+      transports: [{
+        id: "slack",
+        platform: "slack",
+        label: "Slack",
+        delivery_mode: "durable_outbox",
+        targets: [{ id: "ops", label: "Ops" }],
+      }],
+    },
+  });
   api.putMeSettings.mockResolvedValue({ status: "ok" });
+  api.knowledgeProviders.mockResolvedValue({ providers: [] });
+  api.setKnowledgeProvider.mockResolvedValue({ status: "ok" });
+  api.invokeApprovalState.mockResolvedValue({ status: "pending" });
+  localStorage.clear();
+  document.documentElement.classList.remove("reduce-motion");
+  document.documentElement.style.removeProperty("--font-scale");
+  delete document.documentElement.dataset.theme;
+  delete document.documentElement.dataset.themePreference;
+  delete document.documentElement.dataset.character;
+  delete document.documentElement.dataset.density;
+  delete document.documentElement.dataset.contrast;
 });
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  localStorage.clear();
 });
 
 describe("settings surface", () => {
-  it("replaces the app nav with all ten settings sections while settings is open", () => {
+  it("replaces the app nav with the ten canonical settings sections while settings is open", () => {
     const onSettingsSection = vi.fn();
     render(
       <Sidebar
@@ -66,13 +115,14 @@ describe("settings surface", () => {
     }
     // The global nav is gone while settings is open, and the way back is named.
     expect(screen.queryByRole("button", { name: "Routines" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Operations" })).toBeNull();
     expect(screen.getByRole("button", { name: "Back to app" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Health" }));
     expect(onSettingsSection).toHaveBeenCalledWith("health");
   });
 
-  it("searches every setting rather than hiding one behind a head", () => {
+  it("searches every setting while leaving the full settings navigation visible", () => {
     render(
       <Sidebar
         route="settings"
@@ -92,7 +142,186 @@ describe("settings surface", () => {
       target: { value: "archiv" },
     });
     expect(screen.getByRole("button", { name: "Archived chats" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Spending" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Spending" })).toBeTruthy();
+  });
+
+  it("applies and persists every supported appearance axis from the target Look group", async () => {
+    render(<SettingsSectionPane section="you" />);
+
+    await screen.findByText("Look");
+    const pane = document.querySelector(".settings-you-pane") as HTMLElement;
+    const groups = Array.from(pane.children).filter((child) => (
+      child.classList.contains("settings-group")
+    ));
+    expect(pane.firstElementChild?.classList.contains("settings-head")).toBe(true);
+    expect(groups.map((group) => group.querySelector(".console-section-title")?.textContent))
+      .toEqual(["Look", "Reaching you", "Talking to it", "You"]);
+
+    const themeRow = screen.getByText("Theme").closest(".settings-row") as HTMLElement;
+    expect(within(themeRow).getAllByRole("button").map((button) => button.textContent))
+      .toEqual(["System", "Dark", "Light"]);
+    expect(screen.getByText("Density")).toBeTruthy();
+    expect(screen.getByText("Text size")).toBeTruthy();
+    expect(screen.queryByText("Companion")).toBeNull();
+    const lookGroup = groups[0] as HTMLElement;
+    expect(within(lookGroup).getByRole("button", { name: /3 more, for when you need them/ }))
+      .toBeTruthy();
+
+    fireEvent.click(within(themeRow).getByRole("button", { name: "Dark" }));
+    await waitFor(() => expect(api.putMeSettings).toHaveBeenCalledWith({
+      settings: {
+        theme: "dark",
+        density: "comfortable",
+        font_scale: "1",
+        "a11y.reduced_motion": false,
+        "a11y.high_contrast": false,
+        // Character is saved independently so this appearance write cannot
+        // overwrite the selected Stage body.
+      },
+    }));
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(JSON.parse(localStorage.getItem("boltrig.appearance") ?? "{}").theme).toBe("dark");
+
+    fireEvent.click(screen.getAllByRole("button", { name: /3 more, for when you need them/ })[0]);
+    const reducedMotion = screen.getByRole("switch", { name: "Reduced motion" });
+    fireEvent.click(reducedMotion);
+    await waitFor(() => expect(document.documentElement.classList.contains("reduce-motion"))
+      .toBe(true));
+    expect(document.documentElement.style.getPropertyValue("--font-scale")).toBe("1");
+  });
+
+  it("reads real delivery routes and marks unsupported reach and voice controls unavailable", async () => {
+    render(<SettingsSectionPane section="you" />);
+
+    await screen.findByText("Reaching you");
+    const approval = screen.getByRole("switch", { name: "When something needs approving" });
+    await waitFor(() => expect(approval.getAttribute("aria-checked")).toBe("true"));
+    expect((approval as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(
+      (screen.getByLabelText("Send approval notifications to") as HTMLSelectElement).value,
+    ).toBe("Slack · Ops"));
+    expect(screen.getByText(/notification contract has no quiet-hours field/)).toBeTruthy();
+
+    const takeCalls = screen.getByRole("switch", { name: "Take calls" });
+    const holdAtGate = screen.getByRole("switch", { name: "Hold the line at a gate" });
+    expect(takeCalls.getAttribute("aria-checked")).toBe("false");
+    expect((takeCalls as HTMLButtonElement).disabled).toBe(true);
+    expect(holdAtGate.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText(/Always on in this build/)).toBeTruthy();
+  });
+
+  it("renders a searched Theme as the live control under Results", async () => {
+    render(<SettingsSearchResults query="theme" onOpenSection={vi.fn()} />);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Results" })).toBeTruthy();
+    await screen.findByText("Look");
+    expect(document.querySelector(".settings-result-row")).toBeNull();
+    const themeRow = screen.getByText("Theme").closest(".settings-row") as HTMLElement;
+    fireEvent.click(within(themeRow).getByRole("button", { name: "Light" }));
+    await waitFor(() => expect(api.putMeSettings).toHaveBeenCalledWith({
+      settings: expect.objectContaining({ theme: "light" }),
+    }));
+  });
+
+  it("finds and saves Companion through its independent character key", async () => {
+    render(<SettingsSearchResults query="agent.character" onOpenSection={vi.fn()} />);
+
+    await screen.findByText("Look");
+    const companionRow = screen.getByText("Companion").closest(".settings-row") as HTMLElement;
+    expect(within(companionRow).getByText(/visualises measured runtime state/i)).toBeTruthy();
+    fireEvent.click(within(companionRow).getByRole("button", { name: "Jarvis" }));
+
+    await waitFor(() => expect(api.putMeSettings).toHaveBeenCalledWith({
+      settings: { "agent.character": "jarvis" },
+    }));
+    expect(document.documentElement.dataset.character).toBe("jarvis");
+    expect(localStorage.getItem("boltrig.character")).toBe("jarvis");
+  });
+
+  it("keeps unavailable Knowledge providers visible but not actionable", async () => {
+    api.knowledgeProviders.mockResolvedValue({
+      providers: [{
+        id: "supermemory",
+        display_name: "Supermemory",
+        role: "managed_context",
+        enabled: false,
+        bundled: false,
+        health: "unavailable",
+        status: "unavailable",
+        last_error: "Credential-backed projection adapter is not implemented in this build.",
+      }],
+    });
+
+    render(<SettingsSectionPane section="knowledge" />);
+
+    const providerSwitch = await screen.findByRole("switch", { name: "Enable Supermemory" });
+    expect((providerSwitch as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/Credential-backed projection adapter is not implemented/)).toBeTruthy();
+    expect(api.setKnowledgeProvider).not.toHaveBeenCalled();
+  });
+
+  it("replays only the exact approved Knowledge provider change from Settings", async () => {
+    const disabledProvider = {
+      id: "cognee",
+      display_name: "Cognee",
+      role: "graph",
+      enabled: false,
+      bundled: true,
+      health: "unknown",
+      status: "available",
+    };
+    api.knowledgeProviders
+      .mockResolvedValueOnce({ providers: [disabledProvider] })
+      .mockResolvedValueOnce({
+        providers: [{ ...disabledProvider, enabled: true, status: "enabled" }],
+      });
+    api.setKnowledgeProvider
+      .mockResolvedValueOnce({
+        status: "pending_human",
+        hitl_request_id: "approval-provider",
+      })
+      .mockResolvedValueOnce({
+        status: "ok",
+        provider: { ...disabledProvider, enabled: true, status: "enabled" },
+      });
+    api.invokeApprovalState.mockResolvedValue({ status: "approved" });
+
+    render(<SettingsSectionPane section="knowledge" />);
+    fireEvent.click(await screen.findByRole("switch", { name: "Enable Cognee" }));
+    fireEvent.click(await screen.findByRole("button", {
+      name: "Check approval and apply exact change",
+    }));
+
+    await waitFor(() => expect(api.setKnowledgeProvider).toHaveBeenLastCalledWith(
+      "cognee",
+      true,
+      "approval-provider",
+    ));
+    expect(await screen.findByText("Provider enabled.")).toBeTruthy();
+  });
+
+  it("keeps the last reported Knowledge state when a provider mutation fails", async () => {
+    api.knowledgeProviders.mockResolvedValue({
+      providers: [{
+        id: "cognee",
+        display_name: "Cognee",
+        role: "graph",
+        enabled: false,
+        bundled: true,
+        health: "unknown",
+        status: "available",
+      }],
+    });
+    api.setKnowledgeProvider.mockRejectedValue(new Error("network unavailable"));
+
+    render(<SettingsSectionPane section="knowledge" />);
+    const providerSwitch = await screen.findByRole("switch", { name: "Enable Cognee" });
+    fireEvent.click(providerSwitch);
+
+    expect(await screen.findByText(/Cognee could not be changed/)).toBeTruthy();
+    expect(screen.getByText(/last reported state is unchanged/)).toBeTruthy();
+    expect(providerSwitch.getAttribute("aria-checked")).toBe("false");
+    expect(api.knowledgeProviders).toHaveBeenCalledTimes(1);
   });
 
   it("humanises checks without repainting kernel semantics", async () => {

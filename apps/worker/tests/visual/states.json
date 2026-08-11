@@ -1,0 +1,648 @@
+{
+  "schema": "boltrig-worker-visual-states.v2",
+  "base_url": "http://localhost:1420",
+  "base_url_note": "Canonical Vite preview URL. Capture runners may replace only this origin and port when the fixture is served elsewhere; preserve each state URL path, query and hash contract.",
+  "viewport": { "width": 1440, "height": 900 },
+  "governed_state_ids": [
+    "new-chat",
+    "chat-run",
+    "agents",
+    "plugins",
+    "command-palette",
+    "call",
+    "settings-you"
+  ],
+  "additive_state_ids": ["chat-direction"],
+  "current_capture_root": "docs/design/evidence/2026-08-11-console-parity/current",
+  "states": [
+    {
+      "id": "new-chat",
+      "label": "New chat",
+      "figma_node_id": "13:2",
+      "target_output": "docs/design/evidence/2026-08-11-console-parity/figma/new-chat__13-2.png",
+      "hash": "#/chat",
+      "url": "http://localhost:1420/tests/visual/parity.html?state=new-chat&theme=dark",
+      "settled_selector": "html[data-visual-ready=\"new-chat\"]",
+      "settled_when": "The real new-chat welcome and composer are mounted after identity, conversation, chat-config, model-profile, familiar, capability and recent-call reads settle.",
+      "required_request_prefixes": [
+        "/v1/me/settings",
+        "/v1/orgs/current",
+        "/v1/workspaces",
+        "/v1/console/overview",
+        "/v1/conversations?limit=25&offset=0",
+        "/v1/chat/config",
+        "/v1/familiar/phenotype",
+        "/v1/model-profiles",
+        "/v1/capabilities",
+        "/v1/calls?limit=10"
+      ],
+      "required_presence_selectors": [
+        ".sidebar.shell-parity",
+        ".conversation-search",
+        ".new-chat-transcript .welcome",
+        ".new-chat-transcript .welcome h1",
+        ".new-chat-transcript .composer.new-context",
+        ".new-chat-transcript .composer-frame",
+        ".new-chat-transcript .starters",
+        ".new-chat-transcript .starter-card",
+        ".new-chat-transcript button[aria-label=\"Model profile\"]",
+        ".voice-intro"
+      ],
+      "required_absence_selectors": [
+        ".side-status",
+        ".side-status-dot",
+        ".right-rail",
+        ".message-author",
+        ".subagent-fanout"
+      ],
+      "required_visible_selectors": [
+        ".conversation-search",
+        ".new-chat-transcript .welcome h1",
+        ".new-chat-transcript .composer.new-context",
+        ".new-chat-transcript button[aria-label=\"Model profile\"]",
+        ".new-chat-transcript .starter-card",
+        ".voice-intro"
+      ],
+      "required_geometry": [
+        { "selector": ".sidebar.shell-parity", "x": 0, "y": 0, "width": 262, "height": 900 },
+        { "selector": ".new-chat-transcript .welcome", "x": 521, "y": 250.5, "width": 660, "height": 338 },
+        { "selector": ".new-chat-transcript .welcome h1", "x": 521, "y": 250.5, "width": 660, "height": 38 },
+        { "selector": ".new-chat-transcript .composer.new-context", "x": 521, "y": 310.5, "width": 660, "height": 122 },
+        { "selector": ".new-chat-transcript .composer-frame", "x": 521, "y": 310.5, "width": 660, "height": 89 },
+        { "selector": ".new-chat-transcript .starters", "x": 521, "y": 454.5, "width": 660, "height": 134 },
+        { "selector": ".new-chat-transcript .starter-card", "height": 32 },
+        { "selector": ".voice-intro", "x": 521, "y": 823, "width": 660, "height": 57 }
+      ],
+      "required_text": [
+        "What needs doing?",
+        "Find something out",
+        "Draft something",
+        "Work through a list",
+        "Keep an eye on something",
+        "Talk to boltrig"
+      ],
+      "required_absent_text": [
+        "Governed by Boltrig",
+        "Conversation settings",
+        "Everything responding",
+        "This run"
+      ],
+      "direction_records": ["DIR-0008", "DIR-0009"],
+      "known_contract_bound_deviations": [
+        "Voice availability is represented by the real idle control; no microphone or realtime media session is fabricated.",
+        "The composer honestly says Policy because no single autonomy-posture API exists; it cannot claim the target Balanced posture.",
+        "The composer honestly says No project selected because there is no project-selector contract to back the target project control."
+      ],
+      "output": "docs/design/evidence/2026-08-11-console-parity/shipped/new-chat.png",
+      "current_output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png"
+    },
+    {
+      "id": "chat-run",
+      "label": "Chat run",
+      "figma_node_id": "5:2",
+      "target_output": "docs/design/evidence/2026-08-11-console-parity/figma/chat-run__5-2.png",
+      "hash": "#/chat/run-thread",
+      "url": "http://localhost:1420/tests/visual/parity.html?state=chat-run&theme=dark",
+      "settled_selector": "html[data-visual-ready=\"chat-run\"]",
+      "settled_when": "The real conversation route has rendered its persisted user and assistant turn, structured tool/delegation record, composer and task details after all conversation reads settle.",
+      "required_request_prefixes": [
+        "/v1/me/settings",
+        "/v1/orgs/current",
+        "/v1/workspaces",
+        "/v1/console/overview",
+        "/v1/conversations?limit=25&offset=0",
+        "/v1/conversations/run-thread",
+        "/v1/artifacts?conversation_id=run-thread",
+        "/v1/conversations",
+        "/v1/calls/current?conversation_id=run-thread"
+      ],
+      "required_presence_selectors": [
+        ".sidebar.shell-parity",
+        ".conversation-search",
+        ".session-row.active .session-main",
+        ".transcript-tool-summary",
+        ".transcript-subagent-chip",
+        ".right-rail .chat-rail-glass",
+        ".right-rail [aria-label=\"Outputs\"]",
+        ".right-rail [aria-label=\"Subagents\"]"
+      ],
+      "required_absence_selectors": [
+        ".side-status",
+        ".side-status-dot",
+        ".message-author",
+        ".subagent-fanout",
+        ".right-rail [aria-label=\"Conversation title\"]",
+        ".right-rail [aria-label=\"Conversation\"]"
+      ],
+      "required_visible_selectors": [
+        ".conversation-search",
+        ".session-row.active .shell-recent-meta",
+        ".session-row.active .session-actions",
+        ".transcript-tool-summary",
+        ".transcript-subagent-chip",
+        ".right-rail .chat-rail-glass",
+        ".right-rail [aria-label=\"Outputs\"]",
+        ".right-rail [aria-label=\"Subagents\"]"
+      ],
+      "required_geometry": [
+        { "selector": ".conversation-search", "width": 245, "height": 31 },
+        { "selector": ".session-row.active .session-main", "height": 44 },
+        { "selector": ".right-rail .chat-rail-glass", "width": 302, "height": 153.5, "y": 16 }
+      ],
+      "required_text": [
+        "Renewal outreach, top 20 accounts",
+        "Queried data",
+        "5 done",
+        "Create a file or site"
+      ],
+      "required_absent_text": [
+        "Governed by Boltrig",
+        "Conversation settings",
+        "Everything responding",
+        "This run"
+      ],
+      "direction_records": ["DIR-0008", "DIR-0009"],
+      "known_contract_bound_deviations": [
+        "The evidence uses a completed persisted turn, not fabricated live SSE progress; the structured events are the durable transcript contract.",
+        "No generated artifact is claimed because the fixture exposes no governed artifact record for this turn.",
+        "The target's approval card belongs to a live paused run. This completed transcript has no active HITL request, so it does not offer a fabricated actionable approval or waiting state.",
+        "Computer-use and spend are omitted because neither has a truthful receipt in this fixture."
+      ],
+      "output": "docs/design/evidence/2026-08-11-console-parity/shipped/chat-run.png",
+      "current_output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png"
+    },
+    {
+      "id": "agents",
+      "label": "Agents",
+      "figma_node_id": "15:2",
+      "target_output": "docs/design/evidence/2026-08-11-console-parity/figma/agents__15-2.png",
+      "hash": "#/agents",
+      "url": "http://localhost:1420/tests/visual/parity.html?state=agents&theme=dark",
+      "settled_selector": "html[data-visual-ready=\"agents\"]",
+      "settled_when": "The real Agents route has rendered the permanent fleet topology after profile, HITL, topology and model-endpoint reads settle.",
+      "required_request_prefixes": [
+        "/v1/me/settings",
+        "/v1/orgs/current",
+        "/v1/workspaces",
+        "/v1/console/overview",
+        "/v1/conversations?limit=25&offset=0",
+        "/v1/agent-capabilities",
+        "/v1/hitl",
+        "/v1/permanent-fleet",
+        "/v1/model-endpoints"
+      ],
+      "required_presence_selectors": [
+        ".agents-fleet-topbar",
+        ".fleet-summary",
+        ".fleet-authority-key",
+        ".fleet-canvas"
+      ],
+      "required_visible_selectors": [
+        ".agents-fleet-topbar .console-seg",
+        ".agents-fleet-topbar .console-primary",
+        ".fleet-summary",
+        ".fleet-authority-key",
+        ".fleet-canvas"
+      ],
+      "required_geometry": [
+        { "selector": ".agents-fleet-topbar", "x": 262, "y": 0, "width": 1178, "height": 48 },
+        { "selector": ".agents-fleet-topbar .console-seg", "x": 284, "y": 18, "width": 290, "height": 29 },
+        { "selector": ".agents-fleet-topbar .console-primary", "height": 30 },
+        { "selector": ".fleet-summary", "x": 280, "y": 62, "width": 1142, "height": 34 },
+        { "selector": ".fleet-authority-key", "x": 280, "y": 96, "width": 1142, "height": 28 },
+        { "selector": ".fleet-canvas", "x": 280, "y": 136, "width": 1142, "height": 746 }
+      ],
+      "required_text": [
+        "Spend unavailable",
+        "The ring is what it may do",
+        "read",
+        "write",
+        "send",
+        "spend",
+        "delegate"
+      ],
+      "direction_records": ["DIR-0003"],
+      "known_contract_bound_deviations": [
+        "Runtime liveness and authority envelopes are not exposed by these contracts, so the topology renders them as unknown instead of inventing live or full-authority states.",
+        "Windowed per-agent spend is unavailable and remains shown as unavailable."
+      ],
+      "output": "docs/design/evidence/2026-08-11-console-parity/shipped/agents.png",
+      "current_output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/agents.png"
+    },
+    {
+      "id": "plugins",
+      "label": "Plugins",
+      "figma_node_id": "14:2",
+      "target_output": "docs/design/evidence/2026-08-11-console-parity/figma/plugins__14-2.png",
+      "hash": "#/integrations",
+      "url": "http://localhost:1420/tests/visual/parity.html?state=plugins&theme=dark",
+      "settled_selector": "html[data-visual-ready=\"plugins\"]",
+      "settled_when": "The real Plugins route has rendered catalogue groups, verified connections, MCP servers and runtime add-ons after all four inventories settle.",
+      "required_request_prefixes": [
+        "/v1/me/settings",
+        "/v1/orgs/current",
+        "/v1/workspaces",
+        "/v1/console/overview",
+        "/v1/conversations?limit=25&offset=0",
+        "/v1/integrations/catalogue",
+        "/v1/integrations/connections",
+        "/v1/mcp/servers",
+        "/v1/addons"
+      ],
+      "required_presence_selectors": [
+        ".plugins-page",
+        ".plugins-pane",
+        ".plugins-heading h1",
+        ".plugins-alert[aria-label=\"Connection health issues\"]",
+        ".plugins-alert-copy strong",
+        ".plugins-alert > button",
+        ".plugins-inventory",
+        ".plugins-search input[aria-label=\"Search integrations\"]",
+        ".plugins-filter-button",
+        ".plugins-groups"
+      ],
+      "required_absence_selectors": [
+        ".side-status",
+        ".side-status-dot",
+        ".conversation-search",
+        ".right-rail",
+        ".plugins-api-state",
+        ".plugins-notice",
+        ".plugins-empty",
+        ".plugins-row-detail"
+      ],
+      "required_visible_selectors": [
+        ".plugins-heading h1",
+        ".plugins-alert[aria-label=\"Connection health issues\"]",
+        ".plugins-alert > button",
+        ".plugins-inventory-heading",
+        ".plugins-search input[aria-label=\"Search integrations\"]",
+        ".plugins-filter-button",
+        ".plugins-group:first-child > header",
+        ".plugins-group:first-child .plugins-row:first-child .plugins-row-toggle"
+      ],
+      "required_geometry": [
+        { "selector": ".plugins-pane", "x": 401, "width": 900 },
+        { "selector": ".plugins-alert", "x": 433, "y": 162.5625, "width": 836, "height": 64.125 },
+        { "selector": ".plugins-search", "y": 277.6875, "height": 38 },
+        { "selector": ".plugins-group:first-child .plugins-row:first-child", "height": 57 },
+        { "selector": ".plugins-group:first-child .plugins-row:first-child .plugins-row-toggle", "height": 56 }
+      ],
+      "required_text": [
+        "Figma is degraded",
+        "browser's last probe failed (transport unavailable)",
+        "9 connected of 43",
+        "filesystem"
+      ],
+      "required_exact_text": [
+        { "selector": ".plugins-heading h1", "text": "Plugins" },
+        { "selector": ".plugins-alert-copy strong", "text": "Two need you" },
+        { "selector": ".plugins-alert > button", "text": "Look at both" },
+        { "selector": ".plugins-inventory-heading h2", "text": "Connections" },
+        { "selector": ".plugins-filter-button > span:nth-of-type(1)", "text": "Filters" }
+      ],
+      "required_absent_text": [
+        "Governed by Boltrig",
+        "Conversation settings",
+        "Everything responding",
+        "check not ready",
+        "This run"
+      ],
+      "direction_records": ["DIR-0004"],
+      "known_contract_bound_deviations": [
+        "Figma and Browser MCP are deliberately degraded in the fixture so amber health presentation is evidence-backed.",
+        "Credential presence is a boolean custody receipt only; no secret material, provider account detail or invented Nango state is exposed."
+      ],
+      "output": "docs/design/evidence/2026-08-11-console-parity/shipped/plugins.png",
+      "current_output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png"
+    },
+    {
+      "id": "command-palette",
+      "label": "Command palette",
+      "figma_node_id": "16:2",
+      "target_output": "docs/design/evidence/2026-08-11-console-parity/figma/command-palette__16-2.png",
+      "hash": "#/chat/run-thread",
+      "url": "http://localhost:1420/tests/visual/parity.html?state=command-palette&theme=dark",
+      "settled_selector": "html[data-visual-ready=\"command-palette\"]",
+      "settled_when": "The truthful completed run-thread conversation is active and settled before the real Shell command button is clicked, then the real command dialog and search input are mounted over that conversation.",
+      "required_request_prefixes": [
+        "/v1/me/settings",
+        "/v1/orgs/current",
+        "/v1/workspaces",
+        "/v1/console/overview",
+        "/v1/conversations?limit=25&offset=0",
+        "/v1/conversations/run-thread",
+        "/v1/artifacts?conversation_id=run-thread",
+        "/v1/conversations",
+        "/v1/calls/current?conversation_id=run-thread"
+      ],
+      "required_presence_selectors": [
+        ".sidebar.shell-parity",
+        ".conversation-search",
+        ".session-row.active .session-main",
+        ".message.user",
+        ".message.assistant",
+        ".right-rail .chat-rail-glass",
+        ".command-backdrop[data-command-surface]",
+        ".command-palette[data-screen-label=\"Command palette\"]",
+        ".command-search",
+        ".command-search input[aria-label=\"Search Worker\"]",
+        ".command-results",
+        ".command-group[aria-label=\"Navigation commands\"]",
+        ".command-row.active"
+      ],
+      "required_absence_selectors": [
+        ".side-status",
+        ".side-status-dot",
+        ".message-author",
+        ".subagent-fanout",
+        ".right-rail [aria-label=\"Conversation title\"]",
+        ".right-rail [aria-label=\"Conversation\"]"
+      ],
+      "required_visible_selectors": [
+        ".command-palette[data-screen-label=\"Command palette\"]",
+        ".command-search",
+        ".command-search input[aria-label=\"Search Worker\"]",
+        ".command-results",
+        ".command-row.active"
+      ],
+      "required_visible_counts": [
+        { "selector": ".command-group[aria-label=\"Navigation commands\"] > .command-row", "count": 8 }
+      ],
+      "required_geometry": [
+        { "selector": ".command-palette", "x": 660, "y": 135, "width": 560, "height": 335 },
+        { "selector": ".command-search", "x": 661, "y": 136, "width": 558, "height": 48 }
+      ],
+      "required_text": [
+        "New chat",
+        "Agents",
+        "Plugins",
+        "Routines",
+        "You settings",
+        "Autonomy settings",
+        "Spending settings",
+        "Keyboard shortcuts settings"
+      ],
+      "required_exact_text": [
+        { "selector": ".command-row:nth-child(1) .command-row-label", "text": "New chat" },
+        { "selector": ".command-row:nth-child(2) .command-row-label", "text": "Agents" },
+        { "selector": ".command-row:nth-child(3) .command-row-label", "text": "Plugins" },
+        { "selector": ".command-row:nth-child(4) .command-row-label", "text": "Routines" },
+        { "selector": ".command-row:nth-child(5) .command-row-label", "text": "You settings" },
+        { "selector": ".command-row:nth-child(6) .command-row-label", "text": "Autonomy settings" },
+        { "selector": ".command-row:nth-child(7) .command-row-label", "text": "Spending settings" },
+        { "selector": ".command-row:nth-child(8) .command-row-label", "text": "Keyboard shortcuts settings" }
+      ],
+      "required_absent_text": [
+        "Governed by Boltrig",
+        "Conversation settings",
+        "Everything responding",
+        "check not ready",
+        "This run"
+      ],
+      "direction_records": ["DIR-0006"],
+      "known_contract_bound_deviations": [
+        "The palette is intentionally empty-query state; no search result is fabricated or preselected beyond the component's real default.",
+        "The background is the same completed persisted turn as Chat run; no live HITL, computer-use or spend state is fabricated."
+      ],
+      "output": "docs/design/evidence/2026-08-11-console-parity/shipped/command-palette.png",
+      "current_output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png"
+    },
+    {
+      "id": "call",
+      "label": "Call",
+      "figma_node_id": "17:2",
+      "target_output": "docs/design/evidence/2026-08-11-console-parity/figma/call__17-2.png",
+      "hash": "#/chat/voice-thread",
+      "url": "http://localhost:1420/tests/visual/parity.html?state=call&theme=dark",
+      "settled_selector": "html[data-visual-ready=\"call\"]",
+      "settled_when": "The real conversation route has recovered the fixture's current call and durable call events, then mounted the real Call dialog with participants, transcript, and the visibly pinned recovery notice.",
+      "required_request_prefixes": [
+        "/v1/me/settings",
+        "/v1/orgs/current",
+        "/v1/workspaces",
+        "/v1/console/overview",
+        "/v1/conversations?limit=25&offset=0",
+        "/v1/conversations/voice-thread",
+        "/v1/calls/current?conversation_id=voice-thread",
+        "/v1/calls/call-visual/events"
+      ],
+      "required_presence_selectors": [
+        "[data-screen-label=\"Call\"]",
+        ".voice-call-title",
+        ".voice-call-leave",
+        ".voice-call-notice",
+        ".voice-call-participants",
+        ".voice-call-participant",
+        ".voice-call-controls"
+      ],
+      "required_visible_selectors": [
+        ".voice-call-title",
+        ".voice-call-leave",
+        ".voice-call-notice",
+        ".voice-call-participants",
+        ".voice-call-participant",
+        ".voice-call-controls",
+        ".voice-call-controls button[aria-pressed=\"false\"]",
+        ".voice-call-primary-familiar [data-renderer=\"webgl2\"], .voice-call-primary-familiar [data-renderer=\"badge\"]"
+      ],
+      "required_geometry": [
+        { "selector": ".voice-call-notice", "x": 1180, "y": 649, "width": 236, "tolerance": 1.5 },
+        { "selector": ".voice-call-primary-familiar", "width": 150, "height": 150 },
+        { "selector": ".voice-call-primary-familiar .familiar-stage", "width": 150, "height": 150 }
+      ],
+      "required_computed_styles": [
+        { "selector": ".voice-call-primary-familiar .familiar-stage-canvas", "property": "position", "value": "absolute" },
+        { "selector": ".voice-call-primary-familiar .familiar-stage-canvas", "property": "width", "value": "184px" },
+        { "selector": ".voice-call-primary-familiar .familiar-stage-canvas", "property": "height", "value": "184px" },
+        { "selector": ".voice-call-primary-familiar .familiar-stage-canvas", "property": "margin-left", "value": "-92px" },
+        { "selector": ".voice-call-primary-familiar .familiar-stage-canvas", "property": "margin-top", "value": "-92px" }
+      ],
+      "required_text": [
+        "Renewal outreach · you and the chief of staff",
+        "Leave",
+        "A voice call from this conversation can be resumed.",
+        "Revenue-ops came back: three of the twenty are at risk.",
+        "Mute"
+      ],
+      "required_exact_text": [
+        {
+          "selector": ".session-row.active .session-title > span:first-child",
+          "text": "Renewal outreach"
+        },
+        {
+          "selector": ".voice-call-title",
+          "text": "Renewal outreach · you and the chief of staff"
+        },
+        {
+          "selector": ".voice-call-leave",
+          "text": "Leave"
+        },
+        {
+          "selector": ".voice-call-controls button[aria-pressed=\"false\"]",
+          "text": "Mute"
+        }
+      ],
+      "direction_records": ["DIR-0005"],
+      "known_contract_bound_deviations": [
+        "This is the real recovered-current-call state and therefore says Resume call/reconnecting; the fixture does not pretend a microphone, media token or WebSocket handshake exists.",
+        "Date.now is fixed to the fixture observation time so elapsed call evidence cannot drift between captures.",
+        "The visual harness pins only the recovered-call notice so capture timing cannot erase it; outside the harness, non-urgent notices still auto-dismiss after 9.8 seconds."
+      ],
+      "output": "docs/design/evidence/2026-08-11-console-parity/shipped/call.png",
+      "current_output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png"
+    },
+    {
+      "id": "settings-you",
+      "label": "Settings / You",
+      "figma_node_id": "22:2",
+      "target_output": "docs/design/evidence/2026-08-11-console-parity/figma/settings-you__22-2.png",
+      "hash": "#/settings/you",
+      "url": "http://localhost:1420/tests/visual/parity.html?state=settings-you&theme=dark",
+      "settled_selector": "html[data-visual-ready=\"settings-you\"]",
+      "settled_when": "The real Settings/You route has rendered the account, appearance and notification-route controls after both account and notification contracts settle.",
+      "required_request_prefixes": [
+        "/v1/me/settings",
+        "/v1/orgs/current",
+        "/v1/workspaces",
+        "/v1/console/overview",
+        "/v1/conversations?limit=25&offset=0",
+        "/v1/me/notifications"
+      ],
+      "required_presence_selectors": [
+        ".settings-you-pane",
+        ".settings-you-pane > .settings-group:nth-of-type(2) > .console-table",
+        ".settings-you-pane > .settings-group:nth-of-type(3) > .console-section-title"
+      ],
+      "required_absence_selectors": [
+        ".settings-you-pane [aria-label=\"Companion\"]"
+      ],
+      "required_visible_selectors": [
+        ".settings-you-pane > .settings-group:nth-of-type(2) > .console-table",
+        ".settings-you-pane > .settings-group:nth-of-type(3) > .console-section-title"
+      ],
+      "required_geometry": [
+        { "selector": ".settings-you-pane", "x": 523, "y": 52, "width": 656 },
+        { "selector": ".settings-you-pane > .settings-group:nth-of-type(2) > .console-table", "x": 523, "y": 168, "width": 656, "height": 208, "tolerance": 1.5 },
+        { "selector": ".settings-you-pane > .settings-group:nth-of-type(3) > .console-section-title", "x": 523, "y": 404, "width": 656, "height": 16, "tolerance": 1.5 }
+      ],
+      "required_text": [
+        "Theme",
+        "Density",
+        "Text size",
+        "3 more, for when you need them",
+        "Reaching you",
+        "Slack · Ops"
+      ],
+      "required_absent_text": [
+        "Companion"
+      ],
+      "direction_records": ["DIR-0007"],
+      "known_contract_bound_deviations": [
+        "Quiet hours and persisted voice preferences remain unavailable because their APIs do not exist; the fixture does not make those controls functional.",
+        "Approval delivery shows the one verified Slack route supplied by the notification contract."
+      ],
+      "output": "docs/design/evidence/2026-08-11-console-parity/shipped/settings-you.png",
+      "current_output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png"
+    },
+    {
+      "id": "chat-direction",
+      "label": "Desktop chat direction",
+      "hash": "#/chat/direction-thread",
+      "url": "http://localhost:1420/tests/visual/parity.html?state=chat-direction&theme=dark",
+      "settled_selector": "html[data-visual-ready=\"chat-direction\"]",
+      "settled_when": "The real desktop Shell and ChatView are mounted over a completed persisted direction thread, every required request has settled, the compact receipt and rail sections are present, prohibited legacy chrome is absent, and the Codex left-rail details are visibly rendered.",
+      "required_request_prefixes": [
+        "/v1/me/settings",
+        "/v1/orgs/current",
+        "/v1/workspaces",
+        "/v1/console/overview",
+        "/v1/conversations?limit=25&offset=0",
+        "/v1/conversations/direction-thread",
+        "/v1/artifacts?conversation_id=direction-thread",
+        "/v1/conversations",
+        "/v1/calls/current?conversation_id=direction-thread"
+      ],
+      "required_presence_selectors": [
+        ".sidebar.shell-parity",
+        ".chat-layout",
+        ".right-rail .chat-rail-glass",
+        ".right-rail [aria-label=\"Outputs\"]",
+        ".right-rail [aria-label=\"Subagents\"]",
+        ".right-rail [aria-label=\"Background processes\"]",
+        ".right-rail [aria-label=\"Computer Use\"]",
+        ".right-rail [aria-label=\"Sources\"]",
+        ".right-rail [aria-label=\"Sources\"] [data-integration=\"figma\"]",
+        ".right-rail [aria-label=\"Manage sources\"]",
+        ".right-rail .rail-agent-stack [data-familiar-body=\"kepler\"]",
+        ".right-rail .rail-agent-stack [data-familiar-body=\"pioneer\"]",
+        ".right-rail .rail-agent-stack [data-familiar-body=\"voyager\"]",
+        ".transcript-tool-summary",
+        ".transcript-subagent-chip",
+        ".sidebar-footer .side-account",
+        ".sidebar-footer button[aria-label=\"Help and shortcuts\"]"
+      ],
+      "required_absence_selectors": [
+        ".side-status",
+        ".side-status-dot",
+        ".message-author",
+        ".subagent-fanout",
+        ".right-rail [aria-label=\"Conversation title\"]",
+        ".right-rail [aria-label=\"Conversation\"]"
+      ],
+      "required_visible_selectors": [
+        ".conversation-search",
+        ".session-row.active .shell-recent-meta",
+        ".session-row.active .session-actions",
+        ".sidebar-footer .side-account",
+        ".sidebar-footer button[aria-label=\"Help and shortcuts\"]",
+        ".right-rail .chat-rail-glass",
+        ".right-rail [aria-label=\"Subagents\"] .rail-agent-stack",
+        ".right-rail [aria-label=\"Background processes\"] .rail-row",
+        ".right-rail [aria-label=\"Computer Use\"] .rail-row",
+        ".right-rail [aria-label=\"Sources\"] [data-integration=\"figma\"]",
+        ".right-rail [aria-label=\"Sources\"] .rail-view-sources-mark",
+        ".transcript-tool-summary",
+        ".transcript-subagent-chip"
+      ],
+      "required_geometry": [
+        { "selector": ".conversation-search", "width": 245, "height": 31 },
+        { "selector": ".session-row.active .session-main", "height": 44 },
+        { "selector": ".right-rail .chat-rail-glass", "width": 302, "height": 471, "y": 16 }
+      ],
+      "required_text": [
+        "Used Figma integration, read files, edited files, ran commands",
+        "3 done",
+        "updated",
+        "View all",
+        "codex-chat-reference.png"
+      ],
+      "required_absent_text": [
+        "Governed by Boltrig",
+        "Conversation settings",
+        "Everything responding",
+        "check not ready",
+        "This run"
+      ],
+      "direction_records": ["DIR-0008", "DIR-0009"],
+      "reference_digest_manifest": "docs/design/evidence/2026-08-11-chat-ui-direction/references.sha256",
+      "shipped_digest_manifest": "docs/design/evidence/2026-08-11-chat-ui-direction/shipped.sha256",
+      "target_reference_paths": [
+        "docs/design/evidence/2026-08-11-chat-ui-direction/references/codex-left-rail.png",
+        "docs/design/evidence/2026-08-11-chat-ui-direction/references/codex-right-rail.png",
+        "docs/design/evidence/2026-08-11-chat-ui-direction/references/codex-tool-usage.png"
+      ],
+      "negative_reference_paths": [
+        "docs/design/evidence/2026-08-11-chat-ui-direction/references/chat-wrong-root.png",
+        "docs/design/evidence/2026-08-11-chat-ui-direction/references/old-right-rail.png",
+        "docs/design/evidence/2026-08-11-chat-ui-direction/references/old-left-status.png"
+      ],
+      "known_contract_bound_deviations": [
+        "Every activity event is a completed persisted contract receipt; this fixture does not claim a live subagent, background process, computer session, approval, media session or spend state.",
+        "Background-process, Computer Use and Sources sections appear only because this direction fixture supplies explicit completed tool and attachment receipts; no screenshot-shaped placeholder is added.",
+        "The Codex authority consists of region crops rather than a full-frame signed target, so this state prepares shipped evidence but cannot establish a VDS frameDigest, sign-off or conformity verdict."
+      ],
+      "output": "docs/design/evidence/2026-08-11-chat-ui-direction/shipped/chat-direction.png"
+    }
+  ]
+}

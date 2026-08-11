@@ -92,15 +92,21 @@ export function SettingsToggle({ on, onToggle, label, disabled = false }: {
   );
 }
 
-export function SettingsSelect({ value, options, onChange, label }: {
+export function SettingsSelect({ value, options, onChange, label, disabled = false }: {
   value: string;
   options: string[];
   onChange(next: string): void;
   label: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="settings-select">
-      <select aria-label={label} onChange={(event) => onChange(event.target.value)} value={value}>
+      <select
+        aria-label={label}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
         {options.map((option) => <option key={option} value={option}>{option}</option>)}
       </select>
       <svg aria-hidden fill="none" height="12" stroke="var(--text-3)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" viewBox="0 0 24 24" width="12">
@@ -110,17 +116,19 @@ export function SettingsSelect({ value, options, onChange, label }: {
   );
 }
 
-export function SettingsSegmented({ value, options, onChange, label }: {
+export function SettingsSegmented({ value, options, onChange, label, disabled = false }: {
   value: string;
   options: string[];
   onChange(next: string): void;
   label: string;
+  disabled?: boolean;
 }) {
   return (
     <div aria-label={label} className="settings-seg" role="group">
       {options.map((option) => (
         <button
           aria-pressed={option === value}
+          disabled={disabled}
           key={option}
           onClick={() => onChange(option)}
           type="button"

@@ -13,7 +13,7 @@ import "./SubagentTabs.css";
 //
 // Deliberate omissions versus the design mock (recorded in the cluster report):
 // - no per-step list — the ChatSubagent frame carries `step_count` only, so we
-//   show the count and link to Operator, where the full event stream lives;
+//   show the count and keep the stream honest about what it contains;
 // - no "what it returned" paragraph — `subagent_end` carries status only;
 // - no per-subagent composer — ChatRequest addresses a conversation, not a
 //   child run, and no steer-to-subagent API exists.
@@ -217,14 +217,6 @@ function SubagentThread({
           {entry.stepCount} {entry.stepCount === 1 ? "step" : "steps"} recorded.
           <span> The chat stream carries the count only; each step lives in the full event log.</span>
         </p>
-      )}
-      {entry.childRunId && (
-        <a
-          className="subtabs-operator"
-          href={`/operator/#/runs/${encodeURIComponent(entry.childRunId)}`}
-        >
-          Open full event stream
-        </a>
       )}
       <div className="subtabs-allowed">
         <span className="subtabs-allowed-title">What it was allowed to do</span>

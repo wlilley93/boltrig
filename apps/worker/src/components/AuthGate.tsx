@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { configuredApiOrigin } from "../apiOrigin";
+import { characterFromSettings, saveCharacterLocal } from "../character";
 import { client } from "../client";
 import { clearDesktopSession, isDesktop } from "../desktop";
 import { BoltrigApiError } from "@wlilley93/boltrig-web-sdk";
@@ -42,7 +43,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (acceptingInvite || recoveryFlow !== "none") return;
     void client.meSettings()
-      .then(() => setState("authenticated"))
+      .then((result) => {
+        // The authentication read already owns the authoritative settings
+        // snapshot. Apply the selected Stage character before private UI mounts
+        // so a returning session cannot flash the locally cached body first.
+        saveCharacterLocal(characterFromSettings(result.settings));
+        setState("authenticated");
+      })
       .catch((reason) => {
         if (reason instanceof BoltrigApiError && reason.status === 403) {
           const detail = detailOf(reason.body);

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -66,16 +66,35 @@ beforeEach(() => {
       { id: "question-a", type: "question", question: "Which contract?" },
     ],
   });
+  localStorage.clear();
+  document.documentElement.removeAttribute("data-character");
 });
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   window.location.hash = "";
+  localStorage.clear();
 });
 
-describe("global Worker identity and decision context", () => {
-  it("shows user, organisation, active workspace, and pending decisions globally", async () => {
+describe("global Worker identity context", () => {
+  it("applies the authoritative character during an existing identity refresh", async () => {
+    api.meSettings.mockResolvedValue({
+      profile,
+      settings: { "agent.character": "jarvis" },
+    });
+    render(
+      <WorkerGlobalContextProvider>
+        <Topbar title="Runs" />
+      </WorkerGlobalContextProvider>,
+    );
+
+    expect(await screen.findByText("Acme / Operations")).toBeTruthy();
+    expect(document.documentElement.dataset.character).toBe("jarvis");
+    expect(api.meSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows user, organisation, and active workspace globally", async () => {
     render(
       <WorkerGlobalContextProvider>
         <Topbar title="Runs" status="12 visible" />
@@ -95,28 +114,14 @@ describe("global Worker identity and decision context", () => {
     const topbar = screen.getByRole("banner");
     expect(await within(topbar).findByText("Alice")).toBeTruthy();
     expect(within(topbar).getByText("Acme / Operations")).toBeTruthy();
-    expect(within(topbar).getByText("2 pending")).toBeTruthy();
-    // The decided target has no Inbox nav row, so the count that used to ride on
-    // it now states itself on the sidebar's status line. Same signal, same label.
-    expect(screen.getByLabelText("2 pending decisions").textContent)
-      .toBe("2 things need you");
-
-    fireEvent.click(within(topbar).getByRole("button", {
-      name: "Open Inbox, 2 pending decisions",
-    }));
-    expect(window.location.hash).toBe("#/inbox");
+    expect(within(topbar).queryByText(/pending/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Inbox/i })).toBeNull();
   });
 
   it("refreshes the visible active workspace after a context switch", async () => {
     api.consoleOverview
       .mockResolvedValueOnce({ workspace_id: "workspace-a" })
       .mockResolvedValueOnce({ workspace_id: "workspace-b" });
-    api.hitl
-      .mockResolvedValueOnce({
-        requests: [{ id: "approval-a", type: "approval", question: "Approve transfer?" }],
-      })
-      .mockResolvedValueOnce({ requests: [] });
-
     render(
       <WorkerGlobalContextProvider>
         <Topbar title="Account" />
@@ -124,16 +129,14 @@ describe("global Worker identity and decision context", () => {
     );
 
     expect(await screen.findByText("Acme / Operations")).toBeTruthy();
-    expect(screen.getByText("1 pending")).toBeTruthy();
     notifyWorkerContextChanged();
 
     expect(await screen.findByText("Acme / Research")).toBeTruthy();
-    expect(await screen.findByText("Inbox clear")).toBeTruthy();
     await waitFor(() => expect(api.consoleOverview).toHaveBeenCalledTimes(2));
-    expect(api.hitl).toHaveBeenCalledTimes(2);
+    expect(api.hitl).not.toHaveBeenCalled();
   });
 
-  it("reports unavailable pending status instead of claiming the Inbox is clear", async () => {
+  it("does not poll a global approval queue", async () => {
     api.consoleOverview.mockResolvedValue({ workspace_id: null });
     api.hitl.mockRejectedValue(new Error("offline"));
 
@@ -144,7 +147,6 @@ describe("global Worker identity and decision context", () => {
     );
 
     expect(await screen.findByText("Acme / Organisation-wide")).toBeTruthy();
-    expect(await screen.findByText("Inbox unavailable")).toBeTruthy();
-    expect(screen.queryByText("Inbox clear")).toBeNull();
+    expect(api.hitl).not.toHaveBeenCalled();
   });
 });

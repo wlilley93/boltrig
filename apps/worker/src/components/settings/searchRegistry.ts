@@ -17,6 +17,16 @@ export interface SettingsIndexRow {
 export const SETTINGS_INDEX: SettingsIndexRow[] = [
   // You — the compact identity and appearance surface.
   { section: "you", title: "Theme", desc: "System, light or dark", tech: "theme" },
+  { section: "you", title: "Companion", desc: "Familiar or Jarvis on the Stage", tech: "agent.character" },
+  { section: "you", title: "Density", desc: "Comfortable or compact", tech: "density" },
+  { section: "you", title: "Text size", desc: "Small, normal or large", tech: "font_scale" },
+  { section: "you", title: "Reduced motion", desc: "Removes transitions and animation", tech: "a11y.reduced_motion" },
+  { section: "you", title: "High contrast", desc: "Stronger borders and text", tech: "a11y.high_contrast" },
+  { section: "you", title: "When something needs approving", desc: "Verified notification routes" },
+  { section: "you", title: "Send those to", desc: "Verified delivery targets" },
+  { section: "you", title: "Quiet hours", desc: "Unavailable in the live notification contract" },
+  { section: "you", title: "Take calls", desc: "Realtime voice availability is checked when a call starts" },
+  { section: "you", title: "Hold the line at a gate", desc: "A call waits for approval in the originating chat" },
   { section: "you", title: "Locale", tech: "locale" },
   { section: "you", title: "Timezone", tech: "timezone" },
   { section: "you", title: "Notification routes", desc: "Routes for events that need you" },
@@ -57,7 +67,7 @@ export const SETTINGS_INDEX: SettingsIndexRow[] = [
   // Health.
   { section: "health", title: "Everything that has to be working", desc: "Readiness checks, in plain words" },
   { section: "health", title: "What boltrig does not do yet", desc: "Limits you can see" },
-  { section: "health", title: "Waiting on a person", desc: "Approvals and questions in the inbox" },
+  { section: "health", title: "Waiting on a person", desc: "Approvals and questions in chat" },
   { section: "health", title: "Spent today", desc: "Against the daily ceiling, when one is set" },
 
   // Organisation — OrganisationView's real surface.

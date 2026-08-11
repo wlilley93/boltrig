@@ -21,14 +21,14 @@ misconfigurations:
       drops unused gosu, and it runs only the fixed backup loop entrypoint.
   - id: AVD-DS-0002
     paths:
-      - ui/Dockerfile
+      - apps/worker/Dockerfile
       - apps/worker/Dockerfile
     expired_at: 2026-08-15
     statement: >-
       Frontend engineering owns the nginx-unprivileged migration; the secure
       overlay removes the direct host port and the digest-pinned runtime serves
       only the generated static build through its fixed nginx configuration.
-      apps/worker/Dockerfile is the SAME runtime stage as ui/Dockerfile - the
+      apps/worker/Dockerfile is the sole Worker runtime stage - the
       same pinned nginx alpine, the same static root, the same fixed config -
       so it is listed here rather than given an entry of its own, and
       deliberately shares this expiry rather than taking a fresh one. The

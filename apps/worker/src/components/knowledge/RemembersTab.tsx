@@ -111,7 +111,7 @@ export function RemembersTab() {
     const result = await client.memoryForget(input);
     setArmed(null);
     if (forgetFinalizer.begin(input, result, "Memory erasure")) {
-      setMessage("Forgetting this fact is waiting for approval in Inbox.");
+      setMessage("Forgetting this fact is waiting for approval in the originating chat.");
       return;
     }
     setMessage(result.reason ?? (

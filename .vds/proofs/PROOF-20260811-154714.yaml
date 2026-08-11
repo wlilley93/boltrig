@@ -1,0 +1,1239 @@
+id: PROOF-20260811-154714
+kind: register_completeness
+status: failed
+warrant_id: null
+command: vds proof register_completeness
+script: crates/vds-proof/src/register_completeness.rs
+exit_code: 1
+rows_considered: 1825
+rows_enforced: 109
+rows_skipped_reasons:
+  bare_element_informational_vds_s9_10: 1623
+  component_reference_with_no_resolvable_import: 93
+violations:
+- location: CMP-0061
+  rule: 'S-5(9) I4 ([2026] VJS-CA-VDS 1 order 17): a record carrying neither directedAt nor measuredBy is outside the clause'
+  expected: directedAt, or a measure naming what holds this record's conformance
+  actual: 'outside S-5(9) R2 entirely: nothing measures this record and nothing will ever report it as unmeasured.'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:43 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:68 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:73 <ProfileSettings>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0005 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0005 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:74 <ActivityAndExport>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0003 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0003 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:75 <PrivacyPolicyEvidence>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0004 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0004 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:80 <DeveloperTokens>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0007 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0007 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:81 <ConnectionInstructions>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0013 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0013 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:82 <AiKeyManagement>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0011 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0011 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:83 <PasswordSecurity>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0008 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0008 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:84 <TwoFactorSecurity>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0010 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0010 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:85 <SecuritySessions>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0009 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0009 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:86 <ActiveContext>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0006 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0006 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:90 <NotificationPreferences>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0001 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0001 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AccountView.tsx:93 <PersonalAgentLifecycle>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0002 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0002 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1319 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0015 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0015 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1321 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1322 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1323 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1325 <RoutinePicker>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RoutinePicker" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RoutinePicker" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1344 <WorkflowEditor>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"WorkflowEditor" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"WorkflowEditor" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:1939 <RoutineCanvas>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./routine/RoutineCanvas" and whose code.exportName is "RoutineCanvas". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:2034 <StepInspector>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./routine/StepInspector" and whose code.exportName is "StepInspector". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:2222 <WorkflowTriggersPanel>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"WorkflowTriggersPanel" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"WorkflowTriggersPanel" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/AutomationView.tsx:2876 <RecentlyChanged>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./build/RecentlyChanged" and whose code.exportName is "RecentlyChanged". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:147 <AgentTabsStrip>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./build/AgentTabsStrip" and whose code.exportName is "AgentTabsStrip". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:155 <PlusIcon>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"PlusIcon" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"PlusIcon" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:161 <PlusIcon>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"PlusIcon" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"PlusIcon" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:169 <ActionsTable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./build/ActionsTable" and whose code.exportName is "ActionsTable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:177 <RegistryBuild>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0028 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0028 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:183 <SkillsTable>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./build/SkillsTable" and whose code.exportName is "SkillsTable". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:191 <SkillsBuild>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0029 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0029 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:195 <CapabilityRunner>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0026 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0026 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:196 <RegistryBuild>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0028 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0028 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:197 <AdaptersBuild>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0025 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0025 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:198 <ModelEndpointsBuild>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0027 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0027 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:199 <SpawnRulesBuild>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0030 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0030 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:200 <RecentlyChanged>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./build/RecentlyChanged" and whose code.exportName is "RecentlyChanged". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:204 <GovernedCreateModal>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./GovernedCreateModal" and whose code.exportName is "GovernedCreateModal". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:210 <CreateMethodIcon>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./GovernedCreateModal" and whose code.exportName is "CreateMethodIcon". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:218 <CreateMethodIcon>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./GovernedCreateModal" and whose code.exportName is "CreateMethodIcon". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:228 <CreateMethodIcon>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./GovernedCreateModal" and whose code.exportName is "CreateMethodIcon". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:238 <GovernedCreateModal>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./GovernedCreateModal" and whose code.exportName is "GovernedCreateModal". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:244 <CreateMethodIcon>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./GovernedCreateModal" and whose code.exportName is "CreateMethodIcon". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:255 <CreateMethodIcon>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./GovernedCreateModal" and whose code.exportName is "CreateMethodIcon". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/BuildView.tsx:265 <CreateMethodIcon>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./GovernedCreateModal" and whose code.exportName is "CreateMethodIcon". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1438 <GatewaySessionRecovery>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"GatewaySessionRecovery" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"GatewaySessionRecovery" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:1682 <ChannelSendTest>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ChannelSendTest" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ChannelSendTest" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:2133 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0015 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0015 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:848 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:869 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0015 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0015 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:870 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:871 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:872 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:874 <ConnectChannelForm>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ConnectChannelForm" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ConnectChannelForm" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:889 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChannelsView.tsx:908 <ChannelDetail>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ChannelDetail" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ChannelDetail" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1063 <RightRail>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RightRail" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RightRail" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1075 <ConversationControls>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0014 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0014 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1115 <RunSectionView>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./chat/RunSectionView" and whose code.exportName is "RunSectionView". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1153 <FamiliarBadge>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0031 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0031 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1171 <ThemeToggle>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ThemeToggle" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ThemeToggle" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1211 <Welcome>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Welcome" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Welcome" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1229 <Message>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Message" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Message" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1252 <LiveTurn>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"LiveTurn" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"LiveTurn" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1279 <QueuedMessages>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"QueuedMessages" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"QueuedMessages" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1291 <StageBody>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./StageBody" and whose code.exportName is "StageBody". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1319 <SubagentTabs>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./chat/SubagentTabs" and whose code.exportName is "SubagentTabs". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1338 <RightRail>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RightRail" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RightRail" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1470 <OrderedWorkTranscript>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./chat/OrderedWorkTranscript" and whose code.exportName is "OrderedWorkTranscript". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1488 <TurnDecisions>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"TurnDecisions" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"TurnDecisions" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1524 <OrderedWorkTranscript>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./chat/OrderedWorkTranscript" and whose code.exportName is "OrderedWorkTranscript". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1531 <TurnDecisions>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"TurnDecisions" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"TurnDecisions" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1564 <SubagentChips>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./chat/SubagentChips" and whose code.exportName is "SubagentChips". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1574 <SettledApproval>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./chat/InlineApproval" and whose code.exportName is "SettledApproval". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1576 <InlineApproval>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./chat/InlineApproval" and whose code.exportName is "InlineApproval". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1599 <LiveQuestionCard>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0016 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0016 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:1809 <ModelChip>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./chat/ModelChip" and whose code.exportName is "ModelChip". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2217 <RailGroup>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailGroup" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailGroup" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2225 <RailRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2275 <RailGroup>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailGroup" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailGroup" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2276 <RailRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2285 <FamiliarBadge>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0031 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0031 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2301 <RailGroup>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailGroup" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailGroup" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2303 <RailRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2306 <ToolSurfaceMark>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ToolSurfaceMark" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ToolSurfaceMark" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2314 <RailGroup>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailGroup" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailGroup" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2316 <RailRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2319 <ToolSurfaceMark>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ToolSurfaceMark" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ToolSurfaceMark" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2327 <RailGroup>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailGroup" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailGroup" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2334 <RailRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2337 <IntegrationSourceMark>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"IntegrationSourceMark" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"IntegrationSourceMark" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2342 <RailRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2345 <SourceMark>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"SourceMark" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"SourceMark" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2350 <RailRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RailRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RailRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:2352 <ViewSourcesMark>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ViewSourcesMark" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ViewSourcesMark" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:840 <StageBody>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./StageBody" and whose code.exportName is "StageBody". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:924 <Composer>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Composer" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Composer" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:946 <VoiceCall>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0024 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0024 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/ChatView.tsx:993 <MobileChat>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0062 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0062 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/CommandPalette.tsx:357 <CommandIcon>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"CommandIcon" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"CommandIcon" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/CommandPalette.tsx:394 <SearchResultIcon>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"SearchResultIcon" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"SearchResultIcon" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:304 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:321 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0015 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0015 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:322 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:323 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:324 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:326 <CaseEditor>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"CaseEditor" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"CaseEditor" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:344 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/EvaluationsView.tsx:406 <ResultCard>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ResultCard" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ResultCard" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:1017 <PluginGlyph>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"PluginGlyph" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"PluginGlyph" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:1037 <Fact>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Fact" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:1038 <Fact>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Fact" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:1039 <Fact>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Fact" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:1044 <Fact>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Fact" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:1046 <Fact>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Fact" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:1050 <Fact>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Fact" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:628 <SearchIcon>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"SearchIcon" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"SearchIcon" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:650 <FilterIcon>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"FilterIcon" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"FilterIcon" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:680 <CategoryFilterRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"CategoryFilterRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"CategoryFilterRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:690 <CategoryFilterRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"CategoryFilterRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"CategoryFilterRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:746 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0015 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0015 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:761 <IntegrationRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"IntegrationRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"IntegrationRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:783 <McpRow>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"McpRow" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"McpRow" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:808 <RuntimeAddons>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RuntimeAddons" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RuntimeAddons" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:873 <PluginGlyph>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"PluginGlyph" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"PluginGlyph" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:916 <Fact>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Fact" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:917 <Fact>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Fact" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:918 <Fact>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Fact" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:919 <Fact>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Fact" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:921 <Fact>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Fact" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:928 <Fact>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Fact" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:929 <Fact>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Fact" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:930 <Fact>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Fact" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/IntegrationsView.tsx:964 <ManualSecretSetup>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"ManualSecretSetup" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"ManualSecretSetup" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:103 <Pulse>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Pulse" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:158 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:160 <OperationsSection>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"OperationsSection" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"OperationsSection" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:170 <SectionHead>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/SectionHead" and whose code.exportName is "SectionHead". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:178 <Posture>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Posture" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Posture" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:179 <Audit>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Audit" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Audit" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:180 <Budgets>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Budgets" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Budgets" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:334 <PasswordResetDeliveryCard>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"PasswordResetDeliveryCard" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"PasswordResetDeliveryCard" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:339 <BackupStatusCard>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0012 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0012 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:340 <MemoryProjectionDeliveryCard>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"MemoryProjectionDeliveryCard" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"MemoryProjectionDeliveryCard" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:70 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:761 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:83 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:86 <Pulse>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Pulse" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:909 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0015 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0015 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:91 <Pulse>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Pulse" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OperationsView.tsx:97 <Pulse>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"Pulse" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"Pulse" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:43 <Topbar>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0022 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0022 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:66 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:70 <OrganisationPolicy>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0020 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0020 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:75 <OrganisationRoster>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0019 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0019 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:80 <WorkspaceAdministration>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0021 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0021 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:86 <AdminDirectory>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0017 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0017 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:87 <InvitationAdministration>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0018 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0018 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/OrganisationView.tsx:90 <Unavailable>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0023 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0023 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx:1005 <FleetModalShell>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"FleetModalShell" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"FleetModalShell" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx:1013 <FleetMark>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"FleetMark" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"FleetMark" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx:528 <ExactApprovalFinalizer>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0015 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0015 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx:607 <AuthorityIcon>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"AuthorityIcon" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"AuthorityIcon" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx:662 <FleetNodeCard>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"FleetNodeCard" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"FleetNodeCard" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx:692 <FleetInspector>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"FleetInspector" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"FleetInspector" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx:712 <FleetModalShell>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"FleetModalShell" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"FleetModalShell" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx:727 <FleetMark>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"FleetMark" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"FleetMark" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx:743 <AuthorityIcon>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"AuthorityIcon" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"AuthorityIcon" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx:760 <FleetModalShell>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"FleetModalShell" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"FleetModalShell" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx:787 <HeadEditor>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"HeadEditor" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"HeadEditor" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx:795 <HeadEditor>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"HeadEditor" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"HeadEditor" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx:878 <FamiliarBadge>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0031 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0031 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/PermanentFleetTopology.tsx:923 <FleetMark>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"FleetMark" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"FleetMark" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:101 <CompactOrganisationSection>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/CompactSections" and whose code.exportName is "CompactOrganisationSection". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:101 <SectionHead>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/SectionHead" and whose code.exportName is "SectionHead". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:104 <CompactKnowledgeSection>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/CompactSections" and whose code.exportName is "CompactKnowledgeSection". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:104 <SectionHead>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/SectionHead" and whose code.exportName is "SectionHead". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:107 <CompactAdvancedSection>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/CompactSections" and whose code.exportName is "CompactAdvancedSection". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:107 <SectionHead>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/SectionHead" and whose code.exportName is "SectionHead". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:47 <SectionHead>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/SectionHead" and whose code.exportName is "SectionHead". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:48 <SettingsGroup>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/rowKit" and whose code.exportName is "SettingsGroup". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (CMP-0063 exports "SettingsGroup" but from "./components/components/SettingsSurface")
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:49 <SettingsRow>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/rowKit" and whose code.exportName is "SettingsRow". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (CMP-0064 exports "SettingsRow" but from "./components/components/SettingsSurface")
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:54 <SettingsRow>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/rowKit" and whose code.exportName is "SettingsRow". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (CMP-0064 exports "SettingsRow" but from "./components/components/SettingsSurface")
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:63 <SettingsRow>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/rowKit" and whose code.exportName is "SettingsRow". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (CMP-0064 exports "SettingsRow" but from "./components/components/SettingsSurface")
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:85 <SpendingSection>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/SpendingSection" and whose code.exportName is "SpendingSection". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:86 <AutonomySection>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"AutonomySection" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"AutonomySection" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:87 <HealthSection>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/HealthSection" and whose code.exportName is "HealthSection". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:88 <OperationsSection>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./OperationsView" and whose code.exportName is "OperationsSection". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:89 <ShortcutsSection>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/ShortcutsSection" and whose code.exportName is "ShortcutsSection". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:90 <OvernightSection>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/OvernightSection" and whose code.exportName is "OvernightSection". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:91 <ArchivedSection>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/ArchivedSection" and whose code.exportName is "ArchivedSection". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:95 <SectionHead>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/SectionHead" and whose code.exportName is "SectionHead". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/SettingsSurface.tsx:96 <CompactYouSection>
+  rule: 'VDS S-7(5) register_completeness R1: every component referenced by any declared screen exists in the register'
+  expected: 'a register record whose code.importPath is "./settings/CompactSections" and whose code.exportName is "CompactYouSection". Any status satisfies this proof, `proposed` included: this is the existence question, not the composition one'
+  actual: absent from the register (no register record claims either half of the coordinate)
+  severity: fatal
+  drift: undetermined
+- location: apps/worker/src/components/VoiceCall.tsx:1005 <VoiceTranscript>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"VoiceTranscript" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"VoiceTranscript" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/VoiceCall.tsx:1023 <FamiliarBadge>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0031 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0031 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/VoiceCall.tsx:837 <CallReceipt>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"CallReceipt" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"CallReceipt" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/VoiceCall.tsx:856 <RecentCalls>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RecentCalls" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RecentCalls" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/VoiceCall.tsx:891 <VoiceTranscript>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"VoiceTranscript" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"VoiceTranscript" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/VoiceCall.tsx:893 <CallReceipt>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"CallReceipt" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"CallReceipt" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/VoiceCall.tsx:895 <RecentCalls>
+  rule: 'VDS S-7(5) register_completeness I2: a reference whose import the ledger could not resolve is outside the completeness claim'
+  expected: '"RecentCalls" imported from a module the ledger can name, so a register record can be looked up for it'
+  actual: '"RecentCalls" is not imported in this file, so it is defined locally or comes from a global'
+  severity: informational
+  drift: undetermined
+- location: apps/worker/src/components/VoiceCall.tsx:985 <FamiliarStage>
+  rule: 'VDS S-7(5) register_completeness I1 / S-5(4): the record exists, which is all this proof asks, and its status is not one composition accepts'
+  expected: CMP-0032 exists in the register, which is all VDS S-7(5) asks of it here
+  actual: 'CMP-0032 status proposed: existence satisfied, and `composition` accepts this site only once the status is one of registered, built, verified'
+  severity: informational
+  drift: undetermined
+notes:
+- 'this proof establishes EXISTENCE, AND THE MEASUREMENT COVERAGE OF A DIRECTED RECORD (VDS S-7(5) and S-5(9); the widening is recorded by [2026] VJS-CA-VDS 1 order 18 rather than left standing in a scope note the proof has outgrown). A record at `proposed` or `designed` satisfies it and fails `composition`, which is why they are two proofs: W1 REGISTER-COMPLETE is granted on existence alone, before any design work has happened. A warrant citing this run has evidence that the register covers the surface, and no evidence that anything on the surface is fit to be used.'
+- 'the claim is bounded by [surface] screen_globs and [surface] governed_import_prefixes. A screen outside those globs, a reference imported from outside those prefixes, and a reference whose import the ledger could not resolve are each counted and not enforced. This proof cannot say `no unregistered component anywhere`, only `no absent record among the references it reached`. R2 reaches only records that carry `directedAt`. A record naming no direction and no measure is outside this clause, and the count of such records is printed on every run: a rule that fires only on the rows that armed it has a denominator, and an unreported denominator is the defect this clause was written against ([2026] VJS-CA-VDS 1 order 17).'
+- 'relies on VDS S-9(10) RESERVED (SUBMISSION-VDS-005): bare HTML elements are informational rows only, excluded from rows_enforced. Any warrant citing this proof must record that reliance in its `reserved` array.'
+- 93 component reference(s) were NOT reached, because the ledger could not resolve the module their root name was imported from. Each is captured on this record as an informational finding naming its route and line, and none of them was enforced.
+- 63 reference(s) resolve to a record that exists and is not in a status `composition` accepts. This proof passes on them by design, because VDS S-7(5) is the existence question; composition is where they fail.
+- '[I4] 1 enforceable register record(s) carry neither directedAt nor measuredBy, so S-5(9) R2 does not reach them: CMP-0061. This is COVERAGE OWED and not a failure ([2026] VJS-CA-VDS 1 order 17).'
+inputs_digest: sha256:0b0b2325e1bb231e068fc0ffb9e1447b62d272f897ccee595764595612469af9
+digest: sha256:7107382e8112501670cedd1ea62622fe8591d6f2077fab131747abe050cdc24e
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-11T15:47:14Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 1000

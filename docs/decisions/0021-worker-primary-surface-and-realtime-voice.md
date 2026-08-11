@@ -7,8 +7,8 @@
 
 ## Context
 
-Boltrig needs a friendly task-oriented client as well as its dense operator
-console. OpenWorker provides an MIT-licensed React/Tauri presentation baseline,
+Boltrig needs a friendly task-oriented client. OpenWorker provides an MIT-licensed
+React/Tauri presentation baseline,
 but its local Python agent, model clients, connector credentials, permission
 engine, memory, and scheduler would duplicate Boltrig authority and create side
 doors around the dispatcher.
@@ -20,18 +20,17 @@ authority, workflow engine, connector host, or general tool runtime.
 
 ## Decision
 
-Boltrig supports two first-party clients over one governed HTTP/event contract:
+Boltrig supports one first-party client over one governed HTTP/event contract:
 
 - **Worker** is the primary web route and the payload packaged by Tauri. It owns
   task-oriented presentation: conversations, inbox, composer, transcript,
   artifacts, integrations, automation entry points, Familiar presence, and
   native user-initiated affordances.
-- **Operator** remains the maintained advanced console at `/operator`. The
-  spatial deck from decision 0004 is Operator-specific, not a universal
-  frontend requirement.
+The spatial deck from decision 0004 is retired with the former Operator client,
+not a universal frontend requirement.
 
-Both clients consume `@wlilley93/boltrig-web-sdk` types and event
-normalisation. Neither client owns authority, credentials, connector execution,
+Worker consumes `@wlilley93/boltrig-web-sdk` types and event normalisation. It
+does not own authority, credentials, connector execution,
 workflow state, memory truth, artifacts, or model routing. A frontend may render
 an SDK contract before its server capability is enabled, but it must show a
 typed unavailable or uncertified state rather than claim the seam is working.
@@ -49,12 +48,11 @@ its MIT notice in `THIRD_PARTY_NOTICES.md`, rebrands the code, removes the
 OpenWorker server and cloud dependencies, and accepts later upstream changes
 only by reviewed selective import.
 
-The production presentation switch is a reversible deployment overlay, not a
-frontend redirect or a data migration. The ordinary Caddy configuration defaults
-to standalone Operator. `deploy/compose.worker-primary.yml` selects the signed
-Worker image as Caddy's root upstream, keeps Operator at `/operator/`, and removes
-both direct frontend host ports. Removing that overlay restores the standalone
-Operator upstream without changing kernel or tenant state.
+Worker is the sole first-party browser surface. It is the default presentation.
+Caddy proxies the
+Worker image directly; there is no separate frontend image, overlay or browser
+path to maintain. Removing the retired presentation did not change kernel or
+tenant state.
 
 ## Realtime voice exception
 
@@ -92,52 +90,14 @@ materialisation of an authorized artifact download, never an agent side door.
 
 ## Cutover and honesty
 
-Worker may ship in beta before becoming the root route. Primary cutover is
-blocked until surface parity, connector certification, device and call
-acceptance, accessibility, browser/Tauri acceptance, and the absence of an
-OpenWorker Python process are all proven. Until then the deployment continues
-to serve Operator as its default and must describe Worker, device execution,
-connectors, and realtime voice by their actual enabled/certified state.
+Worker is the root route. Connector certification, device and call acceptance,
+accessibility and browser/Tauri acceptance remain independently governed gates;
+the deployment must describe Worker, device execution, connectors and realtime
+voice by their actual enabled/certified state.
 
-## Cutover record, 2026-08-06
+## Removal record, 2026-08-10
 
-**Worker is the root route on `dev.boltrig.io` and `app.boltrig.io` as of
-2026-08-06, on the Principal's direction, with the acceptance list above NOT
-proven.** This section exists so the record does not disagree with the running
-site, which it did for the length of a working day.
-
-The paragraph above says the deployment "continues to serve Operator as its
-default" until surface parity, connector certification, device and call
-acceptance, accessibility, and browser/Tauri acceptance are all proven. Five of
-those six remain unproven. The sixth - the absence of an OpenWorker Python
-process - is proven, by
-`tests/security/test_worker_surface_boundary.py`, which asserts it negatively and
-guards itself with a corpus floor so the assertions cannot pass over zero bytes.
-
-What actually shipped, both serving `boltrig-worker-ui:v0.4.31`:
-
-| host | `/` | `/operator/` |
-|---|---|---|
-| `app.boltrig.io` | Worker | Operator |
-| `dev.boltrig.io` | Worker | Operator |
-
-Operator was not removed. `worker-ui` packages both maintained clients, so the
-advanced console moved down a path exactly as this decision specifies.
-
-**The mechanism used was not `deploy/compose.worker-primary.yml`.** That overlay
-switches the *compose-managed* Caddy, and both these hosts front the stack with a
-host Caddy (prod) or a cloudflared tunnel (dev) instead. So `worker-ui` was
-published on a loopback port and the existing front door repointed at it. The
-overlay remains correct for a stack that uses the bundled Caddy, and is untouched.
-
-Reversal is still one line in each case and needs no kernel or tenant state
-change: prod's `boltrig-ui-1` is still running on `127.0.0.1:8620`, and the M4's
-`app.boltrig.ui` launchd agent still exists, merely unloaded.
-
-**The honesty obligation in the section above now binds harder, not less.** With
-Worker at the root, the requirement that the deployment "describe Worker, device
-execution, connectors, and realtime voice by their actual enabled/certified
-state" is the only thing standing between a user and a surface that looks more
-finished than it is. Auditing the five is now follow-up work against a live
-route rather than a precondition, and each should either be closed or its
-unavailability made visible in the UI.
+The former Operator client was removed from the repository and deployment. Worker
+now serves the root presentation on local, development and production stacks;
+there is no second browser client or retired-client fallback path. This removal
+changed presentation packaging only and did not alter kernel or tenant state.

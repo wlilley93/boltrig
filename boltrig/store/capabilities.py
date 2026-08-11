@@ -93,18 +93,20 @@ class CapabilityStorePG:
         # Governed author edits opt into preserving the prior lifecycle state.
         await self._pool.execute(
             """INSERT INTO agent_capabilities (name, tenant_id, runtime, model_endpoint,
-                                               supported_skills, max_depth, is_ephemeral,
+                                               vision_model_endpoint, supported_skills, max_depth, is_ephemeral,
                                                cost_tier, source, is_active)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true)
                ON CONFLICT (tenant_id, name) DO UPDATE SET
                  runtime=EXCLUDED.runtime, model_endpoint=EXCLUDED.model_endpoint,
+                 vision_model_endpoint=EXCLUDED.vision_model_endpoint,
                  supported_skills=EXCLUDED.supported_skills, max_depth=EXCLUDED.max_depth,
                  is_ephemeral=EXCLUDED.is_ephemeral, cost_tier=EXCLUDED.cost_tier,
                  source=EXCLUDED.source,
-                 is_active=CASE WHEN $10 THEN agent_capabilities.is_active ELSE true END,
+                 is_active=CASE WHEN $11 THEN agent_capabilities.is_active ELSE true END,
                  updated_at=now()""",
-            c.name, c.tenant_id, c.runtime, c.model_endpoint, c.supported_skills,
-            c.max_depth, c.is_ephemeral, c.cost_tier, c.source, preserve_status,
+            c.name, c.tenant_id, c.runtime, c.model_endpoint, c.vision_model_endpoint,
+            c.supported_skills, c.max_depth, c.is_ephemeral, c.cost_tier, c.source,
+            preserve_status,
         )
 
     async def list_capabilities(self, tenant_id):
@@ -152,6 +154,9 @@ def _capability(r):
         supported_skills=list(r["supported_skills"] or []), max_depth=r["max_depth"],
         is_ephemeral=r["is_ephemeral"], cost_tier=r["cost_tier"],
         model_endpoint=r["model_endpoint"],
+        vision_model_endpoint=(
+            r["vision_model_endpoint"] if "vision_model_endpoint" in r else None
+        ),
         source=r["source"] if "source" in r else "control-plane",
         is_active=r["is_active"] if "is_active" in r else True,
     )

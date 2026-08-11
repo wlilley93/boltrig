@@ -6,7 +6,7 @@ export function resultMessage(value: unknown, success: string): string {
     hitl_request_id?: string;
   };
   if (result.status === "pending_human") {
-    return `Waiting for approval in Inbox (${result.hitl_request_id ?? "request created"}).`;
+    return `Waiting for approval in the originating chat (${result.hitl_request_id ?? "request created"}).`;
   }
   if (result.status === "denied") {
     return `Denied: ${result.reason ?? "this identity cannot make that change"}.`;

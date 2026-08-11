@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -146,13 +144,21 @@ def _register_connection_lifecycle(app, P, K) -> None:
                 if record is not None and record.activated
                 else "down"
             )
-            connection = replace(
-                connection,
-                health=health if health in {"ok", "degraded", "down"} else "pending",
-                last_checked_at=utcnow(),
-                updated_at=utcnow(),
+            checked_at = utcnow()
+            connection = await k.store.update_integration_connection_health_if_active(
+                p.tenant_id,
+                connection_id,
+                health if health in {"ok", "degraded", "down"} else "pending",
+                checked_at,
             )
-            await k.store.upsert_integration_connection(connection)
+            if connection is None:
+                connection = await k.store.get_integration_connection(
+                    p.tenant_id, connection_id
+                )
+                if connection is None:
+                    return JSONResponse(
+                        {"status": "error", "reason": "not_found"}, status_code=404
+                    )
         return JSONResponse({
             "connection": await _connection_view(k, p.tenant_id, connection)
         })

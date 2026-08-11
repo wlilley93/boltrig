@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BoltrigApiError,
   buildCapabilityParams,
@@ -22,7 +22,18 @@ interface PendingInvocation {
   request: InvokeRequest;
   approvalId: string;
   verbKey: string;
+  verb: VerbInfo;
   invalidated: boolean;
+}
+
+interface InvocationReceiptState {
+  result: InvokeResult;
+  verb: VerbInfo;
+}
+
+interface RetryInvocation {
+  request: InvokeRequest;
+  verb: VerbInfo;
 }
 
 type FinalizationState =
@@ -154,7 +165,7 @@ function InvocationReceipt({
     return (
       <section className="invocation-receipt pending" aria-label="Pending human receipt">
         <p className="eyebrow">Pending human</p>
-        <h3>Waiting for approval in Inbox</h3>
+        <h3>Waiting for approval in the originating chat</h3>
         <p>The kernel paused this exact invocation. It has not been reported as completed.</p>
         <code>{receipt.hitl_request_id}</code>
       </section>
@@ -256,7 +267,7 @@ function FinalizationReceipt({
       <h3>{copy?.[0] ?? (state === "checking" ? "Checking approval…" : "Waiting for a decision")}</h3>
       <p>
         {copy?.[1]
-          ?? "After an independent decision in Inbox, check again to execute the exact component-held request."}
+          ?? "After an independent decision in the originating chat, check again to execute the exact component-held request."}
       </p>
       {(state === "waiting" || state === "unavailable") && (
         <button className="secondary-button" disabled={!canCheck || running} onClick={onCheck}>
@@ -273,13 +284,20 @@ export function CapabilityRunner() {
   const [discovery, setDiscovery] = useState<DiscoveryState>({ status: "loading" });
   const [values, setValues] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [receipt, setReceipt] = useState<InvokeResult | null>(null);
-  const [retryRequest, setRetryRequest] = useState<InvokeRequest | null>(null);
+  const [receipt, setReceipt] = useState<InvocationReceiptState | null>(null);
+  const [retryRequest, setRetryRequest] = useState<RetryInvocation | null>(null);
   const [pendingInvocation, setPendingInvocation] = useState<PendingInvocation | null>(null);
   const [finalization, setFinalization] = useState<FinalizationState>(null);
   const [running, setRunning] = useState(false);
+  const requestGeneration = useRef(0);
+
+  function invalidateRequestPresentation() {
+    requestGeneration.current += 1;
+    setRunning(false);
+  }
 
   function refresh() {
+    invalidateRequestPresentation();
     setDiscovery({ status: "loading" });
     setReceipt(null);
     setRetryRequest(null);
@@ -339,6 +357,7 @@ export function CapabilityRunner() {
           : null;
 
   function selectCapability(key: string) {
+    invalidateRequestPresentation();
     setSelectedKey(key);
     setValues({});
     setErrors({});
@@ -352,18 +371,21 @@ export function CapabilityRunner() {
     ));
   }
 
-  async function sendRequest(request: InvokeRequest) {
+  async function sendRequest(request: InvokeRequest, verb: VerbInfo) {
+    const generation = ++requestGeneration.current;
     setReceipt(null);
     setRunning(true);
     try {
       const result = await client.invoke(request);
-      setReceipt(result);
+      if (requestGeneration.current !== generation) return;
+      setReceipt({ result, verb });
       if (result.status === "pending_human") {
         const { approval_id: _approvalId, ...baseRequest } = request;
         setPendingInvocation({
           request: baseRequest,
           approvalId: result.hitl_request_id,
           verbKey: JSON.stringify([request.noun, request.verb]),
+          verb,
           invalidated: false,
         });
         setFinalization("waiting");
@@ -379,18 +401,24 @@ export function CapabilityRunner() {
       setRetryRequest(
         request.idempotency_key !== undefined
         && (result.status === "unavailable" || result.status === "error")
-          ? request
+          ? { request, verb }
           : null,
       );
     } catch (error) {
+      if (requestGeneration.current !== generation) return;
       setReceipt({
-        status: "unavailable",
-        reason: reasonFrom(error, "Invocation is unavailable."),
+        result: {
+          status: "unavailable",
+          reason: reasonFrom(error, "Invocation is unavailable."),
+        },
+        verb,
       });
-      setRetryRequest(request.idempotency_key !== undefined ? request : null);
+      setRetryRequest(
+        request.idempotency_key !== undefined ? { request, verb } : null,
+      );
       if (request.approval_id !== undefined) setFinalization("unavailable");
     } finally {
-      setRunning(false);
+      if (requestGeneration.current === generation) setRunning(false);
     }
   }
 
@@ -410,22 +438,25 @@ export function CapabilityRunner() {
         ? { idempotency_key: crypto.randomUUID() }
         : {}),
     };
-    await sendRequest(request);
+    await sendRequest(request, selected);
   }
 
   async function finalizePending() {
+    const pending = pendingInvocation;
     if (
-      pendingInvocation === null
-      || pendingInvocation.invalidated
+      pending === null
+      || pending.invalidated
       || selected === null
-      || capabilityKey(selected) !== pendingInvocation.verbKey
+      || capabilityKey(selected) !== pending.verbKey
     ) {
       setFinalization("invalidated");
       return;
     }
+    const generation = ++requestGeneration.current;
     setFinalization("checking");
     try {
-      const state = await client.invokeApprovalState(pendingInvocation.approvalId);
+      const state = await client.invokeApprovalState(pending.approvalId);
+      if (requestGeneration.current !== generation) return;
       if (state.status === "pending") {
         setFinalization("waiting");
         return;
@@ -438,7 +469,7 @@ export function CapabilityRunner() {
       }
       if (
         state.status === "consumed"
-        && pendingInvocation.request.idempotency_key === undefined
+        && pending.request.idempotency_key === undefined
       ) {
         setReceipt(null);
         setRetryRequest(null);
@@ -446,11 +477,13 @@ export function CapabilityRunner() {
         return;
       }
       await sendRequest({
-        ...pendingInvocation.request,
-        approval_id: pendingInvocation.approvalId,
-      });
+        ...pending.request,
+        approval_id: pending.approvalId,
+      }, pending.verb);
     } catch {
-      setFinalization("unavailable");
+      if (requestGeneration.current === generation) {
+        setFinalization("unavailable");
+      }
     }
   }
 
@@ -544,6 +577,7 @@ export function CapabilityRunner() {
                       error={errors[field.id]}
                       key={field.id}
                       onChange={(value) => {
+                        invalidateRequestPresentation();
                         setValues((current) => ({ ...current, [field.id]: value }));
                         setReceipt(null);
                         setRetryRequest(null);
@@ -567,7 +601,7 @@ export function CapabilityRunner() {
               )}
               {selected.consequence === "high" && (
                 <p className="notice">
-                  High-consequence execution may pause for an independent human decision in Inbox.
+                  High-consequence execution may pause for an independent human decision in the originating chat.
                 </p>
               )}
               {selected.idempotency_mode === "disabled" && (
@@ -583,7 +617,9 @@ export function CapabilityRunner() {
           ) : null}
         </div>
       )}
-      {receipt && selected && <InvocationReceipt receipt={receipt} verb={selected} />}
+      {receipt && (
+        <InvocationReceipt receipt={receipt.result} verb={receipt.verb} />
+      )}
       <FinalizationReceipt
         state={finalization}
         canCheck={Boolean(
@@ -607,7 +643,10 @@ export function CapabilityRunner() {
           <button
             className="secondary-button"
             disabled={running}
-            onClick={() => void sendRequest(retryRequest)}
+            onClick={() => void sendRequest(
+              retryRequest.request,
+              retryRequest.verb,
+            )}
           >
             Retry same invocation
           </button>

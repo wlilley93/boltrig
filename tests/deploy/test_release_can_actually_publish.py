@@ -9,16 +9,15 @@ block, no cosign signature, no SBOM attestation, no digest reverification.
 Three things stopped that run. Two were already fixed by #115 and are pinned here
 so they cannot silently regress:
 
-  * the ui candidate built with an EMPTY `gh_npmrc` secret mount and died on
-    ERR_PNPM_FETCH_401, because nothing in the workflow ever wrote the token the
-    Dockerfile mounts;
+  * the former frontend candidate built with an EMPTY `gh_npmrc` secret mount and
+    died on ERR_PNPM_FETCH_401;
   * the vulnerability gate read no `.trivyignore.yaml`, so it blocked on an
     advisory the security workflow already accepts with a written justification
     and an expiry. A release gate stricter than the security gate BY ACCIDENT is
     not a stricter policy, it is drift.
 
 The third is not fixable in code, and that is the reason the preflight exists.
-kernel, fleet and ui are user-owned GHCR packages that predate this workflow, so
+kernel and fleet are user-owned GHCR packages that predate this workflow, so
 the repository's Actions token cannot write them. The same run proved it by
 accident: `pi-sidecar`, the one package LINKED to the repository, pushed fine.
 GitHub links a package by the `org.opencontainers.image.source` label only when the
@@ -146,19 +145,6 @@ def test_every_registry_login_prefers_a_pat_when_one_exists() -> None:
         assert "GHCR_PUSH_TOKEN" in token and "GITHUB_TOKEN" in token, (
             f"a login uses only {token} - adding the PAT would not reach it"
         )
-
-
-@pytest.mark.security
-@pytest.mark.invariant("IAC-005")
-def test_frontend_candidates_receive_the_packages_token_they_mount() -> None:
-    """Both first-party frontend Dockerfiles mount the ephemeral gh_npmrc."""
-    step = _step("candidates", "Authenticate frontend builds to GitHub Packages")
-    condition = str(step.get("if"))
-    assert "matrix.image == 'ui'" in condition
-    assert "matrix.image == 'worker-ui'" in condition
-    assert "npm.pkg.github.com/:_authToken" in step["run"]
-    build = _step("candidates", "Build release candidate locally")["run"]
-    assert "id=gh_npmrc" in build, "the built token is never mounted into the build"
 
 
 @pytest.mark.security

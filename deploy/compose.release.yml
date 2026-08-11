@@ -21,11 +21,6 @@ services:
     image: ${BOLTRIG_FLEET_IMAGE:?set BOLTRIG_FLEET_IMAGE to an image@sha256 digest}
     pull_policy: always
 
-  ui:
-    build: !reset null
-    image: ${BOLTRIG_UI_IMAGE:?set BOLTRIG_UI_IMAGE to an image@sha256 digest}
-    pull_policy: always
-
   worker-ui:
     build: !reset null
     image: ${BOLTRIG_WORKER_UI_IMAGE:?set BOLTRIG_WORKER_UI_IMAGE to an image@sha256 digest}

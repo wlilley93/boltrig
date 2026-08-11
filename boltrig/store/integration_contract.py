@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Protocol
 
 from boltrig.models.integrations import (
@@ -22,6 +23,16 @@ class IntegrationStoreContract(Protocol):
     ) -> list[IntegrationCatalogueRecord]: ...
 
     async def upsert_integration_connection(self, connection: IntegrationConnection) -> None: ...
+
+    async def update_integration_connection_health_if_active(
+        self,
+        tenant_id: str,
+        connection_id: str,
+        health: str,
+        checked_at: datetime,
+    ) -> IntegrationConnection | None:
+        """Update observation fields only while the connection remains active."""
+        ...
 
     async def create_integration_connection(self, connection: IntegrationConnection) -> bool:
         """Create one active connection per adapter, atomically."""

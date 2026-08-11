@@ -149,8 +149,8 @@ export function SpawnRulesBuild() {
         )}
         {message && <p className="notice" role="status">{message}</p>}
         <p className="muted small">
-          Versioned authoring and rollback remain in Operator until Boltrig has
-          a canonical trusted classification source.
+          Versioned authoring remains unavailable until Boltrig has a canonical
+          trusted classification source.
         </p>
       </form>
     </div>

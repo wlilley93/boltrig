@@ -2,8 +2,8 @@
 #
 #   docker compose -f docker-compose.yml -f deploy/compose.secure.yml up -d
 #
-# It adds TLS termination (Caddy) in front of the UI and kernel, stops publishing
-# the kernel/UI ports directly (only Caddy is reachable), mounts a custom CA
+# It adds TLS termination (Caddy) in front of the Worker and kernel, stops publishing
+# the kernel/Worker ports directly (only Caddy is reachable), mounts a custom CA
 # bundle into the app containers, and shows the encrypted-at-rest volume wiring.
 # All of this is config + env, no image rebuild (P7).
 #
@@ -30,7 +30,7 @@ services:
       - caddy_config:/config
     depends_on:
       - kernel
-      - ui
+      - worker-ui
 
   kernel:
     # reachable only through Caddy now (no direct host port). Internal
@@ -48,14 +48,14 @@ services:
       - ./libraries:/app/libraries:ro
       - ${CA_BUNDLE_FILE:-./deploy/ca-bundle.crt}:/certs/ca.pem:ro
 
-  ui:
+  worker-ui:
     ports: !override []
 
   # M8 (SEC-69): drop the Hatchet host ports entirely in the secure posture. The
   # engine (plaintext gRPC + API) and the unauthenticated dashboard become
   # reachable ONLY over the compose network (the fleet-worker still reaches the
   # engine by service name), never from any host interface - matching how this
-  # overlay already strips kernel/ui.
+  # overlay already strips kernel/Worker.
   hatchet-engine:
     ports: !override []
 

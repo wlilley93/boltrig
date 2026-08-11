@@ -17,13 +17,13 @@ vi.mock("../src/client", () => ({ client: api }));
 // A stub call control: placement rule 3 is about where the Stage sits for the
 // life of a call, not about realtime media, so the stub only raises the
 // call-active signal the way the real control does. It keeps the real idle
-// markup shape (.voice-idle > .secondary-button) because the empty-draft
+// markup shape (.voice-idle > .primary-button) because the empty-draft
 // primary starts the call through that button.
 vi.mock("../src/components/VoiceCall", () => ({
   VoiceCall: ({ onCallActive }: { onCallActive?(active: boolean): void }) => (
     <div className="voice-idle">
       <button
-        className="secondary-button"
+        className="primary-button"
         onClick={() => onCallActive?.(true)}
         type="button"
       >Start test call</button>
@@ -85,18 +85,28 @@ describe("console chat surface", () => {
     // It does NOT open on the Stage at hero size: ADR 0025 placement rule 1 is
     // superseded here by the target, and the unbounded square it put in the
     // welcome was what pushed the composer off a short window.
-    expect(screen.getByRole("heading", { level: 2, name: "What needs doing?" }))
+    expect(screen.getByRole("heading", { level: 1, name: "What needs doing?" }))
       .toBeTruthy();
     expect(document.querySelectorAll(".welcome .starter-card").length).toBe(4);
     expect(document.querySelectorAll(".welcome .starter-icon").length).toBe(4);
     await waitFor(() => {
       expect(document.querySelector(".welcome .familiar-stage")).toBeNull();
     });
-    // The New state draws no header bar at all (so no familiar can sit in
-    // one), yet the theme control stays reachable as a floating action.
+    // The New state draws no header bar at all (so no familiar or settings
+    // control can sit in one). Theme remains available from Settings.
     expect(document.querySelector(".chat-header")).toBeNull();
-    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
-    expect(screen.getByRole("button", { name: "Toggle theme" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Toggle theme" })).toBeNull();
+
+    // At 30px the canonical ladder uses its glossy Stage, not the flat badge.
+    // No chief genotype exists in this route's contract, so the renderer must
+    // state that absence instead of borrowing a child identity.
+    const voiceFamiliar = screen.getByRole("img", {
+      name: "chief of staff Familiar · ready",
+    });
+    expect(voiceFamiliar.classList.contains("familiar-stage")).toBeTruthy();
+    expect(voiceFamiliar.classList.contains("conversation")).toBeTruthy();
+    expect(voiceFamiliar.getAttribute("data-genotype-source")).toBe("unbound");
+    expect(voiceFamiliar.closest(".voice-intro")).toBeTruthy();
   });
 
   it("fills the composer draft from a starter card without sending", () => {
@@ -111,21 +121,20 @@ describe("console chat surface", () => {
     expect(api.streamChat).not.toHaveBeenCalled();
   });
 
-  it("offers the voice banner on the New state and remembers its dismissal", () => {
+  it("keeps voice start in the round composer control", () => {
     renderChat(null);
 
-    expect(screen.getByText("Try boltrig Voice")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss the voice banner" }));
     expect(screen.queryByText("Try boltrig Voice")).toBeNull();
-    expect(localStorage.getItem("boltrig-worker-voice-banner-dismissed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Start a voice call" })).toBeTruthy();
+    expect(screen.queryByText("Call options")).toBeNull();
   });
 
   it("turns the empty-draft primary into a voice call, and says so", async () => {
     renderChat(null);
 
-    // Empty draft: the primary is voice, with the hint line stating it.
-    expect(screen.getByText("Nothing typed, so the round button starts a voice call."))
-      .toBeTruthy();
+    // Empty draft: the primary is the round voice control, with no explanatory footer.
+    expect(screen.queryByText("Nothing typed, so the round button starts a voice call."))
+      .toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Start a voice call" }));
 
     // The click reaches VoiceCall's own start control, so the call machinery
@@ -143,42 +152,53 @@ describe("console chat surface", () => {
   });
 
   it("keeps voice reachable from the composer, not the title row", async () => {
-    renderChat(null);
+    api.conversation.mockResolvedValue({ messages: [], active_run_id: null });
+    renderChat("conversation-a");
     // Voice moved out of the header, but it must stay reachable in an ACTIVE
     // conversation too, so it lives with the composer tools rather than in a
     // banner that only the empty state renders.
     await waitFor(() => {
       expect(document.querySelector(".composer-tools")).toBeTruthy();
     });
+    expect(document.querySelector(".composer.conversation-context:not(.closed)"))
+      .toBeTruthy();
+    expect(screen.getByRole("button", { name: "Policy" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Attach files" }).querySelector("svg"))
+      .toBeTruthy();
     expect(document.querySelector(".chat-header-actions .voice-call")).toBeNull();
   });
 
-  it("moves the one Stage to the newest assistant turn's avatar bullet", async () => {
+  it("does not attribute a main response to its first child subagent", async () => {
     api.conversation.mockResolvedValue({
       messages: [
         { id: "m1", role: "user", content: "First ask" },
         { id: "m2", role: "assistant", content: "Older answer" },
         { id: "m3", role: "user", content: "Second ask" },
-        { id: "m4", role: "assistant", content: "Newest answer" },
+        {
+          id: "m4",
+          role: "assistant",
+          content: "Newest answer",
+          events: [{
+            type: "subagent",
+            child_run_id: "child-lyell",
+            task: "Read account health",
+            name: "Lyell",
+          }],
+        },
       ],
       active_run_id: null,
     });
     renderChat("conversation-a");
 
-    // Placement rule 2: the newest assistant turn's avatar slot holds the one
-    // Stage; every older assistant turn keeps its static badge; the header
-    // holds neither.
-    await waitFor(() => {
-      const stages = document.querySelectorAll(".familiar-stage");
-      expect(stages.length).toBe(1);
-      const article = stages[0]!.closest("article.message.assistant");
-      expect(article?.textContent?.includes("Newest answer")).toBeTruthy();
-      expect(stages[0]!.closest(".message-author")).toBeTruthy();
-    });
-    const older = [...document.querySelectorAll("article.message.assistant")]
-      .find((article) => article.textContent?.includes("Older answer"));
-    expect(older?.querySelector(".familiar-orb")).toBeTruthy();
-    expect(older?.querySelector(".familiar-stage")).toBeNull();
+    const answer = await screen.findByText("Newest answer");
+    const article = answer.closest("article.message.assistant");
+    expect(article?.querySelector(".message-author")).toBeNull();
+    expect(article?.querySelector(".subagent-chip")?.textContent).toContain("Lyell");
+    expect(article?.querySelector(".subagent-fanout")).toBeNull();
+    expect(article?.querySelectorAll(".transcript-subagent-chip")).toHaveLength(1);
+    expect(article?.querySelector(".familiar-stage")).toBeNull();
+    expect(document.querySelectorAll("article.message.assistant .message-author").length)
+      .toBe(0);
     expect(document.querySelector(".chat-header .familiar-stage")).toBeNull();
   });
 
@@ -195,8 +215,8 @@ describe("console chat surface", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Start test call" }));
 
-    // Placement rule 3: centred and large while the call lives; the newest
-    // turn falls back to a static badge so there is still exactly one Stage.
+    // The call owns the one centred Stage. The main response stays unlabelled:
+    // no child identity is borrowed merely because a call is active.
     await waitFor(() => {
       const stages = document.querySelectorAll(".familiar-stage");
       expect(stages.length).toBe(1);
@@ -205,7 +225,7 @@ describe("console chat surface", () => {
     });
     const newest = [...document.querySelectorAll("article.message.assistant")]
       .find((article) => article.textContent?.includes("Newest answer"));
-    expect(newest?.querySelector(".familiar-orb")).toBeTruthy();
+    expect(newest?.querySelector(".message-author")).toBeNull();
     expect(newest?.querySelector(".familiar-stage")).toBeNull();
   });
 
@@ -233,12 +253,79 @@ describe("console chat surface", () => {
     }
   });
 
+  it("keeps real conversation mutations behind a phone-only Task actions disclosure", async () => {
+    vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(max-width: 1020px)" || query === "(max-width: 640px)",
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })));
+    api.conversation.mockResolvedValue({
+      messages: [{
+        id: "assistant-a",
+        role: "assistant",
+        content: "Current answer",
+        created_at: "2026-01-01T00:00:00Z",
+      }],
+      active_run_id: null,
+    });
+    try {
+      renderChat("conversation-a");
+      fireEvent.click(await screen.findByRole("button", { name: "Task details" }));
+      const summary = screen.getByText("Task actions");
+      const disclosure = summary.closest("details") as HTMLDetailsElement;
+      expect(disclosure.open).toBe(false);
+      fireEvent.click(summary);
+      expect(disclosure.open).toBe(true);
+      expect(screen.getByLabelText("Conversation title")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Close conversation" })).toBeTruthy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("titles the header with the real conversation, not a slogan", async () => {
     api.conversation.mockResolvedValue({ messages: [], active_run_id: null });
     renderChat("conversation-a");
 
     expect(await screen.findByRole("heading", { level: 1, name: "Renewal outreach" }))
       .toBeTruthy();
+    expect(screen.getByRole("region", { name: "Conversation transcript" }).hasAttribute("aria-live"))
+      .toBe(false);
+  });
+
+  it("summarises tool use naturally and retains the exact expandable detail", async () => {
+    api.conversation.mockResolvedValue({
+      messages: [{
+        id: "assistant-a",
+        role: "assistant",
+        content: "I found the file.",
+        events: [
+          { type: "message_start", run_id: "run-a", conversation_id: "conversation-a" },
+          { type: "tool_call", call_id: "call-a", tool: "file.read", args_summary: { keys: ["path"] } },
+          { type: "tool_result", call_id: "call-a", verb: "file.read", status: "ok" },
+          { type: "message_end", run_id: "run-a" },
+        ],
+      }],
+      active_run_id: null,
+    });
+    renderChat("conversation-a");
+
+    const summaryText = await screen.findByText("Read files");
+    const summary = summaryText.closest("summary");
+    expect(summary?.getAttribute("aria-label")).toBe("Read files. 1 tool detail");
+    expect(summary?.querySelector(".transcript-tool-glyph")?.getAttribute("data-kind"))
+      .toBe("read");
+    expect(document.querySelector(".work-rule")).toBeNull();
+    expect(document.querySelector(".activity-row")).toBeNull();
+
+    fireEvent.click(summary!);
+    const detail = document.querySelector(".transcript-tool-detail");
+    expect(detail?.querySelector("code")?.textContent).toBe("file.read");
+    expect(detail?.querySelector("[data-status]")?.textContent).toBe("ok");
+    expect(document.querySelector(".tool-icon-read")).toBeTruthy();
   });
 
   it("collapses the desktop rail from the header toggle", async () => {
@@ -300,8 +387,11 @@ describe("console chat surface", () => {
     expect(screen.getByText(/can no longer be answered here/)).toBeTruthy();
   });
 
-  it("flips the theme from the header and persists the choice", () => {
-    renderChat(null);
+  it("flips the theme from an active conversation header and persists the choice", async () => {
+    api.conversation.mockResolvedValue({ messages: [], active_run_id: null });
+    renderChat("conversation-a");
+
+    await screen.findByRole("heading", { level: 1, name: "Renewal outreach" });
 
     fireEvent.click(screen.getByRole("button", { name: "Toggle theme" }));
     expect(document.documentElement.dataset.theme).toBe("light");

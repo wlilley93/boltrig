@@ -276,7 +276,7 @@ export function McpServersBuild({ refreshToken = 0 }: { refreshToken?: number })
     try {
       const result = await mutate(input);
       if (finalizer.begin(input, result, `MCP ${action}`)) {
-        setMessage(`${actionLabel(action)} is waiting for approval in Inbox.`);
+        setMessage(`${actionLabel(action)} is waiting for approval in the originating chat.`);
       } else if (result.status === "ok") {
         await refresh(false, detail.server.id);
         setMessage(`${detail.server.id}: ${actionLabel(action)} completed.`);
@@ -340,7 +340,7 @@ export function McpServersBuild({ refreshToken = 0 }: { refreshToken?: number })
     try {
       const result = await mutate(input);
       if (finalizer.begin(input, result, "MCP configuration replacement")) {
-        setMessage("Configuration replacement is waiting for approval in Inbox.");
+        setMessage("Configuration replacement is waiting for approval in the originating chat.");
       } else if (result.status === "ok") {
         setEditing(false);
         await refresh(false, detail.server.id);
@@ -381,7 +381,7 @@ export function McpServersBuild({ refreshToken = 0 }: { refreshToken?: number })
     try {
       const result = await mutate(input);
       if (finalizer.begin(input, result, "MCP server deletion")) {
-        setMessage("Server deletion is waiting for approval in Inbox.");
+        setMessage("Server deletion is waiting for approval in the originating chat.");
       } else if (result.status === "ok") {
         const deletedId = detail.server.id;
         setSelectedId("");

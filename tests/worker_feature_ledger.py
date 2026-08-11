@@ -196,7 +196,7 @@ _nested(
     "role_mappings",
     "boltrig/config/manifest.py",
     ("operator", "operator", "worker", "worker", "operator"),
-    "Mappings govern grants, while raw trust-policy authoring and rollback stay in Operator.",
+    "Mappings govern grants, while raw trust-policy authoring and rollback remain server-owned and unavailable in the Worker.",
 )
 _nested(
     "ModelsConfig",
@@ -328,7 +328,7 @@ _nested(
 )
 _nested(
     "ChatConfig",
-    "skills_by_role default_skills max_attachments max_attachment_bytes max_total_attachment_bytes compaction_threshold compaction_keep_recent",
+    "default_capability skills_by_role default_skills max_attachments max_attachment_bytes max_total_attachment_bytes compaction_threshold compaction_keep_recent",
     "boltrig/config/manifest.py",
     ("worker", "deployment", "worker", "worker", "deployment"),
     "The live chat admission and continuity paths consume these bounded policies.",
@@ -389,7 +389,7 @@ _nested(
     "name priority intent_tags capability skills max_depth",
     "boltrig/config/spawn_rules.py",
     ("worker", "missing", "worker", "worker", "operator"),
-    "Worker inventories every closed field and previews exact matching without executing; authoring remains Operator-owned pending a trusted classification source.",
+    "Worker inventories every closed field and previews exact matching without executing; authoring remains unavailable pending a trusted classification source.",
 )
 
 
@@ -479,7 +479,7 @@ BACKGROUND_FEATURES: dict[str, FeatureCoverage] = {
     "delegation-pump": _coverage(
         "boltrig/fleet/pump.py:WorkPump.run_forever",
         ("worker", "worker", "worker", "worker", "worker"),
-        "Work and Runs expose the ordinary lifecycle; low-level leases stay Operator evidence.",
+        "Work and Runs expose the ordinary lifecycle; low-level leases remain deployment evidence.",
     ),
     "audit-anchor-janitor": _coverage(
         "boltrig/fleet/anchor.py:run_anchor_forever",

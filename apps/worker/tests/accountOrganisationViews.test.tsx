@@ -410,7 +410,7 @@ describe("Worker account surface", () => {
     const addRoute = screen.getByRole("button", { name: "Add route" });
     await waitFor(() => expect((addRoute as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(addRoute);
-    await screen.findByText("Pending approval in your Inbox.");
+    await screen.findByText("Pending approval. Continue in the originating chat.");
     fireEvent.click(screen.getByRole("button", {
       name: "Check approval and apply exact change",
     }));
@@ -683,7 +683,7 @@ describe("Worker organisation surface", () => {
     fireEvent.click(within(inviteSection.closest("section")!).getByRole("button", {
       name: "Invite",
     }));
-    await screen.findByText("Pending approval in your Inbox.");
+    await screen.findByText("Pending approval. Continue in the originating chat.");
     fireEvent.click(screen.getByRole("button", {
       name: "Check approval and apply exact change",
     }));
@@ -988,7 +988,7 @@ describe("Worker conversation management", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Task details" })).toBeNull());
   });
 
-  it("keeps restore controls reachable in compact task details", async () => {
+  it("keeps compact task details limited to utility sections", async () => {
     stubCompactViewport();
     api.conversations.mockResolvedValue({
       conversations: [{
@@ -1007,42 +1007,10 @@ describe("Worker conversation management", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Task details" }));
-    expect(await screen.findByRole("button", { name: "Restore conversation" })).toBeTruthy();
-  });
-
-  it("refreshes a closed conversation in place without reloading the page", async () => {
-    api.deleteMyConversation.mockResolvedValue({ status: "ok", id: "conversation-a" });
-    api.conversations
-      .mockResolvedValueOnce({
-        conversations: [{
-          id: "conversation-a",
-          title: "Renewals",
-          status: "active",
-          updated_at: "2026-01-01T00:00:00Z",
-        }],
-      })
-      .mockResolvedValueOnce({
-        conversations: [{
-          id: "conversation-a",
-          title: "Renewals",
-          status: "closed",
-          updated_at: "2026-01-01T00:00:00Z",
-        }],
-      });
-    const onChanged = vi.fn();
-    render(
-      <ChatView
-        conversationId="conversation-a"
-        onConversation={vi.fn()}
-        onChanged={onChanged}
-      />,
-    );
-
-    fireEvent.click(await screen.findByRole("button", { name: "Close conversation" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm close conversation" }));
-    expect(await screen.findByRole("heading", { name: "Closed conversation" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Restore conversation" })).toBeTruthy();
-    expect(onChanged).toHaveBeenCalledOnce();
+    expect(screen.getByRole("dialog", { name: "Task details" })).toBeTruthy();
+    expect(screen.getByLabelText("Outputs")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Restore conversation" })).toBeNull();
+    expect(screen.queryByLabelText("Conversation title")).toBeNull();
   });
 
   it("does not submit the composer while an IME composition is active", async () => {
@@ -1166,7 +1134,7 @@ describe("Worker conversation management", () => {
     expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
   });
 
-  it("is wired into the live chat rail for the last eligible assistant message", async () => {
+  it("keeps conversation mutation controls out of the floating desktop rail", async () => {
     render(
       <ChatView
         conversationId="conversation-a"
@@ -1174,10 +1142,10 @@ describe("Worker conversation management", () => {
         onChanged={vi.fn()}
       />,
     );
-    expect(await screen.findByRole("button", {
-      name: "Regenerate last response",
-    })).toBeTruthy();
-    expect(screen.getByLabelText("Conversation title")).toBeTruthy();
+    await waitFor(() => expect(document.querySelector(".right-rail .chat-rail-glass")).toBeTruthy());
+    expect(screen.queryByRole("button", { name: "Regenerate last response" })).toBeNull();
+    expect(screen.queryByLabelText("Conversation title")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close conversation" })).toBeNull();
   });
 
   it("loads further artifact pages without replacing the first page", async () => {
@@ -1263,18 +1231,29 @@ describe("Worker conversation management", () => {
 
     // The newest turn's avatar slot now hosts the one presiding Familiar
     // Stage (console placement rule 2), which stays root-neutral; the emitted
-    // identity remains visible on the subagent marker — drawn as a chip and a
-    // fan-out row, both from the canonical genotype.
-    const profiles = await screen.findAllByLabelText("local-worker Familiar · ready");
-    expect(profiles.length).toBeGreaterThan(0);
-    expect(profiles[0].dataset.genotypeSource).toBe("agent_capability.name.v1");
-    expect(profiles[0].getAttribute("style")).toContain("#112233");
+    // identity remains visible on the compact subagent chip and rail stack;
+    // both are decorative inside already-labelled controls, so inspect their
+    // canonical genotype data rather than announcing a duplicate image.
+    await screen.findByText("local-worker");
+    const profile = document.querySelector<HTMLElement>(
+      '[data-genotype-source="agent_capability.name.v1"]',
+    );
+    expect(profile).not.toBeNull();
+    expect(profile?.getAttribute("style")).toContain("#112233");
     // Spawn-rule provenance is the technical register: it renders only when
     // the persisted developer-details flag is on, and this account has it off.
     expect(screen.queryByText(/policy research-route/)).toBeNull();
-    const root = screen.getByRole("img", { name: "Boltrig activity · ready" });
+    // The header mark is decorative inside the title button, so it is
+    // intentionally excluded from the accessibility tree. Inspect the DOM
+    // contract directly instead of requiring aria-hidden chrome to be a
+    // second announced image.
+    const root = document.querySelector<HTMLElement>(
+      '[aria-label="Boltrig activity · ready"]',
+    );
+    expect(root).not.toBeNull();
+    if (!root) throw new Error("expected the decorative root Familiar mark");
     expect(root.dataset.genotypeSource).toBe("unbound");
-    expect(root.getAttribute("style")).toBeNull();
+    expect(root.dataset.familiarBody).toBe("neutral");
   });
 });
 

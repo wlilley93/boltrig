@@ -6,6 +6,7 @@ import type {
 } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../client";
+import { setThemePreference, type ThemePreference } from "../theme";
 import { Unavailable } from "./Shell";
 
 export function ProfileSettings({
@@ -30,7 +31,7 @@ export function ProfileSettings({
     });
     setMessage(result.status === "ok" ? "Preferences saved." : result.reason ?? result.status);
     if (result.status === "ok") {
-      applyTheme(theme || "system");
+      setThemePreference((theme || "system") as ThemePreference);
       onSaved();
     }
   }
@@ -206,17 +207,6 @@ export function PrivacyPolicyEvidence() {
 
 function stringSetting(value: unknown): string {
   return typeof value === "string" ? value : "";
-}
-
-function applyTheme(theme: string) {
-  try {
-    localStorage.setItem("boltrig-worker-theme", theme);
-    const dark = theme === "dark"
-      || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
-  } catch {
-    // A hardened browser may deny storage/media queries; server preference still saved.
-  }
 }
 
 function formatDate(value: string | null): string {

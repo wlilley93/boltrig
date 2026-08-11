@@ -22,7 +22,13 @@ permits = ".vds/permits"
 [surface]
 # The DECLARED SURFACE. Every VDS claim is bounded by it, and a screen outside
 # these globs is outside every proof.
-screen_globs = ["apps/worker/src/components/*View.tsx"]
+screen_globs = [
+  "apps/worker/src/components/*View.tsx",
+  "apps/worker/src/components/CommandPalette.tsx",
+  "apps/worker/src/components/PermanentFleetTopology.tsx",
+  "apps/worker/src/components/SettingsSurface.tsx",
+  "apps/worker/src/components/VoiceCall.tsx",
+]
 # A component reference whose import path starts with one of these is IN SCOPE
 # for enforcement. Anything else is counted and not enforced, and the count is
 # printed, so the carve-out is visible rather than assumed.
