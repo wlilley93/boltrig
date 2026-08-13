@@ -5,7 +5,7 @@ fileKey: iVQBKFc3NpRH3zdOOxfPqr
 nodeId: 14:2
 shippedScreenshotDigest: sha256:84f01db8d922a25b5db38e7adb6a6989f8988715461b103ab188ab51d075bbf6
 screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png
-servedBuild: "feat/console-target@781346d1abd76f8c35c17e42ff22f2020045dfe3; dirty; capture-source sha256:4f9b663ce8c505e4173d92c250fa345dfba54246f6f2745108615077b2b6c298; capture-manifest sha256:6464842018714990f841f5be5c0487970669ab695786a089015a1c225dcd98c7"
+servedBuild: "feat/console-target@20eb6e8f40aefedd86ff333b27d06b18803954e3; dirty; capture-source sha256:42fd37bb1e6a3da33fef21e4821a4c79439ba77fe47f30590c9806541f85d550; capture-manifest sha256:8487e3f7ada1c0dd27eb63929d643c7ad7b39175614fbc7961b54f22a1ea4403"
 shippedSourceDigest: sha256:e38e8899c42e552612785ad36e3e86014cb25576c23bdc8110b1dd79c693d1b6
 frameImageDigest: sha256:97c4dcd61311526d8ddfddfce01936bad6804ffd5da9d756fb93db2d8e549344
 frameDigest: sha256:70be2f7897493f4789e62df03e8c6faf957b0902f85bbf258b0f85f1693e53f3
@@ -39,8 +39,8 @@ deltas:
 - describes: The differing catalogue population changes the visible category break and body-row extent.
   disposition: forbidden_by_policy
   owedBy: DIR-0004
-reviewedBy: Codex deterministic current-capture evidence rebind v8
-reviewedAt: 2026-08-13T13:55:59Z
+reviewedBy: Codex deterministic current-capture evidence rebind v17
+reviewedAt: 2026-08-13T22:05:51Z
 basis:
 - DIR-0004
 - DIR-0010

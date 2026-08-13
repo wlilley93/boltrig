@@ -3,10 +3,10 @@ routes:
 - apps/worker/src/components/SettingsSurface.tsx
 fileKey: iVQBKFc3NpRH3zdOOxfPqr
 nodeId: 22:2
-shippedScreenshotDigest: sha256:14e45cf3dff1745aeda7b0901434a1526e64ca60af6b30890211d93105b0ad9d
+shippedScreenshotDigest: sha256:746c8fbe28b2aa04b64d122c53e094df33793a46288afe586768af578f4ea81a
 screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png
-servedBuild: "feat/console-target@781346d1abd76f8c35c17e42ff22f2020045dfe3; dirty; capture-source sha256:4f9b663ce8c505e4173d92c250fa345dfba54246f6f2745108615077b2b6c298; capture-manifest sha256:6464842018714990f841f5be5c0487970669ab695786a089015a1c225dcd98c7"
-shippedSourceDigest: sha256:f8252eac4f6a80c1c28ce67658a23ee36c1d7ae5cc3cd23d29f95fba614cbdc7
+servedBuild: "feat/console-target@20eb6e8f40aefedd86ff333b27d06b18803954e3; dirty; capture-source sha256:42fd37bb1e6a3da33fef21e4821a4c79439ba77fe47f30590c9806541f85d550; capture-manifest sha256:8487e3f7ada1c0dd27eb63929d643c7ad7b39175614fbc7961b54f22a1ea4403"
+shippedSourceDigest: sha256:36e8f4ba1b1aeeb8dd94ece91283887fe247e0f5ebe63335298dfee06af98624
 frameImageDigest: sha256:b1d04f772b8f54a22ad02fa3e7917262f7ffecffeb65106c187bb0f5b0758213
 frameDigest: sha256:e9aca9ab0c191069ecb2a0e78d157287d9a9dbac94f4bf2ea3235bb0279db909
 verdict: no_authority
@@ -16,7 +16,7 @@ regions:
   finding: Heading, explanatory copy, section labels and measured main-pane stack align closely.
 - region: facets
   examined: true
-  finding: Search and settings navigation align broadly; the named editorial footer is absent as directed and the Models section is available without adding a second global search field.
+  finding: Search and settings navigation align broadly; the named editorial footer is absent as directed, and Camera and presence plus Models are available without adding a second global search field.
 - region: body_rows
   examined: true
   finding: Appearance, notification and call-preference row geometry aligns closely while backend-derived values and availability states differ.
@@ -36,11 +36,11 @@ deltas:
 - describes: Notification-route detail, quiet-hours availability and voice-preference states follow captured contracts rather than the frame's illustrative values.
   disposition: forbidden_by_policy
   owedBy: DIR-0007
-- describes: The later Principal direction removes the editorial Settings-rail footer and adds governed Models navigation without changing the frame; these are app-chrome and runtime-truth overrides.
+- describes: Later product direction removes the editorial Settings-rail footer and adds governed Models plus Camera and presence navigation without changing the frame; these are app-chrome and runtime-truth overrides.
   disposition: belongs_to_app_chrome
   owedBy: SCR-0006
-reviewedBy: Codex deterministic current-capture evidence rebind v8
-reviewedAt: 2026-08-13T13:55:59Z
+reviewedBy: Codex deterministic current-capture evidence rebind v17
+reviewedAt: 2026-08-13T22:05:51Z
 basis:
 - DIR-0007
 - DIR-0015

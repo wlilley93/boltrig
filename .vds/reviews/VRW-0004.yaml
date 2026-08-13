@@ -3,10 +3,10 @@ routes:
 - apps/worker/src/components/CommandPalette.tsx
 fileKey: iVQBKFc3NpRH3zdOOxfPqr
 nodeId: 16:2
-shippedScreenshotDigest: sha256:e1f7fc46c65c0cb861b383f33365e0e2b33b743c20af23382de3c3978d0d6643
+shippedScreenshotDigest: sha256:9e70d222fb2bb408d7913e41d9284e96bd38fd6405708d10a6c03e5fd70b4926
 screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png
-servedBuild: "feat/console-target@781346d1abd76f8c35c17e42ff22f2020045dfe3; dirty; capture-source sha256:4f9b663ce8c505e4173d92c250fa345dfba54246f6f2745108615077b2b6c298; capture-manifest sha256:6464842018714990f841f5be5c0487970669ab695786a089015a1c225dcd98c7"
-shippedSourceDigest: sha256:41c9807933e042360c263dd2179b0a3cbfbd5d9bf0c705d047d2aee2724f48d0
+servedBuild: "feat/console-target@20eb6e8f40aefedd86ff333b27d06b18803954e3; dirty; capture-source sha256:42fd37bb1e6a3da33fef21e4821a4c79439ba77fe47f30590c9806541f85d550; capture-manifest sha256:8487e3f7ada1c0dd27eb63929d643c7ad7b39175614fbc7961b54f22a1ea4403"
+shippedSourceDigest: sha256:3044e646b0c9c5d5ec1eb9831a86de5d8ae0fbcc96aa6fed1639b51709e8ce45
 frameImageDigest: sha256:d6db445fc5f144ce7e69fb413e54a520e5b1a7a7c3453825543661634fa387d4
 frameDigest: sha256:9ae8fb405f8f4bdec541d73acd9ffbe43f866a228398948d37faab61ccd37f86
 verdict: no_authority
@@ -19,7 +19,7 @@ regions:
   finding: Search copy and dismissal affordance align; the shipped dialog matches the governing Figma frame at x=660, y=135.
 - region: body_rows
   examined: true
-  finding: Command order, exact route labels and distinct settings iconography align closely; the same palette is reused by the empty-composer slash affordance rather than a second command store.
+  finding: The existing command labels and iconography remain coherent; the executable Camera and presence consent destination now occupies the sixth visible row, and the same palette is reused by the empty-composer slash affordance rather than a second command store.
 - region: rail
   examined: false
   finding: The palette screen declares no rail band.
@@ -36,8 +36,8 @@ deltas:
 - describes: The palette is now mounted over the truthful completed Chat-run fixture; the Figma sample's live HITL, computer-use and spend details remain absent because the fixture has no corresponding receipts.
   disposition: belongs_to_app_chrome
   owedBy: SCR-0001
-reviewedBy: Codex deterministic current-capture evidence rebind v8
-reviewedAt: 2026-08-13T13:55:59Z
+reviewedBy: Codex deterministic current-capture evidence rebind v17
+reviewedAt: 2026-08-13T22:05:51Z
 basis:
 - DIR-0006
 - DIR-0010
