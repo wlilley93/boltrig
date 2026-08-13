@@ -12,26 +12,28 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
 
-from . import codex_protocol as wire
 from .bounded_filesystem import (
     ArtifactProjectionError,
     DirectoryCapture,
     FilesystemLimits,
     capture_directory,
 )
+from .codex_binary_pin import (
+    CODEX_CLI_SHA256 as CODEX_CLI_SHA256,
+    CODEX_CLI_SHA256_ARM64 as CODEX_CLI_SHA256_ARM64,
+    CODEX_CLI_TARGET as CODEX_CLI_TARGET,
+    CODEX_CLI_TARGET_ARM64 as CODEX_CLI_TARGET_ARM64,
+    CODEX_CLI_VERSION as CODEX_CLI_VERSION,
+    CodexCellPolicyError as CodexCellPolicyError,
+    PinnedCodexBinary as PinnedCodexBinary,
+    reviewed_codex_artifacts as reviewed_codex_artifacts,
+)
 from .skill_artifacts import SanitizedWorkspaceProjection
 
-CODEX_CLI_VERSION = "0.144.3"
-CODEX_CLI_TARGET = "x86_64-unknown-linux-musl"
-CODEX_CLI_SHA256 = "37e6f5953f191b04f7b62cb07dae90f51d0947ad89f0355665b421fbde28700b"
 CODEX_AUTH_ENVIRONMENT_KEY = "CODEX_ACCESS_TOKEN"
 MAX_CODEX_ACCESS_TOKEN_BYTES = 16 * 1024
 _MINIMAL_PATH = "/usr/bin:/bin"
 CODEX_WORKSPACE_LIMITS = FilesystemLimits()
-
-
-class CodexCellPolicyError(wire.CodexAppServerError):
-    """A cell path, binary, or environment violated supervisor policy."""
 
 
 @dataclass(frozen=True)
@@ -90,46 +92,6 @@ class CodexUpstreamAuth:
 
     def __reduce__(self) -> NoReturn:
         raise TypeError("upstream Codex auth cannot be serialized")
-
-
-class PinnedCodexBinary:
-    """One held, reviewed executable descriptor; the pathname is audit-only."""
-
-    __slots__ = ("path", "sha256", "version", "target", "_descriptor")
-
-    def __init__(self, path: Path, sha256: str, descriptor: int) -> None:
-        if type(descriptor) is not int or descriptor < 0:
-            raise ValueError("pinned Codex descriptor must be a non-negative integer")
-        self.path = path
-        self.sha256 = sha256
-        self.version = CODEX_CLI_VERSION
-        self.target = CODEX_CLI_TARGET
-        self._descriptor = descriptor
-
-    def fileno(self) -> int:
-        if self._descriptor < 0:
-            raise CodexCellPolicyError("pinned Codex descriptor is closed")
-        return self._descriptor
-
-    @property
-    def execution_path(self) -> str:
-        return f"/proc/self/fd/{self.fileno()}"
-
-    def close(self) -> None:
-        descriptor, self._descriptor = self._descriptor, -1
-        if descriptor >= 0:
-            try:
-                os.close(descriptor)
-            except OSError:
-                raise CodexCellPolicyError("pinned Codex descriptor could not be closed") from None
-
-    def __del__(self) -> None:
-        descriptor, self._descriptor = self._descriptor, -1
-        if descriptor >= 0:
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
 
 
 def _identifier(label: str, value: object) -> str:
@@ -368,9 +330,10 @@ def verify_pinned_binary(path: object) -> PinnedCodexBinary:
         if _file_identity(binary.lstat()) != _file_identity(details):
             raise CodexCellPolicyError("Codex binary changed while it was being verified")
         actual = digest.hexdigest()
-        if actual != CODEX_CLI_SHA256:
+        target = reviewed_codex_artifacts().get(actual)
+        if target is None:
             raise CodexCellPolicyError("Codex binary digest does not match the reviewed pin")
-        return PinnedCodexBinary(binary, actual, descriptor)
+        return PinnedCodexBinary(binary, actual, descriptor, target)
     except BaseException:
         try:
             os.close(descriptor)

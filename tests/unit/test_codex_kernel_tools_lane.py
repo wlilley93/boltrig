@@ -34,6 +34,9 @@ from boltrig.fleet.infrastructure.codex_cell_policy import (
     validated_environment_additions,
 )
 from boltrig.fleet.infrastructure.codex_cell_policy import CodexCellLayout
+from boltrig.fleet.infrastructure.codex_assignment_model_binding import (
+    CodexAssignmentModelBinding,
+)
 from boltrig.fleet.infrastructure.codex_cell_provisioning import (
     ProvisioningCodexPhaseAdmissionSource,
 )
@@ -737,7 +740,16 @@ async def test_provider_refuses_an_empty_ceiling_scope(tmp_path: Path) -> None:
         token="run-token-secret",
     )
     with pytest.raises(CodexRuntimeAdmissionError, match="kernel tool scope"):
-        await provider._admit_for_lane(assignment, None, empty_scope)
+        await provider._admit_for_lane(
+            assignment,
+            None,
+            empty_scope,
+            CodexAssignmentModelBinding(
+                assignment=assignment,
+                tenant_id="tenant-1",
+                model_id="provider/model-a",
+            ),
+        )
 
 
 # --- the lane-aware MCP startup invalidation ---------------------------------
@@ -849,8 +861,15 @@ class _SentinelSource:
     def __init__(self) -> None:
         self.calls = 0
 
-    async def admit(self, assignment: object, slot: object = None) -> object:
+    async def admit(
+        self,
+        assignment: object,
+        slot: object = None,
+        *,
+        model_id: str | None = None,
+    ) -> object:
         self.calls += 1
+        assert model_id == "provider/model-b"
         raise _SentinelError("the wall let acquire through to admission")
 
 
@@ -880,8 +899,17 @@ async def test_acquire_admits_session_auth_under_the_attested_posture(
     source = _SentinelSource()
     provider = _session_provider(tmp_path, source)
     monkeypatch.setattr(_wall, "per_cell_uid_mode_available", lambda env=None: True)
+    selected = _assignment_for("b-posture")
+    provider.model_bindings.register(
+        CodexAssignmentModelBinding(
+            assignment=selected,
+            tenant_id="tenant-1",
+            model_id="provider/model-b",
+            endpoint_id="choice-b",
+        )
+    )
     with pytest.raises(_SentinelError):
-        await provider.acquire(_assignment_for("b-posture"))
+        await provider.acquire(selected)
     assert source.calls == 1  # the wall passed and admission ran
 
 

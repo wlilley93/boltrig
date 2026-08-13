@@ -10,7 +10,12 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from pathlib import Path
 
+import pytest
+
 from boltrig.fleet.codex_runtime import CodexRuntime
+from boltrig.fleet.infrastructure.codex_assignment_model_binding import (
+    CodexAssignmentModelBindingRegistry,
+)
 from boltrig.fleet.domain import (
     CanonicalJSON,
     PhaseMode,
@@ -164,3 +169,43 @@ async def test_run_degrades_and_never_raises_on_lifecycle_error() -> None:
     # The reason carries a short cause tag ("codex_turn_failed:<ExceptionType>")
     # so a failure is actionable on the wire without leaking the full traceback.
     assert result.output["_degraded"]["reason"].startswith("codex_turn_failed")
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_trusted_model_binding_is_registered_for_lifecycle_and_cleaned() -> None:
+    registry = CodexAssignmentModelBindingRegistry()
+
+    class _ConsumingLifecycle(_FakeLifecycle):
+        async def start_thread(self, spec: RuntimeThreadSpec) -> RuntimeThreadRef:
+            binding = registry.take(spec.assignment)
+            assert binding is not None
+            assert binding.tenant_id == "tenant-1"
+            assert binding.endpoint_id == "choice-b"
+            assert binding.model_id == "provider/model-b"
+            return await super().start_thread(spec)
+
+    result = await CodexRuntime(
+        _ConsumingLifecycle(),
+        stack_root=_STACK,
+        model_id="provider/model-b",
+        model_endpoint_id="choice-b",
+        model_bindings=registry,
+    ).run("hi", _context(), tools=[])
+
+    assert result.ok is True
+    assert len(registry) == 0
+
+
+async def test_trusted_model_binding_is_cleaned_when_lifecycle_never_consumes_it() -> None:
+    registry = CodexAssignmentModelBindingRegistry()
+    result = await CodexRuntime(
+        _FakeLifecycle(fail_start=True),
+        stack_root=_STACK,
+        model_id="provider/model-b",
+        model_endpoint_id="choice-b",
+        model_bindings=registry,
+    ).run("hi", _context(), tools=[])
+
+    assert result.degraded is True
+    assert result.output["_degraded"]["reason"].startswith("codex_turn_failed")
+    assert len(registry) == 0

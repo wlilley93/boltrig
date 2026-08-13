@@ -302,8 +302,10 @@ async def test_api_composition_shares_one_codex_config_with_every_factory(
     build_shared.assert_called_once_with()
     load_manifest.assert_called_once_with("manifest.yaml")
     select_principal_resolver.assert_called_once_with(manifest)
+    model_catalogue = build_kernel.call_args.kwargs["model_catalogue"]
     build_kernel.assert_awaited_once_with(
         codex_config=codex_config,
+        model_catalogue=model_catalogue,
         sensitive_endpoint_id=sensitive_endpoint_id,
         manifest_snapshot=manifest,
         manifest_path="manifest.yaml",
@@ -313,13 +315,16 @@ async def test_api_composition_shares_one_codex_config_with_every_factory(
         codex_config,
         spawn_rules,
         sensitive_endpoint_id,
+        model_catalogue,
     )
     assert build_chat.call_args.args[0] is codex_config
     assert build_platform.call_args.kwargs["codex_config"] is codex_config
+    assert build_platform.call_args.kwargs["model_catalogue"] is model_catalogue
     assert build_platform.call_args.kwargs["sensitive_endpoint_id"] == sensitive_endpoint_id
     make_spawner.assert_called_once_with(
         kernel,
         codex_config=codex_config,
+        model_catalogue=model_catalogue,
         sensitive_endpoint_id=sensitive_endpoint_id,
         spawn_rules=spawn_rules,
     )
@@ -382,10 +387,11 @@ async def test_kernel_uses_the_composition_manifest_snapshot_without_rereading(
     )
 
     assert result is kernel
-    seed_manifest.assert_awaited_once_with(kernel, manifest)
+    seed_manifest.assert_awaited_once_with(kernel, manifest, model_catalogue=None)
     make_agent_invoker.assert_called_once_with(
         kernel,
         codex_config=codex_config,
+        model_catalogue=None,
         sensitive_endpoint_id=sensitive_endpoint_id,
     )
     kernel.set_agent_invoker.assert_called_once_with(invoker)
@@ -456,8 +462,10 @@ async def test_standalone_worker_shares_one_codex_provider_with_its_spawner(
 
     build_shared.assert_called_once_with()
     load_manifest.assert_called_once_with("manifest.yaml")
+    model_catalogue = build_kernel.call_args.kwargs["model_catalogue"]
     build_kernel.assert_awaited_once_with(
         codex_config=codex_config,
+        model_catalogue=model_catalogue,
         sensitive_endpoint_id=manifest.models.sensitive_endpoint,
         manifest_snapshot=manifest,
         manifest_path="manifest.yaml",
@@ -466,6 +474,7 @@ async def test_standalone_worker_shares_one_codex_provider_with_its_spawner(
     build_spawner.assert_called_once_with(
         kernel,
         codex_config=codex_config,
+        model_catalogue=model_catalogue,
         sensitive_endpoint_id=manifest.models.sensitive_endpoint,
         spawn_rules=manifest.spawn_rules,
     )
@@ -563,8 +572,10 @@ async def test_default_hatchet_bootstrap_shares_one_codex_provider_with_its_spaw
 
     build_shared.assert_called_once_with()
     load_manifest.assert_called_once_with("manifest.yaml")
+    model_catalogue = build_kernel.call_args.kwargs["model_catalogue"]
     build_kernel.assert_awaited_once_with(
         codex_config=codex_config,
+        model_catalogue=model_catalogue,
         sensitive_endpoint_id=manifest.models.sensitive_endpoint,
         manifest_snapshot=manifest,
         manifest_path="manifest.yaml",
@@ -573,6 +584,7 @@ async def test_default_hatchet_bootstrap_shares_one_codex_provider_with_its_spaw
     build_spawner.assert_called_once_with(
         kernel,
         codex_config=codex_config,
+        model_catalogue=model_catalogue,
         sensitive_endpoint_id=manifest.models.sensitive_endpoint,
         spawn_rules=manifest.spawn_rules,
     )
@@ -668,8 +680,10 @@ async def test_hatchet_failed_manifest_overlay_cannot_claim_startup_parity(
     resources = await hatchet_app._default_bootstrap()
 
     load_manifest.assert_called_once_with("manifest.yaml")
+    model_catalogue = build_kernel.call_args.kwargs["model_catalogue"]
     build_kernel.assert_awaited_once_with(
         codex_config=codex_config,
+        model_catalogue=model_catalogue,
         sensitive_endpoint_id=source_manifest.models.sensitive_endpoint,
         manifest_snapshot=source_manifest,
         manifest_path="manifest.yaml",
@@ -677,6 +691,7 @@ async def test_hatchet_failed_manifest_overlay_cannot_claim_startup_parity(
     build_spawner.assert_called_once_with(
         kernel,
         codex_config=codex_config,
+        model_catalogue=model_catalogue,
         sensitive_endpoint_id=None,
     )
     assert build_org.call_args.args[2] is None

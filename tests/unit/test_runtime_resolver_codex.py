@@ -306,5 +306,258 @@ async def test_pinned_codex_profile_refuses_a_different_composed_model():
         )
 
 
+class _ChoiceStore:
+    def __init__(self, *endpoints: ModelEndpoint) -> None:
+        self._endpoints = {
+            (endpoint.tenant_id, endpoint.id): endpoint for endpoint in endpoints
+        }
+
+    async def get_model_endpoint(
+        self, tenant_id: str, endpoint_id: str | None
+    ) -> ModelEndpoint | None:
+        return self._endpoints.get((tenant_id, endpoint_id))
+
+
+class _ChoiceKernel(_FakeKernel):
+    def __init__(self, *endpoints: ModelEndpoint) -> None:
+        super().__init__()
+        self.store = _ChoiceStore(*endpoints)
+        self.audit = None
+
+
+class _ChoiceCatalogue:
+    def __init__(self, models: tuple[str, ...], *, available: bool = True) -> None:
+        self._models = models
+        self._available = available
+
+    async def list_models(self) -> dict[str, object]:
+        if not self._available:
+            return {"status": "unavailable", "models": [], "reason": "gateway_timeout"}
+        return {
+            "status": "ok",
+            "reason": None,
+            "models": [
+                {"id": model, "name": model, "input_modalities": ["text"]}
+                for model in self._models
+            ],
+        }
+
+
+def _choice_resolver(*endpoints: ModelEndpoint) -> RuntimeResolver:
+    base_model = "provider/base-model-20260812"
+    resolver = RuntimeResolver(
+        _ChoiceKernel(*endpoints),
+        codex_config={
+            "trusted": True,
+            "provider": object(),
+            "stack_root": object(),
+            "model_id": base_model,
+        },
+        model_catalogue=_ChoiceCatalogue(
+            (base_model, *(endpoint.model for endpoint in endpoints))
+        ),
+    )
+    resolver._gateway = {"base_url": "http://bifrost:8080/v1", "ttl_seconds": 900}
+    resolver._resolve_ai_key = lambda *args, **kwargs: _none_key()  # type: ignore[method-assign]
+    return resolver
+
+
+def _chat_context(choice: str | None = None, *, tenant_id: str = "tenant-1"):
+    return InvocationContext(
+        tenant_id=tenant_id,
+        actor="chat",
+        extra={
+            "conversation_id": "same-conversation",
+            **({"model_endpoint_id": choice} if choice else {}),
+        },
+    )
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_default_codex_route_uses_composed_model_not_capability_endpoint() -> None:
+    manifest_default = _endpoint(
+        id="manifest-default",
+        kind="bifrost",
+        model="provider/manifest-model",
+    )
+    resolver = _choice_resolver(manifest_default)
+    capability = replace_capability(
+        _capability("codex", ["analysis/*"]),
+        model_endpoint="manifest-default",
+    )
+
+    endpoint, _key, override, route = await resolver._resolve_runtime_policy(
+        "tenant-1", capability, _chat_context(), pinned_policy=False
+    )
+
+    assert endpoint is not None
+    assert endpoint.model == "provider/base-model-20260812"
+    assert override is None
+    assert route == {
+        "model": "provider/base-model-20260812",
+        "provider": "bifrost",
+        "runtime": "codex",
+    }
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_unavailable_codex_runtime_carries_no_speculative_model_route() -> None:
+    resolver = _choice_resolver()
+    resolver._codex = {
+        "trusted": False,
+        "model_id": "provider/base-model-20260812",
+    }
+
+    runtime = await resolver.runtime_for(
+        "tenant-1",
+        _capability("codex", ["analysis/*"]),
+        _chat_context(),
+    )
+
+    assert getattr(runtime, "model_route", None) is None
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_explicit_choice_rebinds_same_conversation_a_to_b() -> None:
+    endpoint_a = _endpoint(id="choice-a", kind="openai", model="provider/model-a")
+    endpoint_b = _endpoint(id="choice-b", kind="anthropic", model="provider/model-b")
+    resolver = _choice_resolver(endpoint_a, endpoint_b)
+    capability = _capability("codex", ["analysis/*"])
+
+    first, _key, _override, first_route = await resolver._resolve_runtime_policy(
+        "tenant-1", capability, _chat_context("choice-a"), pinned_policy=False
+    )
+    second, _key, _override, second_route = await resolver._resolve_runtime_policy(
+        "tenant-1", capability, _chat_context("choice-b"), pinned_policy=False
+    )
+
+    assert first is not None and first.model == "provider/model-a"
+    assert second is not None and second.model == "provider/model-b"
+    assert first_route == {
+        "model": "provider/model-a",
+        "provider": "bifrost",
+        "runtime": "codex",
+        "choice_id": "choice-a",
+    }
+    assert second_route == {
+        "model": "provider/model-b",
+        "provider": "bifrost",
+        "runtime": "codex",
+        "choice_id": "choice-b",
+    }
+    assert resolver._bindings.resolve("tenant-1", "same-conversation") == (
+        "provider/model-b"
+    )
+
+    automatic, _key, _override, automatic_route = (
+        await resolver._resolve_runtime_policy(
+            "tenant-1", capability, _chat_context(), pinned_policy=False
+        )
+    )
+    assert automatic is not None
+    assert automatic.model == "provider/base-model-20260812"
+    assert automatic_route == {
+        "model": "provider/base-model-20260812",
+        "provider": "bifrost",
+        "runtime": "codex",
+    }
+    assert resolver._bindings.resolve("tenant-1", "same-conversation") == (
+        "provider/base-model-20260812"
+    )
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_choice_is_resolved_only_inside_the_callers_tenant() -> None:
+    endpoint = _endpoint(
+        id="choice-a",
+        tenant_id="another-tenant",
+        kind="bifrost",
+        model="provider/model-a",
+    )
+    resolver = _choice_resolver(endpoint)
+
+    with pytest.raises(Exception, match="missing"):
+        await resolver._resolve_runtime_policy(
+            "tenant-1",
+            _capability("codex", ["analysis/*"]),
+            _chat_context("choice-a"),
+            pinned_policy=False,
+        )
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_runtime_refuses_unadvertised_or_unavailable_catalogue_choice() -> None:
+    from boltrig.models import ModelCatalogueUnavailable, ModelEndpointUnavailable
+
+    endpoint = _endpoint(id="choice-a", kind="bifrost", model="provider/model-a")
+    missing = _choice_resolver(endpoint)
+    missing._model_catalogue = _ChoiceCatalogue(
+        ("provider/base-model-20260812",)
+    )
+    with pytest.raises(ModelEndpointUnavailable):
+        await missing._resolve_runtime_policy(
+            "tenant-1",
+            _capability("codex", ["analysis/*"]),
+            _chat_context("choice-a"),
+            pinned_policy=False,
+        )
+
+    unavailable = _choice_resolver(endpoint)
+    unavailable._model_catalogue = _ChoiceCatalogue((), available=False)
+    with pytest.raises(ModelCatalogueUnavailable):
+        await unavailable._resolve_runtime_policy(
+            "tenant-1",
+            _capability("codex", ["analysis/*"]),
+            _chat_context("choice-a"),
+            pinned_policy=False,
+        )
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_runtime_refuses_a_vision_choice_without_catalogue_image_support() -> None:
+    from boltrig.models import ModelEndpointUnavailable
+
+    endpoint = _endpoint(
+        id="choice-vision",
+        kind="bifrost",
+        model="provider/model-vision",
+        modalities=("text", "vision"),
+    )
+    resolver = _choice_resolver(endpoint)
+    context = InvocationContext(
+        tenant_id="tenant-1",
+        actor="chat",
+        extra={
+            "conversation_id": "vision-conversation",
+            "input_modality": "vision",
+            "model_endpoint_id": endpoint.id,
+        },
+    )
+
+    with pytest.raises(ModelEndpointUnavailable, match="requested input"):
+        await resolver._resolve_runtime_policy(
+            "tenant-1",
+            _capability("codex", ["analysis/*"]),
+            context,
+            pinned_policy=False,
+        )
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_automatic_codex_route_refuses_without_the_bifrost_gateway() -> None:
+    from boltrig.models import ModelEndpointUnavailable
+
+    resolver = _choice_resolver()
+    resolver._gateway = {"base_url": None, "ttl_seconds": 900}
+
+    with pytest.raises(ModelEndpointUnavailable, match="requires the Bifrost gateway"):
+        await resolver._resolve_runtime_policy(
+            "tenant-1",
+            _capability("codex", ["analysis/*"]),
+            _chat_context(),
+            pinned_policy=False,
+        )
+
+
 async def _none_key():
     return None, None

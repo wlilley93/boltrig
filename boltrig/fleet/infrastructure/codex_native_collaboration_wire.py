@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import threading
 
+from boltrig.models.model_id_policy import exact_model_id
+
 from .model_proxy_ceiling_errors import ToolCeilingViolation
 
 CODEX_NATIVE_COLLAB_NAMESPACE_NAME = "multi_agent_v1"
@@ -33,7 +35,9 @@ class NativeCollaborationWireGate:
     ) -> None:
         if type(max_total) is not int or not 1 <= max_total <= 64:
             raise ValueError("native collaboration max_total must be between 1 and 64")
-        if type(allowed_model) is not str or not allowed_model or len(allowed_model) > 128:
+        try:
+            exact_model_id(allowed_model)
+        except ValueError:
             raise ValueError("native collaboration model must be bounded and non-empty")
         if (
             type(allowed_reasoning_effort) is not str

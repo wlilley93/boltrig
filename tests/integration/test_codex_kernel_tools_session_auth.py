@@ -185,6 +185,7 @@ async def test_builder_constructs_the_tool_lane_only_under_the_attested_posture(
         "trusted": True,
         "provider": provider,
         "stack_root": Path("/tmp"),
+        "model_id": "provider/model-b",
         "kernel_tools": True,
         "issue_token": str,
         "revoke_token": lambda token: None,

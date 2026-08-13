@@ -6,10 +6,15 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
+import pytest
 
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import Principal, create_app
-from boltrig.observability.codex_admission import codex_admission_projection
+from boltrig.observability import codex_admission as admission_module
+from boltrig.observability.codex_admission import (
+    codex_admission_projection,
+    codex_release_posture,
+)
 from boltrig.store import InMemoryStore
 
 
@@ -40,6 +45,31 @@ def test_uncomposed_codex_projection_claims_no_runtime_evidence() -> None:
     )
     assert projected["runtime"]["cell_liveness"] == "unavailable"
     assert projected["execution_changed_by_projection"] is False
+    assert projected["release_posture"] == codex_release_posture()
+    assert projected["release_posture"]["status"] == "blocked"
+    assert projected["release_posture"]["fresh_authority_required"] is True
+    assert len(projected["release_posture"]["quarantined_preflight_blockers"]) == 7
+
+
+def test_two_constant_flips_cannot_promote_a_quarantined_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(admission_module.CodexAgentRuntime, "production_ready", True)
+    monkeypatch.setattr(
+        admission_module, "CODEX_RUNTIME_CONFIG_PRODUCTION_READY", True
+    )
+
+    posture = codex_release_posture()
+    projected = codex_admission_projection(None, trusted_provider_configured=True)
+
+    assert posture["runtime_class_production_ready"] is True
+    assert posture["runtime_config_production_ready"] is True
+    assert posture["status"] == "blocked"
+    assert len(posture["quarantined_preflight_blockers"]) == 7
+    assert (
+        projected["runtime"]["production_activation"]
+        == "refused_unresolved_isolation_controls"
+    )
 
 
 def test_composed_shadow_stack_is_still_off_and_execution_neutral() -> None:

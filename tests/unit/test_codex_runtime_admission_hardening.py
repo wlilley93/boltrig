@@ -36,6 +36,10 @@ from boltrig.fleet.infrastructure.codex_runtime_admission import (
     QuarantinedCodexPreflightReceipt,
     SupervisedCodexPhaseCellProvider,
 )
+from boltrig.fleet.infrastructure.codex_runtime_surface_evidence import (
+    QuarantinedCodexSurfaceEvidence,
+    canonical_surface_digest,
+)
 
 from .codex_runtime_fakes import (
     INSTRUCTIONS,
@@ -401,3 +405,23 @@ def test_evidence_digest_and_admission_repr_do_not_expose_birth_instructions() -
     assert INSTRUCTIONS not in evidence
     assert INSTRUCTIONS not in repr(value)
     assert INSTRUCTIONS not in repr(admitted)
+
+
+@pytest.mark.invariant("SEC-159")
+def test_surface_receipt_cannot_claim_a_tool_ceiling_the_admission_did_not_grant() -> None:
+    value = admission()
+    cell = fake_cell(value)
+    base = preflight_receipt(value)
+    empty = canonical_surface_digest({})
+    surface = QuarantinedCodexSurfaceEvidence(
+        effective_config_digest=empty,
+        composed_config_digest=empty,
+        apps_inventory_digest=empty,
+        plugins_inventory_digest=empty,
+        external_agents_inventory_digest=empty,
+        effective_tools_digest=canonical_surface_digest(("device.file.list",)),
+    )
+    receipt = replace(base, surface_evidence=surface)
+
+    with pytest.raises(CodexRuntimeAdmissionError, match="tool ceiling"):
+        AdmittedCodexCell(value, cell.initialized, receipt)
