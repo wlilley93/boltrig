@@ -260,93 +260,10 @@ async def capability_context(
             "cost_tier": capability.cost_tier,
             "model_endpoint": capability.model_endpoint,
             "vision_model_endpoint": capability.vision_model_endpoint,
+            "model_routes": capability.model_routes,
             "source": capability.source,
             "is_active": capability.is_active,
         }
-    }
-
-
-def model_endpoint_view(endpoint: Any) -> dict[str, Any] | None:
-    if endpoint is None:
-        return None
-    return {
-        "id": endpoint.id,
-        "kind": endpoint.kind,
-        "model": endpoint.model,
-        "base_url": endpoint.base_url,
-        "fallback": endpoint.fallback,
-        "data_class": endpoint.data_class,
-        "is_active": endpoint.is_active,
-        "modalities": list(endpoint.modalities),
-    }
-
-
-async def _model_endpoint_references(
-    store: Any, endpoint_id: str, context: InvocationContext
-) -> dict[str, list[str]]:
-    capabilities = sorted(
-        item.name
-        for item in await store.list_all_capabilities(context.tenant_id)
-        if item.model_endpoint == endpoint_id or item.vision_model_endpoint == endpoint_id
-    )
-    fallbacks = sorted(
-        item.id
-        for item in await store.list_model_endpoints(context.tenant_id)
-        if item.id != endpoint_id and item.fallback == endpoint_id
-    )
-    return {"capabilities": capabilities, "fallbacks": fallbacks}
-
-
-async def model_endpoint_context(
-    store: Any, params: dict[str, Any], context: InvocationContext
-) -> dict[str, Any]:
-    endpoint_id = str(params["id"])
-    endpoint = await store.get_model_endpoint(context.tenant_id, endpoint_id)
-    if endpoint is None:
-        raise AdapterFailure(
-            "model endpoint not found",
-            status_code=404,
-            reason="control_resource_not_found",
-        )
-    fallback = (
-        await store.get_model_endpoint(context.tenant_id, endpoint.fallback)
-        if endpoint.fallback
-        else None
-    )
-    return {
-        "model_endpoint": model_endpoint_view(endpoint),
-        "fallback_target": model_endpoint_view(fallback),
-        "references": await _model_endpoint_references(store, endpoint_id, context),
-    }
-
-
-async def model_endpoint_upsert_context(
-    store: Any, params: dict[str, Any], context: InvocationContext
-) -> dict[str, Any]:
-    endpoint_id = str(params["id"])
-    fallback_id = str(params.get("fallback") or "").strip() or None
-    if fallback_id == endpoint_id:
-        raise AdapterFailure(
-            "a model endpoint cannot fall back to itself",
-            status_code=409,
-            reason="model_endpoint_fallback_invalid",
-        )
-    fallback = (
-        await store.get_model_endpoint(context.tenant_id, fallback_id)
-        if fallback_id
-        else None
-    )
-    if fallback_id and (fallback is None or not fallback.is_active):
-        raise AdapterFailure(
-            "fallback model endpoint is missing or retired",
-            status_code=409,
-            reason="model_endpoint_fallback_unavailable",
-        )
-    return {
-        "model_endpoint": model_endpoint_view(
-            await store.get_model_endpoint(context.tenant_id, endpoint_id)
-        ),
-        "fallback_target": model_endpoint_view(fallback),
     }
 
 

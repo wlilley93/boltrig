@@ -24,6 +24,10 @@ from .control_approval_registry import (
     verb_context,
     verb_upsert_context,
 )
+from .control_approval_model_endpoints import (
+    model_endpoint_context,
+    model_endpoint_upsert_context,
+)
 from .control_approval_workflows import (
     CAPABILITY_ACTIONS,
     EVAL_CASE_ACTIONS,
@@ -34,8 +38,6 @@ from .control_approval_workflows import (
     capability_context,
     eval_case_context,
     eval_case_upsert_context,
-    model_endpoint_context,
-    model_endpoint_upsert_context,
     workflow_context,
     workflow_trigger_binding_context,
 )

@@ -66,7 +66,17 @@ from datetime import datetime
 # The credential classes that mean a person authenticated at a door. A PAT is
 # excluded on purpose: it carries its owner's authority but nobody is present
 # (D4). "machine" is the Principal default, so an unlabelled resolver is refused.
-_INTERACTIVE_CREDENTIALS = frozenset({"session", "federated", "dev-header"})
+INTERACTIVE_CREDENTIAL_KINDS = frozenset({"session", "federated", "dev-header"})
+
+
+def is_interactive_credential(kind: str) -> bool:
+    """Whether this credential proves a person is present at an auth door.
+
+    A PAT deliberately returns ``False`` even though its principal carries
+    ``actor_tier='human'``: it has the owner's authority, but nobody is present
+    to make a fresh consent decision.
+    """
+    return kind in INTERACTIVE_CREDENTIAL_KINDS
 
 
 @dataclass(frozen=True)
@@ -173,7 +183,7 @@ def posture_block(
         return _R_EXPIRED.format(when=posture.expires_at.isoformat())
 
     # D4. The credential CLASS, never `actor_tier` - see the module docstring.
-    if credential_kind not in _INTERACTIVE_CREDENTIALS:
+    if not is_interactive_credential(credential_kind):
         return _R_MACHINE.format(kind=credential_kind)
 
     # `admin` is a role a CLIENT is routinely given over their own data; admitting

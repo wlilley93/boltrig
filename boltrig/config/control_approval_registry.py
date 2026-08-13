@@ -6,7 +6,11 @@ from typing import Any
 
 from boltrig.models import AdapterFailure, InvocationContext
 
-from .control_approval_workflows import model_endpoint_view
+from .capability_model_routes import (
+    CapabilityRouteValidationError,
+    validated_capability_routes,
+)
+from .control_approval_model_endpoints import model_endpoint_view
 
 AUTHORED_DEFINITION_ACTIONS = frozenset(
     {
@@ -262,38 +266,17 @@ async def capability_upsert_context(
         ),
         None,
     )
-    endpoint_id = str(params.get("model_endpoint") or "").strip() or None
-    vision_endpoint_id = (
-        str(params.get("vision_model_endpoint") or "").strip() or None
-    )
-    endpoint = await store.get_model_endpoint(context.tenant_id, endpoint_id) if endpoint_id else None
-    vision_endpoint = (
-        await store.get_model_endpoint(context.tenant_id, vision_endpoint_id)
-        if vision_endpoint_id
-        else None
-    )
-    for role, selected_id, selected in (
-        ("text", endpoint_id, endpoint),
-        ("vision", vision_endpoint_id, vision_endpoint),
-    ):
-        if selected_id and (selected is None or not selected.is_active):
-            raise AdapterFailure(
-                "model endpoint binding is missing or retired",
-                status_code=409,
-                reason="model_endpoint_binding_unavailable",
-            )
-        if selected_id and not selected.supports(role):
-            raise AdapterFailure(
-                f"{role} model endpoint does not advertise {role} modality",
-                status_code=409,
-                reason="model_endpoint_modality_unavailable",
-            )
-    if endpoint_id and not vision_endpoint_id and not endpoint.supports("vision"):
-        raise AdapterFailure(
-            "a single agent model must advertise both text and vision modalities",
-            status_code=409,
-            reason="multimodal_model_required",
+    try:
+        _, _, _, selected_endpoints = await validated_capability_routes(
+            store, context.tenant_id, params
         )
+    except CapabilityRouteValidationError as error:
+        raise AdapterFailure(
+            str(error),
+            status_code=409,
+            reason=error.reason,
+        ) from None
+    endpoint = selected_endpoints.get("text")
     return {
         "capability": (
             None
@@ -307,9 +290,14 @@ async def capability_upsert_context(
                 "cost_tier": current.cost_tier,
                 "model_endpoint": current.model_endpoint,
                 "vision_model_endpoint": current.vision_model_endpoint,
+                "model_routes": current.model_routes,
                 "source": current.source,
                 "is_active": current.is_active,
             }
         ),
         "model_endpoint": model_endpoint_view(endpoint),
+        "model_endpoints": {
+            modality: model_endpoint_view(selected_endpoints[modality])
+            for modality in sorted(selected_endpoints)
+        },
     }
