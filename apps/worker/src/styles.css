@@ -333,29 +333,6 @@ h1, h2, h3, p { margin-top: 0; }
 }
 .side-icon-button:hover { color: var(--text); background: var(--hover); }
 
-.side-workspace {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: calc(100% - 20px);
-  margin: 0 10px 8px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 8px;
-  color: var(--text-3);
-  background: transparent;
-  cursor: pointer;
-  font-size: 12.5px;
-}
-.side-workspace:hover { color: var(--text-2); background: var(--hover); }
-.side-workspace > span {
-  flex: 1;
-  overflow: hidden;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .side-nav {
   display: flex;
   flex-direction: column;
@@ -415,27 +392,6 @@ h1, h2, h3, p { margin-top: 0; }
   min-height: 0;
   padding: 0 8px 8px;
   overflow-y: auto;
-}
-.conversation-search {
-  position: static;
-  flex: 0 0 31px;
-  width: 100%;
-  height: 31px;
-  margin: 0 0 7px;
-  padding: 0 10px;
-  border: 1px solid var(--border-2);
-  border-radius: 8px;
-  outline: 0;
-  color: var(--text-2);
-  background: color-mix(in srgb, var(--card) 34%, transparent);
-  font: inherit;
-  font-size: 12.5px;
-  line-height: 1;
-}
-.conversation-search::placeholder { color: var(--text-4); }
-.conversation-search:focus-visible {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
 }
 .session-row {
   display: grid;
@@ -1160,7 +1116,9 @@ h1, h2, h3, p { margin-top: 0; }
   border: 1px solid var(--border-2);
   border-radius: 14px;
   background: transparent;
-  overflow: hidden;
+  /* Model and approval menus open above this frame. Clipping here made both
+     controls appear to do nothing even though their state changed. */
+  overflow: visible;
 }
 .composer.new-context { position: relative; z-index: 2; width: 100%; margin: 0; }
 .composer.new-context .composer-frame { background: var(--card); }
@@ -2495,8 +2453,8 @@ button.composer-context-item:hover { color: var(--text); }
   .task-details-trigger {
     position: absolute;
     z-index: 6;
-    top: 6px;
-    right: 16px;
+    top: calc(6px + env(safe-area-inset-top, 0px));
+    right: calc(16px + env(safe-area-inset-right, 0px));
     display: inline-flex;
   }
   .chat-header { padding-right: 118px; }
@@ -2565,7 +2523,10 @@ button.composer-context-item:hover { color: var(--text); }
   .worker-shell { display: block; min-height: 100dvh; }
   .surface { height: 100dvh; }
   .mobile-menu {
-    position: fixed; z-index: 4; top: 13px; left: 9px; display: grid; place-items: center;
+    position: fixed; z-index: 4;
+    top: calc(9px + env(safe-area-inset-top, 0px));
+    left: calc(9px + env(safe-area-inset-left, 0px));
+    display: grid; place-items: center;
     width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 9px;
     background: var(--paper); box-shadow: var(--shadow);
   }
@@ -2581,11 +2542,11 @@ button.composer-context-item:hover { color: var(--text); }
   .identity-chip small { display: none; }
   .chat-header .secondary-button { font-size: 0; }
   .chat-header .secondary-button::after { content: "◉"; font-size: 13px; }
-    .task-details-trigger {
-    flex: 0 0 40px;
-    width: 40px;
-    min-width: 40px;
-    min-height: 40px;
+  .task-details-trigger {
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 0;
     right: 14px;
     font-size: 0;

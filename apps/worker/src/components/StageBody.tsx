@@ -11,7 +11,10 @@ import {
   loadCharacter,
   type CharacterId,
 } from "../character";
-import { characterFor, type StageTurnInput } from "./characters";
+import {
+  useCharacter,
+  type StageTurnInput,
+} from "./characters";
 import type { FamiliarPresentationMode } from "./familiar/FamiliarState";
 
 // The one place that decides WHICH body is on the Stage — and it does so
@@ -86,7 +89,7 @@ export function StageBody({
   label?: string;
 }) {
   const body = useFamiliarBody();
-  const character = characterFor(body);
+  const character = useCharacter(body);
   const budgets = useBudgets(character.wantsBudgets === true);
 
   // Emotion is per-character, not per-installation. A character that does not

@@ -33,17 +33,14 @@ function BackBar({ label, onBack }: { label: string; onBack(): void }) {
   );
 }
 
-export function MobileSettings({
-  user,
-  role,
-  initials,
-  onLeave,
-}: {
+interface MobileSettingsProps {
   user: string;
   role: string;
   initials: string;
   onLeave(): void;
-}) {
+}
+
+export function MobileSettings(props: MobileSettingsProps) {
   const [open, setOpen] = useState<SettingsSection | null>(null);
   const [query, setQuery] = useState("");
 
@@ -52,22 +49,46 @@ export function MobileSettings({
     return () => { delete document.documentElement.dataset.mobileSurface; };
   }, [open]);
 
-  if (open) {
-    const entry = settingsEntry(open);
-    return (
-      <div className="mobile-surface">
-        <BackBar label="Settings" onBack={() => setOpen(null)} />
-        <div className="m-settings-body">
-          <div className="m-detail-head">
-            <span className="m-big-title">{entry.title}</span>
-            <span className="m-detail-lead">{entry.lead}</span>
-          </div>
-          <SettingsSectionPane head={false} section={open} />
-        </div>
-      </div>
-    );
-  }
+  return open
+    ? <MobileSettingsDetail onBack={() => setOpen(null)} section={open} />
+    : <MobileSettingsList {...props} onOpen={setOpen} query={query} onQuery={setQuery} />;
+}
 
+function MobileSettingsDetail({
+  onBack,
+  section,
+}: {
+  onBack(): void;
+  section: SettingsSection;
+}) {
+  const entry = settingsEntry(section);
+  return (
+    <div className="mobile-surface">
+      <BackBar label="Settings" onBack={onBack} />
+      <div className="m-settings-body">
+        <div className="m-detail-head">
+          <span className="m-big-title">{entry.title}</span>
+          <span className="m-detail-lead">{entry.lead}</span>
+        </div>
+        <SettingsSectionPane head={false} section={section} />
+      </div>
+    </div>
+  );
+}
+
+function MobileSettingsList({
+  user,
+  role,
+  initials,
+  onLeave,
+  onOpen,
+  onQuery,
+  query,
+}: MobileSettingsProps & {
+  onOpen(section: SettingsSection): void;
+  onQuery(query: string): void;
+  query: string;
+}) {
   return (
     <div className="mobile-surface">
       <BackBar label="Today" onBack={onLeave} />
@@ -90,7 +111,7 @@ export function MobileSettings({
           </svg>
           <input
             aria-label="Search every setting"
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => onQuery(event.target.value)}
             placeholder="Search every setting"
             value={query}
           />
@@ -99,15 +120,15 @@ export function MobileSettings({
         {query.trim() ? (
           <SettingsSearchResults
             onOpenSection={(section) => {
-              setQuery("");
-              setOpen(section);
+              onQuery("");
+              onOpen(section);
             }}
             query={query}
           />
         ) : (
           <div className="m-card">
             {SETTINGS_SECTIONS.map((entry) => (
-              <button className="m-settings-row" key={entry.id} onClick={() => setOpen(entry.id)} type="button">
+              <button className="m-settings-row" key={entry.id} onClick={() => onOpen(entry.id)} type="button">
                 <span className="m-settings-label">{entry.label}</span>
                 <Chevron />
               </button>
@@ -115,9 +136,6 @@ export function MobileSettings({
           </div>
         )}
 
-        <span className="m-settings-foot">
-          Every setting is one search away. Nothing is hidden, only quiet.
-        </span>
       </div>
     </div>
   );

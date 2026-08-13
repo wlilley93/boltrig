@@ -346,6 +346,13 @@ function localError(reason: unknown): string {
     return "The selected local workspace is no longer available.";
   }
   if (code.includes("local_agent_busy")) return "Another local task is already running.";
+  if (code.includes("local_agent_output_too_large")) {
+    return "The local answer exceeded this app's safe display limit.";
+  }
+  if (code.includes("local_agent_policy_mismatch")) {
+    return "The local runtime did not honor the selected approval posture.";
+  }
+  if (code.includes("local_agent_turn_failed")) return "The local agent reported a failed turn.";
   return "The local task stopped before it completed.";
 }
 

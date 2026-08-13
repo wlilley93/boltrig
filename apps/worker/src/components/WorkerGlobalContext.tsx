@@ -14,7 +14,7 @@ const CONTEXT_CHANGED_EVENT = "boltrig:worker-context-changed";
 
 type LoadStatus = "loading" | "ready" | "unavailable";
 
-interface WorkerIdentity {
+export interface WorkerIdentity {
   user: string;
   role: string | null;
   organisation: string;

@@ -83,6 +83,7 @@ export const workerCommands: Command[] = [
   { route: "channels", label: "Channels", description: "Connect external message and event channels", keywords: "webhook messaging pairing" },
   { route: "build", label: "Build", description: "Author capabilities and model endpoints", keywords: "skills mcp models tools" },
   { route: "build", routeId: "skills", label: "Skills", description: "What the agents know how to do, and where it came from", keywords: "build capabilities know-how provenance" },
+  { route: "integrations", label: "Plugins and sources", description: "Choose connected context for a task", keywords: "slash context sources plugins integrations", hint: "Plugins" },
   { route: "build", routeId: "actions", label: "Actions", description: "Every governed verb an agent can reach", keywords: "build verbs registry approval" },
   { route: "account", label: "Account", description: "Manage your profile, security, and automation", keywords: "identity auth devices keys" },
   { route: "organisation", label: "Organisation", description: "Manage workspace members and policy", keywords: "team roles directory workspace" },

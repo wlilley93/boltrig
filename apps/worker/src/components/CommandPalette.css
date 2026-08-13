@@ -145,12 +145,20 @@
 
 @media (max-width: 640px) {
   .command-backdrop[data-command-surface] {
-    padding-top: 72px;
+    padding:
+      max(72px, calc(12px + env(safe-area-inset-top, 0px)))
+      max(12px, env(safe-area-inset-right, 0px))
+      max(12px, env(safe-area-inset-bottom, 0px))
+      max(12px, env(safe-area-inset-left, 0px));
   }
 
   .command-backdrop[data-command-surface] .command-palette {
     width: min(560px, calc(100vw - 24px));
     transform: none;
+  }
+
+  .command-backdrop[data-command-surface] .command-row {
+    min-height: 44px;
   }
 }
 

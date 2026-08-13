@@ -524,7 +524,7 @@ export function DeviceSettings() {
           <div className="author-grid">
             <label><span>Opaque root label</span><input className="field-control" value={rootLabel} disabled={!selectedIsLocal || busy} onChange={(event) => setRootLabel(event.target.value)} /></label>
             <label><span>Scope</span><select className="field-control" value={rootScope} disabled={!selectedIsLocal || busy} onChange={(event) => setRootScope(event.target.value as typeof rootScope)}><option value="read">Read</option><option value="read_write">Read and write</option></select></label>
-            <label className="check-label"><input type="checkbox" checked={commands} disabled={!selectedIsLocal || busy} onChange={(event) => setCommands(event.target.checked)} />Allow command leases on this root</label>
+            <label className="check-label"><input type="checkbox" checked={commands} disabled={!selectedIsLocal || busy} onChange={(event) => setCommands(event.target.checked)} />Allow the local agent and signed command leases on this root</label>
           </div>
           <button className="primary-button" disabled={!rootLabel.trim() || !selectedIsLocal || busy} onClick={() => void createRoot()}>Register and choose local folder…</button>
           <button className={armed === `device:${device.id}` ? "danger-button armed" : "danger-button"} disabled={busy} onClick={() => void revokeDevice(device.id)}>{armed === `device:${device.id}` ? "Confirm revoke device" : "Revoke device"}</button>

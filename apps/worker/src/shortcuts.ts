@@ -42,7 +42,7 @@ export const SHORTCUTS: ShortcutDef[] = [
     label: "Search everything",
     desc: "Chats, sections and settings, from one palette",
     group: "Getting around",
-    boundIn: "App.tsx",
+    boundIn: "components/shell/useAppNavigation.ts",
     matches: (event) => command(event, "k"),
   },
   {
@@ -51,7 +51,7 @@ export const SHORTCUTS: ShortcutDef[] = [
     label: "New chat",
     desc: "Start something new. Browsers may keep this for a new window",
     group: "Getting around",
-    boundIn: "App.tsx",
+    boundIn: "components/shell/useAppNavigation.ts",
     matches: (event) => command(event, "n"),
   },
   {
@@ -60,7 +60,7 @@ export const SHORTCUTS: ShortcutDef[] = [
     label: "Send",
     desc: "Send what you have written",
     group: "In a conversation",
-    boundIn: "ChatView.tsx",
+    boundIn: "components/chat/Composer.tsx",
   },
   {
     id: "newline",
@@ -68,7 +68,7 @@ export const SHORTCUTS: ShortcutDef[] = [
     label: "New line",
     desc: "Without sending",
     group: "In a conversation",
-    boundIn: "ChatView.tsx",
+    boundIn: "components/chat/Composer.tsx",
   },
   {
     id: "close-overlay",
@@ -76,7 +76,7 @@ export const SHORTCUTS: ShortcutDef[] = [
     label: "Close what is open",
     desc: "The palette, a panel or a menu",
     group: "When something is open",
-    boundIn: "CommandPalette.tsx, ChatView.tsx, Shell.tsx",
+    boundIn: "CommandPalette.tsx, chat/TaskInspector.tsx, shell/useCompactNavigation.ts",
   },
 ];
 
