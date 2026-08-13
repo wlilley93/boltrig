@@ -14,11 +14,37 @@
   backdrop-filter: blur(22px) saturate(1.05);
 }
 
-/* The Codex rail keeps search nearly flush with the canvas; its edge is a
- * quiet separator, not the brighter generic console-input border. */
-:root[data-theme="dark"] .shell-parity .conversation-search {
-  border-color: #262626;
-  background: #171717;
+/* Pinned tasks are a real hierarchy, not merely a hidden sort key. Keep both
+ * groups in the same scrolling region so account/help remain anchored at the
+ * foot and the rail does not gain a second scrollbar. */
+.shell-task-list {
+  gap: 0;
+  padding-top: 14px;
+}
+
+.shell-task-group {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shell-task-group + .shell-task-group {
+  margin-top: 14px;
+}
+
+.shell-task-group-label {
+  margin: 0;
+  padding: 0 8px;
+  color: var(--text-4);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.shell-task-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .shell-parity .session-row {
@@ -156,5 +182,66 @@
   .shell-parity .session-row.active .session-actions,
   .shell-parity .session-actions {
     opacity: 1;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .sidebar.shell-parity {
+    background: var(--side);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .sidebar.shell-parity { background: var(--side); }
+}
+
+@media (max-width: 760px) {
+  .sidebar.shell-parity {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+@media (max-width: 640px) {
+  .shell-parity .side-top {
+    height: 52px;
+    flex-basis: 52px;
+  }
+
+  .shell-parity .side-icon-button,
+  .shell-parity .nav-row,
+  .shell-parity .side-menu-row,
+  .shell-parity .side-account,
+  .shell-parity .side-round-button,
+  .shell-parity .shell-task-list > .secondary-button {
+    min-height: 44px;
+  }
+
+  .shell-parity .side-icon-button,
+  .shell-parity .side-round-button {
+    width: 44px;
+    min-width: 44px;
+  }
+
+  .shell-parity .session-row,
+  .shell-parity .session-row .session-main {
+    height: 44px;
+    max-height: 44px;
+  }
+
+  /* Touch devices reveal both row actions, so reserve their two full targets
+     instead of letting those controls paint over the task title. */
+  .shell-parity .session-row .session-main { padding-right: 101px; }
+  .shell-parity .session-row .session-actions,
+  .shell-parity .session-row.active .session-actions {
+    top: 0;
+    right: 8px;
+  }
+
+  .shell-parity .session-action {
+    width: 44px;
+    height: 44px;
   }
 }
