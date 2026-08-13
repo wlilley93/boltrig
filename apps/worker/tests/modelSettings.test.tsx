@@ -151,6 +151,22 @@ describe("Models settings", () => {
     expect(legacyChange.getAttribute("title")).toContain("cannot be rewritten");
   });
 
+  it("labels legacy routes whose stored model name is blank without inventing one", async () => {
+    const unnamed = {
+      ...legacy,
+      id: "legacy-unnamed-route",
+      model: "",
+    };
+    api.modelEndpoints.mockResolvedValue({ endpoints: [unnamed] });
+
+    render(<ModelSettingsSection />);
+
+    const label = await screen.findByText("Model name unavailable");
+    const row = label.closest<HTMLElement>(".settings-row")!;
+    expect(label.textContent).toBe("Model name unavailable");
+    expect(within(row).getByText("Not in switcher")).toBeTruthy();
+  });
+
   it("keeps vision and voice as working modality views without exposing credentials", async () => {
     render(<ModelSettingsSection />);
     await screen.findByText(active.model);

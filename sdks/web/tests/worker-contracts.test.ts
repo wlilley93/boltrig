@@ -642,6 +642,7 @@ test("Worker parity methods stay on the canonical scoped kernel routes", async (
   await client.conversationsPage(25, 50);
   await client.searchConversations("renewal / terms", 25, 50);
   await client.login({ email: "worker@example.com", password: "not-a-real-secret" });
+  await client.sessionCsrf();
   await client.requestPasswordReset({ email: "worker@example.com" });
   await client.confirmPasswordReset({
     token: "reset-token",
@@ -720,6 +721,7 @@ test("Worker parity methods stay on the canonical scoped kernel routes", async (
     "/v1/conversations?limit=25&offset=50",
     "/v1/conversations/search?q=renewal+%2F+terms&limit=25&offset=50",
     "/v1/auth/login",
+    "/v1/auth/csrf",
     "/v1/auth/password-reset/request",
     "/v1/auth/password-reset/confirm",
     "/v1/auth/2fa/challenge",

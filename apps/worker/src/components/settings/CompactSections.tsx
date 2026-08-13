@@ -765,7 +765,7 @@ export function CompactAdvancedSection() {
               tone="danger"
             />
           )}
-          desc="Signs out this device. Other sessions stay signed in."
+          desc="Signs out this account session. Computer trust stays until you revoke it."
           title="Signed in to Boltrig"
         />
       </SettingsGroup>

@@ -17,6 +17,8 @@ _INPUTS = (
     "apps/worker/package.json",
     "apps/worker/pnpm-lock.yaml",
     "apps/worker/src/characterPlugins.ts",
+    "apps/worker/src/bundles/familiar/character.json",
+    "apps/worker/src/bundles/familiar/familiar.frag",
     "apps/worker/src/components/characters.ts",
     "apps/worker/src/main.tsx",
 )
@@ -33,6 +35,25 @@ def _public_fixture(root: Path) -> None:
 def test_public_product_template_is_byo_and_familiar_jarvis_only() -> None:
     """Keep personal deployment values and third-party companion chunks out."""
     validate()
+
+
+@pytest.mark.security
+def test_public_product_rejects_personal_or_drifting_stock_familiar(tmp_path: Path) -> None:
+    _public_fixture(tmp_path)
+    manifest = tmp_path / "apps/worker/src/bundles/familiar/character.json"
+    value = manifest.read_text(encoding="utf-8")
+    manifest.write_text(
+        value.replace("boltrig-stock:familiar", "wlilley93/beelink-desktop"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="personal or private"):
+        validate(tmp_path)
+
+    shutil.copyfile(ROOT / "apps/worker/src/bundles/familiar/character.json", manifest)
+    shader = tmp_path / "apps/worker/src/bundles/familiar/familiar.frag"
+    shader.write_text(shader.read_text(encoding="utf-8") + "\n// drift\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="digest"):
+        validate(tmp_path)
 
 
 @pytest.mark.security

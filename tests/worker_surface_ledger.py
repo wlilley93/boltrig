@@ -109,6 +109,26 @@ PUT /v1/me/approval-posture putApprovalPosture
 """,
 )
 _surface(
+    "apps/worker/src/components/settings/SensingSection.tsx",
+    """
+GET /v1/me/sensing sensing
+""",
+)
+_surface(
+    "apps/worker/src/components/settings/SensingSettingsGroups.tsx",
+    """
+PUT /v1/me/sensing/camera putSensingCamera
+PUT /v1/me/sensing/presence putSensingPresence
+DELETE /v1/me/sensing/enrollment deleteSensingEnrollment
+""",
+)
+_surface(
+    "apps/worker/src/components/StageBody.tsx",
+    """
+GET /v1/sensing/capability sensingCapability
+""",
+)
+_surface(
     "apps/worker/src/components/AccountProfileSections.tsx",
     """
 PUT /v1/me/settings putMeSettings
@@ -164,6 +184,12 @@ _surface(
     "apps/worker/src/components/auth/LoginScreen.tsx",
     """
 POST /v1/auth/login login
+""",
+)
+_surface(
+    "apps/worker/src/components/AuthGate.tsx",
+    """
+GET /v1/auth/csrf sessionCsrf
 """,
 )
 _surface(
@@ -476,10 +502,15 @@ _surface(
     "apps/worker/src/components/DeviceSettings.tsx",
     """
 GET /v1/devices devices
-POST /v1/devices/enrollment/start startDeviceEnrollment
 DELETE /v1/devices/{device_id} revokeDevice
 POST /v1/devices/{device_id}/roots createDeviceRoot
 DELETE /v1/devices/{device_id}/roots/{root_id} revokeDeviceRoot
+""",
+)
+_surface(
+    "apps/worker/src/desktopTrust.ts",
+    """
+POST /v1/devices/enrollment/start startDeviceEnrollment
 """,
 )
 _surface(
@@ -584,6 +615,8 @@ POST /v1/device-agent/{device_id}/camera-bindings
 GET /v1/device-agent/{device_id}/camera-leases
 POST /v1/device-agent/{device_id}/camera-leases/{lease_id}/claim
 POST /v1/device-agent/{device_id}/camera-leases/{lease_id}/receipt
+GET /v1/device-agent/{device_id}/sensing-config
+POST /v1/device-agent/{device_id}/sensing-enrollment
 POST /v1/device-agent/{device_id}/session/rotate
 GET /v1/hands/commands
 POST /v1/hands/commands/{cmd_id}/receipt
@@ -643,4 +676,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 }
 
 
-EXPECTED_ROUTE_COUNT = 268
+EXPECTED_ROUTE_COUNT = 276

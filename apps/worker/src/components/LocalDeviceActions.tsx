@@ -461,7 +461,7 @@ export function LocalDeviceActions({
         <p className="notice">Local file and command controls require the signed Worker desktop app. This browser cannot execute them.</p>
       )}
       {desktop && !localDevice && (
-        <p className="notice">This is not the device enrolled in the local native agent. Remote actions are view-only here.</p>
+        <p className="notice">This is not the computer connected to the local native agent. Remote actions are view-only here.</p>
       )}
       {localDevice && eligibleRoots.length === 0 && (
         <p className="notice">No locally bound root supports this action. Bind an eligible root on this device first.</p>

@@ -820,6 +820,10 @@ describe("Worker native automation authoring", () => {
       .toBeTruthy();
     expect(within(viewport).getByRole("toolbar", { name: "Routine canvas controls" }))
       .toBeTruthy();
+    expect(within(viewport).getByText(
+      "This is the saved routine. Every action still follows your access and approval rules.",
+    )).toBeTruthy();
+    expect(within(viewport).queryByText(/parents\[\]|engine walks|saved spec/i)).toBeNull();
   });
 
   it("guards a dirty new routine, restores Back focus on Cancel, and discards to the picker", async () => {

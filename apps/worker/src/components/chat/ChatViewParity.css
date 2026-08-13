@@ -74,6 +74,18 @@
   margin: 0;
 }
 
+/* Jarvis normally fills a large instrument panel and therefore carries a
+ * viewport-sized minimum height. In this compact invitation it is the same
+ * 30px identity mark as the Familiar; constrain every dimension so selecting
+ * Jarvis cannot expand the row and squeeze its copy out of view. */
+.voice-intro > .jarvis-stage {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  margin: 0;
+}
+
 /* Header values from the canonical 44px row: quiet 12.5px count and two
  * 28px actions separated by 4px. */
 .chat-header .chat-header-sub {

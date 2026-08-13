@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import type { ConversationSummary } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../../client";
+import { hasDesktopRuntime } from "../../desktop";
+import {
+  listLocalConversations,
+  restoreLocalConversation,
+} from "../../localAgentClient";
 import { shortDate } from "./format";
 import { SectionHead } from "./SectionHead";
 import { SettingsRow } from "./rowKit";
@@ -19,6 +24,11 @@ export function ArchivedSection({ head = true }: { head?: boolean }) {
   const [busy, setBusy] = useState("");
 
   async function load() {
+    if (hasDesktopRuntime()) {
+      setRows(listLocalConversations().filter((row) => row.status === "closed"));
+      setState("ready");
+      return;
+    }
     try {
       const result = await client.conversations();
       setRows((result.conversations ?? []).filter((row) => row.status === "closed"));
@@ -32,7 +42,11 @@ export function ArchivedSection({ head = true }: { head?: boolean }) {
   async function restore(id: string) {
     setBusy(id);
     try {
-      await client.restoreMyConversation(id);
+      if (hasDesktopRuntime()) {
+        if (!restoreLocalConversation(id)) throw new Error("local_restore_failed");
+      } else {
+        await client.restoreMyConversation(id);
+      }
       await load();
     } finally {
       setBusy("");

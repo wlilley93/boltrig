@@ -37,6 +37,16 @@ export const SETTINGS_INDEX: SettingsIndexRow[] = [
   { section: "you", title: "Change password" },
   { section: "you", title: "Activity and export", desc: "Your recent account activity" },
 
+  // Camera and presence — the consent surface for this computer's hardware.
+  { section: "sensing", title: "Camera", desc: "Whether this computer may watch the room at all", tech: "sensing.camera.enabled" },
+  { section: "sensing", title: "Which camera", desc: "The camera this computer's agent published", tech: "sensing.camera.binding" },
+  { section: "sensing", title: "Keep what it saw", desc: "How long frames and their observations survive", tech: "sensing.camera.retention_hours" },
+  { section: "sensing", title: "Quiet hours", desc: "When nothing is captured, whatever a character asks for", tech: "sensing.camera.quiet_hours" },
+  { section: "sensing", title: "Presence", desc: "Whether it is you in front of the camera", tech: "sensing.presence.enabled" },
+  { section: "sensing", title: "The enrolled face", desc: "Kernel data about you; forget it here", tech: "sensing.enrollment" },
+  { section: "sensing", title: "It is never included in a character bundle", desc: "Anchor images are the character's face; the enrolled face is yours" },
+  { section: "sensing", title: "What a character is told", desc: "The honest refusal a character gets when a capability is off" },
+
   // Autonomy.
   { section: "autonomy", title: "Agent tool approvals", desc: "Ask for approval, approve safe actions, or grant full access for this runtime", tech: "agentic.approval_posture" },
   { section: "autonomy", title: "Hard-stop ceilings", desc: "A ceiling without a hard stop does not halt a run" },
@@ -86,9 +96,10 @@ export const SETTINGS_INDEX: SettingsIndexRow[] = [
   // Advanced — the device view plus the kit's own switch.
   { section: "advanced", title: "Developer details", desc: "Shows the identifiers behind each row", tech: "developer_details" },
   { section: "advanced", title: "This device", desc: "Desktop app or web browser" },
-  { section: "advanced", title: "Device settings", desc: "Enrolled device controls" },
+  { section: "advanced", title: "Boltrig Desktop", desc: "Download or connect this computer" },
+  { section: "advanced", title: "Trusted computers", desc: "Revocable per-computer access" },
   { section: "advanced", title: "Desktop updates" },
-  { section: "advanced", title: "Sign out", desc: "Signs out this device" },
+  { section: "advanced", title: "Sign out", desc: "Signs out this account session" },
 
   // Archived chats.
   { section: "archived", title: "Bring back a closed chat", desc: "Restores it to the sidebar; the record never left" },

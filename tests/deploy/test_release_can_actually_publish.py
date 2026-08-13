@@ -346,6 +346,28 @@ def test_desktop_candidates_embed_the_protected_api_origin() -> None:
 
 @pytest.mark.security
 @pytest.mark.invariant("IAC-005")
+def test_full_release_bakes_only_a_reviewed_desktop_download_into_worker() -> None:
+    candidates = _WORKFLOW["jobs"]["candidates"]
+    assert candidates["env"]["RELEASE_MODE"] == (
+        "${{ needs.preflight.outputs.release-mode }}"
+    )
+    assert candidates["env"]["BOLTRIG_DESKTOP_DOWNLOAD_URL"] == (
+        "${{ vars.BOLTRIG_DESKTOP_DOWNLOAD_URL }}"
+    )
+    build = _step("candidates", "Build release candidate locally")["run"]
+    assert 'if [ "$IMAGE" = worker-ui ]' in build
+    assert 'if [ "$RELEASE_MODE" = full ]' in build
+    assert 'parsed.scheme != "https"' in build
+    assert 'parsed.username is not None' in build
+    assert '--build-arg "VITE_DESKTOP_DOWNLOAD_URL=$desktop_download_url"' in build
+
+    dockerfile = (_REPO / "apps" / "worker" / "Dockerfile").read_text()
+    assert 'ARG VITE_DESKTOP_DOWNLOAD_URL=""' in dockerfile
+    assert "ENV VITE_DESKTOP_DOWNLOAD_URL=${VITE_DESKTOP_DOWNLOAD_URL}" in dockerfile
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
 def test_release_reruns_reuse_only_the_exact_unpublished_draft() -> None:
     step = _step("preflight", "Create or reuse only the exact draft")
     run = step["run"]

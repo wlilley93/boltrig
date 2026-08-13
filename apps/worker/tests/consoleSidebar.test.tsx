@@ -28,6 +28,7 @@ vi.mock("../src/components/WorkerGlobalContext", () => ({
 }));
 
 import { Sidebar } from "../src/components/Shell";
+import { SETTINGS_SECTIONS } from "../src/settingsSections";
 import type { WorkerRoute } from "../src/routes";
 
 const shellParityCss = readFileSync(
@@ -290,7 +291,7 @@ describe("console sidebar", () => {
     );
 
     const navigation = screen.getByRole("navigation", { name: "Settings sections" });
-    expect(navigation.querySelectorAll("button")).toHaveLength(11);
+    expect(navigation.querySelectorAll("button")).toHaveLength(SETTINGS_SECTIONS.length);
     expect(container.querySelectorAll(".settings-side-head")).toHaveLength(4);
     expect(screen.getByRole("button", { name: "Archived chats" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Account menu/ })).toBeNull();

@@ -14,6 +14,7 @@ import {
   localConversationId,
   localEventToChatEvent,
   localThreadId,
+  restoreLocalConversation,
   saveLocalConversation,
   type LocalConversation,
 } from "../src/localAgentClient";
@@ -43,6 +44,9 @@ describe("desktop local-agent projection", () => {
     expect(archiveLocalConversation(conversation.id)).toBe(true);
     expect(loadLocalConversation(conversation.id)?.status).toBe("closed");
     expect(archiveLocalConversation(conversation.id)).toBe(false);
+    expect(restoreLocalConversation(conversation.id)).toBe(true);
+    expect(loadLocalConversation(conversation.id)?.status).toBe("active");
+    expect(restoreLocalConversation(conversation.id)).toBe(false);
   });
 
   it("projects only bounded transcript semantics from native events", () => {

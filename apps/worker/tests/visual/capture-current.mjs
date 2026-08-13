@@ -37,6 +37,12 @@ if (options.help) {
   process.stdout.write(helpText());
   process.exit(0);
 }
+if (options.mode !== "smoke" && options.reuseServer) {
+  throw new Error(
+    "Durable evidence cannot reuse an existing server; the capture runner must start "
+    + "the source-owned Vite process",
+  );
+}
 
 const governedStates = manifest.governed_state_ids.map((id) => {
   const state = manifest.states.find((candidate) => candidate.id === id);
@@ -268,7 +274,7 @@ function helpText() {
     + `  --evidence       Capture all seven states into the declared durable current/ evidence root.\n`
     + `  --additive-evidence  Capture every additive state into its separate source-bound current/ root.\n`
     + `  --smoke          Capture into work/visual-capture-smoke (default).\n`
-    + `  --reuse-server   Use an already-running Vite server at --origin.\n`
+    + `  --reuse-server   Use an already-running Vite server for smoke capture only.\n`
     + `  --origin URL     Override the manifest origin only; paths and queries remain declared.\n`
     + `  --playwright P   Explicit Playwright module directory or index.mjs path.\n`
     + `  --browser-executable P  Explicit Chromium/Chrome executable.\n`

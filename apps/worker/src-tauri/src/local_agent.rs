@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
@@ -31,6 +32,21 @@ const TURN_IDLE_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60);
 const MAX_PROJECTED_BYTES: usize = 2 * 1024 * 1024;
 const MAX_PROJECTED_EVENTS: usize = 10_000;
 const MAX_ACTIVE_MESSAGE_ITEMS: usize = 32;
+const SAFE_LOCAL_AGENT_ENVIRONMENT: &[&str] = &[
+    "CODEX_HOME",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "LOGNAME",
+    "PATH",
+    "SHELL",
+    "TEMP",
+    "TERM",
+    "TMP",
+    "TMPDIR",
+    "USER",
+    "USERPROFILE",
+];
 
 pub(crate) struct LocalAgentRuntime {
     active: Mutex<Option<ActiveTurn>>,
@@ -947,26 +963,24 @@ fn bundled_target() -> Result<(&'static str, &'static str, &'static str), String
 
 fn apply_safe_environment(command: &mut Command) {
     command.env_clear();
-    for key in [
-        "CODEX_HOME",
-        "HOME",
-        "LANG",
-        "LC_ALL",
-        "LOGNAME",
-        "PATH",
-        "SHELL",
-        "SSH_AUTH_SOCK",
-        "TEMP",
-        "TERM",
-        "TMP",
-        "TMPDIR",
-        "USER",
-        "USERPROFILE",
-    ] {
+    for key in SAFE_LOCAL_AGENT_ENVIRONMENT {
         if let Some(value) = std::env::var_os(key) {
-            command.env(key, value);
+            if *key == "PATH" {
+                if let Some(path) = absolute_path_entries(&value) {
+                    command.env(key, path);
+                }
+            } else {
+                command.env(key, value);
+            }
         }
     }
+}
+
+fn absolute_path_entries(value: &OsStr) -> Option<OsString> {
+    let paths = std::env::split_paths(value).filter(|path| path.is_absolute());
+    std::env::join_paths(paths)
+        .ok()
+        .filter(|value| !value.is_empty())
 }
 
 #[cfg(test)]
@@ -1025,6 +1039,33 @@ mod tests {
         assert_eq!(
             decode_posture("cloud_full_access"),
             Err("local_agent_posture_invalid".to_string())
+        );
+    }
+
+    #[test]
+    fn local_agent_environment_never_delegates_shell_or_cloud_credentials() {
+        for forbidden in [
+            "AWS_ACCESS_KEY_ID",
+            "BOLTRIG_MODEL_GATEWAY_KEY",
+            "GITHUB_TOKEN",
+            concat!("OPENAI_", "API_KEY"),
+            "SSH_AUTH_SOCK",
+        ] {
+            assert!(!SAFE_LOCAL_AGENT_ENVIRONMENT.contains(&forbidden));
+        }
+        assert!(SAFE_LOCAL_AGENT_ENVIRONMENT.contains(&"CODEX_HOME"));
+        assert!(SAFE_LOCAL_AGENT_ENVIRONMENT.contains(&"HOME"));
+        assert!(SAFE_LOCAL_AGENT_ENVIRONMENT.contains(&"PATH"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_agent_path_drops_relative_workspace_search_entries() {
+        let input = std::env::join_paths(["/usr/bin", ".", "relative/bin", "/bin"]).unwrap();
+        let filtered = absolute_path_entries(&input).unwrap();
+        assert_eq!(
+            std::env::split_paths(&filtered).collect::<Vec<_>>(),
+            vec![PathBuf::from("/usr/bin"), PathBuf::from("/bin")]
         );
     }
 

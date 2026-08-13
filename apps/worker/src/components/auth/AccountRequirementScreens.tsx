@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { client } from "../../client";
+import { client, rememberSessionCsrf } from "../../client";
 import { AuthCard } from "./AuthShell";
 
 export function ChallengeScreen({
@@ -22,7 +22,10 @@ export function ChallengeScreen({
     setError("");
     try {
       const result = await client.twoFactorChallenge({ challenge_token: token, code: code.trim() });
-      if (result.status === "ok") onDone();
+      if (result.status === "ok") {
+        rememberSessionCsrf(result.csrf_token);
+        onDone();
+      }
       else setError(result.reason ?? "That verification code was not accepted.");
     } catch {
       setError("Could not verify the code.");

@@ -10,6 +10,8 @@ from boltrig.store import audit_read_contract as audit_pages
 
 from .approval_posture import APPROVAL_POSTURE_SETTING
 from .approval_posture_routes import register_approval_posture_routes
+from .sensing_policy import SENSING_KEYS
+from .sensing_routes import register_sensing_routes
 
 
 def _register_settings_routes(app, P, K, audit, user_view) -> None:
@@ -51,6 +53,15 @@ def _register_settings_routes(app, P, K, audit, user_view) -> None:
                     "status": "error",
                     "reason": "use the approval-posture endpoint",
                 },
+                status_code=400,
+            )
+        # The sensing keys are consent about the user's own hardware, validated
+        # against published camera bindings and against whether presence has a
+        # room-calibrated threshold. A validated route that can be bypassed by
+        # writing its raw key through the generic bag is not a validated route.
+        if SENSING_KEYS & set(updates):
+            return JSONResponse(
+                {"status": "error", "reason": "use the sensing endpoints"},
                 status_code=400,
             )
         for key, value in updates.items():
@@ -189,5 +200,6 @@ def _register_regenerate_route(app, P, K, audit) -> None:
 def register_account_profile_routes(app, P, K, audit, user_view) -> None:
     _register_settings_routes(app, P, K, audit, user_view)
     register_approval_posture_routes(app, P, K, audit)
+    register_sensing_routes(app, P, K, audit)
     _register_activity_routes(app, P, K, audit)
     _register_regenerate_route(app, P, K, audit)

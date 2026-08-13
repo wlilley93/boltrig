@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from boltrig.api.doctor_backups import backup_checks
 from boltrig.api.doctor_codex import codex_release_check
+from boltrig.api.doctor_edge import edge_checks
 from boltrig.api.doctor_stack_state import stack_state_checks
 from boltrig.config.environment import is_truthy
 from boltrig.config.manifest import FleetManifest, load_manifest
@@ -319,44 +320,8 @@ def _check_auth(env: Mapping[str, str], prod: bool, checks: list[DoctorCheck]) -
 
 
 def _check_edge(env: Mapping[str, str], prod: bool, checks: list[DoctorCheck]) -> None:
-    hosts = _csv(env.get("BOLTRIG_ALLOWED_HOSTS"))
-    if prod and (not hosts or hosts == ["*"]):
-        _add(
-            checks,
-            "fail",
-            "allowed_hosts",
-            "BOLTRIG_ALLOWED_HOSTS is unset or wildcard in production mode.",
-        )
-    elif hosts:
-        _add(checks, "ok", "allowed_hosts", "Host allowlist is explicit.")
-    else:
-        _add(checks, "warn", "allowed_hosts", "BOLTRIG_ALLOWED_HOSTS is unset; dev wildcard applies.")
-
-    origins = _csv(env.get("BOLTRIG_CORS_ORIGINS"))
-    if "*" in origins:
-        _add(checks, "fail", "cors_origins", "BOLTRIG_CORS_ORIGINS contains '*'.")
-    elif origins:
-        _add(checks, "ok", "cors_origins", "Browser CORS origins are explicit.")
-    else:
-        _add(checks, "ok", "cors_origins", "CORS is same-origin by default.")
-
-    max_body = env.get("BOLTRIG_MAX_BODY_BYTES")
-    if max_body:
-        try:
-            if int(max_body) <= 0:
-                raise ValueError
-            _add(checks, "ok", "body_cap", "Request body cap is set.")
-        except ValueError:
-            _add(checks, "warn", "body_cap", "BOLTRIG_MAX_BODY_BYTES is not a positive integer.")
-
-    if prod and not env.get("BOLTRIG_DOMAIN"):
-        _add(
-            checks,
-            "warn",
-            "tls_domain",
-            "BOLTRIG_DOMAIN is unset; doctor cannot confirm secure overlay intent.",
-            "Use make secure-up or set equivalent edge TLS outside compose.",
-        )
+    for check in edge_checks(env, prod):
+        _add(checks, *check)
 
 
 # Runtime kinds that have been REMOVED from the codebase, not merely gated off.

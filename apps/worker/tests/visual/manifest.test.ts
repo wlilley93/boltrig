@@ -255,7 +255,8 @@ describe("console parity evidence manifest", () => {
       { selector: "#shell-pinned-tasks", text: "Pinned" },
       { selector: "#shell-recent-tasks", text: "Recents" },
       { selector: ".command-row:nth-child(1) .command-row-label", text: "New chat" },
-      { selector: ".command-row:nth-child(8) .command-row-label", text: "Keyboard shortcuts settings" },
+      { selector: ".command-row:nth-child(6) .command-row-label", text: "Camera and presence settings" },
+      { selector: ".command-row:nth-child(8) .command-row-label", text: "Spending settings" },
     ]));
     expect(palette!.required_absent_text).toEqual(expect.arrayContaining([
       "Governed by Boltrig",
@@ -611,6 +612,8 @@ describe("console parity evidence manifest", () => {
     expect(source).toContain("sourceDigestAfter !== sourceDigestBefore");
     expect(source).toContain("await replaceDirectory(stagingRoot, finalRoot)");
     expect(source).toContain("Evidence capture is all-or-nothing");
+    expect(source).toContain("Durable evidence cannot reuse an existing server");
+    expect(source).toContain('options.mode !== "smoke" && options.reuseServer');
     expect(source).toContain("state.current_output");
     expect(source).not.toContain("capture-manifest.json\", repoRoot");
   });

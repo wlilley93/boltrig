@@ -25,6 +25,7 @@ import {
 } from "./ModelSettingsPanels";
 import { SectionHead } from "./SectionHead";
 import {
+  modelEndpointLabel,
   supportsCatalogueModalities,
   supportsEndpointView,
   type EndpointModality,
@@ -179,8 +180,8 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
       setMessage(input.kind === "upsert"
         ? "Model saved."
         : input.kind === "retire"
-          ? `${input.endpoint.model} was retired from model routing.`
-          : `${input.endpoint.model} was restored to model routing.`);
+          ? `${modelEndpointLabel(input.endpoint)} was retired from model routing.`
+          : `${modelEndpointLabel(input.endpoint)} was restored to model routing.`);
     },
     onRefused: (result) => {
       setMessage(governedResultReason(result, "The approved model change was refused."));
@@ -409,13 +410,11 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
         setPendingRemoval(null);
       } else if (result.status === "ok") {
         setMessage(input.kind === "retire"
-          ? `${endpoint.model} was retired from model routing.`
-          : `${endpoint.model} was restored to model routing.`);
+          ? `${modelEndpointLabel(endpoint)} was retired from model routing.`
+          : `${modelEndpointLabel(endpoint)} was restored to model routing.`);
         setPendingRemoval(null);
         await refresh(false);
-      } else {
-        setMessage(governedResultReason(result, `${endpoint.model} was not changed.`));
-      }
+      } else setMessage(governedResultReason(result, `${modelEndpointLabel(endpoint)} was not changed.`));
     } catch {
       setMessage("Model lifecycle management is unavailable.");
     } finally {

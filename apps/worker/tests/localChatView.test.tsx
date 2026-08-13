@@ -48,6 +48,44 @@ afterEach(() => {
 });
 
 describe("desktop local chat", () => {
+  it("points an unbound desktop to the shipped Advanced settings section", async () => {
+    local.localAgentRoots.mockResolvedValue([]);
+    render(<LocalChatView
+      conversationId={null}
+      onChanged={vi.fn()}
+      onConversation={vi.fn()}
+    />);
+
+    const input = await screen.findByLabelText("Task instructions");
+    await waitFor(() => expect(input.getAttribute("placeholder"))
+      .toBe("Bind a local workspace in Settings → Advanced"));
+    expect(screen.getByText(
+      "Bind a read/write workspace with local commands enabled in Settings → Advanced.",
+    )).toBeTruthy();
+  });
+
+  it("states a known missing local runtime instead of appearing to load forever", async () => {
+    local.localAgentStatus.mockResolvedValue({
+      runtime: "local",
+      state: "unavailable",
+      source: null,
+      version: null,
+      active: false,
+      reason: "local_agent_binary_not_bundled",
+    });
+    render(<LocalChatView
+      conversationId={null}
+      onChanged={vi.fn()}
+      onConversation={vi.fn()}
+    />);
+
+    const input = await screen.findByLabelText("Task instructions");
+    await waitFor(() => expect(input.getAttribute("placeholder"))
+      .toBe("Local Codex is not included in this development build"));
+    expect((input as HTMLTextAreaElement).disabled).toBe(true);
+    expect(screen.queryByPlaceholderText("Loading conversation state…")).toBeNull();
+  });
+
   it("adopts a new local route only after its entire first answer settles", async () => {
     let finish!: () => void;
     local.runLocalAgentTurn.mockImplementation(async (_input, onEvent) => {

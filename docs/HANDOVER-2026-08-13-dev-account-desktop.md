@@ -136,7 +136,9 @@ The hosted browser was signed in with a disposable member account and verified:
 - private shell rendering;
 - no duplicate Recents search or workspace label;
 - Models settings with Text LLM, Vision, and Voice views;
-- no browser-side provider key input;
+- no browser-side Bifrost provider-key input; Account → Access separately
+  exposes the one-shot envelope-sealed legacy provider-native intake described
+  below;
 - truthful unavailable Bifrost catalogue when no provider is configured;
 - truthful plugin availability;
 - author-only Agents access denied to a member;

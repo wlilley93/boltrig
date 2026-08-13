@@ -16,10 +16,10 @@ or the session secret (D8, K-20).
 
 from __future__ import annotations
 
-
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 
+from boltrig.api import desktop_session_auth
 from boltrig.config import load_settings
 from boltrig.identity import (
     CSRF_COOKIE,
@@ -33,10 +33,8 @@ from boltrig.identity import (
     verify_dummy,
     verify_password,
 )
-from boltrig.api.auth_password_routes import register_password_routes
 from boltrig.identity.invites import hash_invite_token
 from boltrig.identity.passwords import WeakPassword
-from boltrig.identity.sessions import SESSION_TTL_HOURS
 from boltrig.kernel.web_security import client_ip as _client_ip
 from boltrig.identity.totp import (
     CHALLENGE_TTL,
@@ -194,23 +192,22 @@ async def _seat_invitee(k, inv, email: str) -> dict:
     return summary
 
 
-def _set_session_cookies(resp: JSONResponse, secret: str, csrf: str) -> None:
+def _set_session_cookies(
+    resp: JSONResponse,
+    secret: str,
+    csrf: str,
+    *,
+    request: Request | None = None,
+) -> None:
     """Set the httpOnly+Secure+SameSite session cookie and the readable CSRF cookie.
 
     The session cookie is httpOnly (JS cannot read it), Secure (HTTPS only) and
-    SameSite=Strict (never sent on a cross-site request) - so it is not exposed to
-    XSS exfiltration or CSRF (D6). The CSRF cookie is deliberately readable by JS so
-    the SPA can echo it in the X-Boltrig-CSRF header (the double-submit half).
+    SameSite=Strict for the hosted web app. An explicitly CORS-allowlisted
+    packaged Tauri origin receives SameSite=None; CSRF remains mandatory.
     """
     secure = _cookie_secure()
-    max_age = SESSION_TTL_HOURS * 3600
-    resp.set_cookie(
-        SESSION_COOKIE, secret, max_age=max_age, httponly=True, secure=secure,
-        samesite="strict", path="/",
-    )
-    resp.set_cookie(
-        CSRF_COOKIE, csrf, max_age=max_age, httponly=False, secure=secure,
-        samesite="strict", path="/",
+    desktop_session_auth.set_session_cookies(
+        resp, secret, csrf, secure=secure, request=request,
     )
 
 
@@ -249,7 +246,8 @@ async def _mint_web_session(k, tenant: str, user: User):
     return session, secret, csrf
 
 
-def _session_response(secret: str, csrf: str, user: User, *, status: str = "ok",
+def _session_response(secret: str, csrf: str, user: User, *,
+                      request: Request | None = None, status: str = "ok",
                       extra: dict | None = None) -> JSONResponse:
     """The login/challenge success envelope + the session cookies. ``status`` is
     "ok" for a fully-authenticated session, "2fa_enrollment_required" for an org-
@@ -263,7 +261,7 @@ def _session_response(secret: str, csrf: str, user: User, *, status: str = "ok",
     if extra:
         body.update(extra)
     resp = JSONResponse(body)
-    _set_session_cookies(resp, secret, csrf)
+    _set_session_cookies(resp, secret, csrf, request=request)
     return resp
 
 
@@ -312,8 +310,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
     K = Depends(get_kernel)
     P = Depends(principal_dep)
 
-    # The rotation surface lives in its own module (see auth_password_routes).
-    register_password_routes(app, principal_dep=principal_dep, get_kernel=get_kernel)
+    desktop_session_auth.register_auth_support_routes(app, principal_dep, get_kernel)
 
     @app.post("/v1/auth/accept-invite")
     async def accept_invite(body: dict, k=K) -> JSONResponse:
@@ -396,7 +393,6 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         password = password if isinstance(password, str) else ""
         tenant = _console_tenant()
         set_current_tenant(tenant)
-
         # Behind the Cloudflare tunnel the TCP peer is the tunnel/loopback, so a
         # per-IP bound keyed on it collapses to ONE global bucket (a login-DoS
         # lever and useless anti-spray). The shared helper honors CF's
@@ -470,7 +466,8 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
             _, secret, csrf = await _mint_web_session(k, tenant, user)
             await _audit(k, tenant, user.id, "auth.login",
                          {"outcome": "2fa_enrollment_required"})
-            return _session_response(secret, csrf, user, status="2fa_enrollment_required")
+            return _session_response(secret, csrf, user, request=request,
+                                     status="2fa_enrollment_required")
 
         # No second factor due: a plain session, exactly as before (backward-compat).
         session, secret, csrf = await _mint_web_session(k, tenant, user)
@@ -481,7 +478,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         # a console route straight to the rotation screen rather than discover the
         # clamp by being refused. Same shape as 2fa_enrollment_required above.
         clamped = "password_change_required" if user.must_change_password else "ok"
-        return _session_response(secret, csrf, user, status=clamped)
+        return _session_response(secret, csrf, user, request=request, status=clamped)
 
     @app.post("/v1/auth/logout")
     async def logout(request: Request, k=K, p=P) -> JSONResponse:
@@ -542,7 +539,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         await _audit(k, p.tenant_id, p.subject, "auth.session.rotate",
                      {"session_id": session.id})
         resp = JSONResponse({"status": "ok", "csrf_token": csrf})
-        _set_session_cookies(resp, secret, csrf)
+        _set_session_cookies(resp, secret, csrf, request=request)
         return resp
 
     # === TOTP two-factor ([2026] VJS-COUNTY 10) ==============================
@@ -757,7 +754,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
             remaining = await k.store.count_active_recovery_codes(tenant, user.id)
             await _audit(k, tenant, user.id, "auth.2fa.recovery_used",
                          {"outcome": "consumed", "recovery_codes_remaining": remaining})
-        return _session_response(secret_cookie, csrf, user)
+        return _session_response(secret_cookie, csrf, user, request=request)
 
     @app.post("/v1/auth/2fa/disable")
     async def two_factor_disable(body: dict, request: Request, k=K, p=P) -> JSONResponse:

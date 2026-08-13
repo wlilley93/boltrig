@@ -46,20 +46,20 @@ const SOURCE_LABELS: Record<FederatedSearchSource, string> = {
 };
 
 export const workerCommands: Command[] = [
-  // The first four entries mirror the console rail. Deeper operational
-  // destinations remain searchable below them rather than displacing the
-  // task-first vocabulary at the top of an empty palette.
+  // The first four entries mirror the console rail; deeper destinations remain
+  // searchable without displacing the task-first vocabulary in an empty palette.
   { route: "chat", label: "New chat", description: "Start something new", keywords: "new task chat codex voice call", hint: "Go" },
   { route: "agents", label: "Agents", description: "Configure governed Codex worker profiles", keywords: "subagents profiles familiar runtime" },
   { route: "integrations", label: "Plugins", description: "Manage provider connections", keywords: "integrations connectors oauth external plugin" },
   { route: "automations", label: "Routines", description: "Author workflows, DAGs, triggers, and schedules", keywords: "automations hatchet workflow cron webhook routine" },
-
   // Every settings destination in the downloaded target is directly
   // addressable by the current hash router, so the palette exposes the same
   // one-search-away catalogue without inventing controls or state.
   { route: "settings", routeId: "you", label: "You settings", description: "Appearance, voice and personal preferences", keywords: "theme identity profile", hint: "Settings" },
+  { route: "settings", routeId: "sensing", label: "Camera and presence settings", description: "Review camera, retention, and presence consent", keywords: "camera presence sensing privacy retention", hint: "Settings" },
   { route: "settings", routeId: "autonomy", label: "Autonomy settings", description: "Review what stops and governs work", keywords: "approval permissions posture", hint: "Settings" },
   { route: "settings", routeId: "spend", label: "Spending settings", description: "Review cost and budget ceilings", keywords: "budget cost money", hint: "Settings" },
+  { route: "settings", routeId: "models", label: "Models settings", description: "Choose the exact models boltrig may use", keywords: "bifrost llm text vision voice routes", hint: "Settings" },
   { route: "settings", routeId: "shortcuts", label: "Keyboard shortcuts settings", description: "See the shortcuts this build actually binds", keywords: "keys commands keyboard", hint: "Settings" },
   { route: "settings", routeId: "knowledge", label: "Knowledge settings", description: "Review governed sources and storage", keywords: "files citations storage", hint: "Settings" },
   { route: "settings", routeId: "overnight", label: "Overnight settings", description: "Inspect overnight practice and gates", keywords: "practice improve nightly", hint: "Settings" },

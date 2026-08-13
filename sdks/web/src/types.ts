@@ -3203,6 +3203,129 @@ export interface PutApprovalPostureRequest {
   confirm?: "full_access";
 }
 
+// --- Camera and presence -----------------------------------------------------
+// First-class Boltrig SERVICES, not a character's private daemons
+// (docs/SPEC-character-bundle.md). The user owns the switch; a bundle only ever
+// declares that it would like the capability and is refused honestly when it is
+// off. Every reason code below is one the kernel actually emits — with the one
+// marked exception, which by construction it cannot — so the Worker can render
+// an absent capability rather than inventing a substitute for it.
+
+export type SensingCapability = "camera_observations" | "presence";
+
+export type SensingRefusalReason =
+  | "camera_disabled"
+  | "camera_not_bound"
+  | "camera_device_missing"
+  | "camera_paused_quiet_hours"
+  | "camera_paused_dark"
+  | "camera_paused_gesture"
+  /** The interlock's own string, reused verbatim rather than given a synonym. */
+  | "camerad_holds_device"
+  | "presence_disabled"
+  | "presence_not_enrolled"
+  | "presence_not_calibrated"
+  /**
+   * A capability name this Boltrig does not offer at all. It is NOT "the
+   * character never asked for this one" — see the note below the union; the
+   * kernel is never told which character is asking and cannot make that claim.
+   */
+  | "capability_unknown"
+  /**
+   * The one client-originated code, and the only one the kernel can never emit:
+   * a kernel that answers is by definition reachable. The caller synthesises it
+   * when the ask fails or the route is unknown to this build, because being
+   * unable to ask is not consent — but it is also not a switch the user moved,
+   * so it must not borrow `camera_disabled`.
+   */
+  | "kernel_unreachable";
+
+/**
+ * `capability_not_declared` is DELIBERATELY ABSENT, and was removed on
+ * 2026-08-13 rather than left as decoration.
+ *
+ * The kernel sent it for any name outside its capability set, which reads as
+ * "this character did not declare that" — an enforcement NO LAYER PERFORMS.
+ * `GET /v1/sensing/capability` carries the user's session and no character
+ * identity, so the kernel cannot tell one caller from another. Declaration is
+ * honoured only by the Stage, which asks for exactly what `wantsSensing` lists;
+ * anything calling `client.sensingCapability` directly bypasses that. A wire
+ * code asserting a check nobody runs is the kind of thing a later reader builds
+ * on. `capability_unknown` says only what is actually known.
+ */
+
+/** A correct answer, never a fault: `refused` rather than `error`. */
+export interface SensingCapabilityDecision {
+  status: "granted" | "refused";
+  capability: string;
+  reason?: SensingRefusalReason;
+  detail?: string;
+  /**
+   * What changes the answer. `settings:sensing` is a place the user goes;
+   * `retry:automatic` is the honest remedy for an unreachable kernel — there is
+   * nowhere to go, the caller re-asks on its own cadence.
+   */
+  remedy?: "settings:sensing" | "retry:automatic";
+}
+
+export interface SensingCameraBinding {
+  camera_id: string;
+  device_id: string;
+  descriptor_fingerprint?: string;
+  label?: string;
+}
+
+export interface SensingCameraSettings {
+  enabled: boolean;
+  source: "safe_default" | "user_override";
+  binding: SensingCameraBinding | null;
+  retention_hours: number;
+  quiet_hours: { start: number; end: number };
+}
+
+export interface SensingPresenceSettings {
+  enabled: boolean;
+  source: "safe_default" | "user_override";
+  /** Why presence cannot be turned on, stated rather than left as a dead toggle. */
+  blocked_by?: SensingRefusalReason | null;
+}
+
+/**
+ * The enrolled face, described but never disclosed. It is the USER's biometrics,
+ * so `exportable` is a constant `false` rather than a preference: anchor images
+ * are the character's face and travel with a bundle; this never does.
+ */
+export interface SensingEnrollmentView {
+  present: boolean;
+  count: number;
+  threshold: number | null;
+  /** Honest: the false-accept rate has not been measured on this enrolment. */
+  far_measured: boolean;
+  exportable: false;
+}
+
+export interface SensingResponse {
+  status?: "ok";
+  camera: SensingCameraSettings;
+  presence: SensingPresenceSettings;
+  enrollment: SensingEnrollmentView;
+  capabilities: SensingCapabilityDecision[];
+  reason?: string;
+}
+
+export interface PutSensingCameraRequest {
+  enabled?: boolean;
+  /** `null` clears the binding; a camera the agent never published is refused. */
+  camera_id?: string | null;
+  device_id?: string;
+  retention_hours?: number;
+  quiet_hours?: { start: number; end: number };
+}
+
+export interface PutSensingPresenceRequest {
+  enabled: boolean;
+}
+
 export interface ActivityRow {
   seq: number;
   ts: string | null;
@@ -3709,6 +3832,12 @@ export interface LoginResponse {
   user?: AuthUser;
   reason?: string;
   challenge_token?: string;
+}
+
+export interface SessionCsrfResponse {
+  status: string;
+  csrf_token?: string;
+  reason?: string;
 }
 
 // The follow-up second-factor verification that issues the session withheld by

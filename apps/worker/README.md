@@ -20,13 +20,15 @@ cd ../../apps/worker && pnpm install --frozen-lockfile
 BOLTRIG_KERNEL_URL=http://localhost:8000 pnpm dev
 ```
 
-`pnpm tauri dev` opens the same build in the desktop shell. Desktop device
-sessions live in the OS keychain and are bound to the exact configured API
-origin; legacy unbound entries require re-enrollment rather than being returned
-to a different origin. They belong only to the background device agent:
-interactive browser and desktop requests use the httpOnly user-session cookie,
-and the sign-in screen can clear unreadable local enrollment without requiring
-that cookie. Artifact materialisation accepts only bytes already
+`pnpm tauri dev` opens the same build in the desktop shell. Account sign-in is
+the front door in both browser and desktop. After authenticated startup, a new
+desktop automatically bootstraps its revocable computer key; there is no code
+or handoff bundle to copy. Device sessions live in the OS keychain and are
+bound to the exact configured API origin. An unreadable key, or a key belonging
+to a different/revoked account, requires explicit replacement. The device key
+belongs only to the background/local-computer boundary: interactive browser and
+desktop requests continue to use the httpOnly user-session cookie. Artifact
+materialisation accepts only bytes already
 downloaded through the authorized artifact endpoint and always asks the user
 for a destination. Cancelling that dialog writes nothing and does not start a
 browser download. The main webview has no direct dialog permission, so the
@@ -39,6 +41,11 @@ The Worker is the only first-party browser surface:
 docker compose up -d worker-ui
 # Worker: http://localhost:8082/
 ```
+
+Set `BOLTRIG_DESKTOP_DOWNLOAD_URL` to a reviewed HTTPS distribution page when
+building the web image if authenticated users should see **Download Boltrig
+Desktop**. An empty, invalid, credential-bearing, or HTTP value renders an
+honest unavailable state and never becomes a link.
 
 For live voice, configure one enabled `voice` channel in Channels, issue its
 show-once channel-scoped gateway token from the channel detail, place it in the

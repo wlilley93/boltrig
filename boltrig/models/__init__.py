@@ -178,6 +178,7 @@ from .errors import (
     PendingHuman as PendingHuman,
     RateLimited as RateLimited,
     SchemaValidationError as SchemaValidationError,
+    SensingCapabilityUnavailable as SensingCapabilityUnavailable,
     SensitiveDataMisrouted as SensitiveDataMisrouted,
     SpawnRulePolicyInvalid as SpawnRulePolicyInvalid,
     TenantIsolation as TenantIsolation,

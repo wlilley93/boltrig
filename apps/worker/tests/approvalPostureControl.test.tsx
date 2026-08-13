@@ -115,6 +115,21 @@ describe("agent tool approval posture", () => {
     expect(api.putApprovalPosture).not.toHaveBeenCalled();
   });
 
+  it("does not offer cloud posture mutations when the current posture is unavailable", async () => {
+    api.approvalPosture.mockRejectedValue(new Error("unavailable"));
+    render(<ApprovalPostureMenu />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Policy" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Approval posture is unavailable.",
+    );
+    for (const option of screen.getAllByRole("radio")) {
+      expect(option.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(option);
+    }
+    expect(api.putApprovalPosture).not.toHaveBeenCalled();
+  });
+
   it("does not let a late initial read overwrite a confirmed change", async () => {
     let resolveRead!: (value: unknown) => void;
     api.approvalPosture.mockReturnValue(new Promise((resolve) => { resolveRead = resolve; }));

@@ -8,6 +8,12 @@ export type ModelReferences = {
 export type ModelView = "text" | "vision" | "voice";
 export type EndpointModality = "text" | "vision" | "stt" | "tts" | "realtime";
 
+export function modelEndpointLabel(
+  endpoint: Pick<ModelEndpointInfo, "model">,
+): string {
+  return endpoint.model.trim() || "Model name unavailable";
+}
+
 export function supportsCatalogueModality(model: BifrostModelView, view: ModelView): boolean {
   const modalities = model.input_modalities ?? [];
   if (view === "text") return modalities.includes("text");

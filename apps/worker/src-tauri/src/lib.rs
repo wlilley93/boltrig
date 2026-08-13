@@ -7,6 +7,7 @@
 
 mod camera_discovery;
 mod camera_protocol;
+mod desktop_account;
 mod desktop_oauth;
 mod desktop_updater;
 mod device_agent;
@@ -18,12 +19,56 @@ mod materialized;
 mod session;
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use materialized::MaterializedArtifacts;
+
+#[tauri::command]
+async fn desktop_account_login(
+    app: tauri::AppHandle,
+    email: String,
+    password: String,
+) -> Result<desktop_account::AccountResponse, String> {
+    desktop_account::login(&app, email, password).await
+}
+
+#[tauri::command]
+async fn desktop_account_challenge(
+    app: tauri::AppHandle,
+    challenge_token: String,
+    code: String,
+) -> Result<desktop_account::AccountResponse, String> {
+    desktop_account::challenge(&app, challenge_token, code).await
+}
+
+#[tauri::command]
+async fn desktop_account_refresh(
+    app: tauri::AppHandle,
+) -> Result<desktop_account::AccountResponse, String> {
+    desktop_account::refresh(&app).await
+}
+
+#[tauri::command]
+async fn desktop_account_logout(
+    app: tauri::AppHandle,
+) -> Result<desktop_account::AccountResponse, String> {
+    desktop_account::logout(&app).await
+}
+
+#[tauri::command]
+async fn desktop_api_request(
+    app: tauri::AppHandle,
+    method: String,
+    path: String,
+    headers: Vec<(String, String)>,
+    body: Vec<u8>,
+) -> Result<tauri::ipc::Response, String> {
+    desktop_account::api_request(&app, method, path, headers, body).await
+}
 
 #[tauri::command]
 fn camera_discover(
@@ -75,6 +120,7 @@ async fn complete_device_enrollment(
     authorization_code: String,
     expected_verifier: session::LeaseVerifier,
 ) -> Result<device_agent::EnrollmentView, String> {
+    let api_origin = desktop_account::require_configured_origin(&api_origin)?;
     device_agent::complete_enrollment(
         &app,
         &runtime,
@@ -94,8 +140,17 @@ async fn clear_device_session(
 }
 
 #[tauri::command]
-fn device_agent_status() -> Result<device_agent::AgentStatus, String> {
-    device_agent::status()
+async fn device_agent_status() -> Result<device_agent::AgentStatus, String> {
+    // macOS may ask the user to re-authorize Keychain access after an app
+    // update. Never perform that synchronous Security.framework call on the
+    // Tauri event loop: the authorization sheet itself needs the event loop.
+    tokio::time::timeout(
+        Duration::from_secs(15),
+        tauri::async_runtime::spawn_blocking(device_agent::status),
+    )
+    .await
+    .map_err(|_| "device_agent_status_timeout".to_string())?
+    .map_err(|_| "device_agent_status_unavailable".to_string())?
 }
 
 #[tauri::command]
@@ -354,6 +409,11 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             complete_device_enrollment,
+            desktop_account_login,
+            desktop_account_challenge,
+            desktop_account_refresh,
+            desktop_account_logout,
+            desktop_api_request,
             clear_device_session,
             device_agent_status,
             camera_discover,

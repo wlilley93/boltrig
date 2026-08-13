@@ -96,6 +96,10 @@ import type {
   HitlPolicyResponse,
   ApprovalPostureResponse,
   PutApprovalPostureRequest,
+  PutSensingCameraRequest,
+  PutSensingPresenceRequest,
+  SensingCapabilityDecision,
+  SensingResponse,
   PrivacyPolicyResponse,
   BackupStatusResponse,
   IntegrationCatalogueResponse,
@@ -180,6 +184,7 @@ import type {
   SetAiKeyRequest,
   SetAiKeyResponse,
   SessionsResponse,
+  SessionCsrfResponse,
   SetBindingRequest,
   SkillsResponse,
   SkillResponse,
@@ -575,6 +580,40 @@ export class BoltrigClient {
 
   putApprovalPosture(body: PutApprovalPostureRequest): Promise<ApprovalPostureResponse> {
     return this.json("/v1/me/approval-posture", "PUT", body, true);
+  }
+
+  // --- Camera and presence ---------------------------------------------------
+  // The camera is a Boltrig SERVICE with a UI, not a companion's private daemon.
+  // These four are the consent surface; the fifth is what a CHARACTER gets when
+  // it asks, and it answers with a reason rather than throwing.
+
+  sensing(): Promise<SensingResponse> {
+    return this.request("/v1/me/sensing");
+  }
+
+  putSensingCamera(body: PutSensingCameraRequest): Promise<SensingResponse> {
+    return this.json("/v1/me/sensing/camera", "PUT", body, true);
+  }
+
+  putSensingPresence(body: PutSensingPresenceRequest): Promise<SensingResponse> {
+    return this.json("/v1/me/sensing/presence", "PUT", body, true);
+  }
+
+  deleteSensingEnrollment(): Promise<SensingResponse> {
+    return this.json("/v1/me/sensing/enrollment", "DELETE", undefined, true);
+  }
+
+  /**
+   * What a character asking for this capability RIGHT NOW is told. Checked at
+   * use and never cached: a cached grant would keep a character watching after
+   * the user moved the toggle. `tolerateStatus` is on because a refusal is a
+   * 409 the caller must read, not an exception it must catch.
+   */
+  sensingCapability(capability: string): Promise<SensingCapabilityDecision> {
+    return this.request(
+      `/v1/sensing/capability?capability=${encodeURIComponent(capability)}`,
+      { tolerateStatus: true },
+    );
   }
 
   meActivity(params: { limit?: number; offset?: number } = {}): Promise<MeActivityResponse> {
@@ -1083,6 +1122,10 @@ export class BoltrigClient {
 
   login(body: LoginRequest): Promise<LoginResponse> {
     return this.json("/v1/auth/login", "POST", body, true);
+  }
+
+  sessionCsrf(): Promise<SessionCsrfResponse> {
+    return this.request("/v1/auth/csrf");
   }
 
   requestPasswordReset(

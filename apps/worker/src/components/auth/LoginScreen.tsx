@@ -1,7 +1,7 @@
 import { useState } from "react";
 
-import { client } from "../../client";
-import { clearDesktopSession, isDesktop } from "../../desktop";
+import { client, rememberSessionCsrf } from "../../client";
+import { isDesktop } from "../../desktop";
 import { AuthCard } from "./AuthShell";
 import type { GateState } from "./types";
 
@@ -24,6 +24,7 @@ export function LoginScreen({ onChallenge, onState, onForgot }: LoginScreenProps
     setError("");
     try {
       const result = await client.login({ email: email.trim(), password });
+      if (result.csrf_token) rememberSessionCsrf(result.csrf_token);
       if (result.status === "ok") return onState("authenticated");
       if (result.status === "2fa_required" && result.challenge_token) {
         return onChallenge(result.challenge_token);
@@ -44,7 +45,7 @@ export function LoginScreen({ onChallenge, onState, onForgot }: LoginScreenProps
     <AuthCard
       title="Welcome back"
       lead={isDesktop
-        ? "Sign in to this Worker desktop session."
+        ? "Sign in to your Boltrig account. This desktop connects to it after authentication."
         : "Sign in to your Boltrig workspace."}
     >
       <form className="auth-form" onSubmit={submit}>
@@ -58,57 +59,7 @@ export function LoginScreen({ onChallenge, onState, onForgot }: LoginScreenProps
           Forgot password?
         </button>
       </div>
-      {isDesktop && <DesktopEnrollmentReset />}
       <p className="auth-foot">Boltrig is invite only. Permanent provider and integration credentials never enter this client.</p>
     </AuthCard>
-  );
-}
-
-function DesktopEnrollmentReset() {
-  const [armed, setArmed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-
-  async function reset() {
-    if (!armed) {
-      setArmed(true);
-      setMessage(
-        "This removes the device-agent identity and local root bindings from this computer. It does not revoke the server device or change your browser sign-in.",
-      );
-      return;
-    }
-    if (busy) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      await clearDesktopSession();
-      setArmed(false);
-      setMessage("Local device enrollment was removed. Your browser sign-in was not changed.");
-    } catch {
-      setMessage(
-        "Local device enrollment could not be removed from the OS keychain. It is safe to retry.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="auth-handoff">
-      <p>Having trouble with this desktop’s local device enrollment?</p>
-      <button
-        type="button"
-        className={armed ? "danger-button armed" : "secondary-button"}
-        disabled={busy}
-        onClick={() => void reset()}
-      >
-        {busy
-          ? "Removing local enrollment…"
-          : armed
-            ? "Confirm local enrollment reset"
-            : "Reset local device enrollment"}
-      </button>
-      {message && <p className="muted small" role={armed ? "alert" : "status"}>{message}</p>}
-    </div>
   );
 }

@@ -57,8 +57,12 @@ async def _seat_owner(store):
     await store.set_password_credential(T, OWNER, hash_password(OWNER_PW))
 
 
-def _login(client, email, password):
-    return client.post("/v1/auth/login", json={"email": email, "password": password})
+def _login(client, email, password, *, headers=None):
+    return client.post(
+        "/v1/auth/login",
+        json={"email": email, "password": password},
+        headers=headers,
+    )
 
 
 def _set_cookies_insecure(monkeypatch):
@@ -272,18 +276,45 @@ def test_session_cookie_is_httponly_secure_bounded_and_revocable(monkeypatch):
     assert "samesite=strict" in low
     assert "max-age=" in low  # bounded lifetime
 
+    # A packaged desktop is cross-site by construction. Only a built-in Tauri
+    # origin that the deployment also placed in its explicit CORS allowlist gets
+    # SameSite=None; the ordinary hosted-browser assertion above stays Strict.
+    monkeypatch.setenv(
+        "BOLTRIG_CORS_ORIGINS",
+        "https://app.example.test,tauri://localhost",
+    )
+    _, desktop_app, desktop_store = _app()
+    _run(_seat_owner(desktop_store))
+    desktop_login = _login(
+        TestClient(desktop_app),
+        OWNER,
+        OWNER_PW,
+        headers={"origin": "tauri://localhost"},
+    )
+    desktop_cookies = [
+        value
+        for key, value in desktop_login.headers.multi_items()
+        if key.lower() == "set-cookie"
+    ]
+    assert desktop_cookies
+    assert all("samesite=none" in value.lower() for value in desktop_cookies)
+
     # The stored session is bounded (expires_at in the future) and revocable.
     monkeypatch.setenv("BOLTRIG_SESSION_COOKIE_SECURE", "0")
     _, app2, store2 = _app()
     _run(_seat_owner(store2))
     c = TestClient(app2)
-    assert _login(c, OWNER, OWNER_PW).status_code == 200
+    login = _login(c, OWNER, OWNER_PW)
+    assert login.status_code == 200
+    csrf = login.json()["csrf_token"]
     sessions = _run(store2.list_sessions(T, OWNER))
     assert len(sessions) == 1 and sessions[0].expires_at is not None
     assert sessions[0].expires_at > utcnow()
     # Authenticated before logout, denied after (the session is revoked in-store).
     assert c.get("/v1/me/sessions").status_code == 200
-    csrf = _login(c, OWNER, OWNER_PW).json()["csrf_token"]
+    csrf_recovery = c.get("/v1/auth/csrf")
+    assert csrf_recovery.status_code == 200
+    assert csrf_recovery.json() == {"status": "ok", "csrf_token": csrf}
     assert c.post("/v1/auth/logout", headers={"x-boltrig-csrf": csrf}).status_code == 200
     assert c.get("/v1/me/sessions").status_code == 401
 

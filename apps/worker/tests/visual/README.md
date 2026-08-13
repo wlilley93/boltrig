@@ -52,13 +52,14 @@ node apps/worker/tests/visual/capture-current.mjs \
 ```
 
 After production and harness source have stopped changing, capture all seven
-governed states to the durable, unreviewed current-source directory:
+governed states to the durable, unreviewed current-source directory. Durable
+capture always starts and stops its own Vite process; `--reuse-server` is
+intentionally rejected so another checkout or stale dev process cannot be
+promoted as current-source evidence:
 
 ```sh
 node apps/worker/tests/visual/capture-current.mjs \
   --evidence \
-  --reuse-server \
-  --origin http://127.0.0.1:1420 \
   --timeout-ms 45000
 ```
 
@@ -78,8 +79,6 @@ Capture the additive desktop-chat direction independently:
 ```sh
 node apps/worker/tests/visual/capture-current.mjs \
   --additive-evidence \
-  --reuse-server \
-  --origin http://127.0.0.1:1420 \
   --timeout-ms 45000
 ```
 

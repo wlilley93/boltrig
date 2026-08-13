@@ -302,10 +302,14 @@ describe("console chat surface", () => {
     });
     const send = screen.getByRole("button", { name: "Send ↑" }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
+    expect(send.title).toBe("The model gateway is unavailable.");
     fireEvent.click(send);
     expect(api.streamChat).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    const automaticOption = screen.getAllByRole("option")[0]!;
+    expect(within(automaticOption).getByText("Unavailable").title)
+      .toBe("The model gateway is unavailable.");
     fireEvent.click(screen.getByRole("option", {
       name: "anthropic/claude-sonnet-4-5",
     }));

@@ -518,9 +518,9 @@
         "Plugins",
         "Routines",
         "You settings",
+        "Camera and presence settings",
         "Autonomy settings",
-        "Spending settings",
-        "Keyboard shortcuts settings"
+        "Spending settings"
       ],
       "required_exact_text": [
         { "selector": "#shell-pinned-tasks", "text": "Pinned" },
@@ -531,9 +531,9 @@
         { "selector": ".command-row:nth-child(3) .command-row-label", "text": "Plugins" },
         { "selector": ".command-row:nth-child(4) .command-row-label", "text": "Routines" },
         { "selector": ".command-row:nth-child(5) .command-row-label", "text": "You settings" },
-        { "selector": ".command-row:nth-child(6) .command-row-label", "text": "Autonomy settings" },
-        { "selector": ".command-row:nth-child(7) .command-row-label", "text": "Spending settings" },
-        { "selector": ".command-row:nth-child(8) .command-row-label", "text": "Keyboard shortcuts settings" }
+        { "selector": ".command-row:nth-child(6) .command-row-label", "text": "Camera and presence settings" },
+        { "selector": ".command-row:nth-child(7) .command-row-label", "text": "Autonomy settings" },
+        { "selector": ".command-row:nth-child(8) .command-row-label", "text": "Spending settings" }
       ],
       "required_absent_text": [
         "Governed by Boltrig",

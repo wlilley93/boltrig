@@ -1,4 +1,4 @@
-// The settings surface the decided target draws: eleven sections under four heads.
+// The settings surface the decided target draws: twelve sections under four heads.
 // Operations remains a valid deep-linked pane for the workspace home, but it
 // is deliberately not a settings-navigation entry in the canonical console,
 // whose nav replaces the app sidebar while Settings is open.
@@ -9,6 +9,7 @@
 
 export type SettingsSection =
   | "you"
+  | "sensing"
   | "autonomy"
   | "spend"
   | "models"
@@ -44,6 +45,16 @@ export const SETTINGS_SECTIONS: SettingsEntry[] = [
     head: "You",
     title: "You",
     lead: "How boltrig looks, speaks and reaches you.",
+  },
+  {
+    // A top-level section rather than a card under Advanced, deliberately.
+    // Advanced is device plumbing and developer switches; this is a CONSENT
+    // surface about the user's own hardware, and it earns the same standing as
+    // the approval posture next to it.
+    id: "sensing",
+    label: "Camera and presence",
+    title: "Camera and presence",
+    lead: "What this computer may see, how long it keeps it, and when it stops.",
   },
   {
     id: "autonomy",

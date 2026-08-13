@@ -125,9 +125,9 @@ export function StepInspector(props: StepInspectorProps) {
         <p className="rc-fact">
           <span className="rc-fact-dot" />
           <span>
-            Pick a step to see what it does and what it may touch. Drag a step
-            to move it, drag from its right-hand dot to make one wait on
-            another, and the + adds a step after it.
+            Pick a step to see what it does. Drag a step to move it, connect
+            from its right-hand dot to add a dependency, and use + to add the
+            next step.
           </span>
         </p>
         {draft.steps.length === 0 && (
@@ -384,7 +384,7 @@ function buildFacts(
     }
     if (verb?.consequence === "high") {
       facts.push({
-        text: "High consequence action: the kernel can pause it for a human decision. That comes from the action, not from this routine.",
+        text: "High consequence action: it pauses for a person before it can continue.",
         tone: "amber",
       });
     } else if (verb?.consequence === "low") {
@@ -399,7 +399,7 @@ function buildFacts(
     }
   } else if (kind === "code") {
     facts.push({
-      text: "Recognised, and never carried out: there is no code sandbox, so the kernel records the intent with executed=false.",
+      text: "This step is recorded but cannot run because no code workspace is available.",
       tone: "amber",
     });
   } else if (kind === "branch") {

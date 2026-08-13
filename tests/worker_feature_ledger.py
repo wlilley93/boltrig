@@ -583,6 +583,31 @@ BACKGROUND_FEATURES: dict[str, FeatureCoverage] = {
 
 
 NATIVE_COMMANDS: dict[str, FeatureCoverage] = {
+    "desktop_account_login": _coverage(
+        "apps/worker/src-tauri/src/desktop_account.rs",
+        ("worker", "deployment", "worker", "worker", "worker"),
+        "Authenticates only against the HTTPS API origin compiled into the signed app and installs bounded server-issued session cookies directly into the main webview.",
+    ),
+    "desktop_account_challenge": _coverage(
+        "apps/worker/src-tauri/src/desktop_account.rs",
+        ("worker", "deployment", "worker", "worker", "worker"),
+        "Completes the server-issued second-factor challenge at the compiled HTTPS API origin without returning session secrets to JavaScript.",
+    ),
+    "desktop_account_refresh": _coverage(
+        "apps/worker/src-tauri/src/desktop_account.rs",
+        ("worker", "deployment", "worker", "worker", "worker"),
+        "Refreshes the current server account session through native HttpOnly cookie custody and the compiled HTTPS API origin.",
+    ),
+    "desktop_account_logout": _coverage(
+        "apps/worker/src-tauri/src/desktop_account.rs",
+        ("worker", "deployment", "worker", "worker", "worker"),
+        "Ends the current server account session and removes the native webview session cookies as the desktop recovery path.",
+    ),
+    "desktop_api_request": _coverage(
+        "apps/worker/src-tauri/src/desktop_account.rs",
+        ("worker", "deployment", "worker", "worker", "worker"),
+        "Proxies bounded v1 requests only to the compiled HTTPS API origin with native cookie custody, exact CSRF handling and a versioned response envelope.",
+    ),
     "complete_device_enrollment": _coverage(
         "apps/worker/src-tauri/src/lib.rs",
         ("worker", "worker", "worker", "worker", "worker"),

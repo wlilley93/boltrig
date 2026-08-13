@@ -446,9 +446,9 @@ export function Sidebar({
     </aside>
   );
 }
-
 const settingsIcons: Record<SettingsSection, ShellIconName> = {
   you: "user",
+  sensing: "camera",
   autonomy: "shield",
   spend: "gauge",
   models: "code",

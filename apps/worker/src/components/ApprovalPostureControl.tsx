@@ -235,9 +235,53 @@ export function ApprovalPostureSettings({
         onChoose={(posture) => void state.choose(posture)}
         posture={state.posture}
         runtime={runtime}
-        saving={state.saving}
+        saving={state.saving || (state.posture === null && Boolean(state.error))}
       />
       {state.error && <p className="approval-posture-error" role="alert">{state.error}</p>}
+    </div>
+  );
+}
+
+function PosturePopover({
+  error,
+  onChoose,
+  onClose,
+  posture,
+  runtime,
+  saving,
+}: {
+  error: string;
+  onChoose(posture: ApprovalPosture): Promise<boolean>;
+  onClose(): void;
+  posture: ApprovalPosture | null;
+  runtime: ApprovalRuntime;
+  saving: boolean;
+}) {
+  return (
+    <div aria-label="Agent tool approvals" className="approval-posture-popover" role="dialog">
+      <div className="approval-posture-head">
+        <span>{runtime === "local"
+          ? "How should local agent actions be approved?"
+          : "How should cloud agent actions be approved?"}</span>
+        <a
+          href="/settings/autonomy"
+          onClick={(event) => {
+            event.preventDefault();
+            navigate("settings", "autonomy");
+            onClose();
+          }}
+        >Learn more</a>
+      </div>
+      <PostureRows
+        compact
+        onChoose={(posture) => {
+          void onChoose(posture).then((changed) => { if (changed) onClose(); });
+        }}
+        posture={posture}
+        runtime={runtime}
+        saving={saving}
+      />
+      {error && <p className="approval-posture-error" role="alert">{error}</p>}
     </div>
   );
 }
@@ -296,33 +340,14 @@ export function ApprovalPostureMenu({
         <span aria-hidden />
         {selected?.shortLabel ?? "Policy"}
       </button>
-      {open && (
-        <div aria-label="Agent tool approvals" className="approval-posture-popover" role="dialog">
-          <div className="approval-posture-head">
-            <span>{runtime === "local"
-              ? "How should local agent actions be approved?"
-              : "How should cloud agent actions be approved?"}</span>
-            <a
-              href="/settings/autonomy"
-              onClick={(event) => {
-                event.preventDefault();
-                navigate("settings", "autonomy");
-                setOpen(false);
-              }}
-            >Learn more</a>
-          </div>
-          <PostureRows
-            compact
-            onChoose={(posture) => {
-              void state.choose(posture).then((changed) => { if (changed) setOpen(false); });
-            }}
-            posture={state.posture}
-            runtime={runtime}
-            saving={state.saving}
-          />
-          {state.error && <p className="approval-posture-error" role="alert">{state.error}</p>}
-        </div>
-      )}
+      {open && <PosturePopover
+        error={state.error}
+        onChoose={state.choose}
+        onClose={() => setOpen(false)}
+        posture={state.posture}
+        runtime={runtime}
+        saving={state.saving || (state.posture === null && Boolean(state.error))}
+      />}
     </div>
   );
 }

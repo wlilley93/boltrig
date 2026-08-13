@@ -36,9 +36,9 @@ export function SettingsView({ section = "you" }: { section?: SettingsSection })
               <h2>{isDesktop ? "This Worker is running in Tauri" : "Browser session"}</h2>
               <p>
                 User sign-in uses the same secure browser session cookie in desktop
-                and web builds. A separately enrolled background device agent keeps
-                its rotating session in the OS keychain. The shell runs no Python
-                agent server.
+                and web builds. After sign-in, the desktop automatically creates a
+                revocable computer identity whose rotating session stays in the OS
+                keychain. No handoff code or provider secret enters the client.
               </p>
             </section>
             <DesktopUpdater />
@@ -66,7 +66,7 @@ export function SettingsView({ section = "you" }: { section?: SettingsSection })
             <section className="settings-card">
               <p className="eyebrow">Session</p>
               <h2>Signed in to Boltrig</h2>
-              <p>Signing out revokes the current browser session cookie. Other sessions remain visible and revocable under You.</p>
+              <p>Signing out revokes the current account-session cookie. Other sessions stay signed in, and this computer remains trusted until you revoke it above.</p>
               <button className="secondary-button" onClick={() => void client.logout().finally(() => window.location.reload())}>Sign out</button>
             </section>
           </div>

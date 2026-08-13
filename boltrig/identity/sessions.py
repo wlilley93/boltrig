@@ -48,7 +48,7 @@ _MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # also covers the edge case where an admin flips require_two_factor ON while the user
 # already holds a full session - they are clamped on their very next request.
 _ENROLLMENT_ONLY_ALLOWED = frozenset({
-    "/v1/auth/2fa/enroll",
+    "/v1/auth/csrf", "/v1/auth/2fa/enroll",
     "/v1/auth/2fa/verify-enroll",
     "/v1/auth/logout",
 })
@@ -59,7 +59,7 @@ _ENROLLMENT_ONLY_ALLOWED = frozenset({
 # Checked every request, not just at login, so a flag set while a session is live
 # takes effect on the very next call.
 _PASSWORD_CHANGE_ONLY_ALLOWED = frozenset({
-    "/v1/auth/change-password",
+    "/v1/auth/csrf", "/v1/auth/change-password",
     "/v1/auth/logout",
 })
 

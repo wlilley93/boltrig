@@ -142,6 +142,10 @@ describe("Automation primary-surface honesty", () => {
 
     await act(async () => request.resolve({ workflows: [] }));
     expect(await screen.findByText("No saved workflows yet.")).toBeTruthy();
+    expect(screen.getByText(/Repeatable work boltrig can run the same way each time/))
+      .toBeTruthy();
+    expect(screen.queryByText(/reconciled on a loop|what it queued|held as data/i))
+      .toBeNull();
   });
 
   it.each([

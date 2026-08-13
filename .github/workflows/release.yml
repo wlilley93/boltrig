@@ -342,6 +342,8 @@ jobs:
       RELEASE_TAG: ${{ github.ref_name }}
       RELEASE_COMMIT: ${{ needs.preflight.outputs.release-commit }}
       RELEASE_ID: ${{ needs.preflight.outputs.release-id }}
+      RELEASE_MODE: ${{ needs.preflight.outputs.release-mode }}
+      BOLTRIG_DESKTOP_DOWNLOAD_URL: ${{ vars.BOLTRIG_DESKTOP_DOWNLOAD_URL }}
       BUILD_METADATA_FILE: build-metadata-${{ matrix.image }}.json
       SBOM_FILE: sbom-${{ matrix.image }}.cdx.json
       IMAGE_REF_FILE: image-ref-${{ matrix.image }}.txt
@@ -364,7 +366,32 @@ jobs:
           DOCKER_BUILDKIT: "1"
         run: |
           set -euo pipefail
+          build_args=()
+          if [ "$IMAGE" = worker-ui ]; then
+            desktop_download_url=""
+            if [ "$RELEASE_MODE" = full ]; then
+              desktop_download_url="$BOLTRIG_DESKTOP_DOWNLOAD_URL"
+              python3 - "$desktop_download_url" <<'PY'
+          import sys
+          from urllib.parse import urlsplit
+
+          value = sys.argv[1]
+          parsed = urlsplit(value)
+          if (
+              parsed.scheme != "https"
+              or not parsed.netloc
+              or parsed.username is not None
+              or parsed.password is not None
+          ):
+              raise SystemExit(
+                  "BOLTRIG_DESKTOP_DOWNLOAD_URL must be an absolute HTTPS URL without credentials"
+              )
+          PY
+            fi
+            build_args+=(--build-arg "VITE_DESKTOP_DOWNLOAD_URL=$desktop_download_url")
+          fi
           docker build --pull \
+            "${build_args[@]}" \
             --file "$DOCKERFILE" \
             --metadata-file "$BUILD_METADATA_FILE" \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \

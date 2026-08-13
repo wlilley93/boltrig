@@ -309,6 +309,12 @@ def install_security(app: FastAPI, *, env: dict | None = None) -> None:
             allow_origins=origins,
             allow_credentials=True,
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-            allow_headers=["authorization", "content-type", "x-boltrig-mcp-token"],
+            allow_headers=[
+                "authorization",
+                "content-type",
+                "x-boltrig-approval-id",
+                "x-boltrig-csrf",
+                "x-boltrig-mcp-token",
+            ],
         )
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)

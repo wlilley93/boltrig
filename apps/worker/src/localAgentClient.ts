@@ -150,12 +150,23 @@ export function saveLocalConversation(conversation: LocalConversation): void {
 }
 
 export function archiveLocalConversation(id: string): boolean {
+  return setLocalConversationStatus(id, "closed");
+}
+
+export function restoreLocalConversation(id: string): boolean {
+  return setLocalConversationStatus(id, "active");
+}
+
+function setLocalConversationStatus(
+  id: string,
+  status: LocalConversation["status"],
+): boolean {
   if (!localThreadId(id)) return false;
   const current = readStore();
   const target = current.find((conversation) => conversation.id === id);
-  if (!target || target.status === "closed") return false;
+  if (!target || target.status === status) return false;
   const next = current.map((conversation) => conversation.id === id
-    ? { ...conversation, status: "closed" as const, updated_at: new Date().toISOString() }
+    ? { ...conversation, status, updated_at: new Date().toISOString() }
     : conversation);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   window.dispatchEvent(new Event(CHANGE_EVENT));

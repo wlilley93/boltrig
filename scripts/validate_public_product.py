@@ -10,6 +10,7 @@ provide their own Bifrost catalogue and integrations.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -55,6 +56,10 @@ def validate(root: Path = ROOT) -> None:
     worker_package_text = _read("apps/worker/package.json", root=root)
     worker_lock = _read("apps/worker/pnpm-lock.yaml", root=root)
     worker_package = json.loads(worker_package_text)
+    familiar_manifest_path = root / "apps/worker/src/bundles/familiar/character.json"
+    familiar_manifest_text = familiar_manifest_path.read_text(encoding="utf-8")
+    familiar_manifest = json.loads(familiar_manifest_text)
+    familiar_shader = familiar_manifest_path.parent / "familiar.frag"
 
     # These are known values from the local deployment history. A public
     # template must not make them part of another operator's installation.
@@ -78,6 +83,12 @@ def validate(root: Path = ROOT) -> None:
     for marker in private_markers:
         _forbid(manifest, marker, label="manifest.example.yaml")
         _forbid(env, marker, label=".env.example")
+        _forbid(familiar_manifest_text, marker, label="Familiar stock bundle")
+    _forbid(
+        familiar_manifest_text,
+        "wlilley93/beelink-desktop",
+        label="Familiar stock bundle",
+    )
 
     standard = re.search(
         r"(?ms)^\s*- id: standard\s*\n\s*kind: ([^\n]+)\s*\n\s*model: ([^\n]+)",
@@ -114,6 +125,18 @@ def validate(root: Path = ROOT) -> None:
         raise ValueError(
             "character registry must register exactly Familiar then Jarvis"
         )
+    if familiar_manifest.get("id") != "familiar":
+        raise ValueError("stock Familiar bundle must keep the familiar id")
+    if familiar_manifest.get("provenance", {}).get("ships") is not True:
+        raise ValueError("stock Familiar bundle must declare ships=true")
+    fragment = familiar_manifest.get("visual", {}).get("fragment", {})
+    if fragment.get("file") != "familiar.frag":
+        raise ValueError("stock Familiar bundle must own familiar.frag")
+    if familiar_shader.is_symlink() or not familiar_shader.is_file():
+        raise ValueError("stock Familiar shader must be a regular in-bundle file")
+    shader_digest = hashlib.sha256(familiar_shader.read_bytes()).hexdigest()
+    if fragment.get("sha256") != shader_digest:
+        raise ValueError("stock Familiar bundle shader digest does not match its file")
     if "import.meta.glob" in characters:
         raise ValueError("character registry uses a bundler glob that ships external companions")
     if _typescript_without_comments(character_plugins) != "export {};":

@@ -121,6 +121,7 @@ function LocalComposer({ controller, conversationId, newTask, onCommandPalette }
     defaultModelAvailable={controller.ready}
     defaultModelUnavailableReason={localUnavailableReason(controller.status, controller.roots)}
     disabled={!controller.ready || Boolean(conversationId && !controller.conversation)}
+    disabledPlaceholder={localDisabledPlaceholder(controller.status, controller.roots)}
     modelChoice=""
     modelChoices={[]}
     modelChoicesLoaded={controller.status !== null}
@@ -154,7 +155,7 @@ function LocalWorkspacePicker({ roots, rootId, onRoot }: {
   onRoot(value: string): void;
 }) {
   if (roots.length === 0) return <p className="notice local-workspace-notice">
-    Bind a read/write workspace with local commands enabled in Settings → Device.
+    Bind a read/write workspace with local commands enabled in Settings → Advanced.
   </p>;
   return <label className="local-workspace-picker">
     <span>Runs locally in</span>
@@ -171,7 +172,25 @@ function localUnavailableReason(
   roots: LocalAgentRoot[],
 ): string {
   if (!status) return "Checking the local agent";
-  if (status.state !== "ready") return status.reason ?? "Local agent unavailable";
-  if (roots.length === 0) return "Bind a local workspace in Settings → Device";
+  if (status.state !== "ready") return localStatusReason(status.reason);
+  if (roots.length === 0) return "Bind a local workspace in Settings → Advanced";
   return "";
+}
+
+function localDisabledPlaceholder(
+  status: LocalAgentStatus | null,
+  roots: LocalAgentRoot[],
+): string {
+  if (!status) return "Checking the local agent…";
+  return localUnavailableReason(status, roots) || "Loading local task…";
+}
+
+function localStatusReason(reason: string | null): string {
+  if (reason === "local_agent_binary_not_bundled") {
+    return "Local Codex is not included in this development build";
+  }
+  if (reason === "local_agent_binary_unavailable") {
+    return "Local Codex could not be opened on this computer";
+  }
+  return reason ?? "Local agent unavailable";
 }

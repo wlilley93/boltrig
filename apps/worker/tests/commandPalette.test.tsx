@@ -20,7 +20,8 @@ const api = vi.hoisted(() => ({
 
 vi.mock("../src/client", () => ({ client: api }));
 
-import { CommandPalette } from "../src/components/CommandPalette";
+import { CommandPalette, workerCommands } from "../src/components/CommandPalette";
+import { SETTINGS_SECTIONS } from "../src/settingsSections";
 
 const commandPaletteCss = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "../src/components/CommandPalette.css"),
@@ -82,6 +83,23 @@ describe("Worker command palette", () => {
     expect(firstPath("Keyboard shortcuts settings")).toBe(
       "M3.5 6.5h17v11h-17z",
     );
+  });
+
+  it("keeps every canonical settings section reachable from search", () => {
+    for (const { id } of SETTINGS_SECTIONS) {
+      expect(workerCommands).toContainEqual(expect.objectContaining({
+        route: "settings",
+        routeId: id,
+      }));
+    }
+
+    const onNavigate = vi.fn();
+    render(<CommandPalette open onClose={vi.fn()} onNavigate={onNavigate} />);
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "models" },
+    });
+    fireEvent.click(screen.getByRole("option", { name: /Models settings/ }));
+    expect(onNavigate).toHaveBeenCalledWith("settings", "models");
   });
 
   it("finds capability destinations without implying content-wide search", () => {

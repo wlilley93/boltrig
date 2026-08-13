@@ -464,6 +464,40 @@ def test_core_release_doctor_disables_codex_requested_by_the_real_manifest(
 
 @pytest.mark.security
 @pytest.mark.invariant("IAC-005")
+def test_full_release_requires_an_explicit_packaged_desktop_cors_origin(
+    tmp_path: Path,
+) -> None:
+    missing = {
+        **_secure_env(tmp_path),
+        "BOLTRIG_RELEASE_MODE": "full",
+    }
+    missing_report = run_doctor(
+        env=missing,
+        manifest_path=_manifest(tmp_path),
+        production=True,
+    )
+    missing_check = next(
+        item for item in missing_report.checks if item.name == "desktop_cors_origin"
+    )
+    assert missing_check.status == "fail"
+
+    configured = {
+        **missing,
+        "BOLTRIG_CORS_ORIGINS": "https://app.acme.test,tauri://localhost",
+    }
+    configured_report = run_doctor(
+        env=configured,
+        manifest_path=_manifest(tmp_path),
+        production=True,
+    )
+    configured_check = next(
+        item for item in configured_report.checks if item.name == "desktop_cors_origin"
+    )
+    assert configured_check.status == "ok"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
 @pytest.mark.parametrize(
     ("release_mode", "trusted", "message"),
     [

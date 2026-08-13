@@ -113,6 +113,48 @@ def test_wildcard_hosts_refused_in_production():
         install_security(app, env={"BOLTRIG_PRODUCTION": "1", "BOLTRIG_ALLOWED_HOSTS": "*"})
 
 
+@pytest.mark.security
+@pytest.mark.invariant("SEC-58")
+def test_desktop_cors_preflight_allows_only_the_required_session_headers():
+    app = FastAPI()
+
+    @app.post("/v1/action")
+    def action():
+        return {"ok": True}
+
+    install_security(
+        app,
+        env={
+            "BOLTRIG_ALLOWED_HOSTS": "testserver",
+            "BOLTRIG_CORS_ORIGINS": "tauri://localhost",
+        },
+    )
+    response = TestClient(app).options(
+        "/v1/action",
+        headers={
+            "origin": "tauri://localhost",
+            "access-control-request-method": "POST",
+            "access-control-request-headers": (
+                "content-type,x-boltrig-csrf,x-boltrig-approval-id"
+            ),
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "tauri://localhost"
+    allowed = response.headers["access-control-allow-headers"].lower()
+    assert "x-boltrig-csrf" in allowed
+    assert "x-boltrig-approval-id" in allowed
+
+    refused = TestClient(app).options(
+        "/v1/action",
+        headers={
+            "origin": "https://unlisted.example",
+            "access-control-request-method": "POST",
+        },
+    )
+    assert refused.status_code == 400
+
+
 # --------------------------------------------------------------------------- #
 # SEC-59  JWT verification hardening (IAM-02/03/04)
 # --------------------------------------------------------------------------- #

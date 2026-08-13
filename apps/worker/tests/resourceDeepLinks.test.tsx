@@ -191,7 +191,7 @@ describe("Worker durable resource links", () => {
     render(<MemoryView />);
 
     await waitFor(() => expect(api.memoryFact).toHaveBeenCalledWith("fact/deep"));
-    expect(screen.getByLabelText("Memory fact details")).toBeTruthy();
+    expect(await screen.findByLabelText("Memory fact details")).toBeTruthy();
     expect(screen.getByText("Renew annually")).toBeTruthy();
   });
 

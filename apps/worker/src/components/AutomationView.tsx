@@ -1295,9 +1295,8 @@ export function AutomationsView() {
           <div>
             <h1>Routines</h1>
             <p>
-              Steps boltrig repeats the same way every time, held as data rather
-              than code. Each one is a graph: what starts it, then steps that
-              wait on the steps before them. Open one to draw it.
+              Repeatable work boltrig can run the same way each time. Open a
+              routine to see its steps, schedule and latest result.
             </p>
           </div>
           {surfaceState === "ready" && (
@@ -2095,11 +2094,11 @@ function WorkflowEditor(props: WorkflowEditorProps) {
                 <p>
                   {mode === "last"
                     ? runSteps && props.lastExecution
-                      ? `Painted from run ${props.lastExecution.run_id} (${props.lastExecution.status}) — the record the kernel returned when it was started here.`
-                      : "Nothing is painted, because no per-step run record is readable for this routine in this session."
+                      ? `Showing the recorded result from run ${props.lastExecution.run_id} (${props.lastExecution.status}).`
+                      : "No step-by-step result is available for this routine in this session."
                     : mode === "try"
-                      ? "Sample values only — nothing ran and nothing left boltrig. Comparisons follow the engine's fail-closed rules, so an unknown operator takes the false path."
-                      : "This drawing is the saved spec itself: every wire is a parents[] entry the engine walks, and every action stays behind the kernel."}
+                      ? "Sample values only — nothing ran and nothing left boltrig. An unrecognised comparison follows the safe path and does not continue."
+                      : "This is the saved routine. Every action still follows your access and approval rules."}
                 </p>
               </div>
             )}
@@ -2865,14 +2864,6 @@ export function RoutinePicker({
         );
       })}
     </div>
-    <p className="console-foot routine-grid-foot">
-      A due schedule is reconciled on a loop that reports what it saw against
-      what it queued, so a scheduler with work due and nothing queued reads as
-      stalled rather than idle. The dot is how the last run ended, and the state
-      is what the routine still needs from you — opening one lands on whatever
-      that is. Nothing here was learned on its own: a run becomes a routine when
-      you save it.
-    </p>
     <RecentlyChanged />
     </>
   );

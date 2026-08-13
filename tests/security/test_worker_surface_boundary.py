@@ -87,7 +87,9 @@ def test_desktop_native_process_seams_are_explicit_and_bounded():
         for path in (WORKER / "src-tauri" / "src").glob("*.rs")
     }
     rust = "\n".join(rust_files.values())
+    desktop_account = rust_files["desktop_account.rs"]
     config = (WORKER / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
+    config_payload = json.loads(config)
     assert "materialize_artifact" in rust
     assert ".save_file(" in rust
     assert "destination:" not in rust
@@ -106,6 +108,22 @@ def test_desktop_native_process_seams_are_explicit_and_bounded():
     assert "accessToken" not in client
     assert "device_session_token" not in rust_files["lib.rs"]
     assert "dialog:allow-save" not in capabilities
+    assert config_payload["app"]["windows"][0]["useHttpsScheme"] is True
+    assert 'option_env!("BOLTRIG_DESKTOP_API_ORIGIN")' in desktop_account
+    assert '"/v1/auth/login"' in desktop_account
+    assert '"/v1/auth/2fa/challenge"' in desktop_account
+    assert ".set_cookie(" in desktop_account
+    assert "SESSION_COOKIE" in desktop_account
+    assert "desktop_api_request" in rust_files["lib.rs"]
+    assert "exact_api_url" in desktop_account
+    assert "MAX_API_REQUEST_BYTES" in desktop_account
+    assert "MAX_API_RESPONSE_BYTES" in desktop_account
+    assert "API_ENVELOPE_MAGIC" in desktop_account
+    assert "desktop_api_start" not in desktop_account
+    assert "desktop_api_cancel" not in desktop_account
+    assert "session_token" not in desktop_account
+    assert "async fn device_agent_status" in rust_files["lib.rs"]
+    assert "spawn_blocking(device_agent::status)" in rust_files["lib.rs"]
     # There are exactly two native process seams. Remote device commands remain
     # signed argv-only leases. The desktop-local agent may launch only the
     # resolved Codex App Server; its webview request carries an opaque root id

@@ -8,6 +8,7 @@ import type {
 
 import { SettingsButton, SettingsGroup, SettingsRow, StateWord } from "./rowKit";
 import {
+  modelEndpointLabel,
   supportsCatalogueModalities,
   supportsCatalogueModality,
   type EndpointModality,
@@ -139,7 +140,7 @@ function ModelEndpointRow({
       )}
       desc={presentation.description}
       tech={endpoint.id}
-      title={endpoint.model}
+      title={modelEndpointLabel(endpoint)}
     />
   );
 }
@@ -187,7 +188,7 @@ export function ModelRemovalDialog({ busy, endpoint, onCancel, onConfirm }: {
   return (
     <section aria-label="Confirm model removal" className="model-settings-removal" role="alertdialog">
       <div>
-        <div className="console-section-title">Remove {endpoint.model}?</div>
+        <div className="console-section-title">Remove {modelEndpointLabel(endpoint)}?</div>
         <p>This retires route <code>{endpoint.id}</code> everywhere, not only in the chat switcher. Historical task receipts and the route configuration remain.</p>
         <p>Agent references: {endpoint.references.capabilities.length > 0 ? endpoint.references.capabilities.join(", ") : "none"}. Fallback references: {endpoint.references.fallbacks.length > 0 ? endpoint.references.fallbacks.join(", ") : "none"}.</p>
       </div>

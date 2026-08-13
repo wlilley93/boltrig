@@ -22,16 +22,23 @@ const api = vi.hoisted(() => ({
   setKnowledgeProvider: vi.fn(),
   invokeApprovalState: vi.fn(),
 }));
+const desktop = vi.hoisted(() => ({ runtime: false }));
 
 vi.mock("../src/client", () => ({ client: api }));
+vi.mock("../src/desktop", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../src/desktop")>(),
+  hasDesktopRuntime: () => desktop.runtime,
+}));
 
 import { Sidebar } from "../src/components/Shell";
 import { SettingsSearchResults, SettingsSectionPane } from "../src/components/SettingsSurface";
 import { registerCharacter } from "../src/components/characters";
+import { loadLocalConversation, saveLocalConversation } from "../src/localAgentClient";
 import { SETTINGS_SECTIONS } from "../src/settingsSections";
 import { SHORTCUTS } from "../src/shortcuts";
 
 beforeEach(() => {
+  desktop.runtime = false;
   api.approvalPosture.mockResolvedValue({
     posture: "risk_based",
     source: "safe_default",
@@ -117,7 +124,7 @@ afterEach(() => {
 });
 
 describe("settings surface", () => {
-  it("replaces the app nav with the eleven canonical settings sections while settings is open", () => {
+  it("replaces the app nav with every canonical settings section while settings is open", () => {
     const onSettingsSection = vi.fn();
     render(
       <Sidebar
@@ -135,7 +142,7 @@ describe("settings surface", () => {
       />,
     );
 
-    expect(SETTINGS_SECTIONS.length).toBe(11);
+    expect(SETTINGS_SECTIONS.length).toBe(12);
     for (const entry of SETTINGS_SECTIONS) {
       expect(screen.getByRole("button", { name: entry.label })).toBeTruthy();
     }
@@ -382,6 +389,21 @@ describe("settings surface", () => {
         stack_tools: { status: "ok", required: true },
         postgres: { status: "disabled", required: false, reason: "not_configured" },
         control_plane: { status: "failed", required: true, reason: "unavailable" },
+        codex_runtime: {
+          status: "test_only",
+          required: false,
+          reason: "production_gate_closed",
+        },
+        hitl_expiry_janitor: {
+          status: "unknown",
+          required: false,
+          reason: "attempt_evidence_not_observed",
+        },
+        future_service_probe: {
+          status: "failed",
+          required: false,
+          reason: "internal_reason_token",
+        },
       },
     });
     api.health.mockResolvedValue({ status: "ok", adapters: { "acme/jira": "degraded" } });
@@ -396,10 +418,20 @@ describe("settings surface", () => {
     expect(screen.getByText("not working").getAttribute("data-tone")).toBe("red");
     expect(screen.getByText("switched off").getAttribute("data-tone")).toBe("unknown");
     // The stat card counts healthy checks, required and optional together.
-    expect(screen.getByText("1 of 3")).toBeTruthy();
+    expect(screen.getByText("1 of 6")).toBeTruthy();
+    expect(screen.getByText("Cloud agent runtime")).toBeTruthy();
+    expect(screen.getByText("development only")).toBeTruthy();
+    expect(screen.getByText("Expired decisions")).toBeTruthy();
+    expect(screen.getByText("not observed")).toBeTruthy();
+    expect(screen.getByText("Future Service Probe")).toBeTruthy();
+    expect(screen.getByText("Optional service check")).toBeTruthy();
+    expect(screen.queryByText("production_gate_closed")).toBeNull();
+    expect(screen.queryByText("attempt_evidence_not_observed")).toBeNull();
+    expect(screen.queryByText("internal_reason_token")).toBeNull();
     // Adapter health from /healthz joins the same card.
-    expect(screen.getByText("jira adapter")).toBeTruthy();
-    expect(screen.getByText("struggling").getAttribute("data-tone")).toBe("amber");
+    const jiraRow = screen.getByText("jira adapter").closest(".settings-tone-row") as HTMLElement;
+    expect(jiraRow).toBeTruthy();
+    expect(within(jiraRow).getByText("struggling").getAttribute("data-tone")).toBe("amber");
     // Every boundary listed is a limit of THIS build.
     expect(screen.getByText("Current limits")).toBeTruthy();
     expect(screen.getByText("Weekly spending windows")).toBeTruthy();
@@ -524,6 +556,30 @@ describe("settings surface", () => {
     // The date is honestly labelled as activity, not archive time.
     expect(screen.getByText("Dates show each chat's last activity.")).toBeTruthy();
     expect(screen.queryByText("Live one")).toBeNull();
+  });
+
+  it("restores desktop-local tasks without calling the cloud conversation lifecycle", async () => {
+    desktop.runtime = true;
+    saveLocalConversation({
+      id: "local:thread-settings",
+      thread_id: "thread-settings",
+      root_id: "root-1",
+      title: "Local workspace review",
+      status: "closed",
+      model: "gpt-5.6-sol",
+      messages: [],
+      created_at: "2026-08-13T10:00:00.000Z",
+      updated_at: "2026-08-13T10:00:00.000Z",
+    });
+
+    render(<SettingsSectionPane section="archived" />);
+    expect(await screen.findByText("Local workspace review")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Bring back" }));
+    await waitFor(() => {
+      expect(loadLocalConversation("local:thread-settings")?.status).toBe("active");
+    });
+    expect(api.restoreMyConversation).not.toHaveBeenCalled();
+    expect(screen.queryByText("Local workspace review")).toBeNull();
   });
 
   it("hides tech identifiers until the persisted Developer-details switch is on", async () => {

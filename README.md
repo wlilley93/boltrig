@@ -142,10 +142,18 @@ run in every environment; only `.env` and `manifest.yaml` differ (P7).
 The published template contains no personal provider, model identity, API key,
 webhook, or tenant data. Run/configure your own Bifrost instance, keep its
 provider keys in Bifrost's secret/admin surface, then choose one of its
-advertised text models in Worker **Settings → Models**. Boltrig receives only
-the opaque, governed route and exact model name; provider keys never enter the
-browser or the checked-in `.env.example`. The stock Stage ships with Familiar
-and Jarvis only; additional companions are not part of the production bundle.
+advertised text models in Worker **Settings → Models**. That supported
+Codex→Bifrost path gives Boltrig only an opaque governed route and exact model
+name; the Models editor never receives a Bifrost provider key and
+`.env.example` contains none.
+
+**Account → Access** has a separate one-shot, write-only intake for the
+legacy provider-native credential hierarchy. The browser clears the entered
+value before awaiting the response and the kernel envelope-seals it; reads and
+audit expose metadata only. This is not a Bifrost administration proxy and does
+not make an empty Bifrost catalogue runnable. Do not describe it as Bifrost
+onboarding. The stock Stage ships with Familiar and Jarvis only; additional
+companions are not part of the production bundle.
 
 ## Architecture
 

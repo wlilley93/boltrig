@@ -439,6 +439,8 @@ services:
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
+      args:
+        VITE_DESKTOP_DOWNLOAD_URL: ${BOLTRIG_DESKTOP_DOWNLOAD_URL:-}
     image: boltrig/worker-ui:0.1.0
     restart: unless-stopped
     networks:
