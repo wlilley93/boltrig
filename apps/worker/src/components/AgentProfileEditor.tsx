@@ -12,17 +12,19 @@ import {
   governedResultReason,
   useExactApprovalFinalizer,
 } from "./ExactApprovalFinalizer";
+import {
+  AgentModelRouting,
+  endpointSupports,
+  type AgentModelRoutingValue,
+} from "./agent/AgentModelRouting";
 
-interface AgentDraft {
+interface AgentDraft extends AgentModelRoutingValue {
   name: string;
   runtime: string;
   supportedSkills: string;
   maxDepth: number;
   ephemeral: boolean;
   costTier: string;
-  modelEndpoint: string;
-  visionModelEndpoint: string;
-  modelRouteMode: "multimodal" | "separate";
 }
 
 const blank: AgentDraft = {
@@ -34,6 +36,7 @@ const blank: AgentDraft = {
   costTier: "standard",
   modelEndpoint: "",
   visionModelEndpoint: "",
+  modelRoutes: {},
   modelRouteMode: "multimodal",
 };
 
@@ -51,13 +54,21 @@ function draftFor(initial?: AgentCapabilityInfo | null): AgentDraft {
     maxDepth: initial.max_depth,
     ephemeral: initial.is_ephemeral,
     costTier: initial.cost_tier,
-    modelEndpoint: initial.model_endpoint ?? "",
-    visionModelEndpoint: initial.vision_model_endpoint ?? "",
-    modelRouteMode: initial.vision_model_endpoint ? "separate" : "multimodal",
+    modelEndpoint: initial.model_endpoint ?? initial.model_routes?.text ?? "",
+    visionModelEndpoint: initial.vision_model_endpoint ?? initial.model_routes?.vision ?? "",
+    modelRoutes: { ...(initial.model_routes ?? {}) },
+    modelRouteMode: (initial.vision_model_endpoint ?? initial.model_routes?.vision)
+      ? "separate"
+      : "multimodal",
   } : { ...blank };
 }
 
 function profileParams(draft: AgentDraft): Record<string, unknown> {
+  const modelRoutes = { ...draft.modelRoutes };
+  if (draft.modelEndpoint) modelRoutes.text = draft.modelEndpoint;
+  else delete modelRoutes.text;
+  if (draft.visionModelEndpoint) modelRoutes.vision = draft.visionModelEndpoint;
+  else delete modelRoutes.vision;
   return {
     name: draft.name.trim(),
     runtime: draft.runtime.trim(),
@@ -70,6 +81,7 @@ function profileParams(draft: AgentDraft): Record<string, unknown> {
     cost_tier: draft.costTier,
     model_endpoint: draft.modelEndpoint || undefined,
     vision_model_endpoint: draft.visionModelEndpoint || undefined,
+    model_routes: modelRoutes,
   };
 }
 
@@ -139,19 +151,6 @@ export function AgentProfileEditor({
     finalizer.invalidate();
     setDraft(next);
   }
-
-  function endpointSupports(endpoint: ModelEndpointInfo, modality: "text" | "vision") {
-    return (endpoint.modalities ?? ["text"]).includes(modality);
-  }
-
-  const activeEndpoints = modelEndpoints.filter(
-    (endpoint) => endpoint.is_active || endpoint.id === draft.modelEndpoint || endpoint.id === draft.visionModelEndpoint,
-  );
-  const multimodalEndpoints = activeEndpoints.filter(
-    (endpoint) => endpointSupports(endpoint, "text") && endpointSupports(endpoint, "vision"),
-  );
-  const textEndpoints = activeEndpoints.filter((endpoint) => endpointSupports(endpoint, "text"));
-  const visionEndpoints = activeEndpoints.filter((endpoint) => endpointSupports(endpoint, "vision"));
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -228,15 +227,11 @@ export function AgentProfileEditor({
         <label><span>Runtime</span><select className="field-control" required value={draft.runtime} onChange={(event) => updateDraft({ ...draft, runtime: event.target.value })}>{draft.runtime !== "codex" && <option value={draft.runtime}>{draft.runtime} (legacy)</option>}<option value="codex">Codex</option></select></label>
         <label><span>Maximum delegation depth</span><input className="field-control" type="number" min={1} max={5} value={draft.maxDepth} onChange={(event) => updateDraft({ ...draft, maxDepth: Number(event.target.value) })} /></label>
         <label><span>Cost tier</span><select className="field-control" value={draft.costTier} onChange={(event) => updateDraft({ ...draft, costTier: event.target.value })}><option value="cheap">Cheap</option><option value="standard">Standard</option><option value="expensive">Expensive</option></select></label>
-        <fieldset className="agent-model-routing">
-          <legend>Bifrost model routing</legend>
-          <p className="muted small">Choose one multimodal model, or route text and vision through separate governed endpoints.</p>
-          <label><span>Model arrangement</span><select className="field-control" value={draft.modelRouteMode} onChange={(event) => updateDraft({ ...draft, modelRouteMode: event.target.value as AgentDraft["modelRouteMode"], visionModelEndpoint: event.target.value === "multimodal" ? "" : draft.visionModelEndpoint })}><option value="multimodal">One multimodal model</option><option value="separate">Text + separate vision models</option></select></label>
-          <label><span>{draft.modelRouteMode === "multimodal" ? "Multimodal model" : "Text model"}</span><select className="field-control" value={draft.modelEndpoint} onChange={(event) => updateDraft({ ...draft, modelEndpoint: event.target.value })}><option value="">Main API key (default)</option>{(draft.modelRouteMode === "multimodal" ? multimodalEndpoints : textEndpoints).map((endpoint) => <option disabled={!endpoint.is_active} value={endpoint.id} key={endpoint.id}>{endpoint.id} · {endpoint.model}{endpoint.is_active ? "" : " (retired)"}</option>)}</select></label>
-          {draft.modelRouteMode === "separate" && <label><span>Vision model</span><select className="field-control" value={draft.visionModelEndpoint} onChange={(event) => updateDraft({ ...draft, visionModelEndpoint: event.target.value })}><option value="">Main vision key (if configured)</option>{visionEndpoints.map((endpoint) => <option disabled={!endpoint.is_active} value={endpoint.id} key={endpoint.id}>{endpoint.id} · {endpoint.model}{endpoint.is_active ? "" : " (retired)"}</option>)}</select></label>}
-          {modelEndpoints.length === 0 && <p className="muted small">No per-agent override selected. This agent will inherit the main API key, and the optional main vision key for image turns.</p>}
-          {draft.modelRouteMode === "multimodal" && modelEndpoints.length > 0 && multimodalEndpoints.length === 0 && <p className="notice">No per-agent endpoint advertises both modalities. The main API key remains available as the default; choose separate overrides if this agent needs explicit endpoints.</p>}
-        </fieldset>
+        <AgentModelRouting
+          endpoints={modelEndpoints}
+          onChange={(routing) => updateDraft({ ...draft, ...routing })}
+          value={draft}
+        />
         <label className="check-label"><input type="checkbox" checked={draft.ephemeral} onChange={(event) => updateDraft({ ...draft, ephemeral: event.target.checked })} />Ephemeral worker</label>
       </div>
       <label><span>Supported skill patterns</span><textarea className="field-control code-field" rows={4} value={draft.supportedSkills} onChange={(event) => updateDraft({ ...draft, supportedSkills: event.target.value })} /></label>
