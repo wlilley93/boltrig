@@ -125,6 +125,17 @@ def test_compose_validation_is_clean_checkout_safe():
     assert "COMPOSE_VALIDATE_ENV ?= .env.example" in makefile
     assert "BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV)" in makefile
     assert "POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD)" in makefile
+    assert "$(COMPOSE) --profile channels -f docker-compose.yml config --quiet" in makefile
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-70")
+def test_whatsapp_session_mount_resolves_to_the_declared_named_volume() -> None:
+    document = _base()
+    mounts = document["services"]["whatsapp-bridge"]["volumes"]
+
+    assert mounts == ["whatsapp_session:/data"]
+    assert "whatsapp_session" in document["volumes"]
 
 
 @pytest.mark.security
@@ -148,6 +159,46 @@ def test_backup_sidecar_ships_profile_gated():
     assert "backup-healthcheck" in dockerfile
     assert "run failed (retrying next interval)" not in dockerfile
 
+    services = _base()["services"]
+    assert services["hatchet-engine"]["volumes"] == ["hatchet_config:/config"]
+    assert (
+        "${HATCHET_DATABASE_NAME:-hatchet}"
+        in services["backup"]["environment"]["BACKUP_DATABASES"]
+    )
+    assert (
+        "${HATCHET_DATABASE_NAME:-hatchet}"
+        in services["hatchet-engine"]["environment"]["DATABASE_URL"]
+    )
+    release_backup = _release()["services"]["backup"]
+    assert release_backup["environment"]["BACKUP_STATE_DIR"] == "/backup-state"
+    release_mounts = " ".join(release_backup["volumes"])
+    assert "hatchet_config:/backup-state/hatchet-config:ro" in release_mounts
+    assert "knowledge_data:/backup-state/knowledge:ro" in release_mounts
+    assert "manifest.yaml:/backup-state/deployment/manifest.yaml:ro" in release_mounts
+    assert "libraries:/backup-state/deployment/libraries:ro" in release_mounts
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-71")
+def test_fresh_postgres_boot_creates_the_separate_hatchet_database() -> None:
+    postgres = _base()["services"]["postgres"]
+    mounts = " ".join(postgres["volumes"])
+    assert (
+        "deploy/postgres-init-hatchet.sh:"
+        "/docker-entrypoint-initdb.d/00-hatchet-db.sh:ro" in mounts
+    )
+    assert (
+        postgres["environment"]["HATCHET_DATABASE_NAME"]
+        == "${HATCHET_DATABASE_NAME:-hatchet}"
+    )
+
+    initializer = _REPO / "deploy" / "postgres-init-hatchet.sh"
+    assert initializer.stat().st_mode & 0o111
+    text = initializer.read_text()
+    assert "createdb" in text
+    assert '"$POSTGRES_USER"' in text
+    assert '"$hatchet_database"' in text
+
 
 @pytest.mark.security
 @pytest.mark.invariant("FR-HOST-09")
@@ -157,14 +208,17 @@ def test_herdr_opencode_state_is_stack_owned_in_compose():
     services = _base()["services"]
     kernel = services["kernel"]
     fleet = services["fleet-worker"]
+    hatchet = services["hatchet-worker"]
 
     assert kernel["environment"]["BOLTRIG_HERDR_HOME"].endswith("/var/lib/boltrig/herdr}")
     assert fleet["environment"]["BOLTRIG_OPENCODE_HOME"].endswith(
         "/var/lib/boltrig/opencode}"
     )
-    assert fleet["environment"]["BOLTRIG_BROWSER_CLI_HOME"].endswith(
-        "/var/lib/boltrig/browser-cli}"
-    )
+    fleet_browser_home = fleet["environment"]["BOLTRIG_BROWSER_CLI_HOME"]
+    hatchet_browser_home = hatchet["environment"]["BOLTRIG_BROWSER_CLI_HOME"]
+    assert fleet_browser_home.endswith("/var/lib/boltrig/browser-cli/fleet-worker}")
+    assert hatchet_browser_home.endswith("/var/lib/boltrig/browser-cli/hatchet-worker}")
+    assert fleet_browser_home != hatchet_browser_home
     assert fleet["environment"]["BOLTRIG_BROWSER_CLI_BIN"].endswith(
         "/usr/local/bin/browser-use}"
     )
@@ -224,7 +278,14 @@ def test_browser_cli_state_roots_are_stack_owned():
     env_example = _text(".env.example")
     lock = _text("deploy/browser-cli-requirements.txt")
 
-    assert "BOLTRIG_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli" in env_example
+    assert (
+        "BOLTRIG_FLEET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/fleet-worker"
+        in env_example
+    )
+    assert (
+        "BOLTRIG_HATCHET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/hatchet-worker"
+        in env_example
+    )
     assert "BOLTRIG_BROWSER_CLI_BIN=/usr/local/bin/browser-use" in env_example
     assert "BROWSER_CLI_URL" not in env_example
     assert "--python-platform linux" in lock
@@ -369,6 +430,13 @@ def test_release_publishes_only_scanned_signed_digest_images_with_sboms():
     assert 'cosign sign --yes "$IMAGE_REF"' in workflow
     assert 'cosign attest --yes --type cyclonedx --predicate "$SBOM_FILE"' in workflow
     assert "cosign verify-attestation" in workflow
+    assert "actions/attest@a1948c3f048ba23858d222213b7c278aabede763" in workflow
+    assert "push-to-registry: true" in workflow
+    assert "provenance-${{ matrix.image }}.intoto.json" in workflow
+    assert "gh attestation verify" in workflow
+    assert "--signer-workflow" in workflow
+    assert "--source-digest" in workflow
+    assert "https://slsa.dev/provenance/v1" in workflow
     assert 'gh release upload "$RELEASE_TAG"' in workflow
     assert "release-evidence/boltrig-images.env" in workflow
     for variable in (
@@ -427,6 +495,7 @@ def test_release_compose_uses_only_required_digest_images_without_builds():
     variables = {
         "kernel": "BOLTRIG_KERNEL_IMAGE",
         "fleet-worker": "BOLTRIG_FLEET_IMAGE",
+        "hatchet-worker": "BOLTRIG_FLEET_IMAGE",
         "worker-ui": "BOLTRIG_WORKER_UI_IMAGE",
         "backup": "BOLTRIG_BACKUP_IMAGE",
     }
@@ -436,9 +505,21 @@ def test_release_compose_uses_only_required_digest_images_without_builds():
         assert config["image"].startswith(f"${{{variable}:?")
         assert config["pull_policy"] == "always"
 
+    for service in ("kernel", "fleet-worker", "hatchet-worker"):
+        assert services[service]["environment"]["BOLTRIG_RELEASE_MODE"].startswith(
+            "${BOLTRIG_RELEASE_MODE:?"
+        )
+
     backup_mounts = " ".join(services["backup"]["volumes"])
     assert "scripts/backup.sh" not in backup_mounts
+    hatchet_worker = _base()["services"]["hatchet-worker"]
+    assert hatchet_worker["environment"]["HATCHET_CLIENT_WORKER_HEALTHCHECK_ENABLED"] == "true"
+    assert "127.0.0.1:8001/health" in " ".join(hatchet_worker["healthcheck"]["test"])
     makefile = _text("Makefile")
     assert "scripts/validate_release_images.py" in makefile
+    assert "scripts/verify_release_supply_chain.py" in makefile
+    assert "scripts/validate_release_runtime.py" in makefile
+    assert "--env-file $(RELEASE_ENV) --manifest $(RELEASE_MANIFEST)" in makefile
+    assert "boltrig.api.cli doctor --env-file $(RELEASE_ENV)" not in makefile
     assert "-f deploy/compose.release.yml" in makefile
     assert "up -d --no-build" in makefile

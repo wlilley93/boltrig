@@ -23,20 +23,24 @@
 # exist before v0.4.19: it cannot be satisfied by a stale container still up.
 set -uo pipefail
 
+say() { echo; echo "=== $* ==="; }
+die() { echo "ABORT: $*" >&2; exit 1; }
+
 VERSION="${1:-}"
 [ -n "$VERSION" ] || { echo "usage: $0 <version>   e.g. $0 v0.4.19" >&2; exit 2; }
 
-H="${ROLL_HOST:-jellytot-prod}"
-TEN="${ROLL_TENANTS:-/home/jellytot/Projects/opbox-prod/boltrig-tenants}"
-COMPOSE="${ROLL_COMPOSE:-/home/jellytot/Projects/boltrig-main/docker-compose.yml}"
+# Deployment coordinates are operator inputs, never repository defaults.
+H="${ROLL_HOST:-}"
+TEN="${ROLL_TENANTS:-}"
+COMPOSE="${ROLL_COMPOSE:-}"
+[ -n "$H" ] || die "ROLL_HOST is required"
+[ -n "$TEN" ] || die "ROLL_TENANTS is required"
+[ -n "$COMPOSE" ] || die "ROLL_COMPOSE is required"
 # BOTH stacks' compose project working_dir is the base compose file's directory
 # (verified via com.docker.compose.project.working_dir). Running from anywhere
 # else re-resolves the base file's relative binds against a different root.
 PROJECT_DIR="$(dirname "$COMPOSE")"
 STAMP=$(date +%Y%m%d-%H%M%S)
-
-say() { echo; echo "=== $* ==="; }
-die() { echo "ABORT: $*" >&2; exit 1; }
 
 say "digests for $VERSION, read from the registry"
 # WAIT, do not abort on the first miss. Tagging and rolling is ONE operator
@@ -76,7 +80,8 @@ echo "  worker $WUD"
 # So: edit the SOURCE, verify it, copy it to the box, and prove the two match by
 # checksum before anything is brought up. A pin that is not in the source is not
 # a pin, it is a local edit waiting to be lost.
-SRC_ROOT="${ROLL_SRC:-/home/jellytot/Projects/opbox-prod/boltrig-tenants}"
+SRC_ROOT="${ROLL_SRC:-}"
+[ -n "$SRC_ROOT" ] || die "ROLL_SRC is required"
 
 repin() { # $1=overlay path ON THE BOX (its basename-relative path under SRC_ROOT)
   local remote="$1"

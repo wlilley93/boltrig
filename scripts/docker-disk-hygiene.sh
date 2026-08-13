@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Keep a Docker host off the cliff, and say so BEFORE it falls off.
 #
-# Written after jellytot-prod hit 100% (150G, ZERO bytes free) mid-roll, with
+# Written after a production host hit 100% (150G, ZERO bytes free) mid-roll, with
 # 141.7GB of images of which 108.5GB was reclaimable. A production host at zero
 # bytes cannot write Postgres, rotate a log, or pull an image, and the first
 # symptom was a one-line `cp` failing during an unrelated deploy. Nothing had
