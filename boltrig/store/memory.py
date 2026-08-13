@@ -31,6 +31,7 @@ from .eval_cases import EvalCaseStoreMem
 from .credential_references import CredentialReferencePresenceMem
 from .ai_key_proposals import AiKeyProposalStoreMem
 from .mcp_lifecycle import McpLifecycleStoreMem
+from .model_endpoints_memory import ModelEndpointStoreMem
 from boltrig.models import (
     AgentCapability,
     AuditEvent,
@@ -64,7 +65,6 @@ from boltrig.models import (
     MemoryFact,
     MemoryIngestion,
     MemoryProjectionStatus,
-    ModelEndpoint,
     AI_CONFIG_LEVELS,
     AI_CONFIG_MODALITIES,
     AiConfig,
@@ -104,7 +104,8 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
                     WorkflowTriggerStoreMem, WorkflowScheduleStoreMem,
                     AuthoredDefinitionStoreMem,
                     EvalCaseStoreMem, CredentialReferencePresenceMem,
-                    AiKeyProposalStoreMem, McpLifecycleStoreMem):
+                    AiKeyProposalStoreMem, McpLifecycleStoreMem,
+                    ModelEndpointStoreMem):
     """In-memory Store composed from domain partial mixins for offline use and tests."""
 
     def __init__(self) -> None:
@@ -112,6 +113,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         self._init_ai_key_proposal_state()
         self._init_background_job_state()
         self._init_mcp_lifecycle_state()
+        self._init_model_endpoint_state()
         self._init_execution_state()
         self._init_account_state()
 
@@ -123,7 +125,6 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         # Read aggregated by workflow_run_stats to feed the automations home
         # cards with real persisted statistics.
         self._workflow_runs: dict[tuple[str, str], tuple[str, str, datetime]] = {}
-        self._endpoints: dict[tuple[str, str], ModelEndpoint] = {}
         self._work: dict[tuple[str, str], WorkItem] = {}
         self._hitl: dict[tuple[str, str], HITLRequest] = {}
         self._hitl_resp: dict[tuple[str, str], HITLResponse] = {}
@@ -302,27 +303,6 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
             }
             for wf_id, b in sorted(buckets.items())
         ]
-
-    async def upsert_model_endpoint(self, ep):
-        existing = self._endpoints.get((ep.tenant_id, ep.id))
-        if existing is not None:
-            # Replacement edits preserve withdrawal. Only the explicit
-            # lifecycle seam may reactivate an endpoint.
-            ep.is_active = existing.is_active
-        self._endpoints[(ep.tenant_id, ep.id)] = ep
-
-    async def get_model_endpoint(self, tenant_id, ep_id):
-        return self._endpoints.get((tenant_id, ep_id))
-
-    async def list_model_endpoints(self, tenant_id):
-        return [ep for (t, _), ep in self._endpoints.items() if t == tenant_id]
-
-    async def set_model_endpoint_active(self, tenant_id, ep_id, active):
-        endpoint = self._endpoints.get((tenant_id, ep_id))
-        if endpoint is None:
-            return None
-        endpoint.is_active = bool(active)
-        return endpoint
 
     # --- work items ---
     # Store a COPY, and hand back copies on read (see work_items._detached). The
@@ -884,10 +864,8 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         # Newest first, matching the PG ORDER BY created_at DESC LIMIT 1.
         return max(matches, key=lambda i: i.created_at, default=None)
 
-    async def find_invitation_by_token_hash(self, tenant_id, token_hash):
-        # First-party invite ([2026] VJS-COUNTY 7, D1): match a still-pending
-        # invitation by its token hash, constant-time so the hash is not leaked by
-        # timing. Tenant-scoped (the console tenant is bound by the caller).
+    async def claim_invitation_by_token_hash(self, tenant_id, token_hash, now):
+        """Atomically claim one pending, unexpired first-party invite bearer."""
         import hmac as _hmac
 
         for (t, _), inv in self._invites.items():
@@ -896,8 +874,10 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
                 and inv.status == "pending"
                 and inv.token_hash
                 and _hmac.compare_digest(inv.token_hash, token_hash)
+                and (inv.expires_at is None or inv.expires_at > now)
             ):
-                return inv
+                inv.status = "accepted"
+                return replace(inv)
         return None
 
     async def consume_invitation(self, tenant_id, inv_id):

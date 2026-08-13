@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from boltrig.adapters.base import VerbSpec
-from boltrig.models import COST_TIERS
+from boltrig.models import COST_TIERS, MODEL_MODALITIES
 
 from .control_workflow_specs import permanent_fleet_specs, workflow_specs
 
@@ -18,7 +18,7 @@ _STRING: dict[str, Any] = {"type": "string"}
 _STRINGS: dict[str, Any] = {"type": "array", "items": _STRING}
 _MODALITIES: dict[str, Any] = {
     "type": "array",
-    "items": {"type": "string", "enum": ["text", "vision"]},
+    "items": {"type": "string", "enum": list(MODEL_MODALITIES)},
     "minItems": 1,
     "uniqueItems": True,
 }
@@ -72,6 +72,11 @@ def _profile_specs() -> list[VerbSpec]:
                 "cost_tier": {"type": "string", "enum": list(COST_TIERS)},
                 "model_endpoint": _STRING,
                 "vision_model_endpoint": _STRING,
+                "model_routes": {
+                    "type": "object",
+                    "additionalProperties": _STRING,
+                    "maxProperties": len(MODEL_MODALITIES),
+                },
             },
             ("name", "runtime"),
             "Author or replace an agent capability profile",

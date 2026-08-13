@@ -11,14 +11,23 @@ gate is tested exactly as it faces the internet.
 
 import asyncio
 import json
+from datetime import timedelta
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from boltrig.identity import build_session_resolver, hash_password, verify_password
+from boltrig.identity.invites import hash_invite_token
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
-from boltrig.models import GrantSet, TenantPermissions, User, utcnow
+from boltrig.models import (
+    GrantSet,
+    TenantPermissions,
+    User,
+    UserInvitation,
+    utcnow,
+)
 from boltrig.store import InMemoryStore
 from tests.approval import approved_request
 
@@ -99,6 +108,82 @@ def test_invite_only_no_self_signup_and_single_use(monkeypatch):
     replay = invitee_c.post("/v1/auth/accept-invite",
                             json={"token": token, "password": "different-password-1"})
     assert replay.status_code == 400
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-97")
+async def test_concurrent_invite_redemption_cannot_apply_the_rejected_password(
+    monkeypatch,
+):
+    """The single-use claim linearises acceptance before any account write.
+
+    Delaying the legacy id-based consume makes this test deterministically expose
+    the old ordering: both requests wrote their password, then the first CAS
+    winner returned 200 while the rejected request's password remained stored.
+    The current route never reaches that late consume seam; only the exact token
+    claimant can write.
+    """
+    monkeypatch.delenv("BOLTRIG_SESSION_TENANT", raising=False)
+    _, app, store = _app()
+    token = "boltrig_invite_concurrent-redemption"
+    email = "concurrent@example.io"
+    await store.add_invitation(
+        UserInvitation(
+            id="concurrent-invite",
+            tenant_id=T,
+            email=email,
+            intended_role="member",
+            intended_scope={},
+            invited_by=OWNER,
+            expires_at=utcnow() + timedelta(hours=1),
+            token_hash=hash_invite_token(token),
+        )
+    )
+
+    original_consume = store.consume_invitation
+    both_at_legacy_consume = asyncio.Event()
+    first_finished = asyncio.Event()
+    arrivals = 0
+
+    async def delayed_legacy_consume(tenant_id, invitation_id):
+        nonlocal arrivals
+        order = arrivals
+        arrivals += 1
+        if order == 1:
+            both_at_legacy_consume.set()
+        await asyncio.wait_for(both_at_legacy_consume.wait(), timeout=5)
+        if order == 0:
+            won = await original_consume(tenant_id, invitation_id)
+            first_finished.set()
+            return won
+        await asyncio.wait_for(first_finished.wait(), timeout=5)
+        return await original_consume(tenant_id, invitation_id)
+
+    # This hook is intentionally unused by the fixed route. It makes the same
+    # regression fail deterministically if the old mutate-then-consume ordering
+    # is restored.
+    store.consume_invitation = delayed_legacy_consume
+    passwords = ("first-winner-password-123", "second-loser-password-456")
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        responses = await asyncio.gather(
+            *(
+                client.post(
+                    "/v1/auth/accept-invite",
+                    json={"token": token, "password": password},
+                )
+                for password in passwords
+            )
+        )
+
+    assert sorted(response.status_code for response in responses) == [200, 400]
+    winner = next(index for index, response in enumerate(responses) if response.status_code == 200)
+    rejected = 1 - winner
+    credential = await store.get_password_credential(T, email)
+    assert credential is not None
+    assert verify_password(credential, passwords[winner])
+    assert not verify_password(credential, passwords[rejected])
+    assert arrivals == 0
 
 
 # --- SEC-98 / [2026] VJS-COUNTY 7 D4: argon2id, non-reversible, never logged --------

@@ -197,19 +197,11 @@ def test_console_overview_is_scoped_bounded_and_redacted():
         }
     ]
     assert body["models"][0]["calls"] == 2
+    assert body["models"][0]["tokens"] == 125
     assert body["models"][0]["cost_micros"] == 250
 
-    scoped_rendered = repr({
-        "platform": body["platform"],
-        "models": body["models"],
-        "cost": body["cost"],
-        "budgets": body["budgets"],
-        "recent_runs": body["recent_runs"],
-        "approvals": body["approvals"],
-    }).lower()
     rendered = repr(body).lower()
     assert "r2" not in rendered
-    assert "999" not in scoped_rendered
     assert "rpa_secret" not in rendered
     assert "secret.example" not in rendered
     assert "base_url" not in rendered

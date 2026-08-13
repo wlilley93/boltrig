@@ -72,7 +72,7 @@ def safe_gateway_payload(event_type: str, raw: object) -> dict | None:
     allowed: dict[str, tuple[str, ...]] = {
         "participant_joined": ("label", "kind"),
         "participant_left": ("reason",),
-        "transcript": ("text", "final", "kind"),
+        "transcript": ("text", "final", "kind", "via"),
         "tool_call": ("provider_call_id", "verb"),
         "tool_result": ("provider_call_id", "verb", "status", "reason"),
         "hitl": ("request_id", "status", "verb", "provider_call_id"),
@@ -95,6 +95,8 @@ def safe_gateway_payload(event_type: str, raw: object) -> dict | None:
     safe = {key: payload[key] for key in allowed[event_type] if key in payload}
     if "text" in safe:
         safe["text"] = str(safe["text"])[:MAX_TRANSCRIPT_CHARS]
+    if "via" in safe:
+        safe["via"] = str(safe["via"])[:20]
     if event_type == "transcript":
         if (
             safe.get("kind") not in {"input", "output"}

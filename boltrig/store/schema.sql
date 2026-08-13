@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS agent_capabilities (
     is_ephemeral     BOOLEAN NOT NULL,
     cost_tier        TEXT NOT NULL,                     -- cheap | standard | expensive
     vision_model_endpoint TEXT,
+    model_routes    JSONB NOT NULL DEFAULT '{}'::jsonb,
     -- Scoped-declarative reconciliation ([2026] LEXBY LOG-2026-07-17): is_active is
     -- the soft-active flag (list_capabilities returns only active rows, so a
     -- deactivated capability can never be selected); source is provenance -
@@ -195,6 +196,7 @@ CREATE TABLE IF NOT EXISTS model_endpoints (
     data_class  TEXT NOT NULL DEFAULT 'standard',       -- standard | sensitive
     modalities  JSONB NOT NULL DEFAULT '["text"]'::jsonb,
     is_active   BOOLEAN NOT NULL DEFAULT TRUE,           -- reversible governed withdrawal
+    revision    BIGINT NOT NULL DEFAULT 1,               -- approved mutation generation
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
@@ -1106,7 +1108,10 @@ CREATE TABLE IF NOT EXISTS device_leases (
     claimed_at TIMESTAMPTZ, settled_at TIMESTAMPTZ, receipt JSONB,
     PRIMARY KEY (tenant_id,id), UNIQUE (tenant_id,approval_id),
     CONSTRAINT device_lease_verb_valid
-      CHECK (verb IN ('device.file.read','device.file.write','device.command.run')),
+      CHECK (verb IN (
+        'device.file.list','device.file.read','device.file.write',
+        'device.command.run'
+      )),
     CONSTRAINT device_lease_status_valid
       CHECK (status IN ('issued','claimed','completed','failed','expired')),
     CONSTRAINT device_lease_action_object

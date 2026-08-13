@@ -16,7 +16,8 @@
 #   scripts/lane-smoke.sh "Use opbox.party.list and count the parties."
 set -euo pipefail
 
-OWNER_EMAIL="${LANE_SMOKE_EMAIL:-will.lilley93@gmail.com}"
+OWNER_EMAIL="${LANE_SMOKE_EMAIL:-}"
+[ -n "$OWNER_EMAIL" ] || { echo "LANE_SMOKE_EMAIL is required; no owner identity is bundled" >&2; exit 2; }
 KERNEL_URL="${LANE_SMOKE_KERNEL_URL:-http://127.0.0.1:8000}"
 BIFROST_URL="${LANE_SMOKE_BIFROST_URL:-http://127.0.0.1:8081}"
 MESSAGE="${1:-Use the opbox.matter.list tool to list matters and tell me the count.}"

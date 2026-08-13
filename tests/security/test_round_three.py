@@ -175,6 +175,7 @@ def test_author_replacement_views_are_complete_and_role_gated():
         "model": "pinned",
         "data_class": "sensitive",
         "modalities": ["text"],
+        "revision": 1,
         "is_active": True,
         "status": "active",
     }]

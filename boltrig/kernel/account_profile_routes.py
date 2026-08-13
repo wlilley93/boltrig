@@ -8,6 +8,9 @@ from fastapi.responses import JSONResponse
 from boltrig.models import UserSetting
 from boltrig.store import audit_read_contract as audit_pages
 
+from .approval_posture import APPROVAL_POSTURE_SETTING
+from .approval_posture_routes import register_approval_posture_routes
+
 
 def _register_settings_routes(app, P, K, audit, user_view) -> None:
     @app.get("/v1/me/settings")
@@ -42,6 +45,14 @@ def _register_settings_routes(app, P, K, audit, user_view) -> None:
             return JSONResponse(
                 {"status": "error", "reason": "no settings provided"}, status_code=400
             )
+        if APPROVAL_POSTURE_SETTING in updates:
+            return JSONResponse(
+                {
+                    "status": "error",
+                    "reason": "use the approval-posture endpoint",
+                },
+                status_code=400,
+            )
         for key, value in updates.items():
             await k.store.upsert_user_setting(
                 UserSetting(
@@ -54,7 +65,6 @@ def _register_settings_routes(app, P, K, audit, user_view) -> None:
         keys = sorted(str(key) for key in updates)
         await audit(k, p, "settings.update", {"keys": keys})
         return JSONResponse({"status": "ok", "keys": keys})
-
 
 def _register_activity_routes(app, P, K, audit) -> None:
     @app.get("/v1/me/activity")
@@ -178,5 +188,6 @@ def _register_regenerate_route(app, P, K, audit) -> None:
 
 def register_account_profile_routes(app, P, K, audit, user_view) -> None:
     _register_settings_routes(app, P, K, audit, user_view)
+    register_approval_posture_routes(app, P, K, audit)
     _register_activity_routes(app, P, K, audit)
     _register_regenerate_route(app, P, K, audit)

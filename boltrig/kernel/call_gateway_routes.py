@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import replace
+from datetime import timedelta
 
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
@@ -24,6 +25,11 @@ from .call_route_support import (
 from .call_transcript import project_call_transcript
 
 _GATEWAY_TOKEN_HEADER = "x-boltrig-mcp-token"
+_TYPED_TEXT_RATE_LIMIT = 6
+_TYPED_TEXT_RATE_WINDOW_SECONDS = 10
+_TYPED_TEXT_CALL_MESSAGE_LIMIT = 64
+_TYPED_TEXT_CALL_CHAR_LIMIT = 64_000
+_TYPED_TEXT_HISTORY_LIMIT = 500
 
 
 def _gateway_token(request: Request, kernel):
@@ -46,6 +52,31 @@ async def _owns_call_channel(kernel, gateway, call) -> bool:
             gateway.lease_id,
         )
     )
+
+
+async def _typed_text_admitted(kernel, call, payload: dict) -> bool:
+    """Enforce one durable, reconnect-stable typed-text budget per call."""
+    if payload.get("via") != "text":
+        return True
+    events = await kernel.store.list_realtime_call_events(
+        call.tenant_id, call.id, _TYPED_TEXT_HISTORY_LIMIT
+    )
+    # The store deliberately exposes a bounded event read. If the complete
+    # history cannot be proven, typed provider work fails closed.
+    if len(events) >= _TYPED_TEXT_HISTORY_LIMIT:
+        return False
+    typed = [
+        event
+        for event in events
+        if event.type == "transcript" and event.payload.get("via") == "text"
+    ]
+    if len(typed) >= _TYPED_TEXT_CALL_MESSAGE_LIMIT:
+        return False
+    text_chars = sum(len(str(event.payload.get("text") or "")) for event in typed)
+    if text_chars + len(str(payload.get("text") or "")) > _TYPED_TEXT_CALL_CHAR_LIMIT:
+        return False
+    cutoff = utcnow() - timedelta(seconds=_TYPED_TEXT_RATE_WINDOW_SECONDS)
+    return sum(event.created_at >= cutoff for event in typed) < _TYPED_TEXT_RATE_LIMIT
 
 
 async def claim_call_media(body: dict, request: Request, kernel) -> JSONResponse:
@@ -127,6 +158,13 @@ async def append_call_event(
     if payload is None:
         return JSONResponse(
             {"status": "error", "reason": "unsafe_event_payload"}, status_code=400
+        )
+    if event_type == "transcript" and not await _typed_text_admitted(
+        kernel, call, payload
+    ):
+        return JSONResponse(
+            {"status": "error", "reason": "typed_text_limit_reached"},
+            status_code=429,
         )
     if event_type == "hitl" and (
         payload.get("status") != "pending" or not payload.get("request_id")

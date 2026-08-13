@@ -177,7 +177,14 @@ def parse_services(path: Path) -> dict[str, dict]:
             service = stripped[:-1].strip()
             services.setdefault(
                 service,
-                {"build": False, "context": None, "image": None, "test": None, "test_line": 0},
+                {
+                    "build": False,
+                    "context": None,
+                    "image": None,
+                    "command": None,
+                    "test": None,
+                    "test_line": 0,
+                },
             )
             key = sub = None
             continue
@@ -194,6 +201,10 @@ def parse_services(path: Path) -> dict[str, dict]:
                 services[service]["build"] = True
                 if value and value not in {"null", "~"}:
                     services[service]["context"] = value
+            elif key == "command" and value:
+                services[service]["command"] = (
+                    " ".join(_flow_list(value)) if value.startswith("[") else value
+                )
             continue
         if indent == 6 and key == "build" and stripped.startswith("context:"):
             services[service]["context"] = _strip_tag(stripped.split(":", 1)[1])
@@ -243,6 +254,12 @@ def routes_in(directory: Path) -> dict[Path, set[str]]:
         )
         for filename in sorted(filenames):
             path = Path(parent) / filename
+            # This gate's own explanatory examples include literal
+            # ``@app.get("/readyz")`` / ``/health`` snippets. The gate is not
+            # copied into or imported by any service application and must not
+            # become fictional route evidence for every root build context.
+            if path.resolve() == Path(__file__).resolve():
+                continue
             if path.suffix not in SOURCE_SUFFIXES or not path.is_file():
                 continue
             try:
@@ -559,11 +576,12 @@ def main() -> int:
     for manifest in manifests:
         for name, spec in parse_services(manifest).items():
             entry = merged.setdefault(
-                name, {"build": False, "context": None, "image": None}
+                name, {"build": False, "context": None, "image": None, "command": None}
             )
             entry["build"] = entry["build"] or spec["build"]
             entry["context"] = entry["context"] or spec["context"]
             entry["image"] = entry["image"] or spec["image"]
+            entry["command"] = entry["command"] or spec["command"]
             if spec["test"] is not None:
                 occurrences.append((name, manifest, spec))
 
@@ -631,6 +649,16 @@ def main() -> int:
             context.relative_to(ROOT)
         except (OSError, ValueError):
             context = ROOT
+        # A monorepo root build context can contain several independent HTTP
+        # applications. When Compose names a Python module entry point, narrow
+        # route discovery to that module's package instead of attributing a
+        # sibling service's `/health` and `/readyz` to this process.
+        command = str(info.get("command") or "")
+        module_match = re.search(r"\bpython(?:3)?\s+-m\s+([A-Za-z_][\w.]*)", command)
+        if context == ROOT and module_match:
+            module_source = ROOT / (module_match.group(1).replace(".", "/") + ".py")
+            if module_source.is_file():
+                context = module_source.parent
         if context not in route_cache:
             route_cache[context] = routes_in(context)
         table = route_cache[context]

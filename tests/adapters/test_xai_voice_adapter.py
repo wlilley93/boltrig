@@ -8,6 +8,7 @@ import pytest
 
 from boltrig.adapters.base import Credential
 from boltrig.adapters.builtin.xai_voice import XaiVoiceAdapter
+from boltrig.adapters.http_response import MAX_BINARY_RESPONSE_BYTES
 from boltrig.models import GrantSet, InvocationContext
 
 T = "acme"
@@ -169,6 +170,41 @@ async def test_speak_rejects_text_over_the_tts_bound():
     assert result.error is not None
     assert result.error.error_class.value == "invalid"
     assert not result.error.retryable
+
+
+@pytest.mark.invariant("SEC-196")
+async def test_speak_rejects_oversize_audio_without_buffering_it():
+    class NeverReadStream(httpx.AsyncByteStream):
+        reads = 0
+
+        async def __aiter__(self):
+            self.reads += 1
+            yield b"must-not-be-read"
+
+        async def aclose(self) -> None:
+            return None
+
+    stream = NeverReadStream()
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={
+                "Content-Type": "audio/mpeg",
+                "Content-Length": str(MAX_BINARY_RESPONSE_BYTES + 1),
+            },
+            stream=stream,
+        )
+
+    result = await _adapter(handler).execute(
+        "voice.speak", {"text": "hello"}, _cred(), _ctx()
+    )
+
+    assert not result.ok
+    assert result.error is not None
+    assert result.error.error_class.value == "unavailable"
+    assert result.error.retryable is False
+    assert stream.reads == 0
 
 
 async def test_listen_rejects_non_base64_audio():

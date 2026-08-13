@@ -18,6 +18,7 @@ from __future__ import annotations
 import time
 
 import logging
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -207,7 +208,11 @@ async def test_worker_boot_refuses_default_audit_key_under_prod_signal(monkeypat
     monkeypatch.setenv("BOLTRIG_PRODUCTION", "1")
     monkeypatch.delenv("BOLTRIG_AUDIT_HMAC_KEY", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)  # stay offline (in-memory store)
-    monkeypatch.delenv("BOLTRIG_MANIFEST", raising=False)
+    # This is an audit-key boundary test, not a project-extension import test.
+    # Use the shipped self-contained example instead of whichever deployment's
+    # optional adapter modules happen to be named by the working-tree manifest.
+    manifest = Path(__file__).resolve().parents[2] / "manifest.example.yaml"
+    monkeypatch.setenv("BOLTRIG_MANIFEST", str(manifest))
     with pytest.raises(RuntimeError):
         await build_kernel_async()
 

@@ -28,7 +28,6 @@ from boltrig.models import (
     PersonalAccessToken,
     PersonalAgent,
     HITLResponse,
-    ModelEndpoint,
     SecurityEvent,
     Workspace,
     WorkspaceMember,
@@ -64,6 +63,7 @@ from .ai_key_proposals import AiKeyProposalStoreContract
 from .channel_gateway_contract import ChannelGatewayStateContract
 from .conversation_contract import ConversationStoreContract
 from .mcp_lifecycle import McpLifecycleStoreContract
+from .model_endpoint_contract import ModelEndpointStoreContract
 # List pages clamp to MAX_WORK_PAGE/DEFAULT_WORK_PAGE so growing tenants stay bounded.
 # limit=None on the store keeps the legacy
 # full-slice contract for internal callers (e.g. the own-data export) that must
@@ -104,7 +104,7 @@ class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStore
             EvalCaseStoreContract, ExecutionSearchContract,
             CredentialReferenceContract, AiKeyProposalStoreContract,
             ChannelGatewayStateContract, ConversationStoreContract,
-            McpLifecycleStoreContract, Protocol):
+            McpLifecycleStoreContract, ModelEndpointStoreContract, Protocol):
     # --- permissions ---
     async def get_tenant_permissions(self, tenant_id: str) -> TenantPermissions: ...
 
@@ -115,12 +115,6 @@ class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStore
     async def delete_adapter(self, tenant_id: str, adapter_id: str) -> None: ...
     async def upsert_workflow(self, wf: WorkflowDefinition) -> None: ...
     async def list_workflows(self, tenant_id: str) -> list[WorkflowDefinition]: ...
-    async def upsert_model_endpoint(self, ep: ModelEndpoint) -> None: ...
-    async def get_model_endpoint(self, tenant_id: str, ep_id: str) -> ModelEndpoint | None: ...
-    async def list_model_endpoints(self, tenant_id: str) -> list[ModelEndpoint]: ...
-    async def set_model_endpoint_active(
-        self, tenant_id: str, ep_id: str, active: bool
-    ) -> ModelEndpoint | None: ...
     # Observability-only rows feed stats; write failure never voids execution.
     async def record_workflow_run(self, tenant_id: str, workflow_id: str, run_id: str, status: str) -> None: ...
     async def list_workflow_run_ids(self, tenant_id: str, workflow_id: str, limit: int = 100) -> list[str]: ...
@@ -491,12 +485,12 @@ class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStore
     async def find_pending_invitation(
         self, tenant_id: str, email: str
     ) -> UserInvitation | None: ...
-    # First-party invite-only login ([2026] VJS-COUNTY 7, D1): resolve a pending
-    # invitation by the sha256 of its single-use token secret, tenant-scoped so it
-    # is RLS-safe (the console tenant is bound before the read). Constant-time
-    # compare on the in-memory store so the hash is not leaked by timing.
-    async def find_invitation_by_token_hash(
-        self, tenant_id: str, token_hash: str
+    # First-party invite acceptance must claim the bearer BEFORE it performs any
+    # account, credential or tenancy mutation.  Lookup + expiry + pending-state
+    # transition therefore live in one store operation; returning the claimed
+    # snapshot gives the sole winner the immutable authority it may materialise.
+    async def claim_invitation_by_token_hash(
+        self, tenant_id: str, token_hash: str, now: Any
     ) -> UserInvitation | None: ...
     # Atomic single-use consume: flip a still-pending invitation to 'accepted' and
     # return True only for the caller that won the CAS (mirrors consume_hitl), so a

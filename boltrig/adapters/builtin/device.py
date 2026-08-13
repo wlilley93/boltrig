@@ -16,11 +16,13 @@ from boltrig.models import AdapterFailure, InvocationContext
 from boltrig.models.device_actions import (
     MAX_ARG_BYTES,
     MAX_ARGS,
+    MAX_DIRECTORY_ENTRIES,
     MAX_FILE_BYTES,
     MAX_PATH_BYTES,
 )
 
 DEVICE_VERBS = (
+    "device.file.list",
     "device.file.read",
     "device.file.write",
     "device.command.run",
@@ -34,6 +36,11 @@ _OPAQUE_ID = {
 }
 _RELATIVE_PATH = {
     "type": "string",
+    "minLength": 1,
+    "maxLength": MAX_PATH_BYTES,
+}
+_OPTIONAL_RELATIVE_PATH = {
+    "type": ["string", "null"],
     "minLength": 1,
     "maxLength": MAX_PATH_BYTES,
 }
@@ -72,6 +79,28 @@ def _input(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
     }
 
 
+def _file_list_spec(common: dict[str, Any]) -> VerbSpec:
+    return VerbSpec(
+        verb_id="device.file.list",
+        input_schema=_input(
+            {
+                "relative_path": _OPTIONAL_RELATIVE_PATH,
+                "max_entries": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": MAX_DIRECTORY_ENTRIES,
+                },
+            },
+            ["relative_path", "max_entries"],
+        ),
+        description=(
+            "Issue one signed lease for a bounded single-directory "
+            "metadata listing."
+        ),
+        **common,
+    )
+
+
 def device_specs() -> list[VerbSpec]:
     """The full capability is data: schemas, HIGH consequence and rate bounds."""
     common: dict[str, Any] = {
@@ -82,6 +111,7 @@ def device_specs() -> list[VerbSpec]:
         "idempotency_mode": "cacheable",
     }
     return [
+        _file_list_spec(common),
         VerbSpec(
             verb_id="device.file.read",
             input_schema=_input(

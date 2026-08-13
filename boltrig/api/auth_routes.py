@@ -331,18 +331,22 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
             validate_password_strength(password)
         except WeakPassword as exc:
             return JSONResponse({"status": "error", "reason": str(exc)}, status_code=400)
+        # Argon2 work is pure and may fail only before the one-time bearer is
+        # claimed.  Once claimed, no concurrent/replayed request may reach a
+        # password or provisioning write, even if later operational work fails.
+        password_hash = hash_password(password)
 
         tenant = _console_tenant()
         set_current_tenant(tenant)  # bind before any RLS-scoped read/write
-        inv = await k.store.find_invitation_by_token_hash(tenant, hash_invite_token(token))
         # One generic rejection for unknown / expired / already-used, so a probe
         # cannot distinguish them.
         invalid = JSONResponse(
             {"status": "error", "reason": "invalid or expired invite"}, status_code=400
         )
+        inv = await k.store.claim_invitation_by_token_hash(
+            tenant, hash_invite_token(token), utcnow()
+        )
         if inv is None:
-            return invalid
-        if inv.expires_at is not None and inv.expires_at <= utcnow():
             return invalid
 
         email = _norm_email(inv.email)
@@ -367,7 +371,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         # against this one credential; the invite's own tenant is the realm here
         # (invites are consumed at the login realm), so this is the identity home.
         await k.store.set_password_credential(
-            tenant, email, hash_password(password)
+            tenant, email, password_hash
         )
         # Org/workspace-scoped seating + provisioning ([2026] VJS-COUNTY 8, D6). Each
         # arm runs only when its intent is present on the invite (a legacy invite
@@ -376,13 +380,6 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         # could manage a targeted workspace and gated org provisioning to superadmin),
         # so accept just materialises what was authorised.
         seated = await _seat_invitee(k, inv, email)
-        # Atomic single-use, consumed LAST (D1): the invite is burned only once the
-        # account + credential + seating actually exist, so a store failure above
-        # never strands a single-use invite with no account. The CAS still prevents
-        # a double-spend; a lost race / already consumed token returns the same
-        # generic rejection.
-        if not await k.store.consume_invitation(inv.tenant_id, inv.id):
-            return invalid
         # Keys-only via `_audit`: invitation id + email, never the password (SEC-191).
         await _audit(k, inv.tenant_id, email, "auth.invite.accept",
                      {"invitation_id": inv.id, "email": email, **seated})

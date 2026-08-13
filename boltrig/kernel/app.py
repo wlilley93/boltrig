@@ -456,7 +456,7 @@ def create_app(
             on_behalf_bearer=body.on_behalf_bearer,
             idempotency_key=body.idempotency_key,
             origin=body.origin,
-            model_profile_id=body.model_profile_id,
+            model_profile_id=body.model_profile_id, model_choice_id=body.model_choice_id,
         )
         # RBAC / access errors happen before the first event and propagate to the
         # central exception handler (canonical envelope) - the stream hasn't begun.

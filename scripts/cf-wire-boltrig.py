@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Idempotently wire the boltrig.io / boltrig.dev hostnames onto the jellytot-prod
+"""Idempotently wire the boltrig.io / boltrig.dev hostnames onto the configured
+production host
 Cloudflare tunnel: a proxied DNS CNAME per host -> <tunnel>.cfargotunnel.com, and
 a tunnel public-hostname ingress rule per host -> http://localhost:80 (the host
 Caddy routes by hostname). Minimal calls (the token got rate-flagged by rapid
@@ -9,6 +10,7 @@ CLOUDFLARE_ACCOUNT_ID from the env.
 Layout served by the host Caddy:
   boltrig.io / www.boltrig.io  -> /srv/boltrig-marketing (the landing page)
   app.boltrig.io               -> 127.0.0.1:8620 (the console UI)
+  dev.boltrig.io               -> 127.0.0.1:1420 (the current Worker preview)
   boltrig.dev / www.boltrig.dev-> 301 redirect to https://boltrig.io
 """
 import json
@@ -26,6 +28,7 @@ HOSTS = {  # hostname -> zone
     "boltrig.io": "boltrig.io",
     "www.boltrig.io": "boltrig.io",
     "app.boltrig.io": "boltrig.io",
+    "dev.boltrig.io": "boltrig.io",
     "boltrig.dev": "boltrig.dev",
     "www.boltrig.dev": "boltrig.dev",
 }
@@ -58,7 +61,19 @@ def main():
                 return 2
             continue
         if ex.get("result"):
-            print(f"DNS {host}: present ({ex['result'][0]['type']})")
+            record = ex["result"][0]
+            target = f"{TUN}.cfargotunnel.com"
+            if (record.get("type"), record.get("content"), record.get("proxied")) == (
+                "CNAME", target, True
+            ):
+                print(f"DNS {host}: present ({record['type']})")
+                continue
+            d = api(
+                "PUT",
+                f"/zones/{zid}/dns_records/{record['id']}",
+                {"type": "CNAME", "name": host, "content": target, "proxied": True, "ttl": 1},
+            )
+            print(f"DNS {host}: reconciled -> {'ok' if d.get('success') else d.get('errors')}")
             continue
         d = api("POST", f"/zones/{zid}/dns_records",
                 {"type": "CNAME", "name": host, "content": f"{TUN}.cfargotunnel.com",

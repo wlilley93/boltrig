@@ -272,6 +272,45 @@ async def test_device_lifecycle_and_lease_cas_match_on_both_stores(device_store)
     assert owner_rows[0].status == "completed"
     assert owner_rows[0].receipt == {"bytes": 4}
 
+    await _approval(device_store, "approval-list", "device.file.list")
+    listing = SIGNER.sign(
+        replace(
+            lease,
+            id="lease-list",
+            approval_id="approval-list",
+            verb="device.file.list",
+            action={"relative_path": None, "max_entries": 20},
+        )
+    )
+    assert await device_store.create_device_lease(listing)
+    claimed_listing = await device_store.claim_device_lease(
+        T,
+        completed.id,
+        listing.id,
+        listing.signature,
+        token_digest("list-claim"),
+        now + timedelta(minutes=5),
+    )
+    assert claimed_listing is not None
+    assert await device_store.settle_device_lease(
+        T,
+        completed.id,
+        listing.id,
+        token_digest("list-claim"),
+        "completed",
+        {
+            "entries": [
+                {
+                    "name": "src",
+                    "path": "src",
+                    "kind": "directory",
+                    "byte_size": None,
+                }
+            ],
+            "truncated": False,
+        },
+    )
+
     await _approval(device_store, "approval-cancelled", "device.file.read")
     cancelled = SIGNER.sign(
         replace(

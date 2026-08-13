@@ -52,6 +52,12 @@ from boltrig.adapters.base import (
 )
 from boltrig.adapters.egress import EgressBlocked, assert_egress_allowed
 from boltrig.adapters.http_base import Handler, HttpAdapter
+from boltrig.adapters.http_response import (
+    MAX_JSON_RESPONSE_BYTES,
+    ResponseBoundaryError,
+    bounded_http_response,
+    bounded_response_error,
+)
 from boltrig.models import InvocationContext
 
 # The Mac host from inside the VM / its containers. Overridable so the same
@@ -197,7 +203,16 @@ class LocalWhisperAdapter(HttpAdapter):
         except EgressBlocked as exc:
             return AdapterError(ErrorClass.INVALID, str(exc), retryable=False)
         await self._limiter.acquire()
-        resp = await client.request(method, url, **kwargs)
+        try:
+            resp, _ = await bounded_http_response(
+                client,
+                method,
+                url,
+                max_bytes=MAX_JSON_RESPONSE_BYTES,
+                **kwargs,
+            )
+        except ResponseBoundaryError:
+            return bounded_response_error()
         if 200 <= resp.status_code < 300:
             return resp
         return self._map_status(resp)

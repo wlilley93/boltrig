@@ -31,7 +31,6 @@ from boltrig.models import (
     ActionType,
     AuditEvent,
     BindingNotFound,
-    Consequence,
     DegradedMode,
     GrantMissing,
     HITLType,
@@ -50,6 +49,7 @@ from boltrig.store import Store
 
 from .audit import AuditWriter
 from .adapter_errors import adapter_failure
+from .approval_posture import posture_requires_approval
 from .schema_diagnosis import (
     MAX_SCHEMA_ERRORS,
     MAX_SCHEMA_PATH_DEPTH,
@@ -477,7 +477,6 @@ class Dispatcher:
         meta: dict[str, Any],
     ) -> dict[str, Any]:
         tenant = context.tenant_id
-
         # 1. resolve verb + binding (tenant-scoped; fail-closed)
         verb_def = await self._store.get_verb(tenant, verb)
         if verb_def is None:
@@ -504,8 +503,9 @@ class Dispatcher:
             return idempotency.result
         run = idempotency if isinstance(idempotency, IdempotencyRun) else None
 
-        # 5. consequence / HITL gate (SEC-14) - cannot be bypassed by an agent
-        gated = verb_def.consequence == Consequence.HIGH or verb in self._blocking_verbs
+        gated = verb in self._blocking_verbs or await posture_requires_approval(
+            self._store, verb, verb_def, binding, context
+        )
         # 6. rate limit (FR-KER-05). The gate SPENDS the approval it is handed
         # (atomic ANSWERED -> CONSUMED, single-use) and nothing can hand it back,
         # so on the leg that carries one the throttle must decide FIRST: a

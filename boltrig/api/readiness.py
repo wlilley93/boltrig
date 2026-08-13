@@ -21,9 +21,10 @@ from .readiness_control import (
     control_plane_check,
 )
 from .background_readiness import read_background_job_readiness
+from .codex_readiness import codex_runtime_check
 from .readiness_dependencies import database_checks, password_reset_check
 
-EXPECTED_ALEMBIC_HEAD = "0070_ai_config_modalities"
+EXPECTED_ALEMBIC_HEAD = "0073_agent_model_routes"
 
 _PRODUCTION_NAMES = {"prod", "production", "staging"}
 # The tools /readyz requires. Codex is the only target agent runtime (decision
@@ -123,6 +124,7 @@ class ReadinessService:
         tenant_id: str = "default",
         executor: Any = None,
         status_provider: Any = None,
+        manifest: Any = None,
         env: Mapping[str, str] | None = None,
         postgres_probe: PostgresProbe | None = None,
         redis_probe: RedisProbe | None = None,
@@ -135,6 +137,7 @@ class ReadinessService:
         self._tenant_id = tenant_id
         self._executor = executor
         self._status_provider = status_provider
+        self._manifest = manifest
         self._env = env
         self._postgres_probe = postgres_probe
         self._redis_probe = redis_probe or _probe_redis
@@ -172,6 +175,9 @@ class ReadinessService:
         control = await control_plane_check(self._kernel, self._tenant_id)
         stack_tools, model_gateway = await self._platform_checks(env, timeout_s)
         hatchet = await self._hatchet_check(env, timeout_s)
+        codex_runtime = codex_runtime_check(
+            env, production, manifest=self._manifest
+        )
         password_reset = await self._password_reset_check(env, timeout_s)
         background_jobs = await read_background_job_readiness(
             self._kernel.store, self._tenant_id, timeout_s=timeout_s)
@@ -184,6 +190,7 @@ class ReadinessService:
             "stack_tools": stack_tools,
             "hatchet": hatchet,
             "model_gateway": model_gateway,
+            "codex_runtime": codex_runtime,
             "password_reset_delivery": password_reset,
             **background_jobs,
         }

@@ -221,7 +221,7 @@ class ChatService:
         on_behalf_bearer: str | None = None,
         idempotency_key: str | None = None,
         origin: str | None = None,
-        model_profile_id: str | None = None,
+        model_profile_id: str | None = None, model_choice_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         request = TurnRequest(
             tenant_id=tenant_id,
@@ -237,13 +237,13 @@ class ChatService:
             idempotency_key=idempotency_key,
             origin=origin,
             model_profile_id=model_profile_id,
+            model_choice_id=model_choice_id,
         )
         async for event in stream_turn(self, request):
             yield event
 
     async def _maybe_compact(self, tenant_id: str, conversation_id: str) -> None:
         await maybe_compact(self, tenant_id, conversation_id)
-
     async def _drive(
         self,
         tenant_id,
@@ -260,7 +260,7 @@ class ChatService:
         scope=None,
         on_behalf_bearer=None,
         origin=None,
-        model_profile_id=None,
+        model_profile_id=None, model_choice_id=None,
     ):
         async for event in drive_turn_events(
             self,
@@ -278,6 +278,7 @@ class ChatService:
             on_behalf_bearer=on_behalf_bearer,
             origin=origin,
             model_profile_id=model_profile_id,
+            model_choice_id=model_choice_id,
         ):
             yield event
 

@@ -68,6 +68,9 @@ async def test_cheapest_capable_runtime_chosen():
     )
     assert res["agent_type"] == "script-worker"  # cheap beats expensive
     assert "run_id" in res
+    # The script receipt remains available to non-Chat orchestration and audit;
+    # only the direct Chat projection replaces it with user-facing degraded copy.
+    assert res["summary"] == "script run by script-worker (depth 1)"
 
 
 @pytest.mark.invariant("SEC-147")

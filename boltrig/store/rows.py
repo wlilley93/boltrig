@@ -97,7 +97,7 @@ def _endpoint(r):
     return ModelEndpoint(
         id=r["id"], tenant_id=r["tenant_id"], kind=r["kind"], model=r["model"],
         base_url=r["base_url"], fallback=r["fallback"], data_class=r["data_class"],
-        is_active=bool(r["is_active"]),
+        is_active=bool(r["is_active"]), revision=int(r["revision"]) if "revision" in r else 1,
         modalities=tuple(r["modalities"] or ["text"]) if "modalities" in r else ("text",),
     )
 

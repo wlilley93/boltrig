@@ -54,14 +54,14 @@ class Spawner:
         *,
         sensitive_endpoint_id: str | None = None,
         codex_config: dict[str, Any] | None = None,
+        model_catalogue: Any = None,
         spawn_rules: Sequence[SpawnRule] = (),
     ) -> None:
         self._kernel = kernel
         self._sensitive_endpoint_id = sensitive_endpoint_id
         self._runtime_resolver = RuntimeResolver(
-            kernel,
-            sensitive_endpoint_id=sensitive_endpoint_id,
-            codex_config=codex_config,
+            kernel, sensitive_endpoint_id=sensitive_endpoint_id,
+            codex_config=codex_config, model_catalogue=model_catalogue,
         )
         self._observability = build_observability_sink()
         self._base_spawn_rules = tuple(spawn_rules)
@@ -521,6 +521,7 @@ def build_spawner(
     kernel: Kernel,
     *,
     codex_config: dict[str, Any] | None = None,
+    model_catalogue: Any = None,
     sensitive_endpoint_id: str | None = None,
     spawn_rules: Sequence[SpawnRule] = (),
 ) -> Spawner:
@@ -534,8 +535,7 @@ def build_spawner(
     or it is refused rather than escaping through a standard provider.
     """
     return Spawner(
-        kernel,
-        codex_config=codex_config,
+        kernel, codex_config=codex_config, model_catalogue=model_catalogue,
         sensitive_endpoint_id=sensitive_endpoint_id,
         spawn_rules=spawn_rules,
     )

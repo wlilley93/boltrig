@@ -7,6 +7,9 @@ import pytest
 from boltrig.api.doctor import load_env_file, run_doctor
 
 
+_REPO = Path(__file__).resolve().parents[2]
+
+
 MANIFEST = """
 organisation: Acme
 tenant_id: acme
@@ -94,6 +97,7 @@ def _secure_env(tmp_path: Path | None = None) -> dict[str, str]:
         "BOLTRIG_OPENCODE_HOME": "/var/lib/boltrig/opencode",
         "BACKUP_REMOTE": "s3:acme/boltrig",
         "BACKUP_PASSPHRASE": "b" * 32,
+        "BACKUP_DATABASES": "boltrig,hatchet",
         "HATCHET_CLIENT_TOKEN": "h" * 24,
     }
     if tmp_path is not None:
@@ -289,3 +293,202 @@ def test_load_env_file_merges_simple_dotenv(tmp_path):
     assert env["DATABASE_URL"] == "postgresql://user:pw@postgres/db"
     assert env["POSTGRES_PASSWORD"] == "secret-value"
     assert env["KEEP"] == "1"
+
+
+@pytest.mark.invariant("SEC-71")
+def test_production_doctor_requires_encrypted_recovery_state(tmp_path: Path) -> None:
+    env = _secure_env(tmp_path)
+    env.pop("BACKUP_PASSPHRASE")
+
+    result = run_doctor(env=env, manifest_path=_manifest(tmp_path), production=True)
+
+    check = next(item for item in result.checks if item.name == "backup_encryption")
+    assert check.status == "fail"
+
+
+@pytest.mark.invariant("SEC-71")
+def test_production_doctor_requires_hatchet_in_the_recovery_set(tmp_path: Path) -> None:
+    env = _secure_env(tmp_path)
+    env["BACKUP_DATABASES"] = "boltrig"
+
+    result = run_doctor(env=env, manifest_path=_manifest(tmp_path), production=True)
+
+    check = next(
+        item for item in result.checks if item.name == "backup_hatchet_database"
+    )
+    assert check.status == "fail"
+
+
+@pytest.mark.invariant("SEC-71")
+def test_production_doctor_requires_the_exact_application_database(
+    tmp_path: Path,
+) -> None:
+    env = _secure_env(tmp_path)
+    env["BACKUP_DATABASES"] = "hatchet"
+
+    result = run_doctor(env=env, manifest_path=_manifest(tmp_path), production=True)
+
+    check = next(
+        item for item in result.checks if item.name == "backup_application_database"
+    )
+    assert check.status == "fail"
+    assert "omits" in check.message
+
+
+@pytest.mark.invariant("SEC-71")
+def test_production_doctor_uses_the_hatchet_dsn_database_not_a_literal_default(
+    tmp_path: Path,
+) -> None:
+    env = _secure_env(tmp_path)
+    env["HATCHET_DATABASE_URL"] = (
+        "postgresql://boltrig:secret@db.internal:5432/durable?sslmode=require"
+    )
+
+    result = run_doctor(env=env, manifest_path=_manifest(tmp_path), production=True)
+
+    check = next(
+        item for item in result.checks if item.name == "backup_hatchet_database"
+    )
+    assert check.status == "fail"
+    assert "omits" in check.message
+
+
+@pytest.mark.invariant("SEC-71")
+def test_production_doctor_accepts_matching_custom_database_names(
+    tmp_path: Path,
+) -> None:
+    env = _secure_env(tmp_path)
+    env.update(
+        {
+            "DATABASE_URL": (
+                "postgresql+asyncpg://boltrig:secret@db.internal:5432/app_live"
+                "?sslmode=require"
+            ),
+            "POSTGRES_DB": "app_live",
+            "HATCHET_DATABASE_URL": (
+                "postgresql://boltrig:secret@db.internal:5432/durable"
+                "?sslmode=require"
+            ),
+            "HATCHET_DATABASE_NAME": "durable",
+            "BACKUP_DATABASES": "app_live,durable",
+        }
+    )
+
+    result = run_doctor(env=env, manifest_path=_manifest(tmp_path), production=True)
+
+    backup_checks = [item for item in result.checks if item.name.startswith("backup_")]
+    assert all(item.status != "fail" for item in backup_checks)
+    assert next(
+        item for item in backup_checks if item.name == "backup_databases"
+    ).status == "ok"
+
+
+@pytest.mark.invariant("SEC-71")
+@pytest.mark.parametrize(
+    ("updates", "expected_check"),
+    [
+        ({"POSTGRES_DB": "different"}, "backup_application_database"),
+        ({"BACKUP_DATABASES": "boltrig, hatchet"}, "backup_databases"),
+        ({"BACKUP_DATABASES": "boltrig,hatchet,hatchet"}, "backup_databases"),
+        (
+            {"HATCHET_DATABASE_URL": "https://db.internal/hatchet"},
+            "backup_hatchet_database",
+        ),
+    ],
+)
+def test_production_doctor_fails_closed_on_ambiguous_or_unsafe_database_config(
+    tmp_path: Path,
+    updates: dict[str, str],
+    expected_check: str,
+) -> None:
+    env = _secure_env(tmp_path)
+    env.update(updates)
+
+    result = run_doctor(env=env, manifest_path=_manifest(tmp_path), production=True)
+
+    assert any(
+        item.name == expected_check and item.status == "fail"
+        for item in result.checks
+    )
+
+
+def test_doctor_refuses_a_codex_runtime_under_production_until_its_gates_open(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "manifest-codex.yaml"
+    path.write_text(
+        MANIFEST
+        + """
+ephemeral_runtimes:
+  - name: codex-worker
+    runtime: codex
+    model_endpoint: standard
+    supported_skills: ["*"]
+    max_depth: 1
+    cost_tier: standard
+""",
+        encoding="utf-8",
+    )
+
+    production = run_doctor(
+        env=_secure_env(tmp_path), manifest_path=path, production=True
+    )
+    development = run_doctor(
+        env=_secure_env(tmp_path), manifest_path=path, production=False
+    )
+
+    prod_check = next(c for c in production.checks if c.name == "codex_runtime")
+    dev_check = next(c for c in development.checks if c.name == "codex_runtime")
+    assert prod_check.status == "fail"
+    assert "7 blocker" in prod_check.message
+    assert dev_check.status == "warn"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+def test_core_release_doctor_disables_codex_requested_by_the_real_manifest(
+    tmp_path: Path,
+) -> None:
+    env = {**_secure_env(tmp_path), "BOLTRIG_RELEASE_MODE": "core"}
+
+    report = run_doctor(
+        env=env,
+        manifest_path=_REPO / "manifest.yaml",
+        production=True,
+    )
+
+    check = next(item for item in report.checks if item.name == "codex_runtime")
+    assert check.status == "ok"
+    assert check.message == "Codex is disabled by the exact core release mode."
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+@pytest.mark.parametrize(
+    ("release_mode", "trusted", "message"),
+    [
+        ("full", None, "development-only"),
+        ("CORE", None, "not an exact admitted release mode"),
+        ("core ", None, "not an exact admitted release mode"),
+        ("core", "1", "conflicts with an enabled trusted Codex lane"),
+    ],
+)
+def test_real_manifest_doctor_keeps_non_core_and_conflicting_postures_closed(
+    tmp_path: Path,
+    release_mode: str,
+    trusted: str | None,
+    message: str,
+) -> None:
+    env = {**_secure_env(tmp_path), "BOLTRIG_RELEASE_MODE": release_mode}
+    if trusted is not None:
+        env["BOLTRIG_CODEX_TRUSTED"] = trusted
+
+    report = run_doctor(
+        env=env,
+        manifest_path=_REPO / "manifest.yaml",
+        production=True,
+    )
+
+    check = next(item for item in report.checks if item.name == "codex_runtime")
+    assert check.status == "fail"
+    assert message in check.message

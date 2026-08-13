@@ -207,10 +207,11 @@ def test_discovery_catalogue_is_grant_tenant_and_workspace_scoped():
             "supported_skills": ["analysis/*"],
             "max_depth": 2,
             "is_ephemeral": True,
-            "cost_tier": "cheap",
-            "model_endpoint": "local-model",
-            "vision_model_endpoint": None,
-            "familiar_genotype": {
+                "cost_tier": "cheap",
+                "model_endpoint": "local-model",
+                "vision_model_endpoint": None,
+                "model_routes": {"text": "local-model"},
+                "familiar_genotype": {
                 "source": "agent_capability.name.v1",
                 "seed": 104173362,
                 "body": "pioneer",

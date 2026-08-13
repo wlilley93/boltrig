@@ -25,6 +25,7 @@ def make_app_spawner(
     kernel: Kernel,
     *,
     codex_config: dict[str, Any] | None = None,
+    model_catalogue: Any = None,
     sensitive_endpoint_id: str | None = None,
     spawn_rules: Sequence[SpawnRule] = (),
 ) -> Callable[[Principal, SpawnBody], Awaitable[dict[str, Any]]]:
@@ -35,6 +36,7 @@ def make_app_spawner(
         build_spawner(
             kernel,
             codex_config=codex_config,
+            model_catalogue=model_catalogue,
             sensitive_endpoint_id=sensitive_endpoint_id,
             spawn_rules=spawn_rules,
         )
@@ -42,6 +44,7 @@ def make_app_spawner(
         else build_spawner(
             kernel,
             codex_config=codex_config,
+            model_catalogue=model_catalogue,
             sensitive_endpoint_id=sensitive_endpoint_id,
         )
     )
@@ -147,6 +150,7 @@ def make_agent_invoker(
     kernel: Kernel,
     *,
     codex_config: dict[str, Any] | None = None,
+    model_catalogue: Any = None,
     sensitive_endpoint_id: str | None = None,
 ) -> AgentInvoker:
     """Build the reasoning-verb invoker with process-owned runtime policy."""
@@ -156,6 +160,7 @@ def make_agent_invoker(
     spawner = build_spawner(
         kernel,
         codex_config=codex_config,
+        model_catalogue=model_catalogue,
         sensitive_endpoint_id=sensitive_endpoint_id,
     )
 

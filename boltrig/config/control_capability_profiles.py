@@ -7,7 +7,12 @@ from typing import Any
 from boltrig.adapters.base import Result
 from boltrig.models import AgentCapability, InvocationContext
 
+from .capability_model_routes import (
+    CapabilityRouteValidationError,
+    validated_capability_routes,
+)
 from .control_approval import require_unchanged_approval_context
+from .control_safety import ControlConflict
 
 
 async def execute_capability_operation(
@@ -41,35 +46,14 @@ async def execute_capability_operation(
             }
         )
 
-    endpoint_id = str(params.get("model_endpoint") or "").strip() or None
-    vision_endpoint_id = (
-        str(params.get("vision_model_endpoint") or "").strip() or None
-    )
-    endpoint = None
-    for role, selected_id in (("text", endpoint_id), ("vision", vision_endpoint_id)):
-        if not selected_id:
-            continue
-        selected = await store.get_model_endpoint(context.tenant_id, selected_id)
-        if selected is None:
-            raise LookupError("model endpoint not found")
-        if not selected.is_active:
-            from .control_safety import ControlConflict
-
-            raise ControlConflict("model endpoint is retired")
-        if not selected.supports(role):
-            from .control_safety import ControlConflict
-
-            raise ControlConflict(
-                f"{role} model endpoint does not advertise {role} modality"
-            )
-        if role == "text":
-            endpoint = selected
-    if endpoint_id and not vision_endpoint_id and not endpoint.supports("vision"):
-        from .control_safety import ControlConflict
-
-        raise ControlConflict(
-            "a single agent model must advertise both text and vision modalities"
+    try:
+        endpoint_id, vision_endpoint_id, model_routes, _ = (
+            await validated_capability_routes(store, context.tenant_id, params)
         )
+    except CapabilityRouteValidationError as error:
+        if error.missing:
+            raise LookupError(str(error)) from None
+        raise ControlConflict(str(error)) from None
     capability = AgentCapability(
         name=params["name"],
         tenant_id=context.tenant_id,
@@ -80,6 +64,7 @@ async def execute_capability_operation(
         cost_tier=params.get("cost_tier", "standard"),
         model_endpoint=endpoint_id,
         vision_model_endpoint=vision_endpoint_id,
+        model_routes=model_routes,
         source="control-plane",
     )
     await store.upsert_capability(capability, preserve_status=True)

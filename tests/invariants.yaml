@@ -33,6 +33,7 @@ invariants:
       - tests/unit/test_codex_trusted_composition.py::test_default_hatchet_bootstrap_shares_one_codex_provider_with_its_spawner
       - tests/unit/test_codex_trusted_composition.py::test_local_ultracode_task_uses_only_its_composition_owned_spawner
       - tests/unit/test_codex_trusted_composition.py::test_every_packaged_build_spawner_call_explicitly_threads_runtime_policy
+      - tests/unit/test_model_runtime_composition.py::test_manifest_gateway_is_exported_before_process_model_resources_are_composed
       - tests/integration/test_ultracode_run.py::test_ultracode_run_without_a_composition_spawner_fails_closed
   CODEX-APPROVAL-1:
     description: 'An inbound codex server-initiated request (its per-tool-call item/tool/requestUserInput approval) is answered on a side task and NEVER terminates the single-reader notification pump ([2026] VJS-COUNTY 12; AGENTS.md graceful degradation).'
@@ -143,7 +144,7 @@ invariants:
       - tests/unit/test_skill_discovery.py::test_unselected_bundled_skill_must_be_disabled
       - tests/unit/test_skill_discovery.py::test_digest_drift_after_materialization_fails_closed
   SEC-159:
-    description: 'Codex runtime configuration is deterministically composed from a private revalidated request snapshot with secretless command authentication, read-only sandboxing, approvals and every reviewed dynamic surface disabled by default, lexically cell-local helper and skill paths, and exact receipt-to-TOML coherence. Stable V1 collaboration is the sole typed exception: exact thread/depth limits are bound into TOML, receipt and live argv, every Responses request is effort-pinned, spawn calls are prevalidated against the model/effort and a cell-lifetime total, lifetime expiry terminates the phase, and the observed descendant tree must drain before root completion is accepted. Coherent forgeries cannot widen helper or skill policy, request repr is redacted and pickle/copy serialization is blocked. Native subagent admission remains exactly zero until the pinned App Server and production cleanup/configuration controls pass end-to-end acceptance; production readiness also remains false until trusted-root, no-symlink, and evidence verification are wired.'
+    description: 'Codex runtime configuration is deterministically composed from a private revalidated request snapshot with secretless command authentication, read-only sandboxing, approvals and every reviewed dynamic surface disabled by default, lexically cell-local helper and skill paths, and exact receipt-to-TOML coherence. Before thread start, the exact effective config plus empty app/plugin/external-agent inventories and the kernel-derived tool ceiling are bound into the admitted-cell evidence; drift, pagination, hidden inventory, and tool-ceiling mismatch fail closed while the incomplete upstream provider/schema limbs keep production admission closed. Stable V1 collaboration is the sole typed exception: exact thread/depth limits are bound into TOML, receipt and live argv, every Responses request is effort-pinned, spawn calls are prevalidated against the model/effort and a cell-lifetime total, lifetime expiry terminates the phase, and the observed descendant tree must drain before root completion is accepted. Coherent forgeries cannot widen helper or skill policy, request repr is redacted and pickle/copy serialization is blocked. Native subagent admission remains exactly zero until the pinned App Server and production cleanup/configuration controls pass end-to-end acceptance; production readiness remains false until the hard upstream evidence gaps and final authority are resolved.'
     tests:
       - tests/unit/test_codex_runtime_config.py::test_composes_exact_secretless_read_only_config_and_receipt
       - tests/unit/test_codex_runtime_config.py::test_stable_v1_native_limits_are_bound_in_toml_receipt_and_argv
@@ -153,13 +154,20 @@ invariants:
       - tests/unit/test_codex_runtime_config_adversarial.py::test_self_consistent_receipt_cannot_move_helper_into_the_cell_root
       - tests/unit/test_codex_runtime_config_adversarial.py::test_self_consistent_receipt_cannot_widen_skill_policy
       - tests/unit/test_codex_runtime_admission_hardening.py::test_quarantined_admission_requires_all_native_limits_to_be_zero
+      - tests/unit/test_codex_runtime_admission_hardening.py::test_surface_receipt_cannot_claim_a_tool_ceiling_the_admission_did_not_grant
+      - tests/unit/test_codex_runtime_surface_preflight.py::test_surface_preflight_binds_exact_empty_surfaces_and_tool_ceiling
+      - tests/unit/test_codex_runtime_surface_preflight.py::test_surface_preflight_rejects_config_drift_before_listing_other_surfaces
+      - tests/unit/test_codex_runtime_surface_preflight.py::test_surface_preflight_rejects_every_nonempty_dynamic_inventory
+      - tests/deploy/test_codex_image_pin_parity.py::test_release_images_install_every_runtime_reviewed_codex_artifact
       - tests/unit/test_model_proxy_tool_ceiling.py::test_native_spawn_is_prevalidated_and_charged_once_across_response_streams
       - tests/unit/test_model_proxy_tool_ceiling.py::test_native_spawn_rejects_unadmitted_overrides_before_execution
       - tests/unit/test_codex_runtime_notifications.py::test_native_lifetime_expiry_terminates_the_phase_before_completion
       - tests/unit/test_codex_runtime_notifications.py::test_root_completion_requires_the_observed_native_tree_to_be_drained
       - tests/integration/test_codex_cell_smoke.py::test_exact_pinned_binary_accepts_stable_v1_collaboration_limits
+      - tests/integration/test_codex_cell_smoke.py::test_exact_pinned_binary_reports_the_bound_quarantined_surfaces
     service_gated:
       - tests/integration/test_codex_cell_smoke.py::test_exact_pinned_binary_accepts_stable_v1_collaboration_limits
+      - tests/integration/test_codex_cell_smoke.py::test_exact_pinned_binary_reports_the_bound_quarantined_surfaces
   SEC-161:
     description: 'Capability-effect attestations can only reject an existing exact assignment authority snapshot - admission binds tenant, workspace, root, phase, assignment, authority evaluation id/digest/generation, catalog generation/digest, and the complete verb-definition/classification set; only READ_ONLY_NO_EXTERNAL_EFFECT with LOW consequence, or an exact empty no-tool set, admits, while egress, mutation, high consequence, drift, partial/broader evidence, subclass spoofing, and malformed evidence fail closed.'
     tests:
@@ -303,6 +311,32 @@ invariants:
       - tests/security/test_channel_policy.py::test_allowed_chats_are_opt_in_and_fail_closed_for_unknown_or_missing_chat
       - tests/security/test_channel_policy.py::test_malformed_allowlist_or_ceiling_never_falls_open
       - tests/security/test_channel_policy.py::test_thread_ceiling_is_stamped_and_narrows_execution_authority
+  SEC-196:
+    description: 'Every outbound adapter response is allocation-bounded at the raw transport boundary before decompression, decoding, JSON parsing, base64 expansion or vector construction. Requests require identity encoding; declared and chunked over-limit bodies fail with one content-free non-retryable error; web.fetch alone may return a bounded prefix with an explicit truncation receipt; remote voice audio, local speech JSON and model embeddings use fixed per-surface ceilings; and embedding vectors must have the configured dimension with only finite numbers.'
+    tests:
+      - tests/adapters/test_http_response_limits.py::test_web_fetch_returns_a_bounded_prefix_without_draining_upstream
+      - tests/adapters/test_http_response_limits.py::test_json_adapter_rejects_declared_oversize_without_read_or_retry
+      - tests/adapters/test_http_response_limits.py::test_json_adapter_stops_a_chunked_response_at_the_boundary
+      - tests/adapters/test_http_response_limits.py::test_json_adapter_rejects_compression_before_body_iteration
+      - tests/adapters/test_http_response_limits.py::test_local_voice_transcription_uses_the_same_json_response_boundary
+      - tests/adapters/test_xai_voice_adapter.py::test_speak_rejects_oversize_audio_without_buffering_it
+      - tests/unit/test_vector_memory.py::test_model_embedder_bounds_and_validates_the_remote_vector
+      - tests/unit/test_vector_memory.py::test_model_embedder_rejects_declared_oversize_before_reading
+  SEC-197:
+    description: 'A caller-owned approval posture is scoped to one tenant/user and controls only the additional consent prompt for delegated agent calls to adapter-backed tools. Missing or malformed state defaults to risk-based. Always-ask can add a prompt; full-access can remove a consequence prompt only for already-granted external adapters, and can never widen grants or bypass the deployment blocking-verb set, control/agent consequence gates, direct-human consequence gates, credential isolation, rate limits or audit. Changing posture requires an authenticated interactive self-session, full-access carries an exact confirmation token, the generic settings route cannot write the reserved key, and the change is audited without secrets.'
+    tests:
+      - tests/security/test_approval_posture.py::test_posture_http_contract_is_interactive_confirmed_scoped_and_audited
+      - tests/security/test_approval_posture.py::test_machine_bearer_cannot_change_the_owners_posture
+      - tests/security/test_approval_posture.py::test_ask_and_risk_based_postures_drive_only_delegated_adapter_prompts
+      - tests/security/test_approval_posture.py::test_full_access_never_bypasses_blocks_control_gates_or_grants
+      - tests/security/test_approval_posture.py::test_full_access_is_owner_scoped_and_does_not_weaken_direct_human_calls
+      - tests/security/test_approval_posture.py::test_malformed_stored_posture_falls_back_to_risk_based
+  SEC-198:
+    description: 'Agent placement and consent are explicit and fail-closed: browser Chat uses only the kernel-governed cloud route, cloud posture and server conversation directory, while the signed Tauri Chat surface uses only a private local Codex App Server process, device-keychain posture and local-prefixed projection. Cloud full-access consent can never become local full access; the latter defaults to Ask and requires its own native confirmation. Neither side silently falls back to the other. A release build requires the bundled exact Codex version; development may resolve an explicitly configured or PATH binary and labels it development. Local requests select only an enrolled opaque read/write command-enabled root, and the separate remote device-command path remains shell-refusing signed argv-only lease execution.'
+    tests:
+      - tests/security/test_worker_surface_boundary.py::test_browser_cloud_and_desktop_local_agent_routes_cannot_silently_cross
+      - tests/deploy/test_desktop_codex_bundle.py::test_release_stages_one_exact_platform_codex_tree_and_runtime_rechecks_it
+      - tests/deploy/test_desktop_codex_bundle.py::test_desktop_codex_extractor_refuses_links_and_parent_paths
   SEC-185:
     description: 'The trusted-Codex wall admits exactly two postures and both refuse any production signal and require the explicit BOLTRIG_CODEX_TRUSTED flag - (a) the legacy single-operator dev posture (BOLTRIG_DEV_AUTH=1, no real ingress) and (b) the kernel-attested posture, where per-cell uids are verifiably in force (the dropped API holds the live spawner socket) and cell identity is kernel-attested end to end (SO_PEERCRED uid must equal the registered cell uid, J8; privilege re-proved at issuance, J5). Under (b) a real ingress posture - session login included - may coexist because the edge authenticates users, not cells; without per-cell uids the same session-auth env is still refused BEFORE any admit or bearer mint. This is not a production flip: production_ready stays False and the runtime remains test-gated. The SEC-184 kernel-tools lane runs under (b): a run mints its run-scoped token over the real MCP face, tools/list shows only granted verbs, a grant-denied verb is refused at the chokepoint, and the token is revoked at run end.'
     tests:
@@ -683,8 +717,10 @@ invariants:
       - tests/integration/test_durable_resume.py::test_task_body_cannot_bypass_governance
       - tests/integration/test_durable_resume.py::test_task_payload_tenant_must_match_the_envelope
   SEC-12:
-    description: 'Sensitive data routes only to local endpoints - a misroute is blocked and audited, and an external AI config (D5) can never move sensitive data off the local endpoint (the config''s provider/model/base_url are ignored for a sensitive call, while the same config still routes a non-sensitive one).'
+    description: 'Sensitive data routes only to local endpoints - authoring rejects a sensitive non-local endpoint, runtime misroutes are blocked and audited, and an external AI config (D5) can never move sensitive data off the local endpoint (the config''s provider/model/base_url are ignored for a sensitive call, while the same config still routes a non-sensitive one).'
     tests:
+      - tests/security/test_model_endpoint_lifecycle.py::test_endpoint_authoring_enforces_local_sensitive_and_exact_bifrost_ids
+      - tests/security/test_model_endpoint_lifecycle.py::test_bifrost_authoring_requires_live_exact_catalogue_modalities
       - tests/security/test_sensitive_routing.py::test_sensitive_data_blocked_from_hosted_and_audited
       - tests/security/test_sensitive_routing.py::test_sensitive_data_routes_to_local_endpoint
       - tests/security/test_sensitive_routing.py::test_spawn_blocks_sensitive_on_hosted_capability
@@ -1084,6 +1120,19 @@ invariants:
       - tests/security/test_model_gateway_live_health.py::test_model_gateway_live_health_rejects_external_hosts_without_polling
       - tests/security/test_model_gateway_live_health.py::test_model_gateway_live_health_probe_failure_degrades_not_crashes
       - tests/security/test_model_routing.py::test_manifest_model_profiles_feed_runtime_resolver
+  FR-GW-05:
+    description: 'Bifrost model discovery is author-only and read-only: the server calls only the configured internal /v1/models route with its server-held bearer, disables redirects and environment proxies, bounds time/body/rows/pages/cursors, validates the pinned token-pagination schema, projects only id/name/input modalities, and returns an empty typed unavailable result on every failure without disclosing gateway topology, provider configuration, credentials, or partial rows.'
+    tests:
+      - tests/security/test_bifrost_model_catalogue.py::test_bifrost_model_catalogue_contract_tracks_pinned_v162_digest
+      - tests/security/test_bifrost_model_catalogue.py::test_bifrost_model_catalogue_route_is_author_only_and_redacts_upstream
+      - tests/security/test_bifrost_model_catalogue.py::test_bifrost_model_catalogue_route_reprojects_an_injected_provider
+      - tests/security/test_bifrost_model_catalogue.py::test_bifrost_model_catalogue_rejects_ssrf_and_malformed_gateway_urls
+      - tests/security/test_bifrost_model_catalogue.py::test_bifrost_model_catalogue_rejects_redirect_timeout_and_bad_transport_results
+      - tests/security/test_bifrost_model_catalogue.py::test_bifrost_model_catalogue_bounds_body_rows_and_schema
+      - tests/security/test_bifrost_model_catalogue.py::test_bifrost_model_catalogue_pagination_is_bounded_and_all_or_nothing
+      - tests/security/test_bifrost_model_catalogue.py::test_bifrost_model_catalogue_transport_disables_redirects_and_environment_proxies
+      - tests/security/test_bifrost_model_catalogue.py::test_catalogue_cache_singleflights_and_expires_fail_closed
+      - tests/security/test_bifrost_model_catalogue.py::test_catalogue_slow_body_cannot_extend_the_wall_clock_deadline
   FR-SKILL-01:
     description: 'The skill shelf (skill.search) returns lightweight descriptions only - never the prompt_fragment body - and filters by query (progressive disclosure).'
     tests:
@@ -1268,16 +1317,26 @@ invariants:
       - tests/deploy/test_compose_hardening.py::test_local_model_port_is_loopback_only_and_removed_from_secure_compose
       - tests/deploy/test_compose_hardening.py::test_postgres_password_has_no_literal_default
   SEC-71:
-    description: 'A scheduled off-box backup ships by default - a profile-gated backup gateway (so the dev stack is unaffected) atomically pg_dumps the durable state, refuses archives pg_restore cannot parse, optionally encrypts them, creates and verifies a portable SHA-256 gateway, and copies both files off-box via rclone; a complete run alone updates the freshness marker, any configured remote failure exits PID 1 instead of being swallowed, and missing, malformed, or stale success is unhealthy (M10).'
+    description: 'A scheduled off-box backup ships by default - a profile-gated backup gateway (so the dev stack is unaffected) atomically pg_dumps both application and durable Hatchet databases, refuses archives pg_restore cannot parse, encrypts recovery-critical file state, verifies each artifact, and uploads a complete-set SHA-256 marker only after every artifact and sidecar is off-box; a complete run alone updates the freshness marker, any configured remote failure exits PID 1 instead of being swallowed, and missing, malformed, or stale success is unhealthy. Hatchet signing configuration persists across engine recreation, a fresh Postgres volume creates the separate Hatchet database, and production doctor refuses unencrypted or incomplete durable recovery configuration. The operator verifier is read-only and requires one exact encrypted Boltrig/Hatchet/state set; the repository rehearsal ignores ambient database URLs and refuses remote Docker endpoints before creating its uniquely named disposable database container (M10).'
     tests:
       - tests/deploy/test_compose_hardening.py::test_backup_sidecar_ships_profile_gated
+      - tests/deploy/test_compose_hardening.py::test_fresh_postgres_boot_creates_the_separate_hatchet_database
       - tests/deploy/test_backup_scripts.py::test_backup_verifies_dump_checksum_and_remote_pair
+      - tests/deploy/test_backup_scripts.py::test_backup_recovery_set_covers_boltrig_hatchet_and_encrypted_signing_state
+      - tests/deploy/test_backup_scripts.py::test_backup_refuses_unencrypted_hatchet_signing_state
       - tests/deploy/test_backup_scripts.py::test_backup_refuses_unparseable_dump_without_success_marker
       - tests/deploy/test_backup_scripts.py::test_backup_remote_failure_leaves_no_success_marker
       - tests/deploy/test_backup_scripts.py::test_backup_encryption_retains_verified_checksum_contract
       - tests/deploy/test_backup_scripts.py::test_backup_encryption_failure_leaves_no_final_archive
       - tests/deploy/test_backup_scripts.py::test_backup_loop_exits_nonzero_instead_of_masking_failure
       - tests/deploy/test_backup_scripts.py::test_backup_healthcheck_rejects_missing_malformed_and_stale_success
+      - tests/deploy/test_recovery_set_verifier.py::test_recovery_set_verifier_accepts_complete_encrypted_evidence_read_only
+      - tests/deploy/test_recovery_set_verifier.py::test_recovery_set_verifier_rejects_missing_database_or_stack_state
+      - tests/deploy/test_recovery_set_verifier.py::test_recovery_set_verifier_rejects_tampering_and_inconsistent_sidecars
+      - tests/deploy/test_recovery_set_verifier.py::test_recovery_set_verifier_rejects_unencrypted_or_foreign_artifacts
+      - tests/deploy/test_recovery_set_verifier.py::test_recovery_rehearsal_refuses_remote_docker_and_ambient_database
+      - tests/unit/test_doctor.py::test_production_doctor_requires_encrypted_recovery_state
+      - tests/unit/test_doctor.py::test_production_doctor_requires_hatchet_in_the_recovery_set
   SEC-72:
     description: 'Untrusted input is structurally enveloped - the conversation transcript and inbound channel/user text are wrapped in typed <untrusted ...>...</untrusted> delimiters at their composition sites, a hostile payload that tries to close/forge the envelope is neutralised so it cannot break out, and the governance floor asserts that enveloped content is DATA never instructions (M1). The TOOL-RESULT composition site is no longer named here: the only one that existed was the retired Pi sidecar''s run loop, and no in-package site currently feeds a tool result back into a prompt, so the primitive is bound (wrap_untrusted, including the tool_result kind) while the site is not. See docs/decisions/0020-retire-the-pi-lane.md.'
     tests:
@@ -1506,9 +1565,11 @@ invariants:
 
   # --- First-party invite-only login ([2026] VJS-COUNTY 7) -------------------
   SEC-97:
-    description: 'Login is invite-only with no open self-signup - an account is created only by consuming a single-use, hashed, expiring admin invite token (accept-invite), there is no signup route, and a token redeems exactly once (a replay is refused).'
+    description: 'Login is invite-only with no open self-signup - an account is created only by atomically claiming a single-use, hashed, unexpired admin invite token before any user, password or tenancy write. There is no signup route; replay is refused; and under concurrent redemption exactly one claimant may materialise account state, with identical claim semantics in memory and PostgreSQL.'
     tests:
       - tests/security/test_first_party_login.py::test_invite_only_no_self_signup_and_single_use
+      - tests/security/test_first_party_login.py::test_concurrent_invite_redemption_cannot_apply_the_rejected_password
+      - tests/store/test_invitation_store_parity.py::test_exact_token_claim_is_single_winner_and_expiry_safe
   SEC-98:
     description: 'First-party passwords are hashed with argon2id and are non-reversible - the stored form is an argon2id PHC string (embedded per-user salt), never the plaintext, verify accepts the right password and rejects a wrong one, and the plaintext never enters the User identity row or the audit chain.'
     tests:
@@ -1840,13 +1901,16 @@ invariants:
     tests:
       - tests/deploy/test_compose_hardening.py::test_backup_credentials_are_excluded_from_git_and_image_contexts
   SEC-137:
-    description: 'A protected semantic tag uses the named release environment and a draft GitHub release only after the exact reachable commit has successful canonical CI and security workflow runs; it rebuilds all five first-party images, blocks fixable high/critical vulnerabilities, publishes only run-scoped candidates until every immutable digest is keylessly signed and its CycloneDX SBOM attestation is verified, refuses to move existing public tags or overwrite evidence, emits a strict five-image digest environment consumed by a no-build production Compose overlay, and publishes only after all exact digests are promoted and reverified; required reviewers and tag protection remain an explicit external repository-setting gate.'
+    description: 'A protected semantic tag uses the named release environment and a draft GitHub release only after the exact reachable commit has successful canonical CI and security workflow runs; it rebuilds all four first-party images, blocks fixable high/critical vulnerabilities, publishes only run-scoped candidates until every immutable digest is keylessly signed, its CycloneDX SBOM attestation is verified, and pinned actions/attest SLSA provenance binds it to the exact repository workflow, tag and source commit; it refuses to move existing public tags or overwrite evidence, emits a strict four-image digest environment consumed by a no-build production Compose overlay that pins both fleet entry points to the same signed fleet digest, and publishes only after all exact digests and evidence are reverified. Production admission repeats signature, SBOM and provenance verification against the canonical repository, release workflow, semantic tag and checked-out commit before any pull or start; required reviewers and tag protection remain an explicit external repository-setting gate.'
     tests:
       - tests/deploy/test_compose_hardening.py::test_release_publishes_only_scanned_signed_digest_images_with_sboms
       - tests/deploy/test_compose_hardening.py::test_release_requires_canonical_success_for_the_exact_commit
       - tests/deploy/test_compose_hardening.py::test_release_compose_uses_only_required_digest_images_without_builds
       - tests/deploy/test_release_images.py::test_release_image_environment_requires_every_first_party_digest
       - tests/deploy/test_release_images.py::test_release_compose_validator_rejects_builds_tags_and_source_mounts
+      - tests/deploy/test_release_images.py::test_release_requires_hatchet_worker_to_share_the_pinned_fleet_image
+      - tests/deploy/test_release_supply_chain.py::test_release_supply_chain_requires_all_three_evidence_classes_offline
+      - tests/deploy/test_release_supply_chain.py::test_release_supply_chain_rejects_wrong_registry_or_failed_evidence
   IAC-002:
     description: 'Production Python images consume hash-locked runtime dependencies without invoking an unlocked PEP 517 build environment, and application source runs directly from the read-only image tree.'
     tests:
@@ -1861,8 +1925,13 @@ invariants:
       - tests/deploy/test_python_version_is_one_version.py::test_every_python_declaration_agrees_on_one_version
       - tests/deploy/test_python_version_is_one_version.py::test_the_channel_gateway_lock_is_compiled_for_that_same_version
   IAC-005:
-    description: 'The release workflow can actually publish, and fails FAST when it cannot. Registry write access is probed in the preflight job - before ten minutes of candidate builds - by opening and cancelling a blob upload, which proves write without creating a tag, a layer or (critically) the package itself. A bad credential reports the remedy instead of dying in a JSON parser on the 401 body. Every registry login prefers an optional GHCR_PUSH_TOKEN over the built-in token, so the one blocker that cannot be fixed in code closes by adding a secret rather than by another change. The release vulnerability gate reads the SAME .trivyignore.yaml acceptances the security gate does, so the two cannot disagree about an identical image. Promotion still happens only after every candidate is cosign-verified.'
+    description: 'The release workflow can actually publish, and fails FAST when it cannot. Registry write access is probed in the preflight job - before ten minutes of candidate builds - by opening and cancelling a blob upload, which proves write without creating a tag, a layer or (critically) the package itself. A bad credential reports the remedy instead of dying in a JSON parser on the 401 body. Every registry login prefers an optional GHCR_PUSH_TOKEN over the built-in token, so the one blocker that cannot be fixed in code closes by adding a secret rather than by another change. The release vulnerability gate reads the SAME .trivyignore.yaml acceptances the security gate does, so the two cannot disagree about an identical image. Release mode is an exact protected-environment decision: full requires every signed desktop candidate, while the opt-in core mode omits only desktop assets and records disabled Codex/channel admissions; both retain the four-image signature, SBOM and provenance gates. Promotion still happens only after every required candidate is verified.'
     tests:
+      - tests/deploy/test_release_can_actually_publish.py::test_release_mode_rejects_missing_or_ambiguous_values
+      - tests/deploy/test_release_can_actually_publish.py::test_release_mode_accepts_only_the_two_exact_postures
+      - tests/deploy/test_release_can_actually_publish.py::test_core_release_is_explicit_and_keeps_all_server_evidence
+      - tests/deploy/test_release_can_actually_publish.py::test_full_release_still_requires_every_desktop_candidate
+      - tests/deploy/test_release_can_actually_publish.py::test_release_metadata_binds_mode_and_closed_runtime_admissions
       - tests/deploy/test_release_can_actually_publish.py::test_registry_write_access_is_checked_before_the_builds
       - tests/deploy/test_release_can_actually_publish.py::test_the_write_probe_creates_nothing
       - tests/deploy/test_release_can_actually_publish.py::test_a_bad_credential_reports_the_remedy_rather_than_crashing
@@ -1893,6 +1962,7 @@ invariants:
       - tests/unit/test_readiness.py::test_readyz_coalesces_concurrent_unauthenticated_probes
       - tests/unit/test_readiness.py::test_readyz_persists_the_fallback_service_across_requests
       - tests/unit/test_readiness.py::test_readyz_route_returns_503_with_redacted_component_failures
+      - tests/unit/test_readiness_gateway_posture.py::test_an_explicit_false_health_flag_does_not_arm_a_probe
       - tests/unit/test_stack_tool_health.py::test_herdr_probe_executes_exact_argv_without_a_shell
       - tests/unit/test_stack_tool_health.py::test_fleet_probe_requires_both_binaries_and_live_loopback_cdp
       - tests/unit/test_stack_tool_health.py::test_browser_probe_accepts_only_a_chromium_cdp_response
@@ -1965,6 +2035,18 @@ invariants:
       - tests/unit/test_claim_gates.py::test_the_unwired_waiver_file_can_be_held_to
       - tests/unit/test_claim_gates.py::test_the_repositorys_own_unwired_waivers_are_well_formed
       - tests/unit/test_claim_gates.py::test_the_operators_shell_cannot_colour_a_test
+  NFR-MNT-07:
+    description: 'Worker TypeScript structure is an enforced, non-vacuous, expiring ratchet over every ts/tsx file in apps/worker/src: clean code may not exceed 400 physical file lines, 80 function lines, five parameters, cyclomatic complexity 15, or nesting depth four. Every legacy violation has exact compiler-AST file/function metrics plus an owner, reason and ISO expiry. Exact current-source matching rejects stale records, while an independently loaded catalogue from the immutable CI event base (or the local origin/main merge base) rejects a co-edited new/grown file, metric or named function. A base predating both gate and catalogue may bootstrap only the first census, whose first Git commit becomes the monotonic anchor for all later commits in that same change range. Missing post-rollout provenance, unavailable or non-ancestor refs, malformed or duplicate-key catalogues, expired current debt and vacuous scans fail closed, and the seeded failure suite plus live-tree check are mandatory prerequisites of worker-quality in full-history CI.'
+    tests:
+      - tests/unit/test_worker_structure_gate.py::test_worker_structure_ratchet_is_required_by_worker_quality_and_ci
+      - tests/unit/test_worker_structure_gate.py::test_worker_structure_debt_is_owned_reasoned_expiring_and_exactly_shaped
+  NFR-MNT-08:
+    description: 'The VDS screen and visual-route ownership ledgers are required source-bound inputs rather than advisory snapshots: the Python quality gate rejects changed, added or removed screen sources; stale file, source and content digests; out-of-range JSX coordinates; extracted local components left falsely unresolved; missing resolved component modules; route-manifest drift; and capture/metrics hash drift. Its scan is non-vacuous, the route list remains a subset of the live screen surface, and the associated capture must stay explicitly captured_unreviewed/not_assessed with no VDS review update. VDS remains the canonical generator (`vds ledger screens`, then `vds ledger routes --from ...`); this repository check creates no frame digest, sign-off, conformity or visual verdict.'
+    tests:
+      - tests/unit/test_vds_ledger_gate.py::test_repository_vds_ledgers_are_current_and_required_by_quality
+      - tests/unit/test_vds_ledger_gate.py::test_a_screen_changed_after_generation_is_rejected
+      - tests/unit/test_vds_ledger_gate.py::test_an_extracted_import_cannot_remain_recorded_as_local
+      - tests/unit/test_vds_ledger_gate.py::test_route_source_hash_drift_is_rejected_without_visual_authority
   SEC-138:
     description: 'A governed action executes only against the exact resource state that was approved - a queued workflow runs its digest-checked approved snapshot (tampering and cross-workspace replay are rejected), a missing mutable resource fails before any approval is created, and resource drift between the HITL gate and adapter execution fails closed while still consuming the single-use approval.'
     tests:
@@ -2262,15 +2344,29 @@ invariants:
       - tests/security/test_worker_feature_ledger.py::test_every_named_fleet_background_task_is_classified
       - tests/security/test_worker_feature_ledger.py::test_non_http_feature_rows_are_closed_and_missing_states_explain_the_gap
   SEC-WRK-01:
-    description: 'The Worker desktop payload is a thin enrolled client, not a local authority: it ships no OpenWorker Python or aisuite agent, provider-key path, sidecar binary, arbitrary command primitive, or caller-chosen native write path. Artifact materialisation is bounded and destination selection is performed by a native user dialog. Desktop updates accept no endpoint, verification key, signature, package URL or installer bytes from the webview: fixed HTTPS release trust is compiled into the binary, packages are signature-verified natively, and an unconfigured build or browser remains explicitly unavailable. Native OAuth return registers one fixed custom scheme and correlates only an exact expiring in-memory state with a kernel-brokered opaque result; provider authorization codes and tokens are rejected, raw deep-link reads are denied to the webview, and absent provider exchange remains explicit.'
+    description: 'The Worker browser remains a thin cloud client, while the signed desktop has exactly two bounded native process seams: signed argv-only remote device leases and a private local Codex App Server selected by the native binary resolver. The webview can supply neither executable, argv, cwd, native path nor local approval posture; a local task names only an enrolled opaque read/write command-enabled root plus its prompt, while native code reads the separately confirmed posture. It ships no OpenWorker Python or aisuite agent and no provider-key path. Artifact materialisation remains bounded and destination selection stays native. Desktop update and OAuth-return trust remain compiled, signature-checked, opaque and unavailable when unconfigured.'
     tests:
       - tests/security/test_worker_surface_boundary.py::test_worker_ships_no_openworker_agent_server_or_provider_secret_path
-      - tests/security/test_worker_surface_boundary.py::test_desktop_native_boundary_has_no_arbitrary_path_or_command_primitive
+      - tests/security/test_worker_surface_boundary.py::test_desktop_native_process_seams_are_explicit_and_bounded
       - tests/security/test_worker_surface_boundary.py::test_desktop_updater_accepts_no_webview_release_trust_or_unsigned_path
       - tests/security/test_worker_surface_boundary.py::test_desktop_oauth_return_accepts_only_kernel_brokered_opaque_results
   SEC-WRK-02:
-    description: 'A Worker model-profile selection is a preference among server-held approved profiles, not a caller route or credential. The profile catalogue exposes only id, label, coarse routing class, data-class eligibility and availability; provider/model/base URL and credentials never reach it. The selected profile and a bounded non-secret reason may appear in the structured run stream.'
+    description: 'A Worker model selection is a preference among tenant-scoped server-held approved endpoints, not a caller route or credential. Text chat may receive the exact immutable model identifier required to label and audit what will run, plus opaque choice id, modalities and catalogue-derived availability; provider kind/topology, base URL and credentials never reach it. Legacy voice model profiles retain their coarser safe projection. Every selected choice is resolved server-side and the bounded opaque choice/reason may appear in the structured run stream.'
     tests:
+      - tests/security/test_chat_model_choices.py::test_chat_model_choices_are_tenant_scoped_exact_and_catalogue_verified
+      - tests/security/test_chat_model_choices.py::test_catalogue_failure_marks_every_safe_choice_unavailable
+      - tests/security/test_chat_model_choices.py::test_chat_rejects_blank_whitespace_and_oversized_choice_ids
+      - tests/integration/test_chat.py::test_model_choice_on_in_flight_steer_is_rejected_not_silently_reused
+      - tests/unit/test_runtime_resolver_codex.py::test_default_codex_route_uses_composed_model_not_capability_endpoint
+      - tests/unit/test_runtime_resolver_codex.py::test_unavailable_codex_runtime_carries_no_speculative_model_route
+      - tests/unit/test_runtime_resolver_codex.py::test_explicit_choice_rebinds_same_conversation_a_to_b
+      - tests/unit/test_runtime_resolver_codex.py::test_choice_is_resolved_only_inside_the_callers_tenant
+      - tests/unit/test_runtime_resolver_codex.py::test_runtime_refuses_unadvertised_or_unavailable_catalogue_choice
+      - tests/unit/test_runtime_resolver_codex.py::test_runtime_refuses_a_vision_choice_without_catalogue_image_support
+      - tests/unit/test_runtime_resolver_codex.py::test_automatic_codex_route_refuses_without_the_bifrost_gateway
+      - tests/unit/test_codex_runtime.py::test_trusted_model_binding_is_registered_for_lifecycle_and_cleaned
+      - tests/unit/test_codex_cell_provisioning.py::test_per_call_model_is_the_compiled_admission_model
+      - tests/unit/test_codex_assignment_model_binding.py::test_trusted_provider_requires_and_pop_once_consumes_the_exact_binding
       - tests/security/test_worker_model_profiles.py::test_visible_model_profiles_expose_no_provider_endpoint_or_credential
       - tests/security/test_worker_model_profiles.py::test_chat_threads_only_an_approved_profile_name_and_emits_non_secret_route
       - tests/security/test_worker_model_profiles.py::test_model_profile_endpoint_requires_principal_and_returns_safe_projection
@@ -2312,9 +2408,10 @@ invariants:
       - tests/store/test_integration_atomicity.py::test_pg_create_rolls_back_staged_credential_on_conflict_or_failure
       - tests/store/test_integration_atomicity.py::test_pg_revoke_rolls_back_connection_when_owned_credential_delete_fails
   SEC-WRK-07:
-    description: 'A Worker desktop device is owner- and tenant-enrolled with digest-only, expiring, rotatable session secrets and an Ed25519 verifier bootstrap. The bounded device.file.read, device.file.write, and device.command.run verbs are registered through the canonical adapter/binding path; native roots are opaque IDs plus relative paths, write leases bind an exact content digest, and command leases use argv only and remain disabled per root by default. Every signed lease requires a consumed non-self-approved dispatcher approval for the exact canonical action, one approval can materialize once, cancellation or revocation prevents pending work from being claimed, and the issued-to-claimed-to-settled lifecycle uses atomic single-use claim fencing.'
+    description: 'A Worker desktop device is owner- and tenant-enrolled with digest-only, expiring, rotatable session secrets and an Ed25519 verifier bootstrap. The bounded device.file.list, device.file.read, device.file.write, and device.command.run verbs are registered through the canonical adapter/binding path; native roots are opaque IDs plus relative paths, directory metadata is single-level, capped, sanitized and never follows a symlink target, write leases bind an exact content digest, and command leases use argv only and remain disabled per root by default. Every signed lease requires a consumed non-self-approved dispatcher approval for the exact canonical action, one approval can materialize once, cancellation or revocation prevents pending work from being claimed, and the issued-to-claimed-to-settled lifecycle uses atomic single-use claim fencing.'
     tests:
       - tests/security/test_device_dispatch_adapter.py::test_device_verbs_register_as_high_consequence_adapter_data
+      - tests/security/test_device_dispatch_adapter.py::test_file_listing_is_exact_bounded_and_never_becomes_a_direct_read
       - tests/security/test_device_dispatch_adapter.py::test_dispatch_consumes_exact_nonself_approval_and_materializes_once
       - tests/security/test_device_dispatch_adapter.py::test_write_and_command_dispatch_bind_every_exact_action_field
       - tests/security/test_device_dispatch_adapter.py::test_self_approval_never_materializes_a_device_lease
@@ -2323,6 +2420,7 @@ invariants:
       - tests/security/test_device_dispatch_adapter.py::test_boot_registration_is_key_gated_and_uses_canonical_registry
       - tests/security/test_device_leases.py::test_enrollment_and_sessions_are_single_use_digest_only_and_owner_scoped
       - tests/security/test_device_leases.py::test_no_direct_user_lease_materialization_route_exists
+      - tests/security/test_device_leases.py::test_file_listing_receipts_project_only_bounded_relative_metadata
       - tests/security/test_device_leases.py::test_signed_lease_requires_consumed_exact_action_and_is_single_use
       - tests/security/test_device_leases.py::test_paths_write_digests_and_command_opt_in_fail_closed
       - tests/security/test_device_leases.py::test_ed25519_verifier_rejects_any_tampered_lease_field
@@ -2372,7 +2470,12 @@ invariants:
       - tests/security/test_model_endpoint_lifecycle.py::test_process_model_policy_projection_names_real_consumers_without_topology
       - tests/security/test_model_endpoint_lifecycle.py::test_retirement_preserves_configuration_and_every_reference_fails_closed
       - tests/security/test_model_endpoint_lifecycle.py::test_endpoint_lifecycle_approval_is_bound_to_the_exact_mutable_state
+      - tests/security/test_model_endpoint_lifecycle.py::test_maximum_safe_endpoint_id_roundtrips_through_detail_and_retire
+      - tests/security/test_model_endpoint_lifecycle.py::test_two_approved_endpoint_edits_compare_and_swap_once
+      - tests/security/test_model_endpoint_lifecycle.py::test_approved_edit_and_lifecycle_change_compare_and_swap_once
+      - tests/security/test_model_endpoint_lifecycle.py::test_approved_fallback_use_and_retirement_compare_and_swap_once
       - tests/store/test_store_parity.py::test_model_endpoint_lifecycle_matches_on_both_stores
+      - tests/store/test_store_parity.py::test_model_endpoint_revision_cas_serializes_competing_writers_on_both_stores
   SEC-WRK-20:
     description: 'External workflow triggers are approved durable bindings, never a public synthetic-principal bypass: webhook secrets are high-entropy, show-once and hash-only; every webhook delivery reauthorizes its stored human delegator against current active user/workspace authority and intersects that with the binding-time grant ceiling; connected-channel delivery derives authority only from the signature-verified current sender binding. Event bodies remain untrusted workflow input, archived workflows and revoked identities fail closed, and a per-trigger plus source-event digest drives canonical control.workflow.trigger idempotency and keys-only replay receipts.'
     tests:
@@ -2560,6 +2663,10 @@ invariants:
       - tests/security/test_memory_projection_delivery.py::test_ambiguous_enqueue_failure_is_not_retried
       - tests/security/test_memory_projection_delivery.py::test_platform_projection_is_tenant_scoped_bounded_and_redacted
       - tests/store/test_store_parity.py::test_memory_projection_status_upserts_and_filters_on_both_stores
+  SEC-WRK-37:
+    description: 'Per-agent model routing is modality-specific and credential-free: text, vision, speech-to-text, text-to-speech and realtime voice overrides bind only to active endpoints advertising the requested modality, while route records carry opaque endpoint references and never provider key material.'
+    tests:
+      - tests/security/test_model_endpoint_lifecycle.py::test_agent_model_routes_keep_voice_directions_separate_and_credential_free
   SEC-WRK-27:
     description: 'The permanent fleet has one closed, versioned desired hierarchy and a separate worker-observation contract. Non-ephemeral capability rows are persistent profiles, never liveness evidence. A governed edit appends desired state only, round-trips through Admin manifest export, and reports restart plus next-manifest-apply projection honestly; profile and budget reconciliation remains at that safe boundary and preserves governed rows and spend. At startup build_org consumes the exact Chief/Department routing identity, supported skills, purpose, brief, runtime, model endpoint, depth and cost policy into lazy permanent runtime profiles. Runtime resolution remains per-call, pinned, metered and audited, so startup observations report construction with runtime liveness explicitly unknown and never imply a hot apply, a current worker, a reachable endpoint or an admitted Codex cell. Observation persistence is tenant-scoped and equivalent in memory and PostgreSQL.'
     tests:

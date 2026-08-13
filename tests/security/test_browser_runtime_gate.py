@@ -124,7 +124,13 @@ def _stub_path(tmp_path: Path, *, wanted: bool) -> Path:
     (binder / "chromium").write_text(
         f"#!/bin/sh\ntouch {marker}\nsleep 2\n", encoding="utf-8"
     )
-    (binder / "browser-use").write_text("#!/bin/sh\ncat > /dev/null\nexit 0\n", encoding="utf-8")
+    (binder / "browser-use").write_text(
+        "#!/bin/sh\n"
+        'test "${BU_CDP_URL:-}" = "http://127.0.0.1:9222" || exit 42\n'
+        "cat > /dev/null\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
     for name in ("python", "chromium", "browser-use"):
         (binder / name).chmod(0o755)
     return binder
@@ -159,7 +165,13 @@ def test_entrypoint_does_not_start_chromium_when_unwanted(tmp_path: Path) -> Non
 
 
 def test_entrypoint_still_starts_chromium_when_wanted(tmp_path: Path) -> None:
-    """The negative control: without it, a guard that always skips would pass."""
+    """The negative control also proves the CLI is pinned to owned loopback CDP.
+
+    Browser Harness otherwise follows its interactive desktop-Chrome recovery
+    path and waits for a user to approve ``chrome://inspect``.  The browser-use
+    stub exits 42 unless the entrypoint exports the exact endpoint started by
+    this worker.
+    """
     rc, started = _run_entrypoint(tmp_path, wanted=True)
     assert rc == 0
     assert started is True, "a declaring tenant lost its browser"

@@ -96,7 +96,25 @@ async def test_direct_chat_worker_is_not_rendered_as_a_delegated_subagent():
     )
 
     assert not any(event["type"] in {"subagent", "subagent_end"} for event in out)
-    assert any(event["type"] == "text_delta" for event in out)
+    text_events = [event for event in out if event["type"] == "text_delta"]
+    assert text_events == [{
+        "type": "text_delta",
+        "delta": (
+            "(degraded) This chat's configured runtime cannot produce a "
+            "conversational answer."
+        ),
+        "degraded": True,
+    }]
+    assert "script run by" not in text_events[0]["delta"]
+
+    conversations = await store.list_conversations(T, "alice")
+    messages = await store.list_messages(T, conversations[0].id)
+    assert messages[1].content == text_events[0]["delta"]
+
+    run_id = next(event["run_id"] for event in out if event["type"] == "message_start")
+    work_item = await store.get_work_item(T, run_id)
+    assert work_item is not None
+    assert work_item.degraded is True
 
 
 @pytest.mark.invariant("FR-CONV-04")
@@ -269,6 +287,48 @@ async def test_steer_queues_during_in_flight_turn_and_is_consumed_at_boundary():
     assert [m.role.value for m in msgs] == ["user", "user", "assistant", "assistant"]
     assert msgs[2].content == "reply:first"
     assert msgs[3].content == "reply:actually, also do this"
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_model_choice_on_in_flight_steer_is_rejected_not_silently_reused():
+    store, relay = InMemoryStore(), EventRelay()
+    gate = asyncio.Event()
+    calls: list[str] = []
+    chat = ChatService(store, relay, turn_executor=_gated_executor(gate, calls))
+
+    turn = asyncio.create_task(
+        _collect(
+            chat.handle_turn(
+                tenant_id=T,
+                user_id="alice",
+                role="engineer",
+                message="first",
+                model_choice_id="choice-a",
+            )
+        )
+    )
+    while not calls:
+        await asyncio.sleep(0)
+    conversation = (await store.list_conversations(T, "alice"))[0]
+
+    from boltrig.models import ModelEndpointUnavailable
+
+    with pytest.raises(ModelEndpointUnavailable, match="cannot change"):
+        await _collect(
+            chat.handle_turn(
+                tenant_id=T,
+                user_id="alice",
+                role="engineer",
+                message="switch while busy",
+                conversation_id=conversation.id,
+                model_choice_id="choice-b",
+            )
+        )
+
+    messages = await store.list_messages(T, conversation.id)
+    assert [message.content for message in messages] == ["first"]
+    gate.set()
+    await asyncio.wait_for(turn, timeout=2)
 
 
 @pytest.mark.invariant("US-CHAT-15")

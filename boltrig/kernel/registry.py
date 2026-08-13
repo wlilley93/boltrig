@@ -121,6 +121,7 @@ class KernelRegistry:
                 "cost_tier": capability.cost_tier,
                 "model_endpoint": capability.model_endpoint,
                 "vision_model_endpoint": capability.vision_model_endpoint,
+                "model_routes": capability.model_routes,
                 "familiar_genotype": derive_familiar_genotype(
                     capability.name
                 ).as_view(),

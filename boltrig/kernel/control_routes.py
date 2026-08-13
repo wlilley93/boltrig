@@ -36,6 +36,7 @@ async def _ensure_control_plane(
             admin=platform.get("admin"),
             workflows=platform.get("workflows"),
             credentials=kernel.credentials,
+            model_catalogue=platform.get("bifrost_models"),
         )
         await kernel.register_adapter(tenant, adapter)
         return
@@ -44,6 +45,8 @@ async def _ensure_control_plane(
         adapter.set_admin(platform["admin"])
     if platform.get("workflows") is not None:
         adapter.set_workflows(platform["workflows"])
+    if platform.get("bifrost_models") is not None:
+        adapter.set_model_catalogue(platform["bifrost_models"])
     if await kernel.store.get_verb(tenant, "control.workflow.upsert") is None:
         await kernel.registry.register_adapter_verbs(tenant, adapter)
 

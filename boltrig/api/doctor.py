@@ -1,9 +1,4 @@
-"""Production-readiness checks for a Boltrig deployment.
-
-The doctor is intentionally static: it inspects environment and manifest posture
-without connecting to databases, IdPs, model gateways, or sidecars. That keeps it
-safe to run before first boot and deterministic enough for CI.
-"""
+"""Static production-readiness checks with no dependency I/O."""
 
 from __future__ import annotations
 
@@ -15,9 +10,11 @@ from pathlib import Path
 from typing import Mapping
 from urllib.parse import parse_qs, urlsplit
 
+from boltrig.api.doctor_backups import backup_checks
+from boltrig.api.doctor_codex import codex_release_check
+from boltrig.api.doctor_stack_state import stack_state_checks
 from boltrig.config.environment import is_truthy
 from boltrig.config.manifest import FleetManifest, load_manifest
-from boltrig.api.doctor_stack_state import stack_state_checks
 
 # [2026] VJS-CC-BOLTRIG-AUDIT-KEY-PROVISIONING-001 O2: ONE placeholder predicate,
 # shared with the bootstrap audit-key guard and the readiness-receipt key, so the
@@ -118,7 +115,10 @@ def run_doctor(
         _check_stack_tool_state(e, prod, manifest, checks)
         _check_model_posture(e, prod, manifest, checks)
         _check_memory_posture(prod, manifest, checks)
-    _check_backups(e, prod, checks)
+        if codex_check := codex_release_check(e, prod, manifest):
+            _add(checks, *codex_check)
+    for backup_check in backup_checks(e, prod):
+        _add(checks, *backup_check)
     _check_durable_engine(e, checks)
 
     return DoctorReport(production=prod, checks=tuple(checks))
@@ -545,21 +545,6 @@ def _manifest_gateway_url(manifest: FleetManifest) -> str | None:
     gateway = runtimes.get("gateway") if isinstance(runtimes.get("gateway"), dict) else {}
     value = gateway.get("base_url") if isinstance(gateway, dict) else None
     return str(value) if value else None
-
-
-def _check_backups(env: Mapping[str, str], prod: bool, checks: list[DoctorCheck]) -> None:
-    if env.get("BACKUP_REMOTE"):
-        _add(checks, "ok", "backup_remote", "Off-box backup remote is configured.")
-    else:
-        _add(
-            checks,
-            "fail" if prod else "warn",
-            "backup_remote",
-            "BACKUP_REMOTE is unset; scheduled backups remain local-only.",
-            "Set BACKUP_REMOTE or document an equivalent off-box backup path.",
-        )
-    if prod and not env.get("BACKUP_PASSPHRASE"):
-        _add(checks, "warn", "backup_encryption", "BACKUP_PASSPHRASE is unset.")
 
 
 def _check_durable_engine(env: Mapping[str, str], checks: list[DoctorCheck]) -> None:

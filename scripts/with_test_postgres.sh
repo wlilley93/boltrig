@@ -34,7 +34,13 @@ docker run --detach --rm \
 
 ready=0
 for _ in $(seq 1 30); do
-  if docker exec "$name" pg_isready -U postgres -d boltrig_test >/dev/null 2>&1; then
+  # The official entrypoint briefly runs an init-only server on the Unix socket
+  # before restarting PostgreSQL for normal TCP service. A socket-only probe can
+  # therefore go green just as the server exits, and the first host connection
+  # loses its transport. Probe the same TCP listener the test will use.
+  if docker exec "$name" \
+    pg_isready -h 127.0.0.1 -U postgres -d boltrig_test >/dev/null 2>&1
+  then
     ready=1
     break
   fi

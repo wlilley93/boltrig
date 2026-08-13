@@ -26,8 +26,10 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
         agent_capabilities,
         artifacts,
         backup_status,
+        bifrost_models,
         birth_profile,
         budgets,
+        chat_model_choices,
         console,
         eval_routes,
         hitl_policy,
@@ -51,9 +53,9 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
     P = Depends(principal_dep)
     K = Depends(get_kernel)
     for module in (
-        skills, router, addons, adapters, mcp_servers, agent_capabilities, workflows, admin, artifacts, birth_profile,
+        skills, router, addons, adapters, mcp_servers, agent_capabilities, workflows, admin, artifacts, bifrost_models, birth_profile,
         backup_status, budgets, observability, console,
-        eval_routes, hitl_policy, personal, permanent_fleet, privacy_policy, memory, knowledge, integrations, model_endpoints, model_profiles,
+        eval_routes, hitl_policy, personal, permanent_fleet, privacy_policy, memory, knowledge, integrations, model_endpoints, model_profiles, chat_model_choices,
         spawn_rules, work,
     ):
         module.register(app, P, K)

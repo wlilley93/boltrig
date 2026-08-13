@@ -13,6 +13,8 @@ single-use HITL consume CAS, and newest-first list ordering.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 from dataclasses import replace
 from datetime import timedelta
@@ -22,6 +24,7 @@ import pytest
 from boltrig.models import (
     ActionType,
     AdapterRecord,
+    AgentCapability,
     AuditEvent,
     Channel,
     Conversation,
@@ -335,6 +338,369 @@ async def test_model_endpoint_lifecycle_matches_on_both_stores(store):
 
     restored = await store.set_model_endpoint_active(T, endpoint.id, True)
     assert restored is not None and restored.is_active is True
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-14")
+async def test_model_endpoint_revision_cas_serializes_competing_writers_on_both_stores(
+    store,
+):
+    first = ModelEndpoint(
+        id="create-race",
+        tenant_id=T,
+        kind="bifrost",
+        model="provider/model-a-20260812",
+        base_url=None,
+        fallback=None,
+        data_class="standard",
+    )
+    second = replace(first, model="provider/model-b-20260812")
+    create_references = await store.model_endpoint_references(T, first.id)
+    created = await asyncio.gather(
+        store.compare_and_upsert_model_endpoint(
+            first,
+            None,
+            expected_fallback=None,
+            expected_references=create_references,
+        ),
+        store.compare_and_upsert_model_endpoint(
+            second,
+            None,
+            expected_fallback=None,
+            expected_references=create_references,
+        ),
+    )
+    assert sorted(created) == [False, True]
+
+    current = await store.get_model_endpoint(T, first.id)
+    assert current is not None
+    edited = replace(current, model="provider/model-c-20260812")
+    current_references = await store.model_endpoint_references(T, current.id)
+    edit_won, lifecycle_row = await asyncio.gather(
+        store.compare_and_upsert_model_endpoint(
+            edited,
+            current,
+            expected_fallback=None,
+            expected_references=current_references,
+        ),
+        store.compare_and_set_model_endpoint_active(T, current.id, False, current),
+    )
+    assert (edit_won, lifecycle_row is not None) in {(True, False), (False, True)}
+
+    fallback = ModelEndpoint(
+        id="fallback-race",
+        tenant_id=T,
+        kind="bifrost",
+        model="provider/model-fallback-20260812",
+        base_url=None,
+        fallback=None,
+        data_class="standard",
+    )
+    await store.upsert_model_endpoint(fallback)
+    fallback = await store.get_model_endpoint(T, fallback.id)
+    assert fallback is not None
+    primary = replace(first, id="primary-race", fallback=fallback.id)
+    primary_references = await store.model_endpoint_references(T, primary.id)
+    primary_won, fallback_row = await asyncio.gather(
+        store.compare_and_upsert_model_endpoint(
+            primary,
+            None,
+            expected_fallback=fallback,
+            expected_references=primary_references,
+        ),
+        store.compare_and_set_model_endpoint_active(
+            T, fallback.id, False, fallback
+        ),
+    )
+    assert (primary_won, fallback_row is not None) in {(True, False), (False, True)}
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-14")
+async def test_model_endpoint_reference_cas_rejects_capability_drift_and_aba_on_both_stores(
+    store,
+):
+    other_tenant = f"{T}-other"
+    target = ModelEndpoint(
+        id="capability-reference-target",
+        tenant_id=T,
+        kind="local",
+        model="model-before-reference-drift",
+        modalities=("text", "vision"),
+    )
+    other = replace(target, id="other-capability-target", model="other-model")
+    await store.upsert_model_endpoint(target)
+    await store.upsert_model_endpoint(other)
+    await store.upsert_model_endpoint(
+        replace(target, tenant_id=other_tenant, model="other-tenant-model")
+    )
+    await store.upsert_capability(
+        AgentCapability(
+            name="foreign-reference",
+            tenant_id=other_tenant,
+            runtime="codex",
+            supported_skills=["*"],
+            max_depth=1,
+            is_ephemeral=True,
+            cost_tier="standard",
+            model_endpoint=target.id,
+        )
+    )
+    approved_endpoint = await store.get_model_endpoint(T, target.id)
+    assert approved_endpoint is not None
+    approved_references = await store.model_endpoint_references(T, target.id)
+    assert approved_references.approval_context() == {
+        "capabilities": [],
+        "fallbacks": [],
+    }
+
+    capability = AgentCapability(
+        name="new-reference",
+        tenant_id=T,
+        runtime="codex",
+        supported_skills=["*"],
+        max_depth=1,
+        is_ephemeral=True,
+        cost_tier="standard",
+        model_endpoint=target.id,
+    )
+    await store.upsert_capability(capability)
+    after_add = await store.get_model_endpoint(T, target.id)
+    assert after_add is not None
+    assert after_add.revision == approved_endpoint.revision + 1
+    added_references = await store.model_endpoint_references(T, target.id)
+    assert added_references.approval_context()["capabilities"] == ["new-reference"]
+    assert not await store.compare_and_upsert_model_endpoint(
+        replace(after_add, model="stale-reference-edit"),
+        after_add,
+        expected_fallback=None,
+        expected_references=approved_references,
+    )
+
+    await store.upsert_capability(replace(capability, model_endpoint=other.id))
+    after_remove = await store.get_model_endpoint(T, target.id)
+    assert after_remove is not None
+    assert after_remove.revision == after_add.revision + 1
+    removed_references = await store.model_endpoint_references(T, target.id)
+    assert removed_references == approved_references
+    assert not await store.compare_and_upsert_model_endpoint(
+        replace(approved_endpoint, model="aba-reference-edit"),
+        approved_endpoint,
+        expected_fallback=None,
+        expected_references=approved_references,
+    )
+    assert await store.compare_and_upsert_model_endpoint(
+        replace(after_remove, model="current-reference-edit"),
+        after_remove,
+        expected_fallback=None,
+        expected_references=removed_references,
+    )
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-14")
+async def test_generic_model_route_is_an_endpoint_reference_on_both_stores(store):
+    endpoint = ModelEndpoint(
+        id="generic-voice-reference",
+        tenant_id=T,
+        kind="xai",
+        model="voice-model",
+        modalities=("realtime",),
+    )
+    await store.upsert_model_endpoint(endpoint)
+    await store.upsert_capability(
+        AgentCapability(
+            name="voice-reference-agent",
+            tenant_id=T,
+            runtime="codex",
+            supported_skills=["*"],
+            max_depth=1,
+            is_ephemeral=True,
+            cost_tier="standard",
+            model_routes={"realtime": endpoint.id},
+        )
+    )
+
+    references = await store.model_endpoint_references(T, endpoint.id)
+    assert references.approval_context() == {
+        "capabilities": ["voice-reference-agent"],
+        "fallbacks": [],
+    }
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-14")
+async def test_legacy_double_encoded_model_routes_use_exact_values_on_postgres(store):
+    pool = getattr(store, "_pool", None)
+    if pool is None:
+        pytest.skip("PostgreSQL JSONB compatibility regression")
+
+    for endpoint_id in ("text", "actual-route"):
+        await store.upsert_model_endpoint(
+            ModelEndpoint(
+                id=endpoint_id,
+                tenant_id=T,
+                kind="local",
+                model=f"{endpoint_id}-model",
+                modalities=("text",),
+            )
+        )
+    # The old writer passed json.dumps(...) into a codec which serialized it a
+    # second time. The durable row is therefore a JSON string containing an
+    # object. An endpoint named "text" must not match the object's key; only the
+    # exact route VALUE is a reference. A malformed historical string must also
+    # remain harmless and non-referencing.
+    await pool.execute(
+        """INSERT INTO agent_capabilities
+             (name, tenant_id, runtime, model_routes, supported_skills,
+              max_depth, is_ephemeral, cost_tier, source, is_active)
+           VALUES ($1,$2,'codex',$3::jsonb,$4,1,true,'standard',
+                   'control-plane',true),
+                  ($5,$2,'codex',$6::jsonb,$4,1,true,'standard',
+                   'control-plane',true)""",
+        "legacy-double-encoded",
+        T,
+        json.dumps({"text": "actual-route"}),
+        ["*"],
+        "legacy-malformed",
+        "not-an-object",
+    )
+
+    assert (
+        await store.model_endpoint_references(T, "text")
+    ).approval_context()["capabilities"] == []
+    assert (
+        await store.model_endpoint_references(T, "actual-route")
+    ).approval_context()["capabilities"] == ["legacy-double-encoded"]
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-14")
+async def test_model_endpoint_edit_and_new_reference_are_totally_ordered_on_both_stores(
+    store,
+):
+    endpoint = ModelEndpoint(
+        id="concurrent-reference-target",
+        tenant_id=T,
+        kind="local",
+        model="model-before-concurrency",
+        modalities=("text", "vision"),
+    )
+    await store.upsert_model_endpoint(endpoint)
+    approved_endpoint = await store.get_model_endpoint(T, endpoint.id)
+    assert approved_endpoint is not None
+    approved_references = await store.model_endpoint_references(T, endpoint.id)
+    capability = AgentCapability(
+        name="concurrent-reference",
+        tenant_id=T,
+        runtime="codex",
+        supported_skills=["*"],
+        max_depth=1,
+        is_ephemeral=True,
+        cost_tier="standard",
+        model_endpoint=endpoint.id,
+    )
+
+    edit_won, _ = await asyncio.gather(
+        store.compare_and_upsert_model_endpoint(
+            replace(approved_endpoint, model="model-after-concurrency"),
+            approved_endpoint,
+            expected_fallback=None,
+            expected_references=approved_references,
+        ),
+        store.upsert_capability(capability),
+    )
+
+    current = await store.get_model_endpoint(T, endpoint.id)
+    assert current is not None
+    assert (
+        await store.model_endpoint_references(T, endpoint.id)
+    ).approval_context()["capabilities"] == [capability.name]
+    if edit_won:
+        # Endpoint CAS linearized first; the later reference write bumped the
+        # revision again, so an older approval can never mistake this for its
+        # reviewed endpoint state.
+        assert current.model == "model-after-concurrency"
+        assert current.revision == approved_endpoint.revision + 2
+    else:
+        # Reference insertion linearized first and invalidated the endpoint CAS.
+        assert current.model == "model-before-concurrency"
+        assert current.revision == approved_endpoint.revision + 1
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-14")
+async def test_model_endpoint_reference_cas_rejects_fallback_drift_and_aba_on_both_stores(
+    store,
+):
+    other_tenant = f"{T}-other"
+    target = ModelEndpoint(
+        id="fallback-reference-target",
+        tenant_id=T,
+        kind="local",
+        model="model-before-fallback-drift",
+    )
+    await store.upsert_model_endpoint(target)
+    await store.upsert_model_endpoint(
+        replace(target, tenant_id=other_tenant, model="other-tenant-model")
+    )
+    await store.upsert_model_endpoint(
+        replace(
+            target,
+            id="foreign-fallback-reference",
+            tenant_id=other_tenant,
+            fallback=target.id,
+        )
+    )
+    await store.upsert_model_endpoint(
+        replace(target, id="z-fallback-reference", fallback=target.id)
+    )
+    await store.upsert_model_endpoint(
+        replace(target, id="a-fallback-reference", fallback=target.id)
+    )
+    approved_endpoint = await store.get_model_endpoint(T, target.id)
+    assert approved_endpoint is not None
+    approved_references = await store.model_endpoint_references(T, target.id)
+    assert approved_references.approval_context() == {
+        "capabilities": [],
+        "fallbacks": ["a-fallback-reference", "z-fallback-reference"],
+    }
+
+    dependent = await store.get_model_endpoint(T, "a-fallback-reference")
+    assert dependent is not None
+    await store.upsert_model_endpoint(replace(dependent, fallback=None))
+    after_remove = await store.get_model_endpoint(T, target.id)
+    assert after_remove is not None
+    removed_references = await store.model_endpoint_references(T, target.id)
+    assert removed_references.approval_context()["fallbacks"] == [
+        "z-fallback-reference"
+    ]
+    assert not await store.compare_and_upsert_model_endpoint(
+        replace(after_remove, model="stale-fallback-edit"),
+        after_remove,
+        expected_fallback=None,
+        expected_references=approved_references,
+    )
+
+    await store.upsert_model_endpoint(replace(dependent, fallback=target.id))
+    rebound = await store.get_model_endpoint(T, "a-fallback-reference")
+    assert rebound is not None
+    await store.upsert_model_endpoint(replace(rebound, fallback=None))
+    after_aba = await store.get_model_endpoint(T, target.id)
+    assert after_aba is not None
+    assert await store.model_endpoint_references(T, target.id) == removed_references
+    assert not await store.compare_and_upsert_model_endpoint(
+        replace(after_remove, model="aba-fallback-edit"),
+        after_remove,
+        expected_fallback=None,
+        expected_references=removed_references,
+    )
+    assert await store.compare_and_upsert_model_endpoint(
+        replace(after_aba, model="current-fallback-edit"),
+        after_aba,
+        expected_fallback=None,
+        expected_references=removed_references,
+    )
 
 
 # --- evaluation case lifecycle (SEC-WRK-18) --------------------------------

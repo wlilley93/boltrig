@@ -130,6 +130,56 @@ async def test_device_verbs_register_as_high_consequence_adapter_data() -> None:
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-WRK-07")
+async def test_file_listing_is_exact_bounded_and_never_becomes_a_direct_read() -> None:
+    kernel, device_id, root_id = await _kernel(scope="read")
+    params = {
+        "device_id": device_id,
+        "root_id": root_id,
+        "relative_path": "src",
+        "max_entries": 40,
+    }
+    request_id = await _pending(kernel, "device.file.list", params, _context())
+    request = await kernel.hitl.get(T, request_id)
+    assert request is not None
+    action, digest = canonical_device_action(
+        device_id,
+        root_id,
+        "device.file.list",
+        {"relative_path": "src", "max_entries": 40},
+    )
+    assert action == {"relative_path": "src", "max_entries": 40}
+    assert request.action_digest == digest
+
+    await kernel.hitl.answer(T, request_id, "approve", "reviewer")
+    output = await kernel.invoke(
+        "device",
+        "device.file.list",
+        params,
+        _context(),
+        approval_id=request_id,
+    )
+    assert output["verb"] == "device.file.list"
+    assert "src" not in repr(output)
+    lease = await kernel.store.get_device_lease(T, device_id, output["lease_id"])
+    assert lease is not None and lease.action == action
+
+    with pytest.raises(AdapterFailure) as traversal:
+        await kernel.invoke(
+            "device",
+            "device.file.list",
+            {**params, "relative_path": "../secret"},
+            _context(),
+        )
+    assert traversal.value.reason == "invalid_relative_path"
+    for invalid in ({**params, "max_entries": 101}, {**params, "recursive": True}):
+        with pytest.raises(SchemaValidationError):
+            await kernel.invoke(
+                "device", "device.file.list", invalid, _context()
+            )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-07")
 async def test_dispatch_consumes_exact_nonself_approval_and_materializes_once() -> None:
     kernel, device_id, root_id = await _kernel()
     params = {

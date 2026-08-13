@@ -45,6 +45,8 @@ import type {
   ChatConfigResponse,
   ChatEvent,
   ChatFollowFrame,
+  ChatModelChoicesResponse,
+  BifrostModelsResponse,
   ChatRequest,
   AgentCapabilitiesResponse,
   PermanentFleetApplyResponse,
@@ -76,6 +78,8 @@ import type {
   DevicesResponse,
   DeleteAiKeyResponse,
   DeviceEnrollmentStart,
+  DeviceFileListRequest,
+  DeviceLeaseInvokeOptions,
   OwnerDeviceLeasesResponse,
   DeviceRootResponse,
   CreateDeviceRootRequest,
@@ -90,6 +94,8 @@ import type {
   HealthResponse,
   HITLListResponse,
   HitlPolicyResponse,
+  ApprovalPostureResponse,
+  PutApprovalPostureRequest,
   PrivacyPolicyResponse,
   BackupStatusResponse,
   IntegrationCatalogueResponse,
@@ -561,6 +567,14 @@ export class BoltrigClient {
 
   putMeSettings(body: PutSettingsRequest): Promise<PutSettingsResponse> {
     return this.json("/v1/me/settings", "PUT", body, true);
+  }
+
+  approvalPosture(): Promise<ApprovalPostureResponse> {
+    return this.request("/v1/me/approval-posture");
+  }
+
+  putApprovalPosture(body: PutApprovalPostureRequest): Promise<ApprovalPostureResponse> {
+    return this.json("/v1/me/approval-posture", "PUT", body, true);
   }
 
   meActivity(params: { limit?: number; offset?: number } = {}): Promise<MeActivityResponse> {
@@ -1162,6 +1176,14 @@ export class BoltrigClient {
 
   modelProfiles(): Promise<ModelProfilesResponse> {
     return this.request("/v1/model-profiles");
+  }
+
+  chatModelChoices(): Promise<ChatModelChoicesResponse> {
+    return this.request("/v1/chat/model-choices");
+  }
+
+  bifrostModels(): Promise<BifrostModelsResponse> {
+    return this.request("/v1/bifrost/models");
   }
 
   modelEndpoints(): Promise<ModelEndpointsResponse> {
@@ -2086,6 +2108,29 @@ export class BoltrigClient {
     return this.request(
       `/v1/devices/${encodeURIComponent(deviceId)}/leases`,
     );
+  }
+
+  requestDeviceFileListLease(
+    deviceId: string,
+    rootId: string,
+    body: DeviceFileListRequest,
+    options: DeviceLeaseInvokeOptions = {},
+  ): Promise<InvokeResult> {
+    return this.invoke({
+      noun: "device",
+      verb: "device.file.list",
+      params: {
+        device_id: deviceId,
+        root_id: rootId,
+        relative_path: body.relative_path,
+        max_entries: body.max_entries,
+      },
+      ...(options.approvalId ? { approval_id: options.approvalId } : {}),
+      ...(options.idempotencyKey
+        ? { idempotency_key: options.idempotencyKey }
+        : {}),
+      ...(options.context ? { context: options.context } : {}),
+    });
   }
 
   startDeviceEnrollment(label: string): Promise<DeviceEnrollmentStart | StatusAck> {

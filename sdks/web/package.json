@@ -47,6 +47,10 @@
     "./integrationCatalogue": {
       "types": "./dist/src/integrationCatalogue.d.ts",
       "import": "./dist/src/integrationCatalogue.js"
+    },
+    "./characters": {
+      "types": "./dist/src/characters.d.ts",
+      "import": "./dist/src/characters.js"
     }
   },
   "files": [

@@ -81,6 +81,7 @@ def _invocation_context(
     workspace_id,
     scope,
     model_profile_id,
+    model_choice_id,
     attachments,
 ) -> InvocationContext:
     return InvocationContext(
@@ -104,6 +105,7 @@ def _invocation_context(
             "principal_role": role,
             **({"principal_scope": dict(scope)} if scope is not None else {}),
             **({"model_profile": model_profile_id} if model_profile_id else {}),
+            **({"model_endpoint_id": model_choice_id} if model_choice_id else {}),
         },
     )
 
@@ -130,10 +132,40 @@ async def _turn_task(
     return task + attachment_task_supplement(attachments)
 
 
-def _publish_reply(relay, run_id, model_profile_id, result, item) -> None:
-    publish_model_routing(relay, run_id, model_profile_id, result)
-    reply = reply_text(result)
-    item.degraded = bool(result.get("degraded"))
+def _script_runtime_without_reply(result: dict[str, Any]) -> bool:
+    """Whether a deterministic script result has no conversational answer.
+
+    ``ScriptRuntime.summary`` is an audit receipt (``script run by ...``), not
+    assistant prose.  Other fleet callers still need that summary unchanged;
+    only the direct Chat projection must refuse to present it as an answer.
+    Should a future script runtime deliberately provide ``output.text``, it is
+    conversational and passes through the ordinary reply path.
+    """
+    output = result.get("output")
+    return (
+        isinstance(output, dict)
+        and output.get("runtime") == "python-script"
+        and not output.get("text")
+    )
+
+
+def _publish_reply(
+    relay, run_id, model_profile_id, model_choice_id, result, item
+) -> None:
+    publish_model_routing(
+        relay,
+        run_id,
+        model_profile_id,
+        result,
+        requested_choice=model_choice_id,
+    )
+    script_without_reply = _script_runtime_without_reply(result)
+    reply = (
+        "This chat's configured runtime cannot produce a conversational answer."
+        if script_without_reply
+        else reply_text(result)
+    )
+    item.degraded = bool(result.get("degraded")) or script_without_reply
     if item.degraded:
         if not reply.startswith("degraded"):
             reply = f"(degraded) {reply}"
@@ -160,6 +192,7 @@ async def _spawn_turn(
     skills,
     context,
     model_profile_id,
+    model_choice_id,
 ):
     try:
         result = await spawner.spawn(
@@ -171,7 +204,9 @@ async def _spawn_turn(
             partial_on_budget=True,
             announce_child=False,
         )
-        _publish_reply(relay, item.id, model_profile_id, result, item)
+        _publish_reply(
+            relay, item.id, model_profile_id, model_choice_id, result, item
+        )
         await persist_new_work_items(
             kernel.store, item, result.get("new_work_items"), source="chat"
         )
@@ -215,6 +250,7 @@ async def _execute_turn(
     on_behalf_bearer,
     origin,
     model_profile_id,
+    model_choice_id,
 ):
     skills = await _turn_skills(kernel, cfg, tenant_id, role)
     ceiling = grants if grants is not None else EMPTY_GRANTS
@@ -243,6 +279,7 @@ async def _execute_turn(
         workspace_id=workspace_id,
         scope=scope,
         model_profile_id=model_profile_id,
+        model_choice_id=model_choice_id,
         attachments=attachments,
     )
     task = await _turn_task(
@@ -266,6 +303,7 @@ async def _execute_turn(
         skills,
         context,
         model_profile_id,
+        model_choice_id,
     )
 
 
@@ -296,6 +334,7 @@ def build_turn_executor(
         on_behalf_bearer=None,
         origin=None,
         model_profile_id=None,
+        model_choice_id=None,
     ):
         await _execute_turn(
             kernel,
@@ -317,6 +356,7 @@ def build_turn_executor(
             on_behalf_bearer=on_behalf_bearer,
             origin=origin,
             model_profile_id=model_profile_id,
+            model_choice_id=model_choice_id,
         )
 
     return executor

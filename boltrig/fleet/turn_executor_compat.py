@@ -17,6 +17,7 @@ from typing import Any
 # Anything threaded into the executor call belongs in this set the same day.
 _OPTIONAL_KWARGS = frozenset({
     "scope", "workspace_id", "on_behalf_bearer", "origin", "model_profile_id",
+    "model_choice_id",
 })
 _KEYWORD_KINDS = frozenset(
     {

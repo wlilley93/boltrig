@@ -17,6 +17,8 @@ async def execute_profile_operation(
     verb: str,
     params: dict[str, Any],
     context: InvocationContext,
+    *,
+    model_catalogue: Any = None,
 ) -> Result | None:
     capability = await execute_capability_operation(
         store, loader, verb, params, context
@@ -24,5 +26,5 @@ async def execute_profile_operation(
     if capability is not None:
         return capability
     return await execute_model_endpoint_operation(
-        store, loader, verb, params, context
+        store, loader, verb, params, context, model_catalogue=model_catalogue
     )

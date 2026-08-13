@@ -35,3 +35,25 @@ export type {
   FamiliarStateV2,
   FamiliarVoiceBands,
 } from "./familiarState.js";
+export {
+  characterRegistryRevision,
+  characterFor,
+  isCharacterId,
+  isCharacterRegistered,
+  listCharacters,
+  registerCharacter,
+  subscribeCharacters,
+} from "./characters.js";
+export type {
+  Character,
+  CharacterId,
+  CharacterPresentationMode,
+  CharacterRenderProps,
+  CharacterStageState,
+  CharacterTurnInput,
+  PhenotypeResponse,
+  PresentationMode,
+  StageRenderProps,
+  StageState,
+  StageTurnInput,
+} from "./characters.js";

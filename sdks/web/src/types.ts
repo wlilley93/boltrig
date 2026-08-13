@@ -61,6 +61,8 @@ export interface AgentCapabilityInfo {
   cost_tier: string;
   model_endpoint?: string | null;
   vision_model_endpoint?: string | null;
+  /** Per-agent modality overrides. Values are opaque endpoint ids. */
+  model_routes?: Record<string, string>;
   familiar_genotype: FamiliarGenotype;
 }
 
@@ -158,7 +160,8 @@ export interface ModelEndpointInfo {
   kind: string;
   model: string;
   data_class: string;
-  modalities?: Array<"text" | "vision" | string>;
+  modalities?: Array<"text" | "vision" | "stt" | "tts" | "realtime" | string>;
+  revision: number;
   is_active: boolean;
   status: "active" | "retired";
 }
@@ -663,6 +666,9 @@ export interface ChatRequest {
   // availability, or cost policy; the selected profile is emitted as a
   // model_routing event.
   model_profile_id?: string;
+  // Opaque tenant-approved text-chat choice. The server resolves its exact model
+  // and may override it under classification or availability policy.
+  model_choice_id?: string;
 }
 
 // POST /v1/me/conversations/{cid}/messages/{mid}/regenerate: re-runs the last
@@ -1568,6 +1574,53 @@ export interface ModelProfilesResponse {
   profiles: ModelProfile[];
 }
 
+/** A caller-visible, tenant-approved model choice for conversational turns.
+ * `id` remains an opaque governed selection; only the exact non-secret model
+ * name needed to label the switcher is projected to the client. */
+export interface ChatModelChoice {
+  id: string;
+  model_name: string;
+  available: boolean;
+  is_default: boolean;
+  modalities: string[];
+  unavailable_reason?: string | null;
+}
+
+export interface ChatModelChoicesResponse {
+  status: "ok" | "unavailable";
+  reason: string | null;
+  choices: ChatModelChoice[];
+  default_choice_id?: string | null;
+  default_model_name?: string | null;
+  default_available?: boolean;
+  default_unavailable_reason?: string | null;
+}
+
+export type BifrostCatalogueUnavailableReason =
+  | "not_configured"
+  | "invalid_gateway_configuration"
+  | "gateway_timeout"
+  | "gateway_unavailable"
+  | "gateway_redirect_rejected"
+  | "gateway_response_rejected"
+  | "response_too_large"
+  | "schema_invalid"
+  | "catalogue_too_large"
+  | "pagination_limit";
+
+/** The deliberately small, non-secret projection of one Bifrost model. */
+export interface BifrostModelView {
+  id: string;
+  name: string;
+  input_modalities?: string[];
+}
+
+export interface BifrostModelsResponse {
+  status: "ok" | "unavailable";
+  models: BifrostModelView[];
+  reason: BifrostCatalogueUnavailableReason | null;
+}
+
 export type ArtifactProvenanceKind =
   | "agent"
   | "tool"
@@ -1682,13 +1735,46 @@ export interface OwnerDeviceLeaseReceipt {
   duration_ms?: number;
   exit_code?: number | null;
   output_captured?: false;
+  relative_path?: string | null;
+  entries?: DeviceFileListEntry[];
+  truncated?: boolean;
+}
+
+export type DeviceFileKind = "file" | "directory" | "symlink";
+
+export interface DeviceFileListEntry {
+  name: string;
+  path: string;
+  kind: DeviceFileKind;
+  byte_size: number | null;
+}
+
+export interface DeviceFileListReceipt {
+  relative_path: string | null;
+  entries: DeviceFileListEntry[];
+  truncated: boolean;
+}
+
+export interface DeviceFileListRequest {
+  relative_path: string | null;
+  max_entries: number;
+}
+
+export interface DeviceLeaseInvokeOptions {
+  approvalId?: string;
+  idempotencyKey?: string;
+  context?: Record<string, unknown>;
 }
 
 export interface OwnerDeviceLease {
   id: string;
   device_id: string;
   root_id: string;
-  verb: "device.file.read" | "device.file.write" | "device.command.run";
+  verb:
+    | "device.file.list"
+    | "device.file.read"
+    | "device.file.write"
+    | "device.command.run";
   status: OwnerDeviceLeaseStatus;
   issued_at: string;
   expires_at: string;
@@ -3095,6 +3181,26 @@ export interface PutSettingsResponse {
   status: string;
   keys?: string[];
   reason?: string;
+}
+
+export type ApprovalPosture = "always_ask" | "risk_based" | "full_access";
+
+export interface ApprovalPostureResponse {
+  status?: "ok";
+  posture: ApprovalPosture;
+  source: "safe_default" | "user_override";
+  enforcement: {
+    applies_to: "delegated_agent_adapter_calls";
+    workspace_blocking_verbs_remain: true;
+    control_plane_approvals_remain: true;
+    direct_human_consequence_gate_remains: true;
+    authority_is_never_widened: true;
+  };
+}
+
+export interface PutApprovalPostureRequest {
+  posture: ApprovalPosture;
+  confirm?: "full_access";
 }
 
 export interface ActivityRow {

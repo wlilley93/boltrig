@@ -22,7 +22,7 @@ the reasoning inverts here. A health probe that cannot look is usually an offlin
 dev box; a drift check that cannot look is an operator about to deploy blind.
 
 Usage:
-    python scripts/check_fleet_drift.py --host jellytot-prod \
+    python scripts/check_fleet_drift.py --host production-host \
         --compose ~/Projects/boltrig-main/docker-compose.yml \
         --overlay ~/Projects/opbox-prod/boltrig-tenants/boltrig-io.override.yml \
         --project boltrig

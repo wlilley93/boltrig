@@ -3,71 +3,33 @@
 from __future__ import annotations
 
 import os
-from dataclasses import replace
 from typing import Any, cast
 
 from boltrig.config.environment import production_signal
-from boltrig.models import AgentCapability, CredentialResolution, InvocationContext, ModelEndpoint
+from boltrig.models import (
+    AgentCapability,
+    CredentialResolution,
+    InvocationContext,
+    ModelEndpoint,
+)
 
-from .model_gateway import ModelGateway, apply_gateway, gateway_config
-from .model_profiles import apply_model_profile, select_model_profile
-from .model_router import endpoint_id_for_modality, select_model_endpoint
-from .runtime import Runtime, build_runtime, runtime_for_provider
-
-
-# Only provider-native runtimes let an explicitly selected endpoint choose the
-# transport. Codex, OpenCode, Rivet and script capabilities own their execution
-# host; their model endpoint is configuration *inside* that host. Treating an
-# ordinary OpenAI endpoint as a transport override silently turns the shipped
-# Codex chat worker (and Rivet's AgentOS bridge) into the legacy OpenAI lane.
-_PROVIDER_NATIVE_RUNTIMES = frozenset({"openai", "claude-api"})
+from .codex_model_selection import (
+    codex_model_route,
+    resolve_base_model,
+    resolve_codex_model,
+)
+from .model_gateway import ModelGateway, gateway_config
+from .runtime import Runtime, build_runtime
+from .runtime_endpoint_policy import (
+    apply_conversation_gateway,
+    apply_legacy_provider_route,
+    apply_requested_model_profile,
+    served_model_route,
+)
 
 
 class PinnedRuntimePolicyUnavailable(RuntimeError):
     """A composed runtime cannot honestly satisfy an authored pinned profile."""
-
-
-def served_model_route(endpoint: ModelEndpoint | None) -> dict[str, str] | None:
-    """The model that ACTUALLY served a call, for the audit record.
-
-    Extracted rather than inlined so the fallback is testable on its own: reaching it through a
-    full ``resolve`` means standing up a kernel, an MCP face and a gateway, which is why the gap it
-    fills went unnoticed in the first place.
-
-    Never carries a base_url or a key - only the two facts a reader needs, and both are already on
-    ``_PUBLIC_ROUTE_KEYS``. Returns None when there is genuinely nothing to say, so a caller can
-    tell "no endpoint resolved" from "an endpoint with no model", rather than recording an empty
-    dict that reads like an answer.
-    """
-    if endpoint is None:
-        return None
-    model = getattr(endpoint, "model", None)
-    if not model:
-        return None
-    route = {"model": str(model)}
-    provider = getattr(endpoint, "kind", None)
-    if provider:
-        route["provider"] = str(provider)
-    return route
-
-
-def _routed_endpoint(
-    tenant_id: str, base: ModelEndpoint | None, resolution: Any, modality: str = "text"
-) -> ModelEndpoint:
-    """Apply an AI-config provider/model/base-url selection to an endpoint."""
-    model = resolution.model or (base.model if base is not None else "")
-    base_url = resolution.base_url or (base.base_url if base is not None else None)
-    if base is not None:
-        return replace(base, model=model, base_url=base_url)
-    return ModelEndpoint(
-        id="ai-config",
-        tenant_id=tenant_id,
-        kind=(resolution.provider or "openai"),
-        model=model,
-        base_url=base_url,
-        data_class="standard",
-        modalities=("vision",) if modality == "vision" else ("text",),
-    )
 
 
 class RuntimeResolver:
@@ -79,6 +41,7 @@ class RuntimeResolver:
         *,
         sensitive_endpoint_id: str | None = None,
         codex_config: dict[str, Any] | None = None,
+        model_catalogue: Any = None,
     ) -> None:
         self._kernel = kernel
         self._sensitive_endpoint_id = sensitive_endpoint_id
@@ -86,6 +49,7 @@ class RuntimeResolver:
         # root ([2026] VJS-CC-VJS 2). None (the default) => the codex runtime is a
         # degrade-marked unavailable lane (off by default = total no-op).
         self._codex = codex_config
+        self._model_catalogue = model_catalogue
         self._rivet = {
             "agentos_url": os.environ.get("RIVET_AGENTOS_URL")
             or os.environ.get("BOLTRIG_RIVET_AGENTOS_URL")
@@ -141,9 +105,10 @@ class RuntimeResolver:
             endpoint,
             api_key,
             runtime_override,
+            model_route,
             allow_kernel_tools=allow_kernel_tools,
         )
-        self._attach_model_route(runtime, capability, endpoint, model_route)
+        self._attach_model_route(runtime, endpoint, model_route)
         return runtime
 
     async def _resolve_runtime_policy(
@@ -154,69 +119,73 @@ class RuntimeResolver:
         *,
         pinned_policy: bool,
     ) -> tuple[ModelEndpoint | None, str | None, str | None, dict[str, str] | None]:
-        sensitive = bool(context is not None and context.extra.get("data_class") == "sensitive")
-        modality = str(
-            (context.extra if context is not None else {}).get("input_modality")
-            or "text"
-        )
-        endpoint = await select_model_endpoint(
-            self._kernel.store,
-            tenant_id,
-            endpoint_id_for_modality(capability, modality),
-            sensitive=sensitive,
-            modality=modality,
-            sensitive_endpoint_id=self._sensitive_endpoint_id,
-            audit=self._kernel.audit,
-            actor=capability.name,
+        sensitive, modality, selected_endpoint_id, capability_endpoint_id, endpoint = (
+            await resolve_base_model(
+                kernel=self._kernel,
+                tenant_id=tenant_id,
+                capability=capability,
+                context=context,
+                pinned_policy=pinned_policy,
+                sensitive_endpoint_id=self._sensitive_endpoint_id,
+            )
         )
         api_key, resolution = await self._resolve_ai_key(tenant_id, context, modality)
         runtime_override: str | None = None
         model_route: dict[str, str] | None = None
-        explicit_endpoint = endpoint_id_for_modality(capability, modality) is not None
+        explicit_endpoint = capability_endpoint_id is not None
 
-        if not pinned_policy and not sensitive:
-            if (
-                explicit_endpoint
-                and endpoint is not None
-                and capability.runtime in _PROVIDER_NATIVE_RUNTIMES
-            ):
-                # A profile-level endpoint is the deliberate per-agent override:
-                # keep its model and host, while the resolved scoped key remains
-                # the credential for this modality. This applies only to the two
-                # provider-native runtimes; execution-host runtimes keep owning
-                # their transport and consume the endpoint as model config.
-                runtime_override = runtime_for_provider(endpoint.kind)
-                if runtime_override is None and endpoint.kind in {
-                    "local", "openai-compatible"
-                }:
-                    runtime_override = "openai"
-            elif resolution is not None and not resolution.is_default:
-                # No agent override: the main text/vision key owns provider/model
-                # routing, preserving the existing scoped-key precedence.
-                runtime_override = runtime_for_provider(resolution.provider)
-                if runtime_override is not None:
-                    endpoint = _routed_endpoint(
-                        tenant_id, endpoint, resolution, modality
-                    )
-
-        if context is not None and not sensitive and not pinned_policy:
-            profile = select_model_profile(dict(context.extra or {}))
-            endpoint, profile_runtime, profile_route = apply_model_profile(
-                endpoint, profile, tenant_id=tenant_id
+        if capability.runtime == "codex" and not sensitive:
+            gateway_url = cast(str | None, self._gateway["base_url"])
+            endpoint = await resolve_codex_model(
+                kernel=self._kernel,
+                tenant_id=tenant_id,
+                capability=capability,
+                endpoint=endpoint,
+                choice_id=selected_endpoint_id,
+                modality=modality,
+                pinned_policy=pinned_policy,
+                codex_config=self._codex,
+                gateway_url=gateway_url,
+                model_catalogue=self._model_catalogue,
             )
-            if profile_runtime is not None:
-                runtime_override = profile_runtime
-            if profile_route is not None:
-                model_route = profile_route.audit_detail()
+            runtime_override = None
+        else:
+            endpoint, runtime_override = apply_legacy_provider_route(
+                tenant_id=tenant_id,
+                capability=capability,
+                endpoint=endpoint,
+                explicit_endpoint=explicit_endpoint,
+                resolution=resolution,
+                modality=modality,
+                pinned_policy=pinned_policy,
+                sensitive=sensitive,
+            )
 
-        conversation_id = context.extra.get("conversation_id") if context is not None else None
-        endpoint = apply_gateway(
-            endpoint,
-            gateway_url=cast(str | None, self._gateway["base_url"]),
-            binding=self._bindings,
-            conversation_id=conversation_id,
+        endpoint, runtime_override, profile_route = apply_requested_model_profile(
+            tenant_id=tenant_id,
+            capability=capability,
+            endpoint=endpoint,
+            runtime_override=runtime_override,
+            context=context,
+            pinned_policy=pinned_policy,
             sensitive=sensitive,
         )
+        model_route = profile_route or model_route
+
+        conversation_id = context.extra.get("conversation_id") if context is not None else None
+        endpoint = apply_conversation_gateway(
+            endpoint,
+            gateway_url=cast(str | None, self._gateway["base_url"]),
+            bindings=self._bindings,
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            sensitive=sensitive,
+            capability=capability,
+            choice_id=selected_endpoint_id,
+            pinned_policy=pinned_policy,
+        )
+        if capability.runtime == "codex" and endpoint is not None and not sensitive:
+            model_route = codex_model_route(endpoint, selected_endpoint_id)
         return endpoint, api_key, runtime_override, model_route
 
     def _require_pinned_codex_model(
@@ -244,6 +213,7 @@ class RuntimeResolver:
         endpoint: ModelEndpoint | None,
         api_key: str | None,
         runtime_override: str | None,
+        model_route: dict[str, str] | None,
         *,
         allow_kernel_tools: bool,
     ) -> Runtime:
@@ -261,6 +231,12 @@ class RuntimeResolver:
             codex_config=self._codex_config(
                 capability,
                 runtime_override,
+                model_id=(endpoint.model if endpoint is not None else None),
+                model_endpoint_id=(
+                    model_route.get("choice_id")
+                    if model_route is not None
+                    else None
+                ),
                 allow_kernel_tools=allow_kernel_tools,
             ),
             api_key=api_key,
@@ -271,25 +247,17 @@ class RuntimeResolver:
     def _attach_model_route(
         self,
         runtime: Runtime,
-        capability: AgentCapability,
         endpoint: ModelEndpoint | None,
         model_route: dict[str, str] | None,
     ) -> None:
         """Record the model that actually served the call.
 
         A profile route wins because it carries richer attribution. Otherwise the
-        resolved endpoint, or the composed Codex model for an endpoint-free Codex
-        profile, makes cost and decision provenance independently checkable.
+        resolved endpoint makes cost and decision provenance independently
+        checkable. An unavailable runtime gets no speculative model label.
         """
         if model_route is None:
             model_route = served_model_route(endpoint)
-        if (
-            model_route is None
-            and capability.runtime == "codex"
-            and self._codex is not None
-            and self._codex.get("model_id")
-        ):
-            model_route = {"model": str(self._codex["model_id"])}
         if model_route:
             setattr(runtime, "model_route", model_route)
 
@@ -348,6 +316,8 @@ class RuntimeResolver:
         capability: AgentCapability,
         runtime_override: str | None,
         *,
+        model_id: str | None = None,
+        model_endpoint_id: str | None = None,
         allow_kernel_tools: bool = True,
     ) -> dict[str, Any] | None:
         """The injected trusted-Codex config, gated ONLY on ``capability.runtime``.
@@ -371,6 +341,9 @@ class RuntimeResolver:
         if self._codex is None:
             return None
         cfg = dict(self._codex)
+        if model_id:
+            cfg["model_id"] = model_id
+        cfg["model_endpoint_id"] = model_endpoint_id
         cfg["kernel_tools"] = (
             allow_kernel_tools and "*" in (capability.supported_skills or [])
         )

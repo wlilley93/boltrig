@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from boltrig.model_choice_policy import opaque_model_choice_id
 
 
 class InvokeBody(BaseModel):
@@ -76,3 +78,16 @@ class ChatBody(BaseModel):
     # request, never authority: the runtime resolver looks it up only in
     # server-held profile data and residency/availability policy may override it.
     model_profile_id: str | None = None
+    # Opaque tenant-approved text-chat choice. The runtime resolves this id from
+    # the tenant store; no caller-supplied model name or provider route is used.
+    model_choice_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=160,
+        pattern=r"^[!-~]+$",
+    )
+
+    @field_validator("model_choice_id")
+    @classmethod
+    def _valid_model_choice_id(cls, value: str | None) -> str | None:
+        return None if value is None else opaque_model_choice_id(value)

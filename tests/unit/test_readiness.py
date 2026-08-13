@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -16,8 +17,10 @@ from boltrig.api.readiness import (
     REQUIRED_CONTROL_VERBS,
     ReadinessService,
 )
+from boltrig.api.codex_readiness import codex_runtime_check
 from boltrig.config.control_plane import ControlPlaneAdapter
 from boltrig.config.admin import AdminConfig
+from boltrig.config.manifest import EphemeralRuntime, FleetManifest, load_manifest
 from boltrig.kernel import Kernel
 from boltrig.kernel.redis_event_relay import RedisEventRelay
 from boltrig.kernel.app import create_app
@@ -26,6 +29,8 @@ from boltrig.store import InMemoryStore
 from boltrig.workflows import WorkflowLibrary
 
 pytestmark = pytest.mark.unit
+
+_REPO = Path(__file__).resolve().parents[2]
 
 
 class _StatusProvider:
@@ -127,10 +132,211 @@ async def test_readyz_keeps_optional_dependencies_disabled_in_development() -> N
         "migration",
         "hatchet",
         "model_gateway",
+        "codex_runtime",
         "password_reset_delivery",
     ):
         assert report["checks"][name]["status"] == "disabled"
         assert report["checks"][name]["required"] is False
+
+
+@pytest.mark.invariant("FR-OPS-03")
+async def test_readyz_does_not_treat_baked_codex_paths_as_runtime_enablement() -> None:
+    report = await ReadinessService(
+        await _kernel(),
+        tenant_id="acme",
+        env={
+            "BOLTRIG_CODEX_TRUSTED": "0",
+            "BOLTRIG_CODEX_BINARY": "/opt/boltrig/codex/codex",
+            "BOLTRIG_CODEX_STACK_ROOT": "/var/lib/boltrig/codex-cells",
+        },
+        status_provider=_StatusProvider(),
+    ).check()
+
+    assert report["checks"]["codex_runtime"] == {
+        "status": "disabled",
+        "required": False,
+        "reason": "not_configured",
+    }
+
+
+@pytest.mark.invariant("FR-OPS-03")
+async def test_readyz_names_configured_codex_as_test_only_in_development() -> None:
+    report = await ReadinessService(
+        await _kernel(),
+        tenant_id="acme",
+        env={
+            "BOLTRIG_CODEX_TRUSTED": "1",
+            "BOLTRIG_CODEX_BINARY": "/opt/boltrig/codex/codex",
+            "BOLTRIG_CODEX_STACK_ROOT": "/var/lib/boltrig/codex-cells",
+        },
+        status_provider=_StatusProvider(),
+    ).check()
+
+    assert report["status"] == "ready"
+    assert report["checks"]["codex_runtime"] == {
+        "status": "test_only",
+        "required": False,
+        "reason": "production_gate_closed",
+        "blocker_count": 7,
+    }
+
+
+@pytest.mark.invariant("FR-OPS-03")
+async def test_readyz_refuses_configured_codex_under_a_production_signal() -> None:
+    report = await ReadinessService(
+        await _kernel(),
+        tenant_id="acme",
+        env={
+            "BOLTRIG_ENV": "production",
+            "BOLTRIG_CODEX_TRUSTED": "1",
+            "BOLTRIG_AUDIT_HMAC_KEY": "test-readiness-key",
+        },
+        status_provider=_StatusProvider(),
+        herdr_probe=_herdr_ok,
+        fleet_receipt_probe=_fleet_receipt_ok,
+    ).check()
+
+    assert report["status"] == "not_ready"
+    assert report["checks"]["codex_runtime"] == {
+        "status": "failed",
+        "required": True,
+        "reason": "production_gate_closed",
+        "blocker_count": 7,
+    }
+
+
+@pytest.mark.security
+@pytest.mark.invariant("FR-OPS-03")
+def test_readyz_route_refuses_manifest_codex_intent_without_the_trusted_flag() -> None:
+    manifest = FleetManifest(
+        organisation="Acme",
+        tenant_id="acme",
+        ephemeral_runtimes=(EphemeralRuntime(name="codex-worker"),),
+    )
+    env = {
+        "BOLTRIG_ENV": "production",
+        "DATABASE_URL": "postgresql://redacted",
+        "REDIS_URL": "redis://redacted",
+        "BOLTRIG_HATCHET_HEALTH": "1",
+        "BOLTRIG_MODEL_GATEWAY_HEALTH": "1",
+        "BOLTRIG_MODEL_GATEWAY_URL": "http://bifrost:8080/v1",
+        "BOLTRIG_AUDIT_HMAC_KEY": "test-readiness-key",
+    }
+    assert "BOLTRIG_CODEX_TRUSTED" not in env
+    kernel = asyncio.run(_kernel(shared_relay=True))
+    readiness = ReadinessService(
+        kernel,
+        tenant_id="acme",
+        executor=_DurableExecutor(),
+        status_provider=_StatusProvider(),
+        manifest=manifest,
+        env=env,
+        postgres_probe=_postgres_ok,
+        redis_probe=_redis_ok,
+        herdr_probe=_herdr_ok,
+        fleet_receipt_probe=_fleet_receipt_ok,
+    )
+
+    response = TestClient(
+        create_app(kernel, platform={"readiness": readiness})
+    ).get("/readyz")
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["status"] == "not_ready"
+    assert body["checks"]["codex_runtime"]["status"] == "failed"
+    assert body["checks"]["codex_runtime"]["required"] is True
+    assert body["checks"]["codex_runtime"]["reason"] == "production_gate_closed"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+async def test_core_release_readiness_disables_codex_requested_by_the_real_manifest() -> None:
+    manifest = load_manifest(str(_REPO / "manifest.yaml"), env={})
+    env = {
+        "BOLTRIG_ENV": "production",
+        "BOLTRIG_RELEASE_MODE": "core",
+        "DATABASE_URL": "postgresql://redacted",
+        "REDIS_URL": "redis://redacted",
+        "BOLTRIG_HATCHET_HEALTH": "1",
+        "BOLTRIG_MODEL_GATEWAY_HEALTH": "1",
+        "BOLTRIG_MODEL_GATEWAY_URL": "http://bifrost:8080/v1",
+        "BOLTRIG_AUDIT_HMAC_KEY": "test-readiness-key",
+    }
+    report = await ReadinessService(
+        await _kernel(shared_relay=True),
+        tenant_id="acme",
+        executor=_DurableExecutor(),
+        status_provider=_StatusProvider(),
+        manifest=manifest,
+        env=env,
+        postgres_probe=_postgres_ok,
+        redis_probe=_redis_ok,
+        herdr_probe=_herdr_ok,
+        fleet_receipt_probe=_fleet_receipt_ok,
+    ).check()
+
+    assert report["status"] == "ready"
+    assert report["checks"]["codex_runtime"] == {
+        "status": "disabled",
+        "required": False,
+        "reason": "core_release_mode",
+        "release_mode": "core",
+    }
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+@pytest.mark.parametrize(
+    ("env", "reason"),
+    [
+        ({"BOLTRIG_RELEASE_MODE": "full"}, "production_gate_closed"),
+        ({"BOLTRIG_RELEASE_MODE": "CORE"}, "invalid_release_mode"),
+        ({"BOLTRIG_RELEASE_MODE": "core "}, "invalid_release_mode"),
+        (
+            {"BOLTRIG_RELEASE_MODE": "core", "BOLTRIG_CODEX_TRUSTED": "1"},
+            "release_mode_conflict",
+        ),
+    ],
+)
+def test_real_manifest_readiness_keeps_non_core_and_conflicting_postures_closed(
+    env: dict[str, str],
+    reason: str,
+) -> None:
+    manifest = load_manifest(str(_REPO / "manifest.yaml"), env={})
+
+    check = codex_runtime_check(env, True, manifest=manifest)
+
+    assert check["status"] == "failed"
+    assert check["required"] is True
+    assert check["reason"] == reason
+
+
+@pytest.mark.security
+@pytest.mark.invariant("CODEX-COMPOSITION-1")
+def test_platform_composition_threads_the_manifest_into_readiness() -> None:
+    from boltrig.api.platform_bootstrap import _build_platform_services
+
+    manifest = FleetManifest(
+        organisation="Acme",
+        tenant_id="acme",
+        ephemeral_runtimes=(EphemeralRuntime(name="codex-worker"),),
+    )
+    platform = _build_platform_services(
+        Kernel(InMemoryStore()),
+        manifest=manifest,
+        manifest_path=None,
+        codex_config=None,
+        model_catalogue=None,
+        sensitive_endpoint_id=None,
+        spawn_rules=(),
+        default_tenant="default",
+        resume_held_write=lambda *_args, **_kwargs: None,
+        wire_hitl_resume=lambda *_args, **_kwargs: None,
+        wire_memory_projection_executor=lambda *_args, **_kwargs: None,
+    )
+
+    assert platform["readiness"]._manifest is manifest
 
 
 @pytest.mark.invariant("FR-OPS-03")

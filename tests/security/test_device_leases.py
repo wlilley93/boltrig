@@ -342,6 +342,147 @@ def test_owner_lease_projection_is_scoped_bounded_and_authority_free():
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-WRK-07")
+def test_file_listing_receipts_project_only_bounded_relative_metadata():
+    now = utcnow()
+    lease = DeviceLease(
+        id="lease-list",
+        tenant_id=T,
+        device_id="device",
+        root_id="root",
+        owner_id="alice",
+        verb="device.file.list",
+        action={"relative_path": "src", "max_entries": 2},
+        action_digest="a" * 64,
+        approval_id="approval",
+        issued_at=now,
+        expires_at=now + timedelta(minutes=2),
+        status="completed",
+        settled_at=now,
+        receipt={
+            "entries": [
+                {
+                    "name": "main.py",
+                    "path": "src/main.py",
+                    "kind": "file",
+                    "byte_size": 120,
+                    "absolute_path": "/private/work/src/main.py",
+                },
+                {
+                    "name": "linked",
+                    "path": "src/linked",
+                    "kind": "symlink",
+                    "byte_size": None,
+                    "target": "/etc/passwd",
+                },
+            ],
+            "truncated": False,
+            "root_path": "/private/work",
+        },
+    )
+
+    projected = owner_lease_view(lease)["receipt"]
+    assert projected == {
+        "relative_path": "src",
+        "entries": [
+            {
+                "name": "main.py",
+                "path": "src/main.py",
+                "kind": "file",
+                "byte_size": 120,
+            },
+            {
+                "name": "linked",
+                "path": "src/linked",
+                "kind": "symlink",
+                "byte_size": None,
+            },
+        ],
+        "truncated": False,
+    }
+    assert "/private" not in repr(projected)
+    assert "/etc/passwd" not in repr(projected)
+
+    escaped = replace(
+        lease,
+        receipt={
+            "entries": [
+                {
+                    "name": "secret",
+                    "path": "../secret",
+                    "kind": "file",
+                    "byte_size": 1,
+                }
+            ],
+            "truncated": False,
+        },
+    )
+    assert owner_lease_view(escaped)["receipt"] is None
+    outside_approved_directory = replace(
+        lease,
+        receipt={
+            "entries": [
+                {
+                    "name": "secret",
+                    "path": "other/secret",
+                    "kind": "file",
+                    "byte_size": 1,
+                }
+            ],
+            "truncated": False,
+        },
+    )
+    assert owner_lease_view(outside_approved_directory)["receipt"] is None
+    invalid_unicode = replace(
+        lease,
+        receipt={
+            "entries": [
+                {
+                    "name": "\ud800",
+                    "path": "src/\ud800",
+                    "kind": "file",
+                    "byte_size": 1,
+                }
+            ],
+            "truncated": False,
+        },
+    )
+    assert owner_lease_view(invalid_unicode)["receipt"] is None
+    above_approved_count = replace(
+        lease,
+        receipt={
+            "entries": [
+                {
+                    "name": f"item-{index}",
+                    "path": f"src/item-{index}",
+                    "kind": "file",
+                    "byte_size": 1,
+                }
+                for index in range(3)
+            ],
+            "truncated": True,
+        },
+    )
+    assert owner_lease_view(above_approved_count)["receipt"] is None
+    too_many = replace(
+        lease,
+        receipt={
+            "entries": [
+                {
+                    "name": f"item-{index}",
+                    "path": f"src/item-{index}",
+                    "kind": "file",
+                    "byte_size": 1,
+                }
+                for index in range(101)
+            ],
+            "truncated": True,
+        },
+    )
+    assert owner_lease_view(too_many)["receipt"] is None
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-07")
 def test_owner_projection_expires_an_unsettleable_claim_without_mutating_store():
     now = utcnow()
     lease = DeviceLease(

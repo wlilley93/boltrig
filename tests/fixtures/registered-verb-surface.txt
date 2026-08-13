@@ -135,6 +135,7 @@ desktop.window.list	desktop	file
 desktop.window.move	desktop	file
 desktop.workspace.switch	desktop	file
 device.command.run	device	script
+device.file.list	device	script
 device.file.read	device	script
 device.file.write	device	script
 directory.get_user	ms-graph	http

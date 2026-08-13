@@ -41,6 +41,7 @@ from .bootstrap import (
 )
 from .codex_execution import build_codex_execution_stack
 from .logging_config import configure_logging
+from .model_runtime_composition import compose_process_model_runtime
 
 configure_logging()
 log = logging.getLogger("boltrig.worker")
@@ -231,6 +232,7 @@ async def _manifest_spawn_context(
     kernel: Any,
     *,
     codex_config: dict[str, object] | None,
+    model_catalogue: Any,
     manifest_snapshot: Any,
 ) -> tuple[Any, str, Any, bool]:
     """Overlay one process-owned manifest and compose its policy-aware spawner."""
@@ -249,6 +251,7 @@ async def _manifest_spawn_context(
         build_spawner(
             kernel,
             codex_config=codex_config,
+            model_catalogue=model_catalogue,
             sensitive_endpoint_id=manifest.models.sensitive_endpoint,
             spawn_rules=manifest.spawn_rules,
         )
@@ -256,6 +259,7 @@ async def _manifest_spawn_context(
         else build_spawner(
             kernel,
             codex_config=codex_config,
+            model_catalogue=model_catalogue,
             sensitive_endpoint_id=None,
         )
     )
@@ -307,14 +311,19 @@ async def _stop_background_tasks(
 async def _run() -> None:
     # Build the trusted provider once for this process and inject that exact
     # instance into both kernel-bound and pump-bound fleet spawners. None is off.
-    codex_config = _build_shared_codex_config()
-    manifest_path = _find_manifest()
-    manifest_snapshot = load_manifest(manifest_path) if manifest_path else None
+    manifest_path, manifest_snapshot, codex_config, model_catalogue = (
+        compose_process_model_runtime(
+            find_manifest=_find_manifest,
+            load_manifest=load_manifest,
+            build_codex_config=_build_shared_codex_config,
+        )
+    )
     sensitive_endpoint_id = (
         manifest_snapshot.models.sensitive_endpoint if manifest_snapshot is not None else None
     )
     kernel = await build_kernel_async(
         codex_config=codex_config,
+        model_catalogue=model_catalogue,
         sensitive_endpoint_id=sensitive_endpoint_id,
         manifest_snapshot=manifest_snapshot,
         manifest_path=manifest_path,
@@ -331,6 +340,7 @@ async def _run() -> None:
     manifest, tenant, spawner, desired_overlay_applied = await _manifest_spawn_context(
         kernel,
         codex_config=codex_config,
+        model_catalogue=model_catalogue,
         manifest_snapshot=manifest_snapshot,
     )
     pump = build_org(

@@ -35,7 +35,7 @@ import ssl
 from typing import Any
 from urllib.parse import urlparse
 
-from boltrig.adapters.base import Credential, Result, VerbSpec
+from boltrig.adapters.base import AdapterError, Credential, ErrorClass, Result, VerbSpec
 # The SSRF/policy guard now lives in the shared egress module so every HTTP
 # adapter uses one source of truth (consolidation). Re-exported here so callers /
 # tests that import them from web_fetch keep working.
@@ -43,6 +43,11 @@ from boltrig.adapters.egress import (  # noqa: F401
     check_network_policy,
     is_blocked_ip,
     resolve_host as _resolve,
+)
+from boltrig.adapters.http_response import (
+    ResponseBoundaryError,
+    bounded_http_response,
+    bounded_response_error,
 )
 from boltrig.models import InvocationContext, NetworkPolicyViolation
 
@@ -120,7 +125,11 @@ class WebFetchAdapter:
                 input_schema={
                     "type": "object",
                     "properties": {"url": {"type": "string"},
-                                   "max_bytes": {"type": "integer"}},
+                                   "max_bytes": {
+                                       "type": "integer",
+                                       "minimum": 1,
+                                       "maximum": _MAX_BYTES,
+                                   }},
                     "required": ["url"]},
                 output_schema={"type": "object"},
                 # High: fetched content is an untrusted-input / prompt-injection
@@ -133,8 +142,6 @@ class WebFetchAdapter:
         self, verb: str, params: dict, credential: Credential | None, context: InvocationContext
     ) -> Result:
         if verb != "web.fetch":
-            from boltrig.adapters.base import AdapterError, ErrorClass
-
             return Result.failure(AdapterError(ErrorClass.INVALID, f"unknown verb {verb}"))
         url = params["url"]
         host = urlparse(url).hostname or ""
@@ -144,8 +151,19 @@ class WebFetchAdapter:
             # A blocked target is refused before any network call (fail-closed).
             raise NetworkPolicyViolation(f"web.fetch refused: {reason}")
 
-        # Agent-supplied max_bytes can only shrink the cap, never lift it.
-        cap = min(int(params.get("max_bytes") or _MAX_BYTES), _MAX_BYTES)
+        # Agent-supplied max_bytes can only shrink the cap, never lift it. Keep
+        # the runtime check as well as the schema because adapters are public
+        # Python objects and tests/integrators may call one directly.
+        requested_cap = params.get("max_bytes", _MAX_BYTES)
+        if type(requested_cap) is not int or requested_cap < 1:
+            return Result.failure(
+                AdapterError(
+                    ErrorClass.INVALID,
+                    "max_bytes must be a positive integer",
+                    retryable=False,
+                )
+            )
+        cap = min(requested_cap, _MAX_BYTES)
         proxy = self._config.get("https_proxy") or None
         # Redirects are NOT followed: a public URL must not redirect into internal
         # space and slip past the SSRF guard.
@@ -171,15 +189,20 @@ class WebFetchAdapter:
                 timeout=15.0,
                 verify=self._tls_verify,
             )
-        async with client:
-            resp = await client.get(url)
-        body = resp.content[:cap]
+        try:
+            async with client:
+                resp, truncated = await bounded_http_response(
+                    client, "GET", url, max_bytes=cap, truncate=True
+                )
+        except ResponseBoundaryError:
+            return Result.failure(bounded_response_error())
+        body = resp.content
         return Result.success({
             "status": resp.status_code,
             "url": url,
             "content_type": resp.headers.get("content-type", ""),
             "content": body.decode("utf-8", errors="replace"),
-            "truncated": len(resp.content) > cap,
+            "truncated": truncated,
         })
 
     async def health(self) -> str:

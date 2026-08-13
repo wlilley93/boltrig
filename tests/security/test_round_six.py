@@ -97,20 +97,55 @@ def test_gateway_binds_per_conversation_not_run():
 
     # Turn 1 of conversation c1 binds model-A and routes through the gateway.
     ep1 = apply_gateway(base, gateway_url="http://gw:9000", binding=gw,
-                        conversation_id="c1", sensitive=False)
+                        tenant_id=T, conversation_id="c1", sensitive=False)
     assert ep1.base_url == "http://gw:9000" and ep1.model == "model-A"
 
     # Turn 2 (a NEW run, would otherwise resolve model-B) stays pinned to model-A
     # because the binding key is the conversation, not the run.
     other = ModelEndpoint(id="ep", tenant_id=T, kind="openai", model="model-B", base_url="https://provider")
     ep2 = apply_gateway(other, gateway_url="http://gw:9000", binding=gw,
-                        conversation_id="c1", sensitive=False)
+                        tenant_id=T, conversation_id="c1", sensitive=False)
     assert ep2.model == "model-A"  # pinned across turns -> warm cache
 
     # A different conversation gets its own binding.
     ep_c2 = apply_gateway(other, gateway_url="http://gw:9000", binding=gw,
-                          conversation_id="c2", sensitive=False)
+                          tenant_id=T, conversation_id="c2", sensitive=False)
     assert ep_c2.model == "model-B"
+
+    # Conversation ids are opaque only within a tenant. Tenant B may use the
+    # same id without inheriting tenant A's model affinity, and an explicit
+    # switch by B cannot replace A's binding.
+    tenant_b = apply_gateway(
+        other,
+        gateway_url="http://gw:9000",
+        binding=gw,
+        tenant_id="another-tenant",
+        conversation_id="c1",
+        sensitive=False,
+        explicit_rebind=True,
+    )
+    assert tenant_b.model == "model-B"
+    tenant_a_again = apply_gateway(
+        other,
+        gateway_url="http://gw:9000",
+        binding=gw,
+        tenant_id=T,
+        conversation_id="c1",
+        sensitive=False,
+    )
+    assert tenant_a_again.model == "model-A"
+
+    switched = apply_gateway(
+        other,
+        gateway_url="http://gw:9000",
+        binding=gw,
+        tenant_id=T,
+        conversation_id="c1",
+        sensitive=False,
+        explicit_rebind=True,
+    )
+    assert switched.model == "model-B"
+    assert gw.resolve(T, "c1") == "model-B"
 
 
 @pytest.mark.invariant("FR-GW-01")
@@ -141,13 +176,13 @@ def test_gateway_never_reroutes_sensitive_and_is_inert_when_unset():
                           data_class="sensitive")
     # Sensitive data must reach its local endpoint directly - never the gateway.
     routed = apply_gateway(local, gateway_url="http://gw:9000", binding=gw,
-                           conversation_id="c1", sensitive=True)
+                           tenant_id=T, conversation_id="c1", sensitive=True)
     assert routed is local  # unchanged, residency preserved (SEC-43)
 
     # No gateway configured => the seam is inert (behaviour identical to before).
     std = ModelEndpoint(id="ep", tenant_id=T, kind="openai", model="m", base_url="https://provider")
     assert apply_gateway(std, gateway_url=None, binding=gw,
-                         conversation_id="c1", sensitive=False) is std
+                         tenant_id=T, conversation_id="c1", sensitive=False) is std
 
 
 # --------------------------------------------------------------------------- #

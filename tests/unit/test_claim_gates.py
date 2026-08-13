@@ -58,6 +58,20 @@ def test_no_service_reports_healthy_while_unable_to_serve(capsys) -> None:
     assert check_health_claims.main() == 0, capsys.readouterr().out
 
 
+@pytest.mark.invariant("NFR-MNT-05")
+def test_health_gate_examples_are_not_mistaken_for_application_routes() -> None:
+    routes = check_health_claims.routes_in(REPO_ROOT)
+    assert Path(__file__).resolve() not in routes
+    assert Path(check_health_claims.__file__).resolve() not in routes
+
+
+@pytest.mark.invariant("NFR-MNT-05")
+def test_health_gate_parses_python_module_entrypoints() -> None:
+    services = check_health_claims.parse_services(REPO_ROOT / "docker-compose.yml")
+    assert services["fleet-worker"]["command"] == "python -m boltrig.api.worker"
+    assert services["hatchet-worker"]["command"] == "python -m boltrig.fleet.hatchet_worker"
+
+
 def _write_exemptions(tmp_path: Path, monkeypatch, entry: dict) -> Path:
     path = tmp_path / "health-claim-exemptions.json"
     path.write_text(json.dumps({"exemptions": {"kernel": entry}}), encoding="utf-8")
