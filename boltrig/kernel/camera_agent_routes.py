@@ -249,6 +249,66 @@ async def settle_lease(device_id: str, lease_id: str, body: dict, request: Reque
     return {"status": "ok"}
 
 
+async def sensing_config_for_device(device_id: str, request: Request, kernel):
+    """The effective capture policy for one host's camerad/capture/presence.
+
+    This is the seam that makes the camera Boltrig's rather than a companion's:
+    the thresholds, the retention window, the quiet hours and the on/off switch
+    arrive from the kernel the user controls, instead of from constants in a
+    repo a character happens to ship with. ``capture_policy.py`` keeps the same
+    numbers, demoted to fail-safe defaults for when the kernel is unreachable.
+
+    Authenticated as the DEVICE, and answered for the device's OWNER: the
+    settings are the owner's consent, and no other principal can read them here.
+    """
+    from .sensing_policy import sensing_config, sensing_settings
+
+    device = await authenticate_device(request, kernel, device_id)
+    if device is None:
+        return _error("invalid_device_session", 401)
+    settings = await sensing_settings(kernel.store, device.tenant_id, device.owner_id)
+    return sensing_config(settings)
+
+
+async def publish_sensing_enrollment(device_id: str, body: dict, request: Request, kernel):
+    """Record the enrolled face as KERNEL data, published by the host agent.
+
+    METADATA ONLY -- digest, sample count, the room-calibrated threshold, and
+    whether the false-accept rate was ever measured. The vectors themselves stay
+    on the machine beside the camera that produced them; what moves to the kernel
+    is OWNERSHIP, so the user can see the enrolment, forget it, and know it is
+    not something a character bundle can carry away.
+
+    ``parse_enrollment`` refuses anything without a calibrated threshold, which
+    is the same refusal presence makes at start-up rather than guessing one. A
+    guessed threshold is a false-accept rate nobody measured, told as a fact
+    about who is in the room.
+    """
+    from .sensing_policy import parse_enrollment, persist_enrollment
+
+    device = await authenticate_device(request, kernel, device_id)
+    if device is None:
+        return _error("invalid_device_session", 401)
+    enrollment = parse_enrollment(body)
+    if enrollment is None:
+        return _error("sensing_enrollment_requires_a_calibrated_threshold")
+    await persist_enrollment(kernel.store, device.tenant_id, device.owner_id, enrollment)
+    await audit_device(
+        kernel, device.tenant_id, f"device:{device_id}",
+        "sensing.enrollment.record", device_id,
+        {"count": enrollment["count"], "far_measured": enrollment["far_measured"]},
+    )
+    return {"enrollment": {
+        "digest": enrollment["digest"],
+        "count": enrollment["count"],
+        "threshold": enrollment["threshold"],
+        "far_measured": enrollment["far_measured"],
+        # Restated on the wire so no client can read this back and conclude the
+        # enrolment is bundle-shaped data.
+        "exportable": False,
+    }}
+
+
 def _device_endpoint(handler, kernel_dep):
     async def endpoint(device_id: str, request: Request, k=kernel_dep):
         return await handler(device_id, request, k)
@@ -258,6 +318,12 @@ def _device_endpoint(handler, kernel_dep):
 def _binding_endpoint(kernel_dep):
     async def endpoint(device_id: str, body: dict, request: Request, k=kernel_dep):
         return await publish_binding(device_id, body, request, k)
+    return endpoint
+
+
+def _enrollment_endpoint(kernel_dep):
+    async def endpoint(device_id: str, body: dict, request: Request, k=kernel_dep):
+        return await publish_sensing_enrollment(device_id, body, request, k)
     return endpoint
 
 
@@ -283,6 +349,16 @@ def register_camera_agent_routes(app, *, get_kernel) -> None:
         "/v1/device-agent/{device_id}/camera-leases",
         _device_endpoint(pending_leases, kernel), methods=["GET"], name="pending_camera_leases",
     )
+    app.add_api_route(
+        "/v1/device-agent/{device_id}/sensing-config",
+        _device_endpoint(sensing_config_for_device, kernel), methods=["GET"],
+        name="device_sensing_config",
+    )
+    app.add_api_route(
+        "/v1/device-agent/{device_id}/sensing-enrollment",
+        _enrollment_endpoint(kernel), methods=["POST"],
+        name="publish_sensing_enrollment",
+    )
     for suffix, handler, name in (("claim", claim_lease, "claim_camera_lease"), ("receipt", settle_lease, "settle_camera_lease")):
         app.add_api_route(
             f"/v1/device-agent/{{device_id}}/camera-leases/{{lease_id}}/{suffix}",
@@ -292,5 +368,5 @@ def register_camera_agent_routes(app, *, get_kernel) -> None:
 
 __all__ = [
     "binding_view", "lease_view", "owner_lease_view", "list_owner_bindings",
-    "list_owner_leases", "register_camera_agent_routes",
+    "list_owner_leases", "register_camera_agent_routes", "sensing_config_for_device",
 ]

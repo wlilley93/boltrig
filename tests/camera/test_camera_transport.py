@@ -1,4 +1,5 @@
 from datetime import timedelta
+import re
 
 import pytest
 
@@ -8,6 +9,7 @@ from boltrig.kernel.device_crypto import DeviceLeaseSigner, mint_scoped_token, t
 from boltrig.models import HITLStatus, HITLType, utcnow
 from boltrig.models.devices import EnrolledDevice
 from boltrig.store import InMemoryStore
+from boltrig.store.camera_pg import CameraStorePG
 
 
 TENANT = "camera-tenant"
@@ -111,3 +113,29 @@ def test_camera_lease_specs_are_dynamic_and_root_free():
     assert set(specs) == {"camera.ptz.get", "camera.ptz.set"}
     for spec in specs.values():
         assert "root_id" not in spec.input_schema.get("properties", {})
+
+
+@pytest.mark.asyncio
+async def test_postgres_camera_binding_uses_one_argument_for_each_placeholder():
+    class StrictPool:
+        async def execute(self, query, *args):
+            placeholders = {int(value) for value in re.findall(r"\$(\d+)", query)}
+            assert placeholders == set(range(1, len(args) + 1))
+            assert args[4] == "connected"
+            assert args[14] == "alice"
+            return "INSERT 0 1"
+
+    store = CameraStorePG()
+    store._pool = StrictPool()
+    binding = CameraBinding(
+        tenant_id=TENANT,
+        device_id=DEVICE,
+        camera_id=CAMERA,
+        descriptor_fingerprint=FINGERPRINT,
+        owner_id="alice",
+        connection_state="connected",
+        ptz_get_state="proven",
+        ptz_set_state="proven",
+    )
+
+    assert await store.upsert_camera_binding(binding)

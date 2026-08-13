@@ -16,6 +16,7 @@ import { ModelSettingsSection } from "./settings/ModelSettingsSection";
 import { OperationsSettingsSection } from "./settings/OperationsSettingsSection";
 import { OvernightSection } from "./settings/OvernightSection";
 import { SectionHead } from "./settings/SectionHead";
+import { SensingSection } from "./settings/SensingSection";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { SpendingSection } from "./settings/SpendingSection";
 import { SettingsGroup, SettingsRow } from "./settings/rowKit";
@@ -99,6 +100,7 @@ const SETTINGS_PANES: Record<SettingsSection, SettingsPane> = {
   operations: OperationsSettingsSection,
   organisation: OrganisationSettingsPane,
   overnight: OvernightSection,
+  sensing: SensingSection,
   shortcuts: ShortcutsSection,
   spend: SpendingSection,
   you: YouSettingsPane,

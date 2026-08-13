@@ -14,7 +14,7 @@ class CameraStorePG:
                   product,transport,capabilities,evidence,updated_at)
                SELECT $1,$2,$3,$4,d.owner_id,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14
                  FROM devices d
-                WHERE d.tenant_id=$1 AND d.id=$2 AND d.owner_id=$5
+                WHERE d.tenant_id=$1 AND d.id=$2 AND d.owner_id=$15
                   AND d.revoked_at IS NULL
                ON CONFLICT (tenant_id,device_id,camera_id) DO UPDATE SET
                  descriptor_fingerprint=EXCLUDED.descriptor_fingerprint,
@@ -27,10 +27,11 @@ class CameraStorePG:
                  updated_at=EXCLUDED.updated_at
                WHERE camera_bindings.owner_id=EXCLUDED.owner_id""",
             binding.tenant_id, binding.device_id, binding.camera_id,
-            binding.descriptor_fingerprint, binding.owner_id,
-            binding.connection_state, binding.ptz_get_state, binding.ptz_set_state,
+            binding.descriptor_fingerprint, binding.connection_state,
+            binding.ptz_get_state, binding.ptz_set_state,
             binding.label, binding.manufacturer, binding.product, binding.transport,
             binding.capabilities, binding.evidence, binding.updated_at or utcnow(),
+            binding.owner_id,
         )
         return result.endswith("1")
 
