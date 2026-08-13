@@ -36,7 +36,7 @@ struct UpdaterTrust {
 #[derive(Clone, Debug, Serialize)]
 pub struct UpdateReadiness {
     state: &'static str,
-    current_version: &'static str,
+    current_version: String,
     target: Option<String>,
     endpoint_origin: Option<String>,
     public_key_fingerprint: Option<String>,
@@ -106,11 +106,11 @@ fn compiled_trust() -> Result<UpdaterTrust, &'static str> {
     )
 }
 
-pub fn readiness() -> UpdateReadiness {
+pub fn readiness(current_version: String) -> UpdateReadiness {
     match compiled_trust() {
         Ok(trust) => UpdateReadiness {
             state: "ready",
-            current_version: env!("CARGO_PKG_VERSION"),
+            current_version,
             target: Some(trust.target),
             endpoint_origin: Some(trust.endpoint_origin),
             public_key_fingerprint: Some(trust.public_key_fingerprint),
@@ -118,7 +118,7 @@ pub fn readiness() -> UpdateReadiness {
         },
         Err(reason) => UpdateReadiness {
             state: "unavailable",
-            current_version: env!("CARGO_PKG_VERSION"),
+            current_version,
             target: tauri_plugin_updater::target(),
             endpoint_origin: None,
             public_key_fingerprint: None,
@@ -169,7 +169,7 @@ pub async fn check<R: Runtime>(
             runtime.installed.store(false, Ordering::SeqCst);
             Ok(UpdateCheck {
                 status: "current",
-                current_version: env!("CARGO_PKG_VERSION").to_string(),
+                current_version: app.package_info().version.to_string(),
                 version: None,
                 notes: None,
                 published_at: None,
@@ -228,7 +228,7 @@ pub fn take_restart_ready(runtime: &UpdateRuntime) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{trust_from_values, UpdateProgress};
+    use super::{readiness, trust_from_values, UpdateProgress};
 
     #[test]
     fn release_trust_requires_a_fixed_https_endpoint_and_public_key() {
@@ -268,6 +268,9 @@ mod tests {
         assert_eq!(trust.endpoint_origin, "https://releases.example.test");
         assert_eq!(trust.public_key_fingerprint.len(), 64);
         assert_ne!(trust.public_key_fingerprint, trust.public_key);
+
+        let readiness = readiness("9.8.7".to_string());
+        assert_eq!(readiness.current_version, "9.8.7");
     }
 
     #[test]

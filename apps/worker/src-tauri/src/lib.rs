@@ -1,8 +1,9 @@
 //! Boltrig Worker desktop shell.
 //!
-//! This is intentionally only a native boundary around the Worker SPA. It
-//! starts no local agent or Python server, receives no model/integration
-//! credential, and exposes no arbitrary filesystem or command primitive.
+//! The signed desktop owns two native boundaries: an enrolled, lease-driven
+//! device executor and a private local Codex App Server over stdio. The latter
+//! is the desktop chat runtime; it has no listener and does not receive Boltrig
+//! integration credentials. The web build keeps using the hosted Fleet.
 
 mod camera_discovery;
 mod camera_protocol;
@@ -11,6 +12,8 @@ mod desktop_updater;
 mod device_agent;
 mod device_protocol;
 mod device_roots;
+mod local_agent;
+mod local_agent_protocol;
 mod materialized;
 mod session;
 
@@ -86,6 +89,7 @@ async fn complete_device_enrollment(
 async fn clear_device_session(
     runtime: tauri::State<'_, device_agent::DeviceRuntime>,
 ) -> Result<(), String> {
+    local_agent::reset_posture()?;
     device_agent::clear(&runtime).await
 }
 
@@ -128,6 +132,52 @@ fn take_device_read_result(
     lease_id: String,
 ) -> Result<Option<Vec<u8>>, String> {
     device_agent::take_read(&runtime, lease_id)
+}
+
+#[tauri::command]
+async fn local_agent_status(
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, local_agent::LocalAgentRuntime>,
+) -> Result<local_agent::LocalAgentStatus, String> {
+    Ok(runtime.status(&app).await)
+}
+
+#[tauri::command]
+fn local_agent_roots() -> Result<Vec<local_agent::LocalAgentRoot>, String> {
+    local_agent::roots()
+}
+
+#[tauri::command]
+fn local_agent_posture() -> Result<local_agent::LocalAgentPostureView, String> {
+    local_agent::posture()
+}
+
+#[tauri::command]
+async fn put_local_agent_posture(
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, local_agent::LocalAgentRuntime>,
+    posture: local_agent_protocol::ApprovalPosture,
+    confirm: Option<String>,
+) -> Result<local_agent::LocalAgentPostureView, String> {
+    runtime.set_posture(&app, posture, confirm).await
+}
+
+#[tauri::command]
+async fn run_local_agent_turn(
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, local_agent::LocalAgentRuntime>,
+    request: local_agent_protocol::LocalTurnRequest,
+    on_event: tauri::ipc::Channel<local_agent_protocol::LocalAgentEvent>,
+) -> Result<local_agent_protocol::LocalTurnOutcome, String> {
+    let version = app.package_info().version.to_string();
+    local_agent::run_turn(&app, &runtime, request, on_event, &version).await
+}
+
+#[tauri::command]
+async fn stop_local_agent_turn(
+    runtime: tauri::State<'_, local_agent::LocalAgentRuntime>,
+) -> Result<(), String> {
+    local_agent::stop(&runtime).await
 }
 
 fn safe_name(value: &str) -> String {
@@ -203,8 +253,8 @@ fn reveal_materialized_artifact(
 }
 
 #[tauri::command]
-fn desktop_update_readiness() -> desktop_updater::UpdateReadiness {
-    desktop_updater::readiness()
+fn desktop_update_readiness(app: tauri::AppHandle) -> desktop_updater::UpdateReadiness {
+    desktop_updater::readiness(app.package_info().version.to_string())
 }
 
 #[tauri::command]
@@ -276,6 +326,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(runtime)
         .manage(camera_runtime)
+        .manage(local_agent::LocalAgentRuntime::new())
         .manage(MaterializedArtifacts::default())
         .manage(desktop_updater::UpdateRuntime::default())
         .manage(desktop_oauth::OAuthReturnRuntime::default())
@@ -314,6 +365,12 @@ pub fn run() {
             unbind_device_root,
             stage_device_write,
             take_device_read_result,
+            local_agent_status,
+            local_agent_roots,
+            local_agent_posture,
+            put_local_agent_posture,
+            run_local_agent_turn,
+            stop_local_agent_turn,
             materialize_artifact,
             open_materialized_artifact,
             reveal_materialized_artifact,

@@ -19,6 +19,7 @@ const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
 const MAX_PATH_BYTES: usize = 1024;
 const MAX_ARG_BYTES: usize = 4096;
 const MAX_ARGS: usize = 64;
+const MAX_DIRECTORY_ENTRIES: u64 = 100;
 
 #[derive(Clone, Debug)]
 pub(crate) enum ApiError {
@@ -91,6 +92,10 @@ pub(crate) struct DeviceLease {
 
 #[derive(Debug)]
 pub(crate) enum ValidatedAction {
+    List {
+        relative_path: Option<String>,
+        max_entries: usize,
+    },
     Read {
         relative_path: String,
         max_bytes: u64,
@@ -482,6 +487,18 @@ fn validate_action(verb: &str, action: &Value) -> Result<ValidatedAction, String
         .as_object()
         .ok_or_else(|| "invalid_device_action".to_string())?;
     match verb {
+        "device.file.list" => {
+            exact_keys(object, &["max_entries", "relative_path"])?;
+            let relative_path = optional_relative_field(object, "relative_path")?;
+            let max_entries = u64_field(object, "max_entries")?;
+            if !(1..=MAX_DIRECTORY_ENTRIES).contains(&max_entries) {
+                return Err("invalid_device_action".to_string());
+            }
+            Ok(ValidatedAction::List {
+                relative_path,
+                max_entries: max_entries as usize,
+            })
+        }
         "device.file.read" => {
             exact_keys(object, &["max_bytes", "relative_path"])?;
             let relative_path = relative_path(string_field(object, "relative_path")?)?;
@@ -578,6 +595,17 @@ fn u64_field(object: &Map<String, Value>, key: &str) -> Result<u64, String> {
         .get(key)
         .and_then(Value::as_u64)
         .ok_or_else(|| "invalid_device_action".to_string())
+}
+
+fn optional_relative_field(
+    object: &Map<String, Value>,
+    key: &str,
+) -> Result<Option<String>, String> {
+    match object.get(key) {
+        Some(Value::Null) => Ok(None),
+        Some(Value::String(value)) => relative_path(value).map(Some),
+        _ => Err("invalid_device_action".to_string()),
+    }
 }
 
 pub(crate) fn relative_path(value: &str) -> Result<String, String> {
@@ -764,6 +792,27 @@ mod tests {
     fn strict_actions_reject_traversal_shell_strings_and_missing_write_digest() {
         assert!(relative_path("../secret").is_err());
         assert!(relative_path("reports/./secret").is_err());
+        assert!(matches!(
+            validate_action(
+                "device.file.list",
+                &json!({"relative_path": null, "max_entries": 100})
+            )
+            .unwrap(),
+            ValidatedAction::List {
+                relative_path: None,
+                max_entries: 100,
+            }
+        ));
+        assert!(validate_action(
+            "device.file.list",
+            &json!({"relative_path": "../secret", "max_entries": 10})
+        )
+        .is_err());
+        assert!(validate_action(
+            "device.file.list",
+            &json!({"relative_path": null, "max_entries": 101})
+        )
+        .is_err());
         assert!(validate_action(
             "device.command.run",
             &json!({"argv": "git status", "cwd_relative": null, "timeout_seconds": 30})

@@ -321,7 +321,7 @@ static const ControlDefinition kControls[] = {
     { "focus_absolute", 5, 0x06, 2, NO, NO, "unsigned" },
     { "focus_auto", 16, 0x08, 1, NO, NO, "boolean" },
     { "zoom_absolute", 9, 0x0b, 2, NO, NO, "unsigned" },
-    { "pan_tilt_absolute", 11, 0x0d, 8, YES, YES, "0.01_degree" },
+    { "pan_tilt_absolute", 11, 0x0d, 8, YES, YES, "arcsecond" },
     { "privacy", 17, 0x11, 1, NO, NO, "boolean" },
 };
 
@@ -419,9 +419,23 @@ static NSDictionary *ReadControl(UVCConnection *connection,
     return value;
 }
 
+static NSArray<AVCaptureDeviceType> *AVExternalCameraTypes(void) {
+    if (@available(macOS 14.0, *)) {
+        return @[ AVCaptureDeviceTypeExternal, AVCaptureDeviceTypeContinuityCamera ];
+    }
+    return @[ AVCaptureDeviceTypeExternalUnknown ];
+}
+
+static NSArray<AVCaptureDeviceType> *AVAllCameraTypes(void) {
+    NSMutableArray<AVCaptureDeviceType> *types =
+        [NSMutableArray arrayWithObject:AVCaptureDeviceTypeBuiltInWideAngleCamera];
+    [types addObjectsFromArray:AVExternalCameraTypes()];
+    return types;
+}
+
 static NSDictionary *AVInfoForProduct(const char *product) {
     AVCaptureDeviceDiscoverySession *session =
-        [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes:@[ AVCaptureDeviceTypeExternal ]
+        [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes:AVExternalCameraTypes()
                                                                 mediaType:AVMediaTypeVideo
                                                                  position:AVCaptureDevicePositionUnspecified];
     AVAuthorizationStatus permission =
@@ -523,11 +537,7 @@ static NSDictionary *AVInfoForProduct(const char *product) {
 
 static AVCaptureDevice *FindAVDevice(const char *product) {
     AVCaptureDeviceDiscoverySession *session =
-        [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes:@[
-            AVCaptureDeviceTypeExternal,
-            AVCaptureDeviceTypeBuiltInWideAngleCamera,
-            AVCaptureDeviceTypeContinuityCamera,
-        ]
+        [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes:AVAllCameraTypes()
                                                                 mediaType:AVMediaTypeVideo
                                                                  position:AVCaptureDevicePositionUnspecified];
     NSString *needle = product == NULL ? @"" : [NSString stringWithUTF8String:product];
@@ -541,7 +551,70 @@ static AVCaptureDevice *FindAVDevice(const char *product) {
     return nil;
 }
 
+// Is camerad holding the camera right now?
+//
+// camerad is Boltrig's camera service: it owns the selected UVC device through
+// ffmpeg and serves /healthz on loopback:8899 ->
+// {"status": "live", "spawns": N, "seq": N, "age": F}.
+// Opening a second AVCaptureSession against a device it holds can wedge the
+// device for BOTH processes, and recovery is a physical replug -- ~21 hours of
+// that was once observed producing 20 stuck handles and a camera that yielded
+// frames to nobody.
+//
+// So this fails CLOSED: any answer on that port that is not an explicit dead
+// state means do not touch the camera. A probe that errors is treated as "not
+// holding" only because camerad not running is the common case and refusing
+// forever would be worse -- but a reachable camerad always wins.
+static BOOL CameradHoldsDevice(NSString **status_out) {
+    NSURL *url = [NSURL URLWithString:@"http://127.0.0.1:8899/healthz"];
+    NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
+    req.timeoutInterval = 1.0;                    // never block a capture on this
+    req.HTTPMethod = @"GET";
+
+    __block NSData *body = nil;
+    __block NSInteger code = 0;
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    NSURLSessionDataTask *task =
+        [[NSURLSession sharedSession] dataTaskWithRequest:req
+                                        completionHandler:^(NSData *d, NSURLResponse *r, NSError *e) {
+            body = d;
+            if ([r isKindOfClass:[NSHTTPURLResponse class]]) code = ((NSHTTPURLResponse *)r).statusCode;
+            dispatch_semaphore_signal(done);
+        }];
+    [task resume];
+    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC)) != 0) {
+        [task cancel];
+        return NO;                                // no answer: camerad is not up
+    }
+    if (code != 200 || body == nil) return NO;
+
+    NSDictionary *health = [NSJSONSerialization JSONObjectWithData:body options:0 error:NULL];
+    if (![health isKindOfClass:[NSDictionary class]]) {
+        // Something is answering on camerad's port but not speaking its protocol.
+        // Unknown owner is still an owner; refuse.
+        if (status_out) *status_out = @"unparseable";
+        return YES;
+    }
+    NSString *status = health[@"status"] ?: @"unknown";
+    if (status_out) *status_out = status;
+    // Only these mean the device is genuinely free.
+    return !([status isEqualToString:@"stopped"] || [status isEqualToString:@"idle"]);
+}
+
 static NSDictionary *CaptureOneFrame(const char *product, NSMutableArray *errors) {
+    NSString *camerad_status = nil;
+    if (CameradHoldsDevice(&camerad_status)) {
+        [errors addObject:@{
+            @"stage": @"collision",
+            @"error": @"camerad_holds_device",
+            @"detail": [NSString stringWithFormat:
+                @"camerad is %@ on 127.0.0.1:8899 and owns the camera; opening a "
+                @"second AVCaptureSession risks wedging it for both processes "
+                @"(recovery is a physical replug)", camerad_status ?: @"live"],
+        }];
+        return @{ @"ok": @NO, @"capture_attempted": @NO, @"blocked_by": @"camerad" };
+    }
+
     AVAuthorizationStatus permission =
         [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeVideo];
     if (permission != AVAuthorizationStatusAuthorized) {

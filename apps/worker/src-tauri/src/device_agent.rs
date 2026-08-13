@@ -178,10 +178,11 @@ pub(crate) async fn bind_root(
         let approved = app
             .dialog()
             .message(
-                "Allow signed argv-only command leases in this folder? Every command is still \
-                 shown in a native confirmation and requires its own server approval.",
+                "Allow the local Codex agent to read, edit and run Bash in this folder? Boltrig \
+                 applies your approval posture to local agent actions. Remote signed argv-only \
+                 command leases remain separately approved and natively confirmed.",
             )
-            .title("Enable Boltrig commands for this root")
+            .title("Enable the Boltrig local agent for this root")
             .kind(MessageDialogKind::Warning)
             .buttons(MessageDialogButtons::YesNo)
             .blocking_show();

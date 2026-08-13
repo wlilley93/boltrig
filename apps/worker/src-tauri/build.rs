@@ -19,7 +19,12 @@ fn main() {
             build.include(path);
         }
         build.compile("boltrig_camera_native");
-        for framework in ["AVFoundation", "Foundation"] {
+        // camera_uvc.m consumes CMSampleBuffer* and CVPixelBuffer* directly.
+        // AVFoundation's headers expose those types, but its link dependency is
+        // not a promise that the CoreMedia/CoreVideo symbols are re-exported to
+        // this dylib.  Link every framework whose API the bridge calls so the
+        // desktop library and its test harness are independently linkable.
+        for framework in ["AVFoundation", "CoreMedia", "CoreVideo", "Foundation"] {
             println!("cargo:rustc-link-lib=framework={framework}");
         }
     }

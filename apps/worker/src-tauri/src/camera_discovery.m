@@ -37,13 +37,25 @@ static const char *permission_name(AVAuthorizationStatus status) {
     return "unknown";
 }
 
+static NSArray<AVCaptureDeviceType> *camera_device_types(void) {
+    NSMutableArray<AVCaptureDeviceType> *types =
+        [NSMutableArray arrayWithObject:AVCaptureDeviceTypeBuiltInWideAngleCamera];
+    if (@available(macOS 14.0, *)) {
+        [types addObject:AVCaptureDeviceTypeExternal];
+        [types addObject:AVCaptureDeviceTypeContinuityCamera];
+    } else {
+        [types addObject:AVCaptureDeviceTypeExternalUnknown];
+    }
+    return types;
+}
+
 char *boltrig_camera_inventory_json(void) {
     @autoreleasepool {
         AVAuthorizationStatus permission =
             [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeVideo];
         AVCaptureDeviceDiscoverySession *session =
             [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes:
-                @[ AVCaptureDeviceTypeBuiltInWideAngleCamera, AVCaptureDeviceTypeExternal ]
+                camera_device_types()
                 mediaType:AVMediaTypeVideo position:AVCaptureDevicePositionUnspecified];
         NSArray<AVCaptureDevice *> *devices = session.devices;
         NSMutableString *json = [NSMutableString stringWithString:
