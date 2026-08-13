@@ -23,12 +23,6 @@ ROOT = Path(__file__).resolve().parents[2]
 _PUBLIC_IP = "93.184.216.34"
 
 
-class _Response:
-    status_code = 200
-    headers = {"content-type": "text/plain"}
-    content = b"ok"
-
-
 class _Client:
     async def __aenter__(self):
         return self
@@ -36,8 +30,17 @@ class _Client:
     async def __aexit__(self, *args):
         return None
 
-    async def get(self, _url: str):
-        return _Response()
+    def build_request(self, method: str, url: str, **kwargs):
+        return httpx.Request(method, url, **kwargs)
+
+    async def send(self, request: httpx.Request, *, stream: bool = False):
+        assert stream is True
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/plain"},
+            content=b"ok",
+            request=request,
+        )
 
 
 def _context() -> InvocationContext:

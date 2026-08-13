@@ -40,15 +40,9 @@ def _surface(source: str, declarations: str) -> None:
 
 
 _surface(
-    "apps/worker/src/App.tsx",
+    "apps/worker/src/components/shell/useConversationDirectory.ts",
     """
 GET /v1/conversations conversationsPage
-""",
-)
-_surface(
-    "apps/worker/src/components/Shell.tsx",
-    """
-GET /v1/conversations/search searchConversations
 """,
 )
 _surface(
@@ -69,11 +63,27 @@ _surface(
 GET /v1/conversations/{conversation_id} conversation
 GET /v1/conversations/{conversation_id}/events followConversation
 POST /v1/chat streamChat
-GET /v1/chat/config chatConfig
-GET /v1/familiar/phenotype familiarPhenotype
-GET /v1/model-profiles modelProfiles
 GET /v1/artifacts artifacts
 GET /v1/artifacts/{artifact_id}/download downloadArtifact
+""",
+)
+_surface(
+    "apps/worker/src/components/chat/useStagePhenotype.ts",
+    """
+GET /v1/familiar/phenotype familiarPhenotype
+""",
+)
+_surface(
+    "apps/worker/src/components/chat/useChatModelOptions.ts",
+    """
+GET /v1/chat/config chatConfig
+GET /v1/chat/model-choices chatModelChoices
+""",
+)
+_surface(
+    "apps/worker/src/components/settings/ModelSettingsSection.tsx",
+    """
+GET /v1/bifrost/models bifrostModels
 """,
 )
 _surface(
@@ -89,6 +99,13 @@ _surface(
     "apps/worker/src/components/AccountView.tsx",
     """
 GET /v1/me/settings meSettings
+""",
+)
+_surface(
+    "apps/worker/src/components/ApprovalPostureControl.tsx",
+    """
+GET /v1/me/approval-posture approvalPosture
+PUT /v1/me/approval-posture putApprovalPosture
 """,
 )
 _surface(
@@ -144,16 +161,36 @@ DELETE /v1/ai-keys/{level}/{scope_id} deleteAiKey
 """,
 )
 _surface(
-    "apps/worker/src/components/AuthGate.tsx",
+    "apps/worker/src/components/auth/LoginScreen.tsx",
     """
 POST /v1/auth/login login
+""",
+)
+_surface(
+    "apps/worker/src/components/auth/RecoveryScreens.tsx",
+    """
 POST /v1/auth/password-reset/request requestPasswordReset
 POST /v1/auth/password-reset/confirm confirmPasswordReset
+""",
+)
+_surface(
+    "apps/worker/src/components/auth/AccountRequirementScreens.tsx",
+    """
 POST /v1/auth/2fa/challenge twoFactorChallenge
-POST /v1/auth/accept-invite acceptInvite
 POST /v1/auth/2fa/enroll twoFactorEnrollBegin
 POST /v1/auth/2fa/verify-enroll twoFactorVerifyEnroll
 POST /v1/auth/change-password changePassword
+""",
+)
+_surface(
+    "apps/worker/src/components/auth/AcceptInviteScreen.tsx",
+    """
+POST /v1/auth/accept-invite acceptInvite
+""",
+)
+_surface(
+    "apps/worker/src/components/AuthGate.tsx",
+    """
 POST /v1/auth/refresh refreshSession
 """,
 )
@@ -466,6 +503,12 @@ GET /v1/calls/{call_id}/usage callUsage
 
 
 INDIRECT_WORKER_ROUTES: dict[Route, IndirectWorkerSurface] = {
+    ("GET", "/v1/conversations/search"): IndirectWorkerSurface(
+        sdk_method="searchConversations",
+        replacement_method="federatedSearch",
+        source="apps/worker/src/components/CommandPalette.tsx",
+        rationale="the global search control supersedes the removed Recents-only search bar",
+    ),
     ("GET", "/v1/artifacts/{artifact_id}"): IndirectWorkerSurface(
         sdk_method="artifact",
         replacement_method="artifacts",
@@ -554,7 +597,13 @@ GET /v1/devices/{device_id}/camera-leases
 """,
 )
 _non_ui("internal-composition", "POST /v1/knowledge/context")
-_non_ui("legacy-superseded", "POST /v1/memory/query")
+_non_ui(
+    "legacy-superseded",
+    """
+POST /v1/memory/query
+GET /v1/model-profiles
+""",
+)
 _non_ui("advanced-compatibility", "POST /v1/spawn")
 
 
@@ -575,6 +624,18 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
         "compatibility-helper",
         "Worker uses reopenCall for recovery and fresh media credentials.",
     ),
+    "requestDeviceFileListLease": (
+        "unsupported-contract",
+        "Worker chat has no explicit device/root binding, so it must not invent one for workspace reads.",
+    ),
+    "searchConversations": (
+        "superseded-read",
+        "The global federated-search command replaces the removed Recents-only search bar.",
+    ),
+    "modelProfiles": (
+        "superseded-read",
+        "Text chat uses live Bifrost model choices; retained voice profiles stay a compatibility seam.",
+    ),
     "spawn": (
         "advanced-compatibility",
         "Ordinary delegation uses chat, personal-agent and bounded test-spawn flows.",
@@ -582,4 +643,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 }
 
 
-EXPECTED_ROUTE_COUNT = 264
+EXPECTED_ROUTE_COUNT = 268

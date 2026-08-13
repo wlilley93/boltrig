@@ -1,7 +1,8 @@
 """Static shipment boundaries for decision 0021's Worker client."""
 
-from pathlib import Path
+import json
 import plistlib
+from pathlib import Path
 
 import pytest
 
@@ -80,7 +81,7 @@ def test_worker_ships_no_openworker_agent_server_or_provider_secret_path():
 
 
 @pytest.mark.invariant("SEC-WRK-01")
-def test_desktop_native_boundary_has_no_arbitrary_path_or_command_primitive():
+def test_desktop_native_process_seams_are_explicit_and_bounded():
     rust_files = {
         path.name: path.read_text(encoding="utf-8")
         for path in (WORKER / "src-tauri" / "src").glob("*.rs")
@@ -91,7 +92,6 @@ def test_desktop_native_boundary_has_no_arbitrary_path_or_command_primitive():
     assert ".save_file(" in rust
     assert "destination:" not in rust
     assert "#[tauri::command]\nfn run_command" not in rust
-    assert "std::process::Command" not in rust
     assert "open_materialized_artifact" in rust
     assert "reveal_materialized_artifact" in rust
     assert "registry.resolve(&handle)" in rust
@@ -106,14 +106,21 @@ def test_desktop_native_boundary_has_no_arbitrary_path_or_command_primitive():
     assert "accessToken" not in client
     assert "device_session_token" not in rust_files["lib.rs"]
     assert "dialog:allow-save" not in capabilities
-    # The only native process seam is inside the signed device-lease executor:
-    # the pinned verifier and exact canonical envelope are checked before the
-    # claim, and a command additionally needs an opaque native root whose user
-    # opted into commands plus a per-invocation native confirmation. No Tauri
-    # command accepts argv, an executable, a cwd, or a caller-supplied path.
+    # There are exactly two native process seams. Remote device commands remain
+    # signed argv-only leases. The desktop-local agent may launch only the
+    # resolved Codex App Server; its webview request carries an opaque root id
+    # and prompt, never an executable, argv, cwd or caller-supplied path.
+    process_files = {
+        name
+        for name, text in rust_files.items()
+        if "std::process::Command" in text or "tokio::process::Command" in text
+    }
+    assert process_files == {"device_roots.rs", "local_agent.rs"}
     agent = rust_files["device_agent.rs"]
     protocol = rust_files["device_protocol.rs"]
     roots = rust_files["device_roots.rs"]
+    local = rust_files["local_agent.rs"]
+    local_protocol = rust_files["local_agent_protocol.rs"]
     lib = rust_files["lib.rs"]
     assert agent.index("verify_lease(&lease") < agent.index(".claim(")
     assert "validate_verifier(verifier)?" in protocol
@@ -122,6 +129,14 @@ def test_desktop_native_boundary_has_no_arbitrary_path_or_command_primitive():
     assert roots.index(".blocking_show()") < roots.index("Command::new(executable)")
     assert "tokio::process::Command" in roots
     assert "command_shell_refused" in roots
+    assert '.arg("app-server")' in local
+    assert "Command::new(binary)" in local
+    assert "local_agent_workspace(" in local
+    assert "command.env_clear()" in local
+    assert 'return Err("local_agent_binary_not_bundled"' in local
+    assert "pub(crate) root_id: String" in local_protocol
+    for forbidden_local_input in ("executable", "argv", "cwd", "native_path"):
+        assert f"pub(crate) {forbidden_local_input}" not in local_protocol
     for forbidden_export in (
         "run_command",
         "execute_command",
@@ -132,6 +147,63 @@ def test_desktop_native_boundary_has_no_arbitrary_path_or_command_primitive():
         assert f"#[tauri::command]\nfn {forbidden_export}" not in lib
     assert "connect-src 'self' https: wss:" not in config
     assert "https://*.boltrig.io" in config
+
+
+@pytest.mark.invariant("SEC-198")
+def test_browser_cloud_and_desktop_local_agent_routes_cannot_silently_cross():
+    route = (
+        WORKER / "src" / "components" / "shell" / "AppRouteSurface.tsx"
+    ).read_text(encoding="utf-8")
+    directory = (
+        WORKER / "src" / "components" / "shell" / "useConversationDirectory.ts"
+    ).read_text(encoding="utf-8")
+    local_view = (
+        WORKER / "src" / "components" / "LocalChatView.tsx"
+    ).read_text(encoding="utf-8")
+    local_client = (WORKER / "src" / "localAgentClient.ts").read_text(encoding="utf-8")
+    local_controller = (
+        WORKER / "src" / "components" / "chat" / "useLocalChatController.ts"
+    ).read_text(encoding="utf-8")
+    approval_surface = (
+        WORKER / "src" / "components" / "ApprovalPostureControl.tsx"
+    ).read_text(encoding="utf-8")
+    native = (WORKER / "src-tauri" / "src" / "local_agent.rs").read_text(
+        encoding="utf-8"
+    )
+    native_protocol = (
+        WORKER / "src-tauri" / "src" / "local_agent_protocol.rs"
+    ).read_text(encoding="utf-8")
+    remote = (WORKER / "src-tauri" / "src" / "device_roots.rs").read_text(
+        encoding="utf-8"
+    )
+
+    assert "hasDesktopRuntime() ? <LocalChatView" in route
+    assert ": <ChatView" in route
+    assert "hasDesktopRuntime()" in directory
+    assert "listLocalConversations()" in directory
+    assert "client.conversationsPage" in directory
+    assert 'const LOCAL_PREFIX = "local:"' in local_client
+    assert "/v1/chat" not in local_view
+    assert "client.streamChat" not in local_view
+    assert 'source: "bundled" | "development" | null' in local_client
+    request_shape = native_protocol.split(
+        "pub(crate) struct LocalTurnRequest", 1
+    )[1].split("}", 1)[0]
+    assert "approval_posture" not in request_shape
+    assert "client.approvalPosture" not in local_controller
+    assert 'invoke<LocalAgentPosture>("local_agent_posture")' in local_client
+    assert 'invoke<LocalAgentPosture>("put_local_agent_posture"' in local_client
+    assert 'runtime === "local"' in approval_surface
+    assert "localAgentPosture()" in approval_surface
+    assert "putLocalAgentPosture(next)" in approval_surface
+    assert 'const LOCAL_POSTURE_ACCOUNT: &str = "local-agent-posture-v1"' in native
+    assert 'confirm.as_deref() != Some("full_access")' in native
+    assert '.title("Allow full local access?")' in native
+    assert "if !cfg!(debug_assertions)" in native
+    assert 'source: "bundled"' in native
+    assert 'source: "development"' in native
+    assert 'source == "bundled" && version != REQUIRED_RELEASE_CODEX_VERSION' in native
+    assert "command_shell_refused" in remote
 
 
 @pytest.mark.invariant("SEC-WRK-01")
@@ -149,9 +221,16 @@ def test_desktop_updater_accepts_no_webview_release_trust_or_unsigned_path():
     config = (
         WORKER / "src-tauri" / "tauri.conf.json"
     ).read_text(encoding="utf-8")
+    ci_config = (
+        WORKER / "src-tauri" / "tauri.ci.conf.json"
+    ).read_text(encoding="utf-8")
+    ci_config_payload = json.loads(ci_config)
 
     assert 'option_env!("BOLTRIG_UPDATER_ENDPOINT")' in native
     assert 'option_env!("BOLTRIG_UPDATER_PUBLIC_KEY")' in native
+    assert 'env!("CARGO_PKG_VERSION")' not in native
+    assert "app.package_info().version.to_string()" in native
+    assert "app.package_info().version.to_string()" in lib
     assert 'endpoint.scheme() != "https"' in native
     assert ".pubkey(trust.public_key)" in native
     assert ".download_and_install(" in native
@@ -163,6 +242,16 @@ def test_desktop_updater_accepts_no_webview_release_trust_or_unsigned_path():
     assert "download_url" not in surface.lower()
     assert "public_key:" not in surface.lower()
     assert '"createUpdaterArtifacts": true' in config
+    assert '"updater": {' in config
+    assert '"pubkey": ""' in config
+    # Pull requests prove that every native installer can be bundled without
+    # exposing the release signing key. Tagged releases deliberately use the
+    # default config above, so they still fail closed unless Tauri can emit and
+    # sign updater artifacts with the protected release secret.
+    assert ci_config_payload == {
+        "$schema": "https://schema.tauri.app/config/2",
+        "bundle": {"createUpdaterArtifacts": False},
+    }
     assert "dangerousInsecureTransportProtocol" not in config
     for command in (
         "desktop_update_readiness",
@@ -287,6 +376,8 @@ def test_worker_built_artifact_has_a_gating_build_acceptance():
     package = (WORKER / "package.json").read_text(encoding="utf-8")
 
     assert "worker-quality" in makefile
+    assert "PNPM ?= corepack pnpm" in makefile
+    assert "corepack enable" not in makefile
     assert '"build": "tsc && vite build"' in package
     assert '"typecheck": "tsc --noEmit"' in package
     assert "worker-build:" in workflow
@@ -385,7 +476,9 @@ def test_worker_edge_allows_same_origin_voice_without_opening_browser_capabiliti
 
 @pytest.mark.invariant("SEC-WRK-13")
 def test_worker_renders_closed_conversations_in_archived_as_restore_only():
-    shell = (WORKER / "src" / "components" / "Shell.tsx").read_text(encoding="utf-8")
+    task_list = (
+        WORKER / "src" / "components" / "shell" / "TaskList.tsx"
+    ).read_text(encoding="utf-8")
     archived = (
         WORKER / "src" / "components" / "settings" / "ArchivedSection.tsx"
     ).read_text(encoding="utf-8")
@@ -395,7 +488,7 @@ def test_worker_renders_closed_conversations_in_archived_as_restore_only():
     ).read_text(encoding="utf-8")
     sdk = (ROOT / "sdks" / "web" / "src" / "client.ts").read_text(encoding="utf-8")
 
-    assert 'conversation.status !== "closed"' in shell
+    assert 'conversation.status !== "closed"' in task_list
     assert 'row.status === "closed"' in archived
     assert "restoreMyConversation" in archived
     assert "Bring back" in archived

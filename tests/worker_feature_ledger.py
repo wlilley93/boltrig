@@ -381,6 +381,15 @@ _nested(
 )
 _nested(
     "ModelEndpoint",
+    "revision",
+    "boltrig/models/libraries.py",
+    ("worker", "worker", "worker", "worker", "worker"),
+    "The server-owned monotonic generation binds an approved edit or lifecycle action "
+    "to the exact endpoint state; Worker receives conflicts and refreshes rather than "
+    "authoring or guessing the generation.",
+)
+_nested(
+    "ModelEndpoint",
     "tenant_id",
     "boltrig/models/libraries.py",
     ("worker", "deployment", "worker", "worker", "deployment"),
@@ -583,6 +592,36 @@ NATIVE_COMMANDS: dict[str, FeatureCoverage] = {
         "apps/worker/src-tauri/src/lib.rs",
         ("worker", "worker", "worker", "worker", "worker"),
         "Native device sign-out/recovery.",
+    ),
+    "local_agent_status": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("worker", "deployment", "worker", "worker", "worker"),
+        "Projects whether the packaged desktop-local Codex runtime is available without exposing a binary path or host credentials.",
+    ),
+    "local_agent_roots": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("worker", "worker", "worker", "worker", "worker"),
+        "Projects only the user-bound local workspace roots that may be selected for a desktop-local turn.",
+    ),
+    "local_agent_posture": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("worker", "worker", "worker", "worker", "worker"),
+        "Reads the desktop-only approval posture from the OS credential store; it is deliberately independent of cloud Chat policy.",
+    ),
+    "put_local_agent_posture": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("worker", "worker", "worker", "worker", "worker"),
+        "Changes only the desktop-local approval posture, with a second native confirmation before unrestricted host access.",
+    ),
+    "run_local_agent_turn": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("worker", "worker", "worker", "worker", "worker"),
+        "Runs the bundled Codex App Server in one selected local workspace with native policy enforcement and bounded event projection.",
+    ),
+    "stop_local_agent_turn": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("worker", "worker", "worker", "worker", "worker"),
+        "Stops the owned desktop-local child and is also used for conversation switches and unmount recovery.",
     ),
     "device_agent_status": _coverage(
         "apps/worker/src-tauri/src/lib.rs",
@@ -837,7 +876,8 @@ _governed_controls(
         "OperationsView.tsx AgentProfileEditor.tsx PermanentFleetTopology.tsx "
         "build/ModelEndpointsBuild.tsx build/RegistryBuild.tsx "
         "build/SkillsBuild.tsx ParityViews.tsx "
-        "knowledge/KnowledgeView.tsx knowledge/RemembersTab.tsx"
+        "knowledge/KnowledgeView.tsx knowledge/RemembersTab.tsx "
+        "settings/ModelSettingsSection.tsx"
     ),
     ("worker", "worker", "worker", "worker", "worker"),
     "These non-secret controls retain only exact typed route inputs plus an internal approval id, query caller-owned state, replay the same SDK method and invalidate edits, selection changes and refreshes.",
@@ -941,11 +981,12 @@ STRATEGIC_PRODUCT_FEATURES: dict[str, FeatureCoverage] = {
     ),
     "approval-policy-delegation-and-dry-run": _coverage(
         "docs/proposals/approval-policies-and-dry-run.md",
-        ("missing", "missing", "missing", "missing", "missing"),
-        "Exact per-action HITL works, but Boltrig has no first-class versioned "
-        "approval/delegation policy, decision-basis projection or authoritative "
-        "no-side-effect execution plan. Worker must not invent these from a "
-        "blocking-verb list or a client-side preview.",
+        ("worker", "worker", "missing", "worker", "missing"),
+        "Exact per-action HITL and a caller-owned coarse delegated-agent posture "
+        "now share the kernel chokepoint. Boltrig still has no first-class "
+        "versioned per-verb delegation policy, decision-basis projection or "
+        "authoritative no-side-effect execution plan; the Worker must not invent "
+        "those broader capabilities from posture or the blocking-verb list.",
     ),
     "provider-reconciled-cost-history": _coverage(
         "boltrig/kernel/cost.py",
@@ -1071,6 +1112,9 @@ ALL_NON_HTTP_FEATURES = {
     **{f"governed-control:{key}": value for key, value in GOVERNED_WORKER_CONTROL_FEATURES.items()},
     **{f"strategic-runtime:{key}": value for key, value in STRATEGIC_RUNTIME_FEATURES.items()},
     **{f"strategic-product:{key}": value for key, value in STRATEGIC_PRODUCT_FEATURES.items()},
-    **{f"surface-experience:{key}": value for key, value in PRIMARY_SURFACE_EXPERIENCE_FEATURES.items()},
+    **{
+        f"surface-experience:{key}": value
+        for key, value in PRIMARY_SURFACE_EXPERIENCE_FEATURES.items()
+    },
     **{f"internal:{key}": value for key, value in INTERNAL_OR_LEGACY_FEATURES.items()},
 }
