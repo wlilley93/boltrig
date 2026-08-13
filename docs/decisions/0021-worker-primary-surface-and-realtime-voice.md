@@ -1,5 +1,9 @@
 # 0021 - Worker primary surface and scoped realtime voice
 
+> Amended by decision 0027. The signed Tauri product now owns a private local
+> Codex App Server and local shell execution. The signed remote device-lease
+> boundary below remains in force and is not the local-agent transport.
+
 - Status: accepted
 - Date: 2026-07-28
 - Amends: 0004 (spatial deck presentation) and 0012 (target runtimes)
@@ -80,7 +84,10 @@ Decision 0012 is amended by exactly one target-runtime exception named
 
 ## Desktop device boundary
 
-The Tauri shell is an enrolled outbound device, not a local agent server.
+The Tauri shell's **remote device lease path** is an enrolled outbound device,
+not a local agent transport. Decision 0027 separately gives the signed app a
+private local Codex App Server over stdio; these paths must not fall through to
+one another.
 Device file and optional command capabilities are registered as ordinary
 adapter data. Calls use signed, expiring, scoped, single-use leases minted only
 after dispatcher/HITL admission. Paths use `root_id + relative_path`; command

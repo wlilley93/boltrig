@@ -128,7 +128,7 @@ do not leave both up.
 
 ## Housekeeping done on both machines
 
-Every worktree registration on the M4 pointed at a `/home/jellytot/...` path,
+Every worktree registration on the M4 pointed at a host-local path,
 because the tree was copied wholesale off the beelink including
 `.git/worktrees/*`. All 29 were dead there. This is not cosmetic: a dead
 registration still claims its branch and **refuses `git branch -f`**, which is

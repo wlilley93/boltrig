@@ -51,7 +51,7 @@ Adds `reason` on `workflow_step`, `exception` status + `exceptions_count` on run
 
 ## 2. Production state — LIVE
 
-Rolled to `boltrig-vm` (192.168.139.14) 2026-08-10 ~14:24. The VM compose builds **directly off the shared Mac checkout** (`/Users/williamlilley/Projects/boltrig`, OrbStack mount), overlay `docker-compose.vm.yml`.
+Rolled to `boltrig-vm` (private deployment address) 2026-08-10 ~14:24. The VM compose builds **directly off the deployment checkout**, overlay `docker-compose.vm.yml`.
 
 - `boltrig-hatchet-worker-1` **serving** (`'boltrig-live' … waiting for tasks`) — the first time the durable lane has a serving process (closes the decision-0018 gap). Kernel/`/readyz` fully green, hatchet probe ok.
 - No engine recreate → token safe. DB already at head `0067` → no migrations.

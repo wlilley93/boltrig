@@ -1,6 +1,6 @@
 # Design-debt inventory: every surface failing the Principal's bar
 
-Scope: full sweep of /home/jellytot/Projects/boltrig/ui/src (all panels, ux.tsx, shared.tsx, App.tsx). Each finding: location, what the user is asked, why it fails, and the considered replacement in one line. Chat-parity flags are noted where the operation is a direct route today and needs a `control.*` verb (per config/control_plane.py naming) before the chat client can do it.
+Scope: full sweep of the legacy UI source (all panels, ux.tsx, shared.tsx, App.tsx). Each finding: location, what the user is asked, why it fails, and the considered replacement in one line. Chat-parity flags are noted where the operation is a direct route today and needs a `control.*` verb (per config/control_plane.py naming) before the chat client can do it.
 
 ## Cross-cutting (fix once in ux.tsx / shared.tsx, inherited everywhere)
 

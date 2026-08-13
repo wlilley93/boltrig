@@ -176,7 +176,7 @@ worker browser suite **22/22** including the axe sweep.
 - **Dev stack**: kernel runs in OrbStack `boltrig-vm`, host port **18000**
   (`orb start boltrig-vm` if stopped). Dev worker:
   `BOLTRIG_KERNEL_URL=http://192.168.139.14:18000 vite --port 1420`.
-  Dev login: will.lilley93@gmail.com; password was reset today via
+  Dev login: deployment-specific operator identity; password was reset today via
   `boltrig set-password` inside the kernel container (value in this session's
   scratchpad dev-pw.txt; change at will).
 - **Gitleaks locally**: run against the REAL repo dir, not a linked worktree

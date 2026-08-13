@@ -1,11 +1,15 @@
 # Proposal: policy-gated auto-approval + dry-run preview
 
-Status: DESIGN / not implemented. This is the reviewed spec for two features that
-change the kernel chokepoint's behaviour. They are deliberately NOT patched in
-directly: `AGENTS.md` forbids casually touching the dispatch sequence, and a
-change to when the human-in-the-loop gate fires is security-load-bearing. This
-document is the artifact that must be reviewed (and, once Boltrig is a VJS
-jurisdiction, routed to the court) before any code lands.
+Status: DESIGN / the per-verb policy and dry-run described here are not
+implemented. Boltrig does now have the narrower SEC-197 caller posture
+(`always_ask`, `risk_based`, `full_access`): it changes only the extra consent
+prompt for a caller's delegated adapter calls and cannot widen grants, match on
+inputs, approve control-plane changes, or bypass deployment blocks. It is not
+the rule engine proposed below and does not emit a policy-authored HITL decision.
+This document remains the reviewed spec for the two broader features that change
+the kernel chokepoint's behaviour. `AGENTS.md` forbids casually touching the
+dispatch sequence, and a change to when the human-in-the-loop gate fires is
+security-load-bearing.
 
 ## Why these two are sensitive
 

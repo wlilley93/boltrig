@@ -25,16 +25,16 @@ Genesis reads these from the environment if set, otherwise prompts interactively
 
 | Variable | Prompt | Default |
 | --- | --- | --- |
-| `ORG_NAME` | First organisation name | `Boltrig` |
+| `ORG_NAME` | First organisation name | required |
 | `WS_NAME` | First workspace name | the org name |
-| `SUPERADMIN_EMAIL` | Superadmin email | `will.lilley93@gmail.com` |
-| `SUPERADMIN_PASSWORD` | Superadmin password | `admin` |
+| `SUPERADMIN_EMAIL` | Superadmin email | required |
+| `SUPERADMIN_PASSWORD` | Superadmin password | required |
 
 Non-interactive example:
 
 ```bash
-ORG_NAME="Acme" WS_NAME="Acme HQ" \
-SUPERADMIN_EMAIL="admin@acme.com" SUPERADMIN_PASSWORD="a-strong-passphrase" \
+ORG_NAME="Your organisation" WS_NAME="Your workspace" \
+SUPERADMIN_EMAIL="admin@example.com" SUPERADMIN_PASSWORD="a-strong-passphrase" \
 bash genesis.sh dev
 ```
 

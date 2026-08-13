@@ -1,16 +1,19 @@
 # Boltrig console parity evidence — 2026-08-11
 
-This directory records the historical 06:41–06:42 UTC Worker comparison with
+This directory retains the historical 06:41–06:42 UTC Worker comparison with
 the latest Claude Design export and the seven live Figma `CURRENT SOURCE`
-frames at a fixed 1440×900 viewport. It does not bind the current Worker source.
-It is visual evidence, not a substitute for runtime, accessibility, or
-backend-contract tests.
+frames at a fixed 1440×900 viewport. Fresh source-bound evidence for the
+current Worker is stored under `current/`. It is visual evidence, not a
+substitute for runtime, accessibility, or backend-contract tests.
 
-> **Current status:** the 06:41–06:42 UTC Worker captures are historical and
-> are explicitly marked stale in `capture-manifest.json`. Worker and fixture
-> source changed afterward. Do not use the existing shipped images, diffs or
-> metrics as evidence for the current working tree; recapture all seven states
-> losslessly and regenerate their hashes before rebinding VDS review records.
+> **Current status:** the root-level 06:41–06:42 UTC captures remain historical.
+> `current/capture-manifest.json` records a fresh seven-state capture at
+> 2026-08-13T13:49:41.518Z, unchanged across the capture at source digest
+> `4f9b663ce8c505e4173d92c250fa345dfba54246f6f2745108615077b2b6c298`.
+> Six route-scoped VDS reviews are refreshed as unsigned `no_authority`
+> records. They establish current coverage only: no frame sign-off, conformity
+> verdict or parity claim exists. New chat remains a separately measured state
+> of the shared Chat route and still lacks a non-invented frame digest.
 
 `figma-connected-inventory.json` is a separate live-source observation recorded
 at 15:05 UTC. Authenticated Figma metadata reads resolved all seven named

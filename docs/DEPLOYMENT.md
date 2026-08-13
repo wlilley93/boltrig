@@ -11,7 +11,9 @@ workflow; it does not rebuild mutable source on the target host. Check out or
 transfer the protected release tag so its Compose manifests and migration chain
 match the images, then download `boltrig-images.env` from that GitHub release.
 The file contains exactly the kernel, fleet, Worker UI, and backup `image@sha256`
-references.
+references. The fleet digest serves both `fleet-worker` and the durable
+`hatchet-worker`; the release overlay pins both entry points and removes both
+local build definitions.
 
 With the normal production configuration in `.env`:
 
@@ -20,7 +22,22 @@ make release-validate RELEASE_IMAGES_ENV=boltrig-images.env RELEASE_ENV=.env
 make release-up RELEASE_IMAGES_ENV=boltrig-images.env RELEASE_ENV=.env
 ```
 
-The validator rejects missing, additional, or tag-based image values. The launch
+Run these commands from the exact protected semantic-tag checkout. Install
+Cosign and a GitHub CLI with `gh attestation verify` on the deployment host;
+validation reads public signature/attestation evidence from GHCR and does not
+need a signing credential. If multiple protected semantic tags point at the same
+commit, pass the intended one as `RELEASE_TAG=vX.Y.Z`.
+
+The validator rejects missing, additional, or tag-based image values, then
+verifies each digest's release-workflow signature, CycloneDX SBOM attestation,
+and SLSA provenance against the canonical repository, exact tag, and checked-out
+commit. Only after that evidence passes, it pulls the exact kernel and fleet
+digests, assembles an unpushed validation image from them, executes the three CLI
+version probes, and runs production doctor there. The validation container has
+no network, a read-only root filesystem, no capabilities, and receives `.env`
+over stdin. It is removed after the check; pulled layers may remain in the local
+Docker cache. No service is started or changed. Missing tools, network access,
+evidence, image executables, or identity match fail closed. The launch
 layers `deploy/compose.release.yml` and `deploy/compose.secure.yml` over the base
 manifest, enables the scheduled backup profile, pulls the recorded digests, and
 uses `--no-build`. The release overlay also removes the developer bind mount of
@@ -35,7 +52,14 @@ The old Operator application, image, deployment overlay and browser path have
 been removed. The kernel, dispatcher, database, identities, conversations and
 run state remain unchanged by this presentation cleanup.
 
-### Channel-gateway bootstrap and failover
+### Channel-gateway bootstrap and failover (not production-admitted yet)
+
+The protected secure release currently refuses the `channels` profile. The
+gateway and WhatsApp bridge are not yet members of the signed image set, and the
+secure sandbox has no reviewed provider-egress route. The steps below are for
+development and isolated acceptance only; they do not override that release
+gate. Production enablement requires signed/SBOM/provenance-bound channel images,
+a constrained egress design, and real-provider acceptance.
 
 Worker is the canonical channel configuration surface. Author each socket
 channel there with write-only secret-store reference names, then issue the
@@ -46,7 +70,9 @@ alternative is restart-only and must not be configured at the same time.
 
 Before declaring a gateway ready:
 
-1. confirm the kernel migration head is `0062`;
+1. confirm the database revision exactly matches the packaged Alembic head
+   (`alembic heads` and `alembic current` must agree, and `/readyz` must report
+   the migration check ready);
 2. confirm `GET /ready` succeeds (not merely `/health`);
 3. confirm each enabled socket channel has the intended owner label and an
    unexpired lease, then separately prove real provider send/receive;
@@ -64,7 +90,7 @@ deployment must use one kernel API replica) until a reviewed shared registry
 or workload-identity contract replaces that limitation. The gateway does not
 mint its own identity or token.
 
-## `git pull` on the deployment tree IS a deploy step
+## The deployment tree is immutable release input
 
 The images above are digest-pinned, and that covers only what is IN them. The base
 compose bind-mounts host paths straight into running containers, and those bytes
@@ -84,32 +110,15 @@ ones, so none of them resolved and the skill's Opbox reach was nil - stayed
 undelivered for three days. Nothing was wrong with the release; the deploy was
 simply half done, and no step in this document said so.
 
-So a roll is:
+Do not `git pull` a moving branch on a live host. Check out the protected semantic
+tag, require no modified/staged/deleted tracked files, and run `release-validate`
+before `release-up`. Those commands bind the host-read Compose, manifest,
+libraries, and schema to the same protected commit as the signed image evidence.
 
-```bash
-# 1. the tree the containers read from
-ssh <host> 'cd ~/Projects/boltrig-main && git pull --ff-only origin main'
-# 2. the images - CANARY FIRST, and the canary is a GATE
-scripts/roll-release.sh v0.4.19
-# 3. prove BOTH halves landed, on EVERY tenant, before calling it done
-make fleet-drift-all
-```
-
-**Use the script for step 2, not a hand-typed `compose up`.** The recipe used to
-live in one person's head and was re-typed per release, and every re-typing lost a
-check. On 2026-07-28 the hand-written version printed the canary's health and its
-`addons active:` line and then rolled the live client *regardless* - a canary you
-do not assert on is not a canary, it is a delay. `scripts/roll-release.sh` asserts,
-per stack and before touching the next one, that the overlay diff is exactly the
-two image lines, that the kernel is healthy and not restarting, that both
-containers report the expected `addons active:` line, and that the kernel really is
-running the target version. It aborts rather than continuing.
-
-`make fleet-drift-all` compares each pinned digest against what the daemon is
-actually running AND reports any bind-mounted path whose upstream has commits it
-has not pulled. Staleness is scoped to the mounted path, so an unrelated merge does
-not turn it red; a detached HEAD on a deployment tree is reported as the finding it
-is. It needs a box, so it is an operator command and never a CI gate.
+`scripts/roll-release.sh` predates the four-image signature/SBOM/provenance gate
+and is retained only for legacy/dev investigation. It is not a production
+deployment path. The current procedure is
+`docs/PROD-CUTOVER-RUNBOOK.md`.
 
 ## Validate the manifest with the CANDIDATE image before swapping (task #59)
 
@@ -138,6 +147,184 @@ The standing half of the same gate runs in CI:
 shipping loader on every push, so a commit that adds a required field without a
 default goes red in the suite before any box meets it.
 
+## Self-hosted host migration preflight
+
+The signed release path above is canonical for production. This section covers
+the host-dependent failures that can still appear on a new Linux server, and the
+explicitly non-production image-relay path used by disconnected development
+hosts. Do not turn any of these host accommodations into a weaker public image
+or a provider-specific shipping default.
+
+### Match the image to the host
+
+Before changing a running stack, record the current container image IDs and the
+candidate platform:
+
+```bash
+uname -m
+docker image inspect <candidate-kernel> <candidate-fleet> \
+  --format '{{.RepoTags}} {{.Id}} {{.Os}}/{{.Architecture}}'
+for service in kernel fleet-worker hatchet-worker; do
+  container="$(docker compose ps -q "$service")"
+  docker inspect "$container" \
+    --format '{{.Name}} {{.Config.Image}} {{.Image}}'
+done
+```
+
+Production obtains the correct platform through the verified digest-pinned
+release set. For a low-bandwidth or disconnected **development** host only, an
+operator may fetch/build the exact platform elsewhere, then relay an archive:
+
+```bash
+docker save --platform linux/amd64 <kernel-image> <fleet-image> | gzip -1 \
+  > boltrig-images-linux-amd64.tar.gz
+shasum -a 256 boltrig-images-linux-amd64.tar.gz
+# transfer over the trusted operator path
+sha256sum boltrig-images-linux-amd64.tar.gz
+gzip -dc boltrig-images-linux-amd64.tar.gz | docker load
+```
+
+The two checksums must match. `docker save` must name the platform when the local
+store contains a multi-architecture index. `docker load` commonly restores the
+selected manifest without its registry `RepoDigest`; a host-local tag in a
+private development override is therefore acceptable only as recorded local
+evidence. It is not a substitute for signature, SBOM, provenance, or digest
+verification and must never be called a production release.
+
+BuildKit may lexically warn that `BOLTRIG_CODEX_AUTH_HELPER` looks secret-like.
+Its shipping value must remain only the root-owned helper executable path; it is
+not a credential. Verify that fact rather than disabling the scanner or ever
+placing secret material in that variable.
+
+### Prove the Codex sandbox on the target kernel
+
+Every process that composes the trusted Codex runtime proves the sandbox at
+startup: `kernel`, `fleet-worker`, and `hatchet-worker`. Ubuntu 24.04 and later
+requires the repository's named AppArmor profile as well as the narrow Docker
+seccomp exception used by nested Bubblewrap:
+
+```bash
+sudo cp deploy/apparmor/boltrig-codex /etc/apparmor.d/boltrig-codex
+sudo apparmor_parser -r -W /etc/apparmor.d/boltrig-codex
+```
+
+Add `seccomp:unconfined` and `apparmor:boltrig-codex` to those three services in
+the host overlay while retaining `read_only`, `cap_drop: [ALL]`, and
+`no-new-privileges:true`. Read and run the real proof in
+`deploy/apparmor/README.md` before rollout. `unshare -Ur true` is not proof: it
+does not exercise the mount/pivot-root legs. Do not use
+`apparmor=unconfined`, disable the host-wide unprivileged-userns restriction, or
+skip `prove_sandbox_engagement` to make a container start.
+
+The image's service user is uid 10001. Do not override it to root: with
+`cap_drop: ALL`, root has no `CAP_DAC_OVERRIDE`, so an apparently privileged
+container can be less able to write its intended service-owned paths. After
+startup, require `id -u` to report 10001 in all three services.
+
+### Preserve and separate stack-owned state
+
+Fresh named volumes inherit the image's uid-10001 ownership. Imported or legacy
+volumes may not. Inspect the exact mounted volume before changing it, stop its
+owner, then repair only that named volume with the verified candidate image:
+
+```bash
+docker inspect <container> \
+  --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} -> {{.Destination}}{{println}}{{end}}{{end}}'
+docker compose stop <owning-service>
+docker run --rm --user 0:0 --entrypoint sh \
+  -v <exact-volume-name>:/state <verified-candidate-image> \
+  -c 'chown -R 10001:10001 /state'
+```
+
+Never run a recursive ownership change against an unresolved variable, a host
+root, or a mounted personal profile. Fleet and Hatchet run independent Chromium
+processes and must not share a browser profile lock:
+
+```env
+BOLTRIG_FLEET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/fleet-worker
+BOLTRIG_HATCHET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/hatchet-worker
+```
+
+They may share the deployment-owned volume because their roots differ. The
+Fleet entrypoint exports its own loopback `BU_CDP_URL`; operators must not point
+it at a desktop browser. If an image build or headless server asks a human to
+enable `chrome://inspect` or approve remote debugging, reject that image: the
+CLI has fallen off the stack-owned browser path.
+
+### Keep Hatchet identity and recovery state together
+
+Hatchet durability spans three coupled items: its database, the
+`hatchet_config` volume containing token-signing state, and the worker token.
+Do not delete/recreate the config volume while moving an engine, and never touch
+another stack's Hatchet container or config as part of a Boltrig rollout.
+Back up and restore the database and config as one recovery point using
+`docs/backup-restore.md`.
+
+If the signing state is lost, every old worker token becomes unauthenticated.
+Mint a replacement only against the intended restored/new engine, write it
+atomically into the operator secret source, and record only a one-way
+fingerprint—not the token—in the change record. A healthy
+`hatchet-worker` means its listener has connected and heartbeated; do not infer
+registration merely because the engine container is running.
+
+### Keep provider configuration deployment-private
+
+Boltrig ships provider-neutral. A private development model host, provider URL,
+model identifier, or API key belongs only in that deployment's server-side
+secret/configuration state and Bifrost volume; it must not enter
+`manifest.example.yaml`, Compose defaults, images, the Worker bundle, or public
+documentation examples. Run this before publishing any release candidate:
+
+```bash
+make public-product-validate
+```
+
+The gate requires BYO Bifrost configuration and Familiar + Jarvis as the only
+shipping companions. Provider credentials remain kernel/Bifrost-side and never
+become Worker fields. Governed model endpoints must use a catalogue-advertised,
+exact immutable model ID; aliases containing `latest`, `default`, `preview`,
+`stable`, or the other mutable segments rejected by `exact_model_id()` are not
+valid routes.
+
+Set `BOLTRIG_MODEL_GATEWAY_HEALTH=1` when the gateway is required. Values such
+as `0`, `false`, `off`, and `no` mean disabled; they must not be used as a
+placeholder for a required gateway. Before opening ingress, require Bifrost
+health, catalogue membership for the exact route, and one bounded
+non-effectful inference canary through the same internal URL the kernel uses.
+Do not print provider credentials or private endpoint details into the rollout
+record.
+
+### Roll only the intended services, then verify through the edge
+
+Create explicit rollback image references and preserve the pre-change Compose
+override before a development rollout. Recreate only the affected first-party
+runtime services; do not restart Postgres, Redis, Bifrost, or Hatchet engine as
+a side effect of changing the kernel/Fleet bytes:
+
+```bash
+docker compose config --quiet
+docker compose up -d --no-deps --force-recreate \
+  kernel fleet-worker hatchet-worker
+docker compose ps
+```
+
+Allow health start periods to elapse. Then record the actual image IDs and
+require all of the following, not a subset:
+
+- database `alembic current` equals the packaged `alembic heads`;
+- the live sandbox proof succeeds on the target host;
+- kernel `/readyz` is `ready` with Postgres, Redis, Hatchet, migration, model
+  gateway, control plane, and stack tools OK;
+- Fleet and Hatchet report different browser roots and both are healthy;
+- the model canary succeeds when a gateway is enabled; and
+- `/`, `/healthz`, and `/readyz` succeed through the real external edge.
+
+For production, rollback means the previously verified signed release and its
+matching recovery point, as described in `docs/PROD-CUTOVER-RUNBOOK.md`; a local
+rollback tag is development evidence only. Move large local transfer archives
+to recoverable trash after the verified server copy is retained, so a relay
+does not silently consume the build machine's disk.
+
 ## TLS in transit (SEC-10)
 
 Run the secure overlay, which puts a Caddy TLS terminator in front of the UI and
@@ -155,6 +342,11 @@ BOLTRIG_DOMAIN=boltrig.example.com \
   /certs/site.key` and mount those files into the `caddy` service.
 - Only Caddy is reachable from outside; the kernel and UI lose their host ports in
   the overlay. Internal service-to-service traffic stays on the compose network.
+- Do not infer exposure from a host firewall rule alone. Overlay-network agents
+  can install earlier packet-filter rules and bypass an apparently restrictive
+  frontend. Prefer explicit loopback/interface binds and the secure overlay,
+  then verify listeners with `ss -lntp` and probe from a genuinely external
+  host before opening ingress.
 - Postgres connections use TLS by putting `sslmode=require` in `DATABASE_URL`.
   For host-spanning deployments, terminate mTLS for adapter connections to
   enterprise services per the adapter's credential material.
@@ -192,7 +384,8 @@ browser profile:
 ```env
 BOLTRIG_HERDR_HOME=/var/lib/boltrig/herdr
 BOLTRIG_OPENCODE_HOME=/var/lib/boltrig/opencode
-BOLTRIG_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli
+BOLTRIG_FLEET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/fleet-worker
+BOLTRIG_HATCHET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/hatchet-worker
 ```
 
 The base compose file backs these with named volumes. The first-party images
@@ -200,9 +393,11 @@ create the root, home, config, data, and state directories as the unprivileged
 `boltrig` user so fresh named volumes start writable by the service; Browser CLI
 also gets a stack-owned cache directory. Do not bind-mount `~/.config/herdr`,
 `~/.local/share/herdr`, `~/.config/opencode`, `.opencode`, or personal browser
-profile state into the stack. Run `boltrig doctor --production` before cutover;
-it fails when these roots are unset, point at user-owned state, or the runtime
-cannot resolve stack-owned `herdr` / `opencode` / `browser-use` binaries.
+profile state into the stack. Use `make release-validate` before production
+cutover. It runs doctor against the operator configuration inside the verified
+candidate-image context, where all three stack-owned executables exist. A bare
+host-side `boltrig doctor --production` remains a useful diagnostic, but its CLI
+checks describe that host and must not be used as release-image evidence.
 
 To upgrade the shipped CLIs, change the pinned Herdr/OpenCode version and sha256
 build args in `deploy/kernel.Dockerfile` / `deploy/fleet.Dockerfile`, or update
@@ -335,6 +530,34 @@ real delivery, bounce handling and provider receipts in staging before cutover.
 
 ## Signed Worker desktop updates
 
+### Browser agent versus desktop-local agent
+
+Browser Chat is a cloud agent: it calls the authenticated Boltrig kernel, and
+the hosted server-cell admission in `docs/CODEX-PRODUCTION-ADMISSION.md` must be
+open. The signed Tauri Chat surface is a local agent: it starts a private Codex
+App Server over stdio and executes approved file/Bash work on the user's own
+computer. There is no silent fallback between them.
+
+Development builds may resolve `BOLTRIG_LOCAL_CODEX_BIN` (an absolute file) or
+`codex` from `PATH`; the UI labels that source `development`. Release builds do
+not trust a host install. The protected desktop matrix runs
+`scripts/stage_desktop_codex.py`, which downloads the official platform package
+for Codex 0.144.3, verifies the exact archive and executable SHA-256 values,
+stages the complete vendor resource tree, and records a bounded receipt. The
+native app repeats the executable digest and version checks before launch and
+fails with `local_agent_binary_not_bundled`, `_digest_mismatch`, or
+`_version_mismatch` instead of falling back to `PATH`.
+
+Local workspaces are still explicit. In Settings → Device, bind a local folder
+as `read_write` and enable the local-agent/command boundary. `Always ask` and
+`Approve for me` keep Codex in workspace-write sandboxing; `Full access` is the
+user's explicit request for danger-full-access and no per-action prompt. The
+local posture is a separate OS-keychain value, defaults to `Always ask`, resets
+when the device session is cleared, and requires a native confirmation before
+`Full access` is stored. A cloud `Full access` selection never carries into the
+desktop-local agent. Remote device command leases remain a different signed
+argv-only path and continue to reject shell strings.
+
 Desktop update trust is fixed at Worker build time. Release builds that should
 offer updates must set both:
 
@@ -385,17 +608,37 @@ page and reports provider exchange unavailable.
 ## Checklist
 
 - [ ] Protected release selected; downloaded `boltrig-images.env` passes
-      `make release-validate` and contains five `@sha256` image refs
+      `make release-validate` and contains four `@sha256` image refs; both fleet
+      worker services resolve to the one signed fleet digest
+- [ ] every image signature, CycloneDX attestation and SLSA provenance verifies
+      against `wlilley93/boltrig/.github/workflows/release.yml`, the selected tag,
+      and the checked-out commit
 - [ ] `make release-up` completed with the secure overlay (TLS terminator in
       front; kernel/UI/local-model host ports closed; no first-party rebuilds)
 - [ ] `DATABASE_URL` has `sslmode=require`
 - [ ] `PGDATA_HOST` on an encrypted device; backups on encrypted media
+- [ ] a complete encrypted recovery set covers both application and Hatchet
+      databases plus Hatchet config, Knowledge, libraries and manifest; its
+      off-box completion marker and a disposable full restore are verified
+- [ ] a fresh cluster created the separate Hatchet database through the packaged
+      first-boot hook, or an existing cluster was checked/created explicitly
 - [ ] `CA_BUNDLE` set and the bundle mounted; proxy env set if required
-- [ ] `BOLTRIG_HERDR_HOME`, `BOLTRIG_OPENCODE_HOME`, and `BOLTRIG_BROWSER_CLI_HOME`
-      set to stack-owned roots
+- [ ] `BOLTRIG_HERDR_HOME`, `BOLTRIG_OPENCODE_HOME`,
+      `BOLTRIG_FLEET_BROWSER_CLI_HOME`, and
+      `BOLTRIG_HATCHET_BROWSER_CLI_HOME` set to stack-owned roots; the two
+      browser roots are different
+- [ ] on Ubuntu 24.04+, the named `boltrig-codex` AppArmor profile is loaded for
+      kernel, Fleet and Hatchet, and the real sandbox engagement proof passes
+- [ ] all three first-party runtime services execute as uid 10001; imported
+      named volumes have verified ownership and no personal profile is mounted
+- [ ] Hatchet database, `hatchet_config`, and worker-token identity belong to
+      the same recovery point; durable worker registration is healthy
+- [ ] `make public-product-validate` confirms BYO Bifrost and only Familiar +
+      Jarvis ship; any private development route remains deployment-local
 - [ ] Herdr/OpenCode CLI versions and hashes reviewed before image rebuild
-- [ ] `boltrig doctor --production` sees stack-owned `herdr`, `opencode`, and
-      `browser-use` CLIs
+- [ ] `make release-validate` executed `herdr`, `opencode`, and `browser-use`
+      from the verified candidate-image context and production doctor reported
+      zero failures there; no host CLI path was substituted
 - [ ] `/readyz` is 200 only after the fleet worker has published fresh live-tool
       evidence; stopping the worker or Chromium makes it return 503 after TTL
 - [ ] when first-party password recovery is required, a reviewed notifier and

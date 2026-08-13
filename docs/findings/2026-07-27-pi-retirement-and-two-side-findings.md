@@ -7,7 +7,7 @@ because the retirement went looking.
 
 ## What the fleet actually looked like
 
-Both stacks on `jellytot-prod`, before any change:
+Both stacks on the production host, before any change:
 
 | fact | app.boltrig.io | Classical Visas |
 | --- | --- | --- |

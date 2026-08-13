@@ -10,10 +10,13 @@ The deployed stack must use clean service-owned state roots:
 ```env
 BOLTRIG_HERDR_HOME=/var/lib/boltrig/herdr
 BOLTRIG_OPENCODE_HOME=/var/lib/boltrig/opencode
-BOLTRIG_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli
+BOLTRIG_FLEET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/fleet-worker
+BOLTRIG_HATCHET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/hatchet-worker
 ```
 
-In Docker Compose these paths are backed by named volumes. The images create the
+Fleet and Hatchet run independent Chromium processes, so their roots must remain
+different even when they share one deployment-owned named volume. In Docker
+Compose these paths are backed by named volumes. The images create the
 root, home, config, data, and state directories as the unprivileged `boltrig`
 service user so fresh named volumes start writable by the service. Browser CLI
 also gets a stack-owned cache directory. These roots are safe to persist because
@@ -39,6 +42,11 @@ OpenCode, or the runtime cannot resolve stack-owned `herdr` / `opencode` /
 `browser-use` CLI binaries. Compose supplies safe defaults at runtime, but
 checked production env files and non-Compose deployments should set explicit
 service-owned paths.
+
+The Fleet entrypoint binds Browser Harness to the Chromium it starts on its own
+loopback CDP endpoint. A headless image or server must never ask an operator to
+approve Chrome remote debugging; that prompt means the process has fallen back
+to desktop-browser discovery and the image must be rejected.
 
 The binaries are image artefacts. Upgrade Herdr/OpenCode by changing the version
 and sha256 build args in the Dockerfiles; upgrade Browser Use by changing

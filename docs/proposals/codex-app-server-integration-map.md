@@ -29,7 +29,7 @@ remain binding.
 The Beelink host was inspected read-only. Its Codex cache contained:
 
 ```text
-/home/jellytot/.codex/packages/standalone/releases/
+/var/lib/boltrig/codex/packages/standalone/releases/
   0.135.0-x86_64-unknown-linux-musl
   0.136.0-x86_64-unknown-linux-musl
   0.137.0-x86_64-unknown-linux-musl
@@ -63,7 +63,7 @@ the binary and canonical stable-v2 schema digests.
 
 The probe used the developer's current ChatGPT login only to establish protocol
 behavior. Production must use a private stack-owned `CODEX_HOME` with mode
-`0700`; it must not reuse `/home/jellytot/.codex` or any personal login state.
+`0700`; it must not reuse a developer CLI directory or any personal login state.
 
 The stable schema was generated without `--experimental` using:
 

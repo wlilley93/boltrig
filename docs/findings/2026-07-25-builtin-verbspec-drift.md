@@ -49,8 +49,8 @@ tenant first registered the builtin:
 | store | route taken | result |
 | --- | --- | --- |
 | beelink dev (`boltrig`) | `resync-builtin-verbs.py` through the seam | HIGH |
-| jellytot-prod CV (`cvboltrig`, GHCR 0.3.0) | same, over an SSH tunnel | HIGH |
-| jellytot-prod boltrig.io (`boltrig`, local 0.1.0) | targeted UPDATE (see below) | HIGH |
+| production CV deployment | same, over an SSH tunnel | HIGH |
+| production boltrig.io deployment | targeted UPDATE (see below) | HIGH |
 
 The boltrig.io stack is six days old and its schema PREDATES `verbs.idempotency_mode`,
 so today's code cannot read it (`KeyError: 'idempotency_mode'` out of
