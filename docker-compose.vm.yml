@@ -83,10 +83,13 @@ services:
       XDG_RUNTIME_DIR: /run/boltrig-emotion
       XDG_STATE_HOME: /var/lib/boltrig/xdg-state
     volumes:
-      - /Users/williamlilley/.local/state/boltrig-runtime:/run/boltrig-emotion
+      # VM-only state is rooted in this checkout by default; operators may
+      # point both paths at a managed host directory without baking in a
+      # developer profile.
+      - ${BOLTRIG_EMOTION_RUNTIME_DIR:-./.local-state/boltrig-runtime}:/run/boltrig-emotion
       # ONLY the boltrig state dir, not all of ~/.local/state: the relay
       # resolves $XDG_STATE_HOME/boltrig/emotion-state.json.
-      - /Users/williamlilley/.local/state/boltrig:/var/lib/boltrig/xdg-state/boltrig
+      - ${BOLTRIG_EMOTION_STATE_DIR:-./.local-state/boltrig}:/var/lib/boltrig/xdg-state/boltrig
 
   fleet-worker:
     security_opt:

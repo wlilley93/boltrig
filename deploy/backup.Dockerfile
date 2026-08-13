@@ -1,7 +1,7 @@
 # Boltrig scheduled backup sidecar image (M10, SEC-70).
 #
-# This image bakes in the exact tools the backup script needs (pg_dump, rclone,
-# openssl) so the sidecar does not run apt-get at runtime (IAC-003). It is used
+# This image bakes in the exact tools the backup script needs (pg_dump, tar,
+# rclone, openssl) so the sidecar does not install at runtime (IAC-003). It is used
 # by the profile-gated `backup` service in docker-compose.yml.
 #
 # Pin the base image to a specific PostgreSQL minor + digest. For digest pinning,

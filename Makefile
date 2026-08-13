@@ -6,6 +6,7 @@
 # ). The container targets use docker compose with .env + manifest.yaml.
 
 PY ?= .venv/bin/python
+PNPM ?= corepack pnpm
 # Floor raised 75 -> 82 (2026-07-17): actual is 84.43%, so 75 let coverage
 # silently regress ~9 points. 82 locks in the gain with a small honest headroom.
 COVERAGE_MIN ?= 82
@@ -19,13 +20,16 @@ PG_USER ?= boltrig
 PG_DB ?= boltrig
 BACKUP_DIR ?= ./backups
 BACKUP ?= $(BACKUP_DIR)/boltrig.dump
+RECOVERY_MARKER ?=
+RECOVERY_DATABASES ?= boltrig,hatchet
 RELEASE_ENV ?= .env
 RELEASE_IMAGES_ENV ?= boltrig-images.env
+RELEASE_MANIFEST ?= manifest.yaml
 RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help gate-status relock fleet-drift-all up down logs test lint architecture structure codex-protocol unwired-claims reachability prose-references refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality worker-install worker-quality site-install site-quality compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore commit-trailers tracked-symlinks
+.PHONY: help gate-status relock fleet-drift-all up down logs test lint architecture structure vds-ledgers codex-protocol unwired-claims reachability prose-references refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality worker-install worker-structure worker-quality site-install site-quality compose-validate public-product-validate release-supply-chain-verify release-validate release-up doctor-fixture migration-parity recovery-verify recovery-rehearsal python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore commit-trailers tracked-symlinks
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -120,6 +124,9 @@ codex-pin-health: ## The pinned Codex binary must be present, matching and not g
 structure: ## Enforce Python file/function size limits and expiring debt ratchets
 	$(PY) scripts/check_structure.py
 
+vds-ledgers: ## Refuse stale VDS screen and visual-route ownership ledgers
+	$(PY) scripts/check_vds_ledgers.py
+
 codex-protocol: ## Verify the exact checked-in stable Codex App Server protocol pin
 	$(PY) scripts/check_codex_protocol.py
 
@@ -137,7 +144,8 @@ prose-references: ## Every path, test id, make target, env var and order citatio
 # one machine, which is how the first cut passed locally and reddened CI.
 CANON_REPO ?= $(HOME)/Projects/vibe-justice-system
 OPBOX_REPO ?= $(HOME)/Projects/opbox-prod
-DRIFT_HOST ?= jellytot-prod
+# No production host is bundled; pass DRIFT_HOST explicitly for a live audit.
+DRIFT_HOST ?=
 DRIFT_PROJECT ?= boltrig
 DRIFT_COMPOSE ?= $(HOME)/Projects/boltrig-main/docker-compose.yml
 DRIFT_OVERLAY ?= $(HOME)/Projects/opbox-prod/boltrig-tenants/boltrig-io.override.yml
@@ -214,35 +222,45 @@ check: invariants lint architecture continuity-projection codex-pin-health struc
 quality-gate: ## python-quality, run inside a Linux VM when the host is macOS (what the pre-push hook calls)
 	@scripts/quality-gate.sh
 
-python-quality: invariants lint architecture structure codex-protocol unwired-claims reachability prose-references commit-trailers tracked-symlinks gate-coverage health-claims order-directives claims override-locks typecheck no-vacuous-greens ## Run Python tests on Postgres with coverage override-locks typecheck
+python-quality: invariants lint architecture structure vds-ledgers codex-protocol unwired-claims reachability prose-references commit-trailers tracked-symlinks gate-coverage health-claims order-directives claims override-locks typecheck no-vacuous-greens ## Run Python tests on Postgres with coverage override-locks typecheck
 	scripts/with_test_postgres.sh $(PY) -m pytest -q \
 		--cov=boltrig --cov-report=term:skip-covered --cov-report=xml \
 		--cov-fail-under=$(COVERAGE_MIN)
 
 worker-install: lockfile-policy ## Install Worker from its frozen pnpm lockfile
-	cd apps/worker && corepack enable && pnpm install --frozen-lockfile --ignore-scripts
-	cd apps/worker && pnpm rebuild esbuild
+	cd apps/worker && $(PNPM) install --frozen-lockfile --ignore-scripts
+	cd apps/worker && $(PNPM) rebuild esbuild
 
-worker-quality: worker-install ## Audit, typecheck, test, and build the Worker web payload
-	cd apps/worker && pnpm audit --audit-level=high
-	cd apps/worker && pnpm run typecheck
-	cd apps/worker && pnpm run test
-	cd apps/worker && pnpm run build
+worker-structure: worker-install ## Enforce Worker TS/TSX structure and Git-backed expiring debt ratchets
+	cd apps/worker && $(PNPM) run test:structure
+	cd apps/worker && $(PNPM) run structure
+
+worker-quality: worker-structure ## Audit, structure, typecheck, test, and build the Worker web payload
+	cd apps/worker && $(PNPM) audit --audit-level=high
+	cd apps/worker && $(PNPM) run typecheck
+	cd apps/worker && $(PNPM) run test
+	cd apps/worker && $(PNPM) run build
 
 site-install: lockfile-policy ## Install the site from its frozen pnpm lockfile
-	cd site && corepack enable && pnpm install --frozen-lockfile --ignore-scripts
-	cd site && pnpm rebuild esbuild
+	cd site && $(PNPM) install --frozen-lockfile --ignore-scripts
+	cd site && $(PNPM) rebuild esbuild
 
 site-quality: site-install ## Audit, lint, test with coverage, and build the site
-	cd site && pnpm audit --audit-level=high
-	cd site && pnpm run lint:strict
-	cd site && pnpm run test:coverage
-	cd site && pnpm run build
+	cd site && $(PNPM) audit --audit-level=high
+	cd site && $(PNPM) run lint:strict
+	cd site && $(PNPM) run test:coverage
+	cd site && $(PNPM) run build
 
 compose-validate: ## Validate base and secure Compose configurations
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
 		$(COMPOSE) -f docker-compose.yml config --quiet
+	# Profile-gated services still have to form a valid Compose model. In
+	# particular, the channels profile owns credential-bearing named volumes that
+	# the default profile does not resolve or validate.
+	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
+		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
+		$(COMPOSE) --profile channels -f docker-compose.yml config --quiet
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
 		$(COMPOSE) -f docker-compose.yml -f deploy/compose.secure.yml config --quiet
@@ -261,6 +279,7 @@ compose-validate: ## Validate base and secure Compose configurations
 		$(COMPOSE) -f docker-compose.yml -f deploy/compose.opbox-link.yml config --quiet
 	$(PY) scripts/validate_release_images.py $(RELEASE_VALIDATE_IMAGES_ENV)
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
+		BOLTRIG_RELEASE_MODE=core \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
 		$(COMPOSE) --env-file $(COMPOSE_VALIDATE_ENV) \
 		--profile backup --profile local --profile legacy \
@@ -268,6 +287,7 @@ compose-validate: ## Validate base and secure Compose configurations
 		-f docker-compose.yml -f deploy/compose.release.yml config --format json \
 		| $(PY) scripts/validate_release_compose.py
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
+		BOLTRIG_RELEASE_MODE=core \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
 		$(COMPOSE) --env-file $(COMPOSE_VALIDATE_ENV) \
 		--profile backup --profile local --profile legacy \
@@ -276,13 +296,25 @@ compose-validate: ## Validate base and secure Compose configurations
 		-f deploy/compose.secure.yml config --format json \
 		| $(PY) scripts/validate_release_compose.py --secure
 
-release-validate: ## Validate a downloaded digest-pinned release environment
+public-product-validate: ## Ensure public defaults contain no personal deployment data
+	$(PY) scripts/validate_public_product.py
+
+release-supply-chain-verify: ## Verify release signatures, SBOMs, provenance, workflow and commit
+	$(PY) scripts/verify_release_supply_chain.py $(RELEASE_IMAGES_ENV) $(if $(RELEASE_TAG),--release-tag $(RELEASE_TAG),)
+
+release-validate: ## Validate a downloaded, signed, attested release environment
 	$(PY) scripts/validate_release_images.py $(RELEASE_IMAGES_ENV)
 	BOLTRIG_ENV_FILE=$(RELEASE_ENV) \
 		$(COMPOSE) --env-file $(RELEASE_ENV) --env-file $(RELEASE_IMAGES_ENV) \
 		$(RELEASE_PROFILES) -f docker-compose.yml -f deploy/compose.release.yml \
-		-f deploy/compose.secure.yml config --format json \
-		| $(PY) scripts/validate_release_compose.py --secure
+			-f deploy/compose.secure.yml config --format json \
+			| $(PY) scripts/validate_release_compose.py --secure
+	# Verify every digest before Docker may pull it, then execute tool probes and
+	# production doctor inside an ephemeral image made only from the signed kernel
+	# and fleet images. Host Herdr/OpenCode/Browser installs are never consulted.
+	$(PY) scripts/validate_release_runtime.py $(RELEASE_IMAGES_ENV) \
+		--env-file $(RELEASE_ENV) --manifest $(RELEASE_MANIFEST) \
+		$(if $(RELEASE_TAG),--release-tag $(RELEASE_TAG),)
 
 release-up: release-validate ## Pull and start signed release images (secure + backup)
 	BOLTRIG_ENV_FILE=$(RELEASE_ENV) \
@@ -299,6 +331,18 @@ doctor-fixture: ## Prove the secure production-doctor fixture has no failures
 
 migration-parity: ## Compare Alembic head with schema.sql on disposable PostgreSQL
 	scripts/with_test_postgres.sh $(PY) -m pytest -q tests/integration/test_migration_parity.py
+
+recovery-verify: ## Verify one encrypted recovery set without decrypting or restoring it
+	@test -n "$(RECOVERY_MARKER)" || { \
+		echo "set RECOVERY_MARKER=/path/to/boltrig-<UTC>.recovery.sha256" >&2; exit 2; \
+	}
+	$(PY) scripts/verify_recovery_set.py "$(RECOVERY_MARKER)" \
+		--required-databases "$(RECOVERY_DATABASES)"
+
+recovery-rehearsal: ## Exercise pg_dump/restore only inside a disposable PostgreSQL container
+	$(PY) scripts/require_local_docker.py
+	env -u BOLTRIG_TEST_DATABASE_URL scripts/with_test_postgres.sh \
+		$(PY) -m pytest -q tests/integration/test_backup_restore.py
 
 python-audit: ## Audit every shipped Python dependency graph
 	# Via the wrapper, not pip_audit directly: it enforces the EXPIRY on
@@ -330,7 +374,7 @@ actionlint: ## Lint GitHub Actions with the pinned actionlint image
 
 security-source: python-audit sast iac-scan secret-scan actionlint ## Run SCA, SAST, IaC, secret, and workflow gates
 
-quality: python-quality worker-quality site-quality compose-validate doctor-fixture migration-parity security-source ## Run the complete local release gate
+quality: public-product-validate python-quality worker-quality site-quality compose-validate doctor-fixture migration-parity security-source ## Run the complete local release gate
 
 # The ONE npm-locked package, and why it is not pnpm. The whatsapp bridge depends
 # on `baileys`, a GIT-HOSTED package that both runs build scripts on install and
@@ -381,8 +425,8 @@ lockfile-policy: ## Enforce pnpm as the JavaScript package manager (one recorded
 	@python3 scripts/check-release-age-exclusions.py
 
 dependency-audit: lockfile-policy ## Fail on high/critical frontend dependency advisories
-	cd apps/worker && pnpm audit --audit-level=high
-	cd site && pnpm audit --audit-level=high
+	cd apps/worker && $(PNPM) audit --audit-level=high
+	cd site && $(PNPM) audit --audit-level=high
 
 live-check: ## Run opt-in live integration legs; requires services and credentials
 	BOLTRIG_LIVE_SMOKE=1 $(PY) -m pytest -q -rs \

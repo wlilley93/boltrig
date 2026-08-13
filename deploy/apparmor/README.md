@@ -1,14 +1,16 @@
 # AppArmor: `boltrig-codex`
 
 Install this on any **Ubuntu 24.04 or later** host that runs a stack with
-`BOLTRIG_CODEX_TRUSTED=1`. Without it the kernel and fleet-worker refuse to boot.
+`BOLTRIG_CODEX_TRUSTED=1`. Without it the kernel, fleet worker, and durable
+Hatchet worker refuse to boot.
 
 ```sh
 sudo cp deploy/apparmor/boltrig-codex /etc/apparmor.d/boltrig-codex
 sudo apparmor_parser -r -W /etc/apparmor.d/boltrig-codex
 ```
 
-Then give the two services both of these, in the tenant overlay:
+Then give all three trusted-runtime services (`kernel`, `fleet-worker`, and
+`hatchet-worker`) both of these, in the tenant overlay:
 
 ```yaml
     security_opt:
@@ -22,7 +24,7 @@ The kernel proves at boot that it can enforce the codex cell wall, and that proo
 shells out to bubblewrap. On 24.04 that hits **two** separate blocks, one after
 the other, so fixing the first makes the second look like a new bug.
 
-Measured on `jellytot-prod` (Ubuntu 24.04.4, kernel 6.8.0-136) against the real
+Measured on a production host (Ubuntu 24.04.4, kernel 6.8.0-136) against the real
 `prove_sandbox_engagement`, each grant moving the failure exactly one step:
 
 | security opts | result |

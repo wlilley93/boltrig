@@ -22,14 +22,25 @@ jobs:
     env:
       RELEASE_TAG: ${{ github.ref_name }}
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      RELEASE_MODE: ${{ vars.BOLTRIG_RELEASE_MODE }}
     outputs:
       release-commit: ${{ steps.verify.outputs.release-commit }}
+      release-mode: ${{ steps.release-mode.outputs.release-mode }}
+      release-id: ${{ steps.draft.outputs.release-id }}
     steps:
       - name: Checkout release commit with full ancestry
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Require one explicit protected release mode
+        id: release-mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_mode="$(python3 scripts/validate_release_mode.py "$RELEASE_MODE")"
+          echo "release-mode=$release_mode" >> "$GITHUB_OUTPUT"
 
       # Every candidate build takes ~10 minutes. Discovering AFTER them that the
       # registry will not accept the push wastes all of it and reports
@@ -177,25 +188,125 @@ jobs:
           require_successful_workflow ci.yml 'ci / quality'
           require_successful_workflow security.yml 'security / Security gate'
 
-      - name: Refuse to replace an existing release
+      - name: Create or reuse only the exact draft release
+        id: draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_COMMIT: ${{ steps.verify.outputs.release-commit }}
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "release $RELEASE_TAG already exists; release evidence is immutable" >&2
+          # GET /releases/tags/{tag} intentionally omits draft releases. Search
+          # the authenticated paginated release collection instead, otherwise a
+          # retry sees a false 404 and can never reuse the draft it just created.
+          releases="$(gh api --paginate --slurp \
+            "/repos/$GITHUB_REPOSITORY/releases?per_page=100")"
+          match_count="$(jq --arg tag "$RELEASE_TAG" \
+            '[.[][] | select(.tag_name == $tag)] | length' <<<"$releases")"
+          if [ "$match_count" -eq 0 ]; then
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --draft --verify-tag --generate-notes \
+              --target "$RELEASE_COMMIT" \
+              --title "$RELEASE_TAG"
+            releases="$(gh api --paginate --slurp \
+              "/repos/$GITHUB_REPOSITORY/releases?per_page=100")"
+            match_count="$(jq --arg tag "$RELEASE_TAG" \
+              '[.[][] | select(.tag_name == $tag)] | length' <<<"$releases")"
+          fi
+          if [ "$match_count" -ne 1 ]; then
+            echo "expected exactly one GitHub release for $RELEASE_TAG" >&2
+            exit 1
+          fi
+          release="$(jq -c --arg tag "$RELEASE_TAG" \
+            '.[][] | select(.tag_name == $tag)' <<<"$releases")"
+          is_draft="$(jq -r '.draft' <<<"$release")"
+          target_commitish="$(jq -r '.target_commitish // empty' <<<"$release")"
+          release_id="$(jq -r '.id // empty' <<<"$release")"
+          if [ "$is_draft" != true ]; then
+            echo "release $RELEASE_TAG is already published; release evidence is immutable" >&2
+            exit 1
+          fi
+          # For an existing Git tag GitHub records the repository default branch
+          # as target_commitish even when --target is the exact commit. The tag's
+          # commit was verified above; release-metadata.json binds it immutably.
+          case "$target_commitish" in
+            "$DEFAULT_BRANCH"|"$RELEASE_COMMIT") ;;
+            *) echo "draft release has an unexpected target_commitish" >&2; exit 1 ;;
+          esac
+          test -n "$release_id"
+          echo "release-id=$release_id" >> "$GITHUB_OUTPUT"
+          echo "using draft $RELEASE_TAG for verified commit $RELEASE_COMMIT"
+
+      - name: Bind draft metadata to the release mode and closed admissions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_COMMIT: ${{ steps.verify.outputs.release-commit }}
+          RELEASE_ID: ${{ steps.draft.outputs.release-id }}
+          RELEASE_MODE: ${{ steps.release-mode.outputs.release-mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          metadata="$RUNNER_TEMP/release-metadata.json"
+          existing="$RUNNER_TEMP/existing-release-metadata.json"
+          desktop="required"
+          hosted_agent="required"
+          local_desktop_agent="required"
+          if [ "$RELEASE_MODE" = core ]; then
+            desktop="omitted"
+            hosted_agent="disabled"
+            local_desktop_agent="omitted"
+          fi
+          jq -n \
+            --arg schema "boltrig.release/v2" \
+            --arg tag "$RELEASE_TAG" \
+            --arg commit "$RELEASE_COMMIT" \
+            --arg mode "$RELEASE_MODE" \
+            --arg desktop "$desktop" \
+            --arg hosted_agent "$hosted_agent" \
+            --arg local_desktop_agent "$local_desktop_agent" \
+            '{
+              schema: $schema,
+              tag: $tag,
+              commit: $commit,
+              mode: $mode,
+              desktop: $desktop,
+              admissions: {
+                hosted_agent: $hosted_agent,
+                local_desktop_agent: $local_desktop_agent,
+                channels: "disabled"
+              }
+            }' > "$metadata"
+
+          release="$(gh api "/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")"
+          asset_id="$(jq -r \
+            '[.assets[]? | select(.name == "release-metadata.json") | .id] | .[0] // empty' \
+            <<<"$release")"
+          if [ -n "$asset_id" ]; then
+            gh api -H 'Accept: application/octet-stream' \
+              "/repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "$existing"
+            if ! cmp -s "$metadata" "$existing"; then
+              echo "draft release metadata differs; refusing to change release mode or commit" >&2
+              exit 1
+            fi
+            echo "release metadata already binds $RELEASE_TAG to $RELEASE_MODE"
+            exit 0
+          fi
+          if [ "$(jq '.assets | length' <<<"$release")" -ne 0 ]; then
+            echo "unbound draft already contains assets; refusing adoption" >&2
             exit 1
           fi
 
-      - name: Create draft release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >-
-          gh release create "$RELEASE_TAG"
-          --repo "$GITHUB_REPOSITORY"
-          --draft --verify-tag --generate-notes
-          --title "$RELEASE_TAG"
+          gh release upload "$RELEASE_TAG" "$metadata" \
+            --repo "$GITHUB_REPOSITORY"
+          release="$(gh api "/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")"
+          asset_id="$(jq -r \
+            '[.assets[]? | select(.name == "release-metadata.json") | .id] | .[0] // empty' \
+            <<<"$release")"
+          test -n "$asset_id"
+          gh api -H 'Accept: application/octet-stream' \
+            "/repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "$existing"
+          cmp -s "$metadata" "$existing"
 
   candidates:
     name: Verify candidate ${{ matrix.image }}
@@ -204,6 +315,7 @@ jobs:
     timeout-minutes: 75
     environment: release
     permissions:
+      attestations: write
       contents: write
       id-token: write
       packages: write
@@ -229,8 +341,11 @@ jobs:
       CANDIDATE_TAG: candidate-${{ github.run_id }}-${{ github.run_attempt }}
       RELEASE_TAG: ${{ github.ref_name }}
       RELEASE_COMMIT: ${{ needs.preflight.outputs.release-commit }}
+      RELEASE_ID: ${{ needs.preflight.outputs.release-id }}
+      BUILD_METADATA_FILE: build-metadata-${{ matrix.image }}.json
       SBOM_FILE: sbom-${{ matrix.image }}.cdx.json
       IMAGE_REF_FILE: image-ref-${{ matrix.image }}.txt
+      PROVENANCE_FILE: provenance-${{ matrix.image }}.intoto.json
     steps:
       - name: Checkout the tagged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -251,6 +366,7 @@ jobs:
           set -euo pipefail
           docker build --pull \
             --file "$DOCKERFILE" \
+            --metadata-file "$BUILD_METADATA_FILE" \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$RELEASE_COMMIT" \
             --label "org.opencontainers.image.version=$RELEASE_TAG" \
@@ -299,26 +415,85 @@ jobs:
         run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --password-stdin
 
       - name: Push only a run-scoped candidate and record its digest
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ secrets.GHCR_PUSH_USER || github.actor }}
         shell: bash
         run: |
           set -euo pipefail
           image_name="$(printf 'ghcr.io/%s-%s' "$GITHUB_REPOSITORY" "$IMAGE" | tr '[:upper:]' '[:lower:]')"
           candidate_ref="$image_name:$CANDIDATE_TAG"
-          docker tag "$LOCAL_IMAGE" "$candidate_ref"
-          docker push "$candidate_ref"
+          expected_digest="$(jq -r '."containerimage.digest" // empty' "$BUILD_METADATA_FILE")"
+          if [[ ! "$expected_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "BuildKit did not report the candidate's immutable digest" >&2
+            exit 1
+          fi
+          repository="${image_name#ghcr.io/}"
+          token="$(curl -fsSL -u "$GHCR_USER:$GHCR_TOKEN" \
+            "https://ghcr.io/token?service=ghcr.io&scope=repository:$repository:pull,push" \
+            | jq -r '.token')"
+          test -n "$token" && test "$token" != null
+          accept='application/vnd.oci.image.index.v1+json'
+          accept="$accept,application/vnd.oci.image.manifest.v1+json"
+          accept="$accept,application/vnd.docker.distribution.manifest.list.v2+json"
+          accept="$accept,application/vnd.docker.distribution.manifest.v2+json"
+          headers="$RUNNER_TEMP/candidate-$IMAGE.headers"
+          code="$(curl -sS --retry 3 --retry-all-errors --retry-delay 2 \
+            -D "$headers" -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $token" -H "Accept: $accept" \
+            "https://ghcr.io/v2/$repository/manifests/$CANDIDATE_TAG")"
+          case "$code" in
+            200)
+              existing_digest="$(tr -d '\r' < "$headers" \
+                | awk 'tolower($1) == "docker-content-digest:" { print $2 }' \
+                | tail -1)"
+              if [ "$existing_digest" != "$expected_digest" ]; then
+                echo "$candidate_ref already resolves to $existing_digest, expected $expected_digest" >&2
+                exit 1
+              fi
+              echo "reusing exact candidate $candidate_ref@$expected_digest"
+              ;;
+            404)
+              docker tag "$LOCAL_IMAGE" "$candidate_ref"
+              docker push "$candidate_ref"
+              ;;
+            *)
+              echo "cannot establish immutable state for $candidate_ref (HTTP $code)" >&2
+              exit 1
+              ;;
+          esac
           digest="$(docker buildx imagetools inspect "$candidate_ref" --format '{{json .Manifest.Digest}}' | tr -d '"')"
-          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "registry did not return an immutable sha256 digest" >&2
+          if [ "$digest" != "$expected_digest" ]; then
+            echo "registry candidate digest $digest differs from built digest $expected_digest" >&2
             exit 1
           fi
           image_ref="$image_name@$digest"
-          echo "IMAGE_REF=$image_ref" >> "$GITHUB_ENV"
+          {
+            echo "IMAGE_NAME=$image_name"
+            echo "IMAGE_DIGEST=$digest"
+            echo "IMAGE_REF=$image_ref"
+          } >> "$GITHUB_ENV"
           printf '%s\n' "$image_ref" > "$IMAGE_REF_FILE"
 
       - name: Sign candidate digest and attest its SBOM with GitHub OIDC
         run: |
           cosign sign --yes "$IMAGE_REF"
           cosign attest --yes --type cyclonedx --predicate "$SBOM_FILE" "$IMAGE_REF"
+
+      - name: Attest SLSA build provenance for the candidate digest
+        id: provenance
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ env.IMAGE_DIGEST }}
+          push-to-registry: true
+          # The repository is user-owned, so GitHub's organisation-only artifact
+          # storage record is unavailable. The signed provenance is still stored
+          # by GitHub and attached to the OCI digest.
+          create-storage-record: false
+
+      - name: Save the signed provenance bundle as release evidence
+        run: cp '${{ steps.provenance.outputs.bundle-path }}' "$PROVENANCE_FILE"
 
       - name: Verify candidate signature and SBOM attestation
         env:
@@ -328,12 +503,25 @@ jobs:
           cosign verify \
             --certificate-identity "$CERTIFICATE_IDENTITY" \
             --certificate-oidc-issuer "$CERTIFICATE_ISSUER" \
+            --certificate-github-workflow-repository "$GITHUB_REPOSITORY" \
+            --certificate-github-workflow-ref "refs/tags/$RELEASE_TAG" \
+            --certificate-github-workflow-sha "$RELEASE_COMMIT" \
             "$IMAGE_REF" >/dev/null
           cosign verify-attestation \
             --type cyclonedx \
             --certificate-identity "$CERTIFICATE_IDENTITY" \
             --certificate-oidc-issuer "$CERTIFICATE_ISSUER" \
+            --certificate-github-workflow-repository "$GITHUB_REPOSITORY" \
+            --certificate-github-workflow-ref "refs/tags/$RELEASE_TAG" \
+            --certificate-github-workflow-sha "$RELEASE_COMMIT" \
             "$IMAGE_REF" >/dev/null
+          gh attestation verify "oci://$IMAGE_REF" \
+            --repo "$GITHUB_REPOSITORY" \
+            --bundle "$PROVENANCE_FILE" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-digest "$RELEASE_COMMIT" \
+            --source-ref "refs/tags/$RELEASE_TAG" \
+            --predicate-type 'https://slsa.dev/provenance/v1' >/dev/null
 
       - name: Retain candidate evidence in Actions
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -342,20 +530,401 @@ jobs:
           path: |
             ${{ env.SBOM_FILE }}
             ${{ env.IMAGE_REF_FILE }}
+            ${{ env.PROVENANCE_FILE }}
           if-no-files-found: error
           retention-days: 90
 
       - name: Attach immutable evidence to the draft release
         env:
+          CERTIFICATE_IDENTITY: https://github.com/${{ github.workflow_ref }}
+          CERTIFICATE_ISSUER: https://token.actions.githubusercontent.com
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >-
-          gh release upload "$RELEASE_TAG"
-          "$SBOM_FILE" "$IMAGE_REF_FILE"
-          --repo "$GITHUB_REPOSITORY"
+        run: |
+          set -euo pipefail
+          scripts/release_asset.sh exact "$IMAGE_REF_FILE"
+          scripts/release_asset.sh cyclonedx "$SBOM_FILE" "$IMAGE_REF"
+          scripts/release_asset.sh provenance "$PROVENANCE_FILE" "$IMAGE_REF"
+
+  desktop-candidates:
+    name: Sign desktop candidate (${{ matrix.platform }})
+    needs: [preflight]
+    if: ${{ needs.preflight.outputs.release-mode == 'full' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    environment: release
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            # Keep release packages on the same oldest supported WebKitGTK 4.1
+            # baseline as the unsigned CI proof.
+            runner: ubuntu-22.04
+          - platform: darwin-aarch64
+            runner: macos-15
+          - platform: windows-x86_64
+            runner: windows-2025
+    env:
+      PLATFORM: ${{ matrix.platform }}
+      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_COMMIT: ${{ needs.preflight.outputs.release-commit }}
+      RELEASE_ID: ${{ needs.preflight.outputs.release-id }}
+      BOLTRIG_DESKTOP_API_ORIGIN: ${{ vars.BOLTRIG_DESKTOP_API_ORIGIN }}
+      BOLTRIG_UPDATER_ENDPOINT: ${{ vars.BOLTRIG_UPDATER_ENDPOINT || secrets.BOLTRIG_UPDATER_ENDPOINT }}
+      BOLTRIG_UPDATER_PUBLIC_KEY: ${{ vars.BOLTRIG_UPDATER_PUBLIC_KEY || secrets.BOLTRIG_UPDATER_PUBLIC_KEY }}
+    steps:
+      - name: Checkout the tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux desktop build dependencies
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+
+      - name: Install the pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal
+          rustup default 1.97.1
+          test "$(rustc --version | awk '{print $2}')" = 1.97.1
+
+      - name: Install the frozen Worker dependency graph
+        working-directory: apps/worker
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.5.0 --activate
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm rebuild esbuild
+
+      - name: Require protected API, updater and platform signing material
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          APPLE_CERTIFICATE: ${{ matrix.platform == 'darwin-aarch64' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ matrix.platform == 'darwin-aarch64' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ matrix.platform == 'darwin-aarch64' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ matrix.platform == 'darwin-aarch64' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ matrix.platform == 'darwin-aarch64' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'darwin-aarch64' && secrets.APPLE_TEAM_ID || '' }}
+          KEYCHAIN_PASSWORD: ${{ matrix.platform == 'darwin-aarch64' && secrets.KEYCHAIN_PASSWORD || '' }}
+          WINDOWS_CERTIFICATE: ${{ matrix.platform == 'windows-x86_64' && secrets.WINDOWS_CERTIFICATE || '' }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ matrix.platform == 'windows-x86_64' && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
+        run: |
+          set -euo pipefail
+          for name in \
+            BOLTRIG_DESKTOP_API_ORIGIN \
+            BOLTRIG_UPDATER_ENDPOINT \
+            BOLTRIG_UPDATER_PUBLIC_KEY \
+            TAURI_SIGNING_PRIVATE_KEY
+          do
+            if [ -z "${!name:-}" ]; then
+              echo "protected release value $name is not configured" >&2
+              exit 1
+            fi
+          done
+          case "$BOLTRIG_UPDATER_ENDPOINT" in
+            https://*) ;;
+            *) echo "BOLTRIG_UPDATER_ENDPOINT must be HTTPS" >&2; exit 1 ;;
+          esac
+          node <<'NODE'
+          const raw = process.env.BOLTRIG_DESKTOP_API_ORIGIN ?? "";
+          let origin;
+          try {
+            origin = new URL(raw);
+          } catch {
+            console.error("BOLTRIG_DESKTOP_API_ORIGIN must be an absolute HTTPS origin");
+            process.exit(1);
+          }
+          const hostname = origin.hostname.toLowerCase();
+          const canonical = origin.origin;
+          const allowedHost = hostname === "boltrig.io" || hostname.endsWith(".boltrig.io");
+          if (
+            origin.protocol !== "https:" ||
+            !allowedHost ||
+            origin.port !== "" ||
+            raw !== canonical
+          ) {
+            console.error(
+              "BOLTRIG_DESKTOP_API_ORIGIN must be a canonical HTTPS Boltrig origin " +
+              "allowed by the desktop CSP (no path, query, fragment, credentials or port)"
+            );
+            process.exit(1);
+          }
+          NODE
+          case "$RUNNER_OS" in
+            macOS)
+              for name in \
+                APPLE_CERTIFICATE \
+                APPLE_CERTIFICATE_PASSWORD \
+                APPLE_SIGNING_IDENTITY \
+                APPLE_ID \
+                APPLE_PASSWORD \
+                APPLE_TEAM_ID \
+                KEYCHAIN_PASSWORD
+              do
+                if [ -z "${!name:-}" ]; then
+                  echo "protected release secret $name is not configured" >&2
+                  exit 1
+                fi
+              done
+              ;;
+            Windows)
+              for name in WINDOWS_CERTIFICATE WINDOWS_CERTIFICATE_PASSWORD; do
+                if [ -z "${!name:-}" ]; then
+                  echo "protected release secret $name is not configured" >&2
+                  exit 1
+                fi
+              done
+              ;;
+          esac
+
+      - name: Import the Apple Developer ID certificate
+        if: ${{ runner.os == 'macOS' }}
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          certificate="$RUNNER_TEMP/boltrig-release-certificate.p12"
+          keychain="$RUNNER_TEMP/boltrig-release.keychain-db"
+          printf '%s' "$APPLE_CERTIFICATE" | openssl base64 -d -A -out "$certificate"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security default-keychain -s "$keychain"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -t 3600 -u "$keychain"
+          security import "$certificate" \
+            -k "$keychain" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$keychain"
+          security find-identity -v -p codesigning "$keychain" \
+            | grep -Fq -- "$APPLE_SIGNING_IDENTITY"
+          rm -f "$certificate"
+
+      - name: Import the Windows code-signing certificate
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $certificatePath = Join-Path $env:RUNNER_TEMP "boltrig-release-certificate.pfx"
+          $certificateBytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+          [IO.File]::WriteAllBytes($certificatePath, $certificateBytes)
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $certificate = Import-PfxCertificate `
+            -FilePath $certificatePath `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -Password $password
+          if (-not $certificate.Thumbprint) {
+            throw "the imported Windows certificate has no thumbprint"
+          }
+          "WINDOWS_CERTIFICATE_THUMBPRINT=$($certificate.Thumbprint)" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Remove-Item -Force $certificatePath
+
+      - name: Bind the package version and Windows signer to this tag
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const version = process.env.RELEASE_TAG.replace(/^v/, "");
+          const config = {
+            version,
+            bundle: {
+              resources: {
+                [path.resolve("apps/worker/src-tauri/resources/codex")]: "codex"
+              }
+            },
+            plugins: {
+              updater: {
+                pubkey: process.env.BOLTRIG_UPDATER_PUBLIC_KEY,
+                endpoints: [process.env.BOLTRIG_UPDATER_ENDPOINT]
+              }
+            }
+          };
+          if (process.env.RUNNER_OS === "Windows") {
+            config.bundle.windows = {
+              certificateThumbprint: process.env.WINDOWS_CERTIFICATE_THUMBPRINT,
+              digestAlgorithm: "sha256",
+              timestampUrl: "http://timestamp.digicert.com"
+            };
+          }
+          const output = path.join(process.env.RUNNER_TEMP, "tauri.release.conf.json");
+          fs.writeFileSync(output, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+          fs.appendFileSync(process.env.GITHUB_ENV, `TAURI_RELEASE_CONFIG=${output}\n`);
+          NODE
+
+      - name: Stage the exact official local Codex runtime
+        run: |
+          set -euo pipefail
+          python scripts/stage_desktop_codex.py \
+            --platform "$PLATFORM" \
+            --output apps/worker/src-tauri/resources/codex \
+            > "$RUNNER_TEMP/desktop-codex-receipt.json"
+          python - "$RUNNER_TEMP/desktop-codex-receipt.json" "$PLATFORM" <<'PY'
+          import json
+          from pathlib import Path
+          import re
+          import sys
+          receipt = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          assert receipt["schema"] == "boltrig.desktop-codex/v1"
+          assert receipt["platform"] == sys.argv[2]
+          assert receipt["version"] == "0.144.3"
+          assert re.fullmatch(r"[0-9a-f]{64}", receipt["archive_sha256"])
+          assert re.fullmatch(r"[0-9a-f]{64}", receipt["binary_sha256"])
+          PY
+
+      - name: Test the native desktop boundary
+        run: cargo test --locked --manifest-path apps/worker/src-tauri/Cargo.toml
+
+      - name: Build signed installers and updater artifacts
+        working-directory: apps/worker
+        env:
+          VITE_API_BASE: ${{ env.BOLTRIG_DESKTOP_API_ORIGIN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ matrix.platform == 'darwin-aarch64' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ matrix.platform == 'darwin-aarch64' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ matrix.platform == 'darwin-aarch64' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'darwin-aarch64' && secrets.APPLE_TEAM_ID || '' }}
+        run: pnpm run tauri build --ci --config "$TAURI_RELEASE_CONFIG"
+
+      - name: Verify the packaged frontend contains the protected API origin
+        working-directory: apps/worker
+        env:
+          VITE_API_BASE: ${{ env.BOLTRIG_DESKTOP_API_ORIGIN }}
+        run: |
+          set -euo pipefail
+          test -n "$VITE_API_BASE"
+          test -n "$(find dist -type f -name '*.js' -print -quit)"
+          if ! grep -RFl --include='*.js' -- "$VITE_API_BASE" dist >/dev/null; then
+            echo "the packaged frontend does not contain the protected API origin" >&2
+            exit 1
+          fi
+
+      - name: Require a signed updater artifact
+        run: |
+          set -euo pipefail
+          bundle=apps/worker/src-tauri/target/release/bundle
+          test -d "$bundle"
+          test -n "$(find "$bundle" -type f -name '*.sig' -print -quit)"
+
+      - name: Verify Apple code signing and notarization
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          set -euo pipefail
+          app="$(find apps/worker/src-tauri/target/release/bundle \
+            -type d -name '*.app' -print -quit)"
+          test -n "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          xcrun stapler validate "$app"
+
+      - name: Verify Windows Authenticode signatures
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $bundle = "apps/worker/src-tauri/target/release/bundle"
+          $installers = Get-ChildItem $bundle -Recurse -File |
+            Where-Object { $_.Extension -in ".exe", ".msi" }
+          if ($installers.Count -eq 0) {
+            throw "no Windows installer was bundled"
+          }
+          foreach ($installer in $installers) {
+            $signature = Get-AuthenticodeSignature $installer.FullName
+            if ($signature.Status -ne "Valid") {
+              throw "$($installer.Name) has Authenticode status $($signature.Status)"
+            }
+          }
+
+      - name: Attach signed desktop packages to the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          bundle=apps/worker/src-tauri/target/release/bundle
+          asset_count="$(find "$bundle" -type f \( \
+            -name '*.AppImage' -o \
+            -name '*.deb' -o \
+            -name '*.dmg' -o \
+            -name '*.msi' -o \
+            -name '*.rpm' -o \
+            -name '*.sig' -o \
+            -name '*.tar.gz' -o \
+            -name '*-setup.exe' \
+            \) | wc -l | tr -d ' ')"
+          test "$asset_count" -gt 1
+          find "$bundle" -type f \( \
+            -name '*.AppImage' -o \
+            -name '*.deb' -o \
+            -name '*.dmg' -o \
+            -name '*.msi' -o \
+            -name '*.rpm' -o \
+            -name '*.sig' -o \
+            -name '*.tar.gz' -o \
+            -name '*-setup.exe' \
+            \) -print0 |
+            while IFS= read -r -d '' asset; do
+              scripts/release_asset.sh exact "$asset"
+            done
+          evidence="desktop-evidence-$PLATFORM.txt"
+          {
+            printf 'platform=%s\n' "$PLATFORM"
+            printf 'release_commit=%s\n' "$RELEASE_COMMIT"
+            python - "$RUNNER_TEMP/desktop-codex-receipt.json" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          receipt = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          for key in ("version", "target", "archive_sha256", "binary_sha256"):
+              print(f"codex_{key}={receipt[key]}")
+          PY
+            find "$bundle" -type f -name '*.sig' -exec basename {} \; \
+              | sort \
+              | sed 's/^/updater_signature=/'
+          } > "$evidence"
+          scripts/release_asset.sh exact "$evidence"
 
   publish:
     name: Promote verified release
-    needs: [preflight, candidates]
+    needs: [preflight, candidates, desktop-candidates]
+    if: >-
+      ${{ always()
+          && needs.preflight.result == 'success'
+          && needs.candidates.result == 'success'
+          && (needs.preflight.outputs.release-mode == 'core'
+              || needs.desktop-candidates.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: release
@@ -364,10 +933,18 @@ jobs:
       packages: write
     env:
       RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_COMMIT: ${{ needs.preflight.outputs.release-commit }}
+      RELEASE_ID: ${{ needs.preflight.outputs.release-id }}
+      RELEASE_MODE: ${{ needs.preflight.outputs.release-mode }}
       COMMIT_TAG: sha-${{ needs.preflight.outputs.release-commit }}
       CERTIFICATE_IDENTITY: https://github.com/${{ github.workflow_ref }}
       CERTIFICATE_ISSUER: https://token.actions.githubusercontent.com
     steps:
+      - name: Checkout the tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Install pinned Cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
@@ -391,14 +968,93 @@ jobs:
         run: |
           set -euo pipefail
           mkdir release-evidence
-          gh release download "$RELEASE_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern 'image-ref-*.txt' \
-            --pattern 'sbom-*.cdx.json' \
+          download_args=(
+            --repo "$GITHUB_REPOSITORY"
+            --pattern 'release-metadata.json'
+            --pattern 'image-ref-*.txt'
+            --pattern 'sbom-*.cdx.json'
+            --pattern 'provenance-*.intoto.json'
             --dir release-evidence
+          )
+          if [ "$RELEASE_MODE" = full ]; then
+            download_args+=(--pattern 'desktop-evidence-*.txt')
+          fi
+          gh release download "$RELEASE_TAG" "${download_args[@]}"
+
+          jq -e \
+            --arg tag "$RELEASE_TAG" \
+            --arg commit "$RELEASE_COMMIT" \
+            --arg mode "$RELEASE_MODE" \
+            '.schema == "boltrig.release/v2"
+             and .tag == $tag
+             and .commit == $commit
+             and .mode == $mode
+             and .admissions.hosted_agent
+               == (if $mode == "full" then "required" else "disabled" end)
+             and .admissions.local_desktop_agent
+               == (if $mode == "full" then "required" else "omitted" end)
+             and .admissions.channels == "disabled"
+             and .desktop == (if $mode == "full" then "required" else "omitted" end)' \
+            release-evidence/release-metadata.json >/dev/null
+
+          server_assets='[
+            "release-metadata.json",
+            "image-ref-kernel.txt",
+            "image-ref-fleet.txt",
+            "image-ref-worker-ui.txt",
+            "image-ref-backup.txt",
+            "sbom-kernel.cdx.json",
+            "sbom-fleet.cdx.json",
+            "sbom-worker-ui.cdx.json",
+            "sbom-backup.cdx.json",
+            "provenance-kernel.intoto.json",
+            "provenance-fleet.intoto.json",
+            "provenance-worker-ui.intoto.json",
+            "provenance-backup.intoto.json"
+          ]'
+          release="$(gh api "/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")"
+          desktop_count="$(find release-evidence -name 'desktop-evidence-*.txt' -type f | wc -l | tr -d ' ')"
+          if [ "$RELEASE_MODE" = full ]; then
+            test "$desktop_count" -eq 3
+            unexpected_asset_count="$(jq --argjson allowed "$server_assets" '[
+              .assets[]?.name as $name | select(
+                (($allowed | index($name)) == null) and
+                ((
+                  ($name | startswith("desktop-evidence-")) or
+                  ($name | endswith(".AppImage")) or
+                  ($name | endswith(".deb")) or
+                  ($name | endswith(".dmg")) or
+                  ($name | endswith(".msi")) or
+                  ($name | endswith(".rpm")) or
+                  ($name | endswith(".sig")) or
+                  ($name | endswith(".tar.gz")) or
+                  ($name | endswith("-setup.exe"))
+                ) | not)
+              )
+            ] | length' <<<"$release")"
+          else
+            test "$desktop_count" -eq 0
+            unexpected_asset_count="$(jq --argjson allowed "$server_assets" '[
+              .assets[]?.name as $name |
+              select(($allowed | index($name)) == null)
+            ] | length' <<<"$release")"
+          fi
+          if [ "$unexpected_asset_count" -ne 0 ]; then
+            echo "$RELEASE_MODE release draft contains an unexpected asset" >&2
+            exit 1
+          fi
           test "$(find release-evidence -name 'image-ref-*.txt' -type f | wc -l)" -eq 4
           test "$(find release-evidence -name 'sbom-*.cdx.json' -type f | wc -l)" -eq 4
-          image_env=release-evidence/boltrig-images.env
+          test "$(find release-evidence -name 'provenance-*.intoto.json' -type f | wc -l)" -eq 4
+          if [ "$RELEASE_MODE" = full ]; then
+            for platform in linux-x86_64 darwin-aarch64 windows-x86_64; do
+              evidence="release-evidence/desktop-evidence-$platform.txt"
+              grep -Fx "platform=$platform" "$evidence" >/dev/null
+              grep -Fx "release_commit=$RELEASE_COMMIT" "$evidence" >/dev/null
+              grep -q '^updater_signature=' "$evidence"
+            done
+          fi
+          image_env="release-evidence/boltrig-images.env"
           : > "$image_env"
           for image in kernel fleet worker-ui backup; do
             image_name="$(printf 'ghcr.io/%s-%s' "$GITHUB_REPOSITORY" "$image" | tr '[:upper:]' '[:lower:]')"
@@ -407,6 +1063,7 @@ jobs:
             test "${image_ref%@*}" = "$image_name"
             [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
             jq -e . "release-evidence/sbom-$image.cdx.json" >/dev/null
+            jq -e . "release-evidence/provenance-$image.intoto.json" >/dev/null
             case "$image" in
               kernel) variable=BOLTRIG_KERNEL_IMAGE ;;
               fleet) variable=BOLTRIG_FLEET_IMAGE ;;
@@ -417,17 +1074,49 @@ jobs:
           done
           test "$(wc -l < "$image_env")" -eq 4
 
-      - name: Refuse to move an existing public image tag
+      - name: Require existing public image tags to match expected digests
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ secrets.GHCR_PUSH_USER || github.actor }}
         shell: bash
         run: |
           set -euo pipefail
+          accept='application/vnd.oci.image.index.v1+json'
+          accept="$accept,application/vnd.oci.image.manifest.v1+json"
+          accept="$accept,application/vnd.docker.distribution.manifest.list.v2+json"
+          accept="$accept,application/vnd.docker.distribution.manifest.v2+json"
           for image in kernel fleet worker-ui backup; do
-            image_name="$(printf 'ghcr.io/%s-%s' "$GITHUB_REPOSITORY" "$image" | tr '[:upper:]' '[:lower:]')"
+            image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
+            image_name="${image_ref%@*}"
+            digest="${image_ref##*@}"
+            repository="${image_name#ghcr.io/}"
+            token="$(curl -fsSL -u "$GHCR_USER:$GHCR_TOKEN" \
+              "https://ghcr.io/token?service=ghcr.io&scope=repository:$repository:pull,push" \
+              | jq -r '.token')"
+            test -n "$token" && test "$token" != null
             for tag in "$RELEASE_TAG" "$COMMIT_TAG"; do
-              if docker buildx imagetools inspect "$image_name:$tag" >/dev/null 2>&1; then
-                echo "$image_name:$tag already exists; release tags are immutable" >&2
-                exit 1
-              fi
+              headers="$RUNNER_TEMP/preflight-$image-${tag//\//_}.headers"
+              code="$(curl -sS --retry 3 --retry-all-errors --retry-delay 2 \
+                -D "$headers" -o /dev/null -w '%{http_code}' \
+                -H "Authorization: Bearer $token" -H "Accept: $accept" \
+                "https://ghcr.io/v2/$repository/manifests/$tag")"
+              case "$code" in
+                200)
+                  existing_digest="$(tr -d '\r' < "$headers" \
+                    | awk 'tolower($1) == "docker-content-digest:" { print $2 }' \
+                    | tail -1)"
+                  if [ "$existing_digest" != "$digest" ]; then
+                    echo "$image_name:$tag already resolves to $existing_digest, expected $digest" >&2
+                    exit 1
+                  fi
+                  echo "reusing exact immutable public tag $image_name:$tag"
+                  ;;
+                404) ;;
+                *)
+                  echo "cannot establish immutable state for $image_name:$tag (HTTP $code)" >&2
+                  exit 1
+                  ;;
+              esac
             done
           done
 
@@ -440,12 +1129,25 @@ jobs:
             cosign verify \
               --certificate-identity "$CERTIFICATE_IDENTITY" \
               --certificate-oidc-issuer "$CERTIFICATE_ISSUER" \
+              --certificate-github-workflow-repository "$GITHUB_REPOSITORY" \
+              --certificate-github-workflow-ref "refs/tags/$RELEASE_TAG" \
+              --certificate-github-workflow-sha "$RELEASE_COMMIT" \
               "$image_ref" >/dev/null
             cosign verify-attestation \
               --type cyclonedx \
               --certificate-identity "$CERTIFICATE_IDENTITY" \
               --certificate-oidc-issuer "$CERTIFICATE_ISSUER" \
+              --certificate-github-workflow-repository "$GITHUB_REPOSITORY" \
+              --certificate-github-workflow-ref "refs/tags/$RELEASE_TAG" \
+              --certificate-github-workflow-sha "$RELEASE_COMMIT" \
               "$image_ref" >/dev/null
+            gh attestation verify "oci://$image_ref" \
+              --repo "$GITHUB_REPOSITORY" \
+              --bundle "release-evidence/provenance-$image.intoto.json" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-digest '${{ needs.preflight.outputs.release-commit }}' \
+              --source-ref "refs/tags/$RELEASE_TAG" \
+              --predicate-type 'https://slsa.dev/provenance/v1' >/dev/null
           done
 
       - name: Promote verified digests to immutable public tags
@@ -499,11 +1201,34 @@ jobs:
             test -n "$content_type"
 
             for tag in "$RELEASE_TAG" "$COMMIT_TAG"; do
-              curl -fsS -X PUT -o /dev/null \
-                -H "Authorization: Bearer $token" \
-                -H "Content-Type: $content_type" \
-                --data-binary @manifest.bin \
-                "https://ghcr.io/v2/$repository/manifests/$tag"
+              tag_headers="$RUNNER_TEMP/promote-$image-${tag//\//_}.headers"
+              code="$(curl -sS --retry 3 --retry-all-errors --retry-delay 2 \
+                -D "$tag_headers" -o /dev/null -w '%{http_code}' \
+                -H "Authorization: Bearer $token" -H "Accept: $accept" \
+                "https://ghcr.io/v2/$repository/manifests/$tag")"
+              case "$code" in
+                200)
+                  existing_digest="$(tr -d '\r' < "$tag_headers" \
+                    | awk 'tolower($1) == "docker-content-digest:" { print $2 }' \
+                    | tail -1)"
+                  if [ "$existing_digest" != "$digest" ]; then
+                    echo "$image_name:$tag changed to $existing_digest after preflight" >&2
+                    exit 1
+                  fi
+                  echo "leaving exact immutable public tag $image_name:$tag unchanged"
+                  ;;
+                404)
+                  curl -fsS -X PUT -o /dev/null \
+                    -H "Authorization: Bearer $token" \
+                    -H "Content-Type: $content_type" \
+                    --data-binary @manifest.bin \
+                    "https://ghcr.io/v2/$repository/manifests/$tag"
+                  ;;
+                *)
+                  echo "cannot establish immutable state for $image_name:$tag (HTTP $code)" >&2
+                  exit 1
+                  ;;
+              esac
               promoted_digest="$(docker buildx imagetools inspect "$image_name:$tag" --format '{{json .Manifest.Digest}}' | tr -d '"')"
               test "$promoted_digest" = "$digest"
             done
@@ -513,10 +1238,7 @@ jobs:
       - name: Attach the digest-pinned Compose environment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >-
-          gh release upload "$RELEASE_TAG"
-          release-evidence/boltrig-images.env
-          --repo "$GITHUB_REPOSITORY"
+        run: scripts/release_asset.sh exact release-evidence/boltrig-images.env
 
       - name: Publish the fully verified GitHub release
         env:
@@ -529,17 +1251,24 @@ jobs:
   release:
     name: Release gate
     if: ${{ always() }}
-    needs: [preflight, candidates, publish]
+    needs: [preflight, candidates, desktop-candidates, publish]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
     steps:
       - name: Require a fully published signed release
         env:
+          RELEASE_MODE: ${{ needs.preflight.outputs.release-mode }}
           PREFLIGHT_RESULT: ${{ needs.preflight.result }}
           CANDIDATES_RESULT: ${{ needs.candidates.result }}
+          DESKTOP_CANDIDATES_RESULT: ${{ needs.desktop-candidates.result }}
           PUBLISH_RESULT: ${{ needs.publish.result }}
         run: |
           test "$PREFLIGHT_RESULT" = success
           test "$CANDIDATES_RESULT" = success
+          case "$RELEASE_MODE" in
+            full) test "$DESKTOP_CANDIDATES_RESULT" = success ;;
+            core) test "$DESKTOP_CANDIDATES_RESULT" = skipped ;;
+            *) echo "invalid release mode in final gate" >&2; exit 1 ;;
+          esac
           test "$PUBLISH_RESULT" = success

@@ -15,11 +15,25 @@ services:
     build: !reset null
     image: ${BOLTRIG_KERNEL_IMAGE:?set BOLTRIG_KERNEL_IMAGE to an image@sha256 digest}
     pull_policy: always
+    environment:
+      BOLTRIG_RELEASE_MODE: ${BOLTRIG_RELEASE_MODE:?set BOLTRIG_RELEASE_MODE to exactly core or full}
 
   fleet-worker:
     build: !reset null
     image: ${BOLTRIG_FLEET_IMAGE:?set BOLTRIG_FLEET_IMAGE to an image@sha256 digest}
     pull_policy: always
+    environment:
+      BOLTRIG_RELEASE_MODE: ${BOLTRIG_RELEASE_MODE:?set BOLTRIG_RELEASE_MODE to exactly core or full}
+
+  # The durable Hatchet task server is a second entry point from the fleet image.
+  # Pin and pull it explicitly: leaving the base build/local tag in place makes a
+  # no-build release depend on whatever bytes happen to exist on the host.
+  hatchet-worker:
+    build: !reset null
+    image: ${BOLTRIG_FLEET_IMAGE:?set BOLTRIG_FLEET_IMAGE to an image@sha256 digest}
+    pull_policy: always
+    environment:
+      BOLTRIG_RELEASE_MODE: ${BOLTRIG_RELEASE_MODE:?set BOLTRIG_RELEASE_MODE to exactly core or full}
 
   worker-ui:
     build: !reset null
@@ -30,9 +44,17 @@ services:
     build: !reset null
     image: ${BOLTRIG_BACKUP_IMAGE:?set BOLTRIG_BACKUP_IMAGE to an image@sha256 digest}
     pull_policy: always
+    environment:
+      # /config contains Hatchet token-signing state. The backup script refuses
+      # to archive it unless BACKUP_PASSPHRASE is configured.
+      BACKUP_STATE_DIR: /backup-state
     # Production executes only the script baked into the signed backup image.
     # Keep mutable source mounts in the developer base manifest, never here.
     volumes: !override
       - ${BACKUP_DIR:-./backups}:/backups
       - backup_health:/backup-health
+      - hatchet_config:/backup-state/hatchet-config:ro
+      - knowledge_data:/backup-state/knowledge:ro
+      - ./manifest.yaml:/backup-state/deployment/manifest.yaml:ro
+      - ./libraries:/backup-state/deployment/libraries:ro
       - ${RCLONE_CONFIG_DIR:-./deploy/rclone}:/root/.config/rclone:ro

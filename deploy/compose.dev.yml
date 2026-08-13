@@ -42,7 +42,23 @@ services:
     # replaces the base ports list (a plain list would merge-append the base
     # all-interfaces binding straight back).
     ports: !override
-      - "127.0.0.1:${KERNEL_PORT:-8000}:8000"
+      # Keep the dev API away from the base .env's production-style port (and
+      # from other local stacks that commonly occupy :18000). Operators can
+      # still choose a different loopback port with BOLTRIG_DEV_KERNEL_PORT.
+      - "127.0.0.1:${BOLTRIG_DEV_KERNEL_PORT:-18001}:8000"
+    environment:
+      # The trusted Codex lane is deliberately unavailable in ordinary dev
+      # containers: local namespace restrictions must not turn into a crash
+      # loop, and enabling it belongs to the pinned Linux release posture.
+      BOLTRIG_CODEX_TRUSTED: "0"
+      BOLTRIG_DEV_AUTH: "1"
+
+  fleet-worker:
+    environment:
+      # Match the kernel's safe development posture so the worker does not
+      # independently crash-loop while the kernel is intentionally test-only.
+      BOLTRIG_CODEX_TRUSTED: "0"
+      BOLTRIG_DEV_AUTH: "1"
 
   worker-ui:
     # The Worker is reachable only through the dev Caddy now (no direct host port).

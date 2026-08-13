@@ -82,6 +82,7 @@ _MAX_BROWSER_CALLS_ENV = "CHANNEL_GATEWAY_MAX_BROWSER_CALLS"
 _AUTH_RETRY_SECONDS = 30
 _DEFAULT_MAX_BROWSER_CALLS = 8
 _TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_-]{20,512}")
+_MAX_USER_TEXT_CHARS = 8_000
 
 
 class BrowserMediaCapacityError(RuntimeError):
@@ -96,6 +97,7 @@ class BrowserMediaSession:
     channel_id: str
     adapter: PlatformAdapter
     audio: BrowserAudio
+    operation_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 @dataclass(frozen=True)
@@ -243,7 +245,8 @@ class ChannelSidecarDaemon:
             self._browser_session_pending.clear()
         for session in sessions:
             try:
-                await session.adapter.stop()
+                async with session.operation_lock:
+                    await session.adapter.stop()
             except Exception:  # noqa: BLE001 - best-effort shutdown
                 pass
 
@@ -514,7 +517,8 @@ class ChannelSidecarDaemon:
                 # A freshly redeemed one-time bearer for this exact call is an
                 # authenticated reconnect. Retire the prior generation before
                 # opening its replacement; no other call is touched.
-                await replaced.adapter.stop()
+                async with replaced.operation_lock:
+                    await replaced.adapter.stop()
             config = dict(spec.config)
             config["audio"] = audio
             config["event_sink"] = audio.emit_event
@@ -546,6 +550,35 @@ class ChannelSidecarDaemon:
             async with self._browser_session_lock:
                 self._browser_session_pending.discard(call_id)
 
+    async def inject_browser_text(
+        self, call_id: str, audio: BrowserAudio, text: str
+    ) -> bool:
+        """Forward text only for the exact authenticated media generation.
+
+        The identity recheck and provider injection share the exact session's
+        operation lock, so reconnect waits without blocking unrelated calls.
+        """
+        async with self._browser_session_lock:
+            session = self._browser_sessions.get(call_id)
+            if session is None or session.audio is not audio:
+                return False
+        async with session.operation_lock:
+            async with self._browser_session_lock:
+                if self._browser_sessions.get(call_id) is not session:
+                    return False
+            inject = getattr(session.adapter, "inject_user_text", None)
+            if not callable(inject):
+                return False
+            try:
+                return bool(await inject(text))
+            except Exception as exc:  # noqa: BLE001 - never kill the media socket
+                # The text itself is caller content: log the outcome, not the text.
+                log.warning(
+                    "user text injection failed for call %s (%s)",
+                    call_id, type(exc).__name__,
+                )
+                return False
+
     async def release_browser_media(
         self, call_id: str, audio: BrowserAudio | None = None
     ) -> None:
@@ -560,7 +593,8 @@ class ChannelSidecarDaemon:
                 return
             self._browser_sessions.pop(call_id)
         if session is not None:
-            await session.adapter.stop()
+            async with session.operation_lock:
+                await session.adapter.stop()
 
     # --- link (b): the outbound pump ---------------------------------------
     async def _pump_outbox(self) -> None:
@@ -762,12 +796,29 @@ async def ready(request: Request) -> JSONResponse:
     )
 
 
+def _user_text_frame(raw: str | None) -> str | None:
+    """Parse one typed mid-call message frame (``{"type":"user_text",...}``);
+    anything else is not user text and is ignored by the caller."""
+    if not raw or len(raw) > 2 * _MAX_USER_TEXT_CHARS:
+        return None
+    try:
+        frame = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(frame, dict) or frame.get("type") != "user_text":
+        return None
+    text = str(frame.get("text") or "").strip()[:_MAX_USER_TEXT_CHARS]
+    return text or None
+
+
 @app.websocket("/v1/calls/{call_id}/media")
 async def browser_call_media(websocket: WebSocket, call_id: str) -> None:
     """Authenticate in the first frame, then relay bounded PCM frames.
 
     The bearer intentionally travels in a WebSocket message rather than the URL,
-    where reverse-proxy access logs commonly capture query strings.
+    where reverse-proxy access logs commonly capture query strings. Text frames
+    after authentication are control messages: ``ping`` keepalives and typed
+    mid-call ``user_text`` messages forwarded into the provider session.
     """
     await websocket.accept()
     bridge: BrowserAudio | None = None
@@ -807,6 +858,10 @@ async def browser_call_media(websocket: WebSocket, call_id: str) -> None:
             text = message.get("text")
             if text == '{"type":"ping"}':
                 await websocket.send_json({"type": "pong"})
+                continue
+            user_text = _user_text_frame(text)
+            if user_text is not None:
+                await daemon.inject_browser_text(call_id, bridge, user_text)
     except (TimeoutError, WebSocketDisconnect):
         pass
     finally:

@@ -50,8 +50,12 @@ services:
       # strong value and put it in .env - see .env.example.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD (see .env.example)}
       POSTGRES_DB: ${POSTGRES_DB:-boltrig}
+      # The official image exposes these variables to first-boot hooks. Hatchet
+      # uses a separate durable database by default.
+      HATCHET_DATABASE_NAME: ${HATCHET_DATABASE_NAME:-hatchet}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres-init-hatchet.sh:/docker-entrypoint-initdb.d/00-hatchet-db.sh:ro
       # First-boot schema load (idempotent; CREATE TABLE IF NOT EXISTS).
       # Production schema changes go through `make migrate` (alembic).
       - ./boltrig/store/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -243,7 +247,11 @@ services:
     env_file: ${BOLTRIG_ENV_FILE:-.env}
     environment:
       BOLTRIG_OPENCODE_HOME: ${BOLTRIG_OPENCODE_HOME:-/var/lib/boltrig/opencode}
-      BOLTRIG_BROWSER_CLI_HOME: ${BOLTRIG_BROWSER_CLI_HOME:-/var/lib/boltrig/browser-cli}
+      # fleet-worker and hatchet-worker run independent Chromium processes. A
+      # shared user-data-dir makes the second process remove/contend on the
+      # first process's Singleton* lock and crash-loop. Keep both profiles on
+      # the stack-owned volume, but give each execution lane its own root.
+      BOLTRIG_BROWSER_CLI_HOME: ${BOLTRIG_FLEET_BROWSER_CLI_HOME:-/var/lib/boltrig/browser-cli/fleet-worker}
       BOLTRIG_BROWSER_CLI_BIN: ${BOLTRIG_BROWSER_CLI_BIN:-/usr/local/bin/browser-use}
       # Reflection is the ONLY automatic memory writer in the stack: fleet/pump.py
       # calls memory.remember with a distilled lesson when a work item reaches a
@@ -305,7 +313,7 @@ services:
       interval: 60s
       timeout: 10s
       retries: 3
-      # Measured on jellytot-prod, not guessed: container start 09:23:47 ->
+      # Measured on a production host, not guessed: container start 09:23:47 ->
       # "delegation pump live" 09:24:23 is 36s of kernel build and org assembly
       # before the heartbeat task is even created, and the first receipt lands a
       # probe-and-publish cycle after that. 20s would have had the probe failing
@@ -340,9 +348,19 @@ services:
     env_file: ${BOLTRIG_ENV_FILE:-.env}
     environment:
       BOLTRIG_OPENCODE_HOME: ${BOLTRIG_OPENCODE_HOME:-/var/lib/boltrig/opencode}
-      BOLTRIG_BROWSER_CLI_HOME: ${BOLTRIG_BROWSER_CLI_HOME:-/var/lib/boltrig/browser-cli}
+      # This must not equal fleet-worker's browser root: both services start a
+      # long-lived Chromium and loopback CDP endpoint when browser automation is
+      # declared by the manifest.
+      BOLTRIG_BROWSER_CLI_HOME: ${BOLTRIG_HATCHET_BROWSER_CLI_HOME:-/var/lib/boltrig/browser-cli/hatchet-worker}
       BOLTRIG_BROWSER_CLI_BIN: ${BOLTRIG_BROWSER_CLI_BIN:-/usr/local/bin/browser-use}
       BOLTRIG_REFLECT: ${BOLTRIG_REFLECT:-}
+      # The pinned Hatchet SDK serves this endpoint from the action-listener
+      # process itself. It becomes healthy only after the worker has connected
+      # and completed a listener heartbeat, so it detects both process death and
+      # an unregistered/unreachable durable task worker.
+      HATCHET_CLIENT_WORKER_HEALTHCHECK_ENABLED: "true"
+      HATCHET_CLIENT_WORKER_HEALTHCHECK_PORT: "8001"
+      HATCHET_CLIENT_WORKER_HEALTHCHECK_BIND_ADDRESS: 127.0.0.1
     volumes:
       - ./manifest.yaml:/app/manifest.yaml:ro
       - ./libraries:/app/libraries:ro
@@ -355,9 +373,14 @@ services:
         condition: service_healthy
       hatchet-engine:
         condition: service_started
-    # No healthcheck yet: this worker serves no HTTP and publishes no receipt
-    # of its own. Its liveness is observable through the Hatchet dashboard's
-    # worker list; a fleet-health-style receipt is a follow-up, not a blocker.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)" || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   hatchet-engine:
     # Optional durable execution (US-FLT-06). The kernel and fleet run WITHOUT
@@ -368,7 +391,7 @@ services:
     restart: unless-stopped
     environment:
       # M9 (SEC-69): interpolate the DB credential instead of a literal boltrig:boltrig.
-      DATABASE_URL: ${HATCHET_DATABASE_URL:-postgresql://${POSTGRES_USER:-boltrig}:${POSTGRES_PASSWORD}@postgres:5432/hatchet?sslmode=disable}
+      DATABASE_URL: ${HATCHET_DATABASE_URL:-postgresql://${POSTGRES_USER:-boltrig}:${POSTGRES_PASSWORD}@postgres:5432/${HATCHET_DATABASE_NAME:-hatchet}?sslmode=disable}
       SERVER_GRPC_BROADCAST_ADDRESS: hatchet-engine:7077
       SERVER_GRPC_BIND_ADDRESS: 0.0.0.0
       # hatchet-lite binds gRPC on 7070 by default; pin the bind port to the
@@ -389,6 +412,10 @@ services:
     ports:
       - "127.0.0.1:${HATCHET_GRPC_PORT:-7077}:7077"
       - "127.0.0.1:${HATCHET_API_PORT:-8888}:8888"
+    volumes:
+      # Persist Hatchet's token-signing configuration across container recreate.
+      # Production's signed backup path also captures this volume encrypted.
+      - hatchet_config:/config
     depends_on:
       postgres:
         condition: service_healthy
@@ -610,7 +637,7 @@ services:
       # DNS-rebinding defence in addition to loopback.
       WA_ACCEPTED_HOSTS: whatsapp-bridge
     volumes:
-      - whatsapp-session:/data
+      - whatsapp_session:/data
     expose:
       - "3000"
     depends_on:
@@ -631,10 +658,10 @@ services:
     # hosted deployment with a durable audit chain is not one-disk-failure away
     # from total loss. Profile-gated so the DEFAULT (dev) stack is unaffected:
     #   docker compose --profile backup up -d
-    # It loops scripts/backup.sh every BACKUP_INTERVAL seconds: pg_dump (custom
-    # format) -> a timestamped file under /backups, optional passphrase encryption,
-    # and an off-box copy via rclone when BACKUP_REMOTE is set (skipped cleanly,
-    # with a warning, when it is unset - so it is safe to enable in dev too).
+    # It loops scripts/backup.sh every BACKUP_INTERVAL seconds: verified custom-
+    # format dumps for the Boltrig + Hatchet databases, optional encryption, and
+    # an off-box copy via rclone. The signed release overlay also mounts stack file
+    # state and requires encryption for that sensitive archive.
     profiles: ["backup"]
     build:
       context: .
@@ -645,6 +672,9 @@ services:
       PGUSER: ${POSTGRES_USER:-boltrig}
       PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD (see .env.example)}
       PGDATABASE: ${POSTGRES_DB:-boltrig}
+      # Durable execution uses a separate Hatchet database. One health marker is
+      # written only after both databases have verified and uploaded.
+      BACKUP_DATABASES: ${BACKUP_DATABASES:-${POSTGRES_DB:-boltrig},${HATCHET_DATABASE_NAME:-hatchet}}
       BACKUP_DIR: /backups
       BACKUP_INTERVAL: ${BACKUP_INTERVAL:-86400}
       BACKUP_KEEP: ${BACKUP_KEEP:-7}
@@ -692,3 +722,4 @@ volumes:
   signal_cli_data:
   whatsapp_session:
   backup_health:
+  hatchet_config:

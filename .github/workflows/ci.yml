@@ -52,6 +52,8 @@ jobs:
         run: python -m pip install --require-hashes -r requirements-dev-lock.txt
       - name: Python quality gate (invariants, lint, strict types, Postgres, coverage)
         run: make python-quality PY=python
+      - name: Public product boundary (BYO providers, stock companions)
+        run: make public-product-validate PY=python
       # `make quality` calls itself "the complete local release gate", and these two
       # of its components ran in NO workflow until 2026-07-26: the Alembic-head vs
       # schema.sql parity check and the secure-posture doctor fixture were local-only,
@@ -65,6 +67,41 @@ jobs:
   worker-build:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      # The event supplies the immutable pre-change commit. The structural gate
+      # loads its prior debt catalogue from this Git object, never from a
+      # contributor-controlled second working-tree file.
+      WORKER_STRUCTURE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: Worker quality gate (lock, structure, audit, types, contracts, web bundle)
+        run: make worker-quality
+
+  worker-desktop-package:
+    name: Worker desktop package (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            # Tauri recommends the oldest supported WebKitGTK 4.1 baseline so
+            # AppImage/DEB glibc requirements do not accidentally jump forward.
+            runner: ubuntu-22.04
+          - platform: macos-arm64
+            runner: macos-15
+          - platform: windows-x86_64
+            runner: windows-2025
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -72,8 +109,57 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-      - name: Worker quality gate (lock, audit, types, contracts, web bundle)
-        run: make worker-quality
+      - name: Install Linux desktop build dependencies
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+      - name: Install the pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal
+          rustup default 1.97.1
+          test "$(rustc --version | awk '{print $2}')" = 1.97.1
+      - name: Install the frozen Worker dependency graph
+        working-directory: apps/worker
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.5.0 --activate
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm rebuild esbuild
+      - name: Test the native desktop boundary
+        run: cargo test --locked --manifest-path apps/worker/src-tauri/Cargo.toml
+      - name: Build an unsigned installer without release secrets
+        working-directory: apps/worker
+        run: pnpm run tauri build --ci --config src-tauri/tauri.ci.conf.json
+      - name: Require a real installer and prove no updater signature was minted
+        run: |
+          bundle=apps/worker/src-tauri/target/release/bundle
+          test -d "$bundle"
+          case "$RUNNER_OS" in
+            Linux)
+              test -n "$(find "$bundle" -type f \( -name '*.AppImage' -o -name '*.deb' \) -print -quit)"
+              ;;
+            macOS)
+              test -n "$(find "$bundle" -type f -name '*.dmg' -print -quit)"
+              ;;
+            Windows)
+              test -n "$(find "$bundle" -type f \( -name '*.msi' -o -name '*-setup.exe' \) -print -quit)"
+              ;;
+          esac
+          if find "$bundle" -type f -name '*.sig' -print -quit | grep -q .; then
+            echo "pull-request packaging unexpectedly minted an updater signature" >&2
+            exit 1
+          fi
 
   site-build-test-lint:
     runs-on: ubuntu-24.04
@@ -114,6 +200,7 @@ jobs:
     needs:
       - test-and-gate
       - worker-build
+      - worker-desktop-package
       - site-build-test-lint
       - compose-validate
     steps:
@@ -121,5 +208,6 @@ jobs:
         run: |
           test "${{ needs.test-and-gate.result }}" = success
           test "${{ needs.worker-build.result }}" = success
+          test "${{ needs.worker-desktop-package.result }}" = success
           test "${{ needs.site-build-test-lint.result }}" = success
           test "${{ needs.compose-validate.result }}" = success
