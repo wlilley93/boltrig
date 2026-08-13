@@ -120,8 +120,14 @@ little-endian pan/tilt values, `GET_*` requests with `bmRequestType 0xA1`, and
 `SET_CUR` with `bmRequestType 0x21`. No HID report, focus write, or zoom write
 was issued.
 
-All coordinates below are UVC units of `0.01 degree`. The complete advertised
-readback was:
+All coordinates below are UVC units of **one arc-second** (UVC 1.5 Table 4-12), not
+`0.01 degree` as originally recorded here. The table itself settles it: a step of
+3600 is exactly 1.000 degree in arc-seconds, whereas under `0.01 degree` the step
+would be 36 degrees and the range fifteen full rotations rather than a plausible
+±150° pan / ±90° tilt. Read correctly, the advertised range is ±150° pan, ±90° tilt,
+in 1° steps.
+
+The complete advertised readback was:
 
 | Value | Pan | Tilt |
 | --- | ---: | ---: |

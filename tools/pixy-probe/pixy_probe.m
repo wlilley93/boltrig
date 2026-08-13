@@ -256,7 +256,7 @@ static void AddUVCControls(NSMutableDictionary *controls,
         {"focus_absolute", 5, 0x06, 2, "unsigned"},
         {"focus_auto", 16, 0x08, 1, "boolean"},
         {"zoom_absolute", 9, 0x0b, 2, "unsigned"},
-        {"pan_tilt_absolute", 11, 0x0d, 8, "0.01_degree"},
+        {"pan_tilt_absolute", 11, 0x0d, 8, "arcsecond"},
         {"privacy", 17, 0x11, 1, "boolean"},
     };
     for (size_t i = 0; i < sizeof(definitions) / sizeof(definitions[0]); i++) {
@@ -303,8 +303,22 @@ static void AddUVCControls(NSMutableDictionary *controls,
             if (lengthResult == 2) {
                 uint16_t reportedLength = ReadLE16(lengthBuffer);
                 readback[@"get_len_bytes"] = HexBytes(lengthBuffer, sizeof(lengthBuffer));
-                if (reportedLength >= 1 && reportedLength <= 16) {
+                // Do not trust GET_LEN for pan/tilt or privacy. The Pixy reports 3 for
+                // pan/tilt, which is not even a legal width for an 8-byte control; a
+                // 3-byte read then returns truncated bytes that decode to nothing, so
+                // min/max/step/default/current all came back null for a camera whose
+                // standard 8-byte reads succeed perfectly. That made a working PTZ
+                // device look unreadable in the report used to prove support.
+                //
+                // This mirrors the Worker bridge (camera_uvc.m), which already excludes
+                // both controls, and the declared quirk in
+                // camera-profiles/emeet-pixy/profile.toml (ignore_get_len, fixed_length).
+                BOOL trustGetLen = strcmp(definition.name, "pan_tilt_absolute") != 0 &&
+                                   definition.selector != 0x11;
+                if (reportedLength >= 1 && reportedLength <= 16 && trustGetLen) {
                     requestedLength = reportedLength;
+                } else if (!trustGetLen && reportedLength != definition.length) {
+                    readback[@"get_len_ignored"] = @(reportedLength);
                 }
             }
             readback[@"length_used"] = @(requestedLength);

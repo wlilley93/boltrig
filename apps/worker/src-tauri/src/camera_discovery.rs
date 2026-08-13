@@ -133,7 +133,16 @@ pub(crate) struct CameraLeaseValidation {
 }
 
 const MAX_NATIVE_RESULT_BYTES: usize = 64 * 1024;
-const UVC_MILLIDEGREES_PER_UNIT: i64 = 10;
+// A UVC CT_PANTILT_ABSOLUTE unit is one ARC-SECOND (UVC 1.5, Table 4-12), not a
+// hundredth of a degree. The EMEET Pixy confirms it: GET_RES returns 3600 on both
+// axes, which is exactly 1.000 degree per step in arc-seconds; read as 0.01 degree
+// that step would be 36 degrees and MIN/MAX (+/-540000, +/-324000) would mean
+// fifteen full rotations instead of a plausible +/-150 pan and +/-90 tilt.
+//
+// So millidegrees = units * 1000 / 3600 = units * 5 / 18. The old constant of 10
+// was wrong by a factor of 36: a request for 90 degrees moved the camera 2.5.
+const UVC_MILLIDEGREES_NUMERATOR: i64 = 5;
+const UVC_MILLIDEGREES_DENOMINATOR: i64 = 18;
 const MAX_UVC_ANGLE: i64 = i32::MAX as i64;
 
 pub(crate) struct CameraRuntime {
@@ -859,14 +868,28 @@ fn native_inventory_json() -> Result<String, String> {
 }
 
 fn millidegrees_to_uvc(value: i64) -> Result<i64, String> {
-    if value % UVC_MILLIDEGREES_PER_UNIT != 0 {
+    // units = millidegrees * 18 / 5, exact only when the request is a multiple of 5
+    // millidegrees. Anything finer cannot be expressed in whole arc-seconds, and
+    // silently rounding a caller's angle is worse than refusing it.
+    if value % UVC_MILLIDEGREES_NUMERATOR != 0 {
         return Err("camera_ptz_angle_must_match_uvc_precision".to_string());
     }
-    let raw = value / UVC_MILLIDEGREES_PER_UNIT;
+    let raw = value
+        .checked_mul(UVC_MILLIDEGREES_DENOMINATOR)
+        .map(|scaled| scaled / UVC_MILLIDEGREES_NUMERATOR)
+        .ok_or_else(|| "camera_ptz_angle_out_of_range".to_string())?;
     if !(-MAX_UVC_ANGLE..=MAX_UVC_ANGLE).contains(&raw) {
         return Err("camera_ptz_angle_out_of_range".to_string());
     }
     Ok(raw)
+}
+
+fn uvc_to_millidegrees(units: i64) -> Option<i64> {
+    // Truncating: 1 arc-second is 0.2778 millidegrees, so only multiples of 18
+    // arc-seconds land exactly. The Pixy's 3600 step is a clean 1000 millidegrees.
+    units
+        .checked_mul(UVC_MILLIDEGREES_NUMERATOR)
+        .map(|scaled| scaled / UVC_MILLIDEGREES_DENOMINATOR)
 }
 
 fn native_uvc_ptz_json(
@@ -947,7 +970,7 @@ fn decorate_ptz_result(
     object.insert("camera_id".to_string(), json!(camera_id));
     object.insert(
         "semantic_unit".to_string(),
-        json!("millidegrees; native UVC values are 0.01 degrees"),
+        json!("millidegrees; native UVC values are arc-seconds"),
     );
     if let Some(advertised) = object.get("advertised").cloned() {
         object.insert(
@@ -974,10 +997,11 @@ fn convert_control_pairs(value: &Value) -> Value {
     let mut result = serde_json::Map::new();
     for key in ["min", "max", "step", "default", "current"] {
         if let Some(pair) = object.get(key).and_then(pair_from_value) {
-            result.insert(
-                key.to_string(),
-                json!(pair.map(|item| item * UVC_MILLIDEGREES_PER_UNIT)),
-            );
+            let converted: Option<Vec<i64>> =
+                pair.iter().map(|item| uvc_to_millidegrees(*item)).collect();
+            if let Some(values) = converted {
+                result.insert(key.to_string(), json!(values));
+            }
         }
     }
     Value::Object(result)

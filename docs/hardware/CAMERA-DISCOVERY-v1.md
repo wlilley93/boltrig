@@ -24,6 +24,42 @@ The public model uses explicit states: `unsupported`, `advertised`, `readable`,
 evidence. The agent-facing projection exposes PTZ mutation only when both axes
 are proven; descriptors alone never create a mutating verb.
 
+## Two traps that make a working camera look unsupported
+
+Both cost real debugging time and neither is discoverable from the symptom.
+
+**1. A UVC control transfer must not claim the interface.** On macOS,
+`AppleUSBVideoSupport` owns the VideoControl interface, so `libusb_claim_interface`
+returns `LIBUSB_ERROR_ACCESS`. `libusb_control_transfer` on endpoint 0 needs no claim
+and succeeds as an ordinary user — no root, no seizing, no driver override. The
+native bridge already does this correctly.
+
+The trap is that **`pyusb` auto-claims the interface** before a control transfer, so
+any Python-side implementation gets `USBError [Errno 13] Access denied` on every
+request — `GET_INFO` included, nothing mutating. That reads exactly like "macOS blocks
+UVC PTZ", and the wrong conclusion was reached and written down more than once before
+the raw path was tried. **If a control transfer returns EACCES, suspect the wrapper
+before the platform.** Verified working against a Pixy:
+
+```
+GET_CUR, no claim_interface -> 8 bytes   CUR 0 / 2700
+                                        MIN -540000 / -324000
+                                        MAX  540000 /  324000
+                                        RES  3600 / 3600
+                                        DEF  0 / 0
+```
+
+Reads are also safe to run alongside a live capture: control transfers go to endpoint
+0 and never touch the isochronous stream, confirmed with a 15fps consumer streaming
+throughout. Writes move the picture, which invalidates any hand-aiming.
+
+**2. Nothing in a Linux container can see the camera.** `boltrig-vm` is an OrbStack
+Linux machine with no USB passthrough, so libusb and IOKit belong in the Worker
+(native macOS, Tauri) and nowhere else. The kernel learns about cameras only through
+the authenticated Worker transport in `kernel/camera_agent_routes.py`. Do not add a
+USB dependency to a kernel-side container: it will enumerate nothing, on every
+machine.
+
 ## Current v1 foundation
 
 - `boltrig/camera/discovery.py` converts native probe JSON into the versioned
