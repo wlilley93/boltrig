@@ -72,8 +72,7 @@ export function ArchivedSection({ head = true }: { head?: boolean }) {
           </div>
           {rows.length > 0 && (
             <p className="console-foot">
-              Dates are last activity, not the moment of archiving; the kernel records no separate
-              archive time.
+              Dates show each chat's last activity.
             </p>
           )}
         </div>

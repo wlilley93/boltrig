@@ -119,19 +119,19 @@ export function OvernightSection({ head = true }: { head?: boolean }) {
   } else if (!latest && receipts.length > 0) {
     badge = null;
     headline = "Gate activity, but no readable verdict";
-    lead = "The record carries rows for the gate verb, but none is a promote-or-hold receipt this client can read.";
+    lead = "Gate activity was recorded, but no promote-or-hold result is available.";
   } else if (!latest) {
     badge = null;
     headline = "No night has run here yet";
-    lead = "Nightly consolidation exists behind governed verbs, but a person starts a night, and this workspace's record shows none so far.";
+    lead = "No overnight practice has been recorded for this workspace.";
   } else if (latest.status === "distill_gate_promote") {
     badge = { tone: "green", word: "Passed its checks" };
     headline = "The last practice passed every check";
-    lead = "The gate wrote a receipt. Nothing serves until promotion, which is its own approval.";
+    lead = "A passing result was recorded. A separate approval is required before it is used.";
   } else {
     badge = { tone: "amber", word: "Held back" };
     headline = "The last practice was held back";
-    lead = "A failed check keeps yesterday's version in place. The receipt in the record says which.";
+    lead = "A failed check keeps the previous version in place.";
   }
 
   return (
@@ -140,7 +140,7 @@ export function OvernightSection({ head = true }: { head?: boolean }) {
 
       <SettingsGroup
         foot={receipts.length > 0
-          ? "One row per gate receipt, straight from the audit record. Passing is not serving: promotion is a separate, recorded act."
+          ? "Gate results from the audit record. Activation requires separate approval."
           : undefined}
         title="What the record shows"
       >
@@ -189,7 +189,7 @@ function MechanismBlocks() {
   return (
     <div className="settings-night-grid">
       <SettingsGroup
-        foot="Each is a measurement, not an opinion, and any one failing keeps yesterday's version. The scores live in the run's own record."
+        foot="If any check fails, the previous version stays active. Scores are available in the run record."
         title="What a night has to prove"
       >
         {GATES.map(([title, sub]) => (

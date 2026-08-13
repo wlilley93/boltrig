@@ -3,7 +3,7 @@ import type { BudgetItem } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../client";
 import type { SettingsSection } from "../settingsSections";
-import { OperationsSection } from "./OperationsView";
+import { hasDesktopRuntime } from "../desktop";
 import { ArchivedSection } from "./settings/ArchivedSection";
 import {
   CompactAdvancedSection,
@@ -12,11 +12,14 @@ import {
   CompactYouSection,
 } from "./settings/CompactSections";
 import { HealthSection } from "./settings/HealthSection";
+import { ModelSettingsSection } from "./settings/ModelSettingsSection";
+import { OperationsSettingsSection } from "./settings/OperationsSettingsSection";
 import { OvernightSection } from "./settings/OvernightSection";
 import { SectionHead } from "./settings/SectionHead";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { SpendingSection } from "./settings/SpendingSection";
 import { SettingsGroup, SettingsRow } from "./settings/rowKit";
+import { ApprovalPostureSettings } from "./ApprovalPostureControl";
 import "./settings/settings-you.css";
 
 // The settings pane, recast onto the typed row-control kit in
@@ -42,17 +45,21 @@ function AutonomySection({ head = true }: { head?: boolean }) {
   }, []);
 
   const hardStops = (budgets ?? []).filter((budget) => budget.hard_stop).length;
+  const localAgent = hasDesktopRuntime();
   return (
     <>
       {head && <SectionHead section="autonomy" />}
       <SettingsGroup title="What stops a run">
         <SettingsRow
-          title="Every consequential verb asks first"
-          desc="Approval is decided by the kernel against the workspace policy, not by this client. Nothing here can widen it."
-          tech="hitl"
+          title="Agent tool approvals"
+          desc={localAgent
+            ? "Choose how this computer approves local files, commands and network access. Cloud tool grants stay separate."
+            : "Choose how cloud tools use the authority you already granted."}
+          control={<ApprovalPostureSettings runtime={localAgent ? "local" : "cloud"} />}
+          tech="agentic.approval_posture"
         />
         <SettingsRow
-          title="Ceilings that actually stop work"
+          title="Hard-stop ceilings"
           desc="A ceiling without a hard stop is recorded and reported, but it does not halt a run."
           control={(
             <span className="settings-value">
@@ -61,18 +68,12 @@ function AutonomySection({ head = true }: { head?: boolean }) {
           )}
         />
         <SettingsRow
-          title="Credentials never reach this client"
-          desc="Tools, credentials, memory and approvals stay server-side, so an autonomy setting here cannot leak one."
+          title={localAgent ? "Boltrig credentials stay server-side" : "Credentials stay server-side"}
+          desc={localAgent
+            ? "The local agent receives no Boltrig provider credentials. Local files remain governed by the posture above."
+            : "Cloud tools can use credentials without exposing them to this device."}
         />
       </SettingsGroup>
-      {/* The decided target draws a three-way posture chooser here. This build
-          has no posture to set: approval is policy-driven per verb, and drawing
-          a chooser that wrote nothing would be a control that lies. */}
-      <p className="console-foot">
-        The decided target offers a three-way posture here. This build has no posture to set:
-        what stops a run is decided per verb by workspace policy, so the honest thing to show is
-        what that policy currently does.
-      </p>
     </>
   );
 }
@@ -82,29 +83,44 @@ export function SettingsSectionPane({ section, head = true }: {
   /** The mobile surface draws its own head, so it suppresses this one. */
   head?: boolean;
 }) {
-  if (section === "spend") return <SpendingSection head={head} />;
-  if (section === "autonomy") return <AutonomySection head={head} />;
-  if (section === "health") return <HealthSection head={head} />;
-  if (section === "operations") return <OperationsSection head={head} />;
-  if (section === "shortcuts") return <ShortcutsSection head={head} />;
-  if (section === "overnight") return <OvernightSection head={head} />;
-  if (section === "archived") return <ArchivedSection head={head} />;
-  if (section === "you") {
-    return (
-      <div className="settings-you-pane">
-        {head && <SectionHead section={section} />}
-        <CompactYouSection />
-      </div>
-    );
-  }
-  if (section === "organisation") {
-    return <>{head && <SectionHead section={section} />}<CompactOrganisationSection /></>;
-  }
-  if (section === "knowledge") {
-    return <>{head && <SectionHead section={section} />}<CompactKnowledgeSection /></>;
-  }
-  if (section === "advanced") {
-    return <>{head && <SectionHead section={section} />}<CompactAdvancedSection /></>;
-  }
-  return null;
+  const Pane = SETTINGS_PANES[section];
+  return Pane ? <Pane head={head} /> : null;
+}
+
+type SettingsPane = (props: { head?: boolean }) => React.ReactNode;
+
+const SETTINGS_PANES: Record<SettingsSection, SettingsPane> = {
+  advanced: AdvancedSettingsPane,
+  archived: ArchivedSection,
+  autonomy: AutonomySection,
+  health: HealthSection,
+  knowledge: KnowledgeSettingsPane,
+  models: ModelSettingsSection,
+  operations: OperationsSettingsSection,
+  organisation: OrganisationSettingsPane,
+  overnight: OvernightSection,
+  shortcuts: ShortcutsSection,
+  spend: SpendingSection,
+  you: YouSettingsPane,
+};
+
+function YouSettingsPane({ head = true }: { head?: boolean }) {
+  return (
+    <div className="settings-you-pane">
+      {head && <SectionHead section="you" />}
+      <CompactYouSection />
+    </div>
+  );
+}
+
+function OrganisationSettingsPane({ head = true }: { head?: boolean }) {
+  return <>{head && <SectionHead section="organisation" />}<CompactOrganisationSection /></>;
+}
+
+function KnowledgeSettingsPane({ head = true }: { head?: boolean }) {
+  return <>{head && <SectionHead section="knowledge" />}<CompactKnowledgeSection /></>;
+}
+
+function AdvancedSettingsPane({ head = true }: { head?: boolean }) {
+  return <>{head && <SectionHead section="advanced" />}<CompactAdvancedSection /></>;
 }

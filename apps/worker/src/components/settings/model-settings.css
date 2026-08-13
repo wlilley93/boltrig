@@ -1,0 +1,192 @@
+.model-settings-pane {
+  min-width: 0;
+}
+
+.model-settings-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 10px;
+  padding: 3px;
+  width: fit-content;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+.model-settings-tabs button {
+  border: 0;
+  border-radius: 7px;
+  padding: 7px 11px;
+  color: var(--text-3);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.model-settings-tabs button.is-active {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 18%);
+}
+
+.model-settings-intro {
+  max-width: 70ch;
+  margin: 0 0 18px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.model-settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.model-settings-form {
+  margin-bottom: 28px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+
+.model-settings-form-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.model-settings-form-head p {
+  max-width: 62ch;
+  margin: 7px 0 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.model-settings-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.model-settings-fields > label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+.model-settings-fields small {
+  color: var(--text-4);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.model-settings-fields fieldset {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.model-settings-fields legend {
+  float: left;
+  margin-right: 18px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+.model-settings-fields fieldset label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.model-settings-fields input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+.model-settings-submit {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.model-settings-notice {
+  margin-bottom: 16px;
+}
+
+.model-settings-removal {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 0 0 28px;
+  padding: 16px;
+  border: 1px solid var(--amber-line);
+  border-radius: 12px;
+  background: var(--amber-bg);
+}
+
+.model-settings-removal p {
+  max-width: 64ch;
+  margin: 7px 0 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.model-settings-removal-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+@media (max-width: 760px) {
+  .model-settings-actions {
+    flex-wrap: wrap;
+  }
+
+  .model-settings-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .model-settings-fields fieldset {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .model-settings-form-head,
+  .model-settings-removal,
+  .settings-row:has(.model-settings-actions) {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .model-settings-actions {
+    justify-content: flex-start;
+  }
+
+  .model-settings-removal-actions {
+    justify-content: flex-end;
+  }
+
+  .model-settings-submit .primary-button {
+    width: 100%;
+  }
+}

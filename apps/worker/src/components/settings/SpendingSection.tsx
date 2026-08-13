@@ -126,13 +126,13 @@ export function SpendingSection({ head = true }: { head?: boolean }) {
             </span>
           }
           desc={costRead
-            ? "Every governed call this workspace has paid for, in the scope you may see."
-            : "The total could not be read just now, so none is stated."}
+            ? "Total across the workspace data available to you."
+            : "The total is currently unavailable."}
           title="Total so far"
         />
         {!budgetsRead && (
           <SettingsRow
-            desc="Ceilings could not be read just now. Whether one is set is unknown here."
+            desc="Ceilings are currently unavailable."
             title="Ceilings unavailable"
           />
         )}
@@ -159,7 +159,7 @@ export function SpendingSection({ head = true }: { head?: boolean }) {
       {actors.length > 0 && (
         <SettingsGroup
           eyebrow
-          foot="Attributed per actor since the record began, in the scope you may see. The kernel keeps no weekly window, so none is drawn."
+          foot="Attributed by actor since records began, within the scope available to you."
           title="Where it went"
         >
           {shown.map(([actor, micros]) => (
@@ -180,9 +180,7 @@ export function SpendingSection({ head = true }: { head?: boolean }) {
       )}
 
       <p className="console-foot">
-        Every run reserves its ceiling before it starts and gives back what it did not use, so
-        nothing can quietly overspend. A ceiling with a hard stop halts new work when it is
-        reached; one without is recorded and reported but stops nothing.
+        Hard-stop ceilings pause new work when reached. Other ceilings only track and report spend.
       </p>
     </>
   );

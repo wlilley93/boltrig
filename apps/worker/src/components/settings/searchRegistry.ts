@@ -1,7 +1,7 @@
 import { SHORTCUTS } from "../../shortcuts";
 import { settingsEntry, type SettingsSection } from "../../settingsSections";
 
-// A declarative index of every settings row, so one query can search all ten
+// A declarative index of every settings row, so one query can search every
 // sections rather than only the nav labels. Rows for the console-idiom
 // sections mirror what those panes actually draw; rows for the larger
 // dedicated app surfaces remain searchable without making them the default
@@ -24,7 +24,7 @@ export const SETTINGS_INDEX: SettingsIndexRow[] = [
   { section: "you", title: "High contrast", desc: "Stronger borders and text", tech: "a11y.high_contrast" },
   { section: "you", title: "When something needs approving", desc: "Verified notification routes" },
   { section: "you", title: "Send those to", desc: "Verified delivery targets" },
-  { section: "you", title: "Quiet hours", desc: "Unavailable in the live notification contract" },
+  { section: "you", title: "Quiet hours", desc: "Not available" },
   { section: "you", title: "Take calls", desc: "Realtime voice availability is checked when a call starts" },
   { section: "you", title: "Hold the line at a gate", desc: "A call waits for approval in the originating chat" },
   { section: "you", title: "Locale", tech: "locale" },
@@ -37,15 +37,22 @@ export const SETTINGS_INDEX: SettingsIndexRow[] = [
   { section: "you", title: "Change password" },
   { section: "you", title: "Activity and export", desc: "Your recent account activity" },
 
-  // Autonomy — the honest reading of what stops a run.
-  { section: "autonomy", title: "Every consequential verb asks first", desc: "Approval is decided by the kernel against workspace policy", tech: "hitl" },
-  { section: "autonomy", title: "Ceilings that actually stop work", desc: "A ceiling without a hard stop does not halt a run" },
-  { section: "autonomy", title: "Credentials never reach this client" },
+  // Autonomy.
+  { section: "autonomy", title: "Agent tool approvals", desc: "Ask for approval, approve safe actions, or grant full access for this runtime", tech: "agentic.approval_posture" },
+  { section: "autonomy", title: "Hard-stop ceilings", desc: "A ceiling without a hard stop does not halt a run" },
+  { section: "autonomy", title: "Credentials stay server-side" },
 
   // Spending.
   { section: "spend", title: "Total so far", desc: "Every governed call this workspace has paid for" },
   { section: "spend", title: "Ceilings", desc: "Spend meters per budget window" },
   { section: "spend", title: "Where it went", desc: "Spend attributed per actor" },
+
+  // Models — exact Bifrost-facing names and their recoverable lifecycle.
+  { section: "models", title: "Managed model routes", desc: "Exact model names shown in the chat switcher" },
+  { section: "models", title: "Add a model", desc: "Add a governed Bifrost model choice" },
+  { section: "models", title: "Change a model", desc: "Update an existing governed model choice" },
+  { section: "models", title: "Remove a model", desc: "Retire a route everywhere while retaining its configuration" },
+  { section: "models", title: "Restore a model", desc: "Return a retired route to model routing; switcher eligibility is checked separately" },
 
   // Keyboard shortcuts — drawn from the registry, one source of truth.
   ...SHORTCUTS.map((shortcut) => ({
@@ -66,7 +73,7 @@ export const SETTINGS_INDEX: SettingsIndexRow[] = [
 
   // Health.
   { section: "health", title: "Everything that has to be working", desc: "Readiness checks, in plain words" },
-  { section: "health", title: "What boltrig does not do yet", desc: "Limits you can see" },
+  { section: "health", title: "Current limits", desc: "Features and options not currently available" },
   { section: "health", title: "Waiting on a person", desc: "Approvals and questions in chat" },
   { section: "health", title: "Spent today", desc: "Against the daily ceiling, when one is set" },
 
@@ -78,10 +85,10 @@ export const SETTINGS_INDEX: SettingsIndexRow[] = [
 
   // Advanced — the device view plus the kit's own switch.
   { section: "advanced", title: "Developer details", desc: "Shows the identifiers behind each row", tech: "developer_details" },
-  { section: "advanced", title: "This device", desc: "Desktop shell or browser session" },
+  { section: "advanced", title: "This device", desc: "Desktop app or web browser" },
   { section: "advanced", title: "Device settings", desc: "Enrolled device controls" },
   { section: "advanced", title: "Desktop updates" },
-  { section: "advanced", title: "Sign out", desc: "Revokes the current browser session cookie" },
+  { section: "advanced", title: "Sign out", desc: "Signs out this device" },
 
   // Archived chats.
   { section: "archived", title: "Bring back a closed chat", desc: "Restores it to the sidebar; the record never left" },

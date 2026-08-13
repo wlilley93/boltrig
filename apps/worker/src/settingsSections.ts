@@ -1,4 +1,4 @@
-// The settings surface the decided target draws: ten sections under four heads.
+// The settings surface the decided target draws: eleven sections under four heads.
 // Operations remains a valid deep-linked pane for the workspace home, but it
 // is deliberately not a settings-navigation entry in the canonical console,
 // whose nav replaces the app sidebar while Settings is open.
@@ -11,6 +11,7 @@ export type SettingsSection =
   | "you"
   | "autonomy"
   | "spend"
+  | "models"
   | "shortcuts"
   | "knowledge"
   | "overnight"
@@ -33,7 +34,7 @@ const OPERATIONS_ENTRY: SettingsEntry = {
   id: "operations",
   label: "Operations",
   title: "Operations",
-  lead: "Runtime posture, audit evidence and budget controls from the kernel.",
+  lead: "Runtime health, audit history and budget controls.",
 };
 
 export const SETTINGS_SECTIONS: SettingsEntry[] = [
@@ -48,13 +49,19 @@ export const SETTINGS_SECTIONS: SettingsEntry[] = [
     id: "autonomy",
     label: "Autonomy",
     title: "Autonomy",
-    lead: "One decision governs the rest: how far boltrig may go before it asks.",
+    lead: "Approval rules and spending limits that can stop work.",
   },
   {
     id: "spend",
     label: "Spending",
     title: "Spending",
     lead: "What work is allowed to cost, and what it has cost.",
+  },
+  {
+    id: "models",
+    label: "Models",
+    title: "Models",
+    lead: "The exact models boltrig may use for a chat.",
   },
   {
     id: "shortcuts",
@@ -94,7 +101,7 @@ export const SETTINGS_SECTIONS: SettingsEntry[] = [
     id: "advanced",
     label: "Advanced",
     title: "Advanced",
-    lead: "The workings. Safe to ignore, honest when you look.",
+    lead: "Device, session and developer settings.",
   },
   {
     id: "archived",

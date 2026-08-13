@@ -17,7 +17,7 @@ import {
   saveCharacterLocal,
   type CharacterId,
 } from "../../character";
-import { listCharacters } from "../characters";
+import { useCharacterOptions } from "../characters";
 import { isDesktop } from "../../desktop";
 import {
   ExactApprovalFinalizer,
@@ -52,9 +52,6 @@ import {
 const THEME_OPTIONS = ["System", "Dark", "Light"];
 const DENSITY_OPTIONS = ["Comfortable", "Compact"];
 const TEXT_SIZE_OPTIONS = ["Small", "Normal", "Large"];
-// Built from the registry, not from a list here: a character that installs
-// itself must appear in its own setting without editing this file.
-const BODY_OPTIONS = listCharacters().map((character) => character.name);
 const APPEARANCE_TITLES = new Set([
   "Theme",
   "Companion",
@@ -69,9 +66,6 @@ const themeValues: Record<string, ThemePreference> = {
   Dark: "dark",
   Light: "light",
 };
-const bodyValues: Record<string, CharacterId> = Object.fromEntries(
-  listCharacters().map((character) => [character.name, character.id]),
-);
 const densityValues: Record<string, AppearanceDensity> = {
   Comfortable: "comfortable",
   Compact: "compact",
@@ -108,9 +102,9 @@ function AppearanceGroup({
   onChangeCharacter(next: CharacterId): void;
   titles?: Set<string>;
 }) {
+  const { options: bodyOptions, values: bodyValues } = useCharacterOptions();
   const showTheme = !titles || titles.has("Theme");
-  // Companion remains a real, searchable persisted setting, but it is not one
-  // of the three visible rows in the decided Look card. Keeping it search-only
+  // Companion remains searchable but outside the three-row Look card. That
   // preserves the target's Theme/Density/Text-size stack and its exact fold.
   const showBody = Boolean(titles?.has("Companion"));
   const showDensity = !titles || titles.has("Density");
@@ -202,7 +196,7 @@ function AppearanceGroup({
               disabled={busy}
               label="Companion"
               onChange={(label) => onChangeCharacter(bodyValues[label] ?? "familiar")}
-              options={BODY_OPTIONS}
+              options={bodyOptions}
               value={labelFor(character, bodyValues, "Familiar")}
             />
           )}
@@ -372,7 +366,7 @@ export function CompactYouSection() {
               {account.profile.role ? ` · ${account.profile.role}` : ""}
             </span>
           )}
-          desc="Identity and role come from the kernel, not from this device."
+          desc="Your workspace manages your identity and role."
           title="Signed in as"
         />
       </SettingsGroup>
@@ -449,7 +443,7 @@ function CompactReachingYouSection() {
         eventRow("Escalations", "escalation", "A sub-agent asked for more authority than it has."),
         eventRow("Budget warnings", "budget_warning", "Spend crossed the warning threshold."),
         eventRow("Failures", "failure", "A run failed or a connection degraded."),
-        eventRow("Work status changes", "work_status", "Every lane change. Noisy by design."),
+        eventRow("Work status changes", "work_status", "Every status change."),
       ]}
       title="Reaching you"
       >
@@ -477,9 +471,9 @@ function CompactReachingYouSection() {
         />
       </SettingsGroup>
       {state === "unavailable" && (
-        <span className="settings-visually-hidden">Notification routes could not be read. No destination is inferred on this device.</span>
+        <span className="settings-visually-hidden">Notification routes could not be read.</span>
       )}
-      <span className="settings-visually-hidden">The live notification contract has no quiet-hours field, so this client cannot pretend to set one.</span>
+      <span className="settings-visually-hidden">Quiet hours are not available.</span>
     </>
   );
 }
@@ -526,8 +520,8 @@ function CompactTalkingToItSection() {
         desc="A call waits rather than hanging up when something needs you"
         title="Hold the line at a gate"
       />
-      <span className="settings-visually-hidden">Availability is checked against the realtime service when a call starts; there is no saved per-user switch.</span>
-      <span className="settings-visually-hidden">Always on in this build: a pending approval holds the call and resumes it from the originating chat.</span>
+      <span className="settings-visually-hidden">Call availability is checked when a call starts.</span>
+      <span className="settings-visually-hidden">Calls wait for approval and resume from the originating chat.</span>
     </SettingsGroup>
   );
 }
@@ -587,10 +581,7 @@ export function CompactOrganisationSection() {
   }
 
   return (
-    <SettingsGroup
-      foot="Members, invitations and workspace changes live in the full Organisation surface on a desktop."
-      title="This workspace's organisation"
-    >
+    <SettingsGroup title="This workspace's organisation">
       <SettingsRow
         control={<span className="settings-value">{organisation.name}</span>}
         tech={organisation.slug}
@@ -687,11 +678,7 @@ export function CompactKnowledgeSection() {
 
   async function setProvider(provider: KnowledgeProvider, enabled: boolean) {
     if (provider.status === "unavailable") {
-      setMessage(
-        provider.last_error
-          ? `${provider.display_name} is unavailable: ${provider.last_error}`
-          : `${provider.display_name} is unavailable in this build.`,
-      );
+      setMessage(`${provider.display_name} is unavailable.`);
       return;
     }
     setMessage("");
@@ -721,10 +708,7 @@ export function CompactKnowledgeSection() {
     <>
       {message && <p className="console-foot" role="status">{message}</p>}
       <ExactApprovalFinalizer controller={mutationFinalizer} />
-      <SettingsGroup
-        foot="Uploads, revisions and citations live in the full Knowledge surface on a desktop."
-        title="Where knowledge lives"
-      >
+      <SettingsGroup title="Where knowledge lives">
         {providers.length === 0 ? (
           <SettingsRow
             desc="No knowledge provider is configured in this workspace."
@@ -745,7 +729,7 @@ export function CompactKnowledgeSection() {
                   />
                 </div>
               )}
-              desc={provider.last_error ? `${provider.role} · ${provider.last_error}` : provider.role}
+              desc={provider.role}
               key={provider.id}
               tech={provider.id}
               title={provider.display_name}
@@ -764,18 +748,15 @@ export function CompactAdvancedSection() {
         <SettingsRow
           control={(
             <span className="settings-value">
-              {isDesktop ? "Tauri desktop shell" : "Browser session"}
+              {isDesktop ? "Desktop app" : "Web browser"}
             </span>
           )}
-          desc="Sign-in uses the same secure browser session cookie either way."
+          desc="Your sign-in stays protected in either app."
           title="Running in"
         />
         <DeveloperDetailsRow />
       </SettingsGroup>
-      <SettingsGroup
-        foot="Device enrolment, desktop updates and the security defaults live in the full Advanced surface on a desktop."
-        title="Session"
-      >
+      <SettingsGroup title="Session">
         <SettingsRow
           control={(
             <SettingsButton
@@ -784,7 +765,7 @@ export function CompactAdvancedSection() {
               tone="danger"
             />
           )}
-          desc="Revokes the current browser session cookie. Other sessions stay visible and revocable under You."
+          desc="Signs out this device. Other sessions stay signed in."
           title="Signed in to Boltrig"
         />
       </SettingsGroup>

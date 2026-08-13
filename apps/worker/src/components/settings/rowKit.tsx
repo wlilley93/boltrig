@@ -140,11 +140,12 @@ export function SettingsSegmented({ value, options, onChange, label, disabled = 
   );
 }
 
-export function SettingsButton({ label, onClick, tone, disabled = false }: {
+export function SettingsButton({ label, onClick, tone, disabled = false, title }: {
   label: string;
   onClick(): void;
   tone?: "danger";
   disabled?: boolean;
+  title?: string;
 }) {
   return (
     <button
@@ -152,6 +153,7 @@ export function SettingsButton({ label, onClick, tone, disabled = false }: {
       data-tone={tone}
       disabled={disabled}
       onClick={onClick}
+      title={title}
       type="button"
     >
       {label}

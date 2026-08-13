@@ -27,8 +27,8 @@ const healthy = (value: string) => value === "ready" || value === "ok";
 // new check is never silently dropped or mislabelled.
 const CHECK_COPY: Record<string, { title: string; sub: string }> = {
   postgres: { title: "Where everything is kept", sub: "The store that holds runs, approvals and the record" },
-  redis: { title: "Coordination between parts", sub: "The queue the kernel's moving pieces share" },
-  migration: { title: "The storage schema", sub: "Storage is on the version this build expects" },
+  redis: { title: "Coordination between parts", sub: "Coordinates background work" },
+  migration: { title: "The storage schema", sub: "Storage is on the required version" },
   control_plane: { title: "Accounts and policy", sub: "Who may do what, decided server-side" },
   stack_tools: { title: "Acting in your systems", sub: "The tools boltrig uses to do real work" },
   hatchet: { title: "Background work", sub: "The runner for long and queued work" },
@@ -55,11 +55,11 @@ const ADAPTER_TONE: Record<AdapterHealth, { tone: Tone; state: string }> = {
 // Scheduling and ceiling edits exist here (AutomationView, Operate), so the
 // design's rows about them are deliberately absent.
 const BOUNDARIES: Array<[string, string, string]> = [
-  ["A single autonomy dial", "Approval is decided per verb by workspace policy. There is no one switch here that loosens it", "by policy"],
+  ["A single autonomy dial", "Approval requirements are set per action by workspace policy", "by policy"],
   ["Weekly spending windows", "Budgets cover a run, a day or a month. There is no weekly window yet", "not yet"],
   ["Cost per routine", "Spend is attributed per actor today, not per routine", "not yet"],
-  ["Overnight practice on its own", "The nightly verbs exist, but a person starts a night; nothing schedules one unasked", "by hand"],
-  ["Chats in projects", "Conversations carry no project or folder, so the archive is one list", "not yet"],
+  ["Overnight practice on its own", "Overnight practice must be started manually", "by hand"],
+  ["Chats in projects", "Archived chats use one list; projects and folders are not available", "not yet"],
 ];
 
 interface Readiness {
@@ -117,7 +117,7 @@ export function HealthSection({ head = true }: { head?: boolean }) {
         {head && (
           <HeadBlock
             headline="Health could not be read"
-            lead="The readiness endpoint did not answer. That is a reading in itself: assume nothing is fine until it does."
+            lead="Readiness could not be checked. Try again later."
           />
         )}
         <BoundariesCard />
@@ -138,10 +138,10 @@ export function HealthSection({ head = true }: { head?: boolean }) {
     ? `${requiredFailing} essential ${requiredFailing === 1 ? "check is" : "checks are"} not working`
     : "Everything essential is working";
   const lead = requiredFailing > 0
-    ? "Anything that needs a failing check will stop and say so rather than pretend."
+    ? "Work that depends on a failing check will stop."
     : optionalOff > 0
-      ? `${optionalOff} optional ${optionalOff === 1 ? "check is" : "checks are"} off or degraded. Nothing is silently broken.`
-      : "Every check is ready. Nothing is silently broken.";
+      ? `${optionalOff} optional ${optionalOff === 1 ? "check is" : "checks are"} off or degraded.`
+      : "Every check is ready.";
 
   const daily = (budgets ?? []).find(
     (budget) => budget.window === "daily" && budget.cost_limit_micros !== null,
@@ -191,7 +191,7 @@ export function HealthSection({ head = true }: { head?: boolean }) {
             <ToneRow
               key={name}
               state={state}
-              sub={copy?.sub ?? check.reason ?? (check.required ? "Required for this build" : "Optional")}
+              sub={copy?.sub ?? check.reason ?? (check.required ? "Required" : "Optional")}
               tech={name}
               title={copy?.title ?? name}
               tone={tone}
@@ -199,7 +199,7 @@ export function HealthSection({ head = true }: { head?: boolean }) {
           );
         })}
         {entries.length === 0 && (
-          <SettingsRow desc="The kernel reported no checks at all." title="Nothing to check" />
+          <SettingsRow desc="No health checks were reported." title="Nothing to check" />
         )}
         {adapters && Object.entries(adapters).map(([key, value]) => {
           const label = key.includes("/") ? key.slice(key.indexOf("/") + 1) : key;
@@ -208,7 +208,7 @@ export function HealthSection({ head = true }: { head?: boolean }) {
             <ToneRow
               key={`adapter:${key}`}
               state={mapped.state}
-              sub="An integration adapter, as the kernel's loader last saw it"
+              sub="Last reported integration health"
               tech={key}
               title={`${label} adapter`}
               tone={mapped.tone}
@@ -233,10 +233,7 @@ function HeadBlock({ headline, lead }: { headline: string; lead: string }) {
 
 function BoundariesCard() {
   return (
-    <SettingsGroup
-      foot="Listed because a limit you can see is worth more than one you discover mid-run."
-      title="What boltrig does not do yet"
-    >
+    <SettingsGroup title="Current limits">
       {BOUNDARIES.map(([title, sub, state]) => (
         <ToneRow key={title} state={state} sub={sub} title={title} tone="unknown" />
       ))}

@@ -58,11 +58,6 @@ export function ShortcutsSection({ head = true }: { head?: boolean }) {
       {groups.length === 0 && (
         <div className="settings-results-empty">Nothing matches that.</div>
       )}
-
-      <p className="console-foot">
-        Only the shortcuts this build actually binds are listed. An unassigned key is not shown as
-        though it worked.
-      </p>
     </>
   );
 }
