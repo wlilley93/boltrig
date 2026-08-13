@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { configuredApiOrigin } from "../apiOrigin";
 import { characterFromSettings, saveCharacterLocal } from "../character";
-import { client } from "../client";
+import { client, rememberSessionCsrf } from "../client";
 import { isDesktop } from "../desktop";
 import {
   ChallengeScreen,
@@ -11,6 +11,7 @@ import {
 } from "./auth/AccountRequirementScreens";
 import { AcceptInviteScreen } from "./auth/AcceptInviteScreen";
 import { AuthSplash, DesktopServerMissing } from "./auth/AuthShell";
+import { DesktopAccountBridge } from "./auth/DesktopAccountBridge";
 import { LoginScreen } from "./auth/LoginScreen";
 import { RequestPasswordResetScreen, ResetPasswordScreen } from "./auth/RecoveryScreens";
 import {
@@ -43,14 +44,33 @@ function useAuthenticatedSession(acceptingInvite: boolean, recoveryFlow: Recover
   useEffect(() => {
     if (acceptingInvite || recoveryFlow !== "none") return;
     void client.meSettings()
-      .then((result) => {
+      .then(async (result) => {
+        if (isDesktop) {
+          const csrf = await client.sessionCsrf();
+          if (!csrf.csrf_token) throw new Error("desktop_session_csrf_unavailable");
+          rememberSessionCsrf(csrf.csrf_token);
+        }
         // Apply the authoritative character before private UI can mount.
         saveCharacterLocal(characterFromSettings(result.settings));
         setState("authenticated");
       })
-      .catch((reason) => {
+      .catch(async (reason) => {
         if (reason instanceof BoltrigApiError && reason.status === 403) {
           const detail = detailOf(reason.body);
+          if (
+            isDesktop
+            && (detail === "password_change_required"
+              || detail === "two_factor_enrollment_required")
+          ) {
+            try {
+              const csrf = await client.sessionCsrf();
+              if (!csrf.csrf_token) throw new Error("desktop_session_csrf_unavailable");
+              rememberSessionCsrf(csrf.csrf_token);
+            } catch {
+              setState("unauthenticated");
+              return;
+            }
+          }
           if (detail === "password_change_required") return setState("password_change_required");
           if (detail === "two_factor_enrollment_required") return setState("enrollment_required");
         }
@@ -62,16 +82,20 @@ function useAuthenticatedSession(acceptingInvite: boolean, recoveryFlow: Recover
     if (state !== "authenticated") return;
     let active = true;
     const rotate = () => {
-      void client.refreshSession().catch((reason) => {
-        if (active && reason instanceof BoltrigApiError && reason.status === 401) {
-          // Re-resolve after a possible shared-cookie rotation in another tab.
-          void client.meSettings().catch((check) => {
-            if (active && check instanceof BoltrigApiError && check.status === 401) {
-              setState("unauthenticated");
-            }
-          });
-        }
-      });
+      void client.refreshSession()
+        .then((result) => {
+          if (result.csrf_token) rememberSessionCsrf(result.csrf_token);
+        })
+        .catch((reason) => {
+          if (active && reason instanceof BoltrigApiError && reason.status === 401) {
+            // Re-resolve after a possible shared-cookie rotation in another tab.
+            void client.meSettings().catch((check) => {
+              if (active && check instanceof BoltrigApiError && check.status === 401) {
+                setState("unauthenticated");
+              }
+            });
+          }
+        });
     };
     const timer = window.setInterval(rotate, 4 * 60 * 60 * 1000);
     const onVisibility = () => {
@@ -135,5 +159,5 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           }}
         />;
   }
-  return <>{children}</>;
+  return <DesktopAccountBridge>{children}</DesktopAccountBridge>;
 }
