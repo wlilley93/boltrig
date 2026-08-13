@@ -11,6 +11,13 @@ deploy/rclone/
 # --- agent working directories ---
 .claude/
 .skillops/
+# ANCHORED, and it is the scratch root for smoke runs -- mktemp dirs like
+# work/codex-x64-smoke.6n4iHx/ plus captured screenshots. Nothing under it has
+# ever been tracked, and it reached 637 MB (two extracted codex binaries at
+# 291 MB and 253 MB) while invisible to `git status` summaries. A `git add -A`
+# would have committed all of it. Regenerable output, so it is ignored rather
+# than curated.
+/work/
 
 # --- python ---
 __pycache__/

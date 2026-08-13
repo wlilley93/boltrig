@@ -11,6 +11,8 @@ doctrine: one dispatch chokepoint, stable nouns and verbs, everything-as-data).
 > **Runtime direction (2026-07-21):** Codex is the only target agent runtime
 > under decision 0012. Its supervised proxy/event contract is wired, but the
 > production cutover and Codex-native collaboration admission are not yet green.
+> The executable blockers and closure order are recorded in
+> `docs/CODEX-PRODUCTION-ADMISSION.md`.
 > Pi, Hermes, OpenCode, and related paths remain staged rollback residue, not
 > alternate product runtimes.
 
@@ -134,6 +136,16 @@ make up ARGS="--profile local"
 
 The kernel API comes up on `:8000`, the console UI on `:8080`. The same images
 run in every environment; only `.env` and `manifest.yaml` differ (P7).
+
+### Bring your own model gateway
+
+The published template contains no personal provider, model identity, API key,
+webhook, or tenant data. Run/configure your own Bifrost instance, keep its
+provider keys in Bifrost's secret/admin surface, then choose one of its
+advertised text models in Worker **Settings → Models**. Boltrig receives only
+the opaque, governed route and exact model name; provider keys never enter the
+browser or the checked-in `.env.example`. The stock Stage ships with Familiar
+and Jarvis only; additional companions are not part of the production bundle.
 
 ## Architecture
 

@@ -10,10 +10,10 @@
 # (P1/P7). ${ENV} references are interpolated from the process environment
 # (boltrig/config/manifest.py).
 
-organisation: Acme Corp
-tenant_id: acme
+organisation: ${BOLTRIG_ORGANISATION:-Your organisation}
+tenant_id: ${BOLTRIG_TENANT_ID:-default}
 locale_default: en
-timezone_default: Europe/London
+timezone_default: UTC
 
 # --- Boltrig v2 chosen stack ------------------------------------------------
 # This is the accepted target architecture map. Codex is the agent runtime;
@@ -39,19 +39,20 @@ identity:
   audience: ${OIDC_AUDIENCE}
   jwks_uri: ${OIDC_JWKS_URI}
   role_mappings:
-    # Org admins get the tenant-wide verb ceiling ("*").
-    - idp_group: acme-admins
+    # Org admins get the tenant-wide verb ceiling ("*"). Replace these group
+    # names with the groups from the organisation's own identity provider.
+    - idp_group: boltrig-admins
       role: org-admin
       scope:
         all: true
     # Engineering dept heads: ticket + jira authority, scoped to their dept.
-    - idp_group: acme-engineering
+    - idp_group: boltrig-engineering
       role: department-head
       scope:
         departments: ["engineering"]
         nouns: ["ticket", "jira"]
     # Members can read and write tickets only.
-    - idp_group: acme-staff
+    - idp_group: boltrig-members
       role: agent
       scope:
         verbs: ["ticket.read", "ticket.create"]
@@ -59,24 +60,30 @@ identity:
 # --- models: inference back ends + routing (P4, SEC-12) ---------------------
 models:
   endpoints:
+    # Bifrost is the only standard-data route in the public template. The model
+    # name is deliberately blank until the operator configures Bifrost and
+    # selects an advertised model through Settings; no provider key or model
+    # belonging to the repository owner is bundled here.
     - id: standard
-      kind: anthropic
-      model: claude-sonnet-4-6
+      kind: bifrost
+      model: ${BOLTRIG_DEFAULT_MODEL:-}
+      base_url: ${BOLTRIG_MODEL_GATEWAY_URL:-http://bifrost:8080/v1}
       data_class: standard
     - id: local-sensitive
       kind: vllm
-      base_url: http://local-model:8000/v1
-      model: ${LOCAL_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      base_url: ${BOLTRIG_LOCAL_MODEL_URL:-http://local-model:8000/v1}
+      model: ${BOLTRIG_LOCAL_MODEL:-}
       data_class: sensitive
-    - id: opencode-ornith
+    - id: opencode
       kind: opencode
       # Optional warm `opencode serve` URL. Leave unset to let OpenCode start its
       # own local server, or set to http://127.0.0.1:4096 for attach mode.
       # In compose, OpenCode state/config is rooted at BOLTRIG_OPENCODE_HOME so
       # the shipped stack never reads a developer user's ~/.config/opencode.
       base_url: ${OPENCODE_ATTACH_URL:-}
-      # OpenCode expects provider/model here, not merely the upstream HF id.
-      model: ${OPENCODE_MODEL:-ornith/deepreinforce-ai/Ornith-1.0-35B}
+      # OpenCode is optional and operator-owned; the template does not invent a
+      # provider/model identity for it.
+      model: ${OPENCODE_MODEL:-}
       data_class: standard
   default: standard
   # Sensitive-classified data is routed to the on-box endpoint (never egresses).
@@ -197,11 +204,11 @@ ephemeral_runtimes:
     supported_skills: ["analysis/*", "integration/*", "browser/*"]
     max_depth: 2
     cost_tier: standard
-  # Boltrig v2: OpenCode as the coding-agent runtime. The endpoint's model is
-  # the OpenCode provider/model id and base_url is an optional opencode serve URL.
+  # Boltrig v2: OpenCode is an optional operator-owned coding-agent runtime. Its
+  # endpoint stays unconfigured until the operator supplies a model identity.
   - name: opencode-worker
     runtime: opencode
-    model_endpoint: opencode-ornith
+    model_endpoint: opencode
     supported_skills: ["*"]
     max_depth: 2
     cost_tier: standard
@@ -353,7 +360,6 @@ network:
   ca_bundle: ${CA_BUNDLE:-}
   allowed_domains:
     - graph.microsoft.com
-    - your-org.atlassian.net
     - api.x.ai
   blocked_domains: []
 
@@ -380,37 +386,16 @@ runtimes:
   # through the gateway and pinned to one model per conversation so the gateway's
   # prompt cache stays warm across turns (SEC-47). Sensitive data is NEVER routed
   # here - it goes to its local endpoint directly (residency, SEC-43). Maps to
-  # BOLTRIG_MODEL_GATEWAY_URL / BOLTRIG_MODEL_GATEWAY_TTL. Unset => inert.
+  # BOLTRIG_MODEL_GATEWAY_URL / BOLTRIG_MODEL_GATEWAY_TTL.
   gateway:
-    base_url:                                # e.g. http://bifrost:8080/v1 (empty = off)
+    base_url: ${BOLTRIG_MODEL_GATEWAY_URL:-http://bifrost:8080/v1}
     cache_ttl_seconds: 900                   # sync to the gateway's own cache TTL
     health:
       enabled: false                         # exports BOLTRIG_MODEL_GATEWAY_HEALTH
       path: /health                          # derives from base_url; no secrets here
-    # Optional config-only model profiles. apply_manifest exports this object as
-    # BOLTRIG_MODEL_PROFILES unless the process env already overrides it.
-    # Workflows select one with context/defaults/agent model_profile: code/deep/etc.
-    model_profiles:
-      fast:
-        provider: bifrost
-        model: ${BOLTRIG_FAST_MODEL:-qwen-3-coder}
-        base_url: ${BOLTRIG_MODEL_GATEWAY_URL:-http://bifrost:8080/v1}
-      code:
-        provider: bifrost
-        model: ${BOLTRIG_CODE_MODEL:-kimi-k2.7}
-        base_url: ${BOLTRIG_MODEL_GATEWAY_URL:-http://bifrost:8080/v1}
-      deep:
-        provider: bifrost
-        model: ${BOLTRIG_DEEP_MODEL:-kimi-k2.7}
-        base_url: ${BOLTRIG_MODEL_GATEWAY_URL:-http://bifrost:8080/v1}
-      cheap:
-        provider: bifrost
-        model: ${BOLTRIG_CHEAP_MODEL:-gpt-5-mini}
-        base_url: ${BOLTRIG_MODEL_GATEWAY_URL:-http://bifrost:8080/v1}
-      local:
-        provider: vllm
-        model: ${LOCAL_MODEL:-Qwen/Qwen2.5-7B-Instruct}
-        base_url: http://local-model:8000/v1
+    # Model identity and provider keys are intentionally absent here. The
+    # governed Models settings surface reads Bifrost's live catalogue and lets
+    # each deployment author its own routes without exposing keys to the UI.
 
 # --- expose the kernel as an MCP server, and optionally consume external ones
 mcp:

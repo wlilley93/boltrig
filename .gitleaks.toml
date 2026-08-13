@@ -104,6 +104,14 @@ regexes = ['''(?:discord|signal|telegram|voice)roundtrip_123|roundtripsec_123'''
 description = "VDS figma ledger: file keys are URL identifiers, not secrets"
 condition = "AND"
 targetRules = ["generic-api-key"]
-paths = ['''^\.vds/ledgers/figma\.yaml$''']
+paths = [
+  '''^\.vds/directions/DIR-000[1-7]\.yaml$''',
+  '''^\.vds/ledgers/(?:figma|frames)\.yaml$''',
+  '''^\.vds/reviews/VRW-000[1-6]\.yaml$''',
+  '''^\.vds/screens/SCR-000[1-7]\.yaml$''',
+  '''^docs/design/evidence/2026-08-11-console-parity/capture-manifest\.json$''',
+  '''^docs/design/evidence/2026-08-11-console-parity/figma-connected-inventory\.json$''',
+  '''^docs/design/evidence/2026-08-11-console-parity/vds-review-inputs\.pending\.json$''',
+]
 regexTarget = "line"
-regexes = ['''file_key: iVQBKFc3NpRH3zdOOxfPqr''']
+regexes = ['''iVQBKFc3NpRH3zdOOxfPqr''']
