@@ -13,8 +13,10 @@ import type {
 import { configuredApiOrigin } from "../apiOrigin";
 import { client } from "../client";
 import { isDesktop } from "../desktop";
+import { StageBody, useFamiliarBody, type StageTurnInput } from "./StageBody";
+import { useCharacter } from "./characters";
+import { useStagePhenotype } from "./chat/useStagePhenotype";
 import { FamiliarBadge } from "./familiar/FamiliarBadge";
-import { FamiliarStage } from "./familiar/FamiliarStage";
 import "./VoiceCall.css";
 
 interface VoiceCallProps {
@@ -43,6 +45,8 @@ interface VoiceLine {
   id: string;
   speaker: "You" | "Boltrig";
   text: string;
+  /** True when the line was typed mid-call rather than spoken. */
+  typed?: boolean;
 }
 
 type IncomingCallEvent = Pick<CallEvent, "type" | "payload"> &
@@ -199,6 +203,7 @@ export function VoiceCall({
   const [recovered, setRecovered] = useState(false);
   const [recentCalls, setRecentCalls] = useState<RealtimeCall[]>([]);
   const [muted, setMuted] = useState(false);
+  const [textDraft, setTextDraft] = useState("");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [dismissedNotice, setDismissedNotice] = useState("");
   const [focusedParticipantId, setFocusedParticipantId] = useState<string | null>(null);
@@ -208,6 +213,10 @@ export function VoiceCall({
   });
   const mediaRef = useRef<MediaResources | null>(null);
   const callRef = useRef<RealtimeCall | null>(null);
+  const textDraftOwnerRef = useRef<{
+    conversationId: string | null;
+    callId: string | null;
+  } | null>(null);
   const readyRef = useRef(false);
   const endingRef = useRef(false);
   const mutedRef = useRef(false);
@@ -221,15 +230,20 @@ export function VoiceCall({
   onFamiliarActivityRef.current = onFamiliarActivity;
   const onCallActiveRef = useRef(onCallActive);
   onCallActiveRef.current = onCallActive;
+  const inCall = status === "creating"
+    || status === "joining"
+    || status === "active"
+    || status === "reconnecting"
+    || status === "held";
+  const selectedCharacterId = useFamiliarBody();
+  const selectedCharacter = useCharacter(selectedCharacterId);
+  const { phenotype: stagePhenotype } = useStagePhenotype(
+    inCall && selectedCharacter.readsPhenotype,
+  );
 
   useEffect(() => {
-    const inCall = status === "creating"
-      || status === "joining"
-      || status === "active"
-      || status === "reconnecting"
-      || status === "held";
     onCallActiveRef.current?.(inCall);
-  }, [status]);
+  }, [inCall]);
   useEffect(() => () => onCallActiveRef.current?.(false), []);
   const seenEventIdsRef = useRef(new Set<string>());
   const pendingApprovalsRef = useRef(new Set<string>());
@@ -298,6 +312,11 @@ export function VoiceCall({
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (event.target instanceof HTMLInputElement) {
+          // Escape while typing sheds the composer first; it must not hang up.
+          event.target.blur();
+          return;
+        }
         event.preventDefault();
         event.stopPropagation();
         void endCallRef.current();
@@ -404,6 +423,8 @@ export function VoiceCall({
     }
     const attempt = ++connectionAttemptRef.current;
     closeMedia(mediaRef, readyRef, playAtRef);
+    textDraftOwnerRef.current = null;
+    setTextDraft("");
     callRef.current = null;
     setCall(null);
     setStatus("idle");
@@ -429,6 +450,8 @@ export function VoiceCall({
         || connectionAttemptRef.current !== attempt
         || !result.call
       ) return;
+      textDraftOwnerRef.current = null;
+      setTextDraft("");
       setCall(result.call);
       callRef.current = result.call;
       setStatus("reconnecting");
@@ -447,6 +470,8 @@ export function VoiceCall({
     endingRef.current = false;
     mutedRef.current = false;
     setMuted(false);
+    textDraftOwnerRef.current = null;
+    setTextDraft("");
     callStartedAtRef.current = Date.now();
     setElapsedSeconds(0);
     setFamiliarActivity({ ...QUIET_VOICE_FEATURES, bands: [...QUIET_VOICE_FEATURES.bands] });
@@ -517,6 +542,8 @@ export function VoiceCall({
     setUsage(null);
     setEventNotice("");
     setApprovalCount(0);
+    textDraftOwnerRef.current = null;
+    setTextDraft("");
     seenEventIdsRef.current.clear();
     pendingApprovalsRef.current.clear();
     setCall(selected);
@@ -817,6 +844,34 @@ export function VoiceCall({
     for (const track of audioTracks(stream)) track.enabled = !next;
   }
 
+  function sendTextMessage() {
+    const text = textDraft.trim();
+    const owner = textDraftOwnerRef.current;
+    if (
+      text
+      && (
+        owner?.conversationId !== conversationId
+        || owner.callId !== (callRef.current?.id ?? null)
+      )
+    ) {
+      textDraftOwnerRef.current = null;
+      setTextDraft("");
+      return;
+    }
+    const socket = mediaRef.current?.socket;
+    if (!text || !readyRef.current || socket?.readyState !== WebSocket.OPEN) return;
+    try {
+      // Typed mid-call text rides the same media socket as the mic PCM; the
+      // gateway injects it into the provider session and echoes it back as a
+      // transcript call_event, which is what renders the line.
+      socket.send(JSON.stringify({ type: "user_text", text }));
+      textDraftOwnerRef.current = null;
+      setTextDraft("");
+    } catch {
+      // A dying socket reports itself through its own close/error handling.
+    }
+  }
+
   async function refreshRecentCalls() {
     if (typeof client.calls !== "function") return;
     try {
@@ -885,6 +940,7 @@ export function VoiceCall({
         id: event.id ?? crypto.randomUUID(),
         speaker: payload.kind === "input" ? "You" : "Boltrig",
         text: payload.text,
+        typed: payload.via === "text",
       };
       setLines((current) => [...current, line].slice(-50));
       return;
@@ -953,6 +1009,7 @@ export function VoiceCall({
           className="primary-button"
           onClick={() => void start()}
           title={embedded ? "Talk to the chief of staff instead" : undefined}
+          type="button"
         >
           {embedded ? (
             <svg aria-hidden fill="currentColor" height="15" viewBox="0 0 24 24" width="15">
@@ -1038,6 +1095,7 @@ export function VoiceCall({
   const latestAssistantLine = [...lines].reverse().find(
     (line) => line.speaker === "Boltrig",
   );
+  const latestTypedLine = [...lines].reverse().find((line) => line.typed);
   const focusedOnPrimary = focusedAgent?.id === primaryAgent?.id;
   const stageState = {
     working: focusedOnPrimary && !familiarActivity.speaking && (
@@ -1047,6 +1105,16 @@ export function VoiceCall({
     level: focusedOnPrimary ? familiarActivity.level : 0,
     bands: focusedOnPrimary ? familiarActivity.bands : QUIET_VOICE_FEATURES.bands,
     onset: focusedOnPrimary ? familiarActivity.onset : 0,
+  };
+  const stageInput: StageTurnInput = {
+    loading: false,
+    hasLiveEvents: stageState.working,
+    liveEnded: false,
+    voiceSpeaking: stageState.speaking,
+    voiceLevel: stageState.level,
+    voiceBands: stageState.bands,
+    voiceOnset: stageState.onset,
+    micActive: !muted,
   };
   const noticeVisible = Boolean(eventNotice && eventNotice !== dismissedNotice);
   const primaryAgentPhrase = callParticipantPhrase(primaryAgent?.label ?? "Boltrig");
@@ -1097,16 +1165,20 @@ export function VoiceCall({
 
         <div className="voice-call-presence">
           <div className="voice-call-primary-familiar">
-            <FamiliarStage
+            <StageBody
               genotype={focusedGenotype}
+              input={stageInput}
               label={focusedAgent?.label ?? "Boltrig"}
               mode="voice"
-              state={stageState}
+              phenotype={stagePhenotype}
             />
           </div>
           <strong>{focusedAgent?.label ?? "Boltrig"}</strong>
           {latestAssistantLine && focusedOnPrimary && (
             <p className="voice-call-saying">{latestAssistantLine.text}</p>
+          )}
+          {latestTypedLine && (
+            <p className="voice-call-typed">You typed: {latestTypedLine.text}</p>
           )}
           {!focusedOnPrimary && (
             <span className="sr-only" role="status">
@@ -1146,6 +1218,30 @@ export function VoiceCall({
           ))}
         </div>
         <div className="voice-call-controls">
+          {(status === "active" || status === "held") && (
+            <form
+              className="voice-call-text"
+              onSubmit={(event) => {
+                event.preventDefault();
+                sendTextMessage();
+              }}
+            >
+              <input
+                aria-label="Type a message to the call"
+                onChange={(event) => {
+                  const value = event.target.value;
+                  textDraftOwnerRef.current = value ? {
+                    conversationId,
+                    callId: callRef.current?.id ?? null,
+                  } : null;
+                  setTextDraft(value);
+                }}
+                placeholder="Type a message…"
+                value={textDraft}
+              />
+              <button disabled={!textDraft.trim()} type="submit">Send</button>
+            </form>
+          )}
           {(recovered || status === "reconnecting" || status === "failed") && (
             <button onClick={() => void reconnect()} type="button">
               {recovered ? "Resume call" : "Reconnect"}

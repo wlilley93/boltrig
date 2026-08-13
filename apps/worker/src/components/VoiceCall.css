@@ -298,6 +298,33 @@
   background: var(--card-2);
 }
 
+.voice-call-text {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.voice-call-text input {
+  width: 220px;
+  padding: 9px 14px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  color: var(--text);
+  background: transparent;
+  font: 13px/1.35 inherit;
+}
+
+.voice-call-text input:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.voice-call-typed {
+  margin: 2px 0 0;
+  color: var(--text-4);
+  font-size: 12px;
+}
+
 .voice-call-transcript-sr {
   position: absolute;
   width: 1px;

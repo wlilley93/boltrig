@@ -105,6 +105,9 @@
    how VoiceCall's own idle/call layouts flow inside the tools row. */
 .voice-dock { display: flex; min-width: 0; align-items: center; }
 
+.composer-voice-controller { display: contents; }
+.composer-voice-controller[hidden] { display: none; }
+
 .model-chip-wrap { position: relative; }
 .model-chip {
   display: flex;
@@ -121,6 +124,15 @@
 }
 .model-chip:hover { background: var(--hover); }
 .model-chip svg { color: var(--text-4); }
+.model-chip-disambiguator {
+  max-width: 110px;
+  overflow: hidden;
+  color: var(--text-4);
+  font-size: 10.5px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .model-menu {
   position: absolute;
   right: 0;
@@ -152,7 +164,24 @@
 .model-option:hover,
 .model-option[data-active="true"] { color: var(--text); background: var(--hover); }
 .model-option[aria-selected="true"] { color: var(--text); font-weight: 500; }
-.model-chip-tech { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+.model-option > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.model-option > small { color: var(--text-4); font-size: 10.5px; }
+.model-option[aria-disabled="true"] { cursor: default; opacity: .58; }
+.model-manage {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 9px 5px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  color: var(--text-3);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+}
+.model-manage:hover,
+.model-manage:focus-visible { color: var(--text); }
 
 /* --- Work disclosure ------------------------------------------------------- */
 

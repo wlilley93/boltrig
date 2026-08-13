@@ -1,0 +1,116 @@
+/* A compact glass navigator over the uninterrupted chat canvas. Its resting
+ * surface has no stroke; contrast comes from blur, tone, and a restrained
+ * shadow so it belongs to the same surface family as the floating rails. */
+.transcript-navigation {
+  position: absolute;
+  z-index: 8;
+  right: max(
+    12px,
+    env(safe-area-inset-right, 0px),
+    calc((100% - 745px) / 2 - 42px)
+  );
+  bottom: max(104px, calc(96px + env(safe-area-inset-bottom, 0px)));
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 3px;
+  border: 0;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--card) 72%, transparent);
+  box-shadow: 0 9px 28px rgb(0 0 0 / 13%);
+  backdrop-filter: blur(18px) saturate(125%);
+  -webkit-backdrop-filter: blur(18px) saturate(125%);
+}
+
+.transcript-navigation button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-3);
+  background: transparent;
+  cursor: pointer;
+}
+
+.transcript-navigation button:hover,
+.transcript-navigation button:focus-visible {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.transcript-navigation button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.transcript-navigation button:disabled {
+  color: var(--text-4);
+  cursor: default;
+  opacity: .42;
+}
+
+.transcript-navigation button:disabled:hover {
+  background: transparent;
+}
+
+.transcript-navigation-latest {
+  margin-left: 2px;
+  color: var(--text-2) !important;
+  background: color-mix(in srgb, var(--text) 8%, transparent) !important;
+}
+
+.transcript-navigation-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}
+
+@media (max-width: 1020px) {
+  .transcript-navigation {
+    right: max(12px, env(safe-area-inset-right, 0px));
+    bottom: max(108px, calc(100px + env(safe-area-inset-bottom, 0px)));
+  }
+}
+
+@media (max-width: 640px) {
+  .transcript-navigation button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .transcript-navigation {
+    background: var(--card);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .transcript-navigation,
+  .transcript-navigation * {
+    scroll-behavior: auto;
+    transition: none;
+  }
+}
+
+:root.reduce-motion .transcript-navigation,
+:root.reduce-motion .transcript-navigation * {
+  scroll-behavior: auto;
+  transition: none;
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .transcript-navigation { background: var(--card); }
+}
