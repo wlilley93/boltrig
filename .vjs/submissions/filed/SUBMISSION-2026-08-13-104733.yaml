@@ -1,0 +1,103 @@
+id: SUBMISSION-2026-08-13-104733
+court_requested: county
+jurisdiction: default
+question: 'Two real FrameGraph bakes (195.2 MB) sit in another session''s /private/tmp scratchpad because --out defaults to the CWD. Do they stay, move under ~/Projects/gen-pipeline/store/frames/, or wait for the character bundle root the spec calls for - and does that answer bind where future bakes are written?'
+facts: |
+  # Case: where a baked .frame.mp4 lives
+
+  ## Facts (verified)
+  1. Two bakes exist and are real, not placeholders:
+     `Maya.conversation.frame.mp4` 140,835,630 bytes, 50 chapters, 253.125s, and
+     `Maya.greeting.frame.mp4` 54,411,493 bytes, 20 chapters, 101.25s - both
+     544x736@16 - written 17:04 and 17:05 on 2026-08-13. 195.2 MB together.
+  2. They are in
+     `/private/tmp/claude-501/-Users-williamlilley/20aaed51-96ee-491b-8414-ca411a11e415/scratchpad/`,
+     which is ANOTHER session's directory - mode 0700, group wheel, a sibling of
+     this session's own scratchpad. Not a location anyone chose for them.
+  3. They landed there by default, not by decision. `frame_bake.py:181` sets
+     `--out` to `f"{char}.{scene}.frame.mp4"` with no directory, so the bake
+     writes to the CWD it was invoked from.
+  4. The bake is reproducible from inputs that are on disk. `frame_bake.py:24`
+     reads `DATASET = ~/Projects/gen-pipeline/store/clips`; `Maya/wan` holds 534
+     `.mp4` segments; the module docstring records that 190 of 238 performance
+     clips already match the target format, so a matching scene is a pure stream
+     copy - "seconds, and bit-exact".
+  5. The proposed destination does not exist. There is no
+     `~/Projects/gen-pipeline/store/frames/`. The store is 22G:
+     `clips` 5.1G plus `voice`, `personal`, `exports`, `uploads`, `state` and
+     `migration-backup`. Nothing in it is in git.
+  6. The store is shared and rule-bound. `store/README.md` names four projects
+     that read and write it; `me-lora/dataset` is a symlink to `store/clips` that
+     9 scripts under `me-lora/scripts` follow, and the README states plainly that
+     replacing it with a real directory forks the clip library in two. The README
+     also records that 16GB of derived `artifact.zip` files were deleted from this
+     tree on 2026-08-12 after verifying they were redundant.
+  7. Nothing in the estate reads a `.frame.mp4` from a fixed path.
+     `frame_player.py:178` takes the file as a positional argument, and its
+     docstring is explicit that the file "needs no store, no network and no
+     kernel to play".
+  8. The format is load-bearing for the spec and is private.
+     `docs/SPEC-character-bundle.md` says a `type: companion` bundle brings a
+     `.frame.mp4` and its manifest, that assets "consolidate under one bundle
+     root" AND are named by a manifest, and that FrameGraph and the container are
+     proprietary - private build only, never in the public graph.
+  9. Each file records its own invocation. Read through `frame_box.read`, the
+     `uuid` box carries `character: Maya`, `scene: greeting|conversation`,
+     `states: [idle, bow, wave]` and `[idle, talk, listening, nod, smile]`,
+     the target format and the segment table. So a rebuild needs nothing that is
+     not inside the artefact plus `store/clips` - there is no bake log, and none
+     is needed. (An earlier draft of this submission asserted the opposite; it
+     was checked and is withdrawn.)
+
+  ## The question
+  Do the two bakes stay in the scratchpad, move under
+  `~/Projects/gen-pipeline/store/frames/`, or wait for the bundle root - and does
+  the answer bind `frame_bake.py`'s default output path for every future bake?
+
+  ## Options
+  A. MOVE TO `store/frames/`, AND POINT `--out` THERE BY DEFAULT. Strongest case:
+     the store is already the estate's answer to "code lives in projects, assets
+     live here"; the bake's inputs are in it; 195 MB against 22G is not a capacity
+     question; and the current owner is wrong in kind - another session's private
+     directory under `/private/tmp`, invisible to anyone reading the store and
+     alive only until something sweeps temp. Cost: it classes a bake as an ASSET
+     when it is a build output, which is the opposite of the README's split -
+     everything else in the store is a source (clips, corpus, LoRAs) - and derived
+     files in this tree are exactly what put 16GB of `artifact.zip` there. The name
+     also collides with `store/personal/frames/`, which is camera frames and
+     unrelated. And it publishes a proprietary container into a directory three
+     other projects read.
+
+  B. LEAVE THEM, AND TREAT A BAKE AS DISPOSABLE. Delete when the work is done and
+     rebuild on demand. Strongest case: fact 9 makes this genuinely available - a
+     bake is a pure function of `store/clips` plus a scene and a state list, both
+     of which the file itself carries, and 190/238 clips need no re-encode, so a
+     rebuild is minutes and bit-exact. Keeping derived files is precisely how a
+     store reaches 22G. Cost: "leave them" is not a resting state - `/private/tmp`
+     belongs to a session that has ended and is swept by a mechanism nobody chose,
+     so B in practice means DELETE NOW and re-bake when needed, and it must be
+     stated that way rather than as inaction. It also throws away the only two
+     artefacts the container format has ever been exercised against, at a moment
+     when `type: companion` is specified but unimplemented.
+
+  C. NEITHER - A BAKE BELONGS TO A CHARACTER BUNDLE. It goes under Maya's bundle
+     root when that root exists (Phase 4), and the shared store keeps only sources.
+     Strongest case: the spec already decides this shape - a companion bundle
+     brings a `.frame.mp4`, assets consolidate under one root, and the container is
+     private-build - so A would put the proprietary artefact in the one directory
+     the format says it should be leaving. Cost: the bundle root does not exist
+     yet, so C parks the files where they are in the meantime, which is B without
+     B's honesty about the sweep; and Maya's assets are the very thing the
+     consolidation moves, so the bakes would be moved twice.
+
+  ## Constraints
+  No option may leave a `.frame.mp4` reachable from a path the public build or a
+  tailnet mount can serve - the container is proprietary and the `:8901` exposure
+  on beelink is still open. "Leave them" must be read as a decision about
+  `/private/tmp`, not as deferral, since that directory disposes of the files on
+  its own schedule either way. And whatever is decided for these two, `--out` still
+  defaults to the CWD, so the question recurs on the next bake unless the answer
+  binds the default.
+requested_order: TBD
+private_boundary: local
+word_count: 992

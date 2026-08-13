@@ -1,0 +1,104 @@
+id: SUBMISSION-2026-08-13-091412
+court_requested: county
+jurisdiction: default
+question: 'Does the tier-1 Chief of Staff identity resolve in the Worker at dispatch, or in the kernel from the manifest? The name and routing id ride the SDK contract to the Worker, and every dispatch-facing surface on both sides uses a hardcoded literal instead.'
+facts: |
+  # Case: where the tier-1 Chief of Staff identity resolves
+
+  ## Facts (verified)
+  1. The manifest declares it. `manifest.example.yaml:149-158` sets
+     `hierarchy.tier1.name: chief-of-staff` with runtime codex, model_endpoint
+     standard, max_depth 4, cost_tier standard and a daily 50,000,000-micro
+     hard-stop budget. `boltrig/config/manifest.py:583` parses it into
+     `HierarchyConfig.tier1`.
+  2. Exactly one consumer reads that name.
+     `boltrig/fleet/permanent_runtime.py:74-84` builds
+     `AgentCapability(name=tier.name, ...)` for the lazy reasoning profile,
+     constructed at `pump.py:715` as
+     `ChiefOfStaff(kernel, departments, runtime=permanent.chief(spawner, manifest))`.
+     That governs WHICH MODEL answers, not who the turn is addressed to.
+  3. Every dispatch-facing surface in the kernel uses a literal instead.
+     `boltrig/fleet/chat_turn_execution.py:66` stamps
+     `owner_member="chief-of-staff"` on the work item; :90-91 builds
+     `InvocationContext(actor="chief-of-staff", actor_tier="tier1")`. Neither
+     reads the manifest, so the audited actor is a constant.
+  4. The routing identity is a constant BY RULE.
+     `boltrig/config/permanent_fleet.py:87-88` raises "chief routing_id must be
+     cos", and :273 projects `"routing_id": "cos" if chief else (tier.department
+     or tier.name)`. Tier-2 routing ids come from the manifest; tier-1's cannot.
+  5. The catalogue is asymmetric in the same place.
+     `boltrig/config/channel_addressing.py:33-40` hardcodes the chief target
+     `{"id": "cos", "kind": "chief", "label": "Chief of staff"}`, while :53-60
+     reads each department's `routing_id` and `name` off the projected hierarchy.
+  6. The name nonetheless rides the contract to the Worker:
+     `sdks/web/src/types.ts:94-110`, `PermanentFleetHead.name`/`.routing_id` and
+     `PermanentFleetHierarchy.chief`.
+  7. The Worker never reads it for dispatch or for its own label.
+     `ChatView.tsx:1152,1158,1164,1306` and `VoiceCall.tsx:1008,1011` write the
+     string "chief of staff" literally; `ChannelsView.tsx:128-138` carries a
+     `fallbackAddressingCatalogue` repeating `{id:"cos", label:"Chief of staff"}`;
+     `PermanentFleetTopology.tsx:1102` disables the chief's routing-id input.
+  8. The Worker could not address a tier-1 even if it resolved one. `ChatRequest`
+     (`types.ts:646-672`) carries conversation_id, message, attachments,
+     idempotency_key, origin, model_profile_id, model_choice_id - no target and no
+     agent. `apps/worker/src/character.ts:1-4` states the same position for the
+     character choice: "this value is not sent in Chat requests and does not alter
+     response prose or dispatch."
+  9. Asked twice and still open: `~/.claude/plans/swirling-zooming-sundae.md`
+     open decision 1, and `docs/VISION-2026-08-13-app-that-bakes-a-site.md` gap 4,
+     which records that the boundary "needs settling deliberately rather than by
+     drift". Its order of work makes step 3 block steps 4 and 5.
+
+  ## The question
+  Does the tier-1 identity a turn is dispatched to resolve in the Worker at
+  dispatch, or in the kernel from the manifest - and does the answer bind the
+  label the Worker draws as well as the actor the kernel audits?
+
+  ## Options
+  A. THE KERNEL RESOLVES, THE WORKER ONLY RENDERS. `chat_turn_execution.py` reads
+     `hierarchy.tier1.name` for `actor` and `owner_member` instead of the literal;
+     `channel_addressing.py` reads the projected chief `name` for its label exactly
+     as it already does for departments; the Worker drops its literals and renders
+     `PermanentFleetHierarchy.chief.name`, already on the contract it fetches.
+     Strongest case: the identity lands in an audit row's `actor` and on a work
+     item's `owner_member`, so it is authority-adjacent, and every other authority
+     fact here resolves server-side; it also removes the tier-1/tier-2 asymmetry.
+     Cost: `routing_id` stays "cos" regardless (permanent_fleet.py:87-88), so the
+     win is the label and the audited actor, not addressability; and a manifest
+     edit is not live until a worker restart - `permanent_fleet_projection.py`
+     reports `chief_routing_identity` as `awaiting_worker_restart` - so the UI must
+     say "restart required" rather than show the new name as current.
+
+  B. THE WORKER RESOLVES AT DISPATCH. `ChatRequest` gains an optional target drawn
+     from the existing addressing catalogue (`cos`, a department routing id, or
+     `workflow:<id>`), so a chat turn is addressed the way a channel message
+     already is and tier-1 becomes one selectable target rather than the only one.
+     Strongest case: it is the only option that makes the CHOICE real - today a
+     chat turn can reach nothing but tier-1, which is why "the choice reaches the
+     agent" (gap 4) has nowhere to land - and it reuses a catalogue the kernel
+     already scopes, validates and bounds (`supports_arbitrary_agent_pinning:
+     false`). Cost: it puts a routing input on the request surface, so the kernel
+     must re-authorise it every turn rather than trust it; the catalogue is
+     caller-scoped, so a stale client can name a target it may no longer address;
+     and it is the larger change - request schema, server validation, audit and
+     composer UI.
+
+  C. RATIFY THE LITERAL. Record "chief-of-staff" as a fixed system identity, drop
+     `name` from the chief's projection, and keep both sides hardcoded. Strongest
+     case: it is honest about what is true today, costs nothing, and matches the
+     existing rule that the chief's routing id is a constant - a manifest field
+     nothing consumes is worse than no field. Cost: it makes `hierarchy.tier1.name`
+     decorative while `hierarchy.tier2[].name` stays load-bearing, so the manifest
+     teaches an inconsistency; and it forecloses gap 4 - if the tier-1 identity is
+     fixed, "talk to Familiar, or to Jarvis" can never be more than a Stage skin.
+
+  ## Constraints
+  Identity that reaches an audit row is authority-adjacent and may not be settled
+  by a client assertion the server does not re-check. Whichever way it resolves,
+  the two hardcoded catalogues - `channel_addressing.py` and the Worker's
+  `fallbackAddressingCatalogue` - must not be free to disagree. And the answer must
+  say whether it binds the drawn label as well as the audited actor, because today
+  those are two separate literals maintained in two repositories of the same tree.
+requested_order: TBD
+private_boundary: local
+word_count: 878
