@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   artifacts: vi.fn(),
   chatConfig: vi.fn(),
+  chatModelChoices: vi.fn(),
   conversation: vi.fn(),
   conversations: vi.fn(),
   knowledgeAssets: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock("../src/client", () => ({
   client: {
     artifacts: state.artifacts,
     chatConfig: state.chatConfig,
+    chatModelChoices: state.chatModelChoices,
     conversation: state.conversation,
     conversations: state.conversations,
     createCall: vi.fn(),
@@ -87,6 +89,14 @@ beforeEach(() => {
       max_total_bytes: 1_048_576,
       model_readable_media_types: ["text/*"],
     },
+  });
+  state.chatModelChoices.mockResolvedValue({
+    status: "ok",
+    reason: null,
+    choices: [],
+    default_choice_id: "opaque-default-route",
+    default_model_name: "openai/gpt-5.4",
+    default_available: true,
   });
   state.conversation.mockResolvedValue({ messages: [], active_run_id: null });
   state.conversations.mockResolvedValue({

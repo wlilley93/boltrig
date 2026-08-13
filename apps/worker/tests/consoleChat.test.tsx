@@ -1,15 +1,19 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
 
 const api = vi.hoisted(() => ({
+  approvalPosture: vi.fn(),
   artifacts: vi.fn(),
   chatConfig: vi.fn(),
+  chatModelChoices: vi.fn(),
   conversation: vi.fn(),
   conversations: vi.fn(),
   createCall: vi.fn(),
   modelProfiles: vi.fn(),
+  putApprovalPosture: vi.fn(),
   streamChat: vi.fn(),
 }));
 
@@ -23,6 +27,7 @@ vi.mock("../src/components/VoiceCall", () => ({
   VoiceCall: ({ onCallActive }: { onCallActive?(active: boolean): void }) => (
     <div className="voice-idle">
       <button
+        aria-label="Talk to the chief of staff"
         className="primary-button"
         onClick={() => onCallActive?.(true)}
         type="button"
@@ -32,10 +37,22 @@ vi.mock("../src/components/VoiceCall", () => ({
 }));
 
 import { ChatView } from "../src/components/ChatView";
+import { CommandPalette } from "../src/components/CommandPalette";
 
 beforeEach(() => {
   document.documentElement.dataset.theme = "dark";
   api.artifacts.mockResolvedValue({ artifacts: [], next_cursor: null });
+  api.approvalPosture.mockResolvedValue({
+    posture: "risk_based",
+    source: "safe_default",
+    enforcement: {
+      applies_to: "delegated_agent_adapter_calls",
+      workspace_blocking_verbs_remain: true,
+      control_plane_approvals_remain: true,
+      direct_human_consequence_gate_remains: true,
+      authority_is_never_widened: true,
+    },
+  });
   api.chatConfig.mockResolvedValue({
     attachments: {
       max_count: 8,
@@ -43,6 +60,14 @@ beforeEach(() => {
       max_total_bytes: 1_048_576,
       model_readable_media_types: ["text/*"],
     },
+  });
+  api.chatModelChoices.mockResolvedValue({
+    status: "ok",
+    reason: null,
+    choices: [],
+    default_choice_id: "opaque-default-route",
+    default_model_name: "openai/gpt-5.4",
+    default_available: true,
   });
   api.conversations.mockResolvedValue({
     conversations: [{
@@ -58,6 +83,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
   delete document.documentElement.dataset.theme;
   try {
     localStorage.removeItem("boltrig-worker-theme");
@@ -75,6 +101,54 @@ function renderChat(conversationId: string | null) {
       onChanged={vi.fn()}
     />,
   );
+}
+
+function renderChatWithCommands(conversationId: string | null, onCommandPalette: () => void) {
+  render(
+    <ChatView
+      conversationId={conversationId}
+      onCommandPalette={onCommandPalette}
+      onConversation={vi.fn()}
+      onChanged={vi.fn()}
+    />,
+  );
+}
+
+function stubChatViewport(initialCompact: boolean, initialPhone: boolean) {
+  const listeners = new Map<string, Set<(event: MediaQueryListEvent) => void>>();
+  const matches = new Map<string, boolean>([
+    ["(max-width: 1020px)", initialCompact],
+    ["(max-width: 640px)", initialPhone],
+  ]);
+  const media = new Map<string, MediaQueryList>();
+  vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => {
+    if (!media.has(query)) {
+      const queryListeners = new Set<(event: MediaQueryListEvent) => void>();
+      listeners.set(query, queryListeners);
+      media.set(query, {
+        get matches() { return matches.get(query) ?? false; },
+        media: query,
+        onchange: null,
+        addEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => queryListeners.add(
+          listener as (event: MediaQueryListEvent) => void,
+        ),
+        removeEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => queryListeners.delete(
+          listener as (event: MediaQueryListEvent) => void,
+        ),
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        dispatchEvent: vi.fn(),
+      });
+    }
+    return media.get(query)!;
+  }));
+  return {
+    setCompact(next: boolean) {
+      matches.set("(max-width: 1020px)", next);
+      const event = { matches: next, media: "(max-width: 1020px)" } as MediaQueryListEvent;
+      listeners.get(event.media)?.forEach((listener) => listener(event));
+    },
+  };
 }
 
 describe("console chat surface", () => {
@@ -121,12 +195,157 @@ describe("console chat surface", () => {
     expect(api.streamChat).not.toHaveBeenCalled();
   });
 
+  it("opens existing command and skill discovery from slash without inventing a project picker", () => {
+    const onCommandPalette = vi.fn();
+    renderChatWithCommands(null, onCommandPalette);
+
+    const composer = screen.getByRole("textbox", { name: "Task instructions" });
+    fireEvent.keyDown(composer, { key: "/" });
+
+    expect(onCommandPalette).toHaveBeenCalledOnce();
+    expect((composer as HTMLTextAreaElement).value).toBe("");
+    expect(screen.queryByText("No project selected")).toBeNull();
+    expect(screen.queryByTitle("Project selection is not available in this client"))
+      .toBeNull();
+  });
+
+  it("restores the empty composer after dismissing slash-opened commands", async () => {
+    function Harness() {
+      const [commandsOpen, setCommandsOpen] = useState(false);
+      return (
+        <>
+          <ChatView
+            conversationId={null}
+            onChanged={vi.fn()}
+            onCommandPalette={() => setCommandsOpen(true)}
+            onConversation={vi.fn()}
+          />
+          <CommandPalette
+            open={commandsOpen}
+            onClose={() => setCommandsOpen(false)}
+            onNavigate={vi.fn()}
+          />
+        </>
+      );
+    }
+
+    render(<Harness />);
+    const composer = screen.getByRole("textbox", { name: "Task instructions" });
+    composer.focus();
+    fireEvent.keyDown(composer, { key: "/" });
+
+    const search = await screen.findByRole("combobox", { name: "Search Worker" });
+    expect(document.activeElement).toBe(search);
+    fireEvent.keyDown(search, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", {
+      name: "Worker commands",
+    })).toBeNull());
+    expect(document.activeElement).toBe(composer);
+  });
+
+  it("labels exact chat models and sends only the opaque text-model choice", async () => {
+    api.chatModelChoices.mockResolvedValue({
+      status: "ok",
+      reason: null,
+      choices: [{
+        id: "opaque-sonnet-route",
+        model_name: "anthropic/claude-sonnet-4-5",
+        available: true,
+        is_default: false,
+        modalities: ["text"],
+      }],
+      default_choice_id: "opaque-default-route",
+      default_model_name: "openai/gpt-5.4",
+    });
+    api.streamChat.mockResolvedValue(undefined);
+    renderChat(null);
+
+    const model = await screen.findByRole("button", { name: "Model" });
+    expect(model.textContent).toContain("Automatic · openai/gpt-5.4");
+    fireEvent.click(model);
+    fireEvent.click(screen.getByRole("option", {
+      name: "anthropic/claude-sonnet-4-5",
+    }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Task instructions" }), {
+      target: { value: "Use the selected model" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send ↑" }));
+
+    await waitFor(() => expect(api.streamChat).toHaveBeenCalledOnce());
+    const request = api.streamChat.mock.calls[0]![0];
+    expect(request.model_choice_id).toBe("opaque-sonnet-route");
+    expect(request).not.toHaveProperty("model_profile_id");
+  });
+
+  it("fails closed when the selected automatic model is unavailable", async () => {
+    api.chatModelChoices.mockResolvedValue({
+      choices: [{
+        id: "opaque-sonnet-route",
+        model_name: "anthropic/claude-sonnet-4-5",
+        available: true,
+        is_default: false,
+        modalities: ["text"],
+      }],
+      default_choice_id: null,
+      default_model_name: "openai/gpt-5.4",
+      default_available: false,
+      default_unavailable_reason: "model_gateway_unavailable",
+      status: "unavailable",
+      reason: "model_gateway_unavailable",
+    });
+    renderChat(null);
+
+    expect((await screen.findByRole("button", { name: "Model" })).textContent)
+      .toContain("Automatic · openai/gpt-5.4Unavailable");
+    fireEvent.change(screen.getByRole("textbox", { name: "Task instructions" }), {
+      target: { value: "Do not submit this to an unavailable route" },
+    });
+    const send = screen.getByRole("button", { name: "Send ↑" }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    fireEvent.click(send);
+    expect(api.streamChat).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    fireEvent.click(screen.getByRole("option", {
+      name: "anthropic/claude-sonnet-4-5",
+    }));
+    expect(send.disabled).toBe(false);
+    fireEvent.click(send);
+    await waitFor(() => expect(api.streamChat).toHaveBeenCalledOnce());
+    expect(api.streamChat.mock.calls[0]![0].model_choice_id)
+      .toBe("opaque-sonnet-route");
+  });
+
   it("keeps voice start in the round composer control", () => {
     renderChat(null);
 
     expect(screen.queryByText("Try boltrig Voice")).toBeNull();
     expect(screen.getByRole("button", { name: "Start a voice call" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Talk to the chief of staff" }))
+      .toBeNull();
+    expect(screen.queryAllByRole("button", {
+      name: /Start a voice call|Talk to the chief of staff/,
+    })).toHaveLength(1);
+    const mountedController = document.querySelector<HTMLElement>(
+      ".composer-voice-controller",
+    );
+    expect(mountedController?.hidden).toBe(true);
+    expect(mountedController?.querySelector(".voice-idle > button.primary-button"))
+      .toBeTruthy();
     expect(screen.queryByText("Call options")).toBeNull();
+  });
+
+  it("shows voice and send as distinct controls once the draft has text", () => {
+    renderChat(null);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Task instructions" }), {
+      target: { value: "draft text" },
+    });
+
+    expect(screen.queryByRole("button", { name: "Start a voice call" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Talk to the chief of staff" }))
+      .toBeTruthy();
+    expect(screen.getByRole("button", { name: "Send ↑" })).toBeTruthy();
   });
 
   it("turns the empty-draft primary into a voice call, and says so", async () => {
@@ -162,7 +381,7 @@ describe("console chat surface", () => {
     });
     expect(document.querySelector(".composer.conversation-context:not(.closed)"))
       .toBeTruthy();
-    expect(screen.getByRole("button", { name: "Policy" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Approve for me" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Attach files" }).querySelector("svg"))
       .toBeTruthy();
     expect(document.querySelector(".chat-header-actions .voice-call")).toBeNull();
@@ -213,7 +432,7 @@ describe("console chat surface", () => {
     renderChat("conversation-a");
     await screen.findByText("Newest answer");
 
-    fireEvent.click(screen.getByRole("button", { name: "Start test call" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start a voice call" }));
 
     // The call owns the one centred Stage. The main response stays unlabelled:
     // no child identity is borrowed merely because a call is active.
@@ -241,10 +460,19 @@ describe("console chat surface", () => {
       removeEventListener: vi.fn(),
       dispatchEvent: vi.fn(),
     })));
+    api.conversation.mockResolvedValue({
+      messages: [{
+        id: "assistant-a",
+        role: "assistant",
+        content: "Current answer",
+        created_at: "2026-01-01T00:00:00Z",
+      }],
+      active_run_id: null,
+    });
     try {
-      renderChat(null);
+      renderChat("conversation-a");
       expect(document.querySelector(".mobile-surface")).toBeTruthy();
-      const trigger = screen.getByRole("button", { name: "Task details" });
+      const trigger = await screen.findByRole("button", { name: "Task details" });
       expect(trigger.getAttribute("aria-controls")).toBe("worker-task-details");
       fireEvent.click(trigger);
       expect(await screen.findByRole("dialog", { name: "Task details" })).toBeTruthy();
@@ -253,7 +481,49 @@ describe("console chat surface", () => {
     }
   });
 
-  it("keeps real conversation mutations behind a phone-only Task actions disclosure", async () => {
+  it("does not offer an empty task-details sheet on a new phone chat", () => {
+    vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(max-width: 1020px)" || query === "(max-width: 640px)",
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })));
+    renderChat(null);
+    expect(document.querySelector(".mobile-surface")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Task details" })).toBeNull();
+    expect(document.getElementById("worker-task-details")).toBeNull();
+  });
+
+  it("closes a compact sheet and moves focus to the desktop toggle at the breakpoint", async () => {
+    const viewport = stubChatViewport(true, false);
+    api.conversation.mockResolvedValue({
+      messages: [{
+        id: "assistant-a",
+        role: "assistant",
+        content: "Current answer",
+        created_at: "2026-01-01T00:00:00Z",
+      }],
+      active_run_id: null,
+    });
+    renderChat("conversation-a");
+    await screen.findByText("Current answer");
+
+    fireEvent.click(screen.getByRole("button", { name: "Task details" }));
+    expect(await screen.findByRole("dialog", { name: "Task details" })).toBeTruthy();
+
+    act(() => viewport.setCompact(false));
+
+    await waitFor(() => expect(screen.queryByRole("dialog", {
+      name: "Task details",
+    })).toBeNull());
+    const railToggle = screen.getByRole("button", { name: "Hide the task panel" });
+    await waitFor(() => expect(document.activeElement).toBe(railToggle));
+    expect(screen.queryByRole("button", { name: "Dismiss task details" })).toBeNull();
+  });
+
+  it("keeps conversation-title controls out of the phone task-details rail", async () => {
     vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
       matches: query === "(max-width: 1020px)" || query === "(max-width: 640px)",
       media: query,
@@ -274,13 +544,10 @@ describe("console chat surface", () => {
     try {
       renderChat("conversation-a");
       fireEvent.click(await screen.findByRole("button", { name: "Task details" }));
-      const summary = screen.getByText("Task actions");
-      const disclosure = summary.closest("details") as HTMLDetailsElement;
-      expect(disclosure.open).toBe(false);
-      fireEvent.click(summary);
-      expect(disclosure.open).toBe(true);
-      expect(screen.getByLabelText("Conversation title")).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Close conversation" })).toBeTruthy();
+      const rail = await screen.findByRole("dialog", { name: "Task details" });
+      expect(within(rail).queryByText("Task actions")).toBeNull();
+      expect(within(rail).queryByLabelText("Conversation title")).toBeNull();
+      expect(within(rail).queryByRole("button", { name: "Close conversation" })).toBeNull();
     } finally {
       vi.unstubAllGlobals();
     }

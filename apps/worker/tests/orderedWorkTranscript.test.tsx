@@ -11,6 +11,7 @@ import { OrderedWorkTranscript } from "../src/components/chat/OrderedWorkTranscr
 import { ChatView } from "../src/components/ChatView";
 
 const api = vi.hoisted(() => ({
+  chatModelChoices: vi.fn(),
   artifacts: vi.fn(),
   chatConfig: vi.fn(),
   conversation: vi.fn(),
@@ -24,6 +25,14 @@ vi.mock("../src/client", () => ({ client: api }));
 vi.mock("../src/components/VoiceCall", () => ({ VoiceCall: () => null }));
 
 beforeEach(() => {
+  api.chatModelChoices.mockResolvedValue({
+    status: "ok",
+    reason: null,
+    choices: [],
+    default_choice_id: "opaque-default-route",
+    default_model_name: "openai/gpt-5.4",
+    default_available: true,
+  });
   api.artifacts.mockResolvedValue({ artifacts: [], next_cursor: null });
   api.chatConfig.mockResolvedValue({
     attachments: {

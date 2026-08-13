@@ -89,12 +89,13 @@ describe("global Worker identity context", () => {
       </WorkerGlobalContextProvider>,
     );
 
-    expect(await screen.findByText("Acme / Operations")).toBeTruthy();
+    expect(await screen.findByText("Alice")).toBeTruthy();
+    expect(screen.queryByText("Acme / Operations")).toBeNull();
     expect(document.documentElement.dataset.character).toBe("jarvis");
     expect(api.meSettings).toHaveBeenCalledTimes(1);
   });
 
-  it("shows user, organisation, and active workspace globally", async () => {
+  it("shows the user without a redundant organisation or workspace label", async () => {
     render(
       <WorkerGlobalContextProvider>
         <Topbar title="Runs" status="12 visible" />
@@ -113,12 +114,12 @@ describe("global Worker identity context", () => {
 
     const topbar = screen.getByRole("banner");
     expect(await within(topbar).findByText("Alice")).toBeTruthy();
-    expect(within(topbar).getByText("Acme / Operations")).toBeTruthy();
+    expect(within(topbar).queryByText("Acme / Operations")).toBeNull();
     expect(within(topbar).queryByText(/pending/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /Inbox/i })).toBeNull();
   });
 
-  it("refreshes the visible active workspace after a context switch", async () => {
+  it("refreshes context without adding a visible workspace label", async () => {
     api.consoleOverview
       .mockResolvedValueOnce({ workspace_id: "workspace-a" })
       .mockResolvedValueOnce({ workspace_id: "workspace-b" });
@@ -128,11 +129,12 @@ describe("global Worker identity context", () => {
       </WorkerGlobalContextProvider>,
     );
 
-    expect(await screen.findByText("Acme / Operations")).toBeTruthy();
+    expect(await screen.findByText("Alice")).toBeTruthy();
+    expect(screen.queryByText("Acme / Operations")).toBeNull();
     notifyWorkerContextChanged();
 
-    expect(await screen.findByText("Acme / Research")).toBeTruthy();
     await waitFor(() => expect(api.consoleOverview).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("Acme / Research")).toBeNull();
     expect(api.hitl).not.toHaveBeenCalled();
   });
 
@@ -146,7 +148,8 @@ describe("global Worker identity context", () => {
       </WorkerGlobalContextProvider>,
     );
 
-    expect(await screen.findByText("Acme / Organisation-wide")).toBeTruthy();
+    expect(await screen.findByText("Alice")).toBeTruthy();
+    expect(screen.queryByText("Acme / Organisation-wide")).toBeNull();
     expect(api.hitl).not.toHaveBeenCalled();
   });
 });

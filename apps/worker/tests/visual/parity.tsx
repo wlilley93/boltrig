@@ -112,7 +112,13 @@ try {
     highContrast: false,
   }));
   localStorage.setItem("boltrig-worker-theme", visualTheme);
-  localStorage.setItem("boltrig-worker-pinned-conversations", "[]");
+  // Exercise the real two-group TaskList hierarchy. The fixture owns only the
+  // presentation preference; every row still comes from the conversation
+  // response above, and no pinned task is invented outside that contract.
+  localStorage.setItem(
+    "boltrig-worker-pinned-conversations",
+    JSON.stringify(["vendor-invoice-triage"]),
+  );
   localStorage.removeItem("boltrig-worker-voice-banner-dismissed");
 } catch {
   // A visual runner with storage disabled still receives the server fixture.
@@ -388,6 +394,17 @@ const fixtures: Record<string, unknown> = {
       developer_details: false,
     },
   },
+  "/v1/me/approval-posture": {
+    posture: "risk_based",
+    source: "safe_default",
+    enforcement: {
+      applies_to: "delegated_agent_adapter_calls",
+      workspace_blocking_verbs_remain: true,
+      control_plane_approvals_remain: true,
+      direct_human_consequence_gate_remains: true,
+      authority_is_never_widened: true,
+    },
+  },
   "/v1/me/notifications": {
     prefs: [{
       id: "notification-approval-slack",
@@ -445,6 +462,32 @@ const fixtures: Record<string, unknown> = {
       id: "best", label: "Best available", routing_class: "balanced",
       data_classes: [], available: true,
     }],
+  },
+  "/v1/chat/model-choices": {
+    status: "ok",
+    reason: null,
+    choices: [
+      {
+        id: "reasoning-route",
+        model_name: "openai/gpt-5.4",
+        available: true,
+        is_default: true,
+        modalities: ["text", "vision"],
+        unavailable_reason: null,
+      },
+      {
+        id: "writing-route",
+        model_name: "anthropic/claude-sonnet-4-5",
+        available: true,
+        is_default: false,
+        modalities: ["text"],
+        unavailable_reason: null,
+      },
+    ],
+    default_choice_id: "reasoning-route",
+    default_model_name: "openai/gpt-5.4",
+    default_available: true,
+    default_unavailable_reason: null,
   },
   "/readyz": { status: "degraded", checks: { vault: { status: "not_ready" } } },
   "/v1/agent-capabilities": { agent_capabilities: profiles },
@@ -748,7 +791,7 @@ function surfaceIsReady(id: VisualState["id"]): boolean {
       window.location.hash === "#/chat"
       && document.querySelector(".new-chat-transcript .welcome h1")
       && document.querySelector(".new-chat-transcript .composer.new-context")
-      && document.querySelector('.new-chat-transcript button[aria-label="Model profile"]')
+      && document.querySelector('.new-chat-transcript button[aria-label="Model"]')
       && document.querySelector(".voice-intro")
       && document.querySelectorAll(".shell-parity .session-row:not(.closed) .session-main").length === 4
       && bodyHas("What needs doing?")
@@ -806,8 +849,11 @@ function surfaceIsReady(id: VisualState["id"]): boolean {
 function runThreadSurfaceIsReady(): boolean {
   return Boolean(
     window.location.hash === "#/chat/run-thread"
+    && document.querySelector("#shell-pinned-tasks")
+    && document.querySelector("#shell-recent-tasks")
     && document.querySelector(".message.user")
     && document.querySelector(".message.assistant")
+    && document.querySelector('.transcript-navigation[aria-label="Transcript navigation"]')
     && bodyHas("Renewal outreach, top 20 accounts")
     && bodyHas("Twenty accounts fall inside the renewal window.")
     && bodyHas("5 subagents"),
@@ -817,8 +863,11 @@ function runThreadSurfaceIsReady(): boolean {
 function directionThreadSurfaceIsReady(): boolean {
   return Boolean(
     window.location.hash === "#/chat/direction-thread"
+    && document.querySelector("#shell-pinned-tasks")
+    && document.querySelector("#shell-recent-tasks")
     && document.querySelectorAll(".message.user").length === 2
     && document.querySelectorAll(".message.assistant").length === 2
+    && document.querySelector('.transcript-navigation[aria-label="Transcript navigation"]')
     && bodyHas("Desktop chat evidence")
     && bodyHas("The preview and inspection receipts completed without inventing live state.")
   );

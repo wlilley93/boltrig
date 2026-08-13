@@ -3,7 +3,8 @@
 `parity.html` mounts the real Worker `App` and `WorkerGlobalContextProvider` with
 deterministic HTTP fixtures. `states.json` is the capture contract. Its
 `governed_state_ids` list is the only state set promoted by evidence capture;
-the additive desktop-chat direction remains outside that seven-frame set.
+the additive desktop-chat direction remains outside that seven-frame set and
+uses its own source-bound capture lane.
 
 The fixture publishes `window.__boltrigVisualCaptureContract` and adds
 `html[data-visual-ready="<state>"]` only after:
@@ -13,6 +14,25 @@ The fixture publishes `window.__boltrigVisualCaptureContract` and adds
 - fonts are loaded; and
 - that contract remains unchanged for two animation frames at 1440×900 and
   device pixel ratio 1.
+
+The shipped Familiar does not read the machine phenotype, so Familiar states
+must not require a phenotype request merely to settle. Jarvis-specific states
+may bind that read when the selected character actually consumes it.
+
+The chat fixtures deliberately pin the real `vendor-invoice-triage` summary so
+the left rail exercises both `Pinned` and `Recents`. Chat-run and the additive
+direction also require the transcript navigator, 31/44px task-row geometry,
+compact receipt counts, and the shared semantic inspector classes used by both
+the current rail and `TaskInspector`. Legacy Recents search/workspace/status,
+conversation-title and governance chrome remain prohibited.
+
+Any edit under `apps/worker/src` or this harness invalidates an existing
+source-bound receipt by design. Do not repair that failure by rewriting a
+digest: run the all-or-nothing governed and additive capture lanes after the UI
+has stopped changing, then perform comparison and VDS review separately.
+`make vds-ledgers` independently recomputes that tree digest from the scope
+fixed by the capture contract, so a stale receipt cannot satisfy the required
+repository gate merely because its route and metrics hashes were refreshed.
 
 Run an isolated smoke capture (the runner starts and stops Vite itself):
 
@@ -53,6 +73,24 @@ This command does not replace the historical `shipped/` files, regenerate
 pixel comparisons, or update VDS reviews. Those are separate review actions
 after the current capture exists.
 
+Capture the additive desktop-chat direction independently:
+
+```sh
+node apps/worker/tests/visual/capture-current.mjs \
+  --additive-evidence \
+  --reuse-server \
+  --origin http://127.0.0.1:1420 \
+  --timeout-ms 45000
+```
+
+This mode atomically replaces only
+`docs/design/evidence/2026-08-11-chat-ui-direction/current/`. It writes the
+1440×900 PNG, its SHA-256 manifest, and an additive capture receipt bound to the
+exact Worker and visual-harness source digest. The canonical historical
+`chat-ui-direction/shipped/` image and digest remain unchanged. The receipt is
+deliberately `not_assessed`, sets `vdsReviewsUpdated` to false, and cannot act as
+a VDS sign-off or conformity verdict.
+
 Validate the current-to-Figma comparison mapping at any time:
 
 ```sh
@@ -63,7 +101,7 @@ After `--evidence` succeeds, generate source-bound measurements without
 touching the historical comparison:
 
 ```sh
-/Users/williamlilley/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 \
+python3 \
   apps/worker/tests/visual/compare-current.py
 ```
 

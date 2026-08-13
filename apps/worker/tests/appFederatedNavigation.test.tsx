@@ -57,6 +57,9 @@ describe("Worker federated result navigation", () => {
 
     render(<App />);
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
     fireEvent.change(screen.getByRole("combobox"), {
       target: { value: "deep conversation" },
     });

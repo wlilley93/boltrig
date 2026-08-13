@@ -5,6 +5,7 @@ import { BoltrigApiError, type ChatEvent } from "@wlilley93/boltrig-web-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
+  chatModelChoices: vi.fn(),
   artifacts: vi.fn(),
   cancelRun: vi.fn(),
   chatConfig: vi.fn(),
@@ -21,6 +22,14 @@ vi.mock("../src/client", () => ({ client: api }));
 import { ChatView } from "../src/components/ChatView";
 
 beforeEach(() => {
+  api.chatModelChoices.mockResolvedValue({
+    status: "ok",
+    reason: null,
+    choices: [],
+    default_choice_id: "opaque-default-route",
+    default_model_name: "openai/gpt-5.4",
+    default_available: true,
+  });
   api.artifacts.mockResolvedValue({ artifacts: [] });
   api.cancelRun.mockResolvedValue({ status: "cancelled" });
   api.chatConfig.mockResolvedValue({
@@ -55,6 +64,20 @@ afterEach(() => {
 
 describe("Worker chat continuity", () => {
   it("clears conversation-owned UI before a direct conversation switch settles", async () => {
+    api.chatModelChoices.mockResolvedValue({
+      status: "ok",
+      reason: null,
+      choices: [{
+        id: "opaque-sonnet-route",
+        model_name: "anthropic/claude-sonnet-4-5",
+        available: true,
+        is_default: false,
+        modalities: ["text"],
+      }],
+      default_choice_id: "opaque-default-route",
+      default_model_name: "openai/gpt-5.4",
+      default_available: true,
+    });
     api.chatConfig.mockResolvedValue({
       attachments: {
         max_count: 1,
@@ -133,6 +156,12 @@ describe("Worker chat continuity", () => {
     expect(await screen.findByText("Alpha answer")).toBeTruthy();
     expect(await screen.findByText("alpha-output.md")).toBeTruthy();
     expect(screen.getByText("alpha-source.txt")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    fireEvent.click(screen.getByRole("option", {
+      name: "anthropic/claude-sonnet-4-5",
+    }));
+    expect(screen.getByRole("button", { name: "Model" }).textContent)
+      .toContain("anthropic/claude-sonnet-4-5");
 
     fireEvent.change(screen.getByLabelText("Task instructions"), {
       target: { value: "Alpha draft" },
@@ -156,6 +185,8 @@ describe("Worker chat continuity", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Loading conversation…" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Model" }).textContent)
+      .toContain("Automatic · openai/gpt-5.4");
     expect(screen.queryByRole("heading", { name: "What needs doing?" })).toBeNull();
     expect(screen.queryByText("Alpha answer")).toBeNull();
     expect(screen.queryByText("alpha-output.md")).toBeNull();
@@ -662,6 +693,20 @@ describe("Worker chat continuity", () => {
 
   it("keeps the composer open for a canonical same-surface steer", async () => {
     let finishFirst!: () => void;
+    api.chatModelChoices.mockResolvedValue({
+      status: "ok",
+      reason: null,
+      choices: [{
+        id: "opaque-sonnet-route",
+        model_name: "anthropic/claude-sonnet-4-5",
+        available: true,
+        is_default: false,
+        modalities: ["text"],
+      }],
+      default_choice_id: "opaque-default-route",
+      default_model_name: "openai/gpt-5.4",
+      default_available: true,
+    });
     api.conversation.mockResolvedValue({ messages: [], active_run_id: null });
     api.streamChat
       .mockImplementationOnce(async (_body, onEvent) => {
@@ -691,10 +736,18 @@ describe("Worker chat continuity", () => {
       />,
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "Model" }));
+    fireEvent.click(screen.getByRole("option", {
+      name: "anthropic/claude-sonnet-4-5",
+    }));
+
     fireEvent.change(screen.getByLabelText("Task instructions"), {
       target: { value: "First task" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Send ↑" }));
+    expect(api.streamChat.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+      model_choice_id: "opaque-sonnet-route",
+    }));
     await waitFor(() => expect(onConversation).toHaveBeenCalledWith("conversation-a"));
     view.rerender(
       <ChatView
@@ -703,6 +756,8 @@ describe("Worker chat continuity", () => {
         onChanged={vi.fn()}
       />,
     );
+    expect(screen.getByRole("button", { name: "Model" }).textContent)
+      .toContain("anthropic/claude-sonnet-4-5");
     expect(await screen.findByRole("button", { name: "Queue next ↑" })).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Task instructions"), {
@@ -715,6 +770,7 @@ describe("Worker chat continuity", () => {
       message: "Also include the appendix",
       origin: "worker",
     }));
+    expect(api.streamChat.mock.calls[1]?.[0]).not.toHaveProperty("model_choice_id");
     const steer = await screen.findByRole("button", {
       name: "Steer queued message: Also include the appendix",
     });
@@ -1008,6 +1064,7 @@ describe("Worker chat continuity", () => {
         onChanged={vi.fn()}
       />,
     );
+    await waitFor(() => expect(api.chatModelChoices).toHaveBeenCalledOnce());
 
     const input = screen.getByLabelText("Follow up") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "Keep this phone draft" } });

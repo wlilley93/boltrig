@@ -18,6 +18,10 @@ COPY apps/worker/src ./apps/worker/src
 # Keep the image context narrow by packaging only the token files it consumes;
 # the design reference and other documentation are not runtime dependencies.
 COPY docs/design/imported/tokens/colors.css docs/design/imported/tokens/spacing.css docs/design/imported/tokens/typography.css ./docs/design/imported/tokens/
+# Published Worker images always ship the stock companion set (Familiar +
+# Jarvis). The stock dependency graph and characterPlugins.ts contain no
+# operator-owned companion package, so an environment variable cannot widen the
+# release after review.
 RUN cd apps/worker && pnpm run build
 
 FROM nginx:1.30.4-alpine@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46 AS runtime

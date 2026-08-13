@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
+  chatModelChoices: vi.fn(),
   artifacts: vi.fn(),
   chatConfig: vi.fn(),
   conversation: vi.fn(),
@@ -26,6 +27,14 @@ vi.mock("../src/components/chat/RunSectionView", () => ({
 import { ChatView } from "../src/components/ChatView";
 
 beforeEach(() => {
+  api.chatModelChoices.mockResolvedValue({
+    status: "ok",
+    reason: null,
+    choices: [],
+    default_choice_id: "opaque-default-route",
+    default_model_name: "openai/gpt-5.4",
+    default_available: true,
+  });
   document.documentElement.dataset.theme = "dark";
   api.artifacts.mockResolvedValue({ artifacts: [], next_cursor: null });
   api.chatConfig.mockResolvedValue({
@@ -174,7 +183,7 @@ describe("console rail", () => {
       .toContain("Lyell");
     expect(subagentGroup?.textContent).toContain("1 working");
     expect(rail.querySelector('[aria-label="Background processes"]')?.textContent)
-      .toContain("background.process");
+      .toContain("Background process");
     expect(rail.querySelector('[aria-label="Background processes"]')?.textContent)
       .toContain("waiting for approval");
     expect(rail.querySelector('[aria-label="Background processes"] [data-kind="background"]'))
@@ -188,7 +197,7 @@ describe("console rail", () => {
     expect(rail.querySelector('[aria-label="Background processes"]')?.textContent)
       .not.toContain("grant_missing");
     expect(rail.querySelector('[aria-label="Computer Use"]')?.textContent)
-      .toContain("computer.use");
+      .toContain("Computer use");
     expect(rail.querySelector('[aria-label="Computer Use"] [data-kind="computer"]'))
       .toBeTruthy();
     expect(rail.querySelector('[aria-label="Sources"]')?.textContent)

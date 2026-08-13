@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
+  approvalPosture: vi.fn(),
   readiness: vi.fn(),
   health: vi.fn(),
   hitl: vi.fn(),
@@ -16,6 +17,7 @@ const api = vi.hoisted(() => ({
   meSettings: vi.fn(),
   meNotifications: vi.fn(),
   putMeSettings: vi.fn(),
+  putApprovalPosture: vi.fn(),
   knowledgeProviders: vi.fn(),
   setKnowledgeProvider: vi.fn(),
   invokeApprovalState: vi.fn(),
@@ -25,10 +27,22 @@ vi.mock("../src/client", () => ({ client: api }));
 
 import { Sidebar } from "../src/components/Shell";
 import { SettingsSearchResults, SettingsSectionPane } from "../src/components/SettingsSurface";
+import { registerCharacter } from "../src/components/characters";
 import { SETTINGS_SECTIONS } from "../src/settingsSections";
 import { SHORTCUTS } from "../src/shortcuts";
 
 beforeEach(() => {
+  api.approvalPosture.mockResolvedValue({
+    posture: "risk_based",
+    source: "safe_default",
+    enforcement: {
+      applies_to: "delegated_agent_adapter_calls",
+      workspace_blocking_verbs_remain: true,
+      control_plane_approvals_remain: true,
+      direct_human_consequence_gate_remains: true,
+      authority_is_never_widened: true,
+    },
+  });
   api.readiness.mockResolvedValue({ status: "ready", checks: {} });
   api.health.mockResolvedValue({ status: "ok", adapters: {} });
   api.hitl.mockResolvedValue({ requests: [] });
@@ -71,6 +85,18 @@ beforeEach(() => {
     },
   });
   api.putMeSettings.mockResolvedValue({ status: "ok" });
+  api.putApprovalPosture.mockResolvedValue({
+    status: "ok",
+    posture: "full_access",
+    source: "user_override",
+    enforcement: {
+      applies_to: "delegated_agent_adapter_calls",
+      workspace_blocking_verbs_remain: true,
+      control_plane_approvals_remain: true,
+      direct_human_consequence_gate_remains: true,
+      authority_is_never_widened: true,
+    },
+  });
   api.knowledgeProviders.mockResolvedValue({ providers: [] });
   api.setKnowledgeProvider.mockResolvedValue({ status: "ok" });
   api.invokeApprovalState.mockResolvedValue({ status: "pending" });
@@ -91,7 +117,7 @@ afterEach(() => {
 });
 
 describe("settings surface", () => {
-  it("replaces the app nav with the ten canonical settings sections while settings is open", () => {
+  it("replaces the app nav with the eleven canonical settings sections while settings is open", () => {
     const onSettingsSection = vi.fn();
     render(
       <Sidebar
@@ -109,7 +135,7 @@ describe("settings surface", () => {
       />,
     );
 
-    expect(SETTINGS_SECTIONS.length).toBe(10);
+    expect(SETTINGS_SECTIONS.length).toBe(11);
     for (const entry of SETTINGS_SECTIONS) {
       expect(screen.getByRole("button", { name: entry.label })).toBeTruthy();
     }
@@ -200,14 +226,14 @@ describe("settings surface", () => {
     await waitFor(() => expect(
       (screen.getByLabelText("Send approval notifications to") as HTMLSelectElement).value,
     ).toBe("Slack · Ops"));
-    expect(screen.getByText(/notification contract has no quiet-hours field/)).toBeTruthy();
+    expect(screen.getByText("Quiet hours are not available.")).toBeTruthy();
 
     const takeCalls = screen.getByRole("switch", { name: "Take calls" });
     const holdAtGate = screen.getByRole("switch", { name: "Hold the line at a gate" });
     expect(takeCalls.getAttribute("aria-checked")).toBe("false");
     expect((takeCalls as HTMLButtonElement).disabled).toBe(true);
     expect(holdAtGate.getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByText(/Always on in this build/)).toBeTruthy();
+    expect(screen.getByText(/Calls wait for approval/)).toBeTruthy();
   });
 
   it("renders a searched Theme as the live control under Results", async () => {
@@ -238,6 +264,26 @@ describe("settings surface", () => {
     expect(localStorage.getItem("boltrig.character")).toBe("jarvis");
   });
 
+  it("updates Companion choices when a validated plugin registers after Settings mounts", async () => {
+    render(<SettingsSearchResults query="agent.character" onOpenSection={vi.fn()} />);
+
+    await screen.findByText("Companion");
+    expect(screen.queryByRole("button", { name: "Late Character" })).toBeNull();
+    act(() => registerCharacter({
+      id: "late-character",
+      name: "Late Character",
+      readsPhenotype: false,
+      blurb: "Registered after the settings surface mounted.",
+      render: () => null,
+    }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Late Character" }));
+    await waitFor(() => expect(api.putMeSettings).toHaveBeenCalledWith({
+      settings: { "agent.character": "late-character" },
+    }));
+    expect(document.documentElement.dataset.character).toBe("late-character");
+  });
+
   it("keeps unavailable Knowledge providers visible but not actionable", async () => {
     api.knowledgeProviders.mockResolvedValue({
       providers: [{
@@ -256,7 +302,8 @@ describe("settings surface", () => {
 
     const providerSwitch = await screen.findByRole("switch", { name: "Enable Supermemory" });
     expect((providerSwitch as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/Credential-backed projection adapter is not implemented/)).toBeTruthy();
+    expect(screen.queryByText(/Credential-backed projection adapter is not implemented/)).toBeNull();
+    expect(screen.getByText("managed_context")).toBeTruthy();
     expect(api.setKnowledgeProvider).not.toHaveBeenCalled();
   });
 
@@ -354,7 +401,7 @@ describe("settings surface", () => {
     expect(screen.getByText("jira adapter")).toBeTruthy();
     expect(screen.getByText("struggling").getAttribute("data-tone")).toBe("amber");
     // Every boundary listed is a limit of THIS build.
-    expect(screen.getByText("What boltrig does not do yet")).toBeTruthy();
+    expect(screen.getByText("Current limits")).toBeTruthy();
     expect(screen.getByText("Weekly spending windows")).toBeTruthy();
   });
 
@@ -364,6 +411,17 @@ describe("settings surface", () => {
       expect(screen.getByText("No ceiling is set")).toBeTruthy();
     });
     expect(screen.getByText(/Nothing stops spend/)).toBeTruthy();
+  });
+
+  it("does not render implementation commentary in Autonomy", async () => {
+    render(<SettingsSectionPane section="autonomy" />);
+
+    await screen.findByText("What stops a run");
+    expect(screen.getByText("Agent tool approvals")).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /Approve for me/ }).getAttribute("aria-checked"))
+      .toBe("true");
+    expect(screen.queryByText(/decided target|this build has no posture|honest thing to show/i))
+      .toBeNull();
   });
 
   it("draws a labelled meter per money ceiling, honest about soft stops", async () => {
@@ -464,14 +522,14 @@ describe("settings surface", () => {
     expect(screen.getByText(/\d+ Aug/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Bring back" })).toBeTruthy();
     // The date is honestly labelled as activity, not archive time.
-    expect(screen.getByText(/last activity, not the moment of archiving/)).toBeTruthy();
+    expect(screen.getByText("Dates show each chat's last activity.")).toBeTruthy();
     expect(screen.queryByText("Live one")).toBeNull();
   });
 
   it("hides tech identifiers until the persisted Developer-details switch is on", async () => {
     render(<SettingsSectionPane section="autonomy" />);
     await waitFor(() => {
-      expect(screen.getByText("Every consequential verb asks first")).toBeTruthy();
+      expect(screen.getByText("Agent tool approvals")).toBeTruthy();
     });
     // The blob has no developer_details flag, so no monospace chip renders.
     expect(screen.queryByText("hitl")).toBeNull();

@@ -53,6 +53,9 @@ describe("Worker mobile settings", () => {
     // as the avatar.
     expect(screen.getByText("will@acme.co")).toBeTruthy();
     expect(screen.getByText("WL")).toBeTruthy();
+    expect(screen.queryByText("Every setting is one search away. Nothing is hidden, only quiet."))
+      .toBeNull();
+    expect(document.querySelector(".m-settings-foot")).toBeNull();
   });
 
   it("opens a section onto the same pane the console renders, and comes back", () => {

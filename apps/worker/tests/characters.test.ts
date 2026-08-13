@@ -6,6 +6,7 @@ import {
   listCharacters,
   registerCharacter,
 } from "../src/components/characters";
+import "../src/characterPlugins";
 
 describe("the character registry", () => {
   // The inversion this file exists for: emotion belongs to whoever is speaking,
@@ -15,7 +16,7 @@ describe("the character registry", () => {
     expect(characterFor("familiar").readsPhenotype).toBe(false);
   });
 
-  it("ships the two in-tree characters and no others by default", () => {
+  it("ships Familiar and Jarvis only through the production plugin join", () => {
     expect(listCharacters().map((c) => c.id).sort()).toEqual(["familiar", "jarvis"]);
   });
 

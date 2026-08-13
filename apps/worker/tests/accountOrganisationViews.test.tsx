@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
+  chatModelChoices: vi.fn(),
   addWorkspaceMember: vi.fn(),
   aiKeyProposal: vi.fn(),
   aiKeyProposals: vi.fn(),
@@ -99,6 +100,14 @@ const workspace = {
 };
 
 beforeEach(() => {
+  api.chatModelChoices.mockResolvedValue({
+    status: "ok",
+    reason: null,
+    choices: [],
+    default_choice_id: "opaque-default-route",
+    default_model_name: "openai/gpt-5.4",
+    default_available: true,
+  });
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -1056,7 +1065,7 @@ describe("Worker conversation management", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /brief\.md/i }));
     expect((await screen.findByRole("alert")).textContent).toBe(
-      "The artifact could not be downloaded. It is safe to retry.",
+      "The output could not be downloaded. It is safe to retry.",
     );
   });
 
@@ -1179,7 +1188,7 @@ describe("Worker conversation management", () => {
     );
 
     expect(await screen.findByText("brief.md")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Load more artifacts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Load more outputs" }));
     expect(await screen.findByText("appendix.md")).toBeTruthy();
     expect(screen.getByText("brief.md")).toBeTruthy();
     expect(api.artifacts).toHaveBeenLastCalledWith({
@@ -1187,7 +1196,7 @@ describe("Worker conversation management", () => {
       limit: 25,
       cursor: "cursor/artifact-a",
     });
-    expect(screen.queryByRole("button", { name: "Load more artifacts" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Load more outputs" })).toBeNull();
   });
 
   it("uses emitted Familiar identity and leaves the root activity orb unbound", async () => {

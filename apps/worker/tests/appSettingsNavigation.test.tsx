@@ -32,7 +32,7 @@ vi.mock("../src/components/Views", () => ({
     <div aria-label="Current settings section">{section}</div>
   ),
 }));
-vi.mock("../src/components/SettingsSurface", () => ({
+vi.mock("../src/components/settings/SearchResults", () => ({
   SettingsSearchResults: ({
     onOpenSection,
   }: {

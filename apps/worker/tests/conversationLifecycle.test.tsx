@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -52,11 +52,7 @@ describe("Worker closed-conversation lifecycle", () => {
     },
   );
 
-  it("distinguishes an unavailable search from an authorized empty result and retries it", async () => {
-    api.searchConversations
-      .mockRejectedValueOnce(new Error("search unavailable"))
-      .mockResolvedValueOnce({ results: [] });
-
+  it("does not retain the removed recents search path", () => {
     render(
       <Sidebar
         route="chat"
@@ -70,19 +66,9 @@ describe("Worker closed-conversation lifecycle", () => {
       />,
     );
 
-    fireEvent.change(screen.getByRole("textbox", {
-      name: "Search conversations",
-    }), {
-      target: { value: "missing task" },
-    });
-
-    expect(await screen.findByText("Conversation search is unavailable.")).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "Search conversations" })).toBeNull();
+    expect(document.querySelector(".conversation-search")).toBeNull();
     expect(screen.queryByText("No matching conversations")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Retry search" }));
-
-    expect(await screen.findByText("No matching conversations")).toBeTruthy();
-    expect(api.searchConversations).toHaveBeenCalledTimes(2);
-    expect(api.searchConversations).toHaveBeenLastCalledWith("missing task", 50);
+    expect(api.searchConversations).not.toHaveBeenCalled();
   });
 });

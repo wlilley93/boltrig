@@ -22,6 +22,7 @@ vi.mock("../src/client", () => ({ client: api }));
 vi.mock("../src/desktop", () => native);
 
 import { VoiceCall } from "../src/components/VoiceCall";
+import { saveCharacterLocal } from "../src/character";
 
 const call = {
   id: "call-a",
@@ -189,6 +190,8 @@ const approved = {
 };
 
 beforeEach(() => {
+  localStorage.removeItem("boltrig.character");
+  delete document.documentElement.dataset.character;
   delete document.documentElement.dataset.visualPinRecoveredCallNotice;
   native.isDesktop = false;
   FakeWebSocket.instances = [];
@@ -247,6 +250,8 @@ afterEach(() => {
   cleanup();
   document.querySelectorAll("[data-voice-modal-test-sibling]").forEach((element) => element.remove());
   delete document.documentElement.dataset.visualPinRecoveredCallNotice;
+  localStorage.removeItem("boltrig.character");
+  delete document.documentElement.dataset.character;
   vi.useRealTimers();
   vi.clearAllMocks();
   vi.unstubAllEnvs();
@@ -630,6 +635,154 @@ describe("Worker realtime voice continuity", () => {
     )).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "Unmute" }));
     expect(microphoneTrack.enabled).toBe(true);
+  });
+
+  it("keeps the selected Jarvis character on the full-window call Stage", async () => {
+    saveCharacterLocal("jarvis");
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+    render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "◉ Start call" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    act(() => {
+      FakeWebSocket.instances[0]?.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({ type: "ready" }),
+      }));
+    });
+
+    await waitFor(() => expect(document.querySelector(".jarvis-stage")).toBeTruthy());
+    expect(document.querySelector(".familiar-stage")).toBeNull();
+  });
+
+  it("sends typed mid-call text over the media socket and shows the echoed line", async () => {
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+    render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "◉ Start call" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    const socket = FakeWebSocket.instances[0]!;
+    socket.readyState = FakeWebSocket.OPEN;
+    act(() => {
+      socket.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({ type: "ready" }),
+      }));
+    });
+
+    const composer = await screen.findByRole(
+      "textbox",
+      { name: "Type a message to the call" },
+    );
+    fireEvent.change(composer, { target: { value: "got your text?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(socket.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: "user_text", text: "got your text?" }),
+    );
+    expect((composer as HTMLInputElement).value).toBe("");
+
+    // The gateway injects the text into the provider session and echoes it
+    // back as a transcript call_event, which renders the visible typed line.
+    act(() => {
+      socket.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({
+          type: "call_event",
+          event: {
+            id: "event-typed-1",
+            type: "transcript",
+            participant_id: "user",
+            payload: {
+              text: "got your text?",
+              final: true,
+              kind: "input",
+              via: "text",
+            },
+          },
+        }),
+      }));
+    });
+    expect(await screen.findByText("You typed: got your text?")).toBeTruthy();
+  });
+
+  it("does not carry a typed call draft from conversation A into recovered call B", async () => {
+    const callB = {
+      ...call,
+      id: "call-b",
+      conversation_id: "conversation-b",
+      status: "active" as const,
+    };
+    api.currentCall.mockImplementation((conversationId: string) => Promise.resolve({
+      call: conversationId === "conversation-b" ? callB : null,
+    }));
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+    api.reopenCall.mockResolvedValue({
+      call: { ...callB, status: "reconnecting" as const },
+      media_token: "media-token-b",
+      websocket_url: "/voice/v1/calls/call-b/media",
+    });
+    const view = render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "◉ Start call" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    const socketA = FakeWebSocket.instances[0]!;
+    socketA.readyState = FakeWebSocket.OPEN;
+    act(() => {
+      socketA.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({ type: "ready" }),
+      }));
+    });
+    const draftA = await screen.findByRole(
+      "textbox",
+      { name: "Type a message to the call" },
+    );
+    fireEvent.change(draftA, { target: { value: "conversation A secret" } });
+
+    view.rerender(
+      <VoiceCall
+        conversationId="conversation-b"
+        onConversation={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(api.currentCall).toHaveBeenCalledWith("conversation-b"));
+    fireEvent.click(await screen.findByRole("button", { name: "Resume call" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    const socketB = FakeWebSocket.instances[1]!;
+    socketB.readyState = FakeWebSocket.OPEN;
+    act(() => {
+      socketB.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({ type: "ready" }),
+      }));
+    });
+
+    const draftB = await screen.findByRole(
+      "textbox",
+      { name: "Type a message to the call" },
+    );
+    expect((draftB as HTMLInputElement).value).toBe("");
+    expect((screen.getByRole("button", { name: "Send" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(socketA.send).not.toHaveBeenCalledWith(expect.stringContaining("conversation A secret"));
+    expect(socketB.send).not.toHaveBeenCalledWith(expect.stringContaining("conversation A secret"));
+
+    fireEvent.change(draftB, { target: { value: "conversation B message" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(socketB.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: "user_text", text: "conversation B message" }),
+    );
   });
 
   it("makes the full-window call truly modal and restores exact background state on Escape", async () => {

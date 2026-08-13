@@ -26,12 +26,13 @@ function contrast(foreground: string, background: string) {
 describe("Chat rail parity CSS", () => {
   it("floats one borderless glass surface over a transparent rail column", () => {
     expect(css).toContain(".right-rail:not(.task-details-sheet) {");
-    expect(css).toContain("grid-template-columns: minmax(0, 1fr) 316px");
-    expect(css).toContain("width: 316px");
+    expect(css).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(css).toContain("width: var(--task-inspector-width, 316px)");
+    expect(css).toContain("flex-basis: var(--task-inspector-width, 316px)");
     expect(css).toContain("padding: 16px 12px 12px 2px");
     expect(css).toContain("background: transparent;");
     expect(css).toContain("> .chat-rail-glass");
-    expect(css).toContain("width: 302px;");
+    expect(css).toContain("width: auto;");
     expect(css).toContain("max-width: 100%;");
     expect(css).toContain("border: 0;");
     expect(css).toContain("border-radius: 20px;");

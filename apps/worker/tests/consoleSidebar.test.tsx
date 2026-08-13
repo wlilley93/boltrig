@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -15,6 +15,17 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("../src/client", () => ({ client: api }));
+vi.mock("../src/components/WorkerGlobalContext", () => ({
+  useWorkerGlobalContext: () => ({
+    identity: {
+      user: "Will Lilley",
+      role: "org-admin",
+      organisation: "acme",
+      workspace: "production",
+    },
+    identityStatus: "ready",
+  }),
+}));
 
 import { Sidebar } from "../src/components/Shell";
 import type { WorkerRoute } from "../src/routes";
@@ -61,58 +72,36 @@ function renderSidebar(
 afterEach(() => {
   cleanup();
   document.querySelectorAll("style[data-test-shell-styles]").forEach((style) => style.remove());
+  localStorage.removeItem("boltrig.shell-preferences.v1");
   localStorage.removeItem("boltrig-worker-pinned-conversations");
   vi.clearAllMocks();
 });
 
 describe("console sidebar", () => {
-  it("scopes the Codex glass/density override to Chat and New chat", () => {
+  it("keeps shell navigation and task history behind explicit boundaries", () => {
     const chat = renderSidebar();
     expect(chat.container.querySelector(".sidebar")?.classList.contains("shell-parity"))
       .toBe(true);
+    expect(screen.getByRole("navigation", { name: "Primary" })).toBeTruthy();
+    expect(chat.container.querySelector(".shell-task-list")).toBeTruthy();
     chat.unmount();
     const agents = renderSidebar(vi.fn(), vi.fn(), "agents");
     expect(agents.container.querySelector(".sidebar")?.classList.contains("shell-parity"))
-      .toBe(false);
+      .toBe(true);
   });
 
-  it("keeps conversation search on Chat and cancels it when another route opens", async () => {
-    api.searchConversations.mockResolvedValue({ results: [] });
-    const onRoute = vi.fn();
-    const onSettingsSection = vi.fn();
-    const view = renderSidebar(onRoute, onSettingsSection, "chat");
-    fireEvent.change(screen.getByRole("textbox", { name: "Search conversations" }), {
-      target: { value: "renewal" },
-    });
-
-    view.rerender(
-      <Sidebar
-        route="agents"
-        conversations={[]}
-        conversationStatus="ready"
-        selectedConversation={null}
-        onRoute={onRoute}
-        onConversation={vi.fn()}
-        onConversationRestored={vi.fn()}
-        onLoadMore={vi.fn()}
-        hasMoreConversations={false}
-        onCommandPalette={vi.fn()}
-        onSettingsSection={onSettingsSection}
-      />,
-    );
-
+  it("uses the top search control without a second recents search or workspace line", () => {
+    renderSidebar();
+    expect(screen.getByRole("button", { name: "Open command palette" })).toBeTruthy();
     expect(screen.queryByRole("textbox", { name: "Search conversations" })).toBeNull();
-    await new Promise((resolve) => window.setTimeout(resolve, 300));
+    expect(document.querySelector(".conversation-search")).toBeNull();
+    expect(document.querySelector(".side-workspace")).toBeNull();
+    expect(screen.queryByText(/acme\s*[·.]\s*production/i)).toBeNull();
+    const account = screen.getByRole("button", { name: /Signed in as/i });
+    expect(account.getAttribute("aria-label")).not.toMatch(/acme|production/i);
+    expect(account.getAttribute("title")).not.toMatch(/acme|production/i);
     expect(api.searchConversations).not.toHaveBeenCalled();
   });
-
-  it.each<WorkerRoute>(["agents", "integrations", "automations"])(
-    "does not render conversation search on %s",
-    (route) => {
-      renderSidebar(vi.fn(), vi.fn(), route);
-      expect(screen.queryByRole("textbox", { name: "Search conversations" })).toBeNull();
-    },
-  );
 
   it("maps the console nav onto the real Worker routes", () => {
     api.readiness.mockResolvedValue({ status: "ready", checks: {} });
@@ -155,12 +144,11 @@ describe("console sidebar", () => {
     expect(screen.queryByRole("link", { name: "Open Operator" })).toBeNull();
   });
 
-  it("uses truthful workspace and help destinations", () => {
+  it("uses truthful help destinations without a redundant workspace shortcut", () => {
     api.readiness.mockResolvedValue({ status: "ready", checks: {} });
     const { onRoute, onSettingsSection } = renderSidebar();
 
-    fireEvent.click(screen.getByTitle("Open organisation and workspace administration"));
-    expect(onRoute).toHaveBeenLastCalledWith("organisation");
+    expect(screen.queryByTitle("Open organisation and workspace administration")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Help and shortcuts" }));
     expect(screen.getByRole("menu", { name: "Help" })).toBeTruthy();
@@ -302,13 +290,14 @@ describe("console sidebar", () => {
     );
 
     const navigation = screen.getByRole("navigation", { name: "Settings sections" });
-    expect(navigation.querySelectorAll("button")).toHaveLength(10);
+    expect(navigation.querySelectorAll("button")).toHaveLength(11);
     expect(container.querySelectorAll(".settings-side-head")).toHaveLength(4);
     expect(screen.getByRole("button", { name: "Archived chats" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Account menu/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Help and shortcuts" })).toBeNull();
-    expect(screen.getByText("Every setting is one search away. Nothing is hidden, only quiet."))
-      .toBeTruthy();
+    expect(screen.queryByText("Every setting is one search away. Nothing is hidden, only quiet."))
+      .toBeNull();
+    expect(container.querySelector(".settings-side-foot")).toBeNull();
   });
 
   it("omits the readiness/status row and does not poll it from navigation", () => {
@@ -363,27 +352,70 @@ describe("console sidebar", () => {
     await waitFor(() => expect(api.deleteMyConversation).toHaveBeenCalledWith("pixy"));
   });
 
-  it("keeps the rail glassy and recent rows bounded without hiding actions", () => {
+  it("renders pinned tasks as a distinct group and moves rows between groups", () => {
+    localStorage.setItem("boltrig-worker-pinned-conversations", JSON.stringify(["pinned"]));
+    render(
+      <Sidebar
+        route="chat"
+        conversations={[
+          {
+            id: "recent",
+            title: "Recent task",
+            status: "active",
+            updated_at: "2026-08-11T09:00:00Z",
+          },
+          {
+            id: "pinned",
+            title: "Pinned task",
+            status: "active",
+            updated_at: "2026-08-11T08:00:00Z",
+          },
+        ]}
+        conversationStatus="ready"
+        selectedConversation={null}
+        onRoute={vi.fn()}
+        onConversation={vi.fn()}
+        onLoadMore={vi.fn()}
+        hasMoreConversations={false}
+      />,
+    );
+
+    const pinnedGroup = screen.getByRole("region", { name: "Pinned" });
+    const recentGroup = screen.getByRole("region", { name: "Recents" });
+    expect(within(pinnedGroup).getByText("Pinned task")).toBeTruthy();
+    expect(within(pinnedGroup).queryByText("Recent task")).toBeNull();
+    expect(within(recentGroup).getByText("Recent task")).toBeTruthy();
+    expect(within(recentGroup).queryByText("Pinned task")).toBeNull();
+
+    fireEvent.click(within(recentGroup).getByRole("button", { name: "Pin Recent task" }));
+    expect(within(screen.getByRole("region", { name: "Pinned" })).getByText("Recent task"))
+      .toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Recents" })).queryByText("Recent task"))
+      .toBeNull();
+  });
+
+  it("keeps the rail glassy and recent rows bounded without redundant chrome", () => {
     expect(shellParityCss).toContain(".sidebar.shell-parity");
     expect(shellParityCss).toMatch(/\.sidebar\.shell-parity\s*\{[\s\S]*?border-right:\s*0/);
     expect(shellParityCss).toContain("color-mix(in srgb, var(--side) 82%, transparent)");
     expect(shellParityCss).toContain("backdrop-filter: blur(22px)");
+    expect(shellParityCss).toContain(".shell-task-group-label");
+    expect(shellParityCss).toContain(".shell-task-rows");
     expect(shellParityCss).toContain(".shell-parity .session-row {");
     expect(shellParityCss).toContain("max-height: 44px");
     expect(shellParityCss).toContain(".shell-parity .session-row.active .session-main");
     expect(shellParityCss).toMatch(/time\.shell-recent-meta\s*\{[\s\S]*?display:\s*inline/);
     expect(shellParityCss).toMatch(/session-row\.active \.session-actions\s*\{[\s\S]*?opacity:\s*1/);
     expect(shellParityCss).toContain(".shell-parity .session-row:hover .session-actions");
-    expect(workerStylesCss).toMatch(/\.conversation-search\s*\{[\s\S]*?height:\s*31px/);
-    expect(workerStylesCss).toMatch(/\.conversation-search\s*\{[\s\S]*?position:\s*static/);
-    expect(shellParityCss).toMatch(/\.shell-parity \.conversation-search\s*\{[\s\S]*?border-color:\s*#262626/);
-    expect(shellParityCss).toMatch(/\.shell-parity \.conversation-search\s*\{[\s\S]*?background:\s*#171717/);
+    expect(workerStylesCss).not.toContain(".conversation-search");
+    expect(workerStylesCss).not.toContain(".side-workspace");
+    expect(shellParityCss).not.toContain(".conversation-search");
     expect(shellParityCss).toMatch(/\.shell-parity \.session-actions\s*\{[\s\S]*?right:\s*12px/);
     expect(shellParityCss).toMatch(/\.shell-parity \.session-actions\s*\{[\s\S]*?background:\s*transparent/);
     expect(shellParityCss).toMatch(/\.shell-parity \.session-row\.pinned \.session-main,[\s\S]*?padding-right:\s*61px/);
   });
 
-  it("computes a 31px search, 44px selected row, visible time and compact ordinary row", () => {
+  it("computes a 44px selected row, visible time and compact ordinary row", () => {
     installShellStyles();
     localStorage.setItem("boltrig-worker-pinned-conversations", JSON.stringify(["pinned"]));
     render(
@@ -419,11 +451,6 @@ describe("console sidebar", () => {
         onCommandPalette={vi.fn()}
       />,
     );
-
-    const search = screen.getByRole("textbox", { name: "Search conversations" });
-    expect(getComputedStyle(search).position).toBe("static");
-    expect(getComputedStyle(search).height).toBe("31px");
-    expect(getComputedStyle(search).marginBottom).toBe("7px");
 
     const selected = screen.getByText("Selected renewal").closest(".session-row")!;
     const ordinary = screen.getByText("Ordinary renewal").closest(".session-row")!;

@@ -43,23 +43,41 @@ const governedStates = manifest.governed_state_ids.map((id) => {
   if (!state) throw new Error(`Governed visual state ${id} is absent from states.json`);
   return state;
 });
+const additiveStates = manifest.additive_state_ids.map((id) => {
+  const state = manifest.states.find((candidate) => candidate.id === id);
+  if (!state) throw new Error(`Additive visual state ${id} is absent from states.json`);
+  return state;
+});
+const selectedStateSet = options.mode === "additive-evidence"
+  ? additiveStates
+  : governedStates;
 const selectedIds = options.states.length > 0
   ? new Set(options.states)
-  : new Set(manifest.governed_state_ids);
-const unknownIds = [...selectedIds].filter((id) => !manifest.governed_state_ids.includes(id));
+  : new Set(selectedStateSet.map((state) => state.id));
+const selectedStateIds = selectedStateSet.map((state) => state.id);
+const unknownIds = [...selectedIds].filter((id) => !selectedStateIds.includes(id));
 if (unknownIds.length > 0) {
-  throw new Error(`Unknown or non-governed state(s): ${unknownIds.join(", ")}`);
+  throw new Error(
+    `State(s) unavailable in ${options.mode} mode: ${unknownIds.join(", ")}`,
+  );
 }
 if (options.mode === "evidence" && selectedIds.size !== governedStates.length) {
   throw new Error("Evidence capture is all-or-nothing and requires all seven governed states");
 }
-const states = governedStates.filter((state) => selectedIds.has(state.id));
+if (options.mode === "additive-evidence" && selectedIds.size !== additiveStates.length) {
+  throw new Error(
+    "Additive evidence capture is all-or-nothing and requires every additive state",
+  );
+}
+const states = selectedStateSet.filter((state) => selectedIds.has(state.id));
 const origin = new URL(options.origin ?? manifest.base_url);
 assertCaptureOrigin(origin);
 
 const finalRoot = options.mode === "evidence"
   ? resolve(repoRoot, manifest.current_capture_root)
-  : resolve(repoRoot, options.outputDir ?? "work/visual-capture-smoke");
+  : options.mode === "additive-evidence"
+    ? resolve(repoRoot, manifest.additive_capture_root)
+    : resolve(repoRoot, options.outputDir ?? "work/visual-capture-smoke");
 assertSafeOutputRoot(finalRoot);
 await mkdir(dirname(finalRoot), { recursive: true });
 const stagingRoot = await mkdtemp(join(dirname(finalRoot), `.${basename(finalRoot)}.staging-`));
@@ -109,7 +127,10 @@ try {
 
   const capturedAt = new Date().toISOString();
   const receipt = {
-    schema: "boltrig-console-current-capture-manifest.v1",
+    schema: options.mode === "additive-evidence"
+      ? "boltrig-console-additive-current-capture-manifest.v1"
+      : "boltrig-console-current-capture-manifest.v1",
+    ...(options.mode === "additive-evidence" ? { captureSet: "additive" } : {}),
     status: "captured_unreviewed",
     visualVerdict: "not_assessed",
     vdsReviewsUpdated: false,
@@ -198,6 +219,7 @@ function parseArguments(args) {
     const argument = args[index];
     if (argument === "--help" || argument === "-h") parsed.help = true;
     else if (argument === "--reuse-server") parsed.reuseServer = true;
+    else if (argument === "--additive-evidence") parsed.mode = "additive-evidence";
     else if (argument === "--evidence") parsed.mode = "evidence";
     else if (argument === "--smoke") parsed.mode = "smoke";
     else if (argument === "--state") parsed.states.push(requiredValue(args, ++index, argument));
@@ -214,8 +236,10 @@ function parseArguments(args) {
     else if (argument.startsWith("--timeout-ms=")) parsed.timeoutMs = parseTimeout(argument.slice("--timeout-ms=".length));
     else throw new Error(`Unknown argument: ${argument}`);
   }
-  if (parsed.mode === "evidence" && parsed.outputDir) {
-    throw new Error("--output-dir is smoke-only; evidence uses the manifest's durable current_capture_root");
+  if (parsed.mode !== "smoke" && parsed.outputDir) {
+    throw new Error(
+      "--output-dir is smoke-only; evidence modes use their manifest-declared durable roots",
+    );
   }
   return parsed;
 }
@@ -239,8 +263,10 @@ function helpText() {
     + `Usage:\n`
     + `  node apps/worker/tests/visual/capture-current.mjs --smoke [--state ID] [--output-dir PATH]\n`
     + `  node apps/worker/tests/visual/capture-current.mjs --evidence\n\n`
+    + `  node apps/worker/tests/visual/capture-current.mjs --additive-evidence\n\n`
     + `Options:\n`
     + `  --evidence       Capture all seven states into the declared durable current/ evidence root.\n`
+    + `  --additive-evidence  Capture every additive state into its separate source-bound current/ root.\n`
     + `  --smoke          Capture into work/visual-capture-smoke (default).\n`
     + `  --reuse-server   Use an already-running Vite server at --origin.\n`
     + `  --origin URL     Override the manifest origin only; paths and queries remain declared.\n`
@@ -507,9 +533,9 @@ async function captureState(browserInstance, state, captureOrigin, stageRoot, ti
       url: url.href,
       hash: state.hash,
       settledSelector: state.settled_selector,
-      output: options.mode === "evidence"
-        ? state.current_output
-        : relative(repoRoot, join(finalRoot, "shipped", `${state.id}.png`)),
+      output: options.mode === "smoke"
+        ? relative(repoRoot, join(finalRoot, "shipped", `${state.id}.png`))
+        : state.current_output,
       sha256: sha256(bytes),
       width,
       height,

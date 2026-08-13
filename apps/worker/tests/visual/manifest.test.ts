@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { lstat, readFile, readdir, readlink } from "node:fs/promises";
+import { join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -15,6 +17,13 @@ const canonicalStateIds = [
   "settings-you",
 ] as const;
 const additiveStateIds = ["chat-direction"] as const;
+const unboundWorkspacePanelSelectors = [
+  '.right-rail .rail-group[aria-label="Files"]',
+  '.right-rail .rail-group[aria-label="Changes"]',
+  '.right-rail .rail-group[aria-label="Git changes"]',
+  '.right-rail .rail-group[aria-label="Processes"]',
+  '.right-rail .rail-group[aria-label="Terminal"]',
+] as const;
 
 type DirectionState = (typeof manifest.states)[number] & {
   required_presence_selectors: string[];
@@ -28,9 +37,12 @@ type DirectionState = (typeof manifest.states)[number] & {
     height?: number;
     y?: number;
   }>;
+  required_visible_counts: Array<{ selector: string; count: number }>;
+  required_computed_styles: Array<{ selector: string; property: string; value: string }>;
   direction_records: string[];
   reference_digest_manifest: string;
   shipped_digest_manifest: string;
+  current_output: string;
   target_reference_paths: string[];
   negative_reference_paths: string[];
 };
@@ -64,6 +76,43 @@ type ContractState = (typeof manifest.states)[number] & {
   direction_records: string[];
 };
 
+const sourceScope = ["apps/worker/src", "apps/worker/tests/visual"] as const;
+const repoRootPath = fileURLToPath(new URL("../../../../", import.meta.url));
+
+async function sourceTreeDigest(): Promise<string> {
+  const digest = createHash("sha256");
+  for (const scope of sourceScope) {
+    for (const path of await walk(join(repoRootPath, scope))) {
+      const metadata = await lstat(path);
+      const relativePath = relative(repoRootPath, path).split(sep).join("/");
+      digest.update(`${relativePath}\0`);
+      if (metadata.isSymbolicLink()) {
+        digest.update(`symlink\0${await readlink(path)}\0`);
+      } else {
+        digest.update("file\0");
+        digest.update(await readFile(path));
+        digest.update("\0");
+      }
+    }
+  }
+  return digest.digest("hex");
+}
+
+async function walk(root: string): Promise<string[]> {
+  const paths: string[] = [];
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    if (
+      entry.name === ".DS_Store"
+      || entry.name === "__pycache__"
+      || entry.name.endsWith(".pyc")
+    ) continue;
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) paths.push(...await walk(path));
+    else if (entry.isFile() || entry.isSymbolicLink()) paths.push(path);
+  }
+  return paths.sort((left, right) => (left === right ? 0 : left < right ? -1 : 1));
+}
+
 describe("console parity evidence manifest", () => {
   it("keeps the seven canonical states in order and appends additive evidence", () => {
     expect(manifest.schema).toBe("boltrig-worker-visual-states.v2");
@@ -72,6 +121,9 @@ describe("console parity evidence manifest", () => {
     expect(manifest.additive_state_ids).toEqual(additiveStateIds);
     expect(manifest.current_capture_root).toBe(
       "docs/design/evidence/2026-08-11-console-parity/current",
+    );
+    expect(manifest.additive_capture_root).toBe(
+      "docs/design/evidence/2026-08-11-chat-ui-direction/current",
     );
     expect(manifest.states.slice(0, canonicalStateIds.length).map((state) => state.id))
       .toEqual(canonicalStateIds);
@@ -99,6 +151,10 @@ describe("console parity evidence manifest", () => {
       if (manifest.governed_state_ids.includes(state.id as typeof canonicalStateIds[number])) {
         expect("current_output" in state ? state.current_output : null).toBe(
           `docs/design/evidence/2026-08-11-console-parity/current/shipped/${state.id}.png`,
+        );
+      } else {
+        expect("current_output" in state ? state.current_output : null).toBe(
+          `${manifest.additive_capture_root}/shipped/${state.id}.png`,
         );
       }
     }
@@ -129,6 +185,13 @@ describe("console parity evidence manifest", () => {
     }
   });
 
+  it("does not require phenotype traffic from the shipped Familiar state", () => {
+    const newChat = manifest.states.find((state) => state.id === "new-chat");
+    expect(newChat).toBeDefined();
+    expect(newChat!.required_request_prefixes).not.toContain("/v1/familiar/phenotype");
+    expect(newChat!.settled_when).toContain("not fetched by the idle Familiar");
+  });
+
   it("opens the command palette over the same completed run-thread contract as Chat run", () => {
     const chatRun = manifest.states.find((state) => state.id === "chat-run") as
       | ContractState
@@ -145,10 +208,14 @@ describe("console parity evidence manifest", () => {
     expect(palette!.known_contract_bound_deviations).toContain(
       "The background is the same completed persisted turn as Chat run; no live HITL, computer-use or spend state is fabricated.",
     );
-    expect(palette!.direction_records).toEqual(["DIR-0006"]);
+    expect(palette!.direction_records).toEqual([
+      "DIR-0006", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018",
+    ]);
     expect(palette!.required_presence_selectors).toEqual(expect.arrayContaining([
       ".sidebar.shell-parity",
-      ".conversation-search",
+      "#shell-pinned-tasks.shell-task-group-label",
+      "#shell-recent-tasks.shell-task-group-label",
+      ".transcript-navigation[aria-label=\"Transcript navigation\"]",
       ".right-rail .chat-rail-glass",
       ".command-palette[data-screen-label=\"Command palette\"]",
       ".command-search input[aria-label=\"Search Worker\"]",
@@ -157,9 +224,13 @@ describe("console parity evidence manifest", () => {
     expect(palette!.required_absence_selectors).toEqual(expect.arrayContaining([
       ".side-status",
       ".side-status-dot",
+      ".conversation-search",
+      ".side-recents-label",
+      ".side-workspace",
       ".message-author",
       ".subagent-fanout",
       ".right-rail [aria-label=\"Conversation title\"]",
+      ...unboundWorkspacePanelSelectors,
     ]));
     expect(palette!.required_visible_selectors).toEqual(expect.arrayContaining([
       ".command-palette[data-screen-label=\"Command palette\"]",
@@ -171,11 +242,18 @@ describe("console parity evidence manifest", () => {
       selector: ".command-group[aria-label=\"Navigation commands\"] > .command-row",
       count: 8,
     });
+    expect(palette!.required_visible_counts).toEqual(expect.arrayContaining([
+      { selector: ".shell-task-group-label", count: 2 },
+      { selector: ".transcript-navigation", count: 1 },
+      { selector: ".transcript-navigation > button", count: 2 },
+    ]));
     expect(palette!.required_geometry).toEqual(expect.arrayContaining([
       { selector: ".command-palette", x: 660, y: 135, width: 560, height: 335 },
       { selector: ".command-search", x: 661, y: 136, width: 558, height: 48 },
     ]));
     expect(palette!.required_exact_text).toEqual(expect.arrayContaining([
+      { selector: "#shell-pinned-tasks", text: "Pinned" },
+      { selector: "#shell-recent-tasks", text: "Recents" },
       { selector: ".command-row:nth-child(1) .command-row-label", text: "New chat" },
       { selector: ".command-row:nth-child(8) .command-row-label", text: "Keyboard shortcuts settings" },
     ]));
@@ -184,6 +262,7 @@ describe("console parity evidence manifest", () => {
       "Conversation settings",
       "Everything responding",
       "This run",
+      "acme · production",
     ]));
   });
 
@@ -193,7 +272,7 @@ describe("console parity evidence manifest", () => {
       | undefined;
 
     expect(plugins).toBeDefined();
-    expect(plugins!.direction_records).toEqual(["DIR-0004"]);
+    expect(plugins!.direction_records).toEqual(["DIR-0004", "DIR-0010", "DIR-0015", "DIR-0016"]);
     expect(plugins!.required_presence_selectors).not.toContain(".sidebar.shell-parity");
     expect(plugins!.required_presence_selectors).toEqual(expect.arrayContaining([
       ".plugins-pane",
@@ -251,25 +330,38 @@ describe("console parity evidence manifest", () => {
 
     for (const state of [newChat, chatRun]) {
       expect(state).toBeDefined();
-      expect(state!.direction_records).toEqual(["DIR-0008", "DIR-0009"]);
+      expect(state!.direction_records).toEqual([
+        "DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018",
+      ]);
       expect(state!.required_presence_selectors).toContain(".sidebar.shell-parity");
-      expect(state!.required_presence_selectors).toContain(".conversation-search");
+      expect(state!.required_presence_selectors).toEqual(expect.arrayContaining([
+        ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"]",
+        ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"]",
+        "#shell-pinned-tasks.shell-task-group-label",
+        "#shell-recent-tasks.shell-task-group-label",
+      ]));
+      expect(state!.required_presence_selectors).not.toContain(".conversation-search");
       expect(state!.required_absence_selectors).toEqual(expect.arrayContaining([
         ".side-status",
+        ".conversation-search",
+        ".side-recents-label",
+        ".side-workspace",
         ".message-author",
         ".subagent-fanout",
+        ...unboundWorkspacePanelSelectors,
       ]));
       expect(state!.required_absent_text).toEqual(expect.arrayContaining([
         "Governed by Boltrig",
         "Conversation settings",
         "Everything responding",
+        "acme · production",
       ]));
     }
 
     expect(newChat!.required_visible_selectors).toEqual(expect.arrayContaining([
       ".new-chat-transcript .welcome h1",
       ".new-chat-transcript .composer.new-context",
-      ".new-chat-transcript button[aria-label=\"Model profile\"]",
+      ".new-chat-transcript button[aria-label=\"Model\"]",
       ".voice-intro",
     ]));
     expect(newChat!.required_geometry).toEqual(expect.arrayContaining([
@@ -278,18 +370,105 @@ describe("console parity evidence manifest", () => {
       { selector: ".new-chat-transcript .starters", x: 521, y: 454.5, width: 660, height: 134 },
       { selector: ".voice-intro", x: 521, y: 823, width: 660, height: 57 },
     ]));
+    expect(newChat!.required_visible_counts).toContainEqual({
+      selector: ".sidebar-footer > button",
+      count: 2,
+    });
+    expect(newChat!.required_visible_counts).toContainEqual({
+      selector: ".composer .voice-primary",
+      count: 1,
+    });
+    expect(newChat!.required_visible_counts).toEqual(expect.arrayContaining([
+      { selector: ".shell-task-group-label", count: 2 },
+      {
+        selector: ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-row",
+        count: 1,
+      },
+      {
+        selector: ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"] .session-row",
+        count: 3,
+      },
+    ]));
+    expect(newChat!.required_absence_selectors).toContain(".transcript-navigation");
+    expect(newChat!.required_absence_selectors)
+      .toContain('.composer-context-item[title*="Project"]');
+    expect(newChat!.required_absent_text).toContain("No project selected");
+    expect(newChat!.known_contract_bound_deviations).toContain(
+      "Project and host selectors are omitted until a canonical task-context field exists; the fixture does not manufacture a selection control.",
+    );
+    expect(newChat!.required_presence_selectors)
+      .toContain(".composer-voice-controller[hidden]");
+    expect(newChat!.required_absence_selectors)
+      .toContain(".composer-voice-controller:not([hidden])");
+    expect(newChat!.required_computed_styles).toContainEqual({
+      selector: ".composer-voice-controller",
+      property: "display",
+      value: "none",
+    });
     expect(chatRun!.required_visible_selectors).toEqual(expect.arrayContaining([
       ".session-row.active .session-actions",
       ".transcript-tool-summary",
       ".transcript-subagent-chip",
+      ".transcript-navigation[aria-label=\"Transcript navigation\"]",
       ".right-rail .chat-rail-glass",
     ]));
     expect(chatRun!.required_geometry).toContainEqual({
       selector: ".right-rail .chat-rail-glass",
       width: 302,
-      height: 153.5,
       y: 16,
     });
+    expect(chatRun!.required_visible_counts).toEqual(expect.arrayContaining([
+      { selector: ".shell-task-group-label", count: 2 },
+      { selector: ".transcript-navigation", count: 1 },
+      { selector: ".transcript-navigation > button", count: 2 },
+      { selector: ".transcript-tool-summary", count: 1 },
+      { selector: ".right-rail .rail-group[aria-label=\"Outputs\"]", count: 1 },
+      { selector: ".right-rail .rail-group[aria-label=\"Subagents\"]", count: 1 },
+      { selector: ".message.user", count: 1 },
+      { selector: ".message.assistant", count: 1 },
+      { selector: ".sidebar-footer > button", count: 2 },
+      { selector: ".composer .voice-primary", count: 1 },
+    ]));
+    expect(chatRun!.required_geometry).toEqual(expect.arrayContaining([
+      { selector: "#shell-pinned-tasks.shell-task-group-label", height: 18 },
+      { selector: "#shell-recent-tasks.shell-task-group-label", height: 18 },
+      {
+        selector: ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-main",
+        height: 31,
+      },
+      {
+        selector: ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"] .session-row:not(.active) .session-main",
+        height: 31,
+      },
+      { selector: ".transcript-tool-summary", height: 24 },
+      { selector: ".transcript-navigation", width: 63, height: 34 },
+    ]));
+    expect(chatRun!.required_computed_styles).toEqual(expect.arrayContaining([
+      { selector: ".right-rail", property: "background-color", value: "rgba(0, 0, 0, 0)" },
+      { selector: ".chat-rail-glass", property: "border-top-width", value: "0px" },
+      { selector: ".chat-rail-glass", property: "border-right-width", value: "0px" },
+      { selector: ".chat-rail-glass", property: "border-bottom-width", value: "0px" },
+      { selector: ".chat-rail-glass", property: "border-left-width", value: "0px" },
+      { selector: ".chat-rail-glass", property: "backdrop-filter", value: "blur(22px) saturate(1.25)" },
+      { selector: ".transcript-navigation", property: "border-top-width", value: "0px" },
+      { selector: ".transcript-navigation", property: "backdrop-filter", value: "blur(18px) saturate(1.25)" },
+      { selector: ".sidebar.shell-parity", property: "border-right-width", value: "0px" },
+      { selector: ".sidebar.shell-parity", property: "backdrop-filter", value: "blur(22px) saturate(1.05)" },
+      { selector: ".composer-voice-controller", property: "display", value: "none" },
+    ]));
+    expect(chatRun!.required_presence_selectors)
+      .toContain(".composer-voice-controller[hidden]");
+    expect(chatRun!.required_absence_selectors)
+      .toContain(".composer-voice-controller:not([hidden])");
+    expect(chatRun!.required_exact_text).toContainEqual({
+      selector: ".transcript-tool-summary .transcript-tool-copy",
+      text: "Queried data",
+    });
+    expect(chatRun!.required_absence_selectors).toContain(".transcript-tool-disclosure[open]");
+    expect(chatRun!.required_absent_text).toEqual(expect.arrayContaining([
+      "script run by",
+      "depth 1",
+    ]));
   });
 
   it("fails the additive desktop-chat state closed on the Codex direction contract", () => {
@@ -303,21 +482,25 @@ describe("console parity evidence manifest", () => {
     expect(direction!.required_request_prefixes).toContain(
       "/v1/conversations/direction-thread",
     );
-    expect(direction!.direction_records).toEqual(["DIR-0008", "DIR-0009"]);
+    expect(direction!.direction_records).toEqual([
+      "DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018",
+    ]);
     expect(direction!.reference_digest_manifest).toBe(
       "docs/design/evidence/2026-08-11-chat-ui-direction/references.sha256",
     );
     expect(direction!.target_reference_paths).toHaveLength(3);
     expect(direction!.negative_reference_paths).toHaveLength(3);
     expect(direction!.required_visible_selectors).toEqual(expect.arrayContaining([
-      ".conversation-search",
       ".session-row.active .shell-recent-meta",
       ".session-row.active .session-actions",
+      "#shell-pinned-tasks.shell-task-group-label",
+      "#shell-recent-tasks.shell-task-group-label",
+      ".transcript-navigation[aria-label=\"Transcript navigation\"]",
     ]));
     expect(direction!.required_presence_selectors).toEqual(expect.arrayContaining([
-      ".right-rail [aria-label=\"Background processes\"]",
-      ".right-rail [aria-label=\"Computer Use\"]",
-      ".right-rail [aria-label=\"Sources\"]",
+      ".right-rail .rail-group[aria-label=\"Background processes\"]",
+      ".right-rail .rail-group[aria-label=\"Computer Use\"]",
+      ".right-rail .rail-group[aria-label=\"Sources\"]",
       ".right-rail .rail-agent-stack [data-familiar-body=\"kepler\"]",
       ".right-rail .rail-agent-stack [data-familiar-body=\"pioneer\"]",
       ".right-rail .rail-agent-stack [data-familiar-body=\"voyager\"]",
@@ -326,21 +509,68 @@ describe("console parity evidence manifest", () => {
     ]));
     expect(direction!.required_absence_selectors).toEqual(expect.arrayContaining([
       ".side-status",
+      ".conversation-search",
+      ".side-recents-label",
+      ".side-workspace",
       ".right-rail [aria-label=\"Conversation title\"]",
+      ...unboundWorkspacePanelSelectors,
     ]));
     expect(direction!.required_text).toContain(
       "Used Figma integration, read files, edited files, ran commands",
     );
     expect(direction!.required_text).toContain("3 done");
     expect(direction!.required_geometry).toEqual(expect.arrayContaining([
-      { selector: ".conversation-search", width: 245, height: 31 },
+      { selector: "#shell-pinned-tasks.shell-task-group-label", height: 18 },
+      { selector: "#shell-recent-tasks.shell-task-group-label", height: 18 },
       { selector: ".session-row.active .session-main", height: 44 },
-      { selector: ".right-rail .chat-rail-glass", width: 302, height: 471, y: 16 },
+      {
+        selector: ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"] .session-row:not(.active) .session-main",
+        height: 31,
+      },
+      { selector: ".transcript-tool-summary", height: 24 },
+      { selector: ".transcript-navigation", width: 63, height: 34 },
+      { selector: ".right-rail .chat-rail-glass", width: 302, y: 16 },
     ]));
+    expect(direction!.required_visible_counts).toEqual(expect.arrayContaining([
+      { selector: ".shell-task-group-label", count: 2 },
+      { selector: ".transcript-navigation", count: 1 },
+      { selector: ".transcript-navigation > button", count: 2 },
+      { selector: ".transcript-tool-summary", count: 2 },
+      { selector: ".right-rail .rail-group[aria-label=\"Outputs\"]", count: 1 },
+      { selector: ".right-rail .rail-group[aria-label=\"Subagents\"]", count: 1 },
+      { selector: ".right-rail .rail-group[aria-label=\"Background processes\"]", count: 1 },
+      { selector: ".right-rail .rail-group[aria-label=\"Computer Use\"]", count: 1 },
+      { selector: ".right-rail .rail-group[aria-label=\"Sources\"]", count: 1 },
+      { selector: ".message.user", count: 2 },
+      { selector: ".message.assistant", count: 2 },
+      { selector: ".sidebar-footer > button", count: 2 },
+      { selector: ".composer .voice-primary", count: 1 },
+    ]));
+    expect(direction!.required_computed_styles).toEqual(expect.arrayContaining([
+      { selector: ".right-rail", property: "background-color", value: "rgba(0, 0, 0, 0)" },
+      { selector: ".chat-rail-glass", property: "border-top-width", value: "0px" },
+      { selector: ".chat-rail-glass", property: "border-right-width", value: "0px" },
+      { selector: ".chat-rail-glass", property: "border-bottom-width", value: "0px" },
+      { selector: ".chat-rail-glass", property: "border-left-width", value: "0px" },
+      { selector: ".chat-rail-glass", property: "backdrop-filter", value: "blur(22px) saturate(1.25)" },
+      { selector: ".transcript-navigation", property: "border-top-width", value: "0px" },
+      { selector: ".transcript-navigation", property: "backdrop-filter", value: "blur(18px) saturate(1.25)" },
+      { selector: ".sidebar.shell-parity", property: "border-right-width", value: "0px" },
+      { selector: ".sidebar.shell-parity", property: "backdrop-filter", value: "blur(22px) saturate(1.05)" },
+      { selector: ".composer-voice-controller", property: "display", value: "none" },
+    ]));
+    expect(direction!.required_presence_selectors)
+      .toContain(".composer-voice-controller[hidden]");
+    expect(direction!.required_absence_selectors)
+      .toContain(".composer-voice-controller:not([hidden])");
+    expect(direction!.required_absence_selectors).toContain(".transcript-tool-disclosure[open]");
     expect(direction!.required_absent_text).toEqual(expect.arrayContaining([
       "Governed by Boltrig",
       "Conversation settings",
       "Everything responding",
+      "acme · production",
+      "script run by",
+      "depth 1",
     ]));
     expect(newChat?.known_contract_bound_deviations.join(" "))
       .not.toContain("readiness fixture is deliberately degraded");
@@ -383,6 +613,21 @@ describe("console parity evidence manifest", () => {
     expect(source).toContain("Evidence capture is all-or-nothing");
     expect(source).toContain("state.current_output");
     expect(source).not.toContain("capture-manifest.json\", repoRoot");
+  });
+
+  it("keeps additive capture separate, source-bound and review-neutral", async () => {
+    const source = await import("node:fs/promises").then(({ readFile }) => readFile(
+      new URL("./capture-current.mjs", import.meta.url),
+      "utf8",
+    ));
+    expect(source).toContain('options.mode === "additive-evidence"');
+    expect(source).toContain("manifest.additive_state_ids");
+    expect(source).toContain("manifest.additive_capture_root");
+    expect(source).toContain("Additive evidence capture is all-or-nothing");
+    expect(source).toContain("boltrig-console-additive-current-capture-manifest.v1");
+    expect(source).toContain('{ captureSet: "additive" }');
+    expect(source).toContain('visualVerdict: "not_assessed"');
+    expect(source).toContain("vdsReviewsUpdated: false");
   });
 
   it("keeps current comparison source-bound, atomic and review-neutral", async () => {
@@ -428,12 +673,61 @@ describe("console parity evidence manifest", () => {
     expect(source).toContain('run_id: "run-renewal-review"');
   });
 
+  it("keeps shell, transcript and inspector landmarks migration-compatible", async () => {
+    const paritySource = await readFile(new URL("./parity.tsx", import.meta.url), "utf8");
+    const inspectorSource = await readFile(new URL(
+      "../../src/components/chat/TaskInspector.tsx",
+      import.meta.url,
+    ), "utf8");
+
+    expect(paritySource).toContain('JSON.stringify(["vendor-invoice-triage"])');
+    expect(paritySource).toContain('document.querySelector("#shell-pinned-tasks")');
+    expect(paritySource).toContain('document.querySelector("#shell-recent-tasks")');
+    expect(paritySource).toContain(
+      'document.querySelector(\'.transcript-navigation[aria-label="Transcript navigation"]\')',
+    );
+
+    // TaskInspector carries these semantic bridge classes so the visual
+    // contract can survive the legacy RightRail -> TaskInspector mount swap
+    // without accepting a selector-free frame in between.
+    expect(inspectorSource).toContain('"task-inspector right-rail"');
+    expect(inspectorSource).toContain('className="task-inspector__surface rail-card chat-rail-glass"');
+    expect(inspectorSource).toContain('className="task-inspector__group rail-group"');
+    expect(inspectorSource).toContain('className="task-inspector__group-header rail-group-head"');
+    expect(inspectorSource).toContain('className="task-inspector__group-body rail-body"');
+    expect(inspectorSource).toContain('task-inspector__row rail-row');
+    expect(inspectorSource).toContain('className="task-inspector__agent-stack rail-agent-stack"');
+    expect(inspectorSource).toContain('data-integration="figma"');
+
+    for (const id of ["chat-run", "chat-direction"] as const) {
+      const state = manifest.states.find((candidate) => candidate.id === id) as
+        | ContractState
+        | undefined;
+      expect(state).toBeDefined();
+      expect(state!.required_geometry.some(({ selector }) => (
+        selector === ".side-recents-label"
+      ))).toBe(false);
+      expect(state!.required_presence_selectors).toEqual(expect.arrayContaining([
+        ".right-rail .chat-rail-glass",
+        ".right-rail .rail-group[aria-label=\"Outputs\"]",
+        ".right-rail .rail-group[aria-label=\"Subagents\"]",
+      ]));
+      expect(state!.required_absence_selectors).toEqual(expect.arrayContaining([
+        ".conversation-search",
+        ".side-recents-label",
+        ".side-workspace",
+        ".right-rail [aria-label=\"Conversation title\"]",
+        ".right-rail [aria-label=\"Conversation\"]",
+      ]));
+    }
+  });
+
   it("fails the Call fixture closed on its deterministic recovered-call notice", async () => {
     const call = manifest.states.find((state) => state.id === "call") as
       | ContractState
       | undefined;
     expect(call).toBeDefined();
-    expect(call!.direction_records).toEqual(["DIR-0005"]);
+    expect(call!.direction_records).toEqual(["DIR-0005", "DIR-0010", "DIR-0015", "DIR-0016"]);
     expect(call!.required_presence_selectors).toEqual(expect.arrayContaining([
       ".voice-call-title",
       ".voice-call-leave",
@@ -525,7 +819,7 @@ describe("console parity evidence manifest", () => {
       | ContractState
       | undefined;
     expect(settings).toBeDefined();
-    expect(settings!.direction_records).toEqual(["DIR-0007"]);
+    expect(settings!.direction_records).toEqual(["DIR-0007", "DIR-0015"]);
     expect(settings!.required_absence_selectors).toContain(
       '.settings-you-pane [aria-label="Companion"]',
     );
@@ -562,7 +856,7 @@ describe("console parity evidence manifest", () => {
       | ContractState
       | undefined;
     expect(agents).toBeDefined();
-    expect(agents!.direction_records).toEqual(["DIR-0003"]);
+    expect(agents!.direction_records).toEqual(["DIR-0003", "DIR-0010", "DIR-0015", "DIR-0016"]);
     expect(agents!.required_visible_selectors).toEqual(expect.arrayContaining([
       ".agents-fleet-topbar .console-seg",
       ".agents-fleet-topbar .console-primary",
@@ -600,6 +894,77 @@ describe("console parity evidence manifest", () => {
     expect(digestManifest.trim()).toBe(`${digest}  shipped/chat-direction.png`);
   });
 
+  it("binds current additive evidence to its exact source and review-neutral receipt", async () => {
+    const direction = manifest.states.find((state) => state.id === "chat-direction") as
+      | DirectionState
+      | undefined;
+    expect(direction).toBeDefined();
+
+    const repoRoot = new URL("../../../../", import.meta.url);
+    const receipt = JSON.parse(await readFile(new URL(
+      `${manifest.additive_capture_root}/capture-manifest.json`,
+      repoRoot,
+    ), "utf8")) as {
+      schema: string;
+      captureSet: string;
+      status: string;
+      visualVerdict: string;
+      vdsReviewsUpdated: boolean;
+      viewport: { width: number; height: number; deviceScaleFactor: number };
+      sourceBinding: {
+        scope: string[];
+        digestBeforeCapture: string;
+        digestAfterCapture: string;
+        sourceUnchangedDuringCapture: boolean;
+      };
+      states: Array<{
+        state: string;
+        output: string;
+        sha256: string;
+        width: number;
+        height: number;
+        captureContract: {
+          ready: boolean;
+          contractMisses: string[];
+          fixtureMisses: string[];
+        };
+      }>;
+    };
+    expect(receipt.schema).toBe("boltrig-console-additive-current-capture-manifest.v1");
+    expect(receipt.captureSet).toBe("additive");
+    expect(receipt.status).toBe("captured_unreviewed");
+    expect(receipt.visualVerdict).toBe("not_assessed");
+    expect(receipt.vdsReviewsUpdated).toBe(false);
+    expect(receipt.viewport).toEqual({ width: 1440, height: 900, deviceScaleFactor: 1 });
+    expect(receipt.sourceBinding.scope).toEqual(sourceScope);
+    expect(receipt.sourceBinding.sourceUnchangedDuringCapture).toBe(true);
+    expect(receipt.sourceBinding.digestBeforeCapture)
+      .toBe(receipt.sourceBinding.digestAfterCapture);
+    expect(receipt.sourceBinding.digestAfterCapture).toBe(await sourceTreeDigest());
+    expect(receipt.states).toHaveLength(1);
+
+    const row = receipt.states[0]!;
+    expect(row.state).toBe("chat-direction");
+    expect(row.output).toBe(direction!.current_output);
+    expect(row.width).toBe(1440);
+    expect(row.height).toBe(900);
+    expect(row.captureContract.ready).toBe(true);
+    expect(row.captureContract.contractMisses).toEqual([]);
+    expect(row.captureContract.fixtureMisses).toEqual([]);
+
+    const capture = await readFile(new URL(direction!.current_output, repoRoot));
+    const digest = createHash("sha256").update(capture).digest("hex");
+    const digestManifest = await readFile(new URL(
+      `${manifest.additive_capture_root}/shipped.sha256`,
+      repoRoot,
+    ), "utf8");
+    expect([...capture.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+    expect(capture.readUInt32BE(16)).toBe(1440);
+    expect(capture.readUInt32BE(20)).toBe(900);
+    expect(row.sha256).toBe(digest);
+    expect(digestManifest.trim()).toBe(`${digest}  shipped/chat-direction.png`);
+  });
+
   it("keeps the existing console captures explicitly historical and stale", async () => {
     const repoRoot = new URL("../../../../", import.meta.url);
     const captureManifest = JSON.parse(await readFile(
@@ -623,9 +988,9 @@ describe("console parity evidence manifest", () => {
     expect(captureManifest.currentSourceBinding.reason).toContain(
       "must not be presented as evidence of the current working tree",
     );
-    expect(readme).toContain("records the historical 06:41–06:42 UTC Worker comparison");
-    expect(readme).toContain("It does not bind the current Worker source.");
-    expect(readme).toContain("Do not use the existing shipped images, diffs or");
+    expect(readme).toContain("retains the historical 06:41–06:42 UTC Worker comparison");
+    expect(readme).toContain("Fresh source-bound evidence for the");
+    expect(readme).toContain("root-level 06:41–06:42 UTC captures remain historical");
     expect(readme).not.toContain("This directory binds the current Worker implementation");
   });
 });

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -10,6 +10,7 @@ vi.mock("../src/client", () => ({ client: api }));
 
 import { StageBody, type StageTurnInput } from "../src/components/StageBody";
 import { saveCharacterLocal } from "../src/character";
+import { registerCharacter } from "../src/components/characters";
 
 // StageBody is the one place that decides which body is on the Stage, so it is
 // the one place where "the setting actually changes what you see" can be
@@ -66,6 +67,25 @@ describe("the Stage body switch", () => {
     await waitFor(() => {
       expect(container.querySelector(".familiar-stage")).toBeTruthy();
     });
+  });
+
+  it("replaces the fallback when a selected plugin registers after the Stage mounts", async () => {
+    saveCharacterLocal("late-stage-character");
+    const { container } = render(<StageBody input={INPUT} mode="conversation" />);
+    expect(container.querySelector(".familiar-stage")).toBeTruthy();
+
+    act(() => registerCharacter({
+      id: "late-stage-character",
+      name: "Late Stage Character",
+      readsPhenotype: false,
+      blurb: "Registers after the selected setting has already been restored.",
+      render: () => <div className="late-stage-character" />,
+    }));
+
+    await waitFor(() => {
+      expect(container.querySelector(".late-stage-character")).toBeTruthy();
+    });
+    expect(container.querySelector(".familiar-stage")).toBeNull();
   });
 
   // Both bodies read the same turn facts. Neither may ever be handed something
