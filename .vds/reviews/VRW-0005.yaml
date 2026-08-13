@@ -3,10 +3,10 @@ routes:
 - apps/worker/src/components/VoiceCall.tsx
 fileKey: iVQBKFc3NpRH3zdOOxfPqr
 nodeId: 17:2
-shippedScreenshotDigest: sha256:51aa65e725cb4fc624cf9c202b17f96263f85de098c6cf03bb7bb1d509799f43
+shippedScreenshotDigest: sha256:309d79e3fafe1711574cec5af4ab9bc0cc6cb5a0391acdc61d778c35a88f77a3
 screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png
-servedBuild: "feat/console-target@23238fab5acf1bb888421360f40f14b17bde79ae; dirty; capture-source sha256:91585a25a0a3651786219e6a4a3aa2712d46358d0e43a95f6710b1b6a0d325e0; capture-manifest sha256:629af0b56c03bff108df56048f095f775e1cd43a525ce5ae9e271472b0f048a0"
-shippedSourceDigest: sha256:02e7746bbd539658fc26d0f2e78a1109e072157a41d22340f6e1aac76a605c6a
+servedBuild: "feat/console-target@781346d1abd76f8c35c17e42ff22f2020045dfe3; dirty; capture-source sha256:4f9b663ce8c505e4173d92c250fa345dfba54246f6f2745108615077b2b6c298; capture-manifest sha256:6464842018714990f841f5be5c0487970669ab695786a089015a1c225dcd98c7"
+shippedSourceDigest: sha256:97af696c48e8df992a54671ef657bda5123896b3393a646327dc7e5ebbad39fb
 frameImageDigest: sha256:31b55e68eadb7f0a1d8767c9b7435d668b531f2ae38c915ea976bc893d67f45e
 frameDigest: sha256:f45d0e0271e5fef8f5ecc12b799cf023b7693d5cd75e78ffacdfced135038830
 verdict: no_authority
@@ -41,12 +41,15 @@ deltas:
 - describes: The notification occupies the measured target locus, while its recovery copy and action follow the real connection state instead of the frame's illustrative message.
   disposition: forbidden_by_policy
   owedBy: DIR-0005
-reviewedBy: Codex deterministic current-capture evidence rebind v2
-reviewedAt: 2026-08-11T15:36:50Z
+reviewedBy: Codex deterministic current-capture evidence rebind v8
+reviewedAt: 2026-08-13T13:55:59Z
 basis:
 - DIR-0005
+- DIR-0010
+- DIR-0015
+- DIR-0016
 - SCR-0004
 - apps/worker/tests/visual/states.json
 - docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json
 - docs/design/evidence/2026-08-11-console-parity/current/metrics.json
-notes: The frame digest comes from the existing depth-limited ledger and is not eligible for sign-off. This no_authority row binds the deterministic current screenshot and current route source only.
+notes: The unchanged frame digest is retained from the existing depth-limited ledger only and is not eligible for sign-off. The recovered-call screenshot is byte-identical to the prior current capture, while its source-bound capture receipt is new. This no_authority row binds only the deterministic current screenshot and current route source.

@@ -1,0 +1,9 @@
+id: DIR-0012
+logId: DECISION-0008
+decisionDigest: sha256:d6fd4dd37248c36e8f1701bd6da3ba722491560e4a50cb212274808d2ee4b2f3
+surface: !route
+  route: apps/worker/src/components/ChatView.tsx
+direction: In the Chat model switcher, state the actual Bifrost model name for every choice and show the actual resolved default beside Automatic. Submit only a server-issued opaque choice identifier, keep unavailable models visibly unavailable rather than selectable, and keep a direct route to Settings Models.
+magnitude: Apply this to New chat and populated desktop Chat composer states without changing voice-profile semantics. The browser must receive no Bifrost credential, the exact server-selected model must be revalidated and bound to the trusted runtime for the admitted turn, and Automatic must fail closed when no verified default is available. Preserve accessibility, responsive behavior, in-flight turn locking and truthful degraded states; do not invent Bifrost reachability, provider aliases or a successful selection.
+directedAt: 2026-08-12T13:36:38Z
+notes: This additive direction extends the earlier Chat visual directions only at the model-control seam. It asserts no live Bifrost deployment, frameDigest, signed review, Code Connect linkage, token linkage, conformity or sign-off.

@@ -1,0 +1,10 @@
+id: DECISION-0010
+at: 2026-08-12T15:38:31Z
+by: williamlilley
+decision: Boltrig will harvest Omnigent's session information architecture and interaction choreography into Boltrig-native Shell and Chat components without adopting its runtime, store or policy authority; the governed file-metadata seam remains UI-dark until a task binds an explicit device and root, while Git, process and terminal views remain omitted.
+court_required: false
+why: The Principal asked whether to switch to Omnigent or harvest its best UI patterns, then directed the approved plan to proceed. Inspection of the pinned Omnigent revision showed useful task hierarchy, transcript and inspector choreography, but adopting its runner, reducer, policy and direct workspace paths would create a second execution authority outside Boltrig's ordered dispatcher. Reimplementing the interaction patterns over the existing conversation, normalized-event, artifact, attachment and governed-invoke contracts delivers the requested UI while preserving Boltrig's one chokepoint. A bounded device.file.list metadata contract now exists, but Chat has no conversation-bound device_id and root_id; choosing the first available device or root would invent authority, so no Files panel is enabled. Git, process and terminal surfaces lack equivalent root-confined or leased contracts and remain absent. This additive call preserves all earlier Figma and Codex direction provenance and asserts no copied Omnigent code, asset, runtime dependency, visual conformity or sign-off.
+basis:
+- USER-DIRECTION-2026-08-12:OMNIGENT-UI-HARVEST
+- docs/decisions/0026-omnigent-ui-harvest.md
+- BOLTRIG-DOCTRINE:ONE-CHOKEPOINT-AND-CODEX-ONLY

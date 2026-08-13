@@ -3,10 +3,10 @@ routes:
 - apps/worker/src/components/SettingsSurface.tsx
 fileKey: iVQBKFc3NpRH3zdOOxfPqr
 nodeId: 22:2
-shippedScreenshotDigest: sha256:00d8aa74d9a26e0415fef9309063cd8695249ee742cd7276b676ef152c419252
+shippedScreenshotDigest: sha256:14e45cf3dff1745aeda7b0901434a1526e64ca60af6b30890211d93105b0ad9d
 screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png
-servedBuild: "feat/console-target@23238fab5acf1bb888421360f40f14b17bde79ae; dirty; capture-source sha256:91585a25a0a3651786219e6a4a3aa2712d46358d0e43a95f6710b1b6a0d325e0; capture-manifest sha256:629af0b56c03bff108df56048f095f775e1cd43a525ce5ae9e271472b0f048a0"
-shippedSourceDigest: sha256:e54f89235a00b939a52682743f5fc60c0ea6295f4f5c5e3e7ca3b944e6de5808
+servedBuild: "feat/console-target@781346d1abd76f8c35c17e42ff22f2020045dfe3; dirty; capture-source sha256:4f9b663ce8c505e4173d92c250fa345dfba54246f6f2745108615077b2b6c298; capture-manifest sha256:6464842018714990f841f5be5c0487970669ab695786a089015a1c225dcd98c7"
+shippedSourceDigest: sha256:f8252eac4f6a80c1c28ce67658a23ee36c1d7ae5cc3cd23d29f95fba614cbdc7
 frameImageDigest: sha256:b1d04f772b8f54a22ad02fa3e7917262f7ffecffeb65106c187bb0f5b0758213
 frameDigest: sha256:e9aca9ab0c191069ecb2a0e78d157287d9a9dbac94f4bf2ea3235bb0279db909
 verdict: no_authority
@@ -16,7 +16,7 @@ regions:
   finding: Heading, explanatory copy, section labels and measured main-pane stack align closely.
 - region: facets
   examined: true
-  finding: Search and settings navigation align broadly; the shipped shell retains an identity footer the frame omits.
+  finding: Search and settings navigation align broadly; the named editorial footer is absent as directed and the Models section is available without adding a second global search field.
 - region: body_rows
   examined: true
   finding: Appearance, notification and call-preference row geometry aligns closely while backend-derived values and availability states differ.
@@ -36,15 +36,17 @@ deltas:
 - describes: Notification-route detail, quiet-hours availability and voice-preference states follow captured contracts rather than the frame's illustrative values.
   disposition: forbidden_by_policy
   owedBy: DIR-0007
-- describes: The settings shell retains the signed-in identity footer that the frame omits.
+- describes: The later Principal direction removes the editorial Settings-rail footer and adds governed Models navigation without changing the frame; these are app-chrome and runtime-truth overrides.
   disposition: belongs_to_app_chrome
   owedBy: SCR-0006
-reviewedBy: Codex deterministic current-capture evidence rebind v2
-reviewedAt: 2026-08-11T15:36:50Z
+reviewedBy: Codex deterministic current-capture evidence rebind v8
+reviewedAt: 2026-08-13T13:55:59Z
 basis:
 - DIR-0007
+- DIR-0015
+- DIR-0019
 - SCR-0006
 - apps/worker/tests/visual/states.json
 - docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json
 - docs/design/evidence/2026-08-11-console-parity/current/metrics.json
-notes: The frame digest comes from the existing depth-limited ledger and is not eligible for sign-off. The current capture measured the main pane at the governing geometry, while real values and unsupported states still differ. This no_authority row binds the deterministic current screenshot and current route source only.
+notes: The unchanged frame digest is retained from the existing depth-limited ledger only and is not eligible for sign-off. The current capture measures the main pane at the governing geometry, while real values and unsupported states still differ. This no_authority row binds only the deterministic current screenshot and current route source.

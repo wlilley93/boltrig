@@ -1,0 +1,9 @@
+id: DIR-0019
+logId: DECISION-0011
+decisionDigest: sha256:a66133fb6ff6439b87e66f4071b731d9880995697e57aef7a7aeffb51534e695
+surface: !route
+  route: apps/worker/src/components/SettingsSurface.tsx
+direction: Expose the same caller-owned three-way agent-tool approval posture in Autonomy settings, with Full access visibly bounded by the authority and hard limits that remain.
+magnitude: Use the same dedicated kernel setting and option vocabulary as Chat, require interactive self-confirmation for mutation, keep state synchronized across surfaces, and retain concise unavailable/error states. Do not turn this coarse posture into a per-verb policy editor, dry-run planner, grant editor, credential control, control-plane approval bypass or claim that all external actions are unrestricted.
+directedAt: 2026-08-13T13:46:29Z
+notes: 'This additive direction supersedes DIR-0014 only where that earlier record said not to fabricate a posture control: the kernel contract now exists. Its removal of editorial commentary and all other earlier constraints remain live.'

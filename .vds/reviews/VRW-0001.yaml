@@ -3,29 +3,29 @@ routes:
 - apps/worker/src/components/ChatView.tsx
 fileKey: iVQBKFc3NpRH3zdOOxfPqr
 nodeId: 5:2
-shippedScreenshotDigest: sha256:ab6f6bc624e64db9578e860e42260dca401cdd72f8df43051e1c1619122fffac
+shippedScreenshotDigest: sha256:d9913c64a8a77a5c6370b41dae333da42b8e9966048a264f763d86c91d2b608c
 screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png
-servedBuild: "feat/console-target@23238fab5acf1bb888421360f40f14b17bde79ae; dirty; capture-source sha256:91585a25a0a3651786219e6a4a3aa2712d46358d0e43a95f6710b1b6a0d325e0; capture-manifest sha256:629af0b56c03bff108df56048f095f775e1cd43a525ce5ae9e271472b0f048a0"
-shippedSourceDigest: sha256:9c99516180cfb522f95cc557d0dd735960d04f507b6f04ffe994524aa4d39e08
+servedBuild: "feat/console-target@781346d1abd76f8c35c17e42ff22f2020045dfe3; dirty; capture-source sha256:4f9b663ce8c505e4173d92c250fa345dfba54246f6f2745108615077b2b6c298; capture-manifest sha256:6464842018714990f841f5be5c0487970669ab695786a089015a1c225dcd98c7"
+shippedSourceDigest: sha256:79c30df3c9995b2a7f057a3099e36fe4799c02eade036afaa2781cf60996a057
 frameImageDigest: sha256:f6a92ec2b856bf772cd95bafb65d8fa2b137ae4eb906339555d18e6425c667be
 frameDigest: sha256:214f01d660057812c66ea2d1fc487c78f01b9c1a78b78b445c90dd2adbbd67f2
 verdict: no_authority
 regions:
 - region: header
   examined: true
-  finding: The conversation title and participant summary align broadly; the status mark and auxiliary chrome differ.
+  finding: The conversation title and participant summary align broadly; the compact status mark and later Principal-directed Shell chrome differ from the original Figma frame.
 - region: facets
   examined: false
   finding: This screen declares no facet band.
 - region: body_rows
   examined: true
-  finding: The persisted transcript aligns in its central flow, but adds the real Worked and tool-receipt preamble and has no live approval checkpoint.
+  finding: The persisted transcript now answers directly, using one compact Queried data receipt and a thin agent-update row; it has no fabricated root-agent narration or live approval checkpoint.
 - region: rail
   examined: true
-  finding: The shipped rail presents completed run output controls rather than the live subagent, waiting, computer-use and source anatomy in the frame.
+  finding: The resizable borderless-glass Task details rail truthfully presents the stable empty Outputs section, completed Subagents and observed Run activity, and omits conversation-title, governance, unbound Files, Git, process inventory and terminal controls.
 - region: footer
   examined: true
-  finding: The composer occupies the intended footer band, while its action set and the overlapping computer-use surface differ.
+  finding: The composer occupies the intended footer band, names the exact Automatic Bifrost model, exposes the caller's kernel-derived approval posture and one visible voice action while retaining the mounted hidden call controller; its governed action set differs from the illustrative frame.
 - region: empty_state
   examined: false
   finding: The compared state is a populated conversation, not an empty state.
@@ -33,17 +33,29 @@ regions:
   examined: true
   finding: Visible shell and composer affordances were compared; the primary composer action differs.
 deltas:
-- describes: The persisted fixture has no target duration or live-participant status; the shipped transcript truthfully renders Worked and one tool call for a completed child.
+- describes: The persisted fixture has no target duration or live-participant status; the shipped transcript truthfully renders one compact Queried data receipt and completed-agent chips around a direct answer.
   disposition: needs_absent_data
 - describes: The frame's live approval, waiting, computer-use and spend evidence are absent because the captured backend state provides no corresponding governed receipt.
   disposition: forbidden_by_policy
   owedBy: DIR-0001
-reviewedBy: Codex deterministic current-capture evidence rebind v2
-reviewedAt: 2026-08-11T15:36:50Z
+- describes: Later Principal directions require grouped compact task navigation, glass Chat rails, transcript navigation, a resizable contract-observed inspector, no persistent status or duplicate search, exact model identity, one visible composer voice action and the caller's kernel-derived approval posture; those overrides intentionally differ from the original Figma chat frame and do not alter it.
+  disposition: belongs_to_app_chrome
+  owedBy: SCR-0001
+reviewedBy: Codex deterministic current-capture evidence rebind v8
+reviewedAt: 2026-08-13T13:55:59Z
 basis:
 - DIR-0001
+- DIR-0008
+- DIR-0009
+- DIR-0010
+- DIR-0011
+- DIR-0012
+- DIR-0015
+- DIR-0016
+- DIR-0017
+- DIR-0018
 - SCR-0001
 - apps/worker/tests/visual/states.json
 - docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json
 - docs/design/evidence/2026-08-11-console-parity/current/metrics.json
-notes: The frame digest comes from the existing depth-limited ledger and is not eligible for sign-off. New chat is separately measured outside this route-scoped record because VDS keys stage-four coverage by route. This no_authority row binds the deterministic current screenshot and current route source only; it does not turn the measured comparison into a parity verdict.
+notes: The unchanged frame digest is retained from the existing depth-limited ledger only and is not eligible for sign-off. New chat remains separately measured outside this route-scoped record because VDS keys stage-four coverage by route. The source-bound additive Chat-direction capture at the same capture-source digest exercises contract-backed inspector sections and DIR-0016/DIR-0017/DIR-0018 choreography but has no signed frame or visual-review authority. This no_authority row binds only the deterministic current screenshot and current route source; it creates no parity or conformity verdict.

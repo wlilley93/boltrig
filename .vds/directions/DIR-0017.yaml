@@ -1,0 +1,16 @@
+id: DIR-0017
+logId: DECISION-0010
+decisionDigest: sha256:9d4ec1b1f4e6da133107e40532293050c9229f1d1bb8bff74dcd763746df7354
+surface: !route
+  route: apps/worker/src/components/ChatView.tsx
+direction: >-
+  Apply Omnigent-inspired session choreography only through Boltrig-owned contracts:
+  stable near-bottom transcript following with user-turn and latest navigation; the
+  existing command palette for an empty-composer slash; and a resizable
+  borderless-glass Task details inspector whose stable Outputs section and optional
+  Subagents, Background processes, Computer Use, Sources and Run activity sections
+  render only contract-observed state. Omit invented project context, workspace
+  Files, Git changes, process inventory and terminal controls.
+magnitude: Apply this choreography to New chat and populated Chat across desktop rail and responsive sheet presentations. Keep OrderedWorkTranscript and normalized events authoritative, preserve chronological semantics, history-prepend position, reduced-motion behavior, focus containment and restoration, exact Bifrost model identity, the single visible voice action and governed artifact/source actions. Keep the bounded device.file.list metadata contract out of Chat presentation until the selected task supplies an explicit device_id and root_id; never choose a first device or root, infer a Git or process boundary, open a raw terminal channel, expose tool arguments or copy Omnigent code, branding or assets.
+directedAt: 2026-08-12T15:38:57Z
+notes: This additive route direction extends DIR-0008, DIR-0011 and DIR-0012 without changing their reference images. Unsupported dynamic inspector groups stay absent; Outputs remains stable and truthfully reports its empty state. No frameDigest, signed review, Code Connect linkage, token linkage, conformity or sign-off is asserted.

@@ -1,0 +1,9 @@
+id: DIR-0016
+logId: DECISION-0010
+decisionDigest: sha256:9d4ec1b1f4e6da133107e40532293050c9229f1d1bb8bff74dcd763746df7354
+surface: !route
+  route: apps/worker/src/components/Shell.tsx
+direction: Use Omnigent only as an interaction reference for the shared primary task hierarchy. Render one borderless glass rail with compact Pinned and Recents groups over real conversation summaries, keep the top command search as the single global search entry point, and keep account and help controls without a workspace identity line or footer health row. Treat pin state as versioned presentation preference, never as a replacement conversation store.
+magnitude: Apply the grouped task hierarchy wherever the non-Settings Shell renders its TaskList, including Chat, New chat and other primary routes. Preserve truthful working indicators, timestamps, pin and archive actions, keyboard and responsive behavior, the exact removals in DIR-0010 and DIR-0015, and all existing route identities. Do not adopt Omnigent routing, persistence, runtime, policy, branding or assets, and do not change the independent Settings navigation rail.
+directedAt: 2026-08-12T15:38:57Z
+notes: This additive behavior-level direction preserves every earlier Figma and Codex visual record as provenance; Omnigent was inspected at revision 0bea9873e6b697290e0a2d172eb879151839a2a6 but supplies no copied code or asset and becomes no execution authority. No frameDigest, signed review, Code Connect linkage, token linkage, conformity or sign-off is asserted.

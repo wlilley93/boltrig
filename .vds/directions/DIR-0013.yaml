@@ -1,0 +1,9 @@
+id: DIR-0013
+logId: DECISION-0008
+decisionDigest: sha256:d6fd4dd37248c36e8f1701bd6da3ba722491560e4a50cb212274808d2ee4b2f3
+surface: !route
+  route: apps/worker/src/components/SettingsSurface.tsx
+direction: Add a Models section in Settings that states exact Bifrost model names and supports governed add, change, recoverable remove and restore for model routing. Make endpoint identity and eligibility legible, and disclose affected references before a route is retired.
+magnitude: Apply the lifecycle controls through the existing governed server action and approval seams. Preserve exact catalogue membership and text-modality checks, revisions and concurrent-change protection, tenant scope, legacy-provider topology, active references and recoverability. The browser must receive no Bifrost credential and must not contact Bifrost directly; do not present retirement as hard deletion or infer a saved change from a degraded response.
+directedAt: 2026-08-12T13:36:56Z
+notes: This route direction governs the Settings Models presentation and its integrity boundary, not Bifrost deployment availability. It creates no frameDigest, signed review, Code Connect linkage, token linkage, conformity or sign-off.

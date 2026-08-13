@@ -1,0 +1,9 @@
+id: DIR-0010
+logId: DECISION-0006
+decisionDigest: sha256:889dfb96d6a96a7e95d776cf43bec2657628644f68100b09b842bb7be5e2558c
+surface: !route
+  route: apps/worker/src/components/Shell.tsx
+direction: For every primary route using the shared Shell that previously rendered the exact acme.production workspace identity line, omit that line. On desktop Chat and New-chat, also omit the duplicate Recents Search conversations field because the top search icon owns that affordance. These explicit Principal overrides supersede only the contradictory clauses of DIR-0009; they do not mean codex-left-rail.png itself changed.
+magnitude: Apply the workspace-line removal across the shared primary Shell, and apply the duplicate-search removal only where that Recents search field rendered on desktop Chat and New-chat. Preserve the top command-palette search control, compact Recents rows with timestamps and selected-row actions, the absence of the persistent readiness row, truthful per-conversation work indicators, and the account and help controls. Do not transfer this direction to Settings, mobile, or other surfaces that never used this exact Shell line.
+directedAt: 2026-08-12T10:52:36Z
+notes: This additive direction preserves DIR-0008 and DIR-0009 as provenance for the earlier Codex references while recording the Principal's later correction. It creates no frameDigest, sign-off, conformity claim, token linkage, Code Connect linkage, or visual-review authority.
