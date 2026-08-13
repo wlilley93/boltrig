@@ -17,6 +17,11 @@ import { StageBody, useFamiliarBody, type StageTurnInput } from "./StageBody";
 import { useCharacter } from "./characters";
 import { useStagePhenotype } from "./chat/useStagePhenotype";
 import { FamiliarBadge } from "./familiar/FamiliarBadge";
+import {
+  attachBargeInCapture, BARGE_IN_NOTICE, bargeInHostFields, requestSelfHostedInterrupt,
+  startBargeInGate, stopBargeInGate, type BargeInHost,
+} from "./voiceBargeInGraph";
+import { audioTracks, createVoicePlaybackAnalyser, resamplePcm16, safeDisconnect } from "./voiceMedia";
 import "./VoiceCall.css";
 
 interface VoiceCallProps {
@@ -52,14 +57,15 @@ interface VoiceLine {
 type IncomingCallEvent = Pick<CallEvent, "type" | "payload"> &
   Partial<Pick<CallEvent, "id" | "call_id" | "participant_id" | "created_at">>;
 
-interface MediaResources {
+/** Barge-in (Phase 5) contributes a capture-side energy gate, separate from
+ * the playback analyser below, whose only job is "the user started talking". */
+interface MediaResources extends BargeInHost {
   socket: WebSocket;
   context: AudioContext;
   stream: MediaStream;
   processor: ScriptProcessorNode;
   source: MediaStreamAudioSourceNode;
   mute: GainNode;
-  playbackSources: Set<AudioBufferSourceNode>;
   /** Familiar lift (ADR 0025): fires as assistant playback starts/stops. */
   onPlayback?: (speaking: boolean) => void;
   /** Voice embodiment (A4): playback routes through this analyser; a ~30Hz
@@ -500,7 +506,7 @@ export function VoiceCall({
           onConversation(result.text_continuation_conversation_id);
         }
         void refreshRecentCalls();
-        onError("Live voice is unavailable. You can continue here in text.");
+        window.setTimeout(() => onError("Live voice is unavailable. You can continue here in text."), 0);
         return;
       }
       if (result.call.conversation_id !== conversationId) {
@@ -597,6 +603,7 @@ export function VoiceCall({
     let source: MediaStreamAudioSourceNode | null = null;
     let processor: ScriptProcessorNode | null = null;
     let mute: GainNode | null = null;
+    let micAnalyser: AnalyserNode | null = null;
     let socket: WebSocket | null = null;
     let resources: MediaResources | null = null;
     try {
@@ -622,7 +629,7 @@ export function VoiceCall({
       source.connect(processor);
       processor.connect(mute);
       mute.connect(context.destination);
-
+      micAnalyser = attachBargeInCapture(context, source, mute);
       socket = new WebSocket(websocketUrl(result.websocket_url));
       ensureConnectionAttempt(attempt);
       socket.binaryType = "arraybuffer";
@@ -644,23 +651,21 @@ export function VoiceCall({
           setFamiliarActivity(features);
           onFamiliarActivityRef.current?.(features);
         },
-        analyser: (() => {
-          const analyser = context.createAnalyser();
-          analyser.fftSize = 1024;
-          analyser.smoothingTimeConstant = 0.5;
-          analyser.connect(context.destination);
-          return analyser;
-        })(),
+        analyser: createVoicePlaybackAnalyser(context),
         voiceTimer: null,
         prevSpectrum: null,
         onVoiceFeatures: (features) => {
           setFamiliarActivity(features);
           onFamiliarActivityRef.current?.(features);
         },
+        ...bargeInHostFields(micAnalyser, () => interruptForBargeIn(
+          mediaRef.current, playAtRef, setEventNotice,
+        )),
         readyTimeout: null,
         rejectReady: null,
       };
       mediaRef.current = resources;
+      startBargeInGate(resources, () => mutedRef.current);
 
       processor.onaudioprocess = (event) => {
         if (
@@ -696,7 +701,6 @@ export function VoiceCall({
             closeMedia(mediaRef, readyRef, playAtRef);
           }
         }, VOICE_READY_TIMEOUT_MS);
-
         socket!.onopen = () => {
           try {
             socket!.send(JSON.stringify({
@@ -716,6 +720,7 @@ export function VoiceCall({
         socket!.onmessage = (event) => {
           if (event.data instanceof ArrayBuffer) {
             if (readyRef.current && resources) {
+              if (Date.now() < resources.suppressPlaybackUntil) return;
               playPcm(event.data, resources, playAtRef);
             }
             return;
@@ -796,7 +801,7 @@ export function VoiceCall({
       if (resources && mediaRef.current === resources) {
         closeMedia(mediaRef, readyRef, playAtRef);
       } else if (!resources) {
-        closePartialMedia({ socket, context, stream, processor, source, mute });
+        closePartialMedia({ socket, context, stream, processor, source, mute, micAnalyser });
         playAtRef.current = 0;
       }
       throw reason;
@@ -990,7 +995,7 @@ export function VoiceCall({
     }
     if (event.type === "interrupted") {
       stopQueuedPlayback(mediaRef.current, playAtRef);
-      setEventNotice("Playback stopped while you were speaking.");
+      setEventNotice(BARGE_IN_NOTICE);
       return;
     }
     if (event.type === "ended") {
@@ -1439,15 +1444,6 @@ function formatMicros(value: number) {
   }).format(value / 1_000_000);
 }
 
-function audioTracks(stream: MediaStream): MediaStreamTrack[] {
-  const getAudioTracks = (stream as MediaStream & {
-    getAudioTracks?: () => MediaStreamTrack[];
-  }).getAudioTracks;
-  return typeof getAudioTracks === "function"
-    ? getAudioTracks.call(stream)
-    : stream.getTracks();
-}
-
 function closeMedia(
   ref: MutableRefObject<MediaResources | null>,
   ready: MutableRefObject<boolean>,
@@ -1459,6 +1455,9 @@ function closeMedia(
   playAt.current = 0;
   if (!media) return;
   stopVoiceSampler(media);
+  stopBargeInGate(media);
+  media.suppressPlaybackUntil = 0;
+  if (media.micAnalyser) safeDisconnect(media.micAnalyser);
   try {
     media.analyser?.disconnect();
   } catch {
@@ -1513,6 +1512,7 @@ function closePartialMedia({
   processor,
   source,
   mute,
+  micAnalyser,
 }: {
   socket: WebSocket | null;
   context: AudioContext | null;
@@ -1520,6 +1520,7 @@ function closePartialMedia({
   processor: ScriptProcessorNode | null;
   source: MediaStreamAudioSourceNode | null;
   mute: GainNode | null;
+  micAnalyser: AnalyserNode | null;
 }) {
   if (processor) {
     processor.onaudioprocess = null;
@@ -1527,6 +1528,7 @@ function closePartialMedia({
   }
   if (source) safeDisconnect(source);
   if (mute) safeDisconnect(mute);
+  if (micAnalyser) safeDisconnect(micAnalyser);
   for (const track of stream?.getTracks() ?? []) {
     try {
       track.stop();
@@ -1555,12 +1557,15 @@ function closePartialMedia({
   }
 }
 
-function safeDisconnect(node: AudioNode) {
-  try {
-    node.disconnect();
-  } catch {
-    // Disconnect is best-effort for nodes whose setup never completed.
-  }
+function interruptForBargeIn(
+  media: MediaResources | null,
+  playAt: MutableRefObject<number>,
+  setNotice: (notice: string) => void,
+) {
+  if (!media) return;
+  stopQueuedPlayback(media, playAt);
+  setNotice(BARGE_IN_NOTICE);
+  requestSelfHostedInterrupt();
 }
 
 function stopQueuedPlayback(
@@ -1595,25 +1600,6 @@ function websocketUrl(value: string): string {
   const url = new URL(value, origin || window.location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   return url.toString();
-}
-
-function resamplePcm16(
-  input: Float32Array,
-  inputRate: number,
-  outputRate: number,
-): ArrayBuffer {
-  const ratio = inputRate / outputRate;
-  const length = Math.max(1, Math.floor(input.length / ratio));
-  const output = new Int16Array(length);
-  for (let index = 0; index < length; index += 1) {
-    const from = Math.floor(index * ratio);
-    const to = Math.min(input.length, Math.floor((index + 1) * ratio));
-    let sum = 0;
-    for (let cursor = from; cursor < to; cursor += 1) sum += input[cursor] ?? 0;
-    const sample = Math.max(-1, Math.min(1, sum / Math.max(1, to - from)));
-    output[index] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-  }
-  return output.buffer;
 }
 
 function playPcm(

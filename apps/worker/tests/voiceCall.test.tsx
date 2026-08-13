@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -73,6 +73,25 @@ function VoiceCallWithPersistentOpener({ onError = vi.fn() }: { onError?: (messa
   );
 }
 
+function RealtimeUnavailableHarness() {
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  // Mirrors ChatView's hard route-boundary reset.
+  useLayoutEffect(() => setError(""), [conversationId]);
+  return (
+    <>
+      <VoiceCall
+        conversationId={conversationId}
+        embedded
+        onConversation={setConversationId}
+        onError={setError}
+      />
+      <span data-testid="voice-conversation">{conversationId ?? "new"}</span>
+      {error && <p role="alert">{error}</p>}
+    </>
+  );
+}
+
 class FakeWebSocket {
   static CONNECTING = 0;
   static OPEN = 1;
@@ -121,12 +140,27 @@ class FakeAudioContext {
   createGain = vi.fn(() => Object.assign(new FakeAudioNode(), {
     gain: { value: 1 },
   }));
-  createAnalyser = vi.fn(() => Object.assign(new FakeAudioNode(), {
-    fftSize: 0,
-    smoothingTimeConstant: 0,
-    frequencyBinCount: 512,
-    getByteFrequencyData: vi.fn(),
-  }));
+  analysers: Array<FakeAudioNode & {
+    fftSize: number;
+    micLevel: number;
+    getFloatTimeDomainData: (frame: Float32Array) => void;
+  }> = [];
+  createAnalyser = vi.fn(() => {
+    const analyser = Object.assign(new FakeAudioNode(), {
+      fftSize: 0,
+      smoothingTimeConstant: 0,
+      frequencyBinCount: 512,
+      getByteFrequencyData: vi.fn(),
+      // Capture-side barge-in reads the time domain. `micLevel` is the constant
+      // amplitude a test wants the microphone to be carrying.
+      micLevel: 0,
+      getFloatTimeDomainData(frame: Float32Array) {
+        frame.fill(analyser.micLevel);
+      },
+    });
+    this.analysers.push(analyser);
+    return analyser;
+  });
   createBuffer = vi.fn(() => ({
     duration: 1,
     getChannelData: () => new Float32Array(),
@@ -259,6 +293,27 @@ afterEach(() => {
 });
 
 describe("Worker realtime voice continuity", () => {
+  it("keeps the typed unavailable notice after adopting its text conversation", async () => {
+    api.createCall.mockResolvedValue({
+      call: {
+        ...call,
+        conversation_id: "conversation-text-fallback",
+        status: "realtime_unavailable",
+      },
+      media_token: null,
+      text_continuation_conversation_id: "conversation-text-fallback",
+      websocket_url: null,
+    });
+
+    render(<RealtimeUnavailableHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "Talk to the chief of staff" }));
+
+    expect(await screen.findByText("conversation-text-fallback")).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Live voice is unavailable. You can continue here in text.",
+    );
+  });
+
   it("uses a definite article for a common-noun call participant", async () => {
     api.currentCall.mockResolvedValue({
       call: {
@@ -1191,6 +1246,11 @@ describe("Worker realtime voice continuity", () => {
         await Promise.resolve();
       });
       expect(FakeWebSocket.instances).toHaveLength(1);
+      const captureAnalyser = FakeAudioContext.instances[0]?.analysers[0];
+      if (captureAnalyser) {
+        delete (captureAnalyser as Partial<typeof captureAnalyser>)
+          .getFloatTimeDomainData;
+      }
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(15_000);
@@ -1348,5 +1408,127 @@ describe("Worker realtime voice continuity", () => {
 
     const secondContext = FakeAudioContext.instances[1]!;
     expect(secondContext.playbackSources[0]?.start).toHaveBeenCalledWith(2);
+  });
+
+  it("barges in from the microphone and drops the turn that keeps arriving", async () => {
+    // The provider's own VAD is not involved here: no `interrupted` event is
+    // ever delivered. Everything below is the client-side energy gate.
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+    vi.stubEnv("VITE_SELF_HOSTED_TTS_ORIGIN", "http://127.0.0.1:8911");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.useFakeTimers();
+
+    render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "◉ Start call" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+
+    const socket = FakeWebSocket.instances[0]!;
+    const context = FakeAudioContext.instances[0]!;
+    // The capture-side gate reads 512 samples; the playback analyser is 1024.
+    const microphone = context.analysers.find((node) => node.fftSize === 512)!;
+    expect(microphone).toBeTruthy();
+
+    act(() => {
+      socket.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({ type: "ready" }),
+      }));
+    });
+
+    // ~ -61 dBFS of room noise, the floor measured on this estate's captures.
+    microphone.micLevel = 0.000_9;
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+
+    act(() => {
+      socket.onmessage?.(new MessageEvent("message", {
+        data: new Int16Array([100, 200]).buffer,
+      }));
+    });
+    expect(context.playbackSources).toHaveLength(1);
+    // Let the echo tracker settle against a turn that is leaking nothing.
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(context.playbackSources[0]?.stop).not.toHaveBeenCalled();
+
+    // ~ -26 dBFS: the median voiced frame in those same captures.
+    microphone.micLevel = 0.05;
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+
+    expect(context.playbackSources[0]?.stop).toHaveBeenCalledOnce();
+    expect(screen.getByText("Playback stopped while you were speaking.")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8911/interrupt",
+      { method: "POST" },
+    );
+
+    // The provider has not stopped generating yet, so the rest of the turn is
+    // discarded rather than scheduled behind the audio just stopped.
+    act(() => {
+      socket.onmessage?.(new MessageEvent("message", {
+        data: new Int16Array([300, 400]).buffer,
+      }));
+    });
+    expect(context.playbackSources).toHaveLength(1);
+
+    // The microphone keeps streaming throughout, so the transcript follows the
+    // interrupt rather than gating it.
+    act(() => {
+      socket.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({
+          type: "call_event",
+          event: {
+            id: "event-late-transcript",
+            type: "transcript",
+            payload: { text: "wait, stop", final: true, kind: "input" },
+          },
+        }),
+      }));
+    });
+    expect(screen.getByText("wait, stop")).toBeTruthy();
+  });
+
+  it("does not barge in on the companion's own voice leaking past the canceller", async () => {
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+    vi.useFakeTimers();
+
+    render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "◉ Start call" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+
+    const socket = FakeWebSocket.instances[0]!;
+    const context = FakeAudioContext.instances[0]!;
+    const microphone = context.analysers.find((node) => node.fftSize === 512)!;
+
+    act(() => {
+      socket.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({ type: "ready" }),
+      }));
+    });
+    microphone.micLevel = 0.000_9;
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+
+    act(() => {
+      socket.onmessage?.(new MessageEvent("message", {
+        data: new Int16Array([100, 200]).buffer,
+      }));
+    });
+    // An open speaker leaking 27dB over the room floor for the whole turn. AEC3
+    // should have removed it; the gate must not fire even when it has not.
+    microphone.micLevel = 0.02;
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+
+    expect(context.playbackSources[0]?.stop).not.toHaveBeenCalled();
+    expect(screen.queryByText("Playback stopped while you were speaking.")).toBeNull();
   });
 });
