@@ -14,6 +14,8 @@ import type {
   ChatModelChoice,
 } from "@wlilley93/boltrig-web-sdk";
 
+import { modelUnavailableCopy } from "./modelAvailabilityCopy";
+
 import { navigate } from "../../routes";
 import {
   ApprovalPostureMenu,
@@ -65,6 +67,8 @@ export interface ComposerProps {
   newContext?: boolean;
   /** A failed state load is distinct from an in-progress load. */
   unavailable?: boolean;
+  /** A known disabled runtime must not masquerade as an in-progress load. */
+  disabledPlaceholder?: string;
   onCommandPalette?(): void;
 }
 
@@ -216,7 +220,7 @@ function ComposerTextarea(props: ComposerProps) {
           : props.unavailable
             ? "Conversation unavailable — retry above"
           : props.disabled
-            ? "Loading conversation state…"
+            ? props.disabledPlaceholder ?? "Loading conversation state…"
             : "Describe the work"
       }
       disabled={props.disabled}
@@ -360,7 +364,7 @@ function ComposerPrimaryAction(props: ComposerToolsProps) {
       className="send-button"
       disabled={props.disabled || !props.value.trim() || !props.modelReady}
       title={!props.modelReady
-        ? props.defaultModelUnavailableReason ?? "Choose an available model"
+        ? modelUnavailableCopy(props.defaultModelUnavailableReason)
         : props.busy ? "Queue next" : "Send"}
       type="submit"
     >

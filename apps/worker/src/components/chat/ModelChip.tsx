@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatModelChoice } from "@wlilley93/boltrig-web-sdk";
-
+import { modelUnavailableCopy } from "./modelAvailabilityCopy";
 interface ModelChipProps {
   choices: ChatModelChoice[];
   defaultModelName?: string | null;
@@ -162,7 +162,7 @@ export function ModelChip({
                 <span>{option.label}</span>
                 {option.disambiguator && <small>{option.disambiguator}</small>}
                 {!option.available && (
-                  <small title={option.unavailableReason ?? undefined}>Unavailable</small>
+                  <small title={modelUnavailableCopy(option.unavailableReason)}>Unavailable</small>
                 )}
               </button>
             ))}

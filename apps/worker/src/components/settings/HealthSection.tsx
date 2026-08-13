@@ -7,6 +7,7 @@ import type {
 
 import { client } from "../../client";
 import { money } from "./format";
+import { plainCheckCopy, readinessTone } from "./healthCheckCopy";
 import { SettingsGroup, SettingsRow, ToneRow, type Tone } from "./rowKit";
 
 // Health as the decided target draws it: a computed headline instead of a
@@ -21,27 +22,6 @@ import { SettingsGroup, SettingsRow, ToneRow, type Tone } from "./rowKit";
 // switched off as "disabled". Treating only "ready" as healthy painted an ok
 // check red and counted it as failing.
 const healthy = (value: string) => value === "ready" || value === "ok";
-
-// Plain-language names for the kernel's known readiness checks (see
-// boltrig/api/readiness.py). Unknown checks fall back to their raw name so a
-// new check is never silently dropped or mislabelled.
-const CHECK_COPY: Record<string, { title: string; sub: string }> = {
-  postgres: { title: "Where everything is kept", sub: "The store that holds runs, approvals and the record" },
-  redis: { title: "Coordination between parts", sub: "Coordinates background work" },
-  migration: { title: "The storage schema", sub: "Storage is on the required version" },
-  control_plane: { title: "Accounts and policy", sub: "Who may do what, decided server-side" },
-  stack_tools: { title: "Acting in your systems", sub: "The tools boltrig uses to do real work" },
-  hatchet: { title: "Background work", sub: "The runner for long and queued work" },
-  model_gateway: { title: "Reaching the models", sub: "The gateway that does the thinking" },
-  password_reset_delivery: { title: "Password reset delivery", sub: "How a reset actually reaches a person" },
-};
-
-function checkTone(check: ReadinessCheck): { tone: Tone; state: string } {
-  if (healthy(check.status)) return { tone: "green", state: "fine" };
-  if (check.status === "disabled") return { tone: "unknown", state: "switched off" };
-  if (check.required) return { tone: "red", state: "not working" };
-  return { tone: "amber", state: "struggling" };
-}
 
 const ADAPTER_TONE: Record<AdapterHealth, { tone: Tone; state: string }> = {
   ok: { tone: "green", state: "fine" },
@@ -185,15 +165,15 @@ export function HealthSection({ head = true }: { head?: boolean }) {
 
       <SettingsGroup title="Everything that has to be working">
         {entries.map(([name, check]) => {
-          const copy = CHECK_COPY[name];
-          const { tone, state } = checkTone(check);
+          const copy = plainCheckCopy(name, check);
+          const { tone, state } = readinessTone(name, check);
           return (
             <ToneRow
               key={name}
               state={state}
-              sub={copy?.sub ?? check.reason ?? (check.required ? "Required" : "Optional")}
+              sub={copy.sub}
               tech={name}
-              title={copy?.title ?? name}
+              title={copy.title}
               tone={tone}
             />
           );
