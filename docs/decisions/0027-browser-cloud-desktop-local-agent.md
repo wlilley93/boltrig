@@ -66,6 +66,18 @@ the visual shell remain shared presentation. Execution receipts must state
 technical diagnostics. Personal companions and operator-owned model hosts are
 not release defaults.
 
+### Account-first desktop bootstrap
+
+User authentication is the front door for both surfaces. The hosted Worker may
+show an authenticated link to the signed desktop distribution; the downloaded
+app signs in to the same production account on startup. After authentication,
+the desktop automatically consumes a short-lived server bootstrap to create its
+revocable per-computer key in the OS keychain. Users never copy or paste an
+enrollment code. The per-computer identity is retained underneath account auth
+because it provides machine-specific revocation, signed lease verification and
+opaque native-root ownership without putting those powers in a browser cookie.
+Conflicting or unreadable local identity is never overwritten silently.
+
 ## Security and lifecycle constraints
 
 1. Production desktop packages bundle and verify the supported Codex binary;

@@ -46,22 +46,22 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/auth_routes.py": {
-      "max_file_lines": 817,
-      "max_function_lines": 507,
+      "max_file_lines": 814,
+      "max_function_lines": 506,
       "over_limit_functions": [
         {
           "name": "register_auth_routes",
-          "line": 311,
-          "lines": 507
+          "line": 309,
+          "lines": 506
         },
         {
           "name": "register_auth_routes.login",
-          "line": 389,
+          "line": 386,
           "lines": 97
         },
         {
           "name": "register_auth_routes.two_factor_challenge",
-          "line": 671,
+          "line": 668,
           "lines": 91
         }
       ],
@@ -78,7 +78,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/doctor.py": {
-      "max_file_lines": 561,
+      "max_file_lines": 526,
       "max_function_lines": 68,
       "over_limit_functions": [],
       "owner": "operations-maintainers",

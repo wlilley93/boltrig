@@ -8,8 +8,8 @@ substitute for runtime, accessibility, or backend-contract tests.
 
 > **Current status:** the root-level 06:41–06:42 UTC captures remain historical.
 > `current/capture-manifest.json` records a fresh seven-state capture at
-> 2026-08-13T13:49:41.518Z, unchanged across the capture at source digest
-> `4f9b663ce8c505e4173d92c250fa345dfba54246f6f2745108615077b2b6c298`.
+> 2026-08-13T22:05:51.027Z, unchanged across the capture at source digest
+> `42fd37bb1e6a3da33fef21e4821a4c79439ba77fe47f30590c9806541f85d550`.
 > Six route-scoped VDS reviews are refreshed as unsigned `no_authority`
 > records. They establish current coverage only: no frame sign-off, conformity
 > verdict or parity claim exists. New chat remains a separately measured state

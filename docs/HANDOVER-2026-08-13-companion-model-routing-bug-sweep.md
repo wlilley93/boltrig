@@ -125,15 +125,25 @@ the same governed model-endpoint records and modality declarations.
 
 ### Secrets stay server-side
 
-The Worker does not accept Bifrost, provider or voice API keys. That is an
-intentional security boundary, not a missing text field. The browser selects an
-opaque governed route; the kernel resolves the tenant record and owns provider
-credentials and topology.
+The Models editor does not accept Bifrost or voice-provider API keys. The
+browser selects an opaque governed route; the kernel resolves the tenant record
+and Bifrost owns provider credentials and topology.
 
-Therefore “bring your own key” currently means configuring the server-side
-credential/deployment seam and then authoring/selecting a governed route. A
-future BYO onboarding experience may make that operator flow friendlier, but it
-must not introduce raw key fields or browser-to-provider calls.
+There is a distinct **Account → Access** `AiKeyManagement` surface for the
+older org/workspace/user provider-native credential hierarchy. Its password
+input is intentionally uncontrolled, is cleared before the request is awaited,
+and feeds a short-lived envelope-sealed proposal. The raw value is never
+returned or audited. That surface is not wired to Bifrost administration and
+must not be presented as Bifrost onboarding; all shipping cloud-agent lanes are
+Codex routes, so a configured legacy key does not make an empty Bifrost
+catalogue runnable.
+
+For the supported route, “bring your own gateway” means configuring Bifrost's
+server-side provider secret/admin surface and then authoring/selecting a
+governed model route. Per-user Bifrost-provider onboarding remains a separate
+security design: it needs tenant-bound provider-key lifecycle, virtual-key
+binding, revocation and exact runtime admission rather than a browser-to-
+provider call or a reuse of the legacy key form.
 
 ### Text and vision
 
@@ -284,12 +294,12 @@ Key artifacts:
 
 - `docs/design/evidence/2026-08-11-console-parity/current/`
 - `docs/design/evidence/2026-08-11-chat-ui-direction/current/`
-- `docs/design/evidence/2026-08-11-console-parity/current/vds-proof-matrix.json`
 - `docs/design/evidence/2026-08-11-console-parity/README.md`
 
-The proof matrix accurately remains mixed: parity and no-stored-values pass;
-several register/composition/contrast/ledger/screen arms fail or are vacuous.
-All six reviews are unsigned `no_authority`.
+The fresh capture invalidated and removed the prior proof matrix. The current
+receipts remain captured and measured but unreviewed (`not_assessed`); there is
+no current proof matrix or sign-off claim. All six retained reviews are
+unsigned `no_authority`.
 
 The outstanding authority gap is not a UI regression: the depth-three Figma
 frame ledger omits New chat / SCR-0007 (node `13:2`). No full-depth frame

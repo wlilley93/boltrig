@@ -108,7 +108,32 @@ a site is mostly proving the web branch degrades honestly, not porting anything.
    is per-character (Familiar has no phenotype; Jarvis reads one and has a
    persona), so the boundary needs settling deliberately rather than by drift.
 
-5. **CLOSED by codex, 2026-08-13** — Voice Settings now exists and authors XAI
+5. **The route type now EXISTS — `~/Projects/pocket-voice` closes this gap.**
+   Corrected later on 2026-08-13; everything from "CLOSED by codex" down is
+   superseded on its central claim. It concludes that *"self-hosted voice has no
+   route type yet"* and that the operator's stack *"has no runtime contract to
+   author against"*. Both were true only of the stack it names. That stack is
+   retired: the M4 now runs **pocket-voice on `:8911`**
+   (`app.boltrig.pocket-voice`) and **pocket-ears on `:8912`**
+   (`app.boltrig.pocket-ears`), and pocket-voice serves **`POST
+   /v1/audio/speech`** — OpenAI's speech shape, which ElevenLabs, Fish Audio and
+   the rest already mirror. So boltrig carries **one TTS adapter and varies the
+   base URL**, the same trick ollama's OpenAI-compatible endpoint already
+   supplies for LLMs, rather than one adapter per vendor. Self-hosted is
+   therefore **a route type among several**, not the architecture, and voice does
+   not ship "XAI realtime only". Verified on the M4: `GET :8911/healthz` returns
+   `{"ok":true,"loaded":true,...}` and `POST :8911/v1/audio/speech` returns
+   `200`, while `:8910` (whisper) refuses — its plist is parked `.disabled`. The
+   richer `/speak/stream` and `/interrupt` endpoints are the ones OpenAI's shape
+   cannot express, and they are what barge-in needs. Full contract:
+   `~/Projects/pocket-voice/README.md`. What is genuinely still open is narrower
+   than a missing contract: **Voice Settings must grow a base-URL/self-hosted
+   route form** to author against it, and STT has no OpenAI-shaped equivalent
+   here.
+
+   Superseded note follows.
+
+   **CLOSED by codex, 2026-08-13** — Voice Settings now exists and authors XAI
    realtime routes; unsupported Omnivoice/ElevenLabs claims were removed. **But
    this collides with the operator's own deployment below**, which uses OmniVoice
    on the M4 for TTS. The vision says users bring their own keys "including
@@ -147,8 +172,14 @@ models, and the configuration this box actually runs.
 
     text + vision   M1    ollama, qwen3vl-abliterated (Qwen3-VL-30B-A3B, MoE,
                           vision, abliterated) — 17.4 tok/s, tool calling verified
-    voice           M4    whisper-server :8910 (STT), OmniVoice (TTS)
-                          measured 1.48x realtime on MPS, 0.78x on CPU — use MPS
+    voice           M4    pocket-voice :8911 — Pocket TTS, plus POST
+                          /v1/audio/speech (OpenAI shape) and /interrupt
+                    M4    pocket-ears :8912 — Kyutai streaming STT
+                          both loopback, both under launchd. whisper-server :8910
+                          and OmniVoice are RETIRED (plists parked .disabled);
+                          Pocket TTS is measured at 9.83x realtime on one or two
+                          CPU threads, 137ms to first audio, and never touches
+                          the GPU — see pocket-voice/README.md
     camera          M4    EMEET Pixy via camerad :8899 (physically attached)
     build/host      beelink  only x86_64 box; builds and dev servers
     video           Salad RTX 3090, on demand, for FrameGraph

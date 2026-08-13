@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-13T13:49:46.478Z",
+  "capturedAt": "2026-08-13T22:05:57.733Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "4f9b663ce8c505e4173d92c250fa345dfba54246f6f2745108615077b2b6c298",
-    "digestAfterCapture": "4f9b663ce8c505e4173d92c250fa345dfba54246f6f2745108615077b2b6c298",
+    "digestBeforeCapture": "42fd37bb1e6a3da33fef21e4821a4c79439ba77fe47f30590c9806541f85d550",
+    "digestAfterCapture": "42fd37bb1e6a3da33fef21e4821a4c79439ba77fe47f30590c9806541f85d550",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/console-target",
-    "head": "781346d1abd76f8c35c17e42ff22f2020045dfe3",
+    "head": "20eb6e8f40aefedd86ff333b27d06b18803954e3",
     "dirty": true
   },
   "runner": {
@@ -30,13 +30,13 @@
     "browser": "chromium",
     "browserVersion": "149.0.7827.55",
     "browserExecutable": "/Users/williamlilley/Library/Caches/ms-playwright/chromium-1228/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-    "origin": "http://127.0.0.1:1420",
+    "origin": "http://localhost:1420",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
   "states": [
     {
       "state": "chat-direction",
-      "url": "http://127.0.0.1:1420/tests/visual/parity.html?state=chat-direction&theme=dark",
+      "url": "http://localhost:1420/tests/visual/parity.html?state=chat-direction&theme=dark",
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",

@@ -52,6 +52,76 @@ The old Operator application, image, deployment overlay and browser path have
 been removed. The kernel, dispatcher, database, identities, conversations and
 run state remain unchanged by this presentation cleanup.
 
+### Jellytot development preview
+
+`dev.boltrig.io` is a development deployment on `jellytot-prod`; it is not a
+production release path. From the development Mac, Jellytot is reached through
+the existing cable relay:
+
+```bash
+ssh beelink-cable "ssh jellytot-prod '<command>'"
+```
+
+The preview unit is `boltrig-dev-preview.service`, serving
+`/home/jellytot/boltrig-dev/dist` on `127.0.0.1:1420` behind Caddy. Do not move
+this workload to `beelink-prod`, CV/opbox, or a personal Ollama/M1 host. The
+public-product gate must remain green: provider configuration is BYO Bifrost,
+and only Familiar and Jarvis ship as companions.
+
+Build locally, transfer into a new timestamped `dist.candidate-*` directory,
+and compare a deterministic relative-path/content digest before swapping. A
+macOS tar stream can contain AppleDouble `._*` metadata; remove those files
+from the candidate before comparing or serving it. Never merge the candidate
+into the live directory. Atomically rename the current directory to a unique
+`dist.rollback-*`, rename the verified candidate to `dist`, and restart with
+`sudo -n systemctl restart boltrig-dev-preview.service`. An unprivileged
+`systemctl` command cannot restart this system unit. Allow the preview process
+up to ten seconds to bind its port before deciding it failed; an immediate
+probe can produce a false negative. On a real failure, stop the unit, move the
+failed candidate aside, restore the rollback directory, and restart.
+
+Acceptance requires all three public endpoints to return HTTP 200:
+
+```text
+https://dev.boltrig.io/
+https://dev.boltrig.io/healthz
+https://dev.boltrig.io/readyz
+```
+
+Keep the static rollback and the separately named backend rollback until the
+authenticated UI smoke is complete. A static-only deploy does not authorize a
+backend, database, production, or CV/opbox change.
+
+#### Hosted-development BYO model hygiene
+
+A shared preview must not inherit an operator's personal provider credential.
+For the kernel service, omit legacy `OPENAI_API_KEY` and
+`ANTHROPIC_API_KEY` entries rather than leaving blank assignments. Recreate the
+container after changing its env file: Docker stores the environment in
+container metadata, so restarting an existing container does not remove the old
+value. Inspect stopped rollback containers too and remove any that retain a
+provider key. Do not restart or rewrite Bifrost, database, Hatchet, CV/opbox or
+personal model-host containers while doing this cleanup.
+
+When the preview depends on Bifrost, set:
+
+```env
+BOLTRIG_MODEL_GATEWAY_HEALTH=1
+```
+
+Require `/readyz` to report `model_gateway=ok`; a configured-but-unchecked
+gateway is not acceptance. An empty Bifrost `/v1/models` catalogue is a valid,
+truthful pre-onboarding state and cloud sends must remain unavailable.
+
+The organisation-level `allow_own_ai_keys` flag is changed only through the
+authenticated, approval-gated `PATCH /v1/orgs/current` path. It enables the
+sealed org/workspace/user provider-native hierarchy in **Account → Access**;
+it does not configure Bifrost. The shipping Codex→Bifrost lane still requires a
+provider configured in Bifrost's server-owned admin/secret surface. Do not copy
+a personal root key into the kernel or Bifrost merely to make a smoke test pass.
+Per-user Bifrost onboarding requires a separately reviewed tenant-bound
+provider/virtual-key lifecycle and runtime binding.
+
 ### Channel-gateway bootstrap and failover (not production-admitted yet)
 
 The protected secure release currently refuses the `channels` profile. The
@@ -530,6 +600,68 @@ real delivery, bounce handling and provider receipts in staging before cutover.
 
 ## Signed Worker desktop updates
 
+### Account-first desktop connection and download
+
+The production account session is the only user-facing entry flow. A user signs
+in to the hosted Worker, downloads the signed desktop package from the
+authenticated Settings surface, and signs in to the same Boltrig origin when
+the app starts. Do not publish instructions that ask users to copy a device
+enrollment code or paste a browser handoff bundle.
+
+For a full release, configure the protected release-environment variable:
+
+```env
+BOLTRIG_DESKTOP_DOWNLOAD_URL=https://<reviewed-release-page>
+```
+
+The candidate build accepts this only for the `worker-ui` image, requires an
+absolute HTTPS URL without embedded credentials, and compiles it into that
+authenticated UI. A `core` release deliberately bakes an empty value because it
+ships no desktop packages. Local Compose development can use the same variable;
+an absent or unsafe value shows “not published” instead of inventing a link.
+
+After desktop account authentication, Worker automatically uses the existing
+authenticated enrollment-start endpoint and consumes the bootstrap inside the
+same signed app. The short-lived bootstrap is an implementation detail, never a
+user-transferable secret. The resulting private key, rotating device session,
+lease verifier and opaque folder bindings stay in the OS keychain. If the app
+finds a key that is unreadable or is not among the signed-in account's trusted
+computers, it refuses automatic replacement and asks before removing local
+credentials. This device identity remains necessary for per-computer
+revocation, signed exact-action leases, and native paths that must never enter a
+browser cookie or server response.
+
+The packaged UI is cross-origin from the HTTPS kernel. Session-auth deployments
+must explicitly add the platform origins they ship to `BOLTRIG_CORS_ORIGINS`:
+
+```env
+BOLTRIG_CORS_ORIGINS=https://app.example.com,tauri://localhost,https://tauri.localhost
+```
+
+macOS/Linux use `tauri://localhost`; Windows is pinned to
+`https://tauri.localhost` by Tauri's `useHttpsScheme`. Never add `null`, `*`, or
+a plaintext Windows desktop origin. Only these built-in origins, when also
+present in the explicit CORS list, receive the cross-site
+`SameSite=None; Secure` session cookie. The signed desktop performs login,
+second-factor completion, refresh and logout through a fixed native bridge
+pinned at compile time to `BOLTRIG_DESKTOP_API_ORIGIN`. That bridge validates
+the two expected cookies and installs them directly into the webview cookie
+store; it never returns the httpOnly session secret to JavaScript. Because
+WKWebView also suppresses third-party cookies on later cross-origin requests,
+the typed web SDK uses a bounded native transport in the packaged desktop.
+That transport accepts only `/v1` paths at the compile-time origin, adds the
+native-held cookie and CSRF value, strips `Set-Cookie` from the response
+projection, rejects redirects and bounds request/response sizes and total
+response time.
+The hosted browser continues to use ordinary same-origin Fetch and
+`SameSite=Strict` cookies.
+
+Connecting the computer does not grant file, Bash, camera or background access.
+Users must still choose each local folder and enable its capabilities in
+Settings, and ordinary exact-action approval rules continue to apply. Provider,
+Bifrost, integration and organisation credentials remain kernel-side; the
+desktop download or login flow must never accept them.
+
 ### Browser agent versus desktop-local agent
 
 Browser Chat is a cloud agent: it calls the authenticated Boltrig kernel, and
@@ -537,6 +669,15 @@ the hosted server-cell admission in `docs/CODEX-PRODUCTION-ADMISSION.md` must be
 open. The signed Tauri Chat surface is a local agent: it starts a private Codex
 App Server over stdio and executes approved file/Bash work on the user's own
 computer. There is no silent fallback between them.
+
+“Local” describes execution and data ownership, not necessarily model
+inference. The bundled Codex process uses that user's own Codex authentication
+and may contact the Codex service for reasoning; Bash, approved filesystem
+access, thread persistence and process ownership remain on the computer. The
+desktop child receives an allowlisted environment and never inherits Boltrig
+provider credentials, gateway keys, GitHub tokens or SSH agent sockets. Do not
+describe this posture as an offline model, and do not make a personal Ollama or
+operator model host a release default.
 
 Development builds may resolve `BOLTRIG_LOCAL_CODEX_BIN` (an absolute file) or
 `codex` from `PATH`; the UI labels that source `development`. Release builds do
@@ -547,6 +688,15 @@ stages the complete vendor resource tree, and records a bounded receipt. The
 native app repeats the executable digest and version checks before launch and
 fails with `local_agent_binary_not_bundled`, `_digest_mismatch`, or
 `_version_mismatch` instead of falling back to `PATH`.
+
+An ad-hoc debug `.app` can exercise local development but is not desktop
+release evidence. Release acceptance requires the protected platform build,
+publisher signature/notarization, updater signature, exact bundled Codex
+receipt, an authenticated local turn that executes a harmless command in the
+selected workspace, interrupt/switch cleanup, and restart/resume of the same
+local thread. Record the model/network leg separately from the local
+command/filesystem leg so a successful cloud inference is never reported as
+proof that execution happened on the server.
 
 Local workspaces are still explicit. In Settings → Device, bind a local folder
 as `read_write` and enable the local-agent/command boundary. `Always ask` and
@@ -651,6 +801,9 @@ page and reports provider exchange unavailable.
 - [ ] desktop updater endpoint/public key compiled into release builds, signing
       private key confined to the protected build job, and packaged
       cross-platform update acceptance completed
+- [ ] full release has a reviewed `BOLTRIG_DESKTOP_DOWNLOAD_URL`; authenticated
+      browser Settings opens the signed release page, while core/invalid/HTTP
+      configurations show no download link
 - [ ] packaged desktop scheme registration tested on macOS, Windows and Linux;
       no provider OAuth is advertised until its kernel callback/exchange and
       authorization-origin allowlist pass certification
