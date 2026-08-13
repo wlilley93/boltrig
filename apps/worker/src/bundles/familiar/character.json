@@ -1,0 +1,44 @@
+{
+  "$schema": "../../../../../schemas/character-bundle/v1/character-bundle.schema.json",
+  "schemaVersion": 1,
+
+  "id": "familiar",
+  "name": "Familiar",
+  "blurb": "A living body with a private inner life of its own.",
+
+  "type": "shader",
+
+  "visual": {
+    "type": "shader",
+    "source": "boltrig.canvas.shader",
+    "fragment": {
+      "file": "familiar.frag",
+      "sha256": "aca897f206388b84ac93cbf8debb1181d8c3fda5e54939a487be65b8dde70035"
+    },
+    "uniforms": [
+      "iTime", "iResolution", "uAudio", "uBeat", "uMouse", "uDay",
+      "uValence", "uArousal", "uIrritation", "uFatigue", "uAttention",
+      "uSocial", "uBuoyancy", "uLuminosity", "uTension", "uGesture",
+      "uGestureAmt", "uPresence", "uCentreDock", "uScaleDock", "uFitScale",
+      "uGaze", "uWorldRes", "uOrigin", "uPxScale", "uFill", "uPortWide",
+      "uHover", "uCompanion", "uAperture", "uGene"
+    ]
+  },
+
+  "emotion": {
+    "model": "autonomous-wander",
+    "travels": false
+  },
+
+  "capabilities": {
+    "camera": { "wanted": false },
+    "presence": { "wanted": false },
+    "budgets": { "wanted": false }
+  },
+
+  "provenance": {
+    "ships": true,
+    "upstream": "boltrig-stock:familiar",
+    "note": "The bundle owns the single in-repo vendored shader copy. scripts/check_familiar_shader.sh pins its reviewed bytes without requiring a personal checkout or source symlink."
+  }
+}

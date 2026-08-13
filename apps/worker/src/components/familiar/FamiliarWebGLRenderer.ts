@@ -4,7 +4,7 @@
 // envelope and reduced-motion behaviour are kept, so the creature here is the
 // same being as the proven web port. The shader itself is vendored verbatim
 // (familiar.frag); visual changes flow from boltrig-familiar, never start here.
-import fragSrc from "./familiar.frag?raw";
+import fragSrc from "../../bundles/familiar/familiar.frag?raw";
 import type { FamiliarGenotype } from "@wlilley93/boltrig-web-sdk";
 import { packFamiliarGenotype } from "./FamiliarGenotype";
 import {
@@ -21,7 +21,7 @@ void main() {
   gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
-const UNIFORMS = [
+export const UNIFORMS = [
   "iTime", "iResolution", "uAudio", "uBeat", "uMouse", "uDay",
   "uValence", "uArousal", "uIrritation", "uFatigue", "uAttention",
   "uSocial", "uBuoyancy", "uLuminosity", "uTension", "uGesture",

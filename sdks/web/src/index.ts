@@ -44,6 +44,29 @@ export {
   registerCharacter,
   subscribeCharacters,
 } from "./characters.js";
+export {
+  CHARACTER_BUNDLE_SCHEMA_VERSION,
+  CharacterBundleError,
+  bundleReadsPhenotype,
+  bundleWantsBudgets,
+  bundleWantsCamera,
+  bundleWantsPresence,
+  exportCharacterBundle,
+  parseCharacterBundle,
+} from "./characterBundle.js";
+export type {
+  CharacterBundleAssetRef,
+  CharacterBundleExportOptions,
+  CharacterBundleCapabilities,
+  CharacterBundleCompanionVisual,
+  CharacterBundleEmotion,
+  CharacterBundleManifest,
+  CharacterBundlePhenotype,
+  CharacterBundlePrompts,
+  CharacterBundleShaderVisual,
+  CharacterBundleType,
+  CharacterBundleVisual,
+} from "./characterBundle.js";
 export type {
   Character,
   CharacterId,
@@ -53,6 +76,7 @@ export type {
   CharacterTurnInput,
   PhenotypeResponse,
   PresentationMode,
+  SensingDecision,
   StageRenderProps,
   StageState,
   StageTurnInput,

@@ -39,11 +39,17 @@ import {
 } from "@wlilley93/boltrig-web-sdk";
 import type { CharacterId } from "../character";
 import { DEFAULT_CHARACTER } from "../character";
+import familiarBundle from "../bundles/familiar/character.json";
+import {
+  characterFromBundle,
+  type CharacterCanvasSource,
+} from "./characterBundle";
 import { FamiliarStage } from "./familiar/FamiliarStage";
 import {
   familiarStateFromTurn,
   type FamiliarPresentationMode,
 } from "./familiar/FamiliarState";
+import { UNIFORMS as SHADER_UNIFORMS } from "./familiar/FamiliarWebGLRenderer";
 import { JarvisStage } from "./jarvis/JarvisStage";
 import { jarvisStateFromTurn } from "./jarvis/JarvisState";
 
@@ -112,11 +118,24 @@ export function isRegistered(id: CharacterId): boolean {
   return isCharacterRegistered(id);
 }
 
-const FAMILIAR: Character = {
-  id: "familiar",
-  name: "Familiar",
-  readsPhenotype: false,
-  blurb: "A living body with a private inner life of its own.",
+/**
+ * The public shader source: one of the canvas's two sources, and the one that
+ * ships. It draws any `type: shader` bundle, so it names no character — Familiar
+ * and Jarvis are both shaders, and a third would need nothing added here.
+ *
+ * The companion source (the proprietary .frame.mp4 reader) is deliberately
+ * absent from the public build. It registers exactly the way a character does,
+ * from a private entrypoint, which is why `type: companion` is expressible in
+ * the format and unimplemented here rather than being a second subsystem.
+ */
+const SHADER_SOURCE: CharacterCanvasSource = {
+  id: "boltrig.canvas.shader",
+  type: "shader",
+  supplies: SHADER_UNIFORMS,
+  // The Familiar's resting baseline wanders on its own; it is not wired to the
+  // appraisal engine, and never was. Naming the model here is what lets a
+  // bundle asking for one this canvas does not implement be refused out loud.
+  emotionModels: ["autonomous-wander"],
   // createElement, never a direct call: these components use hooks, and calling
   // one as a plain function attaches its hooks to whoever called it. That
   // "works" until the character swaps and the hook order changes underneath the
@@ -130,6 +149,18 @@ const FAMILIAR: Character = {
       state: familiarStateFromTurn(input),
     }),
 };
+
+/**
+ * Familiar, built from her bundle rather than written out here. Every field the
+ * registry reads — id, name, blurb, readsPhenotype, whether budgets are polled —
+ * now comes from bundles/familiar/character.json, and her manifest OMITS the
+ * phenotype field entirely rather than carrying an empty one.
+ *
+ * She ships, so the stock path registers her. That is the rule intact, not bent:
+ * characterPlugins.ts, package.json and manifest.yaml stay untouched, and a
+ * bundle that does not ship is added by a private entrypoint instead.
+ */
+const FAMILIAR: Character = characterFromBundle(familiarBundle, [SHADER_SOURCE]);
 
 const JARVIS: Character = {
   id: "jarvis",

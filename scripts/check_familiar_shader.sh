@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Is the vendored Worker familiar.frag the one copied from its source?
 #
-# apps/worker/src/components/familiar/familiar.frag is a COPY. Its source lives in another repo entirely
+# apps/worker/src/bundles/familiar/familiar.frag is a COPY. Its source lives in another repo entirely
 # (wlilley93/beelink-desktop, familiar/familiar.frag), so no compiler, linter or CI job in this
 # repository can tell you when the two have diverged - CI has no checkout of it.
 #
@@ -22,7 +22,7 @@ FILES="familiar.frag"
 
 status=0
 for f in $FILES; do
-  vendored="$HERE/apps/worker/src/components/familiar/$f"
+  vendored="$HERE/apps/worker/src/bundles/familiar/$f"
   upstream="$UPSTREAM_DIR/$f"
 
   if [ ! -f "$vendored" ]; then
@@ -56,7 +56,7 @@ done
 
 [ "$status" -eq 0 ] || exit 1
 
-frag_sha="$(sha256sum "$HERE/apps/worker/src/components/familiar/familiar.frag" | cut -d' ' -f1)"
+frag_sha="$(sha256sum "$HERE/apps/worker/src/bundles/familiar/familiar.frag" | cut -d' ' -f1)"
 echo "RESULT: PASS - every vendored file is byte-identical to its upstream."
 echo "        Remember the digest in the Worker familiar provenance test"
 echo "        must also name this hash: $frag_sha"

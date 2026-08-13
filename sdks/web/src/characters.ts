@@ -15,6 +15,14 @@
 // convenience and cost the package its reason to exist.
 
 import type { NormalizedTurn } from "./chatTurnTypes.js";
+import type { SensingCapabilityDecision } from "./types.js";
+
+/**
+ * What a character is told when it asks for a sensing capability. Named here
+ * because a plugin reads it off its render props and would otherwise have to
+ * reach for the client module to learn the shape of its own refusal.
+ */
+export type SensingDecision = SensingCapabilityDecision;
 
 /** How much of the shell the Stage currently owns. */
 export type CharacterPresentationMode =
@@ -67,6 +75,17 @@ export interface CharacterRenderProps<TPhenotype = unknown, TGenotype = unknown>
   phenotype: TPhenotype | null;
   /** Budgets, polled only for characters that asked for them. */
   budgets: unknown;
+  /**
+   * The answer to every sensing capability this character DECLARED, keyed by
+   * capability id — and it is often a refusal.
+   *
+   * A character does not own a camera; it asks a daemon the USER owns and can
+   * switch off, and it is told plainly when the answer is no. The refusal
+   * carries a reason, so a body can show that it cannot see rather than
+   * pretending it can or falling back on a stale frame. A character that
+   * declared nothing is handed an empty object and makes no request.
+   */
+  sensing: Record<string, SensingDecision>;
   /** The live turn, narrowed to what a body may draw from. NormalizedTurn is
    *  this package's own model, so naming it here costs no coupling and saves
    *  every host casting `unknown` back to it at the render site. */
@@ -95,6 +114,15 @@ export interface Character<TNode = unknown, TPhenotype = unknown, TGenotype = un
   readsPhenotype: boolean;
   /** True to have the Stage poll budgets; a body nobody chose costs no request. */
   wantsBudgets?: boolean;
+  /**
+   * Sensing capabilities this character DECLARED it would like, by id.
+   *
+   * A declaration, never an installation: the Stage asks the kernel on the
+   * character's behalf and hands back whatever it says, which for a user who
+   * has the camera off is a refusal with a reason. Set only when the bundle
+   * asked, so a character that wants nothing makes no request.
+   */
+  wantsSensing?: readonly string[];
   blurb: string;
   render(props: CharacterRenderProps<TPhenotype, TGenotype>): TNode;
 }

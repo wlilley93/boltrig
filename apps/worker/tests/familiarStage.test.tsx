@@ -193,7 +193,7 @@ describe("authoritative Familiar genotype", () => {
 
   it("binds authored lightness and the warm heart to the shader material", () => {
     const shader = readFileSync(
-      resolve(__dirname, "../src/components/familiar/familiar.frag"),
+      resolve(__dirname, "../src/bundles/familiar/familiar.frag"),
       "utf8",
     );
     expect(shader).toContain(

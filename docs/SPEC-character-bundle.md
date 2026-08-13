@@ -105,6 +105,19 @@ not part of the format — a character built entirely by hand is equally valid.
 - **capability usage** — *when and how* declared kernel capabilities are used:
   which camera events matter, what to do with presence, which automations to
   register. Declaration only; the character requests, the kernel governs.
+
+  **What "the kernel governs" does and does not mean, as built (2026-08-13).**
+  The kernel governs *consent*: `GET /v1/sensing/capability` answers from the
+  user's switches and refuses with a reason. It does **not** enforce the
+  declaration, because it is never told which character is asking — the request
+  carries the user's session and names no bundle. So an undeclared character
+  asking with the camera on is told `granted`. Declaration is honoured by the
+  Stage, which asks only for what `wantsSensing` lists; that is a constraint on
+  the Stage, not a boundary, since a character add-in shares its JavaScript
+  realm. No imagery is at stake — the endpoint returns a decision and never a
+  frame — but do not read the sentence above as an enforced check. What closing
+  it needs is in `SERVICES-INTO-BOLTRIG-2026-08-13.md` §11 and the module
+  docstring of `boltrig/kernel/sensing_capability.py`.
 - **nightly LoRA distillation config** — the per-character training loop lives
   with the character, since what it trains on is hers.
 
@@ -120,10 +133,21 @@ Most fields are optional, and that is deliberate: a character with only prompts
 and a fallback voice id is a valid character. The checklist below degrades
 rather than fails, so a bundle can be built up incrementally.
 
-    required   id, display name, prompts
-    strongly recommended   anchor images, a voice (self-hosted OR fallback ids)
+    required   id, display name, type
+    strongly recommended   prompts, anchor images (companion only), a voice
+               (self-hosted OR fallback ids)
     optional   visual LoRA, voice LoRA, example clips, capability usage,
-               nightly distillation, key set
+               nightly distillation, key set, phenotype, emotion
+
+**`prompts` was required here and that was WRONG** — corrected 2026-08-13 when
+Familiar was actually built as a bundle. **Neither shipped character has
+prompts.** Familiar is a shader with no persona text at all, so a format
+requiring prompts cannot express the character Boltrig ships by default.
+
+This is exactly the failure the "build Familiar first" rule existed to catch: a
+required field that felt obvious because Maya has one. `type` takes its place in
+the required set, because a bundle that does not say whether it is a shader or a
+companion cannot be rendered at all.
 
 An install must refuse gracefully when an optional asset is absent — no visual
 LoRA means no generated likeness, not a broken character. This mirrors the
@@ -186,6 +210,208 @@ might share, and a shared character must not carry someone's face.
 Note this is the one place the "likeness belongs to the character" rule is
 deliberately overridden, and the reason is that it is not the *character's*
 likeness. Anchor images are Maya's face. `enrolled.npz` is yours.
+
+### The daemon is always Boltrig's, whoever is watching
+
+Settled 2026-08-13, and it is the decision that makes the rest of the format
+safe.
+
+Jarvis watching, Maya watching, Bella watching — **same camerad, same
+observation loop, same presence, same retention and quiet-hours and stop-gesture
+policy**. Nothing about the *watching* is character-specific. What varies is the
+prompt the frame is asked about and where the interpretation lands.
+
+    Boltrig ships    camerad, the observation loop, presence, the
+                     retention/quiet-hours/gesture policy, the kernel it
+                     writes observations to
+    the bundle       the prompt it asks with, what to do with the result,
+    brings           which observations matter, where its diary lives
+
+**A bundle therefore never ships executable code — only configuration.** That is
+not a restriction we are accepting reluctantly; it is the point. A character is
+a thing you might download from someone else, and a downloaded character must
+never be able to run a process that watches you through your camera or reads
+your enrolled face. It can only ask a question through a daemon *you* own and
+*you* can toggle off. The blast radius of installing a stranger's character
+drops to "it has bad taste in prompts".
+
+This also resolves `observe.py`, which today fuses two jobs and is the reason
+ownership felt ambiguous. The seam runs through the middle of one file: frame
+pull, change detection, `QUIET_START`/`QUIET_END`, `DARK_MEAN`, the stop-gesture
+pause and `RETENTION_H` are **user hardware policy** and go to Boltrig — the
+spec already says consent, retention and device choice cannot sit in a plugin
+someone might install without reading. The `PROMPT`, which literally opens *"You
+are the eyes of a companion in the room"*, and the diary it appends to are
+**character** and go to the bundle.
+
+Presence goes to Boltrig whole. It reads `enrolled.npz`, which is already kernel
+data; a bundle-owned service reading kernel-owned biometrics is the wrong way
+round. And "is the user in the room" is a fact about the room — a second
+character does not get a different answer.
+
+### Phenotype and emotion are manifest fields, not machinery
+
+They are almost certainly **JSON in the manifest**, not a subsystem: the
+character declares whether it has a phenotype and an emotional model at all, and
+carries its current state as data alongside its prompts.
+
+This is what lets **Familiar** exist. She has no phenotype and nothing to
+interpret, so she simply omits the field — and the observation loop carries on
+serving whoever does bring one. A format where phenotype were machinery, or
+where the camera came *with* the character, could not express her at all. She
+remains the format's proof: if Familiar cannot be a bundle, the format is wrong.
+
+### The manifest declares what a character IS: shader or companion
+
+The field that makes the format cohere. A character's visual is one of two
+kinds, and the manifest says which:
+
+    type: shader      the character IS a shader -- Familiar, Jarvis.
+                      The bundle brings the fragment shader and its uniforms.
+    type: companion   the character is a rendered likeness -- Maya, Bella.
+                      The bundle brings a .frame.mp4 and its manifest.
+
+**The canvas renders both.** It is one surface with two sources, not two
+subsystems — which is why `type` is a flag and not a fork in the architecture.
+A shader character has no `.frame.mp4`; a companion character has no fragment
+shader; neither is a degraded case of the other.
+
+This is what `phenotype` hangs off. A `shader` character has nothing to have a
+phenotype *of*, which is why Familiar omits the field rather than carrying an
+empty one — and why she remains the format's proof.
+
+**FrameGraph and the `.frame.mp4` container are proprietary.** They are the
+basis of every companion-type character's visual, so the format depends on
+them, but they are not part of what Boltrig ships openly and must not be
+described as though they were. A `type: shader` character needs none of it,
+which keeps the public build free of the dependency: Boltrig ships Familiar and
+Jarvis, and both are shaders.
+
+### Live direction, and how a restricted scene is reached
+
+A `companion` character is not played back; it is **directed**. The conversation
+drives segment selection live — the director picks the next segment as the turn
+unfolds, which is exactly why navigation is a seek within one file rather than a
+clip load.
+
+A bundle may carry a restricted scene as an **optional** asset. The gating rule:
+
+    PERMISSION   a user setting, in the KERNEL. Binary, explicit, revocable.
+                 Never inferred, never earned.
+    SELECTION    emotional state, in the character. Chooses WHICH segment
+                 within what permission already allows.
+
+**Emotion selects; it never unlocks.** Two reasons, and both are load-bearing.
+Emotional state is *inferred* — from a camera and a conversation — so making it
+the thing that opens a permission boundary puts a noisy signal in charge of
+consent. And content that opens as emotional state improves is a reward for
+pleasing the character: a mechanic, not a companion. Permission is a question
+the user answers once, in settings, in the same place they toggle the camera.
+
+Check permission at **selection time**, never cache it into director state, so
+revoking it takes effect on the next turn rather than the next restart.
+
+Structurally this is a second `.frame.mp4`, not extra chapters in the first —
+one file is one character in one scene, and a restricted scene must be able to
+be *absent* from a bundle entirely. The cost is that moving between scenes is a
+source swap rather than a seek, which is the one operation FrameGraph exists to
+avoid. So the player **preloads the second file when permission is on**, paying
+the swap ahead of the transition instead of during it.
+
+A `shader` character has none of this. The axis exists only where there is a
+rendered likeness.
+
+### How direction reaches the video: hold, then schedule
+
+**The holding loop is the default state, not a fallback.** The character is
+always in some loop; direction changes swap which one. Nothing ever stalls and
+nothing ever cuts, because there is no state in which the player has nothing
+legal to show.
+
+Every segment is therefore one of two kinds, and the `.frame.mp4` manifest must
+say which:
+
+    loop         seamless, repeats indefinitely (idle, listening, talk)
+    transition   one-shot, carries state A -> state B
+
+**The director never interrupts mid-segment.** It sets a *target* state; the
+player finishes the current loop iteration and then takes the transition. That
+is the whole reason it reads as directed rather than cut. Loop length is
+therefore the responsiveness dial — a 4 s idle loop means up to 4 s of latency
+to a change, so bake loops short. Segment boundaries are already keyframes (each
+source clip opens on an IDR and concat preserves it), so short loops cost
+nothing but bake time.
+
+**Speech is the clock, and this is the part worth getting right.** TTS generates
+at ~11.6x realtime, so **the audio is finished before playback begins and its
+duration is known up front**. The director does not have to react to speech as
+it happens — it can schedule the whole shape of the turn in advance: how many
+talk-loop iterations fit, and exactly when to take the exit transition so it
+lands on the last word. Reacting would always be a frame late; scheduling cannot
+be.
+
+**What the model emits is a small enum, not video commands.** Alongside its
+text it returns a direction drawn from the states the bundle *declares* —
+`idle`, `talk`, `listening`, `nod`, `smile` for the current conversation bake.
+Constrained decoding keeps it inside that set, the same trick already used
+elsewhere in this estate. The bundle declares the vocabulary; the model chooses
+from it; the player owns the machinery. Configuration, not code — consistent
+with the daemon decision above.
+
+If no direction arrives, the current loop simply continues. A slow model
+degrades to a character who is quietly present, which is the correct failure.
+
+Ownership follows the established line: **loop/transition machinery is the
+canvas, so Boltrig.** The available directions, and when each is appropriate,
+are declared by the **bundle**. Emotional state selects among them, within what
+permission already allows.
+
+### What the public build actually ships
+
+Stated precisely, because a looser version of this is easy to believe and wrong.
+
+    ships publicly    the canvas, the shader source, Familiar and Jarvis,
+                      and a visible, EMPTY characterPlugins.ts
+    private build     the companion source (the .frame.mp4 reader and
+    adds              renderer), the companion character, and its assets
+
+**Nothing is hidden.** `characterPlugins.ts` ships visible and empty, carrying a
+comment stating exactly what may go in it. The exclusivity comes from
+**entrypoint separation**, not obscurity: the stock entrypoint registers what
+ships, a private entrypoint registers what does not.
+
+Keep two things apart that are easy to conflate:
+
+- **The entrypoint rule is the technical guarantee.** It is why no companion can
+  reach a public build even by accident, and why the rule is "explicit imports,
+  never a glob" — Vite emits every matched module as a production chunk, so a
+  glob would ship whatever happened to be installed.
+- **The private `.frame.mp4` pipeline is a business moat.** Real, but not
+  load-bearing. If someone else built one tomorrow nothing about this design
+  breaks; they would run their own private distribution. Relying on the pipeline
+  being rare would be the fragile version of a guarantee the entrypoint rule
+  already gives for free.
+
+### The canvas is one surface with a source interface
+
+This resolves the tension between "one canvas, two sources" and "`.frame.mp4` is
+proprietary". Taken naively, one canvas that renders both would put the
+container reader — the whole trick is an 80-line `uuid`-box parse — into the
+public build, publishing the format.
+
+So: the canvas ships as a single surface with a **source interface**. The shader
+source ships with it. **The companion source registers exactly the way a
+character does**, which means the private entrypoint adds the character *and*
+its renderer together.
+
+The result is one canvas rather than two subsystems, a public build with no
+proprietary reader in it, and `type: companion` declared in the format but
+unimplemented publicly. Everything companion-shaped — reader, renderer,
+character, assets — arrives as one private unit.
+
+**Decide this before anyone implements the canvas.** Building the companion path
+into the public renderer first and extracting it later means the format has
+already leaked.
 
 ## Open questions
 
