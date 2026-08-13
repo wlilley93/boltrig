@@ -3,6 +3,9 @@ import ReactDOM from "react-dom/client";
 
 import { App } from "./App";
 import { bootstrapCharacter } from "./character";
+// Side-effect import: installed characters register themselves. Empty in a
+// stock build — see characterPlugins.ts.
+import "./characterPlugins";
 import { AuthGate } from "./components/AuthGate";
 import { WorkerGlobalContextProvider } from "./components/WorkerGlobalContext";
 import { bootstrapAppearance } from "./theme";

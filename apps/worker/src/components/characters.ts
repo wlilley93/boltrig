@@ -21,11 +21,21 @@
 // This file describes how a Stage renderer consumes presentation state. It does
 // not participate in Chat dispatch or response generation.
 
-import { createElement, type ReactNode } from "react";
+import { createElement, useSyncExternalStore, type ReactNode } from "react";
 import type {
+  Character as SdkCharacter,
+  CharacterRenderProps as SdkCharacterRenderProps,
   FamiliarGenotype,
   FamiliarPhenotypeResponse,
   NormalizedTurn,
+} from "@wlilley93/boltrig-web-sdk";
+import {
+  characterRegistryRevision as sdkCharacterRegistryRevision,
+  characterFor as sdkCharacterFor,
+  isCharacterRegistered,
+  listCharacters as sdkListCharacters,
+  registerCharacter as sdkRegisterCharacter,
+  subscribeCharacters as sdkSubscribeCharacters,
 } from "@wlilley93/boltrig-web-sdk";
 import type { CharacterId } from "../character";
 import { DEFAULT_CHARACTER } from "../character";
@@ -37,61 +47,49 @@ import {
 import { JarvisStage } from "./jarvis/JarvisStage";
 import { jarvisStateFromTurn } from "./jarvis/JarvisState";
 
-/** The turn facts every character reads. None carries text, audio or identity. */
-export interface StageTurnInput {
-  loading: boolean;
-  hasLiveEvents: boolean;
-  liveEnded: boolean;
-  voiceSpeaking: boolean;
-  voiceLevel: number;
-  voiceBands?: number[] | null;
-  voiceOnset?: number;
-  micActive?: boolean;
-  micLevel?: number;
-}
-
-export interface StageRenderProps {
-  input: StageTurnInput;
-  mode: FamiliarPresentationMode;
-  /**
-   * Already gated by `readsPhenotype`: a character that does not read the
-   * appraisal engine is handed null here, not asked to ignore a live one.
-   */
-  phenotype: FamiliarPhenotypeResponse | null;
-  /** Budgets, polled only for characters that asked for them. */
-  budgets: unknown;
-  turn?: Pick<NormalizedTurn, "tools" | "subagents" | "steps"> | null;
-  genotype?: FamiliarGenotype | null;
-  label?: string;
-}
-
-export interface Character {
-  id: CharacterId;
-  name: string;
-  /**
-   * Does this character read the server phenotype (decision 0013)?
-   *
-   * False does not mean "lifeless" — the Familiar still wanders. It means the
-   * appraisal engine is not this character's source of truth, so handing it a
-   * phenotype would be attributing the machine's mood to a creature that does
-   * not have access to it.
-   */
-  readsPhenotype: boolean;
-  /** True to have the Stage poll budgets; a body nobody chose costs no request. */
-  wantsBudgets?: boolean;
-  blurb: string;
-  render(props: StageRenderProps): ReactNode;
-}
-
-const REGISTRY = new Map<CharacterId, Character>();
+export type StageTurnInput = import("@wlilley93/boltrig-web-sdk").CharacterTurnInput;
+export type StageRenderProps = SdkCharacterRenderProps<FamiliarPhenotypeResponse, FamiliarGenotype>;
+export type Character = SdkCharacter<ReactNode, FamiliarPhenotypeResponse, FamiliarGenotype>;
 
 /**
- * Adds a character. Later registration of the same id wins, so a plugin may
- * deliberately replace a stock body — but it must say so by reusing the id
- * rather than by editing anything here.
+ * Adds one validated character. Duplicate ids and display names fail closed in
+ * the shared registry rather than changing meaning with module import order.
  */
 export function registerCharacter(character: Character): void {
-  REGISTRY.set(character.id, character);
+  sdkRegisterCharacter(character);
+}
+
+export function characterRegistryRevision(): number {
+  return sdkCharacterRegistryRevision();
+}
+
+export function subscribeCharacters(listener: () => void): () => void {
+  return sdkSubscribeCharacters(listener);
+}
+
+function useCharacterRegistry(): void {
+  useSyncExternalStore(
+    subscribeCharacters,
+    characterRegistryRevision,
+    characterRegistryRevision,
+  );
+}
+
+export function useCharacter(id: CharacterId): Character {
+  useCharacterRegistry();
+  return characterFor(id);
+}
+
+export function useCharacterOptions(): {
+  options: string[];
+  values: Record<string, CharacterId>;
+} {
+  useCharacterRegistry();
+  const installed = listCharacters();
+  return {
+    options: installed.map(({ name }) => name),
+    values: Object.fromEntries(installed.map(({ id, name }) => [name, id])),
+  };
 }
 
 /**
@@ -101,18 +99,17 @@ export function registerCharacter(character: Character): void {
  * its body and nothing else.
  */
 export function characterFor(id: CharacterId): Character {
-  return REGISTRY.get(id)
-    ?? REGISTRY.get(DEFAULT_CHARACTER)
+  return sdkCharacterFor<ReactNode>(id, DEFAULT_CHARACTER) as Character | undefined
     ?? FAMILIAR;
 }
 
 /** Everything installed, for the settings surface to offer. */
 export function listCharacters(): Character[] {
-  return [...REGISTRY.values()];
+  return sdkListCharacters<ReactNode>() as Character[];
 }
 
 export function isRegistered(id: CharacterId): boolean {
-  return REGISTRY.has(id);
+  return isCharacterRegistered(id);
 }
 
 const FAMILIAR: Character = {
@@ -153,11 +150,9 @@ const JARVIS: Character = {
 registerCharacter(FAMILIAR);
 registerCharacter(JARVIS);
 
-// Everything else registers itself. Each additional character ships a
-// `register.ts` beside its own components; this glob imports them without
-// naming one, so a plugin is added by dropping a directory in rather than by
-// editing boltrig. Registration is deliberately cheap and eager — it is
-// metadata plus a render function — while the heavy renderer behind it stays
-// lazy inside the character's own module.
-const registrations = import.meta.glob("./*/register.ts", { eager: true });
-void registrations;
+// Published web and desktop builds contain exactly the two supported bodies
+// above. Do not use a bundler directory glob here: Vite emits every matched companion
+// as a production chunk even when the surrounding branch is DEV-only. A local
+// developer can import a companion's register.ts explicitly in a dev harness
+// and call registerCharacter, while the stock product never discovers or
+// bundles a third body.

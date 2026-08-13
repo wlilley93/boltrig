@@ -11,6 +11,8 @@
 // than being rejected here, so removing a character degrades the Stage instead
 // of breaking the setting.
 
+import { isCharacterId } from "@wlilley93/boltrig-web-sdk";
+
 /** An id in the character registry. Open by design; see components/characters.ts. */
 export type CharacterId = string;
 
@@ -31,7 +33,7 @@ const STORAGE_KEY = "boltrig.character";
 function normalise(value: unknown): CharacterId {
   if (typeof value !== "string") return DEFAULT_CHARACTER;
   const trimmed = value.trim();
-  return /^[a-z][a-z0-9-]{0,63}$/.test(trimmed) ? trimmed : DEFAULT_CHARACTER;
+  return isCharacterId(trimmed) ? trimmed : DEFAULT_CHARACTER;
 }
 
 export function loadCharacter(): CharacterId {
