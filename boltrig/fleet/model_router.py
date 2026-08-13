@@ -28,7 +28,11 @@ def endpoint_id_for_modality(capability: Any, modality: str) -> str | None:
     control-plane validation guarantees that explicit single-model bindings are
     multimodal.
     """
-    if str(modality).strip().lower() == "vision":
+    requested = str(modality).strip().lower()
+    explicit = capability.endpoint_for(requested)
+    if explicit:
+        return explicit
+    if requested == "vision":
         return capability.vision_model_endpoint or capability.model_endpoint
     return capability.model_endpoint
 

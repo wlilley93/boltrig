@@ -49,30 +49,47 @@ class ModelGateway:
 
     def __init__(self, *, ttl_seconds: int = 900) -> None:
         self._ttl = timedelta(seconds=max(1, ttl_seconds))
-        self._bindings: dict[str, tuple[str, object]] = {}
+        self._bindings: dict[tuple[str, str], tuple[str, object]] = {}
 
-    def resolve(self, conversation_id: str) -> str | None:
+    def resolve(self, tenant_id: str, conversation_id: str) -> str | None:
         """The live bound model for a conversation, or ``None`` if unbound/expired."""
-        entry = self._bindings.get(conversation_id)
+        key = (tenant_id, conversation_id)
+        entry = self._bindings.get(key)
         if entry is None:
             return None
         model, expires_at = entry
         if utcnow() >= expires_at:
-            self._bindings.pop(conversation_id, None)
+            self._bindings.pop(key, None)
             return None
         return model
 
-    def bind(self, conversation_id: str, model: str) -> str:
+    def bind(self, tenant_id: str, conversation_id: str, model: str) -> str:
         """Pin (or refresh the TTL of) a conversation's model; returns the model
         now in force for the conversation. An existing live binding wins so the
         conversation stays on its cached model even if capability selection would
         otherwise pick a different one this turn."""
-        existing = self.resolve(conversation_id)
+        key = (tenant_id, conversation_id)
+        existing = self.resolve(tenant_id, conversation_id)
         chosen = existing or model
-        if conversation_id not in self._bindings and len(self._bindings) >= self._MAX_BINDINGS:
+        if key not in self._bindings and len(self._bindings) >= self._MAX_BINDINGS:
             self._sweep()
-        self._bindings[conversation_id] = (chosen, utcnow() + self._ttl)
+        self._bindings[key] = (chosen, utcnow() + self._ttl)
         return chosen
+
+    def rebind(self, tenant_id: str, conversation_id: str, model: str) -> str:
+        """Replace one conversation's affinity after an explicit user choice.
+
+        Ordinary policy/default resolution still calls :meth:`bind`, where the
+        first live model wins.  An explicit, server-validated switch is a new
+        cache decision and must replace that affinity; otherwise the UI would
+        report model B while the gateway and trusted admission kept model A.
+        """
+
+        key = (tenant_id, conversation_id)
+        if key not in self._bindings and len(self._bindings) >= self._MAX_BINDINGS:
+            self._sweep()
+        self._bindings[key] = (model, utcnow() + self._ttl)
+        return model
 
     def _sweep(self) -> None:
         """Evict expired bindings, then earliest-expiring live ones under the bound."""
@@ -98,8 +115,10 @@ def apply_gateway(
     *,
     gateway_url: str | None,
     binding: ModelGateway | None,
+    tenant_id: str,
     conversation_id: str | None,
     sensitive: bool,
+    explicit_rebind: bool = False,
 ) -> ModelEndpoint | None:
     """Route a resolved endpoint through the gateway for a conversation.
 
@@ -116,7 +135,11 @@ def apply_gateway(
     """
     if endpoint is None or sensitive or not gateway_url or binding is None or not conversation_id:
         return endpoint
-    pinned_model = binding.bind(conversation_id, endpoint.model)
+    pinned_model = (
+        binding.rebind(tenant_id, conversation_id, endpoint.model)
+        if explicit_rebind
+        else binding.bind(tenant_id, conversation_id, endpoint.model)
+    )
     return replace(endpoint, base_url=gateway_url, model=pinned_model)
 
 
@@ -128,8 +151,12 @@ def apply_gateway(
 
 #: The env var that puts the gateway in the REQUEST PATH. Distinct from the two health opt-ins.
 GATEWAY_URL_ENV = "BOLTRIG_MODEL_GATEWAY_URL"
-#: The opt-ins that arm an actual health PROBE of the gateway.
-GATEWAY_HEALTH_ENVS = ("BOLTRIG_MODEL_GATEWAY_HEALTH", "BOLTRIG_MODEL_GATEWAY_HEALTH_URL")
+#: The opt-ins that arm an actual health PROBE of the gateway.  The flag is a
+#: boolean; the URL is configured by presence.  They cannot share a generic
+#: "non-empty" predicate because manifest export deliberately writes ``"0"``
+#: for an explicit disabled posture.
+GATEWAY_HEALTH_FLAG_ENV = "BOLTRIG_MODEL_GATEWAY_HEALTH"
+GATEWAY_HEALTH_URL_ENV = "BOLTRIG_MODEL_GATEWAY_HEALTH_URL"
 
 
 def gateway_posture(env: Mapping[str, str]) -> tuple[str, str | None]:
@@ -149,7 +176,9 @@ def gateway_posture(env: Mapping[str, str]) -> tuple[str, str | None]:
     what orchestration does with them), and belongs to whoever owns that contract. This changes what
     the record SAYS, never what it decides.
     """
-    if any(is_truthy(env.get(k)) or (env.get(k) or "").strip() for k in GATEWAY_HEALTH_ENVS):
+    if is_truthy(env.get(GATEWAY_HEALTH_FLAG_ENV)) or (
+        env.get(GATEWAY_HEALTH_URL_ENV) or ""
+    ).strip():
         return ("enabled", None)
     if (env.get(GATEWAY_URL_ENV) or "").strip():
         return ("unchecked", "configured_but_health_check_disabled")

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+from boltrig.models.model_id_policy import exact_model_id
+
 from .model_proxy_ceiling_errors import (
     ModelCeilingViolation,
     ReasoningEffortCeilingViolation,
@@ -16,7 +18,9 @@ def enforce_model_ceiling(body: bytes, allowed_model: str) -> bytes:
     """Require the admission-pinned model on every non-empty request."""
     if type(body) is not bytes:
         raise TypeError("body must be exact bytes")
-    if type(allowed_model) is not str or not allowed_model or len(allowed_model) > 128:
+    try:
+        exact_model_id(allowed_model)
+    except ValueError:
         raise ValueError("allowed model must be a bounded non-empty string")
     if not body:
         return body

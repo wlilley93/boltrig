@@ -12,7 +12,12 @@ from .base import TenantId, UserId, utcnow
 DEVICE_PRESENCE = ("offline", "online", "locked", "revoked")
 DEVICE_ROOT_SCOPES = ("read", "read_write")
 DEVICE_LEASE_STATUSES = ("issued", "claimed", "completed", "failed", "expired")
-DEVICE_LEASE_VERBS = ("device.file.read", "device.file.write", "device.command.run")
+DEVICE_LEASE_VERBS = (
+    "device.file.list",
+    "device.file.read",
+    "device.file.write",
+    "device.command.run",
+)
 
 
 @dataclass

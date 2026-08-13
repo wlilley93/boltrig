@@ -15,19 +15,8 @@ from ._shared import platform_state, require_author
 
 
 async def _references(store: Any, tenant_id: str, endpoint_id: str) -> dict:
-    return {
-        "capabilities": sorted(
-            item.name
-            for item in await store.list_all_capabilities(tenant_id)
-            if item.model_endpoint == endpoint_id
-            or item.vision_model_endpoint == endpoint_id
-        ),
-        "fallbacks": sorted(
-            item.id
-            for item in await store.list_model_endpoints(tenant_id)
-            if item.id != endpoint_id and item.fallback == endpoint_id
-        ),
-    }
+    snapshot = await store.model_endpoint_references(tenant_id, endpoint_id)
+    return snapshot.approval_context()
 
 
 def _role_projection(endpoint_id: str | None, endpoints: dict[str, Any]) -> dict[str, Any]:
@@ -149,6 +138,7 @@ def _register_inventory_routes(app, P, K) -> None:
                     "model": endpoint.model,
                     "data_class": endpoint.data_class,
                     "modalities": list(endpoint.modalities),
+                    "revision": endpoint.revision,
                     "is_active": endpoint.is_active,
                     "status": "active" if endpoint.is_active else "retired",
                 }
@@ -178,6 +168,7 @@ def _register_inventory_routes(app, P, K) -> None:
                     "fallback": endpoint.fallback,
                     "data_class": endpoint.data_class,
                     "modalities": list(endpoint.modalities),
+                    "revision": endpoint.revision,
                     "is_active": endpoint.is_active,
                     "status": "active" if endpoint.is_active else "retired",
                     "references": await _references(k.store, p.tenant_id, endpoint.id),

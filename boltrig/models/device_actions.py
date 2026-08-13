@@ -14,6 +14,7 @@ MAX_FILE_BYTES = 100 * 1024 * 1024
 MAX_PATH_BYTES = 1024
 MAX_ARG_BYTES = 4096
 MAX_ARGS = 64
+MAX_DIRECTORY_ENTRIES = 100
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -84,6 +85,20 @@ def canonical_device_action(
             "relative_path": _relative_path(raw.get("relative_path")),
             "max_bytes": max_bytes,
         }
+    elif verb == "device.file.list":
+        if set(raw) - {"relative_path", "max_entries"}:
+            raise ValueError("unknown_action_field")
+        max_entries = raw.get("max_entries", MAX_DIRECTORY_ENTRIES)
+        if isinstance(max_entries, bool) or not isinstance(max_entries, int):
+            raise ValueError("invalid_max_entries")
+        if not 1 <= max_entries <= MAX_DIRECTORY_ENTRIES:
+            raise ValueError("invalid_max_entries")
+        action = {
+            "relative_path": _relative_path(
+                raw.get("relative_path"), optional=True
+            ),
+            "max_entries": max_entries,
+        }
     elif verb == "device.file.write":
         if set(raw) - {"relative_path", "content_digest", "byte_size", "overwrite"}:
             raise ValueError("unknown_action_field")
@@ -130,6 +145,7 @@ def canonical_device_action(
 __all__ = [
     "MAX_ARG_BYTES",
     "MAX_ARGS",
+    "MAX_DIRECTORY_ENTRIES",
     "MAX_FILE_BYTES",
     "MAX_PATH_BYTES",
     "canonical_device_action",

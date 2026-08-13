@@ -207,6 +207,13 @@ class ModelEndpointUnavailable(BoltrigError):
     reason = "model_endpoint_unavailable"
 
 
+class ModelCatalogueUnavailable(BoltrigError):
+    """The server-owned Bifrost catalogue could not prove a model route."""
+
+    status_code = 503
+    reason = "model_catalogue_unavailable"
+
+
 class EvalCaseArchived(BoltrigError):
     """An archived evaluation case cannot start a new run."""
 
