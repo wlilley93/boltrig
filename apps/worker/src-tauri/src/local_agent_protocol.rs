@@ -298,6 +298,19 @@ fn bounded_string(value: &str, max_bytes: usize) -> String {
 mod tests {
     use super::*;
 
+    /// An absolute workspace path for the platform the test is compiled for.
+    ///
+    /// `Path::new("/workspace").is_absolute()` is true on Unix and FALSE on
+    /// Windows, where an absolute path needs a prefix such as `C:\`. The bare
+    /// "/workspace" literal therefore passed on linux-x86_64 and macos-arm64
+    /// and failed only on windows-x86_64, where thread_request correctly
+    /// returned "invalid_local_agent_workspace". The product code is right;
+    /// the fixture was not portable.
+    #[cfg(windows)]
+    const ABSOLUTE_WORKSPACE: &str = r"C:\workspace";
+    #[cfg(not(windows))]
+    const ABSOLUTE_WORKSPACE: &str = "/workspace";
+
     fn request() -> LocalTurnRequest {
         LocalTurnRequest {
             root_id: "root_1".to_string(),
@@ -322,12 +335,34 @@ mod tests {
 
     #[test]
     fn thread_request_is_local_persistent_and_policy_bound() {
-        let value = thread_request(&request(), ApprovalPosture::RiskBased, "/workspace").unwrap();
+        let value =
+            thread_request(&request(), ApprovalPosture::RiskBased, ABSOLUTE_WORKSPACE).unwrap();
         assert_eq!(value["method"], "thread/start");
         assert_eq!(value["params"]["ephemeral"], false);
-        assert_eq!(value["params"]["cwd"], "/workspace");
+        assert_eq!(value["params"]["cwd"], ABSOLUTE_WORKSPACE);
         assert_eq!(value["params"]["approvalPolicy"], "on-request");
         assert_eq!(value["params"]["sandbox"], "workspace-write");
+    }
+
+    /// The guard the fixture above depends on, which nothing asserted.
+    ///
+    /// Worth having for its own sake - refusing a relative cwd is what stops a
+    /// local agent being pointed at whatever directory the app happens to be
+    /// running from - but also because it pins ABSOLUTE_WORKSPACE. Without this,
+    /// a constant that drifted to a non-absolute value would surface as a
+    /// confusing failure about missing JSON fields rather than about the
+    /// workspace. Relative paths are non-absolute on every platform, so unlike
+    /// the positive fixture this needs no cfg.
+    #[test]
+    fn thread_request_refuses_a_workspace_that_is_not_absolute() {
+        assert!(std::path::Path::new(ABSOLUTE_WORKSPACE).is_absolute());
+        for cwd in ["", "workspace", "./workspace", "../workspace"] {
+            assert_eq!(
+                thread_request(&request(), ApprovalPosture::RiskBased, cwd),
+                Err("invalid_local_agent_workspace".to_string()),
+                "cwd {cwd:?} must be refused",
+            );
+        }
     }
 
     #[test]
