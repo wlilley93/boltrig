@@ -181,6 +181,9 @@ async def _seat_invitee(k, inv, email: str) -> dict:
                 scope={"all": True}, status="active", source="invitation",
                 last_seen_at=utcnow(),
             ))
+            from boltrig.identity.onboarding import require_user_onboarding
+
+            await require_user_onboarding(k.store, new_tid, email)
             # add_org_member also records the email -> orgs index pointer (D1), so login
             # discovers the new org and the switch can re-authorize it against org_members.
             await k.store.add_org_member(OrgMember(
@@ -361,6 +364,10 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
             created_at=existing.created_at if existing else utcnow(),
         )
         await k.store.upsert_user(user)
+        if existing is None:
+            from boltrig.identity.onboarding import require_user_onboarding
+
+            await require_user_onboarding(k.store, inv.tenant_id, email)
         # Store ONLY the argon2id hash, apart from the identity row (D4). The SHARED
         # credential is held ONCE at the identity realm (``tenant`` == _console_tenant(),
         # the login realm), keyed by the normalised email - never duplicated per org

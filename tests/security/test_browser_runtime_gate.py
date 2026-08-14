@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -150,7 +151,30 @@ def _run_entrypoint(tmp_path: Path, *, wanted: bool) -> tuple[int, bool]:
         # and a timeout here reads as the GATE failing, which it was not.
         timeout=180,
     )
-    return proc.returncode, (tmp_path / "chromium-started").exists()
+    # WAIT FOR THE MARKER; DO NOT SAMPLE IT ONCE.
+    #
+    # The entrypoint backgrounds chromium with `&` (fleet-entrypoint.sh:60) and
+    # then polls readiness through the `python` stub -- which exits 0
+    # immediately, so the poll waits for nothing. The chromium stub is
+    # `touch <marker>; sleep 2`. So the entrypoint can return 0 before that
+    # backgrounded shell has reached its `touch`, and a single .exists() call
+    # races it. The symptom is exactly rc == 0 with started False.
+    #
+    # Measured 2026-08-14: fails 2 of 2 full `make quality-gate` runs inside
+    # boltrig-vm, and passes 2 of 2 in the same VM in isolation, on the macOS
+    # host, and in CI. That combination IS the diagnosis -- it needs the full
+    # suite's parallel load AND the slower environment, so the fast machines
+    # never see it and the VM always does.
+    #
+    # A short bounded wait is the fix rather than a longer subprocess timeout:
+    # the 180s above already passed, so the process was never slow. Only the
+    # observation was early. The negative test is unaffected -- it asserts the
+    # marker is ABSENT, and waiting cannot make an absent file appear.
+    deadline = time.monotonic() + 10.0
+    marker = tmp_path / "chromium-started"
+    while not marker.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return proc.returncode, marker.exists()
 
 
 def test_entrypoint_does_not_start_chromium_when_unwanted(tmp_path: Path) -> None:

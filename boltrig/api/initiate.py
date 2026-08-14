@@ -110,6 +110,9 @@ async def _run(
             must_change_password=True,
         )
         await store.upsert_user(user)
+        from boltrig.identity.onboarding import require_user_onboarding
+
+        await require_user_onboarding(store, tenant, email)
         await store.set_password_credential(tenant, email, hash_password(password))
 
         # Seed the default org + workspace + OWNER memberships ([2026] VJS-COUNTY 8,

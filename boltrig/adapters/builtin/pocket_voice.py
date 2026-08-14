@@ -48,7 +48,14 @@ from boltrig.adapters.base import (
     Result,
     VerbSpec,
 )
+from boltrig.adapters.egress import EgressBlocked, assert_egress_allowed
 from boltrig.adapters.http_base import Handler, HttpAdapter
+from boltrig.adapters.http_response import (
+    MAX_BINARY_RESPONSE_BYTES,
+    ResponseBoundaryError,
+    bounded_http_response,
+    bounded_response_error,
+)
 from boltrig.models import InvocationContext
 
 # Loopback by default: the service binds 127.0.0.1 and must stay that way. A
@@ -184,6 +191,36 @@ class PocketVoiceAdapter(HttpAdapter):
                 AdapterError(ErrorClass.UPSTREAM, "voice catalogue was not JSON")
             )
         return Result.success(body if isinstance(body, dict) else {"voices": body})
+
+    async def _raw_request(
+        self, client: httpx.AsyncClient, method: str, url: str, **kwargs: Any
+    ) -> httpx.Response | AdapterError:
+        """The same raw path the vendor siblings use: the base's JSON
+        ``request()`` cannot carry raw audio bytes back from TTS.
+
+        ``allow_internal`` is the guard's one documented opt-in, and is required
+        for the same reason local-whisper needs it: the target is a fixed,
+        operator-configured address on the local machine, which the SSRF guard
+        otherwise refuses precisely BECAUSE it is internal. It is never an
+        agent-supplied URL — the base comes from the deployment, and the verb
+        schema carries no url field for a caller to redirect it with.
+        """
+        try:
+            assert_egress_allowed(
+                str(client.base_url.join(url)), {"allow_internal": True}
+            )
+        except EgressBlocked as exc:
+            return AdapterError(ErrorClass.INVALID, str(exc), retryable=False)
+        await self._limiter.acquire()
+        try:
+            resp, _ = await bounded_http_response(
+                client, method, url, max_bytes=MAX_BINARY_RESPONSE_BYTES, **kwargs,
+            )
+        except ResponseBoundaryError:
+            return bounded_response_error()
+        if 200 <= resp.status_code < 300:
+            return resp
+        return self._map_status(resp)
 
 
 def build() -> PocketVoiceAdapter:

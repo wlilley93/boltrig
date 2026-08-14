@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { MeSettingsResponse } from "@wlilley93/boltrig-web-sdk";
 
 import { configuredApiOrigin } from "../apiOrigin";
 import { characterFromSettings, saveCharacterLocal } from "../character";
@@ -13,6 +14,7 @@ import { AcceptInviteScreen } from "./auth/AcceptInviteScreen";
 import { AuthSplash, DesktopServerMissing } from "./auth/AuthShell";
 import { DesktopAccountBridge } from "./auth/DesktopAccountBridge";
 import { LoginScreen } from "./auth/LoginScreen";
+import { OnboardingGate } from "./onboarding/OnboardingGate";
 import { RequestPasswordResetScreen, ResetPasswordScreen } from "./auth/RecoveryScreens";
 import {
   acceptingInviteFromHash,
@@ -40,6 +42,7 @@ function useAuthRoute() {
 
 function useAuthenticatedSession(acceptingInvite: boolean, recoveryFlow: RecoveryFlow) {
   const [state, setState] = useState<GateState>("checking");
+  const [account, setAccount] = useState<MeSettingsResponse | null>(null);
 
   useEffect(() => {
     if (acceptingInvite || recoveryFlow !== "none") return;
@@ -52,6 +55,7 @@ function useAuthenticatedSession(acceptingInvite: boolean, recoveryFlow: Recover
         }
         // Apply the authoritative character before private UI can mount.
         saveCharacterLocal(characterFromSettings(result.settings));
+        setAccount(result);
         setState("authenticated");
       })
       .catch(async (reason) => {
@@ -109,12 +113,12 @@ function useAuthenticatedSession(acceptingInvite: boolean, recoveryFlow: Recover
     };
   }, [state]);
 
-  return { state, setState };
+  return { account, state, setState };
 }
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const route = useAuthRoute();
-  const { state, setState } = useAuthenticatedSession(
+  const { account, state, setState } = useAuthenticatedSession(
     route.acceptingInvite,
     route.recoveryFlow,
   );
@@ -159,5 +163,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           }}
         />;
   }
-  return <DesktopAccountBridge>{children}</DesktopAccountBridge>;
+  return (
+    <OnboardingGate initialAccount={account}>
+      <DesktopAccountBridge>{children}</DesktopAccountBridge>
+    </OnboardingGate>
+  );
 }
