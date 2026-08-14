@@ -87,7 +87,7 @@ DECLARE
     'background_job_receipts',
     'eval_cases','eval_runs','notification_prefs',
     'personal_agents','memory_items','mcp_servers','mcp_probe_receipts',
-    'conversation_messages',
+    'conversation_messages','conversation_steer_queue',
     'conversation_summaries',
     'user_invitations','user_credentials','password_reset_tokens',
     'user_settings','user_sessions','memory_facts',

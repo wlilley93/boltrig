@@ -32,6 +32,7 @@ from .credential_references import CredentialReferencePresenceMem
 from .ai_key_proposals import AiKeyProposalStoreMem
 from .mcp_lifecycle import McpLifecycleStoreMem
 from .model_endpoints_memory import ModelEndpointStoreMem
+from .conversation_queue import ConversationQueueStoreMem
 from boltrig.models import (
     AgentCapability,
     AuditEvent,
@@ -105,7 +106,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
                     AuthoredDefinitionStoreMem,
                     EvalCaseStoreMem, CredentialReferencePresenceMem,
                     AiKeyProposalStoreMem, McpLifecycleStoreMem,
-                    ModelEndpointStoreMem):
+                    ModelEndpointStoreMem, ConversationQueueStoreMem):
     """In-memory Store composed from domain partial mixins for offline use and tests."""
 
     def __init__(self) -> None:
@@ -114,6 +115,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         self._init_background_job_state()
         self._init_mcp_lifecycle_state()
         self._init_model_endpoint_state()
+        self._init_conversation_queue_state()
         self._init_execution_state()
         self._init_account_state()
 
@@ -688,6 +690,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
                 self._convs.pop((conv.tenant_id, conv.id), None)
                 self._messages.pop(conv.id, None)
                 self._summaries.pop(conv.id, None)
+                self._steer_queues.pop((conv.tenant_id, conv.id), None)
             return len(doomed)
 
     # --- Round Three: config revisions ---
@@ -1107,14 +1110,11 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
             )
         config.updated_at = utcnow()
         self._ai_configs[(config.tenant_id, config.level, config.scope_id, config.modality)] = config
-
     async def get_ai_config(self, tenant_id, level, scope_id, modality="text"):
         # Tenant-scoped: the key includes tenant_id, so a lookup under another tenant
         # never returns this tenant's row (fail-closed, never crosses the boundary).
         return self._ai_configs.get((tenant_id, level, scope_id, modality))
-
     async def list_ai_configs(self, tenant_id):
         return [c for (t, _, _, _), c in self._ai_configs.items() if t == tenant_id]
-
     async def delete_ai_config(self, tenant_id, level, scope_id, modality="text"):
         self._ai_configs.pop((tenant_id, level, scope_id, modality), None)

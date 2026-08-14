@@ -63,6 +63,8 @@ import type {
   ConnectionsResponse,
   ConsoleOverviewResponse,
   ConversationResponse,
+  ConversationQueueReorderRequest,
+  ConversationQueueReorderResponse,
   ConversationSearchResponse,
   ConversationsPageResponse,
   ConversationsResponse,
@@ -126,6 +128,8 @@ import type {
   MeNotificationsResponse,
   MyOrganisationsResponse,
   MeSettingsResponse,
+  UpdateMeProfileRequest,
+  UpdateMeProfileResponse,
   MemoryFactResponse,
   MemoryFactsResponse,
   MemoryForgetRequest,
@@ -442,6 +446,17 @@ export class BoltrigClient {
     return this.request(`/v1/conversations/${encodeURIComponent(id)}`);
   }
 
+  reorderConversationQueue(
+    id: string,
+    body: ConversationQueueReorderRequest,
+  ): Promise<ConversationQueueReorderResponse> {
+    return this.json(
+      `/v1/conversations/${encodeURIComponent(id)}/queue`,
+      "PUT",
+      body,
+    );
+  }
+
   async followConversation(
     id: string,
     onFrame: (frame: ChatFollowFrame) => void,
@@ -514,6 +529,10 @@ export class BoltrigClient {
 
   meSettings(): Promise<MeSettingsResponse> {
     return this.request("/v1/me/settings");
+  }
+
+  updateMeProfile(body: UpdateMeProfileRequest): Promise<UpdateMeProfileResponse> {
+    return this.json("/v1/me/profile", "PATCH", body, true);
   }
 
   aiKeys(): Promise<AiKeysResponse> {
@@ -1181,6 +1200,49 @@ export class BoltrigClient {
 
   cancelRun(runId: string): Promise<CancelRunResponse> {
     return this.json(`/v1/runs/${encodeURIComponent(runId)}/cancel`, "POST", undefined, true);
+  }
+
+  /**
+   * Load the already-authorized run-event snapshot used by execution drawers.
+   * Unlike the bounded chat stream, this route can include server-redacted
+   * input/output values, so callers should request it only after an explicit
+   * user action and render it as untrusted text.
+   */
+  async runEvents(runId: string, signal?: AbortSignal): Promise<ChatEvent[]> {
+    const headers = new Headers({ accept: "text/event-stream" });
+    for (const [key, value] of Object.entries(this.options.headers?.() ?? {})) {
+      headers.set(key, value);
+    }
+    const accessToken = await this.options.accessToken?.();
+    if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
+
+    let response: Response;
+    try {
+      response = await this.fetcher(`${this.baseUrl}/v1/runs/${encodeURIComponent(runId)}/events`, {
+        method: "GET",
+        headers,
+        credentials: "include",
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted) return [];
+      throw new BoltrigApiError(
+        0,
+        null,
+        error instanceof Error ? error.message : "Run details failed",
+      );
+    }
+    if (!response.ok || !response.body) {
+      throw new BoltrigApiError(response.status, await parseResponse(response));
+    }
+
+    const events: ChatEvent[] = [];
+    try {
+      await pumpSse(response.body, (event) => events.push(event), signal);
+    } catch (error) {
+      if (!signal?.aborted) throw error;
+    }
+    return events;
   }
 
   hitl(): Promise<HITLListResponse> {

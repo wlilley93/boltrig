@@ -1496,15 +1496,18 @@ invariants:
     tests:
       - tests/security/test_chat_streaming_richness.py::test_streaming_runtime_does_not_duplicate_summary
   US-CHAT-15:
-    description: 'A mid-run user message ("steer") queues durably instead of starting a parallel turn - a POST to an in-flight conversation persists the message as an ordinary user row (the append-only message log IS the queue), acks 202/queued with no second executor run and nothing persisted for a non-owner (403), the live stream emits typed steer_queued/steer_consumed events, the in-flight turn auto-starts the oldest pending steer as the NEXT turn on the same stream with the untrusted envelope intact (M1/SEC-72), and a cancel never auto-consumes the queue (the steer stays durable for the next explicit turn).'
+    description: 'A mid-run user message ("steer") queues durably instead of starting a parallel turn - a POST to an in-flight conversation freezes content as an ordinary user row and appends an id-only scheduling projection, acks 202/queued with no second executor run and nothing persisted for a non-owner (403), and emits typed steer_queued/steer_consumed events. The owner may compare-and-swap the complete pending order; stale tabs and non-owners are refused, the selected first item is claimed atomically as the NEXT serial turn with its untrusted envelope intact (M1/SEC-72), and a cancel never auto-consumes the queue (the steer stays durable for the next explicit turn).'
     tests:
       - tests/integration/test_chat.py::test_steer_queues_during_in_flight_turn_and_is_consumed_at_boundary
+      - tests/integration/test_chat.py::test_reordered_steers_execute_in_owner_selected_order_and_stale_order_is_refused
+      - tests/integration/test_chat.py::test_queue_reorder_route_is_owner_scoped_bounded_and_compare_and_swap
       - tests/integration/test_chat.py::test_consumed_steer_enters_the_prompt_inside_the_untrusted_envelope
       - tests/integration/test_chat.py::test_second_user_cannot_steer_an_in_flight_conversation
       - tests/integration/test_chat.py::test_cancel_wins_over_the_queue
       - tests/integration/test_chat.py::test_http_steer_returns_202_queued_and_stream_carries_both_turns
       - tests/kernel/test_redis_event_relay.py::test_direct_input_is_durable_before_another_replica_can_append_a_steer
       - tests/kernel/test_redis_event_relay.py::test_turn_admission_rolls_back_cleanly_at_each_storage_boundary
+      - tests/store/test_store_parity.py::test_conversation_steer_queue_reorders_and_claims_atomically_on_both_stores
   SEC-88:
     description: 'Chat tool events never leak verb values (K-20 bounded observability on the user-facing surface) - a secret/untrusted value passed to a verb appears nowhere on the chat stream nor in the persisted turn events (only key names + counts do), while the full payload still exists on the run relay for the canvas + durable audit.'
     tests:

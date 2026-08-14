@@ -1,0 +1,9 @@
+id: DIR-0028
+logId: DECISION-0020
+decisionDigest: sha256:9d1216f7550289d712a837810fb988cde09c7aee8d6edd5916988a3e4c6413c0
+surface: !route
+  route: apps/worker/src/components/shell/TaskList.tsx
+direction: "Render conversation pin and archive actions with compact filled Codex-style glyphs: a diagonal pushpin and a rounded archive box."
+magnitude: Change only the glyph geometry and fill treatment. Preserve the existing hover and focus reveal, 20px action targets, Pin or Unpin and Archive accessible names, lifecycle behavior, keyboard reachability, task-row density and selected-row styling.
+directedAt: 2026-08-14T12:18:17Z
+notes: This additive Principal direction refines the conversation-row controls in DIR-0016 without changing their semantics. The controls remain hidden at rest in the governed captures, so the source-bound recapture may remain pixel-identical. No frameDigest, signed review, conformity or sign-off is asserted.

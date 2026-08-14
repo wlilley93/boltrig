@@ -1,0 +1,9 @@
+id: DIR-0025
+logId: DECISION-0017
+decisionDigest: sha256:c93ca0341188adfbff2a3bf87bee3a9c93e220c51a76208d5f96313d7504a6de
+surface: !route
+  route: apps/worker/src/components/ChatView.tsx
+direction: Keep Task details manually reachable when the compact desktop is too narrow for the automatic inline rail.
+magnitude: Within the compact-desktop band, keep the canonical Chat composer and transcript geometry unchanged and toggle Task details as a fixed right overlay. The overlay is non-modal, has no scrim, does not lock body scroll or isolate the Chat background, and closes on its trigger or Escape with focus returned. Preserve the modal sheet in the phone band and the automatic inline rail beyond the wide-inspector boundary.
+directedAt: 2026-08-14T10:54:41Z
+notes: The compact overlay was visually inspected and geometry-measured at a representative narrow-desktop viewport; opening it left the canonical composer and transcript rectangles unchanged. The governed desktop capture continues to exercise the automatic inline rail because no compact-desktop canonical VDS state exists.

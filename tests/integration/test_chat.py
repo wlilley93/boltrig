@@ -19,7 +19,14 @@ from boltrig.fleet import build_spawner
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.kernel.events import EventRelay
-from boltrig.models import AgentCapability, GrantSet, TenantPermissions
+from boltrig.models import (
+    AgentCapability,
+    Conversation,
+    ConversationMessage,
+    GrantSet,
+    MessageRole,
+    TenantPermissions,
+)
 from boltrig.store import InMemoryStore
 
 T = "acme"
@@ -287,6 +294,107 @@ async def test_steer_queues_during_in_flight_turn_and_is_consumed_at_boundary():
     assert [m.role.value for m in msgs] == ["user", "user", "assistant", "assistant"]
     assert msgs[2].content == "reply:first"
     assert msgs[3].content == "reply:actually, also do this"
+
+
+@pytest.mark.invariant("US-CHAT-15")
+async def test_reordered_steers_execute_in_owner_selected_order_and_stale_order_is_refused():
+    store, relay = InMemoryStore(), EventRelay()
+    gate = asyncio.Event()
+    calls: list[str] = []
+    chat = ChatService(store, relay, turn_executor=_gated_executor(gate, calls))
+
+    turn = asyncio.create_task(_collect(
+        chat.handle_turn(tenant_id=T, user_id="alice", role="engineer", message="first")
+    ))
+    while not calls:
+        await asyncio.sleep(0)
+    conversation = (await store.list_conversations(T, "alice"))[0]
+    second = await _collect(chat.handle_turn(
+        tenant_id=T,
+        user_id="alice",
+        role="engineer",
+        message="second",
+        conversation_id=conversation.id,
+    ))
+    third = await _collect(chat.handle_turn(
+        tenant_id=T,
+        user_id="alice",
+        role="engineer",
+        message="third",
+        conversation_id=conversation.id,
+    ))
+    expected = [second[0]["message_id"], third[0]["message_id"]]
+    selected = list(reversed(expected))
+
+    assert await chat.reorder_pending_steers(
+        T, "alice", conversation.id, expected, selected
+    )
+    assert not await chat.reorder_pending_steers(
+        T, "alice", conversation.id, expected, expected
+    )
+    assert await chat.pending_steer_ids(
+        T, "alice", "engineer", conversation.id
+    ) == selected
+
+    gate.set()
+    await asyncio.wait_for(turn, timeout=2)
+    assert calls == ["first", "third", "second"]
+    assert await store.pending_conversation_steer_ids(T, conversation.id) == []
+
+
+@pytest.mark.invariant("US-CHAT-15")
+def test_queue_reorder_route_is_owner_scoped_bounded_and_compare_and_swap():
+    store, relay = InMemoryStore(), EventRelay()
+    conversation = Conversation(id="queue-route", tenant_id=T, user_id="alice")
+
+    async def seed() -> None:
+        await store.create_conversation(conversation)
+        for message_id in ("queued-a", "queued-b"):
+            await store.enqueue_conversation_steer(ConversationMessage(
+                id=message_id,
+                conversation_id=conversation.id,
+                tenant_id=T,
+                role=MessageRole.USER,
+                content=message_id,
+            ))
+
+    asyncio.run(seed())
+    client = TestClient(create_app(Kernel(store), chat_service=ChatService(store, relay)))
+    owner = {
+        "x-boltrig-tenant": T,
+        "x-boltrig-subject": "alice",
+        "x-boltrig-role": "engineer",
+    }
+    current = ["queued-a", "queued-b"]
+    selected = list(reversed(current))
+
+    detail = client.get(f"/v1/conversations/{conversation.id}", headers=owner)
+    assert detail.status_code == 200
+    assert detail.json()["queued_message_ids"] == current
+    changed = client.put(
+        f"/v1/conversations/{conversation.id}/queue",
+        json={"expected_message_ids": current, "message_ids": selected},
+        headers=owner,
+    )
+    assert changed.status_code == 200 and changed.json()["message_ids"] == selected
+    stale = client.put(
+        f"/v1/conversations/{conversation.id}/queue",
+        json={"expected_message_ids": current, "message_ids": selected},
+        headers=owner,
+    )
+    assert stale.status_code == 409 and stale.json()["reason"] == "queue_changed"
+    denied = client.put(
+        f"/v1/conversations/{conversation.id}/queue",
+        json={"expected_message_ids": selected, "message_ids": current},
+        headers={**owner, "x-boltrig-subject": "bob"},
+    )
+    assert denied.status_code == 403
+    invalid = client.put(
+        f"/v1/conversations/{conversation.id}/queue",
+        json={"expected_message_ids": selected, "message_ids": ["queued-b", "queued-b"]},
+        headers=owner,
+    )
+    assert invalid.status_code == 400 and invalid.json()["reason"] == "queue_order_invalid"
 
 
 @pytest.mark.invariant("SEC-WRK-02")

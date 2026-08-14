@@ -292,6 +292,7 @@ def test_provisioned_org_invitee_gets_a_usable_login(monkeypatch):
     # The active org is the provisioned org (their only membership), so the profile the
     # console returns is their superadmin identity IN the new org.
     assert me.json()["profile"]["role"] == "superadmin"
+    assert me.json()["settings"]["setup.onboarding_version"] == 0
 
 
 # --- SEC-134 / [2026] VJS-COUNTY 11 D5: the shared credential stays sealed and 2FA

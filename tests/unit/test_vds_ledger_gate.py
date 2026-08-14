@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -125,6 +126,8 @@ def _fixture(root: Path) -> str:
     )
     for index in range(10):
         (root / f"ui/Screen{index}View.tsx").write_text(_screen_source(index), encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "--", "ui"], cwd=root, check=True)
     (root / ".vds/config.toml").write_text(
         """[surface]
 screen_globs = ["ui/*View.tsx"]
@@ -216,5 +219,18 @@ def test_worker_source_changed_after_capture_is_rejected(tmp_path: Path) -> None
     with (tmp_path / "ui/chat/Composer.tsx").open("a", encoding="utf-8") as handle:
         handle.write("// source moved after the governed capture\n")
 
+    errors = check_vds_ledgers.check_repository(tmp_path, route_source=route_source).errors
+    assert any("route capture source digest is stale" in error for error in errors)
+
+
+@pytest.mark.invariant("NFR-MNT-08")
+def test_untracked_scratch_is_not_misrepresented_as_candidate_source(tmp_path: Path) -> None:
+    route_source = _fixture(tmp_path)
+    scratch = tmp_path / "ui/chat/Scratch.tsx"
+    scratch.write_text("export const scratch = true;\n", encoding="utf-8")
+
+    assert check_vds_ledgers.check_repository(tmp_path, route_source=route_source).errors == ()
+
+    subprocess.run(["git", "add", "--", "ui/chat/Scratch.tsx"], cwd=tmp_path, check=True)
     errors = check_vds_ledgers.check_repository(tmp_path, route_source=route_source).errors
     assert any("route capture source digest is stale" in error for error in errors)

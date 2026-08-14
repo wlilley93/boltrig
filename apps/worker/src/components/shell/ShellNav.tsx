@@ -12,13 +12,13 @@ const primary: Array<{
   {
     route: "chat",
     label: "New chat",
-    icon: "plus",
+    icon: "compose",
     shortcut: "⌘N",
     title: "Start something new. Anything running carries on",
   },
-  { route: "agents", label: "Agents", icon: "agents" },
-  { route: "integrations", label: "Plugins", icon: "plug" },
-  { route: "automations", label: "Routines", icon: "flow" },
+  { route: "agents", label: "Agents", icon: "agentBranch" },
+  { route: "integrations", label: "Plugins", icon: "pluginGrid" },
+  { route: "automations", label: "Routines", icon: "routineClock" },
 ];
 
 interface ShellNavProps {

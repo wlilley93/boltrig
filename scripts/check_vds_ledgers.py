@@ -20,6 +20,7 @@ import os
 import posixpath
 import re
 import stat
+import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -97,51 +98,45 @@ def source_tree_digest(root: Path, scopes: tuple[str, ...]) -> str:
     """Reproduce capture-current.mjs' path/type/content source digest."""
 
     digest = hashlib.sha256()
-    for scope in scopes:
-        scope_path = repo_path(root, scope, "capture source scope")
-        if not scope_path.is_dir() or scope_path.is_symlink():
-            raise LedgerError(f"capture source scope is not a real directory: {scope!r}")
-        paths: list[Path] = []
-        pending = [scope_path]
-        while pending:
-            directory = pending.pop()
+    try:
+        listed = subprocess.run(
+            ["git", "ls-files", "-z", "--", *scopes],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise LedgerError(f"cannot enumerate indexed capture source paths: {exc}") from exc
+    for encoded_path in sorted(path for path in listed.split(b"\0") if path):
+        try:
+            relative_path = encoded_path.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise LedgerError("capture source path is not valid UTF-8") from exc
+        path = repo_path(root, relative_path, "indexed capture source path")
+        if not path.exists() and not path.is_symlink():
+            continue  # staged deletion: indexed, but absent from the candidate tree
+        try:
+            mode = path.lstat().st_mode
+        except OSError as exc:
+            raise LedgerError(f"cannot inspect capture source path {path}: {exc}") from exc
+        digest.update(encoded_path)
+        digest.update(b"\0")
+        if stat.S_ISLNK(mode):
+            digest.update(b"symlink\0")
             try:
-                entries = sorted(directory.iterdir(), key=lambda item: item.as_posix())
+                digest.update(os.readlink(path).encode())
             except OSError as exc:
-                raise LedgerError(f"cannot scan capture source scope {scope!r}: {exc}") from exc
-            for path in entries:
-                if (
-                    path.name == ".DS_Store"
-                    or path.name == "__pycache__"
-                    or path.name.endswith(".pyc")
-                ):
-                    continue
-                try:
-                    mode = path.lstat().st_mode
-                except OSError as exc:
-                    raise LedgerError(f"cannot inspect capture source path {path}: {exc}") from exc
-                if stat.S_ISDIR(mode):
-                    pending.append(path)
-                elif stat.S_ISREG(mode) or stat.S_ISLNK(mode):
-                    paths.append(path)
-        for path in sorted(paths, key=lambda item: item.relative_to(root).as_posix()):
-            relative_path = path.relative_to(root).as_posix()
-            digest.update(relative_path.encode())
+                raise LedgerError(f"cannot read capture source symlink {path}: {exc}") from exc
             digest.update(b"\0")
-            if path.is_symlink():
-                digest.update(b"symlink\0")
-                try:
-                    digest.update(os.readlink(path).encode())
-                except OSError as exc:
-                    raise LedgerError(f"cannot read capture source symlink {path}: {exc}") from exc
-                digest.update(b"\0")
-            else:
-                digest.update(b"file\0")
-                try:
-                    digest.update(path.read_bytes())
-                except OSError as exc:
-                    raise LedgerError(f"cannot read capture source file {path}: {exc}") from exc
-                digest.update(b"\0")
+        elif stat.S_ISREG(mode):
+            digest.update(b"file\0")
+            try:
+                digest.update(path.read_bytes())
+            except OSError as exc:
+                raise LedgerError(f"cannot read capture source file {path}: {exc}") from exc
+            digest.update(b"\0")
+        else:
+            raise LedgerError(f"indexed capture source path has unsupported type: {relative_path}")
     return digest.hexdigest()
 
 

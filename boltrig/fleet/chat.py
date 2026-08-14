@@ -10,10 +10,10 @@ This lives in the fleet layer (it orchestrates the fleet); the kernel and models
 import nothing from it.
 
 Mid-run steers (US-CHAT-15): a message posted to a conversation whose turn is in
-flight never starts a parallel turn - it is persisted as a user message (the
-append-only message log is the durable queue), acknowledged with a ``queued``
-frame, and auto-started as the NEXT turn on the same stream once the in-flight
-turn completes. A cancelled turn never auto-consumes the queue (cancel wins).
+flight never starts a parallel turn. Its content remains frozen in the append-only
+message log while a separate, owner-reorderable scheduling projection chooses the
+NEXT turn. ``ChatQueueService`` owns that reorder-and-claim boundary. A cancelled
+turn never auto-consumes the queue (cancel wins).
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ from boltrig.fleet.chat_regeneration import (
     RegenerateNotEligible,
     regeneration_inputs,
 )
+from boltrig.fleet.chat_queue import ChatQueueService
 from boltrig.fleet.chat_stream_drive import drive_turn_events, safe_exec
 from boltrig.fleet.chat_turn_execution import build_turn_executor
 from boltrig.fleet.chat_turn_flow import TurnRequest, stream_turn
@@ -72,7 +73,7 @@ TurnExecutor = Callable[..., Awaitable[Any]]
 Summariser = Callable[[list[ConversationMessage]], Awaitable[str]]
 
 
-class ChatService:
+class ChatService(ChatQueueService):
     def __init__(
         self,
         store,
@@ -124,32 +125,6 @@ class ChatService:
         from boltrig.fleet.chat_live_projection import ChatLiveProjection
 
         return ChatLiveProjection(self)
-
-    async def _next_pending_steer(
-        self, tenant_id: str, conversation_id: str
-    ) -> ConversationMessage | None:
-        """The OLDEST queued steer still waiting for its turn, else None.
-
-        The durable steer queue IS the append-only message log (no new store
-        structure). Derivation: chat turns are serialised per conversation by the
-        in-flight mark, and every turn appends exactly ONE assistant reply
-        (chat.py is the only message writer), so live user/assistant messages pair
-        off in order - the first live user message beyond the live assistant count
-        has no reply yet. The candidate must also carry no ``run_id`` of its own:
-        a turn's direct input is tagged with its run at insert, so only a message
-        that QUEUED as a steer is ever consumed here - an explicit input is never
-        re-run, even when cancel stranded it; it rides the next turn's continuity
-        because cancel wins (US-CHAT-15)."""
-        messages = await self._store.list_messages(tenant_id, conversation_id)
-        live = [m for m in messages if m.superseded_by is None]
-        users = [m for m in live if m.role == MessageRole.USER]
-        answered = sum(1 for m in live if m.role == MessageRole.ASSISTANT)
-        if len(users) <= answered:
-            return None
-        candidate = users[answered]
-        if candidate.run_id is not None:
-            return None
-        return candidate
 
     async def list_conversations(self, tenant_id: str, user_id: str) -> list[Conversation]:
         return await self._store.list_conversations(tenant_id, user_id)

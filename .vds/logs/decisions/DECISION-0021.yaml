@@ -1,0 +1,10 @@
+id: DECISION-0021
+at: 2026-08-14T12:32:16Z
+by: williamlilley
+decision: Shared Shell primary navigation uses the compact Codex compose, branching, plugin-grid and clock glyph language while retaining Boltrig's New chat, Agents, Plugins and Routines product labels.
+court_required: false
+why: The Principal explicitly compared the current generic plus, agent-network, plug and flow glyphs with the quieter Codex rail icons and directed the latter visual treatment. Route meanings, labels, accessibility and navigation behavior remain unchanged.
+basis:
+- USER-DIRECTION-2026-08-14:SHELL-PRIMARY-NAV-GLYPHS
+- CODEX-REFERENCE-2026-08-14:COMPOSE-BRANCH-PLUGIN-CLOCK
+- BOLTRIG-CONTRACT:STABLE-SHELL-ROUTES-AND-ACCESSIBLE-NAMES

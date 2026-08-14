@@ -1,0 +1,20 @@
+id: PROOF-20260814-115914
+kind: burndown
+status: vacuous
+warrant_id: null
+command: vds proof burndown
+script: crates/vds-proof/src/burndown.rs
+exit_code: 0
+rows_considered: 0
+rows_enforced: 0
+rows_skipped_reasons: {}
+violations: []
+notes:
+- '[scope] no burndown is registered, so every row is skipped and this run is vacuous. That is the honest state of a project with no pinned metrics, and it is NOT evidence (VDS S-7(2)(4)).'
+inputs_digest: sha256:b4497545fd74b7ac4646915aaa097de105db186196c04752125facd79be499dd
+digest: sha256:4f67ccb6520c055d93e7d290ef63cea10c02343fe4cab1095e08de2fae4aeb0f
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-14T11:59:06Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 1000

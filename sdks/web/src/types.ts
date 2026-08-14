@@ -635,6 +635,20 @@ export interface ConversationResponse {
   messages: ChatMessage[];
   active_run_id?: string | null;
   model_context?: ConversationModelContext;
+  /** Pending steer ids in the exact order the server will claim them. */
+  queued_message_ids?: string[];
+}
+
+export interface ConversationQueueReorderRequest {
+  /** Complete order observed before the move; provides optimistic concurrency. */
+  expected_message_ids: string[];
+  /** Complete desired order, containing the exact same ids. */
+  message_ids: string[];
+}
+
+export interface ConversationQueueReorderResponse {
+  status: "ok";
+  message_ids: string[];
 }
 
 export interface ChatFollowFrame {
@@ -3168,6 +3182,16 @@ export interface MeSettingsResponse {
   profile: UserProfile;
   settings: Record<string, unknown>;
   setting_sources?: Record<string, "tenant_default" | "user_override">;
+}
+
+export interface UpdateMeProfileRequest {
+  display_name: string;
+}
+
+export interface UpdateMeProfileResponse {
+  status: string;
+  profile?: UserProfile;
+  reason?: string;
 }
 
 // PUT accepts either {key, value} or {settings: {k: v}}.

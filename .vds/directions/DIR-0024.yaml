@@ -1,0 +1,9 @@
+id: DIR-0024
+logId: DECISION-0016
+decisionDigest: sha256:621701abebf457d3262c26aac6273414e14a389d588328c0365a2332382ea538
+surface: !route
+  route: apps/worker/src/components/ChatView.tsx
+direction: Keep the canonical Chat column centred and unchanged as the floating right inspector crosses its desktop breakpoint.
+magnitude: Reserve the inline inspector only when the canonical Shell rail, Chat column, Chat gutters and inspector tokens fit together. Below the wide-inspector boundary, keep the full-width centred Chat and expose Task details on demand. Beyond that boundary, mount the inline inspector without narrowing Chat or causing horizontal overflow. Preserve phone behavior, focus return, modal isolation and truthful inspector content.
+directedAt: 2026-08-14T10:36:56Z
+notes: The breakpoint geometry is regression-tested and visually inspected at adjacent viewports immediately below and above the wide-inspector boundary. The governed desktop Chat capture exercises the inline state; no separate narrow-desktop canonical VDS state exists.

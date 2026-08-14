@@ -43,6 +43,22 @@ class ConversationStoreContract(Protocol):
     async def add_message(self, message: ConversationMessage) -> None: ...
     async def list_messages(self, tenant_id: str, conv_id: str) -> list[ConversationMessage]: ...
 
+    # Frozen message content plus a mutable, owner-controlled scheduling view.
+    async def enqueue_conversation_steer(self, message: ConversationMessage) -> None: ...
+    async def pending_conversation_steer_ids(
+        self, tenant_id: str, conversation_id: str
+    ) -> list[str]: ...
+    async def claim_next_conversation_steer(
+        self, tenant_id: str, conversation_id: str, run_id: str
+    ) -> ConversationMessage | None: ...
+    async def reorder_conversation_steers(
+        self,
+        tenant_id: str,
+        conversation_id: str,
+        expected_message_ids: list[str],
+        message_ids: list[str],
+    ) -> bool: ...
+
     # Marker-only supersession keeps frozen message content and events immutable.
     async def mark_message_superseded(
         self, tenant_id: str, message_id: str, superseded_by: str

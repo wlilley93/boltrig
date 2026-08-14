@@ -1,0 +1,10 @@
+id: DECISION-0019
+at: 2026-08-14T11:54:11Z
+by: williamlilley
+decision: Pending Chat turns can be reordered before execution, with one durable server-owned order shared by desktop, touch, reload and the next serial run.
+court_required: false
+why: The Principal explicitly asked for the queued-turn stack to be reorderable. The order must affect execution rather than merely repainting the browser, while preserving frozen message content and refusing stale cross-tab writes.
+basis:
+- USER-DIRECTION-2026-08-14:CHAT-QUEUE-CAN-BE-REORDERED
+- BOLTRIG-INVARIANT:US-CHAT-15-DURABLE-SERIAL-QUEUE
+- BOLTRIG-CONTRACT:OWNER-SCOPED-EXACT-QUEUE-CAS

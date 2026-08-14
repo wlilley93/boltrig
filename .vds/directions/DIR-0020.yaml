@@ -1,0 +1,9 @@
+id: DIR-0020
+logId: DECISION-0012
+decisionDigest: sha256:10aa42e92150d99464c8dfbb3d1d77f880189742483d4ab973c1bc7ad9ea62a5
+surface: !route
+  route: apps/worker/src/components/shell/ShellNav.tsx
+direction: Replace the static Boltrig wordmark in the primary shell with a compact switcher that names the selected companion and offers Familiar and Jarvis with descriptions and a selected check.
+magnitude: Apply the switcher to every non-Settings primary Shell route. Read the installed character registry and the existing agent.character preference, persist changes through the authenticated me-settings contract, and roll back visibly on refusal. Preserve the top command search, navigation geometry, keyboard and focus behavior, plugin registry compatibility, account/help controls and the independent Settings rail. Do not copy ChatGPT/Codex product labels, invent companions, alter chat dispatch or expose a client-only preference.
+directedAt: 2026-08-14T09:27:01Z
+notes: This is an additive Principal override to the Shell identity portion of DIR-0016. It makes no Figma parity, sign-off, frameDigest or conformity claim.

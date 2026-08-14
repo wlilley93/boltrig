@@ -40,6 +40,7 @@ from .credential_references import CredentialReferencePresencePG
 from .ai_key_proposals import AiKeyProposalStorePG
 from .mcp_lifecycle import McpLifecycleStorePG
 from .model_endpoints_postgres import ModelEndpointStorePG
+from .conversation_queue import ConversationQueueStorePG
 from .rows import (
     _adapter, _ai_config, _anchor, _audit, _checkpoint,
     _conversation, _hitl_req, _hitl_resp,
@@ -142,7 +143,7 @@ class PostgresStore(
     CredentialReferencePresencePG,
     AiKeyProposalStorePG,
     McpLifecycleStorePG,
-    ModelEndpointStorePG,
+    ModelEndpointStorePG, ConversationQueueStorePG,
 ):
     """asyncpg-backed Store. Domain methods live in partial mixins
     (e.g. ``ChannelStorePG``) to keep this file under the structural floor;
@@ -1741,7 +1742,6 @@ class PostgresStore(
             "DELETE FROM ai_configs WHERE tenant_id=$1 AND level=$2 AND scope_id=$3 AND modality=$4",
             tenant_id, level, scope_id, modality,
         )
-
 
 
 def _like_escape(value: str) -> str:

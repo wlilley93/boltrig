@@ -1,0 +1,9 @@
+id: DECISION-0013
+at: 2026-08-14T09:35:21Z
+by: williamlilley
+decision: The dark primary Boltrig shell will use a restrained green-black glass tint for the left task rail, separating it chromatically from the neutral chat canvas without adding a divider stroke.
+court_required: false
+why: The Principal supplied the Codex rail/canvas crop directly against Boltrig's nearly monochrome rail and called out the colour split. A scoped translucent green-black rail tint against the neutral near-black canvas reproduces that measured hierarchy without changing the independent right inspector, global dark tokens or the existing borderless-glass direction.
+basis:
+- USER-DIRECTION-2026-08-14:SHELL-COLOUR-SPLIT
+- BOLTRIG-DIRECTION:DIR-0016-BORDERLESS-GLASS-SHELL

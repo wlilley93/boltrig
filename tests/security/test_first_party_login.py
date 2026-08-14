@@ -106,6 +106,8 @@ def test_invite_only_no_self_signup_and_single_use(monkeypatch):
     ac = invitee_c.post("/v1/auth/accept-invite",
                         json={"token": token, "password": "newbie-password-123"})
     assert ac.status_code == 200
+    settings = _run(store.list_user_settings(T, "newbie@example.io"))
+    assert {row.key: row.value for row in settings}["setup.onboarding_version"] == 0
     assert _login(invitee_c, "newbie@example.io", "newbie-password-123").status_code == 200
 
     # The SAME token cannot be reused (single-use consume).
@@ -374,6 +376,8 @@ def test_initiate_is_idempotent_and_refuses_twice(monkeypatch):
     assert rc1 == 0
     seated = _run(shared.get_user(T, "founder@example.io"))
     assert seated is not None and seated.role == "superadmin"
+    settings = _run(shared.list_user_settings(T, "founder@example.io"))
+    assert {row.key: row.value for row in settings}["setup.onboarding_version"] == 0
     # A second run against the same store refuses (an owner already exists).
     rc2 = _run(initiate_mod._run("founder@example.io", "founder-password-123", T))
     assert rc2 != 0

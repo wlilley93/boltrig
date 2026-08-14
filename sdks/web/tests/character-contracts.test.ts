@@ -89,6 +89,7 @@ test("registration snapshots plugin metadata instead of retaining a mutable alia
     },
     mode: "conversation",
     phenotype: null,
+    sensing: {},
   }), null);
   assert.equal(Object.isFrozen(registered), true);
 });

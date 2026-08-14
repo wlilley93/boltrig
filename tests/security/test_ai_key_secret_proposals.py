@@ -294,6 +294,18 @@ def test_worker_retains_only_the_opaque_proposal_after_secret_intake() -> None:
     assert "client.finalizeAiKeyProposal(proposal.id)" in worker
     assert "hitl_request_id" not in worker
 
+    onboarding_form = (
+        ROOT / "apps/worker/src/components/onboarding/ProviderStep.tsx"
+    ).read_text(encoding="utf-8")
+    onboarding_state = (
+        ROOT / "apps/worker/src/components/onboarding/useProviderSetup.ts"
+    ).read_text(encoding="utf-8")
+    intake = (ROOT / "apps/worker/src/aiKeyIntake.ts").read_text(encoding="utf-8")
+    assert 'ref={setup.apiKeyInput}' in onboarding_form
+    assert "submitWriteOnlyAiKey(input" in onboarding_state
+    assert "const [apiKey" not in onboarding_state
+    assert intake.index('input.value = "";') < intake.index("return submission")
+
     spec = (
         ROOT / "boltrig/config/control_compat_specs.py"
     ).read_text(encoding="utf-8")

@@ -28,6 +28,7 @@ from boltrig.models import (
     AuditEvent,
     Channel,
     Conversation,
+    ConversationMessage,
     EvalCase,
     EvalRun,
     HITLRequest,
@@ -35,6 +36,7 @@ from boltrig.models import (
     HITLStatus,
     HITLType,
     MemoryFact,
+    MessageRole,
     MemoryProjectionStatus,
     ModelEndpoint,
     Noun,
@@ -67,9 +69,48 @@ _TABLES = (
     "idempotency_keys,credential_refs,tenant_permissions,memory_facts,"
     "memory_projection_statuses,"
     "integration_connections,integration_catalogue,"
-    "security_log,audit_rollup_anchors,conversations,channels,realtime_calls,"
+    "security_log,audit_rollup_anchors,conversation_steer_queue,conversation_messages,"
+    "conversations,channels,realtime_calls,"
     "realtime_call_events"
 )
+
+
+@pytest.mark.store
+@pytest.mark.invariant("US-CHAT-15")
+async def test_conversation_steer_queue_reorders_and_claims_atomically_on_both_stores(store):
+    conversation = Conversation(id="queue-order", tenant_id=T, user_id="alice")
+    await store.create_conversation(conversation)
+    first = ConversationMessage(
+        id="queued-first",
+        conversation_id=conversation.id,
+        tenant_id=T,
+        role=MessageRole.USER,
+        content="first",
+    )
+    second = ConversationMessage(
+        id="queued-second",
+        conversation_id=conversation.id,
+        tenant_id=T,
+        role=MessageRole.USER,
+        content="second",
+    )
+    await store.enqueue_conversation_steer(first)
+    await store.enqueue_conversation_steer(second)
+
+    original = [first.id, second.id]
+    reordered = [second.id, first.id]
+    assert await store.pending_conversation_steer_ids(T, conversation.id) == original
+    assert await store.reorder_conversation_steers(
+        T, conversation.id, original, reordered
+    )
+    # A stale tab cannot overwrite the newly accepted order.
+    assert not await store.reorder_conversation_steers(
+        T, conversation.id, original, original
+    )
+
+    claimed = await store.claim_next_conversation_steer(T, conversation.id, "run-2")
+    assert claimed is not None and claimed.id == second.id
+    assert await store.pending_conversation_steer_ids(T, conversation.id) == [first.id]
 
 
 async def _make_store(kind: str):

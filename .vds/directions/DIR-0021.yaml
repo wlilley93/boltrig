@@ -1,0 +1,9 @@
+id: DIR-0021
+logId: DECISION-0013
+decisionDigest: sha256:b0b80dcfac2f982ade24791b0848692c7f0abf45c757c7a1fe618e0c7f3dfa11
+surface: !route
+  route: apps/worker/src/components/ShellParity.css
+direction: Give the dark primary left rail the Codex reference's restrained green-black colour split against the neutral workspace canvas.
+magnitude: Apply the tint only to the non-Settings shared Shell rail in dark theme. Keep it borderless and glassy, retain the existing blur and geometry, provide an opaque equivalent when reduced transparency or backdrop filtering applies, and leave the main chat canvas, right inspector, light theme and Settings rail on their existing semantic surfaces.
+directedAt: 2026-08-14T09:35:30Z
+notes: This additive direction refines the surface colour in DIR-0016 and preserves its one-canvas glass hierarchy. It makes no Figma parity, sign-off, frameDigest or conformity claim.

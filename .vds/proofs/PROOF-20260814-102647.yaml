@@ -1,0 +1,97 @@
+id: PROOF-20260814-102647
+kind: visual_review
+status: vacuous
+warrant_id: null
+command: vds proof visual_review
+script: crates/vds-proof/src/visual_review.rs
+exit_code: 0
+rows_considered: 6
+rows_enforced: 0
+rows_skipped_reasons:
+  no_authority_frame_unsigned: 6
+violations:
+- location: VRW-0001 [apps/worker/src/components/ChatView.tsx]
+  rule: 'draft S-7D visual_review W1: no authority; coverage owed, never green, never red'
+  expected: a sign-off row matching the frame's current content hash
+  actual: 'no_authority: no sign-off row exists for iVQBKFc3NpRH3zdOOxfPqr/5:2: the frame was never signed The route has eyes on it and nothing to hold it to; this is COVERAGE OWED, and it is neither a pass nor a failure.'
+  severity: warning
+  drift: undetermined
+- location: VRW-0001 [apps/worker/src/components/ChatView.tsx]
+  rule: 'draft S-7D(8) visual_review W5: partial study must read as partial study'
+  expected: every region of the closed set examined, or recorded as not examined with its reason
+  actual: 5 of 7 listed region(s) examined. Depth is on the face of the record so that partial study reads as partial study.
+  severity: warning
+  drift: undetermined
+- location: VRW-0002 [apps/worker/src/components/PermanentFleetTopology.tsx]
+  rule: 'draft S-7D visual_review W1: no authority; coverage owed, never green, never red'
+  expected: a sign-off row matching the frame's current content hash
+  actual: 'no_authority: no sign-off row exists for iVQBKFc3NpRH3zdOOxfPqr/15:2: the frame was never signed The route has eyes on it and nothing to hold it to; this is COVERAGE OWED, and it is neither a pass nor a failure.'
+  severity: warning
+  drift: undetermined
+- location: VRW-0002 [apps/worker/src/components/PermanentFleetTopology.tsx]
+  rule: 'draft S-7D(8) visual_review W5: partial study must read as partial study'
+  expected: every region of the closed set examined, or recorded as not examined with its reason
+  actual: 3 of 7 listed region(s) examined. Depth is on the face of the record so that partial study reads as partial study.
+  severity: warning
+  drift: undetermined
+- location: VRW-0003 [apps/worker/src/components/IntegrationsView.tsx]
+  rule: 'draft S-7D visual_review W1: no authority; coverage owed, never green, never red'
+  expected: a sign-off row matching the frame's current content hash
+  actual: 'no_authority: no sign-off row exists for iVQBKFc3NpRH3zdOOxfPqr/14:2: the frame was never signed The route has eyes on it and nothing to hold it to; this is COVERAGE OWED, and it is neither a pass nor a failure.'
+  severity: warning
+  drift: undetermined
+- location: VRW-0003 [apps/worker/src/components/IntegrationsView.tsx]
+  rule: 'draft S-7D(8) visual_review W5: partial study must read as partial study'
+  expected: every region of the closed set examined, or recorded as not examined with its reason
+  actual: 3 of 7 listed region(s) examined. Depth is on the face of the record so that partial study reads as partial study.
+  severity: warning
+  drift: undetermined
+- location: VRW-0004 [apps/worker/src/components/CommandPalette.tsx]
+  rule: 'draft S-7D visual_review W1: no authority; coverage owed, never green, never red'
+  expected: a sign-off row matching the frame's current content hash
+  actual: 'no_authority: no sign-off row exists for iVQBKFc3NpRH3zdOOxfPqr/16:2: the frame was never signed The route has eyes on it and nothing to hold it to; this is COVERAGE OWED, and it is neither a pass nor a failure.'
+  severity: warning
+  drift: undetermined
+- location: VRW-0004 [apps/worker/src/components/CommandPalette.tsx]
+  rule: 'draft S-7D(8) visual_review W5: partial study must read as partial study'
+  expected: every region of the closed set examined, or recorded as not examined with its reason
+  actual: 4 of 7 listed region(s) examined. Depth is on the face of the record so that partial study reads as partial study.
+  severity: warning
+  drift: undetermined
+- location: VRW-0005 [apps/worker/src/components/VoiceCall.tsx]
+  rule: 'draft S-7D visual_review W1: no authority; coverage owed, never green, never red'
+  expected: a sign-off row matching the frame's current content hash
+  actual: 'no_authority: no sign-off row exists for iVQBKFc3NpRH3zdOOxfPqr/17:2: the frame was never signed The route has eyes on it and nothing to hold it to; this is COVERAGE OWED, and it is neither a pass nor a failure.'
+  severity: warning
+  drift: undetermined
+- location: VRW-0005 [apps/worker/src/components/VoiceCall.tsx]
+  rule: 'draft S-7D(8) visual_review W5: partial study must read as partial study'
+  expected: every region of the closed set examined, or recorded as not examined with its reason
+  actual: 3 of 7 listed region(s) examined. Depth is on the face of the record so that partial study reads as partial study.
+  severity: warning
+  drift: undetermined
+- location: VRW-0006 [apps/worker/src/components/SettingsSurface.tsx]
+  rule: 'draft S-7D visual_review W1: no authority; coverage owed, never green, never red'
+  expected: a sign-off row matching the frame's current content hash
+  actual: 'no_authority: no sign-off row exists for iVQBKFc3NpRH3zdOOxfPqr/22:2: the frame was never signed The route has eyes on it and nothing to hold it to; this is COVERAGE OWED, and it is neither a pass nor a failure.'
+  severity: warning
+  drift: undetermined
+- location: VRW-0006 [apps/worker/src/components/SettingsSurface.tsx]
+  rule: 'draft S-7D(8) visual_review W5: partial study must read as partial study'
+  expected: every region of the closed set examined, or recorded as not examined with its reason
+  actual: 3 of 7 listed region(s) examined. Depth is on the face of the record so that partial study reads as partial study.
+  severity: warning
+  drift: undetermined
+notes:
+- '[reserved] This kind validates, stores and stales VERDICT RECORDS. The capture and review pipeline (render, screenshot, export, compare) lives in the consuming repo: a proof may not call a network or a model (VDS S-7(2)(1)). The verdict vocabulary is conform | deviate | no_authority, and there is NO ACCEPTANCE STATE: an addition the frame omits is a deviation exactly like a missing element, and its resolution path is a new signed frame version recorded as a redraw, never an engine-side excusal. A delta''s DISPOSITION classifies a difference and never disposes of it: the taxonomy carries no `accepted` and no `wont_fix`, because either would be a fourth verdict wearing a different field name, reachable by the recorder rather than by the signer. BEFORE a surface''s frame is entered in the sign-off register this kind REPORTS AND NEVER BLOCKS ([2026] VJS-SC-OPBOX 1 orders 20, 23 and 24): registration is the moment a surface flips from report to block, and there is no estate-wide flag day.'
+- '[stage-4 coverage] 6 route(s) enumerated by the estate (docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json (sha256:1f0b669ccb457c9126e147d68709b050b8801b97c53620a18edf4635f6c00d32) and metrics.json (sha256:d0e66d3b4a858366fc2e0b5296b606feee235bf7ac40d2d88decfd80d00f48d2)): 6 CURRENT (a verdict against the current artefact AND the current contract), 0 OWED BY DRIFT (the code or the frame moved since the verdict, so the route is not reviewed - it is owed), 0 NEVER REVIEWED (named above, one warning each). A route is covered at stage 4 only while all three hashes hold.'
+- '[manifest] the estate states its enumeration does NOT cover: VDS route coverage cannot distinguish the Chat run and New chat states because both are rendered by ChatView.tsx; the seven-state current capture manifest retains that distinction.; SCR-0007 / Figma node 13:2 has no non-invented frameDigest and cannot occupy a second route-scoped visual-review slot.; This captured-unreviewed route manifest carries no frameDigest, sign-off, conformity verdict or visual-review authority.; There is no signed full-frame target for New chat; routes without a 2026-08-11 Figma CURRENT SOURCE frame are outside this parity programme.'
+- '[region correspondence] R14 ran on 6 route(s) and COULD NOT RUN on 0 route(s), each named above. It runs only where a screen record claims the route AND declares its bands, so a route missing either has an UNCHECKED checklist rather than a clean one. The key is the screen record''s `bands` and never its `regions`: the region vocabulary is the subject''s own and is deliberately open, and an open set cannot refuse a name that is not a band.'
+- '[pipeline] This kind is STAGE 4 of four, in fixed order: (1) the machine-readable contract derived from signed frames, (2) Figma AND code both built to that contract, (3) source-side gates per push, (4) this artefact-side visual check per route. STAGE 3 AND STAGE 4 ARE NOT SUBSTITUTES: gates read SOURCE and cannot see the page; the visual check reads the PAGE and is slow and sampled. Neither may be cited as covering the other''s ground. On the motivating estate, 28 green stage-3 gates were read as evidence about stage 4, and the pages looked nothing like their frames.'
+inputs_digest: sha256:cb28cdd55c5fcd7144b2683b4a183227b29092185c135f87512936c2ddc4227a
+digest: sha256:09643e518a2968acafe5e7f549b3f4fedaabf4d3827daf5a127b67dcc48bc759
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-14T10:26:47Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

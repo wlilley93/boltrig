@@ -68,6 +68,18 @@ GET /v1/artifacts/{artifact_id}/download downloadArtifact
 """,
 )
 _surface(
+    "apps/worker/src/components/chat/useConversationQueue.ts",
+    """
+PUT /v1/conversations/{conversation_id}/queue reorderConversationQueue
+""",
+)
+_surface(
+    "apps/worker/src/components/chat/ToolReceiptDetails.tsx",
+    """
+GET /v1/runs/{run_id}/events runEvents
+""",
+)
+_surface(
     "apps/worker/src/components/chat/useStagePhenotype.ts",
     """
 GET /v1/familiar/phenotype familiarPhenotype
@@ -135,6 +147,12 @@ PUT /v1/me/settings putMeSettings
 GET /v1/me/activity meActivity
 GET /v1/me/export meExport
 GET /v1/privacy/policy privacyPolicy
+""",
+)
+_surface(
+    "apps/worker/src/components/onboarding/OnboardingGate.tsx",
+    """
+PATCH /v1/me/profile updateMeProfile
 """,
 )
 _surface(
@@ -583,7 +601,6 @@ PUT /v1/admin/config/{section}
 GET /v1/admin/config/{section}/history
 POST /v1/admin/config/{section}/rollback
 GET /v1/admin/credentials
-GET /v1/runs/{run_id}/events
 """,
 )
 _non_ui(
@@ -676,4 +693,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 }
 
 
-EXPECTED_ROUTE_COUNT = 276
+EXPECTED_ROUTE_COUNT = 278

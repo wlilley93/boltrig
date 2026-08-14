@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-14T12:17:54.842Z",
+  "capturedAt": "2026-08-14T12:33:37.949Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,12 +17,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "ea09d1543943ab9e0d366df153d121841b3c96e8c45d2769a37223b54aaf2862",
-    "digestAfterCapture": "ea09d1543943ab9e0d366df153d121841b3c96e8c45d2769a37223b54aaf2862",
+    "digestBeforeCapture": "1442418fe59432f45dccc4b6b7b49d9ee2bd8005f6835db4d17b03944e68d18e",
+    "digestAfterCapture": "1442418fe59432f45dccc4b6b7b49d9ee2bd8005f6835db4d17b03944e68d18e",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/console-target",
-    "head": "360311c3a6b447374aaa66d1603919964da16b16",
-    "dirty": false
+    "head": "f152c7cae948a2cd5cf367e71282a6e02666d200",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
@@ -40,7 +40,7 @@
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "e6f04155e653dc0447b8ec485ebde810148629c253d35715597e5108dcb18a25",
+      "sha256": "dcb69301bda3cedd987815a3f1b6bde5b600deb7e61461fe9c65d33102e7ca42",
       "width": 1440,
       "height": 900,
       "captureContract": {

@@ -121,6 +121,25 @@ run_gate() { # run_gate "<name>" <make target> [make args...]
 run_gate "codex pin health" codex-pin-health
 run_gate "continuity projection" continuity-projection
 
+# Visual evidence freshness. 1.8s measured, and it closes a gap this hook already
+# names: the vitest that asserts it lives in worker-quality, which this hook does
+# NOT run, so nothing local refused a source change that left its capture behind.
+# That is the gap 1b18dd4 wrote up as "a source change and its evidence capture
+# are two commits that must move together, and nothing refuses the first without
+# the second until some gate reads them side by side."
+#
+# It runs the EXISTING test rather than recomputing the digest here. A second
+# implementation of the hashing scheme would be free to drift from the one that
+# produces the receipt, and then this gate would go green about a rule nobody
+# enforces - the `make check` failure mode documented at the top of this file.
+#
+# SCOPE, so this does not become another hook that is trusted and wrong: it reads
+# the WORKING TREE, because that is what the capture is generated from. Untracked
+# files under apps/worker/src therefore count. That is not stricter than the
+# existing contract - the vitest fails on exactly the same condition - but it does
+# mean unrelated work-in-progress under src blocks the push until re-captured.
+run_gate "visual evidence freshness" visual-evidence
+
 # The one CI job outside test-and-gate that is worth running here, and it is worth running for the
 # INTERPRETER rather than for the compose files. `PY ?= .venv/bin/python`, so every local run of
 # this target has the project installed; CI passes `PY=python` to a runner that ran setup-python
@@ -189,7 +208,9 @@ fi
 # one is what let PR #266 push on a green print.
 echo ""
 echo "[pre-push] the gates ABOVE are green. NOT run here, and NOT predicted by this:"
-echo "[pre-push]   worker-build            make worker-quality"
+echo "[pre-push]   worker-build            make worker-quality (EXCEPT the one visual-evidence"
+echo "[pre-push]                           test run above — audit, typecheck, the other 819 tests"
+echo "[pre-push]                           and the build are still unlooked-at)"
 echo "[pre-push]   worker-desktop-package  cargo test + tauri build, x3 incl. windows-2025"
 echo "[pre-push]   site-build-test-lint    make site-quality"
 echo "[pre-push]   source-security         python-audit, sast, iac-scan, secret-scan, actionlint"

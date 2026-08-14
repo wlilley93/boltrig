@@ -175,14 +175,19 @@ describe("console sidebar", () => {
     const { onRoute } = renderSidebar();
 
     // The decided target's sidebar carries four surfaces and no second group.
-    const expectations: Array<[string, WorkerRoute]> = [
-      ["New chat", "chat"],
-      ["Agents", "agents"],
-      ["Plugins", "integrations"],
-      ["Routines", "automations"],
+    const expectations: Array<[string, WorkerRoute, string, number, number]> = [
+      ["New chat", "chat", "0 0 20 20", 1, 0],
+      ["Agents", "agents", "0 0 20 20", 2, 3],
+      ["Plugins", "integrations", "0 0 20 20", 1, 0],
+      ["Routines", "automations", "0 0 18 18", 1, 0],
     ];
-    for (const [label, route] of expectations) {
-      fireEvent.click(screen.getByRole("button", { name: label }));
+    for (const [label, route, viewBox, pathCount, circleCount] of expectations) {
+      const button = screen.getByRole("button", { name: label });
+      const icon = button.querySelector("svg")!;
+      expect(icon.getAttribute("viewBox")).toBe(viewBox);
+      expect(icon.querySelectorAll("path")).toHaveLength(pathCount);
+      expect(icon.querySelectorAll("circle")).toHaveLength(circleCount);
+      fireEvent.click(button);
       expect(onRoute).toHaveBeenLastCalledWith(route);
     }
   });
@@ -414,9 +419,24 @@ describe("console sidebar", () => {
       .toBe("page");
     expect(container.querySelector(".shell-recent-meta")).toBeNull();
     expect(container.querySelector(".session-row.active .session-actions")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Pin Integrate EMEET Pixy with Boltrig" }));
+    const pinButton = screen.getByRole("button", { name: "Pin Integrate EMEET Pixy with Boltrig" });
+    const archiveButton = screen.getByRole("button", {
+      name: "Archive Integrate EMEET Pixy with Boltrig",
+    });
+    for (const button of [pinButton, archiveButton]) {
+      const icon = button.querySelector("svg")!;
+      expect(icon.getAttribute("viewBox")).toBe("0 0 20 20");
+      expect(icon.getAttribute("fill")).toBe("currentColor");
+      expect(icon.getAttribute("stroke")).toBeNull();
+    }
+    expect(pinButton.querySelectorAll("path")).toHaveLength(1);
+    expect(archiveButton.querySelectorAll("path")).toHaveLength(2);
+
+    fireEvent.click(pinButton);
     expect(screen.getByRole("button", { name: "Unpin Integrate EMEET Pixy with Boltrig" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Archive Integrate EMEET Pixy with Boltrig" }));
+    fireEvent.click(screen.getByRole("button", {
+      name: "Archive Integrate EMEET Pixy with Boltrig",
+    }));
     await waitFor(() => expect(api.deleteMyConversation).toHaveBeenCalledWith("pixy"));
   });
 

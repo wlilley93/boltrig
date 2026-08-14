@@ -1,0 +1,21 @@
+id: PROOF-20260814-100201
+kind: geometry
+status: vacuous
+warrant_id: null
+command: vds proof geometry
+script: crates/vds-proof/src/geometry.rs
+exit_code: 0
+rows_considered: 0
+rows_enforced: 0
+rows_skipped_reasons: {}
+violations: []
+notes:
+- '[reserved] This kind checks the BOUND and its DIRECTION. What counts as a compliant radius, boundary weight, spacing step or type step is the subject''s design system talking, and VDS does not hold those thresholds: deciding them here would make VDS a fourth design authority. So a reading that calls everything compliant passes this proof, and the honesty of the reading is the generator''s to establish, per VDS S-4(2), by being byte-reproducible from the shipped artefact.'
+- '[scope] no geometry bound is declared, so every row is skipped and this run is vacuous. That is the honest state of a project that has not yet undertaken to reduce any shape, and it is NOT evidence: VDS S-7(2)(4) refuses a vacuous run as warrant evidence for exactly this reason.'
+inputs_digest: sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
+digest: sha256:2a88f7710c4bfae91c9ce54bc5433e87394561fe1261e0aeb182f399c1f60d73
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-14T10:01:56Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

@@ -213,7 +213,7 @@ describe("console parity evidence manifest", () => {
       "The background is the same completed persisted turn as Chat run; no live HITL, computer-use or spend state is fabricated.",
     );
     expect(palette!.direction_records).toEqual([
-      "DIR-0006", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022",
+      "DIR-0006", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0028", "DIR-0029",
     ]);
     expect(palette!.required_presence_selectors).toEqual(expect.arrayContaining([
       ".sidebar.shell-parity",
@@ -277,7 +277,7 @@ describe("console parity evidence manifest", () => {
       | undefined;
 
     expect(plugins).toBeDefined();
-    expect(plugins!.direction_records).toEqual(["DIR-0004", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021"]);
+    expect(plugins!.direction_records).toEqual(["DIR-0004", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021", "DIR-0028", "DIR-0029"]);
     expect(plugins!.required_presence_selectors).not.toContain(".sidebar.shell-parity");
     expect(plugins!.required_presence_selectors).toEqual(expect.arrayContaining([
       ".plugins-pane",
@@ -338,6 +338,7 @@ describe("console parity evidence manifest", () => {
       expect(state!.direction_records).toEqual([
         "DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021",
         ...(state!.id === "chat-run" ? ["DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027"] : []),
+        "DIR-0028", "DIR-0029",
       ]);
       expect(state!.required_presence_selectors).toContain(".sidebar.shell-parity");
       expect(state!.required_presence_selectors).toEqual(expect.arrayContaining([
@@ -525,7 +526,7 @@ describe("console parity evidence manifest", () => {
       "/v1/conversations/direction-thread",
     );
     expect(direction!.direction_records).toEqual([
-      "DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027",
+      "DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027", "DIR-0028", "DIR-0029",
     ]);
     expect(direction!.reference_digest_manifest).toBe(
       "docs/design/evidence/2026-08-11-chat-ui-direction/references.sha256",
@@ -777,7 +778,7 @@ describe("console parity evidence manifest", () => {
       | ContractState
       | undefined;
     expect(call).toBeDefined();
-    expect(call!.direction_records).toEqual(["DIR-0005", "DIR-0010", "DIR-0015", "DIR-0016"]);
+    expect(call!.direction_records).toEqual(["DIR-0005", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0028", "DIR-0029"]);
     expect(call!.required_presence_selectors).toEqual(expect.arrayContaining([
       ".voice-call-title",
       ".voice-call-leave",
@@ -906,7 +907,7 @@ describe("console parity evidence manifest", () => {
       | ContractState
       | undefined;
     expect(agents).toBeDefined();
-    expect(agents!.direction_records).toEqual(["DIR-0003", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021"]);
+    expect(agents!.direction_records).toEqual(["DIR-0003", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021", "DIR-0028", "DIR-0029"]);
     expect(agents!.required_visible_selectors).toEqual(expect.arrayContaining([
       ".agents-fleet-topbar .console-seg",
       ".agents-fleet-topbar .console-primary",

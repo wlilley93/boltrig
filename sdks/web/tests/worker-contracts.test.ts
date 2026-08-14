@@ -246,6 +246,38 @@ test("chat attachment preflight reads the server-owned limits contract", async (
   assert.equal(url, "/v1/chat/config");
 });
 
+test("conversation queue reorder sends a complete optimistic order snapshot", async () => {
+  let url = "";
+  let request: RequestInit | undefined;
+  const client = new BoltrigClient({
+    fetch: async (input, init) => {
+      url = String(input);
+      request = init;
+      return new Response(JSON.stringify({
+        status: "ok",
+        message_ids: ["queued-b", "queued-a"],
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+
+  assert.deepEqual(await client.reorderConversationQueue("conversation-a", {
+    expected_message_ids: ["queued-a", "queued-b"],
+    message_ids: ["queued-b", "queued-a"],
+  }), {
+    status: "ok",
+    message_ids: ["queued-b", "queued-a"],
+  });
+  assert.equal(url, "/v1/conversations/conversation-a/queue");
+  assert.equal(request?.method, "PUT");
+  assert.deepEqual(JSON.parse(String(request?.body)), {
+    expected_message_ids: ["queued-a", "queued-b"],
+    message_ids: ["queued-b", "queued-a"],
+  });
+});
+
 test("effective model policy uses the redacted author projection", async () => {
   let url = "";
   const client = new BoltrigClient({
@@ -455,6 +487,46 @@ test("conversation follow uses projected cursor frames and ignores heartbeats", 
   assert.deepEqual(result, { status: "ended", cursor: 6 });
 });
 
+test("run event snapshots preserve authorized redacted execution detail on demand", async () => {
+  let url = "";
+  let request: RequestInit | undefined;
+  const client = new BoltrigClient({
+    accessToken: () => "session",
+    fetch: async (input, init) => {
+      url = String(input);
+      request = init;
+      return new Response(
+        'data: {"type":"tool_call","run_id":"r1","tool":"exec_command","call_id":"x","input":{"cmd":"pnpm test","token":"[redacted]"}}\n\n' +
+        'data: {"type":"tool_result","run_id":"r1","call_id":"x","status":"ok","output":{"output":"3 passed","exit_code":0}}\n\n',
+        { status: 200, headers: { "content-type": "text/event-stream" } },
+      );
+    },
+  });
+
+  const events = await client.runEvents("run/a");
+
+  assert.equal(url, "/v1/runs/run%2Fa/events");
+  assert.equal(request?.method, "GET");
+  assert.equal(request?.credentials, "include");
+  assert.equal(new Headers(request?.headers).get("authorization"), "Bearer session");
+  assert.deepEqual(events, [
+    {
+      type: "tool_call",
+      run_id: "r1",
+      tool: "exec_command",
+      call_id: "x",
+      input: { cmd: "pnpm test", token: "[redacted]" },
+    },
+    {
+      type: "tool_result",
+      run_id: "r1",
+      call_id: "x",
+      status: "ok",
+      output: { output: "3 passed", exit_code: 0 },
+    },
+  ]);
+});
+
 test("conversation follow reports an idle active-run lookup without inventing a run", async () => {
   const client = new BoltrigClient({
     fetch: async () => new Response(
@@ -639,6 +711,7 @@ test("Worker parity methods stay on the canonical scoped kernel routes", async (
   });
 
   await client.meSettings();
+  await client.updateMeProfile({ display_name: "Alex Example" });
   await client.conversationsPage(25, 50);
   await client.searchConversations("renewal / terms", 25, 50);
   await client.login({ email: "worker@example.com", password: "not-a-real-secret" });
@@ -718,6 +791,7 @@ test("Worker parity methods stay on the canonical scoped kernel routes", async (
 
   assert.deepEqual(requests.map((item) => item.url), [
     "/v1/me/settings",
+    "/v1/me/profile",
     "/v1/conversations?limit=25&offset=50",
     "/v1/conversations/search?q=renewal+%2F+terms&limit=25&offset=50",
     "/v1/auth/login",
@@ -782,6 +856,12 @@ test("Worker parity methods stay on the canonical scoped kernel routes", async (
   for (const item of requests.filter((request) => request.init?.method === "POST")) {
     assert.equal(new Headers(item.init?.headers).get("x-boltrig-csrf"), "csrf-value");
   }
+  const profileRequest = requests.find((item) => item.url === "/v1/me/profile");
+  assert.equal(profileRequest?.init?.method, "PATCH");
+  assert.equal(new Headers(profileRequest?.init?.headers).get("x-boltrig-csrf"), "csrf-value");
+  assert.deepEqual(JSON.parse(String(profileRequest?.init?.body)), {
+    display_name: "Alex Example",
+  });
   assert.deepEqual(
     JSON.parse(String(requests.find((item) => item.url === "/v1/knowledge/search")?.init?.body)),
     { query: "renewal period", limit: 7 },

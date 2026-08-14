@@ -66,7 +66,7 @@ async def _reserve_or_queue(service, request, conversation, records, run_id):
                 "a model choice cannot change while a conversation turn is active"
             )
         message_id = uuid.uuid4().hex
-        await service._store.add_message(  # noqa: SLF001
+        await service._store.enqueue_conversation_steer(  # noqa: SLF001
             ConversationMessage(
                 id=message_id,
                 conversation_id=conversation.id,
@@ -184,8 +184,9 @@ async def _next_turn(service, request, conversation, current_run_id):
             != current_run_id
         ):
             return None
+        run_id = uuid.uuid4().hex
         steer = await service._next_pending_steer(  # noqa: SLF001
-            request.tenant_id, conversation.id
+            request.tenant_id, conversation.id, run_id
         )
         if steer is None:
             service._clear_active_run(  # noqa: SLF001
@@ -194,7 +195,6 @@ async def _next_turn(service, request, conversation, current_run_id):
                 expected=current_run_id,
             )
             return None
-        run_id = uuid.uuid4().hex
         service._set_active_run(  # noqa: SLF001
             request.tenant_id, conversation.id, run_id
         )

@@ -1224,6 +1224,29 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
 );
 CREATE INDEX IF NOT EXISTS conv_messages_idx ON conversation_messages (conversation_id, created_at);
 
+-- Mutable scheduling metadata for otherwise frozen queued user messages. The
+-- message row remains the durable content authority; this projection controls
+-- only which pending steer the next serial turn claims.
+CREATE TABLE IF NOT EXISTS conversation_steer_queue (
+    tenant_id       TEXT NOT NULL,
+    conversation_id TEXT NOT NULL,
+    message_id      TEXT NOT NULL,
+    queue_position  BIGINT NOT NULL CHECK (queue_position > 0),
+    claimed_run_id  TEXT,
+    enqueued_at     TIMESTAMPTZ NOT NULL,
+    claimed_at      TIMESTAMPTZ,
+    PRIMARY KEY (tenant_id, message_id),
+    FOREIGN KEY (tenant_id, conversation_id)
+      REFERENCES conversations(tenant_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, message_id)
+      REFERENCES conversation_messages(tenant_id, id) ON DELETE CASCADE,
+    CHECK ((claimed_run_id IS NULL) = (claimed_at IS NULL))
+);
+CREATE INDEX IF NOT EXISTS conversation_steer_queue_pending_idx
+  ON conversation_steer_queue
+  (tenant_id, conversation_id, queue_position, enqueued_at, message_id)
+  WHERE claimed_run_id IS NULL;
+
 -- Append-only DERIVED conversation summaries (long-conversation compaction). A
 -- summary is a cheap derived view of a conversation's OLDER turns so the
 -- continuity composer can send [summary + recent verbatim tail] past a threshold

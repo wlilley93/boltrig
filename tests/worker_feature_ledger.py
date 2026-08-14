@@ -908,9 +908,9 @@ _governed_controls(
     "These non-secret controls retain only exact typed route inputs plus an internal approval id, query caller-owned state, replay the same SDK method and invalidate edits, selection changes and refreshes.",
 )
 _governed_controls(
-    "ChatView.tsx chat/WorkDisclosure.tsx",
+    "ChatView.tsx chat/WorkDisclosure.tsx chat/ToolReceiptDetails.tsx",
     ("worker", "worker", "worker", "worker", "worker"),
-    "The chat surface renders HITL requests raised BY a turn: it shows the question and the options the kernel supplied, and replays the operator's decision through the same respondHitl method. It composes no approval of its own, retains only the request id, and settles nothing locally - a decision that never reaches the kernel leaves the turn parked, which is the correct failure.",
+    "The chat surface renders HITL requests raised BY a turn: it shows the question and the options the kernel supplied, and replays the operator's decision through the same respondHitl method. Its explicitly opened tool disclosure reads only the caller-visible, server-redacted run snapshot and settles nothing. It composes no approval of its own, retains only bounded display state or the request id, and a decision that never reaches the kernel leaves the turn parked, which is the correct failure.",
 )
 _governed_controls(
     "settings/CompactSections.tsx",

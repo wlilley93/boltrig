@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import unicodedata
+from dataclasses import replace
+
 from fastapi import Query, Request
 from fastapi.responses import JSONResponse
 
@@ -12,6 +15,35 @@ from .approval_posture import APPROVAL_POSTURE_SETTING
 from .approval_posture_routes import register_approval_posture_routes
 from .sensing_policy import SENSING_KEYS
 from .sensing_routes import register_sensing_routes
+
+
+def _preferred_name(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    name = " ".join(value.strip().split())
+    if not 1 <= len(name) <= 80:
+        return None
+    if any(unicodedata.category(char) in {"Cc", "Cf", "Cs"} for char in name):
+        return None
+    return name
+
+
+def _register_profile_route(app, P, K, audit, user_view) -> None:
+    @app.patch("/v1/me/profile")
+    async def update_my_profile(body: dict, k=K, p=P) -> JSONResponse:
+        display_name = _preferred_name(body.get("display_name"))
+        if display_name is None:
+            return JSONResponse(
+                {"status": "error", "reason": "display_name must be 1-80 safe characters"},
+                status_code=400,
+            )
+        user = await k.store.get_user(p.tenant_id, p.subject)
+        if user is None:
+            return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
+        updated = replace(user, display_name=display_name)
+        await k.store.upsert_user(updated)
+        await audit(k, p, "profile.update", {"fields": ["display_name"]})
+        return JSONResponse({"status": "ok", "profile": user_view(updated)})
 
 
 def _register_settings_routes(app, P, K, audit, user_view) -> None:
@@ -198,6 +230,7 @@ def _register_regenerate_route(app, P, K, audit) -> None:
 
 
 def register_account_profile_routes(app, P, K, audit, user_view) -> None:
+    _register_profile_route(app, P, K, audit, user_view)
     _register_settings_routes(app, P, K, audit, user_view)
     register_approval_posture_routes(app, P, K, audit)
     register_sensing_routes(app, P, K, audit)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -10,6 +11,52 @@ from fastapi import Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 _CURSOR_MAX = (1 << 63) - 1
+_QUEUE_ID = re.compile(r"[A-Za-z0-9._:-]{1,160}\Z")
+_QUEUE_MAX = 100
+
+
+def _queue_order(value: Any) -> list[str] | None:
+    if type(value) is not list or len(value) > _QUEUE_MAX:
+        return None
+    if any(type(item) is not str or _QUEUE_ID.fullmatch(item) is None for item in value):
+        return None
+    if len(set(value)) != len(value):
+        return None
+    return value
+
+
+async def _reorder_queue(chat: Any, principal: Any, conversation_id: str, body: dict):
+    expected = _queue_order(body.get("expected_message_ids"))
+    ordered = _queue_order(body.get("message_ids"))
+    if expected is None or ordered is None or set(expected) != set(ordered):
+        return JSONResponse(
+            {"status": "error", "reason": "queue_order_invalid"},
+            status_code=400,
+        )
+    changed = await chat.reorder_pending_steers(
+        principal.tenant_id,
+        principal.subject,
+        conversation_id,
+        expected,
+        ordered,
+    )
+    if not changed:
+        return JSONResponse(
+            {"status": "conflict", "reason": "queue_changed"},
+            status_code=409,
+        )
+    return {"status": "ok", "message_ids": ordered}
+
+
+def _register_queue_route(app: Any, principal: Any) -> None:
+    @app.put("/v1/conversations/{conversation_id}/queue")
+    async def reorder_conversation_queue(
+        conversation_id: str, body: dict[str, Any], request: Request, p=principal
+    ):
+        chat = getattr(request.app.state, "chat", None)
+        if chat is None:
+            return JSONResponse({"error": "chat_unavailable"}, status_code=503)
+        return await _reorder_queue(chat, p, conversation_id, body)
 
 
 def _message_view(message: Any) -> dict[str, Any]:
@@ -61,6 +108,7 @@ async def _event_stream(
 
 def register_conversation_live_routes(app: Any, *, principal_dep: Any) -> None:
     principal = Depends(principal_dep)
+    _register_queue_route(app, principal)
 
     @app.get("/v1/chat/config")
     async def chat_config(request: Request, p=principal):
@@ -86,10 +134,14 @@ def register_conversation_live_routes(app: Any, *, principal_dep: Any) -> None:
         model_context = await chat.context_compaction_view(
             p.tenant_id, conversation_id, messages
         )
+        queued_message_ids = await chat.pending_steer_ids(
+            p.tenant_id, p.subject, p.role, conversation_id
+        )
         return {
             "messages": [_message_view(message) for message in messages],
             "active_run_id": run_id,
             "model_context": model_context,
+            "queued_message_ids": queued_message_ids or [],
         }
 
     @app.get("/v1/conversations/{conversation_id}/events")

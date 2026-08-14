@@ -127,6 +127,9 @@ structure: ## Enforce Python file/function size limits and expiring debt ratchet
 vds-ledgers: ## Refuse stale VDS screen and visual-route ownership ledgers
 	$(PY) scripts/check_vds_ledgers.py
 
+visual-evidence: ## Refuse a capture receipt that no longer describes apps/worker/src
+	cd apps/worker && $(PNPM) exec vitest run tests/visual/manifest.test.ts --reporter=dot
+
 codex-protocol: ## Verify the exact checked-in stable Codex App Server protocol pin
 	$(PY) scripts/check_codex_protocol.py
 

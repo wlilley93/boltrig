@@ -1,0 +1,10 @@
+id: DECISION-0015
+at: 2026-08-14T10:20:54Z
+by: williamlilley
+decision: The phone-width Chat surface will use the same semantic canvas, compact typography and calm disclosure rhythm as desktop Chat, with queued work docked above a multiline composer.
+court_required: false
+why: The Principal compared Codex and Boltrig at a thin viewport and identified the separate oversized mobile palette, always-expanded agent tree, count-only tool row and single-line composer as the wrong hierarchy. The responsive projection should preserve real Boltrig actions and minimum touch-target tokens while matching the shared Chat language rather than acting as a second visual product.
+basis:
+- USER-DIRECTION-2026-08-14:THIN-CHAT-PARITY
+- BOLTRIG-INVARIANT:NFR-MNT-08-SOURCE-BOUND-VISUAL-EVIDENCE
+- BOLTRIG-INVARIANT:SEC-WRK-02-WORKER-SECRET-BOUNDARY

@@ -132,7 +132,7 @@
         "Work through a list",
         "Keep an eye on something"
       ],
-      "direction_records": ["DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021"],
+      "direction_records": ["DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0028", "DIR-0029"],
       "known_contract_bound_deviations": [
         "Voice availability is represented by the real idle control; no microphone or realtime media session is fabricated.",
         "The latest user direction overrides the duplicated waveform in the static frame: one voice action is shown once, while the real VoiceCall controller remains mounted and hidden behind the empty-draft primary.",
@@ -288,7 +288,7 @@
         "script run by",
         "depth 1"
       ],
-      "direction_records": ["DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027"],
+      "direction_records": ["DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027", "DIR-0028", "DIR-0029"],
       "known_contract_bound_deviations": [
         "The evidence uses a completed persisted turn, not fabricated live SSE progress; the structured events are the durable transcript contract.",
         "No generated artifact is claimed because the fixture exposes no governed artifact record for this turn.",
@@ -362,7 +362,7 @@
       "required_computed_styles": [
         { "selector": ".sidebar.shell-parity", "property": "background-color", "value": "rgba(32, 36, 29, 0.96)" }
       ],
-      "direction_records": ["DIR-0003", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021"],
+      "direction_records": ["DIR-0003", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021", "DIR-0028", "DIR-0029"],
       "known_contract_bound_deviations": [
         "Runtime liveness and authority envelopes are not exposed by these contracts, so the topology renders them as unknown instead of inventing live or full-authority states.",
         "Windowed per-agent spend is unavailable and remains shown as unavailable."
@@ -456,7 +456,7 @@
       "required_computed_styles": [
         { "selector": ".sidebar.shell-parity", "property": "background-color", "value": "rgba(32, 36, 29, 0.96)" }
       ],
-      "direction_records": ["DIR-0004", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021"],
+      "direction_records": ["DIR-0004", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021", "DIR-0028", "DIR-0029"],
       "known_contract_bound_deviations": [
         "Figma and Browser MCP are deliberately degraded in the fixture so amber health presentation is evidence-backed.",
         "Credential presence is a boolean custody receipt only; no secret material, provider account detail or invented Nango state is exposed."
@@ -584,7 +584,7 @@
       "required_computed_styles": [
         { "selector": ".sidebar.shell-parity", "property": "background-color", "value": "rgba(32, 36, 29, 0.96)" }
       ],
-      "direction_records": ["DIR-0006", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022"],
+      "direction_records": ["DIR-0006", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0028", "DIR-0029"],
       "known_contract_bound_deviations": [
         "The palette is intentionally empty-query state; no search result is fabricated or preselected beyond the component's real default.",
         "The background is the same completed persisted turn as Chat run; no live HITL, computer-use or spend state is fabricated.",
@@ -670,7 +670,7 @@
           "text": "Mute"
         }
       ],
-      "direction_records": ["DIR-0005", "DIR-0010", "DIR-0015", "DIR-0016"],
+      "direction_records": ["DIR-0005", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0028", "DIR-0029"],
       "known_contract_bound_deviations": [
         "This is the real recovered-current-call state and therefore says Resume call/reconnecting; the fixture does not pretend a microphone, media token or WebSocket handshake exists.",
         "Date.now is fixed to the fixture observation time so elapsed call evidence cannot drift between captures.",
@@ -895,7 +895,7 @@
         "script run by",
         "depth 1"
       ],
-      "direction_records": ["DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027"],
+      "direction_records": ["DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027", "DIR-0028", "DIR-0029"],
       "reference_digest_manifest": "docs/design/evidence/2026-08-11-chat-ui-direction/references.sha256",
       "shipped_digest_manifest": "docs/design/evidence/2026-08-11-chat-ui-direction/shipped.sha256",
       "target_reference_paths": [

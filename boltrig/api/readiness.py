@@ -24,7 +24,7 @@ from .background_readiness import read_background_job_readiness
 from .codex_readiness import codex_runtime_check
 from .readiness_dependencies import database_checks, password_reset_check
 
-EXPECTED_ALEMBIC_HEAD = "0073_agent_model_routes"
+EXPECTED_ALEMBIC_HEAD = "0074_conversation_steer_queue"
 
 _PRODUCTION_NAMES = {"prod", "production", "staging"}
 # The tools /readyz requires. Codex is the only target agent runtime (decision

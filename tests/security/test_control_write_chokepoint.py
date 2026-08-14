@@ -65,6 +65,10 @@ SANCTIONED_DIRECT_WRITES: frozenset[tuple[str, str, str]] = frozenset(
     {
         # --- stay-direct-by-design: caller's OWN scope + channel ingress ------
         ("account_profile_routes.py", "put_settings", "upsert_user_setting"),
+        # A preferred-name change is caller-owned profile state. The route can
+        # update only the authenticated principal's existing tenant-scoped user,
+        # accepts one bounded safe field, and writes a keys-only audit receipt.
+        ("account_profile_routes.py", "update_my_profile", "upsert_user"),
         (
             "conversation_account_routes.py",
             "_close_conversation",
@@ -189,4 +193,4 @@ def test_control_plane_direct_writes_are_all_sanctioned():
 
     # Tripwire on the closed ledger: only 18 self-scope/ingress/derived-health
     # writes remain.
-    assert len(SANCTIONED_DIRECT_WRITES) == 17
+    assert len(SANCTIONED_DIRECT_WRITES) == 18

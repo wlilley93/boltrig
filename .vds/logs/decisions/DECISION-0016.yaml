@@ -1,0 +1,10 @@
+id: DECISION-0016
+at: 2026-08-14T10:36:56Z
+by: williamlilley
+decision: The floating Chat inspector will load inline only when the Shell rail, the canonical centred Chat column and the inspector all fit without narrowing Chat; otherwise Task details remains an on-demand sheet.
+court_required: false
+why: The Principal compared the same Codex task immediately below and above its inspector breakpoint. The Chat column remains centred and the same width in both states; the inspector consumes only surplus horizontal space. Boltrig must not squeeze transcript or composer merely to keep its right rail mounted.
+basis:
+- USER-DIRECTION-2026-08-14:SPACE-GATED-CHAT-INSPECTOR
+- BOLTRIG-INVARIANT:NFR-MNT-08-SOURCE-BOUND-VISUAL-EVIDENCE
+- BOLTRIG-CONTRACT:TASK-INSPECTOR-TRUTHFUL-PROJECTION
