@@ -183,8 +183,17 @@ jobs:
           persist-credentials: false
       # The target shells out to the release validators via $(PY), which defaults
       # to .venv/bin/python and does not exist on a bare runner - that was an
-      # exit-127 "command not found", not a Compose error. Both validators are
-      # stdlib-only, so an interpreter is enough; no dependency install needed.
+      # exit-127 "command not found", not a Compose error.
+      #
+      # An interpreter is still enough, and no dependency install is needed, but
+      # not because the validators are stdlib-only: validate_release_compose.py
+      # imports boltrig.release_mode so the admitted release modes have ONE
+      # definition. That module is itself pure stdlib and ships in the checkout,
+      # so it costs no install - it only has to be importable, and a script run
+      # by path gets scripts/ on sys.path rather than the repo root. The scripts
+      # put the root on the path themselves. Do not restate that claim as
+      # "stdlib-only" again: it was false from the moment the shared import
+      # landed, and the venv hid it locally for a week.
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"

@@ -6,9 +6,20 @@ import argparse
 import json
 import re
 import sys
+from pathlib import Path
 from typing import Any
 
-from boltrig.release_mode import RELEASE_MODE_ENV, validate_release_mode
+# `scripts/` is not a package and this file is run as a PATH, not a module, so
+# sys.path[0] is scripts/ and not the checkout root - which is the only reason
+# the first-party import below could not resolve. Nothing here needs installing:
+# boltrig.release_mode is pure stdlib and ships in the tree, and `import boltrig`
+# from the repo root works on a bare interpreter. Adding the root to the path is
+# what keeps "no dependency install needed" true for the compose-validate job,
+# without duplicating the one definition of the admitted release modes that
+# boltrig/release_mode.py exists to be.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from boltrig.release_mode import RELEASE_MODE_ENV, validate_release_mode  # noqa: E402
 
 # "pi-sidecar" was the fifth entry until the Pi lane was retired
 # ([2026] VJS-PC 20 L1). It is not merely unpinned now, it does not exist: the

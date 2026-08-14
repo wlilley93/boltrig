@@ -3,8 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 
-from boltrig.release_mode import (
+# Same reason as scripts/validate_release_compose.py, and the same latent bug:
+# release.yml runs `python3 scripts/validate_release_mode.py` on a bare runner
+# with no install, so this import would have raised ModuleNotFoundError at the
+# FIRST gate of a release. It has not fired yet only because that workflow runs
+# on release events and the compose job found the shared defect first.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from boltrig.release_mode import (  # noqa: E402
     VALID_RELEASE_MODES as VALID_RELEASE_MODES,
     validate_release_mode as validate_release_mode,
 )
