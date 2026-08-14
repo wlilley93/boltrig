@@ -4,6 +4,38 @@ The same images run everywhere; security is configuration, not a rebuild (P7).
 This covers encryption in transit (SEC-10), encryption at rest (SEC-11), and the
 corporate proxy + internal CA wiring (US-DEP-04).
 
+## Release identity and update channels
+
+One protected semantic tag is the release identity, but each installed surface
+consumes it differently. Do not make all three follow a mutable branch or a
+generic `latest` image tag.
+
+| Surface | Update source | Promotion rule | Rollback |
+| --- | --- | --- | --- |
+| `dev.boltrig.io` | a reviewed commit on the development branch | explicit atomic static-directory swap on Jellytot | restore the previous `dist.rollback-*` directory |
+| `app.boltrig.io` and other hosted Worker stacks | the `worker-ui@sha256` entry in a protected release's `boltrig-images.env` | exact semantic-tag checkout, `release-validate`, then `release-up` | previous protected tag plus its four digest refs |
+| already-installed signed desktop apps | `latest.json` attached to the latest stable **full** GitHub release | Tauri verifies the selected platform package with the public key compiled into the app | install a previous signed package explicitly; the updater never follows an image or branch |
+| pinned server products such as Opbox | operator-selected protected release tag and that release's `boltrig-images.env` | explicit maintenance-window validation and restart | retain and reapply the previous tag/environment pair |
+
+The release workflow builds all four server images for both release modes. A
+stable `full` release additionally builds and signs macOS, Linux and Windows
+desktop packages, creates the Tauri static update manifest from those exact
+packages, uploads everything while the GitHub release is still a draft, and
+then marks that release Latest. A `core` release and any prerelease are
+explicitly **not** Latest, so neither can displace the last complete desktop
+update manifest.
+
+An app built without an updater endpoint/public key, including the existing
+ad-hoc development package, cannot acquire that trust configuration from the
+web or from a later unsigned response. It needs one manual reinstall from a
+protected full release; signed releases after that update normally in place.
+
+Pinned server products deliberately have no automatic “follow latest” mode.
+Automation may notify an operator that a newer protected tag exists, but it must
+not download or start it without selecting the tag, verifying the image/SBOM/
+provenance set, and retaining the previous tag as rollback. This keeps an Opbox
+deployment reproducible even when `dev.boltrig.io` advances several times a day.
+
 ## Deploy a signed release
 
 Production runs the exact first-party image digests verified by the release
@@ -739,27 +771,31 @@ desktop-local agent. Remote device command leases remain a different signed
 argv-only path and continue to reject shell strings.
 
 Desktop update trust is fixed at Worker build time. Release builds that should
-offer updates must set both:
+offer updates compile both:
 
 ```env
-BOLTRIG_UPDATER_ENDPOINT=https://<release-host>/<manifest-path>
+BOLTRIG_UPDATER_ENDPOINT=https://github.com/wlilley93/boltrig/releases/latest/download/latest.json
 BOLTRIG_UPDATER_PUBLIC_KEY=<complete Tauri updater public key>
 ```
 
-The endpoint must be HTTPS and may use Tauri's `{{target}}`, `{{arch}}`, and
-`{{current_version}}` manifest placeholders. The public-key value is the
-complete Tauri updater public key, not a path to a mutable file. These values
-are compiled into the desktop binary; they are never accepted from the
-webview. A build without either value remains usable but Settings truthfully
-reports desktop updates as unavailable.
+The protected workflow derives the endpoint from the canonical repository; it
+is not an operator-provided URL. `scripts/build_desktop_update_manifest.py`
+requires every generated updater package and signature, binds each URL to the
+exact semantic tag, and merges all three platform fragments into `latest.json`.
+The public-key value remains protected release configuration and is the complete
+Tauri updater public key, not a path to a mutable file. Both values are compiled
+into the desktop binary and are never accepted from the webview. A build without
+either value remains usable but Settings truthfully reports desktop updates as
+unavailable.
 
 `apps/worker/src-tauri/tauri.conf.json` enables
 `bundle.createUpdaterArtifacts`, so the protected desktop release job must
 provide `TAURI_SIGNING_PRIVATE_KEY` and, when applicable,
 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` only within that job. Never commit,
 compile, or copy the updater private key into a Worker package. Publish the
-generated installer, signature, and update manifest atomically to the compiled
-release endpoint.
+generated installer, signature, platform fragment, and merged update manifest
+atomically while the release is still a draft. The package signature, rather
+than the mutable `latest.json` pointer, is the executable trust boundary.
 
 Before enabling desktop-primary distribution, exercise check, download,
 signature verification, installation, and restart using packaged macOS,

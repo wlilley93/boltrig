@@ -35,7 +35,9 @@ otherwise decorated values fail before a draft is created:
   kernel-governed agent admission to be open. It also requires signed desktop candidates
   for Linux, macOS, and Windows, including updater signatures, Apple
   notarisation, Windows Authenticode evidence, and the exact bundled local Codex
-  runtime receipt for each platform.
+  runtime receipt for each platform. The workflow must merge those three
+  immutable platform fragments into `latest.json` before publishing the draft;
+  only a stable full release may become the desktop updater's Latest release.
 - `core` is an explicit server-only exception. It still requires all four
   digest-pinned images, vulnerability gates, signatures, CycloneDX SBOMs, SLSA
   provenance, recovery posture, the production doctor, and secure Compose
@@ -62,7 +64,10 @@ each item in the change record.
 2. **Signed release set:** the protected release workflow produced the exact
    digest-pinned kernel, fleet, Worker UI, and backup images, with valid
    signatures, CycloneDX SBOM attestations, and SLSA provenance. The fleet
-   digest covers both `fleet-worker` and `hatchet-worker`.
+   digest covers both `fleet-worker` and `hatchet-worker`. For a full release,
+   the same draft also contains three platform update fragments and one
+   `latest.json` whose package URLs are bound to this tag; a core release must
+   contain none of them and must not displace the latest full release.
 3. **Desktop release:** updater signing, Apple notarisation, Windows
    Authenticode, and the protected HTTPS desktop API origin are configured; the
    packaged update path passed on supported platforms. Each installer contains

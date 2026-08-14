@@ -133,8 +133,12 @@ def test_full_release_still_requires_every_desktop_candidate() -> None:
 
     evidence = _step("publish", "Download and validate all draft release evidence")["run"]
     assert "if [ \"$RELEASE_MODE\" = full ]; then" in evidence
-    assert "download_args+=(--pattern 'desktop-evidence-*.txt')" in evidence
+    assert "--pattern 'desktop-evidence-*.txt'" in evidence
+    assert "--pattern 'desktop-update-*.json'" in evidence
     assert 'test "$desktop_count" -eq 3' in evidence
+    assert 'test "$desktop_fragment_count" -eq 3' in evidence
+    assert "build_desktop_update_manifest.py merge" in evidence
+    assert "release-evidence/latest.json" in evidence
     for platform in ("linux-x86_64", "darwin-aarch64", "windows-x86_64"):
         assert platform in evidence
 
@@ -408,15 +412,41 @@ def test_fixed_release_assets_are_read_back_without_replacement() -> None:
     attach = _step("candidates", "Attach immutable evidence")["run"]
     desktop = _step("desktop-candidates", "Attach signed desktop packages")["run"]
     compose = _step("publish", "Attach the digest-pinned Compose environment")["run"]
+    latest = _step("publish", "Attach the signed desktop update manifest")["run"]
 
     assert 'release_asset.sh exact "$IMAGE_REF_FILE"' in attach
     assert 'release_asset.sh cyclonedx "$SBOM_FILE" "$IMAGE_REF"' in attach
     assert 'release_asset.sh provenance "$PROVENANCE_FILE" "$IMAGE_REF"' in attach
     assert 'release_asset.sh exact "$asset"' in desktop
+    assert 'release_asset.sh exact "$fragment"' in desktop
     assert 'release_asset.sh exact "$evidence"' in desktop
     assert "release_asset.sh exact release-evidence/boltrig-images.env" in compose
+    assert "release_asset.sh exact release-evidence/latest.json" in latest
     assert "--clobber" not in _TEXT
     assert "release delete-asset" not in _TEXT
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+def test_desktop_updater_uses_the_manifest_this_workflow_atomically_publishes() -> None:
+    desktop = _WORKFLOW["jobs"]["desktop-candidates"]
+    assert desktop["env"]["BOLTRIG_UPDATER_ENDPOINT"] == (
+        "https://github.com/${{ github.repository }}/releases/latest/download/latest.json"
+    )
+    requirement = _step("desktop-candidates", "Require protected API")["run"]
+    assert "expected_updater_endpoint" in requirement
+    assert '"$BOLTRIG_UPDATER_ENDPOINT" != "$expected_updater_endpoint"' in requirement
+
+    package = _step("desktop-candidates", "Attach signed desktop packages")["run"]
+    assert "build_desktop_update_manifest.py fragment" in package
+    assert '--platform "$PLATFORM"' in package
+    assert '--commit "$RELEASE_COMMIT"' in package
+
+    publish = _step("publish", "Publish the fully verified GitHub release")["run"]
+    assert "latest=(--latest=false)" in publish
+    assert 'elif [ "$RELEASE_MODE" = full ]; then' in publish
+    assert "latest=(--latest)" in publish
+    assert '[[ "$RELEASE_TAG" == *-* ]]' in publish
 
 
 @pytest.mark.security

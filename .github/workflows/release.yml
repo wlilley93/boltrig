@@ -602,7 +602,10 @@ jobs:
       RELEASE_COMMIT: ${{ needs.preflight.outputs.release-commit }}
       RELEASE_ID: ${{ needs.preflight.outputs.release-id }}
       BOLTRIG_DESKTOP_API_ORIGIN: ${{ vars.BOLTRIG_DESKTOP_API_ORIGIN }}
-      BOLTRIG_UPDATER_ENDPOINT: ${{ vars.BOLTRIG_UPDATER_ENDPOINT || secrets.BOLTRIG_UPDATER_ENDPOINT }}
+      # Every full release publishes this exact static Tauri manifest. Keeping the
+      # endpoint repository-owned prevents a signed app from being compiled against
+      # an operator URL whose publication is outside this workflow's evidence gate.
+      BOLTRIG_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
       BOLTRIG_UPDATER_PUBLIC_KEY: ${{ vars.BOLTRIG_UPDATER_PUBLIC_KEY || secrets.BOLTRIG_UPDATER_PUBLIC_KEY }}
     steps:
       - name: Checkout the tagged source
@@ -677,6 +680,11 @@ jobs:
             https://*) ;;
             *) echo "BOLTRIG_UPDATER_ENDPOINT must be HTTPS" >&2; exit 1 ;;
           esac
+          expected_updater_endpoint="https://github.com/$GITHUB_REPOSITORY/releases/latest/download/latest.json"
+          if [ "$BOLTRIG_UPDATER_ENDPOINT" != "$expected_updater_endpoint" ]; then
+            echo "desktop updater endpoint is not the repository-owned latest.json" >&2
+            exit 1
+          fi
           node <<'NODE'
           const raw = process.env.BOLTRIG_DESKTOP_API_ORIGIN ?? "";
           let origin;
@@ -925,10 +933,20 @@ jobs:
             while IFS= read -r -d '' asset; do
               scripts/release_asset.sh exact "$asset"
             done
+          fragment="desktop-update-$PLATFORM.json"
+          python scripts/build_desktop_update_manifest.py fragment \
+            --platform "$PLATFORM" \
+            --bundle "$bundle" \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG" \
+            --commit "$RELEASE_COMMIT" \
+            --output "$fragment"
+          scripts/release_asset.sh exact "$fragment"
           evidence="desktop-evidence-$PLATFORM.txt"
           {
             printf 'platform=%s\n' "$PLATFORM"
             printf 'release_commit=%s\n' "$RELEASE_COMMIT"
+            printf 'updater_fragment=%s\n' "$fragment"
             python - "$RUNNER_TEMP/desktop-codex-receipt.json" <<'PY'
           import json
           from pathlib import Path
@@ -1004,7 +1022,10 @@ jobs:
             --dir release-evidence
           )
           if [ "$RELEASE_MODE" = full ]; then
-            download_args+=(--pattern 'desktop-evidence-*.txt')
+            download_args+=(
+              --pattern 'desktop-evidence-*.txt'
+              --pattern 'desktop-update-*.json'
+            )
           fi
           gh release download "$RELEASE_TAG" "${download_args[@]}"
 
@@ -1041,13 +1062,17 @@ jobs:
           ]'
           release="$(gh api "/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")"
           desktop_count="$(find release-evidence -name 'desktop-evidence-*.txt' -type f | wc -l | tr -d ' ')"
+          desktop_fragment_count="$(find release-evidence -name 'desktop-update-*.json' -type f | wc -l | tr -d ' ')"
           if [ "$RELEASE_MODE" = full ]; then
             test "$desktop_count" -eq 3
+            test "$desktop_fragment_count" -eq 3
             unexpected_asset_count="$(jq --argjson allowed "$server_assets" '[
               .assets[]?.name as $name | select(
                 (($allowed | index($name)) == null) and
                 ((
                   ($name | startswith("desktop-evidence-")) or
+                  ($name | startswith("desktop-update-")) or
+                  ($name == "latest.json") or
                   ($name | endswith(".AppImage")) or
                   ($name | endswith(".deb")) or
                   ($name | endswith(".dmg")) or
@@ -1061,6 +1086,7 @@ jobs:
             ] | length' <<<"$release")"
           else
             test "$desktop_count" -eq 0
+            test "$desktop_fragment_count" -eq 0
             unexpected_asset_count="$(jq --argjson allowed "$server_assets" '[
               .assets[]?.name as $name |
               select(($allowed | index($name)) == null)
@@ -1078,8 +1104,21 @@ jobs:
               evidence="release-evidence/desktop-evidence-$platform.txt"
               grep -Fx "platform=$platform" "$evidence" >/dev/null
               grep -Fx "release_commit=$RELEASE_COMMIT" "$evidence" >/dev/null
+              grep -Fx "updater_fragment=desktop-update-$platform.json" "$evidence" >/dev/null
               grep -q '^updater_signature=' "$evidence"
             done
+            published_at="$(git show -s --format=%cI "$RELEASE_COMMIT")"
+            python scripts/build_desktop_update_manifest.py merge \
+              --repository "$GITHUB_REPOSITORY" \
+              --tag "$RELEASE_TAG" \
+              --commit "$RELEASE_COMMIT" \
+              --published-at "$published_at" \
+              --output release-evidence/latest.json \
+              release-evidence/desktop-update-*.json
+            while IFS= read -r asset; do
+              jq -e --arg name "$asset" \
+                'any(.assets[]?; .name == $name)' <<<"$release" >/dev/null
+            done < <(jq -r '.assets[].name' release-evidence/desktop-update-*.json | sort -u)
           fi
           image_env="release-evidence/boltrig-images.env"
           : > "$image_env"
@@ -1267,13 +1306,30 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: scripts/release_asset.sh exact release-evidence/boltrig-images.env
 
+      - name: Attach the signed desktop update manifest
+        if: ${{ needs.preflight.outputs.release-mode == 'full' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/release_asset.sh exact release-evidence/latest.json
+
       - name: Publish the fully verified GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >-
-          gh release edit "$RELEASE_TAG"
-          --repo "$GITHUB_REPOSITORY"
-          --draft=false
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest=(--latest=false)
+          prerelease=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            prerelease=(--prerelease)
+          elif [ "$RELEASE_MODE" = full ]; then
+            latest=(--latest)
+          fi
+          gh release edit "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false \
+            "${latest[@]}" \
+            "${prerelease[@]}"
 
   release:
     name: Release gate
