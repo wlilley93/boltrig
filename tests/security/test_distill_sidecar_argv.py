@@ -25,6 +25,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -32,10 +33,13 @@ SIDECAR = (Path(__file__).resolve().parents[2]
            / "services" / "distill_sidecar" / "app.py")
 
 
-def _load():
+def _load() -> ModuleType:
+    """Import by path: the sidecar is a service, not part of the boltrig
+    package, and it deliberately has no import-time side effects (constants and
+    a ``__main__``-guarded ``main``), so loading it here starts nothing."""
     spec = importlib.util.spec_from_file_location("distill_sidecar_app", SIDECAR)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
 
