@@ -17,7 +17,7 @@ from boltrig.api.readiness import (
     REQUIRED_CONTROL_VERBS,
     ReadinessService,
 )
-from boltrig.api.codex_readiness import codex_runtime_check
+from boltrig.api.codex_readiness import codex_runtime_check, manifest_requests_codex
 from boltrig.config.control_plane import ControlPlaneAdapter
 from boltrig.config.admin import AdminConfig
 from boltrig.config.manifest import EphemeralRuntime, FleetManifest, load_manifest
@@ -266,18 +266,28 @@ def test_the_shipped_manifest_still_requests_codex() -> None:
     """The precondition every "...requested by the shipped manifest" leg rests on.
 
     Those legs claim the release gate closes Codex down *even though the shipped
-    manifest asks for it*. If manifest.example.yaml ever stopped asking, they
-    would keep passing and stop meaning anything: measured, an empty manifest
-    under BOLTRIG_RELEASE_MODE=full returns `not_configured` rather than the
-    `production_gate_closed` those legs assert, so the precondition is load
-    bearing on the readiness side and silently is not on the doctor side.
-    Asserting it here once is what stops the whole family going vacuous.
+    manifest asks for it*. If manifest.example.yaml ever stopped asking, some of
+    them would keep passing and stop meaning anything. Measured, by flipping
+    every `runtime: codex` in the shipped manifest to `opencode`: exactly two of
+    the ten legs notice (readiness `full` and doctor `full`, which fall through
+    to `not_configured` where they assert `production_gate_closed`). The other
+    eight are pinned by release mode alone and would stay green over a manifest
+    that asks for no Codex at all. This leg is what makes that visible.
+
+    It asserts through `manifest_requests_codex`, the predicate the product
+    itself keys on, and NOT over a capability name. The first version of this
+    test checked `runtime.name == "codex-worker"`, which is a label: the same
+    mutation above - six `runtime: codex` entries flipped, `manifest_requests_
+    codex` returning False - left that assertion passing. A precondition test
+    that survives the mutation it exists to catch is the vacuous green wearing
+    the costume of the fix.
     """
     manifest = load_manifest(str(_SHIPPED_MANIFEST), env={})
 
-    assert any(
-        runtime.name == "codex-worker" for runtime in manifest.ephemeral_runtimes
-    ), "manifest.example.yaml must keep requesting Codex for the release-gate legs to mean anything"
+    assert manifest_requests_codex(manifest), (
+        "manifest.example.yaml must keep declaring a Codex-backed runtime for the "
+        "release-gate legs above to mean anything"
+    )
 
 
 @pytest.mark.security
