@@ -25,6 +25,29 @@
 #
 # Measured cost: python-quality 324s (3615 tests, 86.89% coverage), the other two ~2s.
 #
+# WHAT IT DOES NOT RUN, and why the old label was dangerous. Until 2026-08-14 the line below
+# announced `python-quality (the target CI runs)`. Singular "the". CI runs EIGHT jobs; this runs
+# one of them, and one of the four steps inside that one. PR #266 pushed on a green print from
+# this hook and arrived with eight red checks. A hook that is trusted and wrong is worse than no
+# hook, so the label now names its own scope and the footer prints the uncovered jobs.
+#
+# And a bigger hook would NOT have caught that push. Measured, per failure:
+#
+#   worker-build       merge conflict with main. `make worker-quality` on the branch TIP passes;
+#                      the failing test file existed only on main. Different COMMIT.
+#   test-and-gate      ten tests read the gitignored manifest.yaml. This hook already runs that
+#                      exact target and it passed - the VM mounts the host tree, so an untracked
+#                      file participated. Different FILESYSTEM.
+#   compose-validate   `PY ?= .venv/bin/python` here, `PY=python` on a runner with no install.
+#                      The venv had the package. Different INTERPRETER.
+#   desktop windows    a POSIX path literal in a Rust fixture. No machine here runs windows-2025.
+#                      Different PLATFORM.
+#
+# Four failures, four axes, none of them "a missing make target". Adding every CI target to this
+# hook and changing nothing else still prints green on that same push. The axes are what to fix -
+# see docs/CI-RED-2026-08-14.md - and until they are, this hook is a fast first filter and NOT a
+# prediction of CI.
+#
 # Skips, each deliberate and each leaving a trace in the command you typed:
 #   SKIP_PUSH_GATES=1     everything
 #   SKIP_QUALITY_GATE=1   just the slow python-quality run
@@ -72,8 +95,26 @@ run_gate() { # run_gate "<name>" <make target>
 run_gate "codex pin health" codex-pin-health
 run_gate "continuity projection" continuity-projection
 
+# CI checks out refs/pull/N/merge - main merged INTO the branch - and this hook checks out the
+# branch tip. When main has moved, those are different trees, and a change that is correct on
+# each side alone can fail only on the merge. That is exactly how PR #266's worker-build broke:
+# main added a test pinning a path this branch had moved. Nothing local can see it while the two
+# are unmerged, so say so before the push rather than after the red.
+#
+# A warning, not a block. Blocking would refuse every push from a branch that main has merely
+# moved past, including the ones that are fine, and several sessions share this tree. Promoting
+# it to a block is an operator call, not this hook's.
+if ! git merge-base --is-ancestor origin/main HEAD 2>/dev/null; then
+  behind="$(git rev-list --count HEAD..origin/main 2>/dev/null || echo '?')"
+  echo ""
+  echo "[pre-push] NOTE: origin/main is $behind commit(s) ahead and NOT merged into this branch."
+  echo "[pre-push]   CI tests refs/pull/N/merge. These gates test the branch tip. Different trees."
+  echo "[pre-push]   A semantic merge conflict is invisible here and red there. Merge origin/main"
+  echo "[pre-push]   and re-run if CI matters to you more than this print does."
+fi
+
 if [[ "${SKIP_QUALITY_GATE:-}" == "1" ]]; then
-  echo "[pre-push] SKIP_QUALITY_GATE=1 set — skipping python-quality (the gate CI enforces)."
+  echo "[pre-push] SKIP_QUALITY_GATE=1 set — skipping python-quality (one of CI's eight jobs)."
 else
   # `quality-gate`, not `python-quality` directly. On Linux the two are identical -
   # it execs the same target. On macOS it runs that target inside a Linux VM,
@@ -84,8 +125,19 @@ else
   # This is not the "second list" this file's own preamble warns about. It is one
   # line of dispatch around the SAME make target CI runs, so there is still nothing
   # to drift.
-  run_gate "python-quality (the target CI runs)" quality-gate
+  run_gate "python-quality (1 of CI's 8 jobs, 1 of its 4 steps)" quality-gate
 fi
 
-echo "[pre-push] all gates green."
+# "all gates green" was the other half of the false promise: it is true of the gates this hook
+# runs and reads as true of CI. Name what was not looked at. A written gap is arguable; a silent
+# one is what let PR #266 push on a green print.
+echo ""
+echo "[pre-push] the gates ABOVE are green. NOT run here, and NOT predicted by this:"
+echo "[pre-push]   worker-build            make worker-quality"
+echo "[pre-push]   worker-desktop-package  cargo test + tauri build, x3 incl. windows-2025"
+echo "[pre-push]   site-build-test-lint    make site-quality"
+echo "[pre-push]   compose-validate        make compose-validate PY=python   (bare, no venv)"
+echo "[pre-push]   source-security         python-audit, sast, iac-scan, secret-scan, actionlint"
+echo "[pre-push]   codeql / containers     GitHub-hosted; unreachable from any local gate"
+echo "[pre-push]   and, in test-and-gate:  public-product-validate, migration-parity, doctor-fixture"
 exit 0
