@@ -527,6 +527,8 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/builtin/inbound_webhook.py:58		A 
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/inbound_webhook.py:90		check alone cannot stop a second ingest.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/jira.py:63		returns a fresh list over them so a caller can never mutate the shared table.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/local_whisper.py:67		Same bounds as the remote STT adapters so switching provider cannot change how
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/pocket_voice.py:100		Left None on purpose.
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/pocket_voice.py:61		Bounds, fail-closed, matching the vendor siblings.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/runpod.py:187		URL-quoted: a pod id with '/', '?' or '..' must not rewrite the path.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/web_fetch.py:151		A blocked target is refused before any network call (fail-closed).
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/web_fetch.py:154		Agent-supplied max_bytes can only shrink the cap, never lift it.
