@@ -22,12 +22,16 @@ const silent = { id: "ghost", name: "Ghost", type: "shader", schemaVersion: 1 } 
   Parameters<typeof resolveVoiceId>[0];
 
 describe("Familiar's shipped voice", () => {
-  it("declares marius, which is CC0 and therefore shippable", () => {
-    // marius resolves to hf://kyutai/tts-voices/voice-donations/Selfie.wav, and
-    // voice-donations is CC0. This assertion is about LICENSING as much as
-    // sound: cosette (Expresso) and jean (EARS) are CC-BY-NC and cannot ship in
-    // a commercial build, so the default must never drift onto one of them.
-    expect(resolveVoiceId(manifest, OVERRIDE_PROVIDER, undefined, "familiar")).toBe("marius");
+  it("declares vera, which is CC-BY-4.0 and therefore shippable WITH attribution", () => {
+    // vera resolves to hf://kyutai/tts-voices/vctk/p229_023_enhanced.wav. VCTK is
+    // CC-BY-4.0, so shipping it obliges us to credit — see THIRD_PARTY_NOTICES.md.
+    //
+    // This assertion is about LICENSING as much as sound. Kyutai's catalogue is
+    // licensed per SOURCE DATASET, not uniformly: cosette comes from Expresso and
+    // jean from EARS, both CC-BY-NC-4.0, and neither may ship in a commercial
+    // build. Pinning the default here stops it drifting onto one of those because
+    // somebody preferred the sound.
+    expect(resolveVoiceId(manifest, OVERRIDE_PROVIDER, undefined, "familiar")).toBe("vera");
   });
 
   it("names no cloud voice id, so the stock build needs no vendor account", () => {
@@ -51,7 +55,7 @@ describe("the user's choice", () => {
   it("clears back to the bundle's voice rather than to silence", () => {
     const cleared = voiceOverrideToSettings(settings, "familiar", null);
     expect(cleared[VOICE_OVERRIDE_SETTING_KEY]).toEqual({});
-    expect(resolveVoiceId(manifest, OVERRIDE_PROVIDER, cleared, "familiar")).toBe("marius");
+    expect(resolveVoiceId(manifest, OVERRIDE_PROVIDER, cleared, "familiar")).toBe("vera");
   });
 
   it("survives a malformed sibling entry instead of losing every voice", () => {
