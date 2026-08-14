@@ -17,6 +17,7 @@ interface OrderedWorkTranscriptProps {
   startedAt?: number | null;
   durationSeconds?: number | null;
   emptyText?: string;
+  runId?: string;
 }
 
 type PendingPart =
@@ -118,6 +119,7 @@ export function OrderedWorkTranscript({
   startedAt,
   durationSeconds,
   emptyText = "",
+  runId = turn.runId,
 }: OrderedWorkTranscriptProps) {
   const parts = useMemo(() => orderedParts(content, events), [content, events]);
   if (!parts) {
@@ -126,6 +128,7 @@ export function OrderedWorkTranscript({
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{content || emptyText}</ReactMarkdown>
         {events.length > 0 && (
           <WorkDisclosure
+            runId={runId}
             turn={turn}
             settled={settled}
             startedAt={startedAt}
@@ -144,6 +147,7 @@ export function OrderedWorkTranscript({
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.content}</ReactMarkdown>
           ) : (
             <WorkDisclosure
+              runId={runId}
               turn={part.turn}
               settled={settled}
               startedAt={startedAt}

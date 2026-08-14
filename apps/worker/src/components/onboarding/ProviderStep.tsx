@@ -16,9 +16,11 @@ export function ProviderStep({ profile }: { profile: UserProfile }) {
         <p>Boltrig keeps provider credentials server-side and write-only. You can also use a model your workspace already provides.</p>
       </div>
       <ReadinessCard ready={modelReady} defaultName={defaultName} />
-      {setup.canAddKey
-        ? <ProviderKeyForm setup={setup} />
-        : <ManagedKeyNotice />}
+      {!setup.readiness
+        ? <ProviderLoading />
+        : setup.canAddKey
+          ? <ProviderKeyForm setup={setup} />
+          : <ManagedKeyNotice />}
       {setup.readiness?.keyCount ? (
         <p className="onboarding-status">
           {setup.readiness.keyCount} provider {setup.readiness.keyCount === 1 ? "key" : "keys"} already configured.
@@ -67,6 +69,15 @@ function ManagedKeyNotice() {
     <div className="readiness-card quiet onboarding-rise" style={{ "--onboarding-delay": "160ms" } as React.CSSProperties}>
       <span className="readiness-icon" aria-hidden="true">↗</span>
       <span><strong>Your organisation manages provider keys</strong><small>Ask an administrator to allow personal keys or connect a workspace model route.</small></span>
+    </div>
+  );
+}
+
+function ProviderLoading() {
+  return (
+    <div className="readiness-card quiet onboarding-rise" aria-busy="true" style={{ "--onboarding-delay": "160ms" } as React.CSSProperties}>
+      <span className="readiness-icon" aria-hidden="true">···</span>
+      <span><strong>Checking key policy</strong><small>Boltrig is reading the workspace's safe configuration metadata.</small></span>
     </div>
   );
 }

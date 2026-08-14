@@ -7,10 +7,6 @@
   background: #171717;
 }
 
-:root[data-theme="dark"] .worker-shell:has(.chat-layout) .sidebar.shell-parity {
-  background: color-mix(in srgb, #171717 82%, transparent);
-}
-
 .chat-main > .composer.conversation-context:not(.closed) textarea {
   height: 37px;
   min-height: 37px;

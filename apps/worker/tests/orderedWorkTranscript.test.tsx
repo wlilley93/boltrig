@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   conversations: vi.fn(),
   followConversation: vi.fn(),
   modelProfiles: vi.fn(),
+  runEvents: vi.fn(),
   streamChat: vi.fn(),
 }));
 
@@ -51,6 +52,7 @@ beforeEach(() => {
     }],
   });
   api.modelProfiles.mockResolvedValue({ profiles: [] });
+  api.runEvents.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -105,11 +107,11 @@ describe("ordered transcript work receipts", () => {
     summaries.forEach((summary) => fireEvent.click(summary));
     const details = screen.getAllByRole("list", { name: "Exact tool details" });
     expect(details).toHaveLength(2);
-    expect(details[0]!.textContent).toContain("figma.get_design_contextok");
-    expect(details[0]!.textContent).toContain("file.readok");
+    expect(details[0]!.textContent).toContain("figma.get_design_contextSuccess");
+    expect(details[0]!.textContent).toContain("file.readSuccess");
     expect(details[0]!.textContent).not.toContain("apply_patch");
-    expect(details[1]!.textContent).toContain("apply_patchok");
-    expect(details[1]!.textContent).toContain("exec_commandok");
+    expect(details[1]!.textContent).toContain("apply_patchSuccess");
+    expect(details[1]!.textContent).toContain("exec_commandSuccess");
     expect(details[1]!.textContent).not.toContain("file.read");
   });
 
@@ -137,7 +139,7 @@ describe("ordered transcript work receipts", () => {
       "work",
     ]);
     expect(document.body.textContent).not.toContain("Stale relay copy.");
-    expect(screen.getByText("Read files, ran commands")).toBeTruthy();
+    fireEvent.click(screen.getByText("Read files, ran commands").closest("summary")!);
     expect(screen.getByRole("list", { name: "Exact tool details" }).children)
       .toHaveLength(2);
   });

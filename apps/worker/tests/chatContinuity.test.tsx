@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   conversations: vi.fn(),
   followConversation: vi.fn(),
   modelProfiles: vi.fn(),
+  reorderConversationQueue: vi.fn(),
   restoreMyConversation: vi.fn(),
   streamChat: vi.fn(),
 }));
@@ -49,6 +50,10 @@ beforeEach(() => {
     }],
   });
   api.modelProfiles.mockResolvedValue({ profiles: [] });
+  api.reorderConversationQueue.mockImplementation(async (_id, body) => ({
+    status: "ok",
+    message_ids: body.message_ids,
+  }));
   api.restoreMyConversation.mockResolvedValue({
     status: "ok",
     id: "conversation-a",
@@ -157,6 +162,7 @@ describe("Worker chat continuity", () => {
     expect(await screen.findByText("alpha-output.md")).toBeTruthy();
     expect(screen.getByText("alpha-source.txt")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Choose model" }));
     fireEvent.click(screen.getByRole("option", {
       name: "anthropic/claude-sonnet-4-5",
     }));
@@ -170,7 +176,8 @@ describe("Worker chat continuity", () => {
     const staged = new File(["staged"], "staged.txt", { type: "text/plain" });
     Object.defineProperty(fileInput!, "files", { configurable: true, value: [staged] });
     fireEvent.change(fileInput!);
-    expect(await screen.findByText(/staged\.txt · model-readable/)).toBeTruthy();
+    expect(await screen.findByText("staged.txt")).toBeTruthy();
+    expect(screen.getByText("model-readable")).toBeTruthy();
     const rejected = new File(["second"], "second.txt", { type: "text/plain" });
     Object.defineProperty(fileInput!, "files", { configurable: true, value: [rejected] });
     fireEvent.change(fileInput!);
@@ -191,7 +198,7 @@ describe("Worker chat continuity", () => {
     expect(screen.queryByText("Alpha answer")).toBeNull();
     expect(screen.queryByText("alpha-output.md")).toBeNull();
     expect(screen.queryByText("alpha-source.txt")).toBeNull();
-    expect(screen.queryByText(/staged\.txt · model-readable/)).toBeNull();
+    expect(screen.queryByText("staged.txt")).toBeNull();
     expect(screen.queryByText("Attach at most 1 files to one turn.")).toBeNull();
     expect((screen.getByLabelText("Task instructions") as HTMLTextAreaElement).value).toBe("");
     expect(document.querySelector(".right-rail")).toBeNull();
@@ -301,7 +308,7 @@ describe("Worker chat continuity", () => {
         onChanged={vi.fn()}
       />,
     );
-    expect((screen.getByLabelText("Follow up") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("Follow up") as HTMLTextAreaElement).value).toBe("");
     expect(await screen.findByText("Beta mobile")).toBeTruthy();
   });
 
@@ -329,12 +336,11 @@ describe("Worker chat continuity", () => {
       target: { value: "Keep this draft" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Task details" }));
-    await waitFor(() => {
-      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close task details" }));
-    });
+    expect(screen.getByRole("complementary", { name: "Task details" })).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
 
     act(() => viewport.setPhone(true));
-    const phoneDraft = await screen.findByLabelText("Follow up") as HTMLInputElement;
+    const phoneDraft = await screen.findByLabelText("Follow up") as HTMLTextAreaElement;
     expect(phoneDraft.value).toBe("Keep this draft");
     await waitFor(() => {
       expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close task details" }));
@@ -371,14 +377,13 @@ describe("Worker chat continuity", () => {
     const props = { onConversation: vi.fn(), onChanged: vi.fn() };
     const view = render(<ChatView conversationId="conversation-a" {...props} />);
     expect(await screen.findByText("Alpha result")).toBeTruthy();
-    const alphaTools = screen.getByRole("button", { name: /1 tool/ });
-    fireEvent.click(alphaTools);
-    expect(alphaTools.getAttribute("aria-expanded")).toBe("true");
+    const alphaTools = screen.getByText("Read files").closest("summary");
+    fireEvent.click(alphaTools!);
+    expect(alphaTools!.closest("details")?.open).toBe(true);
 
     view.rerender(<ChatView conversationId="conversation-b" {...props} />);
     expect(await screen.findByText("Beta result")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /1 tool/ }).getAttribute("aria-expanded"))
-      .toBe("false");
+    expect(screen.getByText("Read files").closest("details")?.open).toBe(false);
   });
 
   it("labels a degraded live response as incomplete", async () => {
@@ -715,6 +720,24 @@ describe("Worker chat continuity", () => {
           run_id: "run-a",
           conversation_id: "conversation-a",
         });
+        onEvent({
+          type: "workflow_step",
+          step_id: "audit",
+          action: "Audit the task",
+          status: "ok",
+        });
+        onEvent({
+          type: "workflow_step",
+          step_id: "draft",
+          action: "Draft the appendix",
+          status: "running",
+        });
+        onEvent({
+          type: "workflow_step",
+          step_id: "verify",
+          action: "Verify the result",
+          status: "paused",
+        });
         await new Promise<void>((resolve) => {
           finishFirst = resolve;
         });
@@ -737,6 +760,7 @@ describe("Worker chat continuity", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Model" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Choose model" }));
     fireEvent.click(screen.getByRole("option", {
       name: "anthropic/claude-sonnet-4-5",
     }));
@@ -759,6 +783,7 @@ describe("Worker chat continuity", () => {
     expect(screen.getByRole("button", { name: "Model" }).textContent)
       .toContain("anthropic/claude-sonnet-4-5");
     expect(await screen.findByRole("button", { name: "Queue next ↑" })).toBeTruthy();
+    expect(screen.getByText("Step 2 / 3")).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Task instructions"), {
       target: { value: "Also include the appendix" },
@@ -812,6 +837,67 @@ describe("Worker chat continuity", () => {
       expect.any(Function),
       expect.objectContaining({ since: 0 }),
     ));
+  });
+
+  it("persists a queued-turn reorder and paints the accepted execution order", async () => {
+    api.conversation.mockResolvedValue({
+      messages: [
+        {
+          id: "direct",
+          role: "user",
+          content: "Initial turn",
+          run_id: "run-a",
+          created_at: "2026-01-01T00:00:00Z",
+        },
+        {
+          id: "answer",
+          role: "assistant",
+          content: "Working",
+          run_id: "run-a",
+          created_at: "2026-01-01T00:00:01Z",
+        },
+        {
+          id: "queued-first",
+          role: "user",
+          content: "First queued turn",
+          created_at: "2026-01-01T00:00:02Z",
+        },
+        {
+          id: "queued-second",
+          role: "user",
+          content: "Second queued turn",
+          created_at: "2026-01-01T00:00:03Z",
+        },
+      ],
+      active_run_id: null,
+      queued_message_ids: ["queued-first", "queued-second"],
+    });
+
+    render(
+      <ChatView
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onChanged={vi.fn()}
+      />,
+    );
+    const handle = await screen.findByRole("button", {
+      name: "Reorder queued message: First queued turn",
+    });
+    fireEvent.keyDown(handle, { key: "ArrowDown" });
+
+    await waitFor(() => expect(api.reorderConversationQueue).toHaveBeenCalledWith(
+      "conversation-a",
+      {
+        expected_message_ids: ["queued-first", "queued-second"],
+        message_ids: ["queued-second", "queued-first"],
+      },
+    ));
+    await waitFor(() => {
+      const ids = [...document.querySelectorAll(".queued-message")]
+        .map((row) => row.getAttribute("data-message-id"));
+      expect(ids).toEqual(["queued-second", "queued-first"]);
+    });
+    expect(screen.getByText("Queue order updated.")).toBeTruthy();
   });
 
   it("keeps a stale slower load from clobbering the selected conversation", async () => {
@@ -1034,7 +1120,7 @@ describe("Worker chat continuity", () => {
     const first = new File(["notes"], "notes.txt", { type: "text/plain" });
     Object.defineProperty(input!, "files", { configurable: true, value: [first] });
     fireEvent.change(input!);
-    expect(await screen.findByText(/notes.txt · model-readable/)).toBeTruthy();
+    expect(await screen.findByText("notes.txt")).toBeTruthy();
 
     const second = new File(["more"], "more.txt", { type: "text/plain" });
     Object.defineProperty(input!, "files", { configurable: true, value: [second] });
@@ -1049,7 +1135,7 @@ describe("Worker chat continuity", () => {
     await screen.findByText(/server rejected the attachment limits/i);
     expect((screen.getByLabelText("Task instructions") as HTMLTextAreaElement).value)
       .toBe("Use the attached notes");
-    expect(screen.getByText(/notes.txt · model-readable/)).toBeTruthy();
+    expect(screen.getByText("notes.txt")).toBeTruthy();
   });
 
   it("restores a phone draft when the server rejects the turn", async () => {
@@ -1066,7 +1152,7 @@ describe("Worker chat continuity", () => {
     );
     await waitFor(() => expect(api.chatModelChoices).toHaveBeenCalledOnce());
 
-    const input = screen.getByLabelText("Follow up") as HTMLInputElement;
+    const input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "Keep this phone draft" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
@@ -1077,7 +1163,7 @@ describe("Worker chat continuity", () => {
 
 function stubPhoneViewport() {
   vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
-    matches: query === "(max-width: 1020px)" || query === "(max-width: 640px)",
+    matches: query === "(max-width: 1374px)" || query === "(max-width: 640px)",
     media: query,
     onchange: null,
     addEventListener: vi.fn(),
@@ -1102,7 +1188,7 @@ function stubMutablePhoneViewport(initialPhone: boolean) {
   };
   const compactMedia = {
     matches: true,
-    media: "(max-width: 1020px)",
+    media: "(max-width: 1374px)",
     onchange: null,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),

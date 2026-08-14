@@ -26,6 +26,8 @@ import {
 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { SOURCE_SCOPE, sourceTreeDigest } from "./sourceDigest.mjs";
+
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = resolve(dirname(scriptPath), "../../../..");
 const workerRoot = join(repoRoot, "apps/worker");
@@ -89,7 +91,7 @@ await mkdir(dirname(finalRoot), { recursive: true });
 const stagingRoot = await mkdtemp(join(dirname(finalRoot), `.${basename(finalRoot)}.staging-`));
 await mkdir(join(stagingRoot, "shipped"), { recursive: true });
 
-const sourceScope = ["apps/worker/src", "apps/worker/tests/visual"];
+const sourceScope = SOURCE_SCOPE;
 const sourceDigestBefore = await treeDigest(sourceScope);
 let server = null;
 let browser = null;
@@ -574,39 +576,11 @@ function pngDimensions(bytes) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-async function treeDigest(scopes) {
-  const digest = createHash("sha256");
-  for (const scope of scopes) {
-    const absoluteScope = join(repoRoot, scope);
-    for (const path of await walk(absoluteScope)) {
-      const metadata = await lstat(path);
-      const relativePath = relative(repoRoot, path).split(sep).join("/");
-      digest.update(`${relativePath}\0`);
-      if (metadata.isSymbolicLink()) {
-        digest.update(`symlink\0${await readlink(path)}\0`);
-      } else {
-        digest.update("file\0");
-        digest.update(await readFile(path));
-        digest.update("\0");
-      }
-    }
-  }
-  return digest.digest("hex");
-}
-
-async function walk(root) {
-  const paths = [];
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    if (
-      entry.name === ".DS_Store"
-      || entry.name === "__pycache__"
-      || entry.name.endsWith(".pyc")
-    ) continue;
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) paths.push(...await walk(path));
-    else if (entry.isFile() || entry.isSymbolicLink()) paths.push(path);
-  }
-  return paths.sort((left, right) => (left === right ? 0 : left < right ? -1 : 1));
+// treeDigest and its directory walk moved to ./sourceDigest.mjs, which the test
+// that CHECKS this receipt imports too. The walk counted untracked files, so a
+// receipt could only ever match on the one machine that captured it.
+function treeDigest(scopes) {
+  return sourceTreeDigest(repoRoot, scopes);
 }
 
 function sha256(value) {

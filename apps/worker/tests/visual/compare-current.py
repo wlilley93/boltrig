@@ -13,6 +13,7 @@ import json
 import math
 import os
 import shutil
+import subprocess
 import tempfile
 import uuid
 from pathlib import Path
@@ -35,31 +36,27 @@ def sha256(path: Path) -> str:
 
 def source_tree_digest() -> str:
     digest = hashlib.sha256()
-    for scope in SOURCE_SCOPE:
-        root = REPO_ROOT / scope
-        paths = sorted(
-            (
-                path
-                for path in root.rglob("*")
-                if path.name != ".DS_Store"
-                and "__pycache__" not in path.parts
-                and path.suffix != ".pyc"
-                and (path.is_file() or path.is_symlink())
-            ),
-            key=lambda path: path.relative_to(REPO_ROOT).as_posix(),
-        )
-        for path in paths:
-            relative_path = path.relative_to(REPO_ROOT).as_posix()
-            digest.update(relative_path.encode())
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--", *SOURCE_SCOPE],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+    ).stdout
+    for relative_path in sorted(path for path in listed.split(b"\0") if path):
+        decoded = os.fsdecode(relative_path)
+        path = REPO_ROOT / decoded
+        if not path.exists() and not path.is_symlink():
+            continue  # staged deletion: indexed, but absent from the candidate tree
+        digest.update(relative_path)
+        digest.update(b"\0")
+        if path.is_symlink():
+            digest.update(b"symlink\0")
+            digest.update(os.fsencode(os.readlink(path)))
             digest.update(b"\0")
-            if path.is_symlink():
-                digest.update(b"symlink\0")
-                digest.update(os.readlink(path).encode())
-                digest.update(b"\0")
-            else:
-                digest.update(b"file\0")
-                digest.update(path.read_bytes())
-                digest.update(b"\0")
+        else:
+            digest.update(b"file\0")
+            digest.update(path.read_bytes())
+            digest.update(b"\0")
     return digest.hexdigest()
 
 

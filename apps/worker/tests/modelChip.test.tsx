@@ -49,6 +49,10 @@ describe("chat model switcher", () => {
     expect(trigger.textContent).not.toContain("Best available");
 
     fireEvent.click(trigger);
+    expect(screen.getByRole("menu", { name: "Model and runtime" })).toBeTruthy();
+    expect(screen.getByText("Workspace policy")).toBeTruthy();
+    expect(screen.getByText("Gateway managed")).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Choose model" }));
     const listbox = screen.getByRole("listbox", { name: "Models" });
     expect(within(listbox).getByText("anthropic/claude-sonnet-4-5")).toBeTruthy();
     expect(within(listbox).queryByText("choice-writing")).toBeNull();
@@ -63,7 +67,7 @@ describe("chat model switcher", () => {
     const onChange = vi.fn();
     render(<ModelChip choices={choices} onChange={onChange} value="" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    openModelOptions();
     const unavailable = screen.getByRole("option", {
       name: "google/gemini-3-pro Unavailable",
     });
@@ -87,13 +91,36 @@ describe("chat model switcher", () => {
 
     expect(screen.getByRole("button", { name: "Model" }).textContent)
       .toContain("Automatic · openai/gpt-5.4Unavailable");
-    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    openModelOptions();
     const automatic = screen.getByRole("option", {
       name: "Automatic · openai/gpt-5.4 Unavailable",
     });
     expect(automatic.getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(automatic);
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps effort and speed informational because admission owns both", () => {
+    const onChange = vi.fn();
+    render(
+      <ModelChip
+        choices={choices}
+        defaultModelName="openai/gpt-5.4"
+        onChange={onChange}
+        value="choice-writing"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    expect(screen.queryByRole("button", { name: /Effort/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Speed/ })).toBeNull();
+    expect(screen.getByText("Workspace policy").closest<HTMLElement>(".model-runtime-fact")?.title)
+      .toContain("trusted runtime admission policy");
+    expect(screen.getByText("Gateway managed").closest<HTMLElement>(".model-runtime-fact")?.title)
+      .toContain("model gateway");
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Reset to Automatic" }));
+    expect(onChange).toHaveBeenCalledWith("");
   });
 
   it("puts model management outside the listbox and locks during a live turn", () => {
@@ -122,7 +149,7 @@ describe("chat model switcher", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Model" }));
-    const manage = screen.getByRole("button", { name: "Manage models…" });
+    const manage = screen.getByRole("menuitem", { name: "Manage models…" });
     expect(manage.closest('[role="listbox"]')).toBeNull();
     fireEvent.click(manage);
     expect(onManage).toHaveBeenCalledOnce();
@@ -146,3 +173,8 @@ describe("chat model switcher", () => {
       .toContain("route-b");
   });
 });
+
+function openModelOptions() {
+  fireEvent.click(screen.getByRole("button", { name: "Model" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Choose model" }));
+}

@@ -19,6 +19,7 @@ interface ChatProjectionInput {
   error: string;
   events: ChatEvent[];
   localQueuedMessages: ChatMessage[];
+  queuedMessageOrder: string[];
   materializedOutputs: Record<string, string>;
   messages: ChatMessage[];
 }
@@ -40,8 +41,14 @@ export function useChatProjection(input: ChatProjectionInput) {
       visibleMessages,
       input.localQueuedMessages,
       input.consumedSteerIds,
+      input.queuedMessageOrder,
     ),
-    [input.consumedSteerIds, input.localQueuedMessages, visibleMessages],
+    [
+      input.consumedSteerIds,
+      input.localQueuedMessages,
+      input.queuedMessageOrder,
+      visibleMessages,
+    ],
   );
   const transcriptMessages = useMemo(() => {
     const queuedIds = new Set(queuedMessages.map((message) => message.id));
@@ -116,6 +123,7 @@ export function queuedMessagesFrom(
   messages: ChatMessage[],
   localQueuedMessages: ChatMessage[],
   consumedSteerIds: string[],
+  queuedMessageOrder: string[] = [],
 ): ChatMessage[] {
   const assistantCount = messages.filter((message) => message.role === "assistant").length;
   const serverQueued = messages
@@ -123,8 +131,17 @@ export function queuedMessagesFrom(
     .slice(assistantCount)
     .filter((message) => !message.run_id && !consumedSteerIds.includes(message.id));
   const byId = new Map<string, ChatMessage>();
-  for (const message of [...serverQueued, ...localQueuedMessages]) byId.set(message.id, message);
-  return [...byId.values()];
+  for (const message of [...serverQueued, ...localQueuedMessages]) {
+    if (!consumedSteerIds.includes(message.id)) byId.set(message.id, message);
+  }
+  const ordered: ChatMessage[] = [];
+  for (const id of queuedMessageOrder) {
+    const message = byId.get(id);
+    if (!message) continue;
+    ordered.push(message);
+    byId.delete(id);
+  }
+  return [...ordered, ...byId.values()];
 }
 
 export function uniqueConversationSources(

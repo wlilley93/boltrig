@@ -39,6 +39,7 @@
       ],
       "required_presence_selectors": [
         ".sidebar.shell-parity",
+        ".companion-switcher-trigger[aria-label=\"Companion: Familiar\"]",
         ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"]",
         ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"]",
         "#shell-pinned-tasks.shell-task-group-label",
@@ -53,6 +54,7 @@
         ".composer-voice-controller[hidden]"
       ],
       "required_absence_selectors": [
+        ".companion-menu",
         ".side-status",
         ".side-status-dot",
         ".conversation-search",
@@ -73,6 +75,7 @@
         ".composer-voice-controller:not([hidden])"
       ],
       "required_visible_selectors": [
+        ".companion-switcher-trigger",
         "#shell-pinned-tasks.shell-task-group-label",
         "#shell-recent-tasks.shell-task-group-label",
         ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-row.pinned .session-main",
@@ -89,6 +92,7 @@
         { "selector": ".composer .voice-primary", "count": 1 }
       ],
       "required_computed_styles": [
+        { "selector": ".sidebar.shell-parity", "property": "background-color", "value": "rgba(32, 36, 29, 0.96)" },
         { "selector": ".composer-voice-controller", "property": "display", "value": "none" }
       ],
       "required_geometry": [
@@ -96,11 +100,12 @@
         { "selector": "#shell-pinned-tasks.shell-task-group-label", "height": 20 },
         { "selector": "#shell-recent-tasks.shell-task-group-label", "height": 20 },
         { "selector": ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-main", "height": 31 },
-        { "selector": ".new-chat-transcript .welcome", "x": 480.5, "y": 333.5, "width": 745, "height": 249 },
-        { "selector": ".new-chat-transcript .welcome h1", "x": 480.5, "y": 333.5, "width": 745, "height": 38 },
-        { "selector": ".new-chat-transcript .composer.new-context", "x": 480.5, "y": 460.5, "width": 745, "height": 122 },
-        { "selector": ".new-chat-transcript .composer-frame", "x": 480.5, "y": 460.5, "width": 745, "height": 89 },
-        { "selector": ".voice-intro", "x": 480.5, "y": 393.5, "width": 745, "height": 57 }
+        { "selector": ".new-chat-transcript .welcome", "x": 480.5, "y": 40, "width": 745, "height": 836 },
+        { "selector": ".new-chat-transcript .welcome h1", "x": 480.5, "y": 335.5, "width": 745, "height": 38 },
+        { "selector": ".voice-intro", "x": 480.5, "y": 687, "width": 745, "height": 57 },
+        { "selector": ".new-chat-transcript .composer.new-context", "x": 480.5, "y": 754, "width": 745, "height": 122 },
+        { "selector": ".new-chat-transcript .composer-frame", "x": 480.5, "y": 787, "width": 745, "height": 89 },
+        { "selector": ".new-chat-transcript .composer-context", "x": 492.5, "y": 754, "width": 721, "height": 41 }
       ],
       "required_text": [
         "Pinned",
@@ -111,6 +116,7 @@
         "Approve for me"
       ],
       "required_exact_text": [
+        { "selector": ".companion-switcher-trigger", "text": "Familiar" },
         { "selector": "#shell-pinned-tasks", "text": "Pinned" },
         { "selector": "#shell-recent-tasks", "text": "Recents" }
       ],
@@ -126,7 +132,7 @@
         "Work through a list",
         "Keep an eye on something"
       ],
-      "direction_records": ["DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018"],
+      "direction_records": ["DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021"],
       "known_contract_bound_deviations": [
         "Voice availability is represented by the real idle control; no microphone or realtime media session is fabricated.",
         "The latest user direction overrides the duplicated waveform in the static frame: one voice action is shown once, while the real VoiceCall controller remains mounted and hidden behind the empty-draft primary.",
@@ -162,6 +168,7 @@
       ],
       "required_presence_selectors": [
         ".sidebar.shell-parity",
+        ".companion-switcher-trigger[aria-label=\"Companion: Familiar\"]",
         ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"]",
         ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"]",
         "#shell-pinned-tasks.shell-task-group-label",
@@ -180,6 +187,7 @@
         ".composer-voice-controller[hidden]"
       ],
       "required_absence_selectors": [
+        ".companion-menu",
         ".side-status",
         ".side-status-dot",
         ".conversation-search",
@@ -196,14 +204,16 @@
         ".right-rail .rail-group[aria-label=\"Processes\"]",
         ".right-rail .rail-group[aria-label=\"Terminal\"]",
         ".transcript-navigation button[aria-label=\"Jump to latest\"]",
-        ".composer-voice-controller:not([hidden])"
+        ".session-row .shell-recent-meta",
+        ".composer-voice-controller:not([hidden])",
+        ".run-progress",
+        ".queued-messages"
       ],
       "required_visible_selectors": [
+        ".companion-switcher-trigger",
         "#shell-pinned-tasks.shell-task-group-label",
         "#shell-recent-tasks.shell-task-group-label",
         ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-row.pinned .session-main",
-        ".session-row.active .shell-recent-meta",
-        ".session-row.active .session-actions",
         ".transcript-tool-summary",
         ".transcript-subagent-chip",
         ".transcript-navigation[aria-label=\"Transcript navigation\"]",
@@ -232,13 +242,14 @@
         { "selector": "#shell-pinned-tasks.shell-task-group-label", "height": 20 },
         { "selector": "#shell-recent-tasks.shell-task-group-label", "height": 20 },
         { "selector": ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-main", "height": 31 },
-        { "selector": ".session-row.active .session-main", "height": 44 },
+        { "selector": ".session-row.active .session-main", "height": 31 },
         { "selector": ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"] .session-row:not(.active) .session-main", "height": 31 },
         { "selector": ".transcript-tool-summary", "height": 24 },
         { "selector": ".transcript-navigation", "width": 63, "height": 34 },
         { "selector": ".right-rail .chat-rail-glass", "width": 302, "y": 16 }
       ],
       "required_computed_styles": [
+        { "selector": ".sidebar.shell-parity", "property": "background-color", "value": "rgba(32, 36, 29, 0.96)" },
         { "selector": ".right-rail", "property": "background-color", "value": "rgba(0, 0, 0, 0)" },
         { "selector": ".right-rail", "property": "border-top-width", "value": "0px" },
         { "selector": ".chat-rail-glass", "property": "border-top-width", "value": "0px" },
@@ -250,9 +261,11 @@
         { "selector": ".transcript-navigation", "property": "backdrop-filter", "value": "blur(18px) saturate(1.25)" },
         { "selector": ".sidebar.shell-parity", "property": "border-right-width", "value": "0px" },
         { "selector": ".sidebar.shell-parity", "property": "backdrop-filter", "value": "blur(22px) saturate(1.05)" },
+        { "selector": ".session-row.active .session-actions", "property": "opacity", "value": "0" },
         { "selector": ".composer-voice-controller", "property": "display", "value": "none" }
       ],
       "required_exact_text": [
+        { "selector": ".companion-switcher-trigger", "text": "Familiar" },
         { "selector": "#shell-pinned-tasks", "text": "Pinned" },
         { "selector": "#shell-recent-tasks", "text": "Recents" },
         { "selector": ".transcript-navigation-status", "text": "No user message selected" },
@@ -275,13 +288,14 @@
         "script run by",
         "depth 1"
       ],
-      "direction_records": ["DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018"],
+      "direction_records": ["DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027"],
       "known_contract_bound_deviations": [
         "The evidence uses a completed persisted turn, not fabricated live SSE progress; the structured events are the durable transcript contract.",
         "No generated artifact is claimed because the fixture exposes no governed artifact record for this turn.",
         "The target's approval card belongs to a live paused run. This completed transcript has no active HITL request, so it does not offer a fabricated actionable approval or waiting state.",
         "Computer-use and spend are omitted because neither has a truthful receipt in this fixture.",
         "The latest user direction renders the empty-draft voice action once; the duplicate embedded waveform remains mounted but visually and accessibly hidden.",
+        "Live workflow progress, queued turns and reorder controls stay absent because this evidence uses a completed persisted run; the fixture does not fabricate active step or queue state.",
         "The governed file-metadata verb is not projected because this conversation binds no explicit device and root; Git, process-inventory and terminal panels remain omitted."
       ],
       "output": "docs/design/evidence/2026-08-11-console-parity/shipped/chat-run.png",
@@ -308,17 +322,25 @@
         "/v1/model-endpoints"
       ],
       "required_presence_selectors": [
+        ".companion-switcher-trigger[aria-label=\"Companion: Familiar\"]",
         ".agents-fleet-topbar",
         ".fleet-summary",
         ".fleet-authority-key",
         ".fleet-canvas"
       ],
+      "required_absence_selectors": [
+        ".companion-menu"
+      ],
       "required_visible_selectors": [
+        ".companion-switcher-trigger",
         ".agents-fleet-topbar .console-seg",
         ".agents-fleet-topbar .console-primary",
         ".fleet-summary",
         ".fleet-authority-key",
         ".fleet-canvas"
+      ],
+      "required_exact_text": [
+        { "selector": ".companion-switcher-trigger", "text": "Familiar" }
       ],
       "required_geometry": [
         { "selector": ".agents-fleet-topbar", "x": 266, "y": 0, "width": 1174, "height": 48 },
@@ -337,7 +359,10 @@
         "spend",
         "delegate"
       ],
-      "direction_records": ["DIR-0003", "DIR-0010", "DIR-0015", "DIR-0016"],
+      "required_computed_styles": [
+        { "selector": ".sidebar.shell-parity", "property": "background-color", "value": "rgba(32, 36, 29, 0.96)" }
+      ],
+      "direction_records": ["DIR-0003", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021"],
       "known_contract_bound_deviations": [
         "Runtime liveness and authority envelopes are not exposed by these contracts, so the topology renders them as unknown instead of inventing live or full-authority states.",
         "Windowed per-agent spend is unavailable and remains shown as unavailable."
@@ -366,6 +391,7 @@
         "/v1/addons"
       ],
       "required_presence_selectors": [
+        ".companion-switcher-trigger[aria-label=\"Companion: Familiar\"]",
         ".plugins-page",
         ".plugins-pane",
         ".plugins-heading h1",
@@ -378,6 +404,7 @@
         ".plugins-groups"
       ],
       "required_absence_selectors": [
+        ".companion-menu",
         ".side-status",
         ".side-status-dot",
         ".conversation-search",
@@ -388,6 +415,7 @@
         ".plugins-row-detail"
       ],
       "required_visible_selectors": [
+        ".companion-switcher-trigger",
         ".plugins-heading h1",
         ".plugins-alert[aria-label=\"Connection health issues\"]",
         ".plugins-alert > button",
@@ -411,6 +439,7 @@
         "filesystem"
       ],
       "required_exact_text": [
+        { "selector": ".companion-switcher-trigger", "text": "Familiar" },
         { "selector": ".plugins-heading h1", "text": "Plugins" },
         { "selector": ".plugins-alert-copy strong", "text": "Two need you" },
         { "selector": ".plugins-alert > button", "text": "Look at both" },
@@ -424,7 +453,10 @@
         "check not ready",
         "This run"
       ],
-      "direction_records": ["DIR-0004", "DIR-0010", "DIR-0015", "DIR-0016"],
+      "required_computed_styles": [
+        { "selector": ".sidebar.shell-parity", "property": "background-color", "value": "rgba(32, 36, 29, 0.96)" }
+      ],
+      "direction_records": ["DIR-0004", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021"],
       "known_contract_bound_deviations": [
         "Figma and Browser MCP are deliberately degraded in the fixture so amber health presentation is evidence-backed.",
         "Credential presence is a boolean custody receipt only; no secret material, provider account detail or invented Nango state is exposed."
@@ -455,7 +487,9 @@
         "/v1/calls/current?conversation_id=run-thread"
       ],
       "required_presence_selectors": [
+        ".companion-switcher-trigger[aria-label=\"Companion: Familiar\"]",
         ".sidebar.shell-parity",
+        ".companion-switcher-trigger[aria-label=\"Companion: Familiar\"]",
         ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"]",
         ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"]",
         "#shell-pinned-tasks.shell-task-group-label",
@@ -474,6 +508,8 @@
         ".command-row.active"
       ],
       "required_absence_selectors": [
+        ".companion-menu",
+        ".companion-menu",
         ".side-status",
         ".side-status-dot",
         ".conversation-search",
@@ -492,6 +528,8 @@
         ".transcript-navigation button[aria-label=\"Jump to latest\"]"
       ],
       "required_visible_selectors": [
+        ".companion-switcher-trigger",
+        ".companion-switcher-trigger",
         ".command-palette[data-screen-label=\"Command palette\"]",
         ".command-search",
         ".command-search input[aria-label=\"Search Worker\"]",
@@ -521,6 +559,8 @@
         "Spending settings"
       ],
       "required_exact_text": [
+        { "selector": ".companion-switcher-trigger", "text": "Familiar" },
+        { "selector": ".companion-switcher-trigger", "text": "Familiar" },
         { "selector": "#shell-pinned-tasks", "text": "Pinned" },
         { "selector": "#shell-recent-tasks", "text": "Recents" },
         { "selector": ".transcript-navigation-status", "text": "No user message selected" },
@@ -541,7 +581,10 @@
         "This run",
         "acme · production"
       ],
-      "direction_records": ["DIR-0006", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018"],
+      "required_computed_styles": [
+        { "selector": ".sidebar.shell-parity", "property": "background-color", "value": "rgba(32, 36, 29, 0.96)" }
+      ],
+      "direction_records": ["DIR-0006", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022"],
       "known_contract_bound_deviations": [
         "The palette is intentionally empty-query state; no search result is fabricated or preselected beyond the component's real default.",
         "The background is the same completed persisted turn as Chat run; no live HITL, computer-use or spend state is fabricated.",
@@ -713,6 +756,7 @@
       ],
       "required_presence_selectors": [
         ".sidebar.shell-parity",
+        ".companion-switcher-trigger[aria-label=\"Companion: Familiar\"]",
         ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"]",
         ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"]",
         "#shell-pinned-tasks.shell-task-group-label",
@@ -741,6 +785,7 @@
         ".composer-voice-controller[hidden]"
       ],
       "required_absence_selectors": [
+        ".companion-menu",
         ".side-status",
         ".side-status-dot",
         ".conversation-search",
@@ -757,14 +802,16 @@
         ".right-rail .rail-group[aria-label=\"Processes\"]",
         ".right-rail .rail-group[aria-label=\"Terminal\"]",
         ".transcript-navigation button[aria-label=\"Jump to latest\"]",
-        ".composer-voice-controller:not([hidden])"
+        ".session-row .shell-recent-meta",
+        ".composer-voice-controller:not([hidden])",
+        ".run-progress",
+        ".queued-messages"
       ],
       "required_visible_selectors": [
+        ".companion-switcher-trigger",
         "#shell-pinned-tasks.shell-task-group-label",
         "#shell-recent-tasks.shell-task-group-label",
         ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-row.pinned .session-main",
-        ".session-row.active .shell-recent-meta",
-        ".session-row.active .session-actions",
         ".sidebar-footer .side-account",
         ".sidebar-footer button[aria-label=\"Help and shortcuts\"]",
         ".right-rail .chat-rail-glass",
@@ -801,13 +848,14 @@
         { "selector": "#shell-pinned-tasks.shell-task-group-label", "height": 20 },
         { "selector": "#shell-recent-tasks.shell-task-group-label", "height": 20 },
         { "selector": ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-main", "height": 31 },
-        { "selector": ".session-row.active .session-main", "height": 44 },
+        { "selector": ".session-row.active .session-main", "height": 31 },
         { "selector": ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"] .session-row:not(.active) .session-main", "height": 31 },
         { "selector": ".transcript-tool-summary", "height": 24 },
         { "selector": ".transcript-navigation", "width": 63, "height": 34 },
         { "selector": ".right-rail .chat-rail-glass", "width": 302, "y": 16 }
       ],
       "required_computed_styles": [
+        { "selector": ".sidebar.shell-parity", "property": "background-color", "value": "rgba(32, 36, 29, 0.96)" },
         { "selector": ".right-rail", "property": "background-color", "value": "rgba(0, 0, 0, 0)" },
         { "selector": ".right-rail", "property": "border-top-width", "value": "0px" },
         { "selector": ".chat-rail-glass", "property": "border-top-width", "value": "0px" },
@@ -819,9 +867,11 @@
         { "selector": ".transcript-navigation", "property": "backdrop-filter", "value": "blur(18px) saturate(1.25)" },
         { "selector": ".sidebar.shell-parity", "property": "border-right-width", "value": "0px" },
         { "selector": ".sidebar.shell-parity", "property": "backdrop-filter", "value": "blur(22px) saturate(1.05)" },
+        { "selector": ".session-row.active .session-actions", "property": "opacity", "value": "0" },
         { "selector": ".composer-voice-controller", "property": "display", "value": "none" }
       ],
       "required_exact_text": [
+        { "selector": ".companion-switcher-trigger", "text": "Familiar" },
         { "selector": "#shell-pinned-tasks", "text": "Pinned" },
         { "selector": "#shell-recent-tasks", "text": "Recents" },
         { "selector": ".transcript-navigation-status", "text": "No user message selected" }
@@ -845,7 +895,7 @@
         "script run by",
         "depth 1"
       ],
-      "direction_records": ["DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018"],
+      "direction_records": ["DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027"],
       "reference_digest_manifest": "docs/design/evidence/2026-08-11-chat-ui-direction/references.sha256",
       "shipped_digest_manifest": "docs/design/evidence/2026-08-11-chat-ui-direction/shipped.sha256",
       "target_reference_paths": [
@@ -863,6 +913,7 @@
         "Background-process, Computer Use and Sources sections appear only because this direction fixture supplies explicit completed tool and attachment receipts; no screenshot-shaped placeholder is added.",
         "The Codex authority consists of region crops rather than a full-frame signed target, so this state prepares shipped evidence but cannot establish a VDS frameDigest, sign-off or conformity verdict.",
         "The latest user direction requires one visible waveform for one voice action; the hidden mounted controller preserves runtime ownership without duplicating the affordance.",
+        "Live workflow progress and queued turns stay absent because this evidence uses a completed persisted run; the fixture does not fabricate active step or queue state.",
         "The bounded file-metadata verb is intentionally not rendered because this task has no explicit device and root binding; Git, process-inventory and terminal panels remain unsupported."
       ],
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/shipped/chat-direction.png",

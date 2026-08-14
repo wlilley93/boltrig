@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ConversationSummary } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../../client";
@@ -64,12 +64,6 @@ function useTaskListModel(props: TaskListProps) {
   const [pinnedConversationIds, setPinnedConversationIds] = useState<string[]>(
     () => loadShellPreferences().pinnedConversationIds,
   );
-  const [relativeNow, setRelativeNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setRelativeNow(Date.now()), 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   // Recovery lives in Settings > Archived chats. Keep closed rows outside both
   // groups rather than allowing a second lifecycle inside the navigation rail.
@@ -128,7 +122,6 @@ function useTaskListModel(props: TaskListProps) {
     pinnedConversationIds,
     pinnedConversations,
     recentConversations,
-    relativeNow,
     togglePinnedConversation,
   };
 }
@@ -153,9 +146,6 @@ function ConversationRow({ conversation, model, props }: {
             role="status" title="Working on this chat" />
         )}
       </span>
-      <time className="shell-recent-meta" dateTime={conversation.updated_at}>
-        {relativeTime(conversation.updated_at, model.relativeNow)}
-      </time>
     </button>
     <div className="session-actions" aria-label={`Actions for ${title}`}>
       <button aria-label={isPinned ? `Unpin ${title}` : `Pin ${title}`}
@@ -191,15 +181,4 @@ function ConversationListState({ model, props }: { model: TaskListModel; props: 
     {model.onlyClosedConversations ? "No recent conversations" : "No conversations yet"}
   </p>;
   return null;
-}
-
-function relativeTime(value: string, now = Date.now()): string {
-  const time = Date.parse(value);
-  if (!Number.isFinite(time)) return "";
-  const minutes = Math.max(0, Math.round((now - time) / 60_000));
-  if (minutes < 1) return "now";
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.round(hours / 24)}d`;
 }

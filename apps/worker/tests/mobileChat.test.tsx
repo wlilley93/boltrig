@@ -37,10 +37,12 @@ function mobileChat(props: Partial<Parameters<typeof MobileChat>[0]> = {}) {
       onBack={vi.fn()}
       onComposerChange={vi.fn()}
       onReconnect={vi.fn()}
+      onReorderQueued={vi.fn()}
       onRetryConversation={vi.fn()}
       onSend={vi.fn()}
       onSteerQueued={vi.fn()}
       onStop={vi.fn()}
+      queueReordering={false}
       queuedMessages={[]}
       retryFollow={false}
       subtitle=""
@@ -85,6 +87,9 @@ describe("mobile surface", () => {
       }),
     });
 
+    const agents = screen.getByText("2 subagents").closest("summary");
+    expect(agents?.closest("details")?.open).toBe(false);
+    fireEvent.click(agents!);
     expect(screen.getByText("Lyell")).toBeTruthy();
     expect(screen.getByText("Hutton")).toBeTruthy();
     expect(screen.getByText("The plan")).toBeTruthy();
@@ -257,11 +262,11 @@ describe("mobile surface", () => {
     const alerts = screen.getAllByRole("alert");
     expect(alerts.some((item) => item.textContent?.includes("summary offline"))).toBe(true);
     expect(alerts.some((item) => item.textContent?.includes("stream disconnected"))).toBe(true);
-    expect((screen.getByLabelText("Follow up") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Follow up") as HTMLTextAreaElement).disabled).toBe(true);
     expect(screen.queryByRole("button", { name: "Attach" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry conversation" }));
     fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));
-    fireEvent.click(screen.getByRole("button", { name: "Load" }));
+    fireEvent.click(screen.getByRole("button", { name: /Steer queued message/ }));
     expect(onRetryConversation).toHaveBeenCalledTimes(1);
     expect(onReconnect).toHaveBeenCalledTimes(1);
     expect(onSteerQueued).toHaveBeenCalledWith(queued);
@@ -362,23 +367,71 @@ describe("mobile surface", () => {
       }),
     });
 
-    const tools = screen.getByRole("button", { name: /1 tool/ });
-    expect(tools.getAttribute("aria-expanded")).toBe("false");
-    const toolControls = tools.getAttribute("aria-controls");
-    fireEvent.click(tools);
-    expect(tools.getAttribute("aria-expanded")).toBe("true");
-    expect(document.getElementById(toolControls!)).toBeTruthy();
-    expect(screen.getAllByText("degraded").length).toBeGreaterThanOrEqual(2);
+    const tools = screen.getByText("Used Figma integration").closest("summary");
+    expect(tools).toBeTruthy();
+    expect(tools!.closest("details")?.open).toBe(false);
+    fireEvent.click(tools!);
+    expect(tools!.closest("details")?.open).toBe(true);
+    expect(screen.getByText("figma.read")).toBeTruthy();
+    expect(screen.getAllByText("Degraded")).toHaveLength(2);
+    fireEvent.click(screen.getByText("1 subagent").closest("summary")!);
+    expect(screen.getByText("degraded")).toBeTruthy();
 
     const plan = screen.getByRole("button", { name: /The plan/ });
     expect(plan.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByText("paused")).toBeTruthy();
   });
 
+  it("docks queued work above a multiline composer", () => {
+    renderMobile({
+      queuedMessages: [{
+        id: "queued-1",
+        role: "user",
+        content: "Inspect the compact layout",
+        created_at: "2026-08-11T10:00:00Z",
+      }],
+    });
+
+    const dock = screen.getByRole("region", { name: "Queued messages" }).parentElement;
+    const composer = screen.getByLabelText("Follow up");
+    expect(dock?.classList.contains("m-composer-dock")).toBe(true);
+    expect(composer.tagName).toBe("TEXTAREA");
+    expect(dock?.lastElementChild?.classList.contains("m-composer")).toBe(true);
+  });
+
+  it("offers touch-sized earlier and later controls for queued work", () => {
+    const onReorderQueued = vi.fn();
+    renderMobile({
+      onReorderQueued,
+      queuedMessages: [
+        {
+          id: "queued-1",
+          role: "user",
+          content: "First queued turn",
+          created_at: "2026-08-11T10:00:00Z",
+        },
+        {
+          id: "queued-2",
+          role: "user",
+          content: "Second queued turn",
+          created_at: "2026-08-11T10:00:01Z",
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", {
+      name: "Move queued message later: First queued turn",
+    }));
+    expect(onReorderQueued).toHaveBeenCalledWith(
+      ["queued-1", "queued-2"],
+      ["queued-2", "queued-1"],
+    );
+  });
+
   it("announces an existing conversation load without showing the New-chat welcome", () => {
     renderMobile({ composerDisabled: true, loadingConversation: true, newState: false });
     expect(screen.getByRole("status").textContent).toContain("Loading conversation");
     expect(screen.queryByText(/Say what needs doing/)).toBeNull();
-    expect((screen.getByLabelText("Follow up") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Follow up") as HTMLTextAreaElement).disabled).toBe(true);
   });
 });

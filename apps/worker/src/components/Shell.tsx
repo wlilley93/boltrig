@@ -254,10 +254,13 @@ export function Sidebar({
         >
           <div className="side-menu-identity">
             <span aria-hidden className="side-avatar">{initials}</span>
-            <span className="side-menu-name">
-              {identity
-                ? identity.user
-                : (identityStatus === "unavailable" ? "Identity unavailable" : "Loading identity…")}
+            <span className="side-menu-identity-copy">
+              <span className="side-menu-name">
+                {identity
+                  ? identity.user
+                  : (identityStatus === "unavailable" ? "Identity unavailable" : "Loading identity…")}
+              </span>
+              {identity?.role && <small className="side-menu-role">{identity.role}</small>}
             </span>
           </div>
           {accountMenuItems.map((item) => (
@@ -337,9 +340,6 @@ export function Sidebar({
             setAccountOpen((current) => !current);
             setHelpOpen(false);
           }}
-          title={identity
-            ? `${identity.user} · ${identity.role ?? "member"}`
-            : undefined}
           ref={accountTriggerRef}
           type="button"
         >

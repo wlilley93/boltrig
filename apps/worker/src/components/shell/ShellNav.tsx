@@ -1,4 +1,5 @@
 import type { WorkerRoute } from "../../routes";
+import { CompanionSwitcher } from "./CompanionSwitcher";
 import { ShellIcon, type ShellIconName } from "./ShellIcon";
 
 const primary: Array<{
@@ -31,7 +32,7 @@ export function ShellNav({ route, onRoute, onCommandPalette }: ShellNavProps) {
   return (
     <>
       <div className="side-top">
-        <span className="side-brand">boltrig</span>
+        <CompanionSwitcher route={route} />
         {onCommandPalette && (
           <button
             aria-label="Open command palette"

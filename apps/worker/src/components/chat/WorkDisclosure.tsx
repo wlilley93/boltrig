@@ -1,6 +1,12 @@
+import { useState } from "react";
 import type { NormalizedTurn, ToolEntry } from "@wlilley93/boltrig-web-sdk";
 
-import { integrationForToolVerb } from "./toolActivity";
+import { ToolReceiptDetails } from "./ToolReceiptDetails";
+import {
+  toolGlyphKind,
+  toolPhrase,
+  type ToolGlyphKind,
+} from "./toolVerbPresentation";
 import "./TranscriptDensity.css";
 
 interface WorkDisclosureProps {
@@ -10,22 +16,9 @@ interface WorkDisclosureProps {
   settled?: boolean;
   startedAt?: number | null;
   durationSeconds?: number | null;
-}
-
-const FILE_SCOPE = /(^|[._:/-])(file|files|filesystem|fs)([._:/-]|$)/;
-const FILE_READ = /(^|[._:/-])(read|list|open|load|get|find|search|glob)([._:/-]|$)/;
-const FILE_EDIT = /(^|[._:/-])(write|edit|create|save|append|patch|move|rename|delete|remove)([._:/-]|$)/;
-const COMMAND = /(^|[._:/-])(exec|execute|command|shell|terminal|script|bash|zsh)([._:/-]|$)/;
-
-type ToolGlyphKind = "figma" | "read" | "command" | "generic";
-
-function toolGlyphKind(tools: ToolEntry[]): ToolGlyphKind {
-  const verbs = tools.map((tool) => tool.verb.trim().toLowerCase());
-  if (verbs.some((verb) => integrationForToolVerb(verb)?.id === "figma")) return "figma";
-  const first = verbs[0] ?? "";
-  if (FILE_SCOPE.test(first) && FILE_READ.test(first)) return "read";
-  if (COMMAND.test(first)) return "command";
-  return "generic";
+  /** The enclosing persisted turn owns the run id when an ordered tool slice
+      contains no message_start frame of its own. */
+  runId?: string;
 }
 
 function ToolGlyph({ kind }: { kind: ToolGlyphKind }) {
@@ -65,32 +58,6 @@ function ToolGlyph({ kind }: { kind: ToolGlyphKind }) {
       </svg>
     </span>
   );
-}
-
-function toolPhrase(verb: string): string | null {
-  const value = verb.trim().toLowerCase();
-  const integration = integrationForToolVerb(value);
-  if (integration) return `used ${integration.label} integration`;
-  if (value === "apply_patch" || (FILE_SCOPE.test(value) && FILE_EDIT.test(value))) {
-    return "edited files";
-  }
-  if (FILE_SCOPE.test(value) && FILE_READ.test(value)) return "read files";
-  if (COMMAND.test(value)) return "ran commands";
-  if (/web[._:/-](search|query)|search_query/.test(value)) return "searched the web";
-  if (/(^|[._:/-])browser([._:/-]|$)/.test(value)) return "used the browser";
-  if (/(^|[._:/-])(calendar|schedule|meeting)([._:/-]|$)/.test(value)) {
-    return "used calendar tools";
-  }
-  if (/(^|[._:/-])(mail|email|message|notify)([._:/-]|$)/.test(value)) {
-    return "used messaging tools";
-  }
-  if (/(^|[._:/-])(database|sql|crm|record|table)([._:/-]|$)/.test(value)) {
-    return "queried data";
-  }
-  // Exact ids remain available in the expanded audit rows. An unknown verb is
-  // not suitable resting-chat copy: exposing it here recreates the diagnostic
-  // dump this compact receipt is meant to replace.
-  return null;
 }
 
 function toolState(tools: ToolEntry[]): { label: string; tone?: "amber" | "red" | "muted" } | null {
@@ -137,13 +104,17 @@ function toolSummary(tools: ToolEntry[]): { text: string; state: ReturnType<type
  * verb ids and statuses, so the summary classifies those facts conservatively;
  * the native disclosure keeps every exact id/status available without making
  * the resting transcript a stack of diagnostic cards. */
-export function WorkDisclosure({ turn }: WorkDisclosureProps) {
+export function WorkDisclosure({ turn, runId = turn.runId }: WorkDisclosureProps) {
+  const [expanded, setExpanded] = useState(false);
   if (turn.tools.length === 0) return null;
   const summary = toolSummary(turn.tools);
   const detailCount = turn.tools.length;
   const glyph = toolGlyphKind(turn.tools);
   return (
-    <details className="work-disclosure transcript-tool-disclosure">
+    <details
+      className="work-disclosure transcript-tool-disclosure"
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+    >
       <summary
         aria-label={`${summary.text}${summary.state ? `, ${summary.state.label}` : ""}. ${detailCount} ${detailCount === 1 ? "tool detail" : "tool details"}`}
         className="transcript-tool-summary"
@@ -154,14 +125,7 @@ export function WorkDisclosure({ turn }: WorkDisclosureProps) {
           <small data-tone={summary.state.tone}>{summary.state.label}</small>
         )}
       </summary>
-      <div aria-label="Exact tool details" className="transcript-tool-details" role="list">
-        {turn.tools.map((tool, index) => (
-          <div className="transcript-tool-detail" key={tool.callId ?? `${tool.key}-${index}`} role="listitem">
-            <code>{tool.verb}</code>
-            <span data-status={tool.status}>{tool.status}</span>
-          </div>
-        ))}
-      </div>
+      {expanded && <ToolReceiptDetails runId={runId} tools={turn.tools} />}
     </details>
   );
 }

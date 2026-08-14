@@ -26,7 +26,7 @@ function contrast(foreground: string, background: string) {
 describe("Chat rail parity CSS", () => {
   it("floats one borderless glass surface over a transparent rail column", () => {
     expect(css).toContain(".right-rail:not(.task-details-sheet) {");
-    expect(css).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(css).toContain("grid-template-columns: minmax(793px, 1fr) auto");
     expect(css).toContain("width: var(--task-inspector-width, 316px)");
     expect(css).toContain("flex-basis: var(--task-inspector-width, 316px)");
     expect(css).toContain("padding: 16px 12px 12px 2px");
@@ -54,8 +54,8 @@ describe("Chat rail parity CSS", () => {
     expect(contrast("#9a9a9a", "#313131")).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("keeps compact task details as one borderless floating glass object", () => {
-    expect(css).toContain("@media (max-width: 1020px)");
+  it("keeps the phone task sheet as one borderless floating glass object", () => {
+    expect(css).toContain("@media (max-width: 1374px)");
     expect(css).toContain(".right-rail.task-details-sheet {");
     expect(css).toContain("max-height: calc(100dvh - 20px);");
     expect(css).toContain(".right-rail.task-details-sheet > .chat-rail-glass");

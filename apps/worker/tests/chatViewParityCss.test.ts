@@ -12,12 +12,16 @@ const workerCss = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "../src/styles.css"),
   "utf-8",
 );
+const chatCss = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "../src/components/chat/chat.css"),
+  "utf-8",
+);
 
 describe("Chat parity geometry", () => {
-  it("keeps the Codex-dark Chat canvas distinct from its floating rail", () => {
+  it("keeps the Codex-dark Chat canvas neutral without overriding the shared rail tint", () => {
     expect(css).toContain(':root[data-theme="dark"] .surface:has(.chat-layout)');
     expect(css).toContain("background: #171717");
-    expect(css).toContain(".sidebar.shell-parity");
+    expect(css).not.toContain(".sidebar.shell-parity");
   });
 
   it("keeps the active composer compact without changing New or closed states", () => {
@@ -47,6 +51,8 @@ describe("Chat parity geometry", () => {
     expect(workerCss).toMatch(/\.welcome h1,\s*\n\.welcome h2\s*\{[^}]*height:\s*38px/);
     expect(workerCss).toMatch(/\.welcome h1,\s*\n\.welcome h2\s*\{[^}]*line-height:\s*34px/);
     expect(workerCss).toMatch(/\.new-chat-transcript \.welcome\s*\{[^}]*transform:\s*none/);
+    expect(chatCss).toMatch(/\.transcript\.new-chat-transcript\s*\{[^}]*justify-content:\s*stretch/);
+    expect(chatCss).toMatch(/\.new-chat-transcript \.welcome\s*\{[^}]*grid-template-rows:\s*minmax\(0, 1fr\) auto/);
     expect(workerCss).not.toContain(".welcome .starter-card");
   });
 

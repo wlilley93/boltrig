@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { SOURCE_SCOPE, sourceTreeDigest as digestOf } from "./sourceDigest.mjs";
 import manifest from "./states.json";
 
 const canonicalStateIds = [
@@ -76,42 +77,14 @@ type ContractState = (typeof manifest.states)[number] & {
   direction_records: string[];
 };
 
-const sourceScope = ["apps/worker/src", "apps/worker/tests/visual"] as const;
+const sourceScope = SOURCE_SCOPE;
 const repoRootPath = fileURLToPath(new URL("../../../../", import.meta.url));
 
-async function sourceTreeDigest(): Promise<string> {
-  const digest = createHash("sha256");
-  for (const scope of sourceScope) {
-    for (const path of await walk(join(repoRootPath, scope))) {
-      const metadata = await lstat(path);
-      const relativePath = relative(repoRootPath, path).split(sep).join("/");
-      digest.update(`${relativePath}\0`);
-      if (metadata.isSymbolicLink()) {
-        digest.update(`symlink\0${await readlink(path)}\0`);
-      } else {
-        digest.update("file\0");
-        digest.update(await readFile(path));
-        digest.update("\0");
-      }
-    }
-  }
-  return digest.digest("hex");
-}
-
-async function walk(root: string): Promise<string[]> {
-  const paths: string[] = [];
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    if (
-      entry.name === ".DS_Store"
-      || entry.name === "__pycache__"
-      || entry.name.endsWith(".pyc")
-    ) continue;
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) paths.push(...await walk(path));
-    else if (entry.isFile() || entry.isSymbolicLink()) paths.push(path);
-  }
-  return paths.sort((left, right) => (left === right ? 0 : left < right ? -1 : 1));
-}
+// The digest and its membership rule live in sourceDigest.mjs, imported here AND
+// by capture-current.mjs. This file used to carry a second copy of the hashing
+// scheme; the copy that recomputes a value is exactly the one that must not be
+// free to drift from the copy that wrote it.
+const sourceTreeDigest = () => digestOf(repoRootPath, sourceScope);
 
 describe("console parity evidence manifest", () => {
   it("keeps the seven canonical states in order and appends additive evidence", () => {
@@ -192,6 +165,37 @@ describe("console parity evidence manifest", () => {
     expect(newChat!.settled_when).toContain("not fetched by the idle Familiar");
   });
 
+  it("binds shared dark Shell routes to the green-black rail split", () => {
+    for (const id of ["new-chat", "chat-run", "agents", "plugins", "command-palette", "chat-direction"]) {
+      const state = manifest.states.find((candidate) => candidate.id === id);
+      expect(state, id).toBeDefined();
+      expect(state!.direction_records, id).toContain("DIR-0021");
+      expect(state!.required_computed_styles, id).toContainEqual({
+        selector: ".sidebar.shell-parity",
+        property: "background-color",
+        value: "rgba(32, 36, 29, 0.96)",
+      });
+    }
+
+    for (const id of ["call", "settings-you"]) {
+      const state = manifest.states.find((candidate) => candidate.id === id);
+      expect(state, id).toBeDefined();
+      expect(state!.direction_records, id).not.toContain("DIR-0021");
+    }
+  });
+
+  it("keeps richer tool receipts closed in capture while binding their on-demand direction", () => {
+    for (const id of ["chat-run", "command-palette", "chat-direction"]) {
+      const state = manifest.states.find((candidate) => candidate.id === id);
+      expect(state, id).toBeDefined();
+      expect(state!.direction_records, id).toContain("DIR-0022");
+      expect(state!.required_absence_selectors, id)
+        .toContain(".transcript-tool-disclosure[open]");
+    }
+    expect(manifest.states.find((state) => state.id === "new-chat")!.direction_records)
+      .not.toContain("DIR-0022");
+  });
+
   it("opens the command palette over the same completed run-thread contract as Chat run", () => {
     const chatRun = manifest.states.find((state) => state.id === "chat-run") as
       | ContractState
@@ -209,7 +213,7 @@ describe("console parity evidence manifest", () => {
       "The background is the same completed persisted turn as Chat run; no live HITL, computer-use or spend state is fabricated.",
     );
     expect(palette!.direction_records).toEqual([
-      "DIR-0006", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018",
+      "DIR-0006", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022",
     ]);
     expect(palette!.required_presence_selectors).toEqual(expect.arrayContaining([
       ".sidebar.shell-parity",
@@ -273,7 +277,7 @@ describe("console parity evidence manifest", () => {
       | undefined;
 
     expect(plugins).toBeDefined();
-    expect(plugins!.direction_records).toEqual(["DIR-0004", "DIR-0010", "DIR-0015", "DIR-0016"]);
+    expect(plugins!.direction_records).toEqual(["DIR-0004", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021"]);
     expect(plugins!.required_presence_selectors).not.toContain(".sidebar.shell-parity");
     expect(plugins!.required_presence_selectors).toEqual(expect.arrayContaining([
       ".plugins-pane",
@@ -332,7 +336,8 @@ describe("console parity evidence manifest", () => {
     for (const state of [newChat, chatRun]) {
       expect(state).toBeDefined();
       expect(state!.direction_records).toEqual([
-        "DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018",
+        "DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021",
+        ...(state!.id === "chat-run" ? ["DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027"] : []),
       ]);
       expect(state!.required_presence_selectors).toContain(".sidebar.shell-parity");
       expect(state!.required_presence_selectors).toEqual(expect.arrayContaining([
@@ -359,6 +364,11 @@ describe("console parity evidence manifest", () => {
       ]));
     }
 
+    expect(chatRun!.required_absence_selectors).toEqual(expect.arrayContaining([
+      ".run-progress",
+      ".queued-messages",
+    ]));
+
     expect(newChat!.required_visible_selectors).toEqual(expect.arrayContaining([
       ".new-chat-transcript .welcome h1",
       ".new-chat-transcript .composer.new-context",
@@ -376,9 +386,9 @@ describe("console parity evidence manifest", () => {
       "Keep an eye on something",
     ]));
     expect(newChat!.required_geometry).toEqual(expect.arrayContaining([
-      { selector: ".new-chat-transcript .welcome", x: 480.5, y: 333.5, width: 745, height: 249 },
-      { selector: ".new-chat-transcript .composer.new-context", x: 480.5, y: 460.5, width: 745, height: 122 },
-      { selector: ".voice-intro", x: 480.5, y: 393.5, width: 745, height: 57 },
+      { selector: ".new-chat-transcript .welcome", x: 480.5, y: 40, width: 745, height: 836 },
+      { selector: ".new-chat-transcript .composer.new-context", x: 480.5, y: 754, width: 745, height: 122 },
+      { selector: ".voice-intro", x: 480.5, y: 687, width: 745, height: 57 },
     ]));
     expect(newChat!.required_visible_counts).toContainEqual({
       selector: ".sidebar-footer > button",
@@ -416,7 +426,6 @@ describe("console parity evidence manifest", () => {
       value: "none",
     });
     expect(chatRun!.required_visible_selectors).toEqual(expect.arrayContaining([
-      ".session-row.active .session-actions",
       ".transcript-tool-summary",
       ".transcript-subagent-chip",
       ".transcript-navigation[aria-label=\"Transcript navigation\"]",
@@ -442,6 +451,7 @@ describe("console parity evidence manifest", () => {
     expect(chatRun!.required_geometry).toEqual(expect.arrayContaining([
       { selector: "#shell-pinned-tasks.shell-task-group-label", height: 20 },
       { selector: "#shell-recent-tasks.shell-task-group-label", height: 20 },
+      { selector: ".session-row.active .session-main", height: 31 },
       {
         selector: ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-main",
         height: 31,
@@ -464,8 +474,10 @@ describe("console parity evidence manifest", () => {
       { selector: ".transcript-navigation", property: "backdrop-filter", value: "blur(18px) saturate(1.25)" },
       { selector: ".sidebar.shell-parity", property: "border-right-width", value: "0px" },
       { selector: ".sidebar.shell-parity", property: "backdrop-filter", value: "blur(22px) saturate(1.05)" },
+      { selector: ".session-row.active .session-actions", property: "opacity", value: "0" },
       { selector: ".composer-voice-controller", property: "display", value: "none" },
     ]));
+    expect(chatRun!.required_absence_selectors).toContain(".session-row .shell-recent-meta");
     expect(chatRun!.required_presence_selectors)
       .toContain(".composer-voice-controller[hidden]");
     expect(chatRun!.required_absence_selectors)
@@ -481,6 +493,26 @@ describe("console parity evidence manifest", () => {
     ]));
   });
 
+  it("binds the primary shell identity to the real Familiar companion preference", () => {
+    for (const id of [
+      "new-chat", "chat-run", "agents", "plugins", "command-palette", "chat-direction",
+    ]) {
+      const state = manifest.states.find((candidate) => candidate.id === id) as
+        | ContractState
+        | undefined;
+      expect(state).toBeDefined();
+      expect(state!.required_presence_selectors).toContain(
+        '.companion-switcher-trigger[aria-label="Companion: Familiar"]',
+      );
+      expect(state!.required_visible_selectors).toContain(".companion-switcher-trigger");
+      expect(state!.required_absence_selectors).toContain(".companion-menu");
+      expect(state!.required_exact_text).toContainEqual({
+        selector: ".companion-switcher-trigger",
+        text: "Familiar",
+      });
+    }
+  });
+
   it("fails the additive desktop-chat state closed on the Codex direction contract", () => {
     const direction = manifest.states.find((state) => state.id === "chat-direction") as
       | DirectionState
@@ -493,7 +525,7 @@ describe("console parity evidence manifest", () => {
       "/v1/conversations/direction-thread",
     );
     expect(direction!.direction_records).toEqual([
-      "DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018",
+      "DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027",
     ]);
     expect(direction!.reference_digest_manifest).toBe(
       "docs/design/evidence/2026-08-11-chat-ui-direction/references.sha256",
@@ -501,8 +533,6 @@ describe("console parity evidence manifest", () => {
     expect(direction!.target_reference_paths).toHaveLength(3);
     expect(direction!.negative_reference_paths).toHaveLength(3);
     expect(direction!.required_visible_selectors).toEqual(expect.arrayContaining([
-      ".session-row.active .shell-recent-meta",
-      ".session-row.active .session-actions",
       "#shell-pinned-tasks.shell-task-group-label",
       "#shell-recent-tasks.shell-task-group-label",
       ".transcript-navigation[aria-label=\"Transcript navigation\"]",
@@ -523,6 +553,8 @@ describe("console parity evidence manifest", () => {
       ".side-recents-label",
       ".side-workspace",
       ".right-rail [aria-label=\"Conversation title\"]",
+      ".run-progress",
+      ".queued-messages",
       ...unboundWorkspacePanelSelectors,
     ]));
     expect(direction!.required_text).toContain(
@@ -532,7 +564,7 @@ describe("console parity evidence manifest", () => {
     expect(direction!.required_geometry).toEqual(expect.arrayContaining([
       { selector: "#shell-pinned-tasks.shell-task-group-label", height: 20 },
       { selector: "#shell-recent-tasks.shell-task-group-label", height: 20 },
-      { selector: ".session-row.active .session-main", height: 44 },
+      { selector: ".session-row.active .session-main", height: 31 },
       {
         selector: ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"] .session-row:not(.active) .session-main",
         height: 31,
@@ -541,6 +573,12 @@ describe("console parity evidence manifest", () => {
       { selector: ".transcript-navigation", width: 63, height: 34 },
       { selector: ".right-rail .chat-rail-glass", width: 302, y: 16 },
     ]));
+    expect(direction!.required_absence_selectors).toContain(".session-row .shell-recent-meta");
+    expect(direction!.required_computed_styles).toContainEqual({
+      selector: ".session-row.active .session-actions",
+      property: "opacity",
+      value: "0",
+    });
     expect(direction!.required_visible_counts).toEqual(expect.arrayContaining([
       { selector: ".shell-task-group-label", count: 2 },
       { selector: ".transcript-navigation", count: 1 },
@@ -868,7 +906,7 @@ describe("console parity evidence manifest", () => {
       | ContractState
       | undefined;
     expect(agents).toBeDefined();
-    expect(agents!.direction_records).toEqual(["DIR-0003", "DIR-0010", "DIR-0015", "DIR-0016"]);
+    expect(agents!.direction_records).toEqual(["DIR-0003", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021"]);
     expect(agents!.required_visible_selectors).toEqual(expect.arrayContaining([
       ".agents-fleet-topbar .console-seg",
       ".agents-fleet-topbar .console-primary",

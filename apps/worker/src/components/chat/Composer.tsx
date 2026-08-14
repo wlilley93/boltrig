@@ -25,8 +25,9 @@ import { ModelChip } from "./ModelChip";
 import {
   arrayBufferToBase64,
   formatBytes,
-  modelReadable,
 } from "./attachmentPresentation";
+import { ComposerAddMenu } from "./ComposerAddMenu";
+import { AttachmentStatus } from "./ComposerAttachments";
 
 export interface ComposerProps {
   busy: boolean;
@@ -163,6 +164,7 @@ export function Composer(props: ComposerProps) {
 
   return (
     <form className={`composer${props.closed ? " closed" : ""}${props.newContext ? " new-context" : " conversation-context"}`} onSubmit={submit}>
+      {props.newContext && <ComposerContext runtime={props.agentRuntime ?? "cloud"} />}
       <div className="composer-frame">
         {props.closed && (
           <p className="composer-closed" role="status">
@@ -184,29 +186,7 @@ export function Composer(props: ComposerProps) {
           voicePrimaryVisible={voicePrimaryVisible}
         />
       </div>
-      {props.newContext && <ComposerContext runtime={props.agentRuntime ?? "cloud"} />}
     </form>
-  );
-}
-
-function AttachmentStatus({
-  attachmentLimits,
-  fileError,
-  files,
-  onRemove,
-}: {
-  attachmentLimits: ChatAttachmentLimits;
-  fileError: string;
-  files: ChatAttachment[];
-  onRemove(file: ChatAttachment): void;
-}) {
-  return (
-    <>
-      {files.length > 0 && <div className="file-row">{files.map((file, index) => (
-        <button type="button" className="file-chip" key={`${file.name}-${index}`} onClick={() => onRemove(file)}>▧ {file.name} · {modelReadable(file.media_type, attachmentLimits.model_readable_media_types) ? "model-readable" : "record only"} ×</button>
-      ))}</div>}
-      {fileError && <p className="notice" role="alert">{fileError}</p>}
-    </>
   );
 }
 
@@ -280,19 +260,12 @@ function AttachmentAndPolicyTools(props: ComposerToolsProps) {
   return (
     <div>
       <input ref={props.fileInputRef} hidden type="file" multiple onChange={(event) => void props.addFiles(event.target.files)} />
-      <button
-        type="button"
-        className="icon-button"
-        disabled={props.disabled || props.attachmentsDisabled}
-        onClick={() => props.fileInputRef.current?.click()}
-        aria-label={props.attachmentsDisabled ? "Attachments unavailable for local tasks" : "Attach files"}
-        title={props.attachmentsDisabled ? "Local task attachments are not available yet" : undefined}
-      >
-        <svg aria-hidden fill="none" height="17" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" viewBox="0 0 24 24" width="17">
-          <line x1="12" x2="12" y1="5" y2="19" />
-          <line x1="5" x2="19" y1="12" y2="12" />
-        </svg>
-      </button>
+      <ComposerAddMenu
+        attachmentsDisabled={props.attachmentsDisabled}
+        disabled={props.disabled}
+        onAttach={() => props.fileInputRef.current?.click()}
+        onOpenCommands={props.onCommandPalette}
+      />
       <ApprovalPostureMenu
         disabled={props.disabled || (props.agentRuntime === "local" && props.busy)}
         runtime={props.agentRuntime}

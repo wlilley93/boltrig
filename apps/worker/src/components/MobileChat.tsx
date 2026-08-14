@@ -8,6 +8,8 @@ import {
 
 import { FamiliarBadge } from "./familiar/FamiliarBadge";
 import { LiveQuestionCard } from "./LiveQuestionCard";
+import { WorkDisclosure } from "./chat/WorkDisclosure";
+import { MobileQueuedMessages } from "./chat/MobileQueuedMessages";
 import "./chat/chat.css";
 import "./MobileChatParity.css";
 
@@ -161,7 +163,9 @@ export function MobileChat({
   onStop,
   onRetryConversation,
   onReconnect,
+  onReorderQueued,
   onSteerQueued,
+  queueReordering,
   busy,
   composerValue,
   onComposerChange,
@@ -187,7 +191,9 @@ export function MobileChat({
   onStop(): void;
   onRetryConversation(): void;
   onReconnect(): void;
+  onReorderQueued(expectedMessageIds: string[], messageIds: string[]): void | Promise<void>;
   onSteerQueued(message: ChatMessage): void;
+  queueReordering: boolean;
   busy: boolean;
   composerValue: string;
   onComposerChange(value: string): void;
@@ -204,9 +210,7 @@ export function MobileChat({
     return () => { delete document.documentElement.dataset.mobileSurface; };
   }, []);
 
-  const [traceOpen, setTraceOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(true);
-  const traceId = useId();
   const planId = useId();
   const bodyRef = useRef<HTMLDivElement>(null);
   const followLatestRef = useRef(true);
@@ -306,42 +310,15 @@ export function MobileChat({
           </article>
         )}
 
-        {turn.tools.length > 0 && (
-          <>
-            <button
-              aria-controls={traceId}
-              aria-expanded={traceOpen}
-              className="m-trace"
-              onClick={() => setTraceOpen((open) => !open)}
-              type="button"
-            >
-              <svg fill="none" height="18" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" viewBox="0 0 24 24" width="18">
-                <circle cx="11" cy="11" r="7" /><line x1="16.5" x2="21" y1="16.5" y2="21" />
-              </svg>
-              <span>{turn.tools.length} {turn.tools.length === 1 ? "tool" : "tools"}</span>
-              <span className="m-caret" data-open={traceOpen ? "true" : undefined}>›</span>
-            </button>
-            {traceOpen && (
-              <div className="m-card m-trace-list" id={traceId}>
-                {turn.tools.map((tool, index) => (
-                  <div className="m-trace-row" key={tool.callId ?? `${tool.key}-${index}`}>
-                    <span className="m-dot" data-tone={statusTone(tool.status)} />
-                    <span className="m-trace-label">{tool.verb}</span>
-                    <StateWord state={tool.status} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
+        <WorkDisclosure runId={turn.runId} turn={turn} />
 
         {turn.subagents.length > 0 && (
-          <div className="m-tree">
-            <div className="m-lead">
+          <details className="m-tree">
+            <summary className="m-lead">
               <span className="m-lead-label">
                 {turn.subagents.length} {turn.subagents.length === 1 ? "subagent" : "subagents"}
               </span>
-            </div>
+            </summary>
             <div className="m-fanout">
               {turn.subagents.map((agent) => {
                 const status = agent.status ?? (turnIsAnswerable ? "running" : "status unavailable");
@@ -358,7 +335,7 @@ export function MobileChat({
                 );
               })}
             </div>
-          </div>
+          </details>
         )}
 
         {steps.length > 0 && (
@@ -410,45 +387,43 @@ export function MobileChat({
 
         {error && <p className="m-notice" role="alert">{error}</p>}
 
-        {queuedMessages.length > 0 && (
-          <section aria-label="Queued messages" className="m-queued">
-            <h2>Queued</h2>
-            {queuedMessages.map((message) => (
-              <div className="m-queued-row" key={message.id}>
-                <p>{message.content || "Queued instruction"}</p>
-                <button onClick={() => onSteerQueued(message)} type="button">Load</button>
-              </div>
-            ))}
-          </section>
-        )}
       </div>
 
-      <div className="m-composer">
-        <input
-          aria-label="Follow up"
-          className="m-input"
-          disabled={composerDisabled}
-          onChange={(event) => onComposerChange(event.target.value)}
-          placeholder={composerPlaceholder}
-          value={composerValue}
+      <div className="m-composer-dock">
+        <MobileQueuedMessages
+          disabled={queueReordering}
+          messages={queuedMessages}
+          onReorder={onReorderQueued}
+          onSteer={onSteerQueued}
         />
-        <button
-          aria-label={busy ? "Stop" : "Send"}
-          className="m-send"
-          disabled={!busy && (composerDisabled || !composerValue.trim())}
-          onClick={busy ? onStop : onSend}
-          type="button"
-        >
-          {busy ? (
-            <svg fill="currentColor" height="15" viewBox="0 0 24 24" width="15">
-              <rect height="12" rx="2.5" width="12" x="6" y="6" />
-            </svg>
-          ) : (
-            <svg fill="none" height="17" stroke="currentColor" strokeLinecap="round" strokeWidth="2.2" viewBox="0 0 24 24">
-              <line x1="12" x2="12" y1="19" y2="5" /><polyline points="6 11 12 5 18 11" />
-            </svg>
-          )}
-        </button>
+        <div className="m-composer">
+          <textarea
+            aria-label="Follow up"
+            className="m-input"
+            disabled={composerDisabled}
+            onChange={(event) => onComposerChange(event.target.value)}
+            placeholder={composerPlaceholder}
+            rows={1}
+            value={composerValue}
+          />
+          <button
+            aria-label={busy ? "Stop" : "Send"}
+            className="m-send"
+            disabled={!busy && (composerDisabled || !composerValue.trim())}
+            onClick={busy ? onStop : onSend}
+            type="button"
+          >
+            {busy ? (
+              <svg fill="currentColor" height="13" viewBox="0 0 24 24" width="13">
+                <rect height="12" rx="2.5" width="12" x="6" y="6" />
+              </svg>
+            ) : (
+              <svg fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeWidth="2.2" viewBox="0 0 24 24">
+                <line x1="12" x2="12" y1="19" y2="5" /><polyline points="6 11 12 5 18 11" />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

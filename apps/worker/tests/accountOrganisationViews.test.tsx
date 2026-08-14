@@ -58,6 +58,7 @@ const api = vi.hoisted(() => ({
   finalizeAiKeyProposal: vi.fn(),
   invalidateAiKeyProposal: vi.fn(),
   updateCurrentOrg: vi.fn(),
+  updateMeProfile: vi.fn(),
   updateWorkspace: vi.fn(),
   workspaceMembers: vi.fn(),
   workspaces: vi.fn(),
@@ -100,6 +101,8 @@ const workspace = {
 };
 
 beforeEach(() => {
+  stubDesktopViewport();
+  api.updateMeProfile.mockResolvedValue({ status: "ok", profile });
   api.chatModelChoices.mockResolvedValue({
     status: "ok",
     reason: null,
@@ -277,8 +280,14 @@ describe("Worker account surface", () => {
     fireEvent.change(screen.getByLabelText("Timezone"), {
       target: { value: "Europe/Paris" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+    fireEvent.change(screen.getByLabelText("Display name"), {
+      target: { value: "Alice Rivers" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
 
+    await waitFor(() => expect(api.updateMeProfile).toHaveBeenCalledWith({
+      display_name: "Alice Rivers",
+    }));
     await waitFor(() => expect(api.putMeSettings).toHaveBeenCalledWith({
       settings: {
         theme: "system",
@@ -296,7 +305,7 @@ describe("Worker account surface", () => {
     render(<AccountView />);
     await screen.findByText("Alice");
     fireEvent.change(screen.getByLabelText("Theme"), { target: { value: "dark" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
     await waitFor(() => expect(api.putMeSettings).toHaveBeenCalled());
     expect(localStorage.getItem("boltrig-worker-theme")).toBe("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
@@ -955,7 +964,7 @@ describe("Worker conversation management", () => {
     expect((screen.getByRole("button", { name: "Restore conversation" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("opens compact task details as a dismissible focus-managed dialog", async () => {
+  it("opens compact desktop task details as a non-modal floating rail", async () => {
     stubCompactViewport();
     render(
       <ChatView
@@ -967,34 +976,26 @@ describe("Worker conversation management", () => {
 
     const trigger = await screen.findByRole("button", { name: "Task details" });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
-    const hiddenSheet = document.getElementById("worker-task-details");
-    expect(hiddenSheet?.hasAttribute("inert")).toBe(true);
-    expect(hiddenSheet?.querySelectorAll("button").length).toBeGreaterThan(0);
+    const hiddenOverlay = document.getElementById("worker-task-details");
+    expect(hiddenOverlay?.hasAttribute("inert")).toBe(true);
+    expect(hiddenOverlay?.querySelectorAll("button").length).toBeGreaterThan(0);
     fireEvent.click(trigger);
 
-    expect(screen.getByRole("dialog", { name: "Task details" })).toBeTruthy();
-    expect(hiddenSheet?.hasAttribute("inert")).toBe(false);
-    const close = screen.getByRole("button", { name: "Close task details" });
-    await waitFor(() => expect(document.activeElement).toBe(close));
-    expect(document.body.style.overflow).toBe("hidden");
-    const dialogButtons = screen.getByRole("dialog", { name: "Task details" })
-      .querySelectorAll<HTMLButtonElement>("button:not([disabled])");
-    const last = dialogButtons[dialogButtons.length - 1];
-    last.focus();
-    fireEvent.keyDown(window, { key: "Tab" });
-    expect(document.activeElement).toBe(close);
-    fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
-    expect(document.activeElement).toBe(last);
-
-    fireEvent.keyDown(window, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Task details" })).toBeNull());
-    await waitFor(() => expect(document.activeElement).toBe(trigger));
-    expect(hiddenSheet?.hasAttribute("inert")).toBe(true);
+    expect(screen.getByRole("complementary", { name: "Task details" })).toBeTruthy();
+    expect(hiddenOverlay?.hasAttribute("inert")).toBe(false);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Dismiss task details" })).toBeNull();
     expect(document.body.style.overflow).toBe("");
 
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("complementary", { name: "Task details" })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(hiddenOverlay?.hasAttribute("inert")).toBe(true);
+
     fireEvent.click(trigger);
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss task details" }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Task details" })).toBeNull());
+    await screen.findByRole("complementary", { name: "Task details" });
+    fireEvent.click(trigger);
+    await waitFor(() => expect(screen.queryByRole("complementary", { name: "Task details" })).toBeNull());
   });
 
   it("keeps compact task details limited to utility sections", async () => {
@@ -1016,7 +1017,7 @@ describe("Worker conversation management", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Task details" }));
-    expect(screen.getByRole("dialog", { name: "Task details" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Task details" })).toBeTruthy();
     expect(screen.getByLabelText("Outputs")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Restore conversation" })).toBeNull();
     expect(screen.queryByLabelText("Conversation title")).toBeNull();
@@ -1268,7 +1269,18 @@ describe("Worker conversation management", () => {
 
 function stubCompactViewport() {
   vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
-    matches: query === "(max-width: 1020px)",
+    matches: query === "(max-width: 1374px)",
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })));
+}
+
+function stubDesktopViewport() {
+  vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
+    matches: false,
     media: query,
     onchange: null,
     addEventListener: vi.fn(),

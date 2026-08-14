@@ -38,6 +38,7 @@ export function OnboardingGate({
     let active = true;
     void client.meSettings()
       .then((result) => { if (active) setAccount(result); })
+      .catch(() => { if (active) setAccount(null); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [initialAccount]);
@@ -47,7 +48,11 @@ export function OnboardingGate({
   return (
     <OnboardingFlow
       account={account}
-      onComplete={(settings) => setAccount({ ...account, settings })}
+      onComplete={(settings, displayName) => setAccount({
+        ...account,
+        profile: { ...account.profile, display_name: displayName },
+        settings,
+      })}
     />
   );
 }
@@ -65,12 +70,13 @@ function OnboardingFlow({
   onComplete,
 }: {
   account: MeSettingsResponse;
-  onComplete: (settings: Record<string, unknown>) => void;
+  onComplete: (settings: Record<string, unknown>, displayName: string) => void;
 }) {
   const stored = characterFromSettings(account.settings);
   const [character, setCharacter] = useState<CharacterId>(
     stored === "jarvis" ? stored : DEFAULT_CHARACTER,
   );
+  const [name, setName] = useState(account.profile.display_name?.trim() ?? "");
   const [step, setStep] = useState<Step>(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -80,10 +86,14 @@ function OnboardingFlow({
     setError("");
     const settings = completedOnboardingSettings(character);
     try {
+      const profileResult = await client.updateMeProfile({ display_name: name.trim() });
+      if (profileResult.status !== "ok") {
+        throw new Error(profileResult.reason ?? profileResult.status);
+      }
       const result = await client.putMeSettings({ settings });
       if (result.status !== "ok") throw new Error(result.reason ?? result.status);
       saveCharacterLocal(character);
-      onComplete({ ...account.settings, ...settings });
+      onComplete({ ...account.settings, ...settings }, name.trim());
     } catch {
       setError("Setup could not be saved. Nothing was inferred; please try again.");
       setSaving(false);
@@ -93,16 +103,16 @@ function OnboardingFlow({
   return (
     <OnboardingFrame step={step} onBack={() => setStep((step - 1) as Step)}>
       <div className="onboarding-slide" key={step}>
-        {step === 0 && <CompanionStep selected={character} onSelect={setCharacter} />}
+        {step === 0 && <CompanionStep name={name} onName={setName} selected={character} onSelect={setCharacter} />}
         {step === 1 && <ProviderStep profile={account.profile} />}
-        {step === 2 && <ReadyStep character={character} />}
+        {step === 2 && <ReadyStep character={character} userName={name.trim()} />}
       </div>
       {error && <p className="onboarding-error" role="alert">{error}</p>}
       <footer className="onboarding-actions onboarding-rise">
         <span>{step === 1 ? "Provider setup is optional." : ""}</span>
         <button
           className="onboarding-primary"
-          disabled={saving}
+          disabled={saving || (step === 0 && !name.trim())}
           onClick={() => step === 2 ? void finish() : setStep((step + 1) as Step)}
           type="button"
         >

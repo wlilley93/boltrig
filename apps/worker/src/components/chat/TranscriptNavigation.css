@@ -75,7 +75,7 @@
   white-space: nowrap;
 }
 
-@media (max-width: 1020px) {
+@media (max-width: 1374px) {
   .transcript-navigation {
     right: max(12px, env(safe-area-inset-right, 0px));
     bottom: max(108px, calc(100px + env(safe-area-inset-bottom, 0px)));

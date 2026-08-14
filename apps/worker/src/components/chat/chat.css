@@ -33,10 +33,24 @@
 
 .new-chat-prompt-stack {
   display: flex;
+  align-self: end;
   width: 100%;
   flex-direction: column;
   gap: 10px;
 }
+
+/* New chat keeps its orientation copy calm in the open canvas while the
+   actionable stack stays anchored to the lower working edge. */
+.transcript.new-chat-transcript { justify-content: stretch; }
+.new-chat-transcript .welcome {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 18px;
+  margin: 0 auto;
+}
+.new-chat-transcript .welcome h1 { align-self: center; }
 
 /* The hint sits under the composer card, outside its border. */
 .composer-hint {
@@ -55,81 +69,6 @@
 
 .composer-voice-controller { display: contents; }
 .composer-voice-controller[hidden] { display: none; }
-
-.model-chip-wrap { position: relative; }
-.model-chip {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 8px;
-  color: var(--text-2);
-  background: transparent;
-  cursor: pointer;
-  font-size: 13px;
-}
-.model-chip:hover { background: var(--hover); }
-.model-chip svg { color: var(--text-4); }
-.model-chip-disambiguator {
-  max-width: 110px;
-  overflow: hidden;
-  color: var(--text-4);
-  font-size: 10.5px;
-  font-weight: 400;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.model-menu {
-  position: absolute;
-  right: 0;
-  bottom: 34px;
-  z-index: 20;
-  min-width: 180px;
-  max-height: 260px;
-  overflow-y: auto;
-  padding: 5px;
-  border: 1px solid var(--border-2);
-  border-radius: 10px;
-  background: var(--card);
-  box-shadow: var(--shadow);
-}
-.model-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 9px;
-  border: 0;
-  border-radius: 7px;
-  color: var(--text-2);
-  background: transparent;
-  cursor: pointer;
-  font-size: 13px;
-  text-align: left;
-}
-.model-option:hover,
-.model-option[data-active="true"] { color: var(--text); background: var(--hover); }
-.model-option[aria-selected="true"] { color: var(--text); font-weight: 500; }
-.model-option > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.model-option > small { color: var(--text-4); font-size: 10.5px; }
-.model-option[aria-disabled="true"] { cursor: default; opacity: .58; }
-.model-manage {
-  width: 100%;
-  margin-top: 4px;
-  padding: 8px 9px 5px;
-  border: 0;
-  border-top: 1px solid var(--border);
-  color: var(--text-3);
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12.5px;
-  text-align: left;
-}
-.model-manage:hover,
-.model-manage:focus-visible { color: var(--text); }
 
 /* --- Work disclosure ------------------------------------------------------- */
 

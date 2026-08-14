@@ -100,6 +100,12 @@ export function useCharacterOptions(): {
   };
 }
 
+/** Reactive installed-character list for surfaces that need more than labels. */
+export function useCharacters(): Character[] {
+  useCharacterRegistry();
+  return listCharacters();
+}
+
 /**
  * Resolves an id to something drawable. An unregistered id — an uninstalled
  * plugin, or a setting carried over from a build that shipped it — falls back

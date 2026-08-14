@@ -27,6 +27,14 @@ vi.mock("../src/components/chat/RunSectionView", () => ({
 import { ChatView } from "../src/components/ChatView";
 
 beforeEach(() => {
+  vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })));
   api.chatModelChoices.mockResolvedValue({
     status: "ok",
     reason: null,
@@ -60,6 +68,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
   delete document.documentElement.dataset.theme;
 });
 

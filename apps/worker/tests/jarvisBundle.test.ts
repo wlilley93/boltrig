@@ -83,9 +83,13 @@ describe("Jarvis as a character bundle", () => {
 });
 
 describe("Jarvis's voice", () => {
-  it("names the Fish Audio id it wants to be spoken with", () => {
+  // Two providers doing two different jobs, and the distinction is the point:
+  // `fish` GENERATED the register references and is not called at runtime;
+  // `pocket-voice` is what actually speaks him, from local clones.
+  it("names the Fish id that generated him and the local voice that speaks him", () => {
     const manifest = parseCharacterBundle(jarvisBundle);
     expect(bundleVoiceId(manifest, "fish")).toBe("d2d43385f4a749389dda58ecff883bb5");
+    expect(bundleVoiceId(manifest, "pocket-voice")).toBe("jarvis");
   });
 
   // "Absent voice means a silent character, never a substituted one." A
@@ -94,7 +98,7 @@ describe("Jarvis's voice", () => {
   it("says nothing for a provider it does not name", () => {
     const manifest = parseCharacterBundle(jarvisBundle);
     expect(bundleVoiceId(manifest, "elevenlabs")).toBeUndefined();
-    expect(bundleVoiceId(manifest, "pocket-voice")).toBeUndefined();
+    expect(bundleVoiceId(manifest, "xai")).toBeUndefined();
   });
 
   it("says nothing for the Familiar, who declares no voice at all", () => {

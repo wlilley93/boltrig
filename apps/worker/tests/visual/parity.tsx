@@ -576,6 +576,67 @@ visualWindow.__boltrigVisualRequests = requestedPaths;
 visualWindow.__boltrigVisualFixtureMisses = fixtureMisses;
 visualWindow.__boltrigVisualState = visualState;
 
+const runEventFixtures: Record<string, unknown[]> = {
+  "run-renewal-review": [
+    {
+      type: "tool_call", run_id: "run-renewal-review", tool: "crm.health.read",
+      call_id: "call-renewal-health",
+      input: { window: "30d", status: ["healthy", "at_risk"] },
+      args_summary: { keys: ["status", "window"], count: 2 },
+    },
+    {
+      type: "tool_result", run_id: "run-renewal-review",
+      call_id: "call-renewal-health", status: "ok",
+      output: { accounts: 20, as_of: now },
+      result_summary: { keys: ["accounts", "as_of"] },
+    },
+  ],
+  "run-chat-direction-ui": [
+    {
+      type: "tool_call", run_id: "run-chat-direction-ui", tool: "figma.get_design_context",
+      call_id: "call-direction-figma", input: { node_id: "5:2" },
+      args_summary: { keys: ["node_id"], count: 1 },
+    },
+    {
+      type: "tool_result", run_id: "run-chat-direction-ui",
+      call_id: "call-direction-figma", status: "ok",
+      output: { nodes: 1 }, result_summary: { keys: ["nodes"] },
+    },
+    {
+      type: "tool_call", run_id: "run-chat-direction-ui", tool: "file.read",
+      call_id: "call-direction-read", input: { path: "apps/worker/src/components/ChatView.tsx" },
+      args_summary: { keys: ["path"], count: 1 },
+    },
+    {
+      type: "tool_result", run_id: "run-chat-direction-ui",
+      call_id: "call-direction-read", status: "ok",
+      output: { bytes: 8432 }, result_summary: { keys: ["bytes"] },
+    },
+    {
+      type: "tool_call", run_id: "run-chat-direction-ui", tool: "apply_patch",
+      call_id: "call-direction-edit", input: { files: ["ChatView.tsx"] },
+      args_summary: { keys: ["files"], count: 1 },
+    },
+    {
+      type: "tool_result", run_id: "run-chat-direction-ui",
+      call_id: "call-direction-edit", status: "ok",
+      output: { changed_files: 1 }, result_summary: { keys: ["changed_files"] },
+    },
+    {
+      type: "tool_call", run_id: "run-chat-direction-ui", tool: "exec_command",
+      call_id: "call-direction-command",
+      input: { cmd: "pnpm --dir apps/worker typecheck", workdir: "/workspace/boltrig" },
+      args_summary: { keys: ["cmd", "workdir"], count: 2 },
+    },
+    {
+      type: "tool_result", run_id: "run-chat-direction-ui",
+      call_id: "call-direction-command", status: "ok",
+      output: { output: "Done in 1.2s", exit_code: 0 },
+      result_summary: { keys: ["exit_code", "output"] },
+    },
+  ],
+};
+
 window.fetch = async (input) => {
   const resource = typeof input === "string"
     ? input
@@ -587,6 +648,15 @@ window.fetch = async (input) => {
   invalidateVisualReadiness();
   updateVisualDiagnostics();
   try {
+    const runMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/events$/);
+    if (runMatch) {
+      const events = runEventFixtures[decodeURIComponent(runMatch[1]!)];
+      if (!events) {
+        if (!fixtureMisses.includes(requestPath)) fixtureMisses.push(requestPath);
+        return json({ status: "unavailable", reason: "No visual run fixture" }, 404);
+      }
+      return sse(events);
+    }
     const routine = routines.find((item) => url.pathname === `/v1/workflows/${item.id}`);
     const value = routine ?? fixtures[url.pathname];
     if (value === undefined) {
@@ -1134,5 +1204,12 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
+  });
+}
+
+function sse(events: readonly unknown[]): Response {
+  return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
   });
 }

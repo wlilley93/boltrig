@@ -9,6 +9,7 @@ const css = (path: string) => readFileSync(join(sourceRoot, path), "utf8");
 
 const shellCss = css("components/ShellParity.css");
 const inspectorCss = css("components/chat/TaskInspector.css");
+const railCss = css("components/chat/ChatRailParity.css");
 const transcriptCss = css("components/chat/TranscriptNavigation.css");
 const mobileCss = css("components/MobileChatParity.css");
 const paletteCss = css("components/CommandPalette.css");
@@ -33,6 +34,25 @@ describe("responsive shell hardening", () => {
     expect(inspectorCss).toMatch(/@media \(max-width: 640px\)[\s\S]*?min-height: 44px/);
     expect(transcriptCss).toMatch(/@media \(max-width: 640px\)[\s\S]*?width: 44px;[\s\S]*?height: 44px/);
     expect(paletteCss).toMatch(/@media \(max-width: 640px\)[\s\S]*?min-height: 44px/);
+  });
+
+  it("keeps thin Chat on the shared canvas with compact type and a multiline dock", () => {
+    expect(mobileCss).toMatch(/html:root\[data-theme\] \.mobile-surface[\s\S]*?--m-bg: var\(--bg\)/);
+    expect(mobileCss).toMatch(/\.mobile-surface \.m-head[\s\S]*?44px/);
+    expect(mobileCss).toMatch(/\.mobile-surface \.m-message > p[\s\S]*?font-size: 15px/);
+    expect(mobileCss).toMatch(/\.mobile-surface \.m-composer[\s\S]*?min-height: 88px/);
+    expect(mobileCss).toContain(".mobile-surface .m-composer-dock");
+    expect(mobileCss).toContain(".mobile-surface .work-disclosure.transcript-tool-disclosure");
+  });
+
+  it("waits to inline task details until the full chat column and rail fit", () => {
+    expect(workerCss).toContain("@media (max-width: 1374px)");
+    expect(railCss).toContain("@media (max-width: 1374px)");
+    expect(transcriptCss).toContain("@media (max-width: 1374px)");
+    expect(railCss).toContain("grid-template-columns: minmax(793px, 1fr) auto");
+    expect(inspectorCss).toContain(".task-inspector.right-rail.task-inspector--overlay");
+    expect(inspectorCss).toContain("position: fixed;");
+    expect(inspectorCss).toContain("transform: translateX(calc(100% + 20px))");
   });
 
   it("offers opaque fallbacks and removes glass effects when transparency is reduced", () => {

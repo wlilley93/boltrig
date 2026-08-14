@@ -51,12 +51,12 @@ interface TaskInspectorCommonProps {
   onSelectSource?(source: TaskInspectorSource): void;
   onManageSources?(): void;
   onInspectRun?(): void;
-  /** Optional explicit return target for the compact sheet. */
+  /** Optional explicit return target for a dismissible inspector. */
   returnFocusRef?: { readonly current: HTMLElement | null };
 }
-
 type TaskInspectorModeProps =
   | { mode?: "rail"; open?: boolean; onClose?(): void }
+  | { mode: "overlay"; open: boolean; onClose(): void }
   | { mode: "sheet"; open: boolean; onClose(): void };
 
 export type TaskInspectorProps = TaskInspectorCommonProps & TaskInspectorModeProps;
@@ -148,7 +148,7 @@ export function TaskInspector(props: TaskInspectorProps) {
   }, [mode, open, returnFocusRef]);
 
   useEffect(() => {
-    if (mode !== "sheet" || !open) return;
+    if (mode === "rail" || !open) return;
     const handleDocumentKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented) return;
       const panel = panelNodeRef.current;
@@ -158,7 +158,7 @@ export function TaskInspector(props: TaskInspectorProps) {
         onClose?.();
         return;
       }
-      if (event.key !== "Tab") return;
+      if (event.key !== "Tab" || mode !== "sheet") return;
       const focusable = focusableElements(panel);
       if (focusable.length === 0) {
         event.preventDefault();
@@ -261,9 +261,9 @@ export function TaskInspector(props: TaskInspectorProps) {
 
   const aside = (
     <aside
-      {...(mode === "sheet" && !open ? { inert: "" } : {})}
-      aria-hidden={mode === "sheet" && !open ? true : undefined}
-      aria-label={mode === "rail" ? "Task details" : undefined}
+      {...(mode !== "rail" && !open ? { inert: "" } : {})}
+      aria-hidden={mode !== "rail" && !open ? true : undefined}
+      aria-label={mode === "sheet" ? undefined : "Task details"}
       aria-labelledby={mode === "sheet" ? titleId : undefined}
       aria-modal={mode === "sheet" ? true : undefined}
       className={[
@@ -436,7 +436,7 @@ export function TaskInspector(props: TaskInspectorProps) {
     </aside>
   );
 
-  if (mode === "rail") return aside;
+  if (mode !== "sheet") return aside;
   return (
     <>
       {open && (

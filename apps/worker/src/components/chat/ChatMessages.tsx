@@ -40,6 +40,7 @@ export function Message({
         <OrderedWorkTranscript
           content={message.content}
           events={message.events ?? []}
+          runId={message.run_id ?? undefined}
           turn={turn}
           settled
           durationSeconds={durationSeconds ?? null}

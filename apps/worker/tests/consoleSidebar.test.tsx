@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
   deleteMyConversation: vi.fn(),
+  putMeSettings: vi.fn(),
   readiness: vi.fn(),
   restoreMyConversation: vi.fn(),
   searchConversations: vi.fn(),
@@ -75,6 +76,8 @@ afterEach(() => {
   document.querySelectorAll("style[data-test-shell-styles]").forEach((style) => style.remove());
   localStorage.removeItem("boltrig.shell-preferences.v1");
   localStorage.removeItem("boltrig-worker-pinned-conversations");
+  localStorage.removeItem("boltrig.character");
+  delete document.documentElement.dataset.character;
   vi.clearAllMocks();
 });
 
@@ -100,8 +103,71 @@ describe("console sidebar", () => {
     expect(screen.queryByText(/acme\s*[·.]\s*production/i)).toBeNull();
     const account = screen.getByRole("button", { name: /Signed in as/i });
     expect(account.getAttribute("aria-label")).not.toMatch(/acme|production/i);
-    expect(account.getAttribute("title")).not.toMatch(/acme|production/i);
+    expect(account.getAttribute("title")).toBeNull();
     expect(api.searchConversations).not.toHaveBeenCalled();
+  });
+
+  it("uses the real companion preference as the shell identity", async () => {
+    api.putMeSettings.mockResolvedValue({ status: "ok", settings: {} });
+    const { container } = renderSidebar();
+
+    const trigger = screen.getByRole("button", { name: "Companion: Familiar" });
+    expect(container.querySelector(".side-brand")).toBeNull();
+    fireEvent.click(trigger);
+
+    const menu = screen.getByRole("menu", { name: "Companion" });
+    const familiar = within(menu).getByRole("menuitemradio", { name: /Familiar/ });
+    const jarvis = within(menu).getByRole("menuitemradio", { name: /Jarvis/ });
+    expect(familiar.getAttribute("aria-checked")).toBe("true");
+    expect(jarvis.getAttribute("aria-checked")).toBe("false");
+    expect(within(menu).getByText("A living body with a private inner life of its own."))
+      .toBeTruthy();
+    expect(within(menu).getByText("An instrument that displays the machine's measured state."))
+      .toBeTruthy();
+
+    fireEvent.click(jarvis);
+    await waitFor(() => {
+      expect(api.putMeSettings).toHaveBeenCalledWith({
+        settings: { "agent.character": "jarvis" },
+      });
+      expect(screen.getByRole("button", { name: "Companion: Jarvis" })).toBeTruthy();
+    });
+    expect(screen.queryByRole("menu", { name: "Companion" })).toBeNull();
+  });
+
+  it("rolls the companion switcher back when the saved preference is refused", async () => {
+    api.putMeSettings.mockResolvedValue({ status: "degraded", reason: "Settings unavailable." });
+    renderSidebar();
+
+    fireEvent.click(screen.getByRole("button", { name: "Companion: Familiar" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Jarvis/ }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Settings unavailable.");
+    expect(screen.getByRole("button", { name: "Companion: Familiar" })).toBeTruthy();
+    expect(screen.getByRole("menuitemradio", { name: /Familiar/ }).getAttribute("aria-checked"))
+      .toBe("true");
+  });
+
+  it("keeps companion selection keyboard-operable and returns to shell order", () => {
+    renderSidebar();
+
+    const trigger = screen.getByRole("button", { name: "Companion: Familiar" });
+    const search = screen.getByRole("button", { name: "Open command palette" });
+    fireEvent.click(trigger);
+    const items = screen.getAllByRole("menuitemradio");
+    expect(document.activeElement).toBe(items[0]);
+    expect(items.every((item) => item.tabIndex === -1)).toBe(true);
+
+    fireEvent.keyDown(items[0]!, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(items[1]);
+    fireEvent.keyDown(items[1]!, { key: "Tab" });
+    expect(screen.queryByRole("menu", { name: "Companion" })).toBeNull();
+    expect(document.activeElement).toBe(search);
+
+    fireEvent.click(trigger);
+    fireEvent.keyDown(screen.getAllByRole("menuitemradio")[0]!, { key: "Escape" });
+    expect(screen.queryByRole("menu", { name: "Companion" })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("maps the console nav onto the real Worker routes", () => {
@@ -139,6 +205,7 @@ describe("console sidebar", () => {
     expect(onSettingsSection).toHaveBeenCalledWith("you");
     fireEvent.click(screen.getByRole("button", { name: /Account menu/ }));
     expect(screen.getByRole("menuitem", { name: "Log out" })).toBeTruthy();
+    expect(screen.getByText("org-admin")).toBeTruthy();
     expect(screen.getByText("›").getAttribute("aria-hidden")).not.toBeNull();
     expect(screen.getByText("⌘,").getAttribute("aria-hidden")).not.toBeNull();
     expect(screen.queryByRole("menuitem", { name: "Home" })).toBeNull();
@@ -345,7 +412,7 @@ describe("console sidebar", () => {
     expect(screen.getByRole("status", { name: "Working on this chat" })).toBeTruthy();
     expect(container.querySelector(".shell-parity .session-main")?.getAttribute("aria-current"))
       .toBe("page");
-    expect(container.querySelector(".shell-recent-meta")).toBeTruthy();
+    expect(container.querySelector(".shell-recent-meta")).toBeNull();
     expect(container.querySelector(".session-row.active .session-actions")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Pin Integrate EMEET Pixy with Boltrig" }));
     expect(screen.getByRole("button", { name: "Unpin Integrate EMEET Pixy with Boltrig" })).toBeTruthy();
@@ -398,7 +465,9 @@ describe("console sidebar", () => {
   it("keeps the rail glassy and recent rows bounded without redundant chrome", () => {
     expect(shellParityCss).toContain(".sidebar.shell-parity");
     expect(shellParityCss).toMatch(/\.sidebar\.shell-parity\s*\{[\s\S]*?border-right:\s*0/);
-    expect(shellParityCss).toContain("color-mix(in srgb, var(--side) 82%, transparent)");
+    expect(shellParityCss).toContain("--shell-rail-glass: color-mix(in srgb, var(--side) 82%, transparent)");
+    expect(shellParityCss).toMatch(/:root\[data-theme="dark"\] \.sidebar\.shell-parity\s*\{[\s\S]*?--shell-rail-glass:\s*rgb\(32 36 29 \/ 96%\)/);
+    expect(shellParityCss).toMatch(/prefers-reduced-transparency:[\s\S]*?data-theme="dark"[\s\S]*?background:\s*#20231d/);
     expect(shellParityCss).toContain("backdrop-filter: blur(22px)");
     expect(shellParityCss).toMatch(/\.worker-shell:has\(\.sidebar\.shell-parity\)\s*\{[\s\S]*?grid-template-columns:\s*266px/);
     expect(shellParityCss).toMatch(/\.sidebar\.shell-parity\s*\{[\s\S]*?width:\s*266px/);
@@ -409,20 +478,22 @@ describe("console sidebar", () => {
     expect(shellParityCss).toContain(".shell-task-group-label");
     expect(shellParityCss).toContain(".shell-task-rows");
     expect(shellParityCss).toContain(".shell-parity .session-row {");
-    expect(shellParityCss).toContain("max-height: 44px");
+    expect(shellParityCss).toContain("max-height: 31px");
     expect(shellParityCss).toContain(".shell-parity .session-row.active .session-main");
-    expect(shellParityCss).toMatch(/time\.shell-recent-meta\s*\{[\s\S]*?display:\s*inline/);
-    expect(shellParityCss).toMatch(/session-row\.active \.session-actions\s*\{[\s\S]*?opacity:\s*1/);
+    expect(shellParityCss).toMatch(/time\.shell-recent-meta\s*\{[\s\S]*?display:\s*none/);
+    expect(shellParityCss).toMatch(/session-row\.active \.session-actions\s*\{[\s\S]*?opacity:\s*0/);
     expect(shellParityCss).toContain(".shell-parity .session-row:hover .session-actions");
+    expect(shellParityCss).toMatch(/\.session-working-indicator\s*\{[\s\S]*?width:\s*12px[\s\S]*?border-top-color:\s*var\(--text-2\)/);
+    expect(shellParityCss).toContain("animation: shell-task-working-spin 800ms linear infinite");
     expect(workerStylesCss).not.toContain(".conversation-search");
     expect(workerStylesCss).not.toContain(".side-workspace");
     expect(shellParityCss).not.toContain(".conversation-search");
     expect(shellParityCss).toMatch(/\.shell-parity \.session-actions\s*\{[\s\S]*?right:\s*12px/);
     expect(shellParityCss).toMatch(/\.shell-parity \.session-actions\s*\{[\s\S]*?background:\s*transparent/);
-    expect(shellParityCss).toMatch(/\.shell-parity \.session-row\.pinned \.session-main,[\s\S]*?padding-right:\s*61px/);
+    expect(shellParityCss).toMatch(/\.shell-parity \.session-row:hover \.session-main,[\s\S]*?padding-right:\s*61px/);
   });
 
-  it("computes a 44px selected row, visible time and compact ordinary row", () => {
+  it("keeps selected, pinned and ordinary task rows equally compact at rest", () => {
     installShellStyles();
     localStorage.setItem("boltrig-worker-pinned-conversations", JSON.stringify(["pinned"]));
     render(
@@ -462,15 +533,14 @@ describe("console sidebar", () => {
     const selected = screen.getByText("Selected renewal").closest(".session-row")!;
     const ordinary = screen.getByText("Ordinary renewal").closest(".session-row")!;
     const pinned = screen.getByText("Pinned renewal").closest(".session-row")!;
-    expect(getComputedStyle(selected).height).toBe("44px");
-    expect(getComputedStyle(selected.querySelector(".session-main")!).height).toBe("44px");
-    expect(getComputedStyle(selected.querySelector(".session-actions")!).opacity).toBe("1");
-    expect(getComputedStyle(selected.querySelector(".shell-recent-meta")!).display).toBe("inline");
+    expect(getComputedStyle(selected).height).toBe("31px");
+    expect(getComputedStyle(selected.querySelector(".session-main")!).height).toBe("31px");
+    expect(getComputedStyle(selected.querySelector(".session-actions")!).opacity).toBe("0");
+    expect(selected.querySelector(".shell-recent-meta")).toBeNull();
     expect(getComputedStyle(ordinary.querySelector(".session-main")!).height).toBe("31px");
     expect(getComputedStyle(ordinary.querySelector(".session-actions")!).opacity).toBe("0");
-    expect(getComputedStyle(pinned.querySelector(".session-main")!).paddingRight).toBe("61px");
-    expect(getComputedStyle(pinned.querySelector(".session-actions")!).opacity).toBe("1");
-    expect(ordinary.querySelector("time")?.getAttribute("datetime"))
-      .toBe("2026-08-11T08:00:00Z");
+    expect(getComputedStyle(pinned.querySelector(".session-main")!).height).toBe("31px");
+    expect(getComputedStyle(pinned.querySelector(".session-actions")!).opacity).toBe("0");
+    expect(ordinary.querySelector("time")).toBeNull();
   });
 });

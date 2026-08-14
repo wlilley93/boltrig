@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   createCall: vi.fn(),
   modelProfiles: vi.fn(),
   putApprovalPosture: vi.fn(),
+  runEvents: vi.fn(),
   streamChat: vi.fn(),
 }));
 
@@ -41,6 +42,7 @@ import { CommandPalette } from "../src/components/CommandPalette";
 
 beforeEach(() => {
   document.documentElement.dataset.theme = "dark";
+  stubChatViewport(false, false);
   api.artifacts.mockResolvedValue({ artifacts: [], next_cursor: null });
   api.approvalPosture.mockResolvedValue({
     posture: "risk_based",
@@ -78,6 +80,7 @@ beforeEach(() => {
     }],
   });
   api.modelProfiles.mockResolvedValue({ profiles: [] });
+  api.runEvents.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -117,7 +120,7 @@ function renderChatWithCommands(conversationId: string | null, onCommandPalette:
 function stubChatViewport(initialCompact: boolean, initialPhone: boolean) {
   const listeners = new Map<string, Set<(event: MediaQueryListEvent) => void>>();
   const matches = new Map<string, boolean>([
-    ["(max-width: 1020px)", initialCompact],
+    ["(max-width: 1374px)", initialCompact],
     ["(max-width: 640px)", initialPhone],
   ]);
   const media = new Map<string, MediaQueryList>();
@@ -144,8 +147,8 @@ function stubChatViewport(initialCompact: boolean, initialPhone: boolean) {
   }));
   return {
     setCompact(next: boolean) {
-      matches.set("(max-width: 1020px)", next);
-      const event = { matches: next, media: "(max-width: 1020px)" } as MediaQueryListEvent;
+      matches.set("(max-width: 1374px)", next);
+      const event = { matches: next, media: "(max-width: 1374px)" } as MediaQueryListEvent;
       listeners.get(event.media)?.forEach((listener) => listener(event));
     },
   };
@@ -188,6 +191,9 @@ describe("console chat surface", () => {
     expect(promptStack).toBeTruthy();
     expect(promptStack?.firstElementChild).toBe(voiceIntro);
     expect(promptStack?.lastElementChild?.classList.contains("composer")).toBe(true);
+    const newComposer = promptStack?.lastElementChild;
+    expect(newComposer?.firstElementChild?.classList.contains("composer-context")).toBe(true);
+    expect(newComposer?.lastElementChild?.classList.contains("composer-frame")).toBe(true);
     expect(screen.getByRole("button", { name: "Start voice chat" })).toBeTruthy();
   });
 
@@ -259,6 +265,7 @@ describe("console chat surface", () => {
     const model = await screen.findByRole("button", { name: "Model" });
     expect(model.textContent).toContain("Automatic · openai/gpt-5.4");
     fireEvent.click(model);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Choose model" }));
     fireEvent.click(screen.getByRole("option", {
       name: "anthropic/claude-sonnet-4-5",
     }));
@@ -303,6 +310,7 @@ describe("console chat surface", () => {
     expect(api.streamChat).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Choose model" }));
     const automaticOption = screen.getAllByRole("option")[0]!;
     expect(within(automaticOption).getByText("Unavailable").title)
       .toBe("The model gateway is unavailable.");
@@ -382,8 +390,12 @@ describe("console chat surface", () => {
     expect(document.querySelector(".composer.conversation-context:not(.closed)"))
       .toBeTruthy();
     expect(await screen.findByRole("button", { name: "Approve for me" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Attach files" }).querySelector("svg"))
+    expect(screen.getByRole("button", { name: "Add" }).querySelector("svg"))
       .toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByRole("dialog", { name: "Add to task" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Files/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Record a skill/ })).toBeTruthy();
     expect(document.querySelector(".chat-header-actions .voice-call")).toBeNull();
   });
 
@@ -453,7 +465,7 @@ describe("console chat surface", () => {
     // never detaches it mid-measure; on the phone it must coexist with the
     // MobileChat surface and still control the sheet.
     vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
-      matches: query === "(max-width: 1020px)" || query === "(max-width: 640px)",
+      matches: query === "(max-width: 1374px)" || query === "(max-width: 640px)",
       media: query,
       onchange: null,
       addEventListener: vi.fn(),
@@ -483,7 +495,7 @@ describe("console chat surface", () => {
 
   it("does not offer an empty task-details sheet on a new phone chat", () => {
     vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
-      matches: query === "(max-width: 1020px)" || query === "(max-width: 640px)",
+      matches: query === "(max-width: 1374px)" || query === "(max-width: 640px)",
       media: query,
       onchange: null,
       addEventListener: vi.fn(),
@@ -496,7 +508,7 @@ describe("console chat surface", () => {
     expect(document.getElementById("worker-task-details")).toBeNull();
   });
 
-  it("closes a compact sheet and moves focus to the desktop toggle at the breakpoint", async () => {
+  it("closes a compact overlay and moves focus to the desktop toggle at the breakpoint", async () => {
     const viewport = stubChatViewport(true, false);
     api.conversation.mockResolvedValue({
       messages: [{
@@ -511,13 +523,13 @@ describe("console chat surface", () => {
     await screen.findByText("Current answer");
 
     fireEvent.click(screen.getByRole("button", { name: "Task details" }));
-    expect(await screen.findByRole("dialog", { name: "Task details" })).toBeTruthy();
+    expect(await screen.findByRole("complementary", { name: "Task details" })).toBeTruthy();
 
     act(() => viewport.setCompact(false));
 
-    await waitFor(() => expect(screen.queryByRole("dialog", {
+    await waitFor(() => expect(screen.getByRole("complementary", {
       name: "Task details",
-    })).toBeNull());
+    }).classList.contains("task-inspector--rail")).toBe(true));
     const railToggle = screen.getByRole("button", { name: "Hide the task panel" });
     await waitFor(() => expect(document.activeElement).toBe(railToggle));
     expect(screen.queryByRole("button", { name: "Dismiss task details" })).toBeNull();
@@ -525,7 +537,7 @@ describe("console chat surface", () => {
 
   it("keeps conversation-title controls out of the phone task-details rail", async () => {
     vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
-      matches: query === "(max-width: 1020px)" || query === "(max-width: 640px)",
+      matches: query === "(max-width: 1374px)" || query === "(max-width: 640px)",
       media: query,
       onchange: null,
       addEventListener: vi.fn(),
@@ -591,8 +603,72 @@ describe("console chat surface", () => {
     fireEvent.click(summary!);
     const detail = document.querySelector(".transcript-tool-detail");
     expect(detail?.querySelector("code")?.textContent).toBe("file.read");
-    expect(detail?.querySelector("[data-status]")?.textContent).toBe("ok");
+    expect(detail?.querySelector("[data-status]")?.textContent).toBe("Success");
     expect(document.querySelector(".tool-icon-read")).toBeTruthy();
+  });
+
+  it("loads redacted run detail only after the user opens a tool receipt", async () => {
+    api.runEvents.mockResolvedValue([
+      {
+        type: "tool_call",
+        run_id: "run-a",
+        call_id: "call-read",
+        tool: "file.read",
+        input: { path: "apps/worker/package.json" },
+        args_summary: { keys: ["path"], count: 1 },
+      },
+      {
+        type: "tool_result",
+        run_id: "run-a",
+        call_id: "call-read",
+        status: "ok",
+        output: { bytes: 640 },
+        result_summary: { keys: ["bytes"] },
+      },
+      {
+        type: "tool_call",
+        run_id: "run-a",
+        call_id: "call-command",
+        tool: "exec_command",
+        input: { cmd: "pnpm --dir apps/worker typecheck", token: "[redacted]" },
+        args_summary: { keys: ["cmd", "token"], count: 2 },
+      },
+      {
+        type: "tool_result",
+        run_id: "run-a",
+        call_id: "call-command",
+        status: "ok",
+        output: { output: "Done in 1.2s", exit_code: 0 },
+        result_summary: { keys: ["exit_code", "output"] },
+      },
+    ]);
+    api.conversation.mockResolvedValue({
+      messages: [{
+        id: "assistant-a",
+        role: "assistant",
+        content: "The checks passed.",
+        events: [
+          { type: "message_start", run_id: "run-a", conversation_id: "conversation-a" },
+          { type: "tool_call", call_id: "call-read", tool: "file.read", args_summary: { keys: ["path"] } },
+          { type: "tool_result", call_id: "call-read", status: "ok", result_summary: { keys: ["bytes"] } },
+          { type: "tool_call", call_id: "call-command", tool: "exec_command", args_summary: { keys: ["cmd", "token"] } },
+          { type: "tool_result", call_id: "call-command", status: "ok", result_summary: { keys: ["exit_code", "output"] } },
+          { type: "message_end", run_id: "run-a" },
+        ],
+      }],
+      active_run_id: null,
+    });
+    renderChat("conversation-a");
+
+    expect(api.runEvents).not.toHaveBeenCalled();
+    fireEvent.click((await screen.findByText("Read files, ran commands")).closest("summary")!);
+    await waitFor(() => expect(api.runEvents).toHaveBeenCalledWith("run-a", expect.any(AbortSignal)));
+    fireEvent.click(await screen.findByRole("button", { name: /Ran commands.*exec_command.*Success/ }));
+
+    expect(await screen.findByText(/\$ pnpm --dir apps\/worker typecheck/)).toBeTruthy();
+    expect(screen.getByText(/Done in 1\.2s/)).toBeTruthy();
+    expect(screen.getByText("Input fields").parentElement?.textContent).toContain("cmd, token");
+    expect(document.body.textContent).not.toContain("[redacted]");
   });
 
   it("collapses the desktop rail from the header toggle", async () => {

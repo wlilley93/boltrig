@@ -33,7 +33,7 @@ import { MobileChat } from "./MobileChat";
 import { VoiceCall } from "./VoiceCall";
 import { Composer } from "./chat/Composer";
 import { LiveTurn, Message } from "./chat/ChatMessages";
-import { QueuedMessages } from "./chat/QueuedMessages";
+import { ComposerRunStatus } from "./chat/QueuedMessages";
 import { RunSectionView } from "./chat/RunSectionView";
 import { SubagentTabs } from "./chat/SubagentTabs";
 import { TaskInspector } from "./chat/TaskInspector";
@@ -49,6 +49,7 @@ import { downloadAttachment } from "./chat/attachmentPresentation";
 import { reasonText } from "./chat/chatErrors";
 import { useChatModelOptions } from "./chat/useChatModelOptions";
 import { useChatProjection } from "./chat/useChatProjection";
+import { useConversationQueue } from "./chat/useConversationQueue";
 import { useStagePhenotype } from "./chat/useStagePhenotype";
 import { useTechDetails } from "./chat/useTechDetails";
 import { useTranscriptViewport } from "./chat/useTranscriptViewport";
@@ -78,7 +79,6 @@ type ConversationLoadState = {
   phase: "idle" | "loading" | "ready" | "error";
   error: string;
 };
-
 export function ChatView({
   conversationId,
   onConversation,
@@ -114,7 +114,7 @@ export function ChatView({
   const [error, setError] = useState("");
   const [continuity, setContinuity] = useState("");
   const [retryFollow, setRetryFollow] = useState(false);
-  const compactTaskDetails = useMediaQuery("(max-width: 1020px)");
+  const compactTaskDetails = useMediaQuery("(max-width: 1374px)");
   // Mobile is a different surface, not the console squeezed. Below the phone
   // breakpoint the conversation is drawn by MobileChat on its own palette.
   const phone = useMediaQuery("(max-width: 640px)");
@@ -128,8 +128,6 @@ export function ChatView({
   // Queued steers are durable user messages with no run id yet. Keep a small
   // local echo so the row appears as soon as the 202 receipt arrives; the next
   // conversation load reconciles it with the append-only message log.
-  const [localQueuedMessages, setLocalQueuedMessages] = useState<ChatMessage[]>([]);
-  const [consumedSteerIds, setConsumedSteerIds] = useState<string[]>([]);
   // Desktop-only rail visibility. Compact widths keep the task-details sheet
   // and its single trigger untouched (the 39c14bd invariant).
   const [railOpen, setRailOpen] = useState(true);
@@ -183,6 +181,8 @@ export function ChatView({
   const liveConversationRef = useRef<string | null>(null);
   const activeRunRef = useRef<string | null>(null);
   const followCursorRef = useRef(0);
+  const queue = useConversationQueue({ conversationId, generationRef: conversationGenerationRef,
+    selectedRef: selectedConversationRef, reload: loadConversation, setContinuity, setError });
   const {
     conversationSubagentCount,
     inspectorModel,
@@ -196,13 +196,14 @@ export function ChatView({
     transcriptRevision,
   } = useChatProjection({
     artifacts,
-    consumedSteerIds,
+    consumedSteerIds: queue.consumedIds,
     continuity,
     error,
     events,
-    localQueuedMessages,
+    localQueuedMessages: queue.localMessages,
     materializedOutputs,
     messages,
+    queuedMessageOrder: queue.order,
   });
   const transcriptViewport = useTranscriptViewport({
     conversationKey: conversationId,
@@ -253,8 +254,7 @@ export function ChatView({
     // The design's New tab resets the draft on entry; switching conversations
     // likewise drops a stale draft rather than carrying it across tasks.
     setDraft("");
-    setLocalQueuedMessages([]);
-    setConsumedSteerIds([]);
+    queue.reset();
     setMessages([]);
     setArtifacts([]);
     setArtifactCursor(null);
@@ -406,15 +406,13 @@ export function ChatView({
         activeRunRef.current = queued.run_id;
         liveConversationRef.current = queuedConversationId;
         if (queuedConversationId) onWorkingChange?.(queuedConversationId, true);
-        setLocalQueuedMessages((current) => current.some((item) => item.id === queuedMessageId)
-          ? current
-          : [...current, {
-            id: queuedMessageId,
-            role: "user",
-            content: message,
-            attachments,
-            created_at: new Date().toISOString(),
-          }]);
+        queue.echo({
+          id: queuedMessageId,
+          role: "user",
+          content: message,
+          attachments,
+          created_at: new Date().toISOString(),
+        });
         // A 202 queue receipt carries no stream. When no other stream is
         // open (the active turn was started elsewhere or the local follow
         // already dropped), attach a follow after this send's controller is
@@ -549,7 +547,7 @@ export function ChatView({
     }
     onWorkingChange?.(id, Boolean(thread.active_run_id));
     const loadedMessageIds = new Set(thread.messages.map((message) => message.id));
-    setLocalQueuedMessages((current) => current.filter((message) => !loadedMessageIds.has(message.id)));
+    queue.hydrate(thread.queued_message_ids ?? [], loadedMessageIds);
     setMessages(thread.messages);
     setModelContext(thread.model_context ?? null);
     setArtifacts(artifactResult.artifacts);
@@ -739,9 +737,7 @@ export function ChatView({
       if (id) void loadConversation(id).catch(() => undefined);
     } else if (event.type === "steer_consumed") {
       if (event.message_id) {
-        setConsumedSteerIds((current) => current.includes(event.message_id!)
-          ? current
-          : [...current, event.message_id!]);
+        queue.consume(event.message_id);
       }
     } else if (event.type === "artifact") {
       const id = liveConversationRef.current ?? conversationId;
@@ -907,7 +903,7 @@ export function ChatView({
     if (compactTaskDetails) setTaskDetailsOpen(false);
     window.setTimeout(() => {
       if (phone) {
-        document.querySelector<HTMLInputElement>(".m-composer .m-input")?.focus();
+        document.querySelector<HTMLTextAreaElement>(".m-composer .m-input")?.focus();
       } else {
         draftInputRef.current?.focus();
       }
@@ -1032,6 +1028,7 @@ export function ChatView({
             );
           }}
           onRetryConversation={retryConversationLoad}
+          onReorderQueued={queue.reorder}
           onRespondHitl={async (id, decision) => {
             try {
               const result = await client.respondHitl(id, decision, "");
@@ -1055,10 +1052,11 @@ export function ChatView({
             setDraft(message.content ?? "");
             setContinuity("Queued instruction loaded into the composer.");
             window.setTimeout(() => {
-              document.querySelector<HTMLInputElement>(".m-composer .m-input")?.focus();
+              document.querySelector<HTMLTextAreaElement>(".m-composer .m-input")?.focus();
             }, 0);
           }}
           onStop={() => void stop()}
+          queueReordering={queue.reordering}
           queuedMessages={queuedMessages}
           retryFollow={retryFollow}
           subtitle={conversationSubagentCount > 0
@@ -1106,7 +1104,7 @@ export function ChatView({
           aria-controls="worker-task-details"
           aria-expanded={taskDetailsOpen}
           className="secondary-button task-details-trigger"
-          onClick={() => setTaskDetailsOpen(true)}
+          onClick={() => setTaskDetailsOpen((open) => !open)}
           ref={taskDetailsTriggerRef}
           type="button"
         >
@@ -1285,16 +1283,17 @@ export function ChatView({
             transcriptId="worker-conversation-transcript"
           />
         )}
-        {queuedMessages.length > 0 && (
-          <QueuedMessages
-            messages={queuedMessages}
-            onSteer={(message) => {
-              setDraft(message.content ?? "");
-              setContinuity("Queued instruction loaded into the composer.");
-              window.setTimeout(() => draftInputRef.current?.focus(), 0);
-            }}
-          />
-        )}
+        {!isNewState && <ComposerRunStatus
+          disabled={queue.reordering}
+          messages={queuedMessages}
+          steps={live.steps}
+          onReorder={queue.reorder}
+          onSteer={(message) => {
+            setDraft(message.content ?? "");
+            setContinuity("Queued instruction loaded into the composer.");
+            window.setTimeout(() => draftInputRef.current?.focus(), 0);
+          }}
+        />}
         {!isNewState && composer}
       </main>
       {openTabs.length > 0 && canOpenPanes && (
@@ -1312,7 +1311,7 @@ export function ChatView({
       {!isNewState && conversationReady && <TaskInspector
         key={`rail:${conversationId ?? "new"}`}
         model={inspectorModel}
-        mode={compactTaskDetails ? "sheet" : "rail"}
+        mode={compactTaskDetails ? "overlay" : "rail"}
         open={compactTaskDetails ? taskDetailsOpen : railOpen}
         panelRef={taskDetailsPanelRef}
         returnFocusRef={taskDetailsTriggerRef}

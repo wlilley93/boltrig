@@ -1,8 +1,10 @@
 /* Desktop task rail parity. The grid keeps the conversation readable, but the
  * rail column is visually the same canvas: only this blurred, floating surface
- * is painted. Compact widths continue to use the existing task-details sheet. */
+ * is painted. Compact desktop uses an overlay; phones retain the modal sheet. */
 .chat-layout:not([data-rail-collapsed="true"]) {
-  grid-template-columns: minmax(0, 1fr) auto;
+  /* 745px content + 24px on each side. The inspector must never buy space by
+   * squeezing or reflowing the canonical conversation column. */
+  grid-template-columns: minmax(793px, 1fr) auto;
 }
 
 .right-rail:not(.task-details-sheet) {
@@ -257,11 +259,11 @@
   margin: 4px 15px 6px;
 }
 
-/* The compact projection remains a dismissible dialog, but it is still the
+/* The phone projection remains a dismissible dialog, but it is still the
  * same floating glass object—not the legacy full-height, stroked side band.
  * Its header is intentionally only a close affordance and a short accessible
  * title; conversation controls do not return at smaller breakpoints. */
-@media (max-width: 1020px) {
+@media (max-width: 1374px) {
   .chat-layout:not([data-rail-collapsed="true"]) {
     grid-template-columns: minmax(0, 1fr);
   }

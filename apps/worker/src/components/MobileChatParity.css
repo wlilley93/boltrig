@@ -1,32 +1,72 @@
-/* Phone-only correctness and accessibility refinements. The mobile surface has
-   its own palette in styles.css; this file only closes behavior/geometry gaps
-   and does not alter desktop Chat or the floating desktop rail. */
+/* Phone-only Chat projection. The narrow surface now resolves through the same
+   semantic tokens as desktop Chat; it changes layout, not visual authority. */
 
-.mobile-surface {
+html:root[data-theme] .mobile-surface {
+  --m-bg: var(--bg);
+  --m-card: var(--card);
+  --m-card-2: var(--card-2);
+  --m-sep: var(--border);
+  --m-text: var(--text);
+  --m-text-2: var(--text-2);
+  --m-text-3: var(--text-3);
+  --m-text-4: var(--text-4);
+  --m-accent: var(--accent);
+  --m-green: var(--green);
+  --m-amber: var(--amber);
+  --m-red: var(--red);
+
   height: 100dvh;
+  background: var(--m-bg);
 }
 
 .mobile-surface .m-head {
-  min-height: calc(58px + env(safe-area-inset-top, 0px));
-  padding-top: calc(6px + env(safe-area-inset-top, 0px));
-  padding-right: calc(74px + env(safe-area-inset-right, 0px));
-  padding-left: calc(14px + env(safe-area-inset-left, 0px));
+  min-height: calc(44px + env(safe-area-inset-top, 0px));
+  gap: 3px;
+  padding: env(safe-area-inset-top, 0px) calc(52px + env(safe-area-inset-right, 0px)) 0 calc(4px + env(safe-area-inset-left, 0px));
+  border-bottom: 1px solid var(--m-sep);
+}
+
+.mobile-surface .m-round {
+  width: 44px;
+  height: 44px;
+  flex-basis: 44px;
+  border-radius: 8px;
+  color: var(--m-text-2);
+  background: transparent;
+}
+
+.mobile-surface .m-title {
+  font-size: 14px;
+  font-weight: 550;
+  letter-spacing: -.1px;
+}
+
+.mobile-surface .m-sub {
+  font-size: 12px;
 }
 
 :root[data-mobile-surface] .task-details-trigger {
-  top: calc(6px + env(safe-area-inset-top, 0px));
-  right: calc(14px + env(safe-area-inset-right, 0px));
+  top: env(safe-area-inset-top, 0px);
+  right: calc(4px + env(safe-area-inset-right, 0px));
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 8px;
+  color: var(--m-text-2);
+  background: transparent;
 }
 
 .mobile-surface .m-body {
-  padding-right: calc(18px + env(safe-area-inset-right, 0px));
-  padding-left: calc(18px + env(safe-area-inset-left, 0px));
-  scroll-padding-block: 12px;
+  gap: 18px;
+  padding: 14px calc(30px + env(safe-area-inset-right, 0px)) 16px calc(30px + env(safe-area-inset-left, 0px));
+  scroll-padding-block: 14px;
   overscroll-behavior: contain;
 }
 
 .mobile-surface .m-body:focus-visible,
 .mobile-surface button:focus-visible,
+.mobile-surface summary:focus-visible,
+.mobile-surface textarea:focus-visible,
 :root[data-mobile-surface] .right-rail.task-details-sheet button:focus-visible,
 :root[data-mobile-surface] .right-rail.task-details-sheet summary:focus-visible {
   outline: 2px solid var(--m-accent, var(--accent));
@@ -41,16 +81,16 @@
 
 .mobile-surface .m-message > p {
   margin: 0;
-  font-size: 17px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.48;
   white-space: pre-wrap;
 }
 
 .mobile-surface .m-message-user {
   align-self: flex-end;
-  max-width: 86%;
-  padding: 13px 17px;
-  border-radius: 20px;
+  max-width: 78%;
+  padding: 11px 14px;
+  border-radius: 15px;
   background: var(--m-card);
 }
 
@@ -65,13 +105,79 @@
   display: block;
   margin-bottom: 4px;
   color: var(--m-text-3);
-  font-size: 13px;
+  font-size: 11.5px;
   text-transform: capitalize;
 }
 
 .mobile-surface .m-message-live {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.mobile-surface .m-empty {
+  font-size: 15px;
+  line-height: 1.48;
+}
+
+.mobile-surface .m-tree {
+  gap: 8px;
+}
+
+.mobile-surface .m-tree > summary {
+  min-height: 44px;
+  justify-content: space-between;
+  color: var(--m-text-3);
+  cursor: pointer;
+  list-style: none;
+}
+
+.mobile-surface .m-tree > summary::-webkit-details-marker {
+  display: none;
+}
+
+.mobile-surface .m-tree > summary::marker {
+  content: "";
+}
+
+.mobile-surface .m-tree > summary::after {
+  content: "›";
+  color: var(--m-text-4);
+  font-size: 17px;
+  transition: transform .15s ease;
+}
+
+.mobile-surface .m-tree[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+.mobile-surface .m-lead-label {
+  color: var(--m-text-2);
+  font-size: 14px;
+}
+
+.mobile-surface .m-fanout {
+  gap: 4px;
+  margin-left: 8px;
   padding-left: 12px;
-  border-left: 2px solid var(--m-accent);
+}
+
+.mobile-surface .m-fan-row {
+  min-height: 34px;
+  gap: 8px;
+  padding: 0;
+}
+
+.mobile-surface .m-fan-row .familiar-orb {
+  width: 28px;
+  height: 28px;
+}
+
+.mobile-surface .m-fan-label {
+  font-size: 13.5px;
+}
+
+.mobile-surface .m-state {
+  font-size: 12px;
 }
 
 .mobile-surface .m-message-attachments {
@@ -98,7 +204,7 @@
   border-radius: 14px;
   color: var(--m-text-2);
   background: var(--m-card);
-  font-size: 15px;
+  font-size: 13.5px;
   line-height: 1.4;
 }
 
@@ -118,20 +224,62 @@
   font: inherit;
 }
 
-.mobile-surface .m-trace,
 .mobile-surface .m-plan-head,
 .mobile-surface .m-pending-actions button,
 .mobile-surface .live-question button {
   min-height: 44px;
 }
 
-.mobile-surface .m-trace-row,
 .mobile-surface .m-plan-row {
   align-items: center;
 }
 
+.mobile-surface .work-disclosure.transcript-tool-disclosure {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.mobile-surface .transcript-tool-summary {
+  min-height: 44px;
+  color: var(--m-text-3);
+  font-size: 14px;
+}
+
+.mobile-surface .transcript-tool-summary > small {
+  font-size: 11px;
+}
+
+.mobile-surface .transcript-tool-details {
+  gap: 6px;
+  margin-top: 2px;
+  padding-left: 0;
+}
+
+.mobile-surface .transcript-tool-detail > button {
+  min-height: 44px;
+  padding-inline: 8px;
+}
+
+.mobile-surface .transcript-tool-evidence {
+  border-color: var(--m-sep);
+  background: var(--m-card);
+}
+
 .mobile-surface .m-state[data-tone="running"] { color: var(--m-accent); }
 .mobile-surface .m-state[data-tone="failed"] { color: var(--m-red); }
+
+.mobile-surface .m-plan-title {
+  font-size: 14px;
+}
+
+.mobile-surface .m-plan-progress,
+.mobile-surface .m-plan-n {
+  font-size: 12px;
+}
+
+.mobile-surface .m-plan-label {
+  font-size: 13.5px;
+}
 
 .mobile-surface .m-settled-question,
 .mobile-surface .live-question {
@@ -175,10 +323,14 @@
 
 .mobile-surface .m-queued {
   display: grid;
-  gap: 8px;
-  padding: 12px 14px;
-  border-radius: 16px;
+  gap: 5px;
+  max-height: min(34dvh, 280px);
+  padding: 8px;
+  overflow: hidden;
+  border: 1px solid var(--m-sep);
+  border-radius: 14px;
   background: var(--m-card);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 18%);
 }
 
 .mobile-surface .m-queued h2,
@@ -187,31 +339,97 @@
 }
 
 .mobile-surface .m-queued h2 {
-  font-size: 15px;
+  padding: 2px 7px;
+  color: var(--m-text-3);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.mobile-surface .m-queued-list {
+  display: grid;
+  gap: 2px;
+  overflow-y: auto;
 }
 
 .mobile-surface .m-queued-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  min-height: 42px;
+  gap: 8px;
+  padding-left: 7px;
+  border-radius: 8px;
+}
+
+.mobile-surface .m-queued-row:hover {
+  background: var(--hover);
+}
+
+.mobile-surface .m-queued-row p {
+  overflow: hidden;
+  color: var(--m-text-2);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-surface .m-queued-actions {
+  display: flex;
+  align-items: center;
 }
 
 .mobile-surface .m-queued-row button {
   margin: 0;
+  padding-inline: 10px;
+  color: var(--m-text-3);
+  background: transparent;
+  font-size: 12px;
+}
+
+.mobile-surface .m-queued-row button:disabled {
+  color: var(--m-text-4);
+  opacity: .45;
+}
+
+.mobile-surface .m-composer-dock {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 0 calc(30px + env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) calc(30px + env(safe-area-inset-left, 0px));
 }
 
 .mobile-surface .m-composer {
-  min-height: 52px;
-  height: auto;
-  margin-right: max(14px, env(safe-area-inset-right, 0px));
-  margin-bottom: max(14px, env(safe-area-inset-bottom, 0px));
-  margin-left: max(14px, env(safe-area-inset-left, 0px));
-  padding-left: 17px;
+  position: relative;
+  min-height: 88px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 14px 52px 12px 14px;
+  border: 1px solid var(--m-sep);
+  border-radius: 18px;
+  background: var(--m-card);
 }
 
 .mobile-surface .m-input {
-  min-height: 44px;
+  width: 100%;
+  min-height: 58px;
+  max-height: 120px;
+  padding: 0;
+  resize: none;
+  color: var(--m-text);
+  font: 15px/1.45 var(--font-ui);
+  scrollbar-width: thin;
+}
+
+.mobile-surface .m-send {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  width: 38px;
+  height: 38px;
+  flex-basis: 38px;
+  color: var(--m-bg);
+  background: var(--m-text);
 }
 
 .mobile-surface .m-input:disabled,

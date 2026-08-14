@@ -193,7 +193,7 @@ describe("Worker conversation shell truthfulness", () => {
 
     await waitFor(() => {
       expect(document.activeElement).toBe(screen.getByRole("button", {
-        name: "Open command palette",
+        name: "Companion: Familiar",
       }));
     });
     expect(opener.getAttribute("aria-expanded")).toBe("true");
@@ -225,7 +225,9 @@ describe("Worker conversation shell truthfulness", () => {
     const paletteOpener = await screen.findByRole("button", {
       name: "Open command palette",
     });
-    await waitFor(() => expect(document.activeElement).toBe(paletteOpener));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", {
+      name: "Companion: Familiar",
+    })));
 
     fireEvent.click(paletteOpener);
 

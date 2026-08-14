@@ -25,7 +25,7 @@ export function useProviderSetup(profile: UserProfile) {
   const [message, setMessage] = useState("");
   const apiKeyInput = useRef<HTMLInputElement>(null);
   const isAdmin = ADMIN_ROLES.has(profile.role ?? "");
-  const canAddKey = Boolean(readiness?.allowOwn || isAdmin);
+  const canAddKey = Boolean(readiness && (readiness.allowOwn || isAdmin));
   const level: AiKeyLevel = readiness?.allowOwn ? "user" : "org";
 
   useEffect(() => {

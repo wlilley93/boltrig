@@ -334,6 +334,44 @@
   cursor: pointer;
 }
 
+.task-inspector.right-rail.task-inspector--overlay {
+  position: fixed;
+  z-index: 41;
+  top: max(42px, calc(env(safe-area-inset-top, 0px) + 42px));
+  right: max(10px, env(safe-area-inset-right, 0px));
+  bottom: max(10px, env(safe-area-inset-bottom, 0px));
+  display: flex;
+  width: min(var(--task-inspector-width), calc(
+    100vw - 20px
+    - env(safe-area-inset-left, 0px)
+    - env(safe-area-inset-right, 0px)
+  ));
+  min-width: 0;
+  max-width: none;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  background: transparent;
+  pointer-events: none;
+  visibility: hidden;
+  transform: translateX(calc(100% + 20px));
+  transition: transform 180ms ease, visibility 0s linear 180ms;
+}
+
+.task-inspector.right-rail.task-inspector--overlay.task-inspector--open {
+  pointer-events: auto;
+  visibility: visible;
+  transform: translateX(0);
+  transition: transform 180ms ease;
+}
+
+.task-inspector.right-rail.task-inspector--overlay > .task-inspector__surface {
+  min-height: 0;
+  max-height: none;
+  flex: 1;
+  overflow: hidden auto;
+}
+
 .task-inspector.right-rail.task-inspector--sheet {
   position: fixed;
   z-index: 41;
@@ -435,11 +473,19 @@
   .task-inspector__output-actions > button { min-height: 44px; }
 }
 
+@media (min-width: 641px) and (max-width: 760px) {
+  .task-inspector.right-rail.task-inspector--overlay {
+    top: max(58px, calc(env(safe-area-inset-top, 0px) + 58px));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .task-inspector--overlay,
   .task-inspector--sheet,
   .task-inspector__resize-handle::after { transition: none; }
 }
 
+:root.reduce-motion .task-inspector--overlay,
 :root.reduce-motion .task-inspector--sheet,
 :root.reduce-motion .task-inspector__resize-handle::after { transition: none; }
 

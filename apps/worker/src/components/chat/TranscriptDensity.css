@@ -64,31 +64,144 @@
 
 .transcript-tool-details {
   display: grid;
-  gap: 3px;
-  margin-top: 7px;
-  padding-left: 4px;
+  gap: 7px;
+  margin-top: 6px;
+  padding-left: 3px;
+}
+.transcript-tool-list {
+  display: grid;
+  gap: 2px;
 }
 .transcript-tool-detail {
+  min-width: 0;
+}
+.transcript-tool-detail > button {
   display: grid;
+  width: 100%;
+  min-height: 30px;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  min-height: 20px;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
   color: var(--text-4);
-  font-size: 11px;
-}
-.transcript-tool-detail code {
-  overflow: hidden;
-  color: var(--text-3);
+  background: transparent;
+  cursor: pointer;
   font: inherit;
+  text-align: left;
+}
+.transcript-tool-detail > button:hover {
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+}
+.transcript-tool-detail > button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--card) 72%, transparent);
+}
+.transcript-tool-detail > button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.transcript-tool-detail-copy {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+.transcript-tool-detail-copy strong {
+  flex: 0 0 auto;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 450;
+}
+.transcript-tool-detail-copy code {
+  overflow: hidden;
+  color: var(--text-4);
+  font: 10.5px/1.35 ui-monospace, "SF Mono", Menlo, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.transcript-tool-detail > span { font-variant-numeric: tabular-nums; }
-.transcript-tool-detail > span[data-status="degraded"],
-.transcript-tool-detail > span[data-status="pending_human"] { color: var(--amber); }
-.transcript-tool-detail > span[data-status="error"],
-.transcript-tool-detail > span[data-status="failed"] { color: var(--red); }
+.transcript-tool-detail > button > span:last-child {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.transcript-tool-detail [data-status="degraded"],
+.transcript-tool-detail [data-status="pending_human"],
+.transcript-tool-detail [data-status="pending"] { color: var(--amber); }
+.transcript-tool-detail [data-status="error"] { color: var(--red); }
+
+.transcript-tool-load-state {
+  margin: 0;
+  padding: 0 7px;
+  color: var(--text-4);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.transcript-tool-evidence {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: 10px;
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--card) 78%, transparent);
+}
+.transcript-tool-payload,
+.transcript-tool-terminal {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 9px 10px;
+}
+.transcript-tool-payload + .transcript-tool-payload {
+  border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+}
+.transcript-tool-payload h4,
+.transcript-tool-terminal h4 {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 15px;
+}
+.transcript-tool-payload pre,
+.transcript-tool-terminal pre {
+  max-height: 280px;
+  margin: 0;
+  overflow: auto;
+  color: var(--text-2);
+  font: 11.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.transcript-tool-field-summary {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 3px 10px;
+  color: var(--text-4);
+  font-size: 10.5px;
+  line-height: 15px;
+}
+.transcript-tool-field-summary > span {
+  flex: 0 0 auto;
+  color: var(--text-3);
+}
+.transcript-tool-outcome {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+  padding: 7px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--text-4);
+  font-size: 11px;
+}
+.transcript-tool-outcome[data-status="ok"] { color: var(--text-3); }
+.transcript-tool-outcome[data-status="pending"],
+.transcript-tool-outcome[data-status="pending_human"],
+.transcript-tool-outcome[data-status="degraded"] { color: var(--amber); }
+.transcript-tool-outcome[data-status="error"] { color: var(--red); }
 
 .subagent-chips.transcript-subagent-chips {
   display: flex;
