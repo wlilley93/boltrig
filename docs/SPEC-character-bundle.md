@@ -413,9 +413,67 @@ character, assets — arrives as one private unit.
 into the public renderer first and extracting it later means the format has
 already leaked.
 
+## Decisions taken 2026-08-14
+
+### The bundle on disk is a VIEW, not an artefact — measured
+
+The three gaps Maya's consolidation exposed were re-examined. One is closed, one
+is misdescribed, and the third is bigger than it was written up as.
+
+**`Maya.greeting.frame.mp4` needs no new slot — greeting folds into the bake.**
+`companionVisual` has `frame` plus an optional `restrictedScene`, and greeting
+looked like it wanted a third. It does not, because a `.frame.mp4` is *already*
+a multi-region graph: every clip the player can reach is laid on one track with
+chapters at the boundaries and the whole state machine in a `uuid` box. A
+greeting is an entry region of that graph. Adding a `scenes[]` list would put a
+second graph-selector *above* a format whose entire purpose is that one file
+holds the whole reachable space — two mechanisms for one job.
+
+`restrictedScene` stays a separate slot, and the reason is worth stating because
+it is not "greeting is less important": it is a **distribution** boundary, not a
+graph boundary. A user without permission should not have the bytes at all, so
+those frames must be separately shippable. Unrestricted scenes have no such
+requirement, so they belong in one bake. The rule is: **a slot exists only where
+a permission boundary exists.**
+
+**`behaviour/camera.json` is NOT two sources of truth.** It is a *symlink* to
+`companion-observer/characters/maya.json` — one file, resolved via
+`Path.resolve()`. The duplication the earlier note describes does not exist, and
+a parity test written to catch drift between them was deleted after mutation
+testing showed it could never fail: it compared a file with itself.
+
+**But the symlink is the real finding.** Maya's bundle contains **21 symlinks**,
+all relative, all escaping the bundle root into `gen-pipeline`, `maya-remote`
+and `companion-observer` — `library`, `lines`, `prompts/persona.md`,
+`data/character.db`, `identity/visual-lora/*`, `identity/example-clips/*`.
+`~/Projects/character-bundles` is not a git repository, so there is no history
+either. Measured by packing it the way anyone would:
+
+    tar -cf  (no --dereference), unpack elsewhere  ->  21 dangling links
+    tar -chf (--dereference),    unpack elsewhere  ->  18 dangling links
+
+`--dereference` does **not** rescue it: 18 remain, because there are symlinks
+nested inside the directories it followed. So the spec's central claim — that a
+character *brings* its data — is not true of the bundle as it exists on disk. It
+brings references to one operator's home directory, and it is assembled in place
+rather than built.
+
+This does not invalidate the format; the manifest, the `type` split and the
+capability declarations are all real. It reclassifies the on-disk layout as a
+**development view**, and makes "Bundle format on disk" below the question that
+has to be answered before any bundle moves between machines. Whatever answer is
+chosen needs an export step that resolves links recursively and a check that
+refuses to publish a bundle containing a path outside its own root.
+
 ## Open questions
 
-- **Bundle format on disk** — directory with a manifest, or an archive?
+- **Bundle format on disk** — directory with a manifest, or an archive? *Now
+  load-bearing rather than cosmetic: see the 2026-08-14 decision above. Any
+  answer needs a recursive-dereference export and a refusal on out-of-root
+  paths, or a bundle "ships" 21 links to nothing.*
+- **`emotion` is still unset** — the schema wants a model name that the bound
+  canvas source declares it supports, and no companion source is registered yet.
+  Blocked on the private companion renderer, not on a decision.
 - **How the private entrypoint is selected at build time** — env var, separate
   Vite entry, or a private repo that vendors the public one?
 - **Where bundle assets live at runtime.** Maya's are spread across

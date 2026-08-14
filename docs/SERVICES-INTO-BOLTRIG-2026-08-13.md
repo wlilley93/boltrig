@@ -173,6 +173,43 @@ is modified in the tree. For the record, the existing mounts are
 > this phase. It is named here because a camera-adjacent port on the tailnet
 > deserves a deliberate decision rather than silence.
 
+**DECIDED 2026-08-14: keep it.** This is deliberately the opposite call from
+`:8901`, and the difference is authentication, not squeamishness about cameras.
+
+`:8901` was an unauthenticated player mounted on the tailnet — anything on the
+tailnet could drive it, so the mount *was* the access control and there wasn't
+one. `:8896` is the reverse: `camerad.py:78` declares it as the tailnet-facing
+viewer and gives it its own gate, while local consumers (`presence.py`,
+`aim.py`, `guard.py`, `enroll.py`, `extend_enrollment.py`) all read `:8899`,
+which is **not** proxied. Removing `:8444` would therefore break exactly one
+thing — a human looking at their own room from their phone — and protect
+nothing, because the camera was never reachable through it unauthenticated.
+
+The gate was verified from a peer (never from the serve's own host, which
+returns 000 and looks broken):
+
+    no credential        -> 401
+    wrong k= token       -> 401     same length, one character changed
+    wrong header token   -> 401
+    valid header token   -> 200     text/html
+    valid k= token       -> 302     trades the URL token for a cookie
+
+It holds up on inspection too: a 192-bit `secrets.token_urlsafe(24)`, compared
+with `hmac.compare_digest` rather than `==`, and the URL token is exchanged for
+an `HttpOnly; SameSite=Lax` cookie so it stops riding on every request and
+leaves the address bar on the next navigation.
+
+The load-bearing detail is a comment in `camerad.py`: **there is no loopback
+exemption, deliberately.** `tailscale serve` proxies *from* `127.0.0.1`, so an
+"allow loopback" shortcut would have exempted the entire tailnet — the same trap
+that made the old POST guard useless. Anyone tidying this later should not add
+one.
+
+What this decision does **not** cover: the token never expires and there is no
+revocation path short of deleting `~/pixy-stream/viewer-token` and restarting
+camerad, which invalidates every device at once. Acceptable for one operator and
+a handful of personal devices; it is the thing to revisit first if that changes.
+
 No presence bridge to beelink was built or prepared.
 
 ---
