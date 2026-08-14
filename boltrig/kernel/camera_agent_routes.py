@@ -26,6 +26,33 @@ def _error(reason: str, status: int = 400) -> JSONResponse:
     return JSONResponse({"status": "error", "reason": reason}, status_code=status)
 
 
+# The reasons a validation failure in this module may state to a caller.
+#
+# An ALLOW-LIST, and the same one device_routes.py already uses, because the
+# alternative is what this module did until now: hand str(exc) straight to the
+# client. Every ValueError raised here is a literal code today, so nothing
+# leaked -- but nothing STOPPED it either, and the next raise carrying a path,
+# a field value or a chained library message would have been published without
+# anyone editing this line.
+#
+# Naming which field was wrong is deliberate: the caller is an enrolled device
+# reporting its own camera, so the reason is about data it already holds.
+_VALIDATION_REASONS = frozenset({
+    "camera_evidence_too_large",
+    "camera_physical_proof_evidence_required",
+    "invalid_camera_evidence",
+    "invalid_camera_id",
+    "invalid_connection_state",
+    "invalid_descriptor_fingerprint",
+    "invalid_ptz_state",
+})
+
+
+def _validation_reason(exc: Exception) -> str:
+    reason = str(exc)
+    return reason if reason in _VALIDATION_REASONS else "invalid_request"
+
+
 def _text(body: dict, key: str, maximum: int, *, required: bool = True) -> str | None:
     value = body.get(key)
     if value is None and not required:
@@ -163,7 +190,7 @@ async def publish_binding(device_id: str, body: dict, request: Request, kernel):
     try:
         binding = _binding_from_body(device, body)
     except ValueError as exc:
-        return _error(str(exc))
+        return _error(_validation_reason(exc))
     if not await kernel.store.upsert_camera_binding(binding):
         return _error("camera_binding_unavailable", 409)
     await audit_device(
