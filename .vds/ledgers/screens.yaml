@@ -1,5 +1,5 @@
 schema_version: 1
-generated_at: 2026-08-14T08:08:19Z
+generated_at: 2026-08-14T12:15:37Z
 generated_by: vds ledger screens
 source_globs:
 - apps/worker/src/components/*View.tsx
@@ -7,8 +7,8 @@ source_globs:
 - apps/worker/src/components/PermanentFleetTopology.tsx
 - apps/worker/src/components/SettingsSurface.tsx
 - apps/worker/src/components/VoiceCall.tsx
-source_digest: sha256:9da5dba8b3b08bb9920f036a3ede0c016d4bf4731330e776f5de6a2d2dfc4e9f
-content_digest: sha256:991d48d2cf2a142e6704438dc9e22ef3e25c0eaee1ad8d5ca6e0a39b90cfdf87
+source_digest: sha256:197b265cc6678d8fcd8271e6f348fabd9e3421fb751c4d7e780bee4b3d738ae8
+content_digest: sha256:3205c2eb6ecf50b4bb05d8035b9dd9f77325614c6710f84dfbe229126c524b0e
 screens:
 - route: apps/worker/src/components/AccountView.tsx
   digest: sha256:de974d81b5f02bd734d36b61476d72dbe60a8c12931d6b3084f396dd446825ac
@@ -4070,7 +4070,7 @@ screens:
     import_path: null
     line: 2138
 - route: apps/worker/src/components/ChatView.tsx
-  digest: sha256:b00a2ac0ebbf98354ac8bf9201903fe01846edfecb6835196e355d2b6aa83f76
+  digest: sha256:b581b061de11becc1fac67ab78434922cd903b11399f48dc5ff30386aa9270e9
   references:
   - name: StageBody
     root: StageBody
@@ -4079,7 +4079,7 @@ screens:
     kind: component
     import_path: ./StageBody
     resolved_path: apps/worker/src/components/StageBody
-    line: 863
+    line: 859
   - name: Composer
     root: Composer
     export_name: Composer
@@ -4087,14 +4087,14 @@ screens:
     kind: component
     import_path: ./chat/Composer
     resolved_path: apps/worker/src/components/chat/Composer
-    line: 918
+    line: 914
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 944
+    line: 940
   - name: VoiceCall
     root: VoiceCall
     export_name: VoiceCall
@@ -4102,14 +4102,14 @@ screens:
     kind: component
     import_path: ./VoiceCall
     resolved_path: apps/worker/src/components/VoiceCall
-    line: 945
+    line: 941
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 960
+    line: 956
   - name: VoiceBanner
     root: VoiceBanner
     export_name: VoiceBanner
@@ -4117,7 +4117,7 @@ screens:
     kind: component
     import_path: ./chat/VoiceBanner
     resolved_path: apps/worker/src/components/chat/VoiceBanner
-    line: 962
+    line: 958
   - name: StageBody
     root: StageBody
     export_name: StageBody
@@ -4125,14 +4125,14 @@ screens:
     kind: component
     import_path: ./StageBody
     resolved_path: apps/worker/src/components/StageBody
-    line: 964
+    line: 960
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 999
+    line: 995
   - name: MobileChat
     root: MobileChat
     export_name: MobileChat
@@ -4140,7 +4140,7 @@ screens:
     kind: component
     import_path: ./MobileChat
     resolved_path: apps/worker/src/components/MobileChat
-    line: 1010
+    line: 1006
   - name: TaskInspector
     root: TaskInspector
     export_name: TaskInspector
@@ -4148,14 +4148,14 @@ screens:
     kind: component
     import_path: ./chat/TaskInspector
     resolved_path: apps/worker/src/components/chat/TaskInspector
-    line: 1072
+    line: 1070
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1105
+    line: 1103
   - name: RunSectionView
     root: RunSectionView
     export_name: RunSectionView
@@ -4163,56 +4163,56 @@ screens:
     kind: component
     import_path: ./chat/RunSectionView
     resolved_path: apps/worker/src/components/chat/RunSectionView
-    line: 1122
+    line: 1120
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1137
+    line: 1135
   - name: main
     root: main
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1142
+    line: 1140
   - name: header
     root: header
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
+    line: 1142
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1143
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
     line: 1144
-  - name: div
-    root: div
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1145
-  - name: div
-    root: div
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1146
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1147
+    line: 1145
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1159
+    line: 1157
   - name: FamiliarBadge
     root: FamiliarBadge
     export_name: FamiliarBadge
@@ -4220,28 +4220,28 @@ screens:
     kind: component
     import_path: ./familiar/FamiliarBadge
     resolved_path: apps/worker/src/components/familiar/FamiliarBadge
-    line: 1160
+    line: 1158
   - name: h1
     root: h1
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1165
+    line: 1163
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1172
+    line: 1170
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1177
+    line: 1175
   - name: ThemeToggle
     root: ThemeToggle
     export_name: ThemeToggle
@@ -4249,35 +4249,42 @@ screens:
     kind: component
     import_path: ./chat/ThemeToggle
     resolved_path: apps/worker/src/components/chat/ThemeToggle
-    line: 1178
+    line: 1176
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1183
+    line: 1181
   - name: svg
     root: svg
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1193
+    line: 1191
   - name: rect
     root: rect
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1194
+    line: 1192
   - name: line
     root: line
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1195
+    line: 1193
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1201
   - name: div
     root: div
     export_name: null
@@ -4285,13 +4292,6 @@ screens:
     kind: element
     import_path: null
     line: 1203
-  - name: div
-    root: div
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1205
   - name: Welcome
     root: Welcome
     export_name: Welcome
@@ -4299,28 +4299,28 @@ screens:
     kind: component
     import_path: ./chat/Welcome
     resolved_path: apps/worker/src/components/chat/Welcome
-    line: 1215
+    line: 1213
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1218
+    line: 1216
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1221
+    line: 1219
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1223
+    line: 1221
   - name: Message
     root: Message
     export_name: Message
@@ -4328,35 +4328,35 @@ screens:
     kind: component
     import_path: ./chat/ChatMessages
     resolved_path: apps/worker/src/components/chat/ChatMessages
-    line: 1233
+    line: 1231
   - name: details
     root: details
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1243
+    line: 1241
   - name: summary
     root: summary
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1244
+    line: 1242
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1248
+    line: 1246
   - name: blockquote
     root: blockquote
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1252
+    line: 1250
   - name: LiveTurn
     root: LiveTurn
     export_name: LiveTurn
@@ -4364,28 +4364,28 @@ screens:
     kind: component
     import_path: ./chat/ChatMessages
     resolved_path: apps/worker/src/components/chat/ChatMessages
-    line: 1256
+    line: 1254
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1265
+    line: 1263
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1268
+    line: 1266
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1280
+    line: 1278
   - name: TranscriptNavigation
     root: TranscriptNavigation
     export_name: TranscriptNavigation
@@ -4393,15 +4393,15 @@ screens:
     kind: component
     import_path: ./chat/TranscriptNavigation
     resolved_path: apps/worker/src/components/chat/TranscriptNavigation
-    line: 1283
-  - name: QueuedMessages
-    root: QueuedMessages
-    export_name: QueuedMessages
+    line: 1281
+  - name: ComposerRunStatus
+    root: ComposerRunStatus
+    export_name: ComposerRunStatus
     namespace_member: false
     kind: component
     import_path: ./chat/QueuedMessages
     resolved_path: apps/worker/src/components/chat/QueuedMessages
-    line: 1289
+    line: 1286
   - name: SubagentTabs
     root: SubagentTabs
     export_name: SubagentTabs
@@ -4409,7 +4409,7 @@ screens:
     kind: component
     import_path: ./chat/SubagentTabs
     resolved_path: apps/worker/src/components/chat/SubagentTabs
-    line: 1301
+    line: 1300
   - name: TaskInspector
     root: TaskInspector
     export_name: TaskInspector
@@ -4417,7 +4417,7 @@ screens:
     kind: component
     import_path: ./chat/TaskInspector
     resolved_path: apps/worker/src/components/chat/TaskInspector
-    line: 1312
+    line: 1311
 - route: apps/worker/src/components/CommandPalette.tsx
   digest: sha256:3044e646b0c9c5d5ec1eb9831a86de5d8ae0fbcc96aa6fed1639b51709e8ce45
   references:

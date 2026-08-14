@@ -3,10 +3,10 @@ routes:
 - apps/worker/src/components/ChatView.tsx
 fileKey: iVQBKFc3NpRH3zdOOxfPqr
 nodeId: 5:2
-shippedScreenshotDigest: sha256:d9913c64a8a77a5c6370b41dae333da42b8e9966048a264f763d86c91d2b608c
+shippedScreenshotDigest: sha256:fabae259c8ccaada82d7c0b73f32b24f3acc65954d7579bdb73d285295c7cff8
 screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png
-servedBuild: "feat/console-target@22b508b369546f550945a7b0a12109ee349f78fd; dirty; capture-source sha256:abf7be9a1711d3423cd925604f32192b9c528eaa2e59477a22b7f036b80abf83; capture-manifest sha256:df10f4572e6b1f07be73c3968eb789c38076a8cf9f7543f916792993d4414191"
-shippedSourceDigest: sha256:79c30df3c9995b2a7f057a3099e36fe4799c02eade036afaa2781cf60996a057
+servedBuild: "feat/console-target@c939143914257af9f3f6fa59f5f7fc2a1ee3a9c4; dirty; capture-source sha256:926f1e6d356f96bdd028e33c00db087b6dcba0b03ec8bb2d7aa9df6976bba474; capture-manifest sha256:602b9093a36b6bb725125266d112cdf8d77975d5d999bf5d812fda8a585a1b8e"
+shippedSourceDigest: sha256:b581b061de11becc1fac67ab78434922cd903b11399f48dc5ff30386aa9270e9
 frameImageDigest: sha256:f6a92ec2b856bf772cd95bafb65d8fa2b137ae4eb906339555d18e6425c667be
 frameDigest: sha256:214f01d660057812c66ea2d1fc487c78f01b9c1a78b78b445c90dd2adbbd67f2
 verdict: no_authority
@@ -19,7 +19,7 @@ regions:
   finding: This screen declares no facet band.
 - region: body_rows
   examined: true
-  finding: The persisted transcript now answers directly, using one compact Queried data receipt and a thin agent-update row; it has no fabricated root-agent narration or live approval checkpoint.
+  finding: The persisted transcript answers directly, using one compact Queried data receipt and a thin agent-update row; the separately exercised disclosure expands on demand into visibility-fenced redacted per-tool evidence without changing the resting capture.
 - region: rail
   examined: true
   finding: The resizable borderless-glass Task details rail truthfully presents the stable empty Outputs section, completed Subagents and observed Run activity, and omits conversation-title, governance, unbound Files, Git, process inventory and terminal controls.
@@ -33,7 +33,7 @@ regions:
   examined: true
   finding: Visible shell and composer affordances were compared; the primary composer action differs.
 deltas:
-- describes: The persisted fixture has no target duration or live-participant status; the shipped transcript truthfully renders one compact Queried data receipt and completed-agent chips around a direct answer.
+- describes: The persisted fixture has no target duration or live-participant status; the shipped transcript truthfully renders one compact Queried data receipt and completed-agent chips around a direct answer, with exact execution evidence available only after explicit expansion.
   disposition: needs_absent_data
 - describes: The frame's live approval, waiting, computer-use and spend evidence are absent because the captured backend state provides no corresponding governed receipt.
   disposition: forbidden_by_policy
@@ -41,8 +41,8 @@ deltas:
 - describes: Later Principal directions require grouped compact task navigation, glass Chat rails, transcript navigation, a resizable contract-observed inspector, no persistent status or duplicate search, exact model identity, one visible composer voice action and the caller's kernel-derived approval posture; those overrides intentionally differ from the original Figma chat frame and do not alter it.
   disposition: belongs_to_app_chrome
   owedBy: SCR-0001
-reviewedBy: Codex deterministic current-capture evidence rebind v19
-reviewedAt: 2026-08-13T22:53:59Z
+reviewedBy: Codex deterministic current-capture evidence rebind v28
+reviewedAt: 2026-08-14T11:57:38Z
 basis:
 - DIR-0001
 - DIR-0008
@@ -54,8 +54,16 @@ basis:
 - DIR-0016
 - DIR-0017
 - DIR-0018
+- DIR-0020
+- DIR-0021
+- DIR-0022
+- DIR-0023
+- DIR-0024
+- DIR-0025
+- DIR-0026
+- DIR-0027
 - SCR-0001
 - apps/worker/tests/visual/states.json
 - docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json
 - docs/design/evidence/2026-08-11-console-parity/current/metrics.json
-notes: The unchanged frame digest is retained from the existing depth-limited ledger only and is not eligible for sign-off. New chat remains separately measured outside this route-scoped record because VDS keys stage-four coverage by route. The source-bound additive Chat-direction capture at the same capture-source digest exercises contract-backed inspector sections and DIR-0016/DIR-0017/DIR-0018 choreography but has no signed frame or visual-review authority. This no_authority row binds only the deterministic current screenshot and current route source; it creates no parity or conformity verdict.
+notes: The unchanged frame digest is retained from the existing depth-limited ledger only and is not eligible for sign-off. New chat remains separately measured outside this route-scoped record because VDS keys stage-four coverage by route. The source-bound additive Chat-direction capture at the same capture-source digest exercises contract-backed inspector sections and the calm DIR-0022 receipt state; the expanded redacted trail was inspected separately and is regression-tested. DIR-0023 is a separately browser-tested phone-density direction with no canonical phone frame. DIR-0024 is regression-tested and visually inspected immediately below and above the wide-inspector boundary; the governed desktop capture exercises its inline-rail state. DIR-0025 was browser-tested at a representative narrow-desktop viewport; opening the non-modal overlay left the canonical composer and transcript rectangles unchanged, added no scrim, body lock or inert background, and Escape closed it with trigger focus restored. DIR-0026 was visually inspected with live workflow and queued state; the completed governed capture correctly contains neither surface, while focused regressions cover its expandable truthful step list and thin steerable queue. DIR-0027 adds owner-scoped durable queue reordering with pointer, keyboard and touch controls; the completed capture correctly keeps those live-only controls absent, while focused UI, SDK, Memory and PostgreSQL regressions prove the order reaches the next serial claim. This no_authority row binds only the deterministic current desktop screenshot and current route source; it creates no parity or conformity verdict.

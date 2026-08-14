@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-14T08:05:46.737Z",
+  "capturedAt": "2026-08-14T12:14:40.396Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,12 +16,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "e9484dd786d6116e15ab3a86ce7691f61b9fe5e76542291843ac2a3d3c4bfcc9",
-    "digestAfterCapture": "e9484dd786d6116e15ab3a86ce7691f61b9fe5e76542291843ac2a3d3c4bfcc9",
+    "digestBeforeCapture": "ea09d1543943ab9e0d366df153d121841b3c96e8c45d2769a37223b54aaf2862",
+    "digestAfterCapture": "ea09d1543943ab9e0d366df153d121841b3c96e8c45d2769a37223b54aaf2862",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/console-target",
-    "head": "e7939efa9698673809d50b1f9cdb3857982b5803",
-    "dirty": true
+    "head": "360311c3a6b447374aaa66d1603919964da16b16",
+    "dirty": false
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
@@ -41,7 +41,7 @@
       "hash": "#/chat",
       "settledSelector": "html[data-visual-ready=\"new-chat\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
-      "sha256": "fad5558f146f63d88d51c07333856a09a244410620e97cbe95e9ccc8ba862c1f",
+      "sha256": "8fb46f52f38f7e2a3e70de06dd3b6405a02c300b6add53f5c6570b32b06a84de",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -57,7 +57,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -85,7 +85,7 @@
       "hash": "#/chat/run-thread",
       "settledSelector": "html[data-visual-ready=\"chat-run\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
-      "sha256": "2d1816145ff0f3c74a06747f6ff082b2b5d725d61cbd294f26b367d715b1bc6e",
+      "sha256": "fabae259c8ccaada82d7c0b73f32b24f3acc65954d7579bdb73d285295c7cff8",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -133,7 +133,7 @@
       "hash": "#/agents",
       "settledSelector": "html[data-visual-ready=\"agents\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/agents.png",
-      "sha256": "469a90ac917e64481d628a329127703ddd23505a38394b4b31210210f6cda20e",
+      "sha256": "a853d023416e0994b0253d30a80e6da940bd86101680a26adc397d902df607e4",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -175,7 +175,7 @@
       "hash": "#/integrations",
       "settledSelector": "html[data-visual-ready=\"plugins\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
-      "sha256": "89483b11b3a075f3db6c81a7c7510c2e3b22f6e45dfff70663f589c6d1e8b42c",
+      "sha256": "1324427e8ed7dac2c03fd41a848a75cbd1ca24dd05126c804d8504ec55479528",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -217,7 +217,7 @@
       "hash": "#/chat/run-thread",
       "settledSelector": "html[data-visual-ready=\"command-palette\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png",
-      "sha256": "917b813f131bd8b8023fdc4cdced26791b038bb29bb2201e0edc6677f8b92d21",
+      "sha256": "f2ef2e5405e63a582e1eefd1910be90e2ec57434faf3a4b9392fba99ac4cf6c7",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -281,7 +281,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -314,7 +314,7 @@
       "hash": "#/settings/you",
       "settledSelector": "html[data-visual-ready=\"settings-you\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png",
-      "sha256": "746c8fbe28b2aa04b64d122c53e094df33793a46288afe586768af578f4ea81a",
+      "sha256": "f9275e3dab32758d8888dcf8ea31aa5ce3322cee2a7b4eb3a5f71ab5cbd0cbc9",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -330,7 +330,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

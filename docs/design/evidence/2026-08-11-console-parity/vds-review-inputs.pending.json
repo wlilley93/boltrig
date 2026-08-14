@@ -4,9 +4,9 @@
   "fileKey": "iVQBKFc3NpRH3zdOOxfPqr",
   "captureEvidence": {
     "manifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-    "manifestDigest": "sha256:df10f4572e6b1f07be73c3968eb789c38076a8cf9f7543f916792993d4414191",
+    "manifestDigest": "sha256:602b9093a36b6bb725125266d112cdf8d77975d5d999bf5d812fda8a585a1b8e",
     "metricsPath": "docs/design/evidence/2026-08-11-console-parity/current/metrics.json",
-    "metricsDigest": "sha256:9f33535c6e1f61e70b3d61eb7e0ba55c6598ce2e2f02faac2802d64503dde3e0",
+    "metricsDigest": "sha256:8f077a46178ed1f044a63f05d4fcaeb41a2e0e023008832243ae4cb6ca2fe4cf",
     "viewport": "1440x900",
     "statesCompared": 7,
     "statesMissing": 0,
@@ -14,12 +14,12 @@
   },
   "additiveCaptureEvidence": {
     "manifestPath": "docs/design/evidence/2026-08-11-chat-ui-direction/current/capture-manifest.json",
-    "manifestDigest": "sha256:0a59e95b14fd780bba38db190cbc9a8cd14a5fc5c825616638b2ba71c12d9db0",
-    "capturedAt": "2026-08-13T22:54:06.717Z",
-    "captureSourceDigest": "sha256:abf7be9a1711d3423cd925604f32192b9c528eaa2e59477a22b7f036b80abf83",
+    "manifestDigest": "sha256:cd627075e60b91f9099ff7be327814a3b823397089ade8dc45533c1455ed7cd0",
+    "capturedAt": "2026-08-14T11:55:29.391Z",
+    "captureSourceDigest": "sha256:926f1e6d356f96bdd028e33c00db087b6dcba0b03ec8bb2d7aa9df6976bba474",
     "state": "chat-direction",
     "shippedScreenshotPath": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-    "shippedScreenshotDigest": "sha256:2273011361fff82429bd1c4f6679dcbe13aabf9a873cb4e02ec654e9af6b1ac9",
+    "shippedScreenshotDigest": "sha256:e6f04155e653dc0447b8ec485ebde810148629c253d35715597e5108dcb18a25",
     "directionRecords": [
       "DIR-0008",
       "DIR-0009",
@@ -29,7 +29,14 @@
       "DIR-0015",
       "DIR-0016",
       "DIR-0017",
-      "DIR-0018"
+      "DIR-0018",
+      "DIR-0020",
+      "DIR-0021",
+      "DIR-0022",
+      "DIR-0024",
+      "DIR-0025",
+      "DIR-0026",
+      "DIR-0027"
     ],
     "additiveRebindDirectionRecords": [],
     "visualVerdict": "not_assessed",
@@ -37,34 +44,35 @@
   },
   "servedBuild": {
     "branch": "feat/console-target",
-    "head": "22b508b369546f550945a7b0a12109ee349f78fd",
+    "head": "c939143914257af9f3f6fa59f5f7fc2a1ee3a9c4",
     "dirty": true,
-    "captureSourceDigest": "sha256:abf7be9a1711d3423cd925604f32192b9c528eaa2e59477a22b7f036b80abf83",
+    "captureSourceDigest": "sha256:926f1e6d356f96bdd028e33c00db087b6dcba0b03ec8bb2d7aa9df6976bba474",
     "captureSourceDigestAlgorithm": "sha256-path-type-content-v1",
     "captureSourceScope": [
       "apps/worker/src",
       "apps/worker/tests/visual"
     ],
     "sourceUnchangedDuringCapture": true,
-    "capturedAt": "2026-08-13T22:53:59.851Z"
+    "capturedAt": "2026-08-14T11:55:25.600Z"
   },
   "screensLedger": {
     "path": ".vds/ledgers/screens.yaml",
-    "fileDigest": "sha256:e1eebde2d709aa7c540b8857aa83fc2b9ae0a3f8a8d6310003c87c3a45e2c860",
-    "sourceDigest": "sha256:882ce5626fa7ed57b47a3dc7db138d993cc0dca4b09521572885e6d9a36dd6c5",
-    "contentDigest": "sha256:747f31f1bf87495cb42ba79ce5170dbfa115cbfc71b3ee3c45b125eee0ee4f43"
+    "fileDigest": "sha256:90e5c2fb6aa74c801b4507daded1099ced40a7739717cbae2bcf55a6c33e2e10",
+    "sourceDigest": "sha256:197b265cc6678d8fcd8271e6f348fabd9e3421fb751c4d7e780bee4b3d738ae8",
+    "contentDigest": "sha256:3205c2eb6ecf50b4bb05d8035b9dd9f77325614c6710f84dfbe229126c524b0e"
   },
   "routeLedger": {
     "manifestPath": "docs/design/evidence/2026-08-11-console-parity/current/vds-route-manifest.json",
-    "manifestFileDigest": "sha256:e46d503e2eb4994912711cb16535d752ca6233833191fc7534e340a6311dcd2c",
+    "manifestFileDigest": "sha256:f3708937ba1c2b1173ea7158d02aa49bddf87081ca57b5c968d8df17a8142b9b",
     "ledgerPath": ".vds/ledgers/routes.yaml",
-    "ledgerFileDigest": "sha256:305a66f3dcd5b9123f0de7e4e4b2c036a04a3d0edc97be6e4e461388a1161d4d",
-    "contentDigest": "sha256:80830ebb818df6be9949bee7e4174372b3c469e085ae9192279bd43816687991"
+    "ledgerFileDigest": "sha256:8267afdb293f36ef2503963e3fbf1981c440ca11dbe86a1d70c9c7379e57464a",
+    "contentDigest": "sha256:85c3fbd1cb7ccb77b83bc7e61d2f00dc98803e82900afe2b7c88fb6e4f302b0e"
   },
   "proofRun": {
     "matrixPath": "docs/design/evidence/2026-08-11-console-parity/current/vds-proof-matrix.json",
-    "matrixDigest": "sha256:4cb0cd540b1e67b56ec3a0acf22ec9ad06f8a798235154c79ed6303af8759926",
-    "visualReviewProof": ".vds/proofs/PROOF-20260813-225530.yaml",
+    "matrixDigest": "sha256:27807dc322296a5de4392e6c1899603474f4f602547ed5008f993e6ab9c895b5",
+    "visualReviewProof": ".vds/proofs/PROOF-20260814-120515.yaml",
+    "visualReviewProofDigest": "sha256:4f1d4e32adc15d4c6eac7c6d912bd58d94b63837b40f5796a3cc3472911e91f7",
     "visualReviewStatus": "vacuous",
     "visualReviewCoverage": "6_current_0_drift_0_never_reviewed_all_unsigned_no_authority"
   },
@@ -77,7 +85,7 @@
   },
   "recordPolicy": {
     "verdict": "no_authority",
-    "instruction": "Six route-scoped no_authority reviews bind the final governed capture and measured deviations. They are unsigned, non-enforceable, and cannot establish parity or conformity. The source-bound additive Chat-direction capture records DIR-0016, DIR-0017 and DIR-0018's interaction choreography without creating review authority. New chat remains outside a review record because no non-invented frameDigest exists and its route slot is shared with Chat run; DIR-0019 is recorded against Settings Autonomy but is not exercised by the Settings / You capture.",
+    "instruction": "Six route-scoped no_authority reviews bind the final governed capture and measured deviations. They are unsigned, non-enforceable, and cannot establish parity or conformity. The source-bound additive Chat-direction capture records the latest Shell, Chat and on-demand tool-receipt directions without creating review authority. New chat remains outside a review record because no non-invented frameDigest exists and its route slot is shared with Chat run; DIR-0019 is recorded against Settings Autonomy but is not exercised by the Settings / You capture.",
     "routeStateLimitation": "VDS keys visual reviews by screens-ledger route. Chat run and New chat share ChatView.tsx, so both state comparisons must remain in this evidence set even though only one can occupy the live VDS route slot."
   },
   "states": [
@@ -91,12 +99,12 @@
       "frameImageDigest": "sha256:f6a92ec2b856bf772cd95bafb65d8fa2b137ae4eb906339555d18e6425c667be",
       "frameImageWidth": 1440,
       "frameImageHeight": 900,
-      "currentShippedSourceDigest": "sha256:79c30df3c9995b2a7f057a3099e36fe4799c02eade036afaa2781cf60996a057",
+      "currentShippedSourceDigest": "sha256:b581b061de11becc1fac67ab78434922cd903b11399f48dc5ff30386aa9270e9",
       "shippedScreenshotPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
-      "shippedScreenshotDigest": "sha256:d9913c64a8a77a5c6370b41dae333da42b8e9966048a264f763d86c91d2b608c",
+      "shippedScreenshotDigest": "sha256:fabae259c8ccaada82d7c0b73f32b24f3acc65954d7579bdb73d285295c7cff8",
       "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/chat-run.png",
-      "diffDigest": "sha256:341a70dbcc2cb2832f5b949ef0fff830eb941adc288c3b49f36207681d778025",
-      "changedPixelRatioGt16": 0.06414891975308643,
+      "diffDigest": "sha256:ea2fdffa4c20989fb71c6d87caf3b8b2d099aebfd58fb010dc3d416d0df777d9",
+      "changedPixelRatioGt16": 0.07469135802469136,
       "reviewRecord": ".vds/reviews/VRW-0001.yaml",
       "reviewVerdict": "no_authority",
       "overrideDirectionRecords": [
@@ -108,7 +116,14 @@
         "DIR-0015",
         "DIR-0016",
         "DIR-0017",
-        "DIR-0018"
+        "DIR-0018",
+        "DIR-0020",
+        "DIR-0021",
+        "DIR-0022",
+        "DIR-0024",
+        "DIR-0025",
+        "DIR-0026",
+        "DIR-0027"
       ],
       "legacyDepthLimitedFrameDigest": "sha256:214f01d660057812c66ea2d1fc487c78f01b9c1a78b78b445c90dd2adbbd67f2",
       "requiredBands": [
@@ -135,12 +150,12 @@
       "frameImageDigest": "sha256:8c51c188fa0e2e42c00487baa65db70dfdba88b8bd931c344f9040c3778979fb",
       "frameImageWidth": 1440,
       "frameImageHeight": 900,
-      "currentShippedSourceDigest": "sha256:79c30df3c9995b2a7f057a3099e36fe4799c02eade036afaa2781cf60996a057",
+      "currentShippedSourceDigest": "sha256:b581b061de11becc1fac67ab78434922cd903b11399f48dc5ff30386aa9270e9",
       "shippedScreenshotPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
-      "shippedScreenshotDigest": "sha256:2a6b60ba7b1fe56c1a506108ea88da6a7f9eecf18ce97873433a2af283029cd5",
+      "shippedScreenshotDigest": "sha256:8fb46f52f38f7e2a3e70de06dd3b6405a02c300b6add53f5c6570b32b06a84de",
       "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/new-chat.png",
-      "diffDigest": "sha256:c6b1dbef093c3fee59f6b7a439a2ae0028cbc842f2200e07e88e33e174e0178b",
-      "changedPixelRatioGt16": 0.018800925925925926,
+      "diffDigest": "sha256:3a07e2f12dc3459eb9853b6d41ad8695b7dcd251387043d2029cc4b0b8279323",
+      "changedPixelRatioGt16": 0.037132716049382716,
       "reviewRecord": null,
       "reviewVerdict": null,
       "overrideDirectionRecords": [
@@ -152,7 +167,9 @@
         "DIR-0015",
         "DIR-0016",
         "DIR-0017",
-        "DIR-0018"
+        "DIR-0018",
+        "DIR-0020",
+        "DIR-0021"
       ],
       "legacyDepthLimitedFrameDigest": null,
       "requiredBands": [
@@ -182,16 +199,18 @@
       "frameImageHeight": 900,
       "currentShippedSourceDigest": "sha256:e38e8899c42e552612785ad36e3e86014cb25576c23bdc8110b1dd79c693d1b6",
       "shippedScreenshotPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
-      "shippedScreenshotDigest": "sha256:84f01db8d922a25b5db38e7adb6a6989f8988715461b103ab188ab51d075bbf6",
+      "shippedScreenshotDigest": "sha256:1324427e8ed7dac2c03fd41a848a75cbd1ca24dd05126c804d8504ec55479528",
       "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/plugins.png",
-      "diffDigest": "sha256:9b90ce46ae5c703dc7b640cea7256d7d9cc621214d4bc10d534dff915efe1500",
-      "changedPixelRatioGt16": 0.03819984567901234,
+      "diffDigest": "sha256:5a5174ba9d6d9911ee60343cf00f546762238467ebb57d33f87081d4b48ab125",
+      "changedPixelRatioGt16": 0.04669984567901234,
       "reviewRecord": ".vds/reviews/VRW-0003.yaml",
       "reviewVerdict": "no_authority",
       "overrideDirectionRecords": [
         "DIR-0010",
         "DIR-0015",
-        "DIR-0016"
+        "DIR-0016",
+        "DIR-0020",
+        "DIR-0021"
       ],
       "legacyDepthLimitedFrameDigest": "sha256:70be2f7897493f4789e62df03e8c6faf957b0902f85bbf258b0f85f1693e53f3",
       "requiredBands": [
@@ -220,16 +239,18 @@
       "frameImageHeight": 900,
       "currentShippedSourceDigest": "sha256:38596c93fd33c20a52764c2a4d5edbca8f06a8529946440d9ea2ff35dda30c69",
       "shippedScreenshotPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/agents.png",
-      "shippedScreenshotDigest": "sha256:11a0fd518c9ddf78dc046bdbc5961c8e0279e58eda96ab09a18bc9654cf898e9",
+      "shippedScreenshotDigest": "sha256:a853d023416e0994b0253d30a80e6da940bd86101680a26adc397d902df607e4",
       "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/agents.png",
-      "diffDigest": "sha256:3e93ac1f3c7183a01d98a463d58028eacc6254c754baa00977f942612bc47aac",
-      "changedPixelRatioGt16": 0.039968364197530866,
+      "diffDigest": "sha256:09b3e21e5fef4e9a8e514fb76616f960d53c449ec08d0b6ab5bcefc66e4dd34d",
+      "changedPixelRatioGt16": 0.04677160493827161,
       "reviewRecord": ".vds/reviews/VRW-0002.yaml",
       "reviewVerdict": "no_authority",
       "overrideDirectionRecords": [
         "DIR-0010",
         "DIR-0015",
-        "DIR-0016"
+        "DIR-0016",
+        "DIR-0020",
+        "DIR-0021"
       ],
       "legacyDepthLimitedFrameDigest": "sha256:12ff6ddde30da51188b6a11ebfd8a4d865203d5f31b3764b709cc06aee6dc93c",
       "requiredBands": [
@@ -258,10 +279,10 @@
       "frameImageHeight": 900,
       "currentShippedSourceDigest": "sha256:3044e646b0c9c5d5ec1eb9831a86de5d8ae0fbcc96aa6fed1639b51709e8ce45",
       "shippedScreenshotPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png",
-      "shippedScreenshotDigest": "sha256:9e70d222fb2bb408d7913e41d9284e96bd38fd6405708d10a6c03e5fd70b4926",
+      "shippedScreenshotDigest": "sha256:f2ef2e5405e63a582e1eefd1910be90e2ec57434faf3a4b9392fba99ac4cf6c7",
       "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/command-palette.png",
-      "diffDigest": "sha256:d553d069960588eb21cef959e69e768b72454a66e9ed78ad67152bc4f1558547",
-      "changedPixelRatioGt16": 0.04818287037037037,
+      "diffDigest": "sha256:37cbe279f03ebdfa2f26104e5c00438999a754d264df772a1a62bbb1a1113cfe",
+      "changedPixelRatioGt16": 0.04924614197530864,
       "reviewRecord": ".vds/reviews/VRW-0004.yaml",
       "reviewVerdict": "no_authority",
       "overrideDirectionRecords": [
@@ -271,7 +292,10 @@
         "DIR-0015",
         "DIR-0016",
         "DIR-0017",
-        "DIR-0018"
+        "DIR-0018",
+        "DIR-0020",
+        "DIR-0021",
+        "DIR-0022"
       ],
       "authorityNote": "The shipped palette matches the governing Figma CURRENT SOURCE placement at x=660, y=135 over the truthful completed Chat-run fixture. DECISION-0003 makes Figma govern over the executable HTML crop's x=440 centring disagreement.",
       "legacyDepthLimitedFrameDigest": "sha256:9ae8fb405f8f4bdec541d73acd9ffbe43f866a228398948d37faab61ccd37f86",
