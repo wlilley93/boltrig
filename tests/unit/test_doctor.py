@@ -9,6 +9,14 @@ from boltrig.api.doctor import load_env_file, run_doctor
 
 _REPO = Path(__file__).resolve().parents[2]
 
+# See tests/unit/test_readiness.py for the full reasoning. In short: the legs
+# below need a manifest that REQUESTS Codex, and they were reading the
+# gitignored `manifest.yaml`. In CI that file does not exist, run_doctor
+# swallowed the missing path, and the `next(...)` below then died on an empty
+# iterator - five StopIteration errors whose cause was nowhere in the message.
+# manifest.example.yaml is the shipped manifest and it requests Codex.
+_SHIPPED_MANIFEST = _REPO / "manifest.example.yaml"
+
 
 MANIFEST = """
 organisation: Acme
@@ -446,14 +454,14 @@ ephemeral_runtimes:
 
 @pytest.mark.security
 @pytest.mark.invariant("IAC-005")
-def test_core_release_doctor_disables_codex_requested_by_the_real_manifest(
+def test_core_release_doctor_disables_codex_requested_by_the_shipped_manifest(
     tmp_path: Path,
 ) -> None:
     env = {**_secure_env(tmp_path), "BOLTRIG_RELEASE_MODE": "core"}
 
     report = run_doctor(
         env=env,
-        manifest_path=_REPO / "manifest.yaml",
+        manifest_path=_SHIPPED_MANIFEST,
         production=True,
     )
 
@@ -507,7 +515,7 @@ def test_full_release_requires_an_explicit_packaged_desktop_cors_origin(
         ("core", "1", "conflicts with an enabled trusted Codex lane"),
     ],
 )
-def test_real_manifest_doctor_keeps_non_core_and_conflicting_postures_closed(
+def test_shipped_manifest_doctor_keeps_non_core_and_conflicting_postures_closed(
     tmp_path: Path,
     release_mode: str,
     trusted: str | None,
@@ -519,7 +527,7 @@ def test_real_manifest_doctor_keeps_non_core_and_conflicting_postures_closed(
 
     report = run_doctor(
         env=env,
-        manifest_path=_REPO / "manifest.yaml",
+        manifest_path=_SHIPPED_MANIFEST,
         production=True,
     )
 

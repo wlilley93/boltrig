@@ -32,6 +32,17 @@ pytestmark = pytest.mark.unit
 
 _REPO = Path(__file__).resolve().parents[2]
 
+# The SHIPPED manifest, and the only one a test may read. `manifest.yaml` is
+# gitignored (.gitignore, under "secrets / local config"), so it exists only on a
+# box where an operator has made one: the legs below passed on this laptop and
+# raised FileNotFoundError in CI, which is a test asserting over a file that is
+# not in the repository. manifest.example.yaml is what the project actually
+# ships, it requests Codex, and that is the precondition these legs need - the
+# claim is "core release mode closes Codex down even though the shipped manifest
+# asks for it." Asserting that over an operator's private file proved nothing
+# about the product; skipping when the file is absent would prove less.
+_SHIPPED_MANIFEST = _REPO / "manifest.example.yaml"
+
 
 class _StatusProvider:
     def __init__(self, *, tool_status: str = "ok", gateway_status: str = "ok") -> None:
@@ -251,8 +262,28 @@ def test_readyz_route_refuses_manifest_codex_intent_without_the_trusted_flag() -
 
 @pytest.mark.security
 @pytest.mark.invariant("IAC-005")
-async def test_core_release_readiness_disables_codex_requested_by_the_real_manifest() -> None:
-    manifest = load_manifest(str(_REPO / "manifest.yaml"), env={})
+def test_the_shipped_manifest_still_requests_codex() -> None:
+    """The precondition every "...requested by the shipped manifest" leg rests on.
+
+    Those legs claim the release gate closes Codex down *even though the shipped
+    manifest asks for it*. If manifest.example.yaml ever stopped asking, they
+    would keep passing and stop meaning anything: measured, an empty manifest
+    under BOLTRIG_RELEASE_MODE=full returns `not_configured` rather than the
+    `production_gate_closed` those legs assert, so the precondition is load
+    bearing on the readiness side and silently is not on the doctor side.
+    Asserting it here once is what stops the whole family going vacuous.
+    """
+    manifest = load_manifest(str(_SHIPPED_MANIFEST), env={})
+
+    assert any(
+        runtime.name == "codex-worker" for runtime in manifest.ephemeral_runtimes
+    ), "manifest.example.yaml must keep requesting Codex for the release-gate legs to mean anything"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+async def test_core_release_readiness_disables_codex_requested_by_the_shipped_manifest() -> None:
+    manifest = load_manifest(str(_SHIPPED_MANIFEST), env={})
     env = {
         "BOLTRIG_ENV": "production",
         "BOLTRIG_RELEASE_MODE": "core",
@@ -299,11 +330,11 @@ async def test_core_release_readiness_disables_codex_requested_by_the_real_manif
         ),
     ],
 )
-def test_real_manifest_readiness_keeps_non_core_and_conflicting_postures_closed(
+def test_shipped_manifest_readiness_keeps_non_core_and_conflicting_postures_closed(
     env: dict[str, str],
     reason: str,
 ) -> None:
-    manifest = load_manifest(str(_REPO / "manifest.yaml"), env={})
+    manifest = load_manifest(str(_SHIPPED_MANIFEST), env={})
 
     check = codex_runtime_check(env, True, manifest=manifest)
 
