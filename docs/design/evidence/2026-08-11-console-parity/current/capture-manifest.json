@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-14T12:33:29.430Z",
+  "capturedAt": "2026-08-14T12:55:18.791Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,11 +16,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "1442418fe59432f45dccc4b6b7b49d9ee2bd8005f6835db4d17b03944e68d18e",
-    "digestAfterCapture": "1442418fe59432f45dccc4b6b7b49d9ee2bd8005f6835db4d17b03944e68d18e",
+    "digestBeforeCapture": "733292a5cc8436e93a0504dd1e5d154643edb78394c22fe052689a053dcc582f",
+    "digestAfterCapture": "733292a5cc8436e93a0504dd1e5d154643edb78394c22fe052689a053dcc582f",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/console-target",
-    "head": "f152c7cae948a2cd5cf367e71282a6e02666d200",
+    "head": "285d3bc39dd1845160f23c5e1d7ba58fb310c89e",
     "dirty": true
   },
   "runner": {
@@ -133,7 +133,7 @@
       "hash": "#/agents",
       "settledSelector": "html[data-visual-ready=\"agents\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/agents.png",
-      "sha256": "76b2552909ffde2efe97792bc3b9153bc23de6b6ebbff51f2e519773d6069eb3",
+      "sha256": "b08e675ea74f90a0d90cc01712be93b4638acedad60de065f832777baddd72ea",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -233,7 +233,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -281,7 +281,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

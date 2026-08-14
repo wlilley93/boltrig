@@ -492,6 +492,7 @@ describe("console sidebar", () => {
     expect(shellParityCss).toMatch(/\.worker-shell:has\(\.sidebar\.shell-parity\)\s*\{[\s\S]*?grid-template-columns:\s*266px/);
     expect(shellParityCss).toMatch(/\.sidebar\.shell-parity\s*\{[\s\S]*?width:\s*266px/);
     expect(shellParityCss).toMatch(/\.shell-parity \.nav-row\s*\{[\s\S]*?height:\s*32px[\s\S]*?font-size:\s*14px/);
+    expect(shellParityCss).toMatch(/\.shell-parity \.nav-row:focus-visible\s*\{[\s\S]*?outline:\s*2px[\s\S]*?outline-offset:\s*-2px/);
     expect(shellParityCss).toMatch(/\.shell-task-list\s*\{[\s\S]*?padding-top:\s*20px/);
     expect(shellParityCss).toMatch(/\.shell-task-group \+ \.shell-task-group\s*\{[\s\S]*?margin-top:\s*20px/);
     expect(shellParityCss).toMatch(/\.shell-task-group-label\s*\{[\s\S]*?font-size:\s*13\.5px/);

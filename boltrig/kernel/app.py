@@ -28,6 +28,7 @@ from boltrig.store.base import DEFAULT_WORK_PAGE, MAX_WORK_PAGE, clamp_work_page
 
 from . import Kernel
 from .app_bodies import ChatBody, InvokeBody, RespondBody, SpawnBody
+from .conversation_list_views import conversation_search_views, conversation_views
 from .hitl_http import list_visible_hitl, respond_to_hitl
 from .web_security import client_ip
 from .work_http import get_visible_work_item, list_visible_work_items, work_item_audit_trail
@@ -221,29 +222,6 @@ def _get_kernel(request: Request) -> Kernel:
     """Resolve the live kernel from app state (set synchronously for a prebuilt
     kernel, or built on the serving loop by the lifespan for the factory path)."""
     return request.app.state.kernel
-
-
-# The conversation-list item shape the UI consumes (shared by the plain list, the
-# paginated list, and search so all three surfaces agree field-for-field).
-def _conversation_view(c) -> dict:
-    return {
-        "id": c.id,
-        "title": c.title,
-        "status": c.status.value,
-        "updated_at": c.updated_at.isoformat(),
-    }
-
-
-_SNIPPET_MAX = 240
-
-
-def _snippet(text: str | None) -> str | None:
-    """A short, bounded preview of a matched message body for the search results
-    (US-CONV-10). Never the whole message - just enough to show why it matched."""
-    if not text:
-        return None
-    text = text.strip()
-    return text if len(text) <= _SNIPPET_MAX else text[:_SNIPPET_MAX].rstrip() + "..."
 
 
 def create_app(
@@ -497,19 +475,20 @@ def create_app(
         chat_svc = getattr(request.app.state, "chat", None)
         if chat_svc is None:
             return {"conversations": []}
-        # Backward-compatible (US-CONV-09): a bare call (no limit, offset 0) returns
-        # the full owner-scoped list in the original shape. Opting into pagination
-        # (a limit, or a non-zero offset) returns one bounded page plus next_offset
-        # (null when the list is exhausted); the page size is clamped under the
-        # ChatConfig ceiling inside the service.
+        # Backward-compatible (US-CONV-09): a bare call (no limit, offset 0) retains
+        # the original owner-scoped wrapper and ordering. The additive, content-free
+        # `working` boolean deliberately replaces any temptation to expose run ids.
+        # Opting into pagination (a limit, or a non-zero offset) returns one bounded
+        # page plus next_offset (null when exhausted); the page size is clamped under
+        # the ChatConfig ceiling inside the service.
         if limit is None and offset <= 0:
             convs = await chat_svc.list_conversations(p.tenant_id, p.subject)
-            return {"conversations": [_conversation_view(c) for c in convs]}
+            return {"conversations": conversation_views(chat_svc, p.tenant_id, convs)}
         items, next_offset = await chat_svc.list_conversations_page(
             p.tenant_id, p.subject, limit=limit, offset=offset
         )
         return {
-            "conversations": [_conversation_view(c) for c in items],
+            "conversations": conversation_views(chat_svc, p.tenant_id, items),
             "next_offset": next_offset,
         }
 
@@ -535,9 +514,7 @@ def create_app(
             p.tenant_id, p.subject, query, limit=limit, offset=offset
         )
         return {
-            "results": [
-                {**_conversation_view(c), "snippet": _snippet(snippet)} for c, snippet in pairs
-            ],
+            "results": conversation_search_views(chat_svc, p.tenant_id, pairs),
             "next_offset": next_offset,
         }
 

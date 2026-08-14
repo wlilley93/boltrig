@@ -1,0 +1,9 @@
+id: DIR-0030
+logId: DECISION-0022
+decisionDigest: sha256:44e269afc756f7e910bf2caff6cc08e61fb319a5e82aba463f8f3d32678dec2f
+surface: !route
+  route: apps/worker/src/components/Shell.tsx
+direction: "Keep Shared Shell primary navigation rows visually compact when focused: preserve the 32px desktop row and draw its keyboard-focus ring inside that box."
+magnitude: Change only the primary nav focus-ring width and offset. Preserve a clearly visible focus indicator, the existing 44px phone minimum, route selection styling, icon and text alignment, accessible names and keyboard order.
+directedAt: 2026-08-14T12:36:52Z
+notes: This additive Principal direction resolves the apparent height mismatch without weakening keyboard accessibility or shrinking mobile targets. It refines the Shell density contract in DIR-0016 and the glyph treatment in DIR-0029. No frameDigest, signed review, conformity or sign-off is asserted.

@@ -69,6 +69,7 @@ function CoreRoute(props: AppRouteSurfaceProps) {
       onCommandPalette={props.onCommandPalette}
       onConversation={props.onConversation}
       onChanged={props.onChanged}
+      onWorkingChange={props.onWorkingChange}
     /> : <ChatView
         conversationId={props.selectedConversation}
         onCommandPalette={props.onCommandPalette}

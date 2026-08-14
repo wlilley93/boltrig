@@ -26,6 +26,7 @@ export interface LocalChatControllerProps {
   conversationId: string | null;
   onConversation(id: string): void;
   onChanged(): void;
+  onWorkingChange?(conversationId: string, working: boolean): void;
 }
 
 export function useLocalChatController(props: LocalChatControllerProps) {
@@ -180,6 +181,7 @@ async function executeLocalTurn(
   } catch (reason) {
     settleFailedTurn(context, session, reason);
   } finally {
+    if (session.owner) context.props.onWorkingChange?.(session.owner.id, false);
     if (ownsGeneration(context, session)) context.projection.setBusy(false);
   }
   return false;
@@ -210,6 +212,7 @@ function beginTurn(context: TurnContext, message: string): TurnSession {
   context.projection.eventsRef.current = [];
   context.projection.setEvents([]);
   if (owner) storeOwner(context, owner);
+  if (owner) context.props.onWorkingChange?.(owner.id, true);
   return {
     generation: context.projection.generationRef.current,
     nextMessages,
@@ -229,6 +232,7 @@ function acceptNativeEvent(
   if (event.type === "message_start" && !session.owner) {
     session.owner = createOwner(context.runtime.rootId, session, message, event);
     storeOwner(context, session.owner);
+    context.props.onWorkingChange?.(session.owner.id, true);
   }
   const projected = localEventToChatEvent(event);
   if (!projected) return;

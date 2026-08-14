@@ -1,0 +1,9 @@
+id: DIR-0031
+logId: DECISION-0023
+decisionDigest: sha256:49c008db453b2e54606dfe686381ab273900c8a6df103faf4922961af91e9f33
+surface: !route
+  route: apps/worker/src/components/shell/TaskList.tsx
+direction: "Show one compact right-edge activity ring on a task row while its chat has a real active run, and remove it when that run settles."
+magnitude: Bind the existing compact ring to the owner-scoped server working projection and the equivalent local desktop lifecycle. Preserve row height, title truncation, reduced-motion behavior, task ordering and keyboard interaction. Project only a boolean into the conversation list; never expose the run identifier in the rail.
+directedAt: 2026-08-14T12:49:45Z
+notes: The current persisted visual fixtures represent settled conversations and therefore do not fabricate an ongoing state merely to exercise this direction. Runtime and component regressions carry the dynamic contract. No frameDigest, signed review, conformity or sign-off is asserted.

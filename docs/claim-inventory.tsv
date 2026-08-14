@@ -118,8 +118,8 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/access_routes.py:467		active org 
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/access_routes.py:644		handle + policy flags, never a secret.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/access_routes.py:680		add-member picker;
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/access_routes.py:76		A PAT for listing: never the secret or the hash (PAT-02).
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/app.py:526		fail-closed to the caller's scope.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/app.py:758		user has a password), so they are always wired.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/app.py:505		fail-closed to the caller's scope.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/app.py:735		user has a password), so they are always wired.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/approval_gate.py:37		Return approval context that is faithful but never a secret store.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/audit.py:146		Bounded-observability scrub (K-20).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/audit.py:36		argues for never rotating a LEAKED key.
@@ -705,7 +705,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:35		(``user:chief-of-staf
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:37		principal's grants.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:38		principal's grants (a principal holding no memory verb must not stop the org
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/bifrost_model_catalogue.py:78		Return the one safe failure shape;
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat.py:155		user only), so a caller only ever sees their own conversations - never
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat.py:159		user only), so a caller only ever sees their own conversations - never
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_authority.py:108		function's contract is that it must NEVER take down a spawn that would
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/chat_conversation_access.py:19		A retained conversation cannot accept a turn until explicitly restored.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/chat_event_projection.py:1		Closed, browser-safe projection of the internal run-event relay.
@@ -1029,21 +1029,20 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/access_routes.py:476		active org.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/access_routes.py:582		denial leaves no invitation behind (fail-closed):
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/access_routes.py:655		Org-admin only, fail-closed + audited: rename / settings / toggle the
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/ai_key_proposal_routes.py:87		staging and never claim that the key was applied.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:108		request body can never seed kernel-trusted authority (principal_role/_scope
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/app.py:131		The one canonical kernel error body: a 403 is a denial, anything else is an error.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:136		A refusal that does not say what WOULD have been accepted cannot be acted
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/app.py:204		Caller-supplied spawn depth, clamped: garbage is 0 (never a 500) and a negative depth floors at 0, so a body can never reset the runaway-tree budget (fleet/spawn.py checks ``depth + 1 > max_depth``).
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/app.py:240		A short, bounded preview of a matched message body for the search results (US-CONV-10).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:271		builds the app without a resolver must not silently get full-trust auth.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:353		D1).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:375		SEC-186: the body may not name somebody else's run.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:49		request (fail-closed to None); never read from the request body.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:527		route so "search" is never captured as a conversation id.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:54		User-Agent), never from a body field.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:62		"machine" so an unlabelled resolver is refused, never admitted.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:645		never load the whole visible set into a dict - that was O(all items).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:657		out-of-scope reads 404 (not 403) so the item's existence never leaks.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:725		(visibility was fully enforced above);
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:109		request body can never seed kernel-trusted authority (principal_role/_scope
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/app.py:132		The one canonical kernel error body: a 403 is a denial, anything else is an error.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:137		A refusal that does not say what WOULD have been accepted cannot be acted
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/app.py:205		Caller-supplied spawn depth, clamped: garbage is 0 (never a 500) and a negative depth floors at 0, so a body can never reset the runaway-tree budget (fleet/spawn.py checks ``depth + 1 > max_depth``).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:249		builds the app without a resolver must not silently get full-trust auth.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:331		D1).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:353		SEC-186: the body may not name somebody else's run.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:50		request (fail-closed to None); never read from the request body.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:506		route so "search" is never captured as a conversation id.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:55		User-Agent), never from a body field.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:622		never load the whole visible set into a dict - that was O(all items).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:63		"machine" so an unlabelled resolver is refused, never admitted.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:634		out-of-scope reads 404 (not 403) so the item's existence never leaks.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:702		(visibility was fully enforced above);
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:29		selects the handling department.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:51		{name, media_type, data (base64)}.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:74		selects the handling department.
@@ -1079,6 +1078,7 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/channel_routes.py:68		The at-rest r
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/control_routes.py:108		and must never turn success into a client-visible failure.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/control_routes.py:13		Late-wire the built-in adapter for in-process/test app construction.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/control_routes.py:96		notifier or sweep cannot find an orphaned replay claimant.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/conversation_list_views.py:38		Return enough matched content to explain a hit, never the full message.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:293		raising callback must never abort a metered reservation, matching every
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:316		charged for a call that never ran).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:45		policy-as-data price table (FR-COST-04) - a configured price always wins - and
@@ -1368,7 +1368,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/spawn_rules.py:337	capability
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:1	model.yaml	Load the emotion tables from ``libraries/emotion`` into engine dataclasses (EMO-5).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:172	None	Load and validate the three emotion YAML tables, or ``None`` on ANY failure.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:68	DEFAULT_INTERVAL_SECONDS	The configured sweep interval (seconds), or :data:`DEFAULT_INTERVAL_SECONDS`.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:360	cancelled	End a live chat turn's SSE stream cleanly on a server-side cancel ([2026] VJS-COUNTY 6, D5).
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:364	cancelled	End a live chat turn's SSE stream cleanly on a server-side cancel ([2026] VJS-COUNTY 6, D5).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/codex_trusted_wall.py:49	BOLTRIG_CODEX_TRUSTED	Fail closed unless a lawful trusted-Codex posture holds (see module docstring).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/continuity.py:261	wrap_untrusted	Render the derived summary as a fixed, content-stable frame.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/domain/attested_assignment.py:37	attempt	Trusted facts; no binding, pin, attestation set, or set reference appears.
@@ -1398,7 +1398,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:136	fn	Await ``fn``
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:158	KeyError	Start the registered task on the engine without waiting (US-EXE-02).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:72	KeyError	Run the registered task body INLINE (awaited here, US-EXE-05).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/identity/password_reset.py:42	False	Run a sync or async notifier and make an explicit ``False`` fail closed.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/app.py:145	id	The streamable-HTTP answer for one JSON-RPC message.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/app.py:146	id	The streamable-HTTP answer for one JSON-RPC message.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/audit.py:72	seq	The ONE key a row at ``seq`` is allowed to verify under.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_notify.py:71	source_route	Enqueue one outbox row per (matching pref, resolved subject, bound channel).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_policy.py:1	allowed_chats	Opt-in policy controls for channel intake.
@@ -1469,8 +1469,8 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:220	now	The ten obs
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:266	tick	Rebuild an engine from a :meth:`snapshot` mapping, tolerantly.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/__init__.py:1	kernel.set_agent_invoker	The Boltrig agent fleet (Epic FLT).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/application/assignment_admission.py:58	GrantLeaseBinding.from_execution_assignment	The sole atomic, total path from trusted facts to an attested assignment.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/chat.py:260	store.mark_message_superseded	Regenerate the last assistant reply (append-plus-supersede, [2026] VJS-COUNTY 4).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/chat.py:339	regenerate_turn	Carry out the write a human approved, on the turn that asked for it (decision 0018, Order 4).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/chat.py:264	store.mark_message_superseded	Regenerate the last assistant reply (append-plus-supersede, [2026] VJS-COUNTY 4).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/chat.py:343	regenerate_turn	Carry out the write a human approved, on the turn that asked for it (decision 0018, Order 4).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/chief_of_staff.py:81	work_item	Return the department name that should own ``work_item``.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/codex_runtime.py:310	UnavailableRuntime	Construct the trusted read-only Codex runtime, or a typed unavailable one.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/hatchet_app.py:167	HatchetExecutor	Run a stored workflow through the interpreter with BOTH durability seams wired (NFR-REL-02): each step dispatches inside its own ``executor.run_step`` boundary AND the checkpoint seam replays completed steps, so a re-run

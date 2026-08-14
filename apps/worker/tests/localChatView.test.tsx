@@ -111,10 +111,12 @@ describe("desktop local chat", () => {
       };
     });
     const onConversation = vi.fn();
+    const onWorkingChange = vi.fn();
     render(<LocalChatView
       conversationId={null}
       onChanged={vi.fn()}
       onConversation={onConversation}
+      onWorkingChange={onWorkingChange}
     />);
 
     const input = await screen.findByLabelText("Task instructions");
@@ -124,10 +126,12 @@ describe("desktop local chat", () => {
 
     await waitFor(() => expect(local.runLocalAgentTurn).toHaveBeenCalledOnce());
     await waitFor(() => expect(local.saveLocalConversation).toHaveBeenCalled());
+    expect(onWorkingChange).toHaveBeenCalledWith("local:thread-1", true);
     expect(onConversation).not.toHaveBeenCalled();
 
     await act(async () => finish());
     await waitFor(() => expect(onConversation).toHaveBeenCalledWith("local:thread-1"));
+    expect(onWorkingChange).toHaveBeenLastCalledWith("local:thread-1", false);
     expect(await screen.findByText("Local answer")).toBeTruthy();
     expect(local.runLocalAgentTurn.mock.calls[0]?.[0]).toEqual({
       rootId: "root-1",

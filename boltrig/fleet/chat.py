@@ -102,6 +102,10 @@ class ChatService(ChatQueueService):
     def _active_run_for(self, tenant_id: str, conversation_id: str) -> str | None:
         return self._relay.active_run(tenant_id, conversation_id)
 
+    def conversation_is_working(self, tenant_id: str, conversation_id: str) -> bool:
+        """Project active-run truth without exposing the run identifier."""
+        return self._active_run_for(tenant_id, conversation_id) is not None
+
     def _set_active_run(self, tenant_id: str, conversation_id: str, run_id: str) -> None:
         self._relay.set_active_run(tenant_id, conversation_id, run_id)
 

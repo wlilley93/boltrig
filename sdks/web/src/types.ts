@@ -505,6 +505,8 @@ export interface ConversationSummary {
   title: string;
   status: string;
   updated_at: string;
+  /** Server-owned active-run truth; older kernels may omit this field. */
+  working?: boolean;
 }
 
 export interface ConversationsResponse {
@@ -515,7 +517,8 @@ export interface ConversationsResponse {
 // page (a limit and/or a non-zero offset) returns this shape: the page's rows
 // plus next_offset, the offset to request for the following page (null once the
 // list is exhausted). A bare GET /v1/conversations (no params) still returns the
-// unpaginated ConversationsResponse above, so that legacy path is untouched.
+// unpaginated ConversationsResponse wrapper above; only the optional content-free
+// working projection was added to each summary.
 export interface ConversationsPageResponse {
   conversations: ConversationSummary[];
   next_offset: number | null;

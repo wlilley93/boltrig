@@ -141,7 +141,8 @@ function ConversationRow({ conversation, model, props }: {
     <button aria-current={isSelected ? "page" : undefined} className="session-main"
       onClick={() => props.onConversation(conversation.id)} type="button">
       <span className="session-title"><span>{title}</span>
-        {props.workingConversationIds.includes(conversation.id) && (
+        {(conversation.working === true
+          || props.workingConversationIds.includes(conversation.id)) && (
           <span aria-label="Working on this chat" className="session-working-indicator"
             role="status" title="Working on this chat" />
         )}

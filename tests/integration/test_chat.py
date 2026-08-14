@@ -200,11 +200,19 @@ async def test_http_conversation_list_is_backward_compatible_and_paginates():
     store, relay = InMemoryStore(), EventRelay()
     for i in range(3):
         await _seed_conv(store, f"c{i}", "alice", f"thread {i}")
+    relay.set_active_run(T, "c1", "run-1")
     client = TestClient(create_app(Kernel(store), chat_service=ChatService(store, relay)))
     hdr = {"x-boltrig-tenant": T, "x-boltrig-subject": "alice", "x-boltrig-role": "engineer"}
-    # bare call: unchanged shape, every conversation, no next_offset key
+    # Bare call keeps the legacy wrapper and ordering while adding only the
+    # content-free working boolean; it never exposes the internal run id.
     body = client.get("/v1/conversations", headers=hdr).json()
     assert [c["id"] for c in body["conversations"]] == ["c2", "c1", "c0"]
+    assert {c["id"]: c["working"] for c in body["conversations"]} == {
+        "c2": False,
+        "c1": True,
+        "c0": False,
+    }
+    assert all("active_run_id" not in c for c in body["conversations"])
     assert "next_offset" not in body
     # opt into pagination: one bounded page + a next offset that walks to exhaustion
     p1 = client.get("/v1/conversations?limit=2", headers=hdr).json()
@@ -213,6 +221,9 @@ async def test_http_conversation_list_is_backward_compatible_and_paginates():
     p2 = client.get("/v1/conversations?limit=2&offset=2", headers=hdr).json()
     assert [c["id"] for c in p2["conversations"]] == ["c0"]
     assert p2["next_offset"] is None
+    assert relay.clear_active_run(T, "c1", expected="run-1")
+    settled = client.get("/v1/conversations", headers=hdr).json()
+    assert next(c for c in settled["conversations"] if c["id"] == "c1")["working"] is False
 
 
 @pytest.mark.invariant("SEC-94")

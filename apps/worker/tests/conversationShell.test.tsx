@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
+  conversations: vi.fn(),
   conversationsPage: vi.fn(),
   restoreMyConversation: vi.fn(),
   searchConversations: vi.fn(),
@@ -123,6 +124,33 @@ describe("Worker conversation shell truthfulness", () => {
     expect(screen.queryByRole("button", {
       name: "Load more conversations",
     })).toBeNull();
+  });
+
+  it("shows server-owned ongoing work without exposing a run identifier", async () => {
+    api.conversationsPage
+      .mockResolvedValueOnce({
+        conversations: [{ ...conversation, working: true }],
+        next_offset: null,
+      })
+      .mockResolvedValueOnce({
+        conversations: [{ ...conversation, working: false }],
+        next_offset: null,
+      });
+    api.conversations.mockResolvedValue({
+      conversations: [{ ...conversation, working: true }],
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("status", { name: "Working on this chat" })).toBeTruthy();
+    expect(screen.queryByText("run-active")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", {
+      name: "Refresh conversations from Chat",
+    }));
+    await waitFor(() => expect(screen.queryByRole("status", {
+      name: "Working on this chat",
+    })).toBeNull());
   });
 
   it("does not append a stale page into a newer conversation refresh", async () => {
