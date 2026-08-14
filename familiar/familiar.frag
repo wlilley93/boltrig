@@ -135,12 +135,12 @@ vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1
 //   [0] = shape family, blend, focal(a), cassini b
 //   [1] = lobe balance, superM, superN1, superN2
 //   [2] = superN3, superA, superB, aspect
-//   [3] = rotation, twist, (reserved), (reserved)
+//   [3] = rotation, twist, paletteHueRotation, paletteSaturation
 //   [4] = warmth, breathDepth, bumpAmp, silkChurn
 //   [5] = specSharp, haloReach, specGain, fresnelGain
 //   [6] = tempoBase, bodyScale, haloGain, irritationGain
-//   [7] = lightAzimuth, bumpScale, (reserved), (reserved)
-uniform vec4 uGene[8];   // 32 slots, 30 of them claimed. 30-31 RESERVED.
+//   [7] = lightAzimuth, bumpScale, paletteLightness, (reserved)
+uniform vec4 uGene[8];   // 32 slots, 31 of them claimed. Slot 31 remains RESERVED.
 // moteGain and ejectRate were wired here and REMOVED before shipping: both feed `moteA`, which
 // only reaches `cover`, and cover is discarded wherever uPresence is 1. Swept across the moods
 // that produce motes and ejecta, neither changed a single pixel in any configuration that could
@@ -344,7 +344,7 @@ void main(){
   float soc     = clamp(uSocial, 0.0, 1.0);
   float buo     = clamp(uBuoyancy, 0.0, 1.0);
   float voice   = clamp(uAudio.x, 0.0, 1.0);
-  float vWARMTH = 0.25*uGene[4].x;   // gene: warmth. The warm breath in the heart, and
+  float vWARMTH = uGene[4].x;        // gene: warmth. The warm breath in the heart, and
                                     // the value theme 2 actually consumes (see WARMTH above).
   float tempo   = (0.26*uGene[6].x + 0.85*clamp(uArousal,0.0,1.0))*(1.0 - 0.45*fatigue);
   // The master clock IS an emotion readout: it runs at tempo, not wall speed. With no phenotype
@@ -442,6 +442,13 @@ void main(){
   vec3 sky     = vec3(0.175,0.620,1.000);
   vec3 magenta = vec3(0.820,0.180,0.620);
   float val = clamp(uValence,0.0,1.0);
+  // The genotype's middle palette colour is the body colour. Hue and
+  // saturation are applied above; its authored lightness controls material
+  // exposure here so a navy identity stays navy instead of being lifted into
+  // the canonical electric-blue ramp. This is identity, not mood: phenotype
+  // still changes structure and intensity downstream.
+  float paletteLightness = clamp(uGene[7].z, 0.0, 1.0);
+  float materialExposure = mix(0.12, 0.78, paletteLightness);
   vec3 base = mix(mix(navy, blue, smoothstep(0.00,0.55,val)),
                   mix(azure, sky, smoothstep(0.55,1.00,val)),
                   smoothstep(0.40,0.80,val));
@@ -450,7 +457,9 @@ void main(){
   base = saturate3(hueRotate(base, uGene[3].z), 1.0 + uGene[3].w);
   base = mix(base, magenta, clamp(irr*0.70*uGene[6].w, 0.0, 1.0));   // gene: irritationGain
   base *= mix(vec3(0.90,0.94,1.12), vec3(1.02,0.98,1.06), clamp(uDay,0.0,1.0));
-  vec3 hot = mix(base, vec3(0.45,0.75,1.00), 0.40 + 0.18*lum);
+  base *= materialExposure;
+  vec3 materialSky = vec3(0.45,0.75,1.00)*materialExposure;
+  vec3 hot = mix(base, materialSky, 0.40 + 0.18*lum);
   hot = mix(hot, vec3(1.00,0.30,0.70), irr*0.75);   // irritation floods the highlights too
 
   vec3 col = vec3(0.0);
@@ -535,10 +544,12 @@ void main(){
       silk += (vnoise(w*5.5 + vec3(0.0, iTime*1.2, 0.0)) - 0.5)*irr*0.55;   // anger: jagged chop
       float band = smoothstep(edge0, edge1, silk);
       band *= band;                               // more dark field, less milky midtone
-      vec3 liteT = mix(liteTone, vec3(0.30,0.80,1.00), w2*0.6*(1.0 - irr*0.8));
-      vec3 lc = deepTone*(0.42 + 0.26*w1) + liteT*band*(0.48 + 0.38*lum);
+      vec3 liteT = mix(liteTone, vec3(0.30,0.80,1.00)*materialExposure, w2*0.6*(1.0 - irr*0.8));
+      float silkExposure = paletteLightness;
+      vec3 lc = deepTone*(0.42 + 0.26*w1)
+              + liteT*band*(0.48 + 0.38*lum)*silkExposure;
       float ribbon = pow(band*(1.0-band)*4.0, 2.0);
-      lc += mix(sky, vec3(0.55,0.90,1.00), w1)*ribbon*(0.45 + 0.55*lum + 0.9*voice + 0.5*excite);
+      lc += mix(sky, vec3(0.55,0.90,1.00), w1)*materialExposure*silkExposure*ribbon*(0.45 + 0.55*lum + 0.9*voice + 0.5*excite);
       // Fibre-level creases are what make the material survive a 4K close look. Two differently
       // scaled ridges prevent them reading as a single procedural grid; tension narrows and
       // brightens them, while fatigue lets them recede. These are emissive detail, not silhouette
@@ -547,8 +558,8 @@ void main(){
       float fibreB = pow(ridge(w.yzx*8.9 + vec3(13.7, t*0.07, -4.2)), 13.0 + 9.0*ten);
       float fibres = clamp(fibreA*0.72 + fibreB*0.42, 0.0, 1.0);
       fibres *= smoothstep(0.02, 0.35, chord)*(1.0 - 0.72*fatigue);
-      lc += mix(hot, vec3(0.62,0.88,1.00), 0.55)*fibres
-          *(0.13 + 0.34*lum + 0.30*ten + 0.18*excite);
+      lc += mix(hot, vec3(0.62,0.88,1.00)*materialExposure, 0.55)*fibres
+          *(0.13 + 0.34*lum + 0.30*ten + 0.18*excite)*silkExposure;
       lc = mix(lc, magenta, irr*ribbon*0.5);
       lc += liteT*vort*0.12*excite;
       inner = mix(inner, lc, (j == 0) ? 1.0 : 0.55);
@@ -561,9 +572,9 @@ void main(){
     heartBreath *= 1.0 - fatigue*0.12*(0.5 + 0.5*sin(iTime*2.0 + sin(iTime*0.6)));
     float heartAura = exp(-nucD*nucD*(10.5 - 2.5*lum))*heartBreath;
     float heartCore = exp(-nucD*nucD*(78.0 - 18.0*lum))*heartBreath;
-    vec3 heartC = mix(vec3(0.90,0.95,1.00), vec3(1.00,0.74,0.48), vWARMTH*0.6);
+    vec3 heartC = mix(vec3(0.90,0.95,1.00), vec3(1.00,0.48,0.12), clamp(vWARMTH,0.0,1.0));
     heartC = mix(heartC, vec3(1.00,0.40,0.70), irr*0.6);
-    inner += heartC*(heartAura*(0.16 + 0.18*lum) + heartCore*(0.85 + 0.70*lum));
+    inner += heartC*(heartAura*(0.08 + 0.09*lum) + heartCore*(0.58 + 0.40*lum));
     inner += base*exp(-nucD*nucD*3.4)*0.12*(0.4 + 0.6*lum);
 
     // AURORA ARCS: slow luminous ring-segments sweeping the interior
@@ -696,7 +707,7 @@ void main(){
         }
         hero = min(hero, 1.5);
 
-        vec3 filC = mix(hot, vec3(0.62,0.88,1.00), 0.5);
+    vec3 filC = mix(hot, vec3(0.62,0.88,1.00)*materialExposure, 0.5);
         filC = mix(filC, magenta, irr*0.55);       // irritation stains the needles
         inner += filC*fil*filDrive*(0.50 + 0.70*lum + 0.45*ten);
         inner += filC*hero*filDrive*(0.55 + 0.60*lum)*(0.35 + 0.65*diff);
@@ -1451,6 +1462,8 @@ void main(){
   vec3 sky     = vec3(0.220,0.650,1.000);
   vec3 magenta = vec3(0.820,0.180,0.620);
   float val = clamp(uValence,0.0,1.0);
+  float paletteLightness = clamp(uGene[7].z, 0.0, 1.0);
+  float materialExposure = mix(0.12, 0.78, paletteLightness);
   vec3 base = mix(mix(navy, blue, smoothstep(0.00,0.55,val)),
                   mix(azure, sky, smoothstep(0.55,1.00,val)),
                   smoothstep(0.40,0.80,val));
@@ -1458,9 +1471,10 @@ void main(){
   // Identity tint. Slots 14/15 of the genotype, applied here and nowhere else.
   base = saturate3(hueRotate(base, uGene[3].z), 1.0 + uGene[3].w);
   base = mix(base, magenta, clamp(irr*0.70*uGene[6].w, 0.0, 1.0));   // gene: irritationGain
+  base *= materialExposure;
   // (The time-of-day tint is gone: colour belongs to boltrig's emotion engine alone. uDay stays in
   // the contract but paints nothing.)
-  vec3 hot   = mix(base, vec3(0.40,0.64,1.00), 0.26 + 0.16*lum);   // moonlit, not lit
+  vec3 hot   = mix(base, vec3(0.40,0.64,1.00)*materialExposure, 0.26 + 0.16*lum);   // moonlit, not lit
   vec3 ember = mix(hot, vec3(1.00,0.60,0.36), WARMTH);   // the warm heart
 
   vec3 col = vec3(0.0);
