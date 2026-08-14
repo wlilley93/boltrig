@@ -286,6 +286,40 @@ ALLOW: dict[tuple[str, str], str] = {
         "instrument: editing it to resolve would falsify the record."
     ),
     (
+        "docs/CI-RED-2026-08-14.md",
+        "tests/unit/test_readiness.py::test_real_manifest_readiness_keeps_non_core_and_conflicting_postures_closed",
+    ): (
+        "Quoted pytest FAILED output, verbatim. The fix renamed it to "
+        "test_shipped_manifest_... precisely because 'real' meant 'the manifest this "
+        "laptop happens to have'. Updating the quote would make the doc report a "
+        "failure CI never printed."
+    ),
+    (
+        "docs/CI-RED-2026-08-14.md",
+        "tests/unit/test_doctor.py::test_core_release_doctor_disables_codex_requested_by_the_real_manifest",
+    ): (
+        "As above -- quoted pytest output naming the pre-fix test. It does not resolve "
+        "BECAUSE the fix landed."
+    ),
+    (
+        "docs/CI-RED-2026-08-14.md",
+        "tests/familiarShaderParity.test.ts",
+    ): (
+        "Quoted CI output inside a fence, reproduced verbatim. vitest prints the path "
+        "relative to apps/worker, so it lacks the prefix this gate resolves against. "
+        "Correcting it would make the doc quote something CI never said, which is the "
+        "opposite of what a post-mortem is for."
+    ),
+    (
+        "docs/CI-RED-2026-08-14.md",
+        "apps/worker/src/components/familiar/familiar.frag",
+    ): (
+        "The path the shader moved FROM. main's 690b72f added a parity test hardcoding "
+        "it; d3db2be moved the shader to apps/worker/src/bundles/familiar/. The whole "
+        "failure IS that this path stopped existing, so the doc has to name it. It does "
+        "not resolve BECAUSE the fix worked."
+    ),
+    (
         "docs/extension-contract.md",
         "libraries/skills/renewal/adgm.yaml",
     ): (
