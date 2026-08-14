@@ -34,11 +34,11 @@ describe("Agents fleet parity CSS", () => {
 
   it("derives the canonical framed canvas width from the shell gutters", () => {
     const viewportWidth = 1440;
-    const sidebarWidth = 262;
+    const sidebarWidth = 266;
     const fleetGutter = 18;
     expect(rule(".permanent-fleet")).toContain("padding: 14px 18px 18px;");
-    expect(sidebarWidth + fleetGutter).toBe(280);
-    expect(viewportWidth - sidebarWidth - fleetGutter * 2).toBe(1142);
+    expect(sidebarWidth + fleetGutter).toBe(284);
+    expect(viewportWidth - sidebarWidth - fleetGutter * 2).toBe(1138);
   });
 
   it("preserves the canonical summary, legend and canvas vertical rhythm", () => {

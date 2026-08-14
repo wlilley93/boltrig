@@ -930,7 +930,7 @@ h1, h2, h3, p { margin-top: 0; }
   flex-direction: column;
   gap: 22px;
   width: 100%;
-  max-width: 660px;
+  max-width: 745px;
   margin: auto;
 }
 .welcome .familiar-stage.hero { margin-bottom: 8px; }
@@ -1211,8 +1211,8 @@ button.composer-context-item:hover { color: var(--text); }
   flex: 0 0 auto;
   align-items: center;
   gap: 13px;
-  width: min(660px, calc(100% - 48px));
-  margin: 0 auto 20px;
+  width: 100%;
+  margin: 0;
   padding: 12px 13px 12px 14px;
   border: 0;
   border-radius: 13px;

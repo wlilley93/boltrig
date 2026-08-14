@@ -585,18 +585,30 @@ probes.
 `BOLTRIG_STACK_TOOL_PROBE_TIMEOUT` tune the bounded worker receipt loop; see
 `.env.example` for defaults and limits.
 
-Password-reset delivery is disabled in the standard ASGI composition. An
-embedding deployment may inject a reviewed async notifier and a bounded,
-redacted readiness probe through
+Password-reset delivery remains fail-closed unless the standard ASGI process is
+given a complete server-side MailerSend configuration:
+
+```env
+BOLTRIG_PASSWORD_RESET_PROVIDER=mailersend
+BOLTRIG_MAILERSEND_API_KEY=<secret-store value>
+BOLTRIG_PASSWORD_RESET_FROM_EMAIL=noreply@<verified-domain>
+BOLTRIG_PASSWORD_RESET_FROM_NAME=Boltrig
+BOLTRIG_PASSWORD_RESET_PUBLIC_ORIGIN=https://<worker-origin>
+BOLTRIG_REQUIRE_PASSWORD_RESET_DELIVERY=1
+```
+
+The adapter posts only to MailerSend's fixed HTTPS API, refuses redirects and
+environment proxies, disables open/click/content tracking, and bounds the whole
+request to five seconds. Its readiness probe uses MailerSend's read-only
+`/v1/api-quota` endpoint and consumes no mail quota. An embedding deployment may
+instead inject another reviewed async notifier and bounded probe through
 `build_app(password_reset_notifier=...,
-password_reset_readiness_probe=...)`. Set
-`BOLTRIG_REQUIRE_PASSWORD_RESET_DELIVERY=1` only when first-party session
-recovery is required; readiness then fails unless both callables are composed
-and the probe returns exactly `true`. The probe result establishes only adapter
+password_reset_readiness_probe=...)`. Readiness establishes only adapter/token
 posture. The authenticated Operate projection likewise reports a bounded,
 recipient-free notifier attempt—not a provider receipt or proof of inbox
-delivery. Keep provider credentials in the deployment secret store and validate
-real delivery, bounce handling and provider receipts in staging before cutover.
+delivery. Keep the API key in the deployment secret store and validate real
+delivery, suppression/bounce handling and provider receipts in staging before
+cutover.
 
 ## Signed Worker desktop updates
 
@@ -646,7 +658,16 @@ present in the explicit CORS list, receive the cross-site
 second-factor completion, refresh and logout through a fixed native bridge
 pinned at compile time to `BOLTRIG_DESKTOP_API_ORIGIN`. That bridge validates
 the two expected cookies and installs them directly into the webview cookie
-store; it never returns the httpOnly session secret to JavaScript. Because
+store; it never returns the httpOnly session secret to JavaScript.
+
+Every desktop build must set `VITE_API_BASE` and
+`BOLTRIG_DESKTOP_API_ORIGIN` to the same canonical origin. Setting only the
+Vite value produces a UI that renders the account forms but whose native HTTP
+transport cannot contact the server. The checked-in Tauri pre-build command
+refuses that split configuration, and the Rust build script tracks the native
+origin so Cargo cannot reuse a binary compiled for an older or empty value.
+
+Because
 WKWebView also suppresses third-party cookies on later cross-origin requests,
 the typed web SDK uses a bounded native transport in the packaged desktop.
 That transport accepts only `/v1` paths at the compile-time origin, adds the
@@ -697,6 +718,15 @@ selected workspace, interrupt/switch cleanup, and restart/resume of the same
 local thread. Record the model/network leg separately from the local
 command/filesystem leg so a successful cloud inference is never reported as
 proof that execution happened on the server.
+
+Several desktop surfaces legitimately inspect the same enrolled-computer
+credential during startup. They must share the native process cache rather
+than reading `device-session` independently: otherwise an ad-hoc signature
+change produces repeated macOS Keychain prompts. The first read is
+single-flight, successful saves/removals update the cache, and a denied read is
+remembered until restart. Never work around this by exporting the Keychain
+secret to JavaScript or a plaintext local file. A stable publisher signature
+remains required for normal upgrade continuity.
 
 Local workspaces are still explicit. In Settings → Device, bind a local folder
 as `read_write` and enable the local-agent/command boundary. `Always ask` and
@@ -791,8 +821,9 @@ page and reports provider exchange unavailable.
       zero failures there; no host CLI path was substituted
 - [ ] `/readyz` is 200 only after the fleet worker has published fresh live-tool
       evidence; stopping the worker or Chromium makes it return 503 after TTL
-- [ ] when first-party password recovery is required, a reviewed notifier and
-      bounded readiness probe are injected,
+- [ ] when first-party password recovery is required, the complete server-only
+      MailerSend configuration (or another reviewed notifier and bounded probe)
+      is composed,
       `BOLTRIG_REQUIRE_PASSWORD_RESET_DELIVERY=1`, and real staging
       delivery/bounce/provider-receipt acceptance is recorded
 - [ ] real OIDC configured (`OIDC_*`), `BOLTRIG_DEV_AUTH` unset (SEC-01)

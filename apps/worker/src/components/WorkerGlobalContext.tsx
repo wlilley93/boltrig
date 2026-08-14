@@ -2,13 +2,13 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from "react";
 
 import { client } from "../client";
 import { characterFromSettings, saveCharacterLocal } from "../character";
+import { useIdentityRefreshLifecycle } from "./workerIdentityRefresh";
 
 const CONTEXT_CHANGED_EVENT = "boltrig:worker-context-changed";
 
@@ -89,16 +89,7 @@ export function WorkerGlobalContextProvider({ children }: { children: React.Reac
     );
   }, []);
 
-  useEffect(() => {
-    void refreshIdentity();
-    const refresh = () => {
-      void refreshIdentity();
-    };
-    window.addEventListener(CONTEXT_CHANGED_EVENT, refresh);
-    return () => {
-      window.removeEventListener(CONTEXT_CHANGED_EVENT, refresh);
-    };
-  }, [refreshIdentity]);
+  useIdentityRefreshLifecycle(refreshIdentity, CONTEXT_CHANGED_EVENT);
 
   const value = useMemo<WorkerGlobalContextValue>(() => ({
     identity,

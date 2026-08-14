@@ -88,8 +88,14 @@ def test_desktop_native_process_seams_are_explicit_and_bounded():
     }
     rust = "\n".join(rust_files.values())
     desktop_account = rust_files["desktop_account.rs"]
+    session = rust_files["session.rs"]
     config = (WORKER / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
     config_payload = json.loads(config)
+    package_payload = json.loads((WORKER / "package.json").read_text(encoding="utf-8"))
+    build_script = (WORKER / "src-tauri" / "build.rs").read_text(encoding="utf-8")
+    origin_gate = (
+        WORKER / "scripts" / "require-desktop-origin.mjs"
+    ).read_text(encoding="utf-8")
     assert "materialize_artifact" in rust
     assert ".save_file(" in rust
     assert "destination:" not in rust
@@ -109,6 +115,14 @@ def test_desktop_native_process_seams_are_explicit_and_bounded():
     assert "device_session_token" not in rust_files["lib.rs"]
     assert "dialog:allow-save" not in capabilities
     assert config_payload["app"]["windows"][0]["useHttpsScheme"] is True
+    assert config_payload["build"]["beforeBuildCommand"] == "pnpm run build:desktop"
+    assert config_payload["build"]["beforeDevCommand"] == "pnpm run dev:desktop"
+    assert "require-desktop-origin.mjs" in package_payload["scripts"]["build:desktop"]
+    assert "require-desktop-origin.mjs" in package_payload["scripts"]["dev:desktop"]
+    assert "rerun-if-env-changed=BOLTRIG_DESKTOP_API_ORIGIN" in build_script
+    assert "VITE_API_BASE" in origin_gate
+    assert "BOLTRIG_DESKTOP_API_ORIGIN" in origin_gate
+    assert "must match exactly" in origin_gate
     assert 'option_env!("BOLTRIG_DESKTOP_API_ORIGIN")' in desktop_account
     assert '"/v1/auth/login"' in desktop_account
     assert '"/v1/auth/2fa/challenge"' in desktop_account
@@ -124,6 +138,10 @@ def test_desktop_native_process_seams_are_explicit_and_bounded():
     assert "session_token" not in desktop_account
     assert "async fn device_agent_status" in rust_files["lib.rs"]
     assert "spawn_blocking(device_agent::status)" in rust_files["lib.rs"]
+    assert "static AGENT_CACHE: OnceLock<Mutex<AgentCache>>" in session
+    assert "agent_cache().get_or_load(load_agent_from_keychain)" in session
+    assert "agent_cache().replace(Ok(Some(record.clone())))" in session
+    assert "agent_cache().replace(Ok(None))" in session
     # There are exactly two native process seams. Remote device commands remain
     # signed argv-only leases. The desktop-local agent may launch only the
     # resolved Codex App Server; its webview request carries an opaque root id

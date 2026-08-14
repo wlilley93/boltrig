@@ -399,6 +399,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/ai_keys.py:68	workspace_
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/auth.py:1	dev_principal_resolver	Token verification and the principal resolver (US-IAM-01, SEC-01/02).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/auth.py:176	verify	SAML assertion verification seam (US-IAM-01).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/auth.py:236	Principal	Build a production ``PrincipalResolver`` from a verifier (US-IAM-01/02).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/mailersend_password_reset.py:1	MailerSendPasswordResetNotifier	``MailerSendPasswordResetNotifier`` provides bounded MailerSend delivery.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/passwords.py:1	verify_dummy	First-party password hashing ([2026] VJS-COUNTY 7, D4).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/passwords.py:65	verify_dummy	Whether ``password`` matches the stored argon2 ``encoded`` hash (D4/D5).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/provisioning.py:115	grants_for_scope	A role that implies authority must not arrive with a scope that grants none.

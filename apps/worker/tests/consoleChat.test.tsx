@@ -164,7 +164,8 @@ describe("console chat surface", () => {
     expect(document.querySelectorAll(".welcome .starter-card").length).toBe(4);
     expect(document.querySelectorAll(".welcome .starter-icon").length).toBe(4);
     await waitFor(() => {
-      expect(document.querySelector(".welcome .familiar-stage")).toBeNull();
+      expect(document.querySelector(".welcome > .familiar-stage")).toBeNull();
+      expect(document.querySelector(".welcome .familiar-stage.hero")).toBeNull();
     });
     // The New state draws no header bar at all (so no familiar or settings
     // control can sit in one). Theme remains available from Settings.
@@ -180,7 +181,13 @@ describe("console chat surface", () => {
     expect(voiceFamiliar.classList.contains("familiar-stage")).toBeTruthy();
     expect(voiceFamiliar.classList.contains("conversation")).toBeTruthy();
     expect(voiceFamiliar.getAttribute("data-genotype-source")).toBe("unbound");
-    expect(voiceFamiliar.closest(".voice-intro")).toBeTruthy();
+    const voiceIntro = voiceFamiliar.closest(".voice-intro");
+    const promptStack = voiceIntro?.closest(".new-chat-prompt-stack");
+    expect(voiceIntro).toBeTruthy();
+    expect(promptStack).toBeTruthy();
+    expect(promptStack?.firstElementChild).toBe(voiceIntro);
+    expect(promptStack?.lastElementChild?.classList.contains("composer")).toBe(true);
+    expect(screen.getByRole("button", { name: "Start voice chat" })).toBeTruthy();
   });
 
   it("fills the composer draft from a starter card without sending", () => {

@@ -7,7 +7,11 @@
 //
 // The shader is vendored as the single source of visual truth; this file may
 // only ever decide WHEN something is true, never what it looks like.
-import fragSrc from "./jarvis.frag?raw";
+// jarvis.frag now lives in the BUNDLE, beside familiar.frag, because it is the
+// character's body rather than this renderer's private asset — the manifest
+// names it and pins its bytes. jarvis-post.frag stays here: the post pass is
+// Boltrig's machinery, and a bundle "never carries a renderer".
+import fragSrc from "../../bundles/jarvis/jarvis.frag?raw";
 import postSrc from "./jarvis-post.frag?raw";
 import {
   advanceSpin,
@@ -34,7 +38,12 @@ void main() {
   gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
-const UNIFORMS = [
+// Exported so the canvas source can declare what it is able to drive, the way
+// FamiliarWebGLRenderer's list does. `uGene` is deliberately NOT here: it is
+// identity, uploaded once at mount (see below), not a per-frame channel — so
+// the source adds it explicitly rather than this loop paying for it 60x a
+// second.
+export const UNIFORMS = [
   "iResolution", "iTime", "uListening", "uThinking", "uWorking", "uSpeaking",
   "uLevel", "uOnset", "uBands", "uWave", "uWaveHead", "uReadout", "uReduced",
   "uAccent", "uScale", "uLabelTop", "uLabelBottom", "uLabelTopAmt",

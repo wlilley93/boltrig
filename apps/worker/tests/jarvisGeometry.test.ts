@@ -11,7 +11,7 @@ import { GAUGE_RADII, LABEL_CAP_H, R_OUTER, RADII, SVG_UNITS, toSvg }
 // silently slide off the ring they are supposed to sit on — and nothing else in
 // the suite would notice, because both files stay individually valid.
 const SHADER = readFileSync(
-  fileURLToPath(new URL("../src/components/jarvis/jarvis.frag", import.meta.url)),
+  fileURLToPath(new URL("../src/bundles/jarvis/jarvis.frag", import.meta.url)),
   "utf8",
 );
 

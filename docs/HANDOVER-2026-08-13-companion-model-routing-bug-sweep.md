@@ -283,7 +283,7 @@ The final governed seven-state capture and the additive chat-direction capture
 are bound to this Worker/visual source digest:
 
 ```text
-4873c3e4bcb2532a5b81f72b473ce69d61f6591baf851c052773db18608d42a2
+abf7be9a1711d3423cd925604f32192b9c528eaa2e59477a22b7f036b80abf83
 ```
 
 All eight screenshots were byte-identical to the previous current renders.
@@ -296,10 +296,12 @@ Key artifacts:
 - `docs/design/evidence/2026-08-11-chat-ui-direction/current/`
 - `docs/design/evidence/2026-08-11-console-parity/README.md`
 
-The fresh capture invalidated and removed the prior proof matrix. The current
-receipts remain captured and measured but unreviewed (`not_assessed`); there is
-no current proof matrix or sign-off claim. All six retained reviews are
-unsigned `no_authority`.
+The fresh capture invalidated the prior proof matrix; the current matrix was
+then rebuilt from a new 15-proof manual run and binds the current capture,
+metrics and route manifest. The receipts remain `not_assessed`, the six reviews
+remain unsigned `no_authority`, and there is still no sign-off or conformity
+claim. The matrix records two passing, six failing and seven vacuous proof kinds
+without converting any of those states into design acceptance.
 
 The outstanding authority gap is not a UI regression: the depth-three Figma
 frame ledger omits New chat / SCR-0007 (node `13:2`). No full-depth frame

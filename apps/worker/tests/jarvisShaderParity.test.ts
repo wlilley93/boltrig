@@ -17,7 +17,7 @@ describe("jarvis shader parity", () => {
     const canon = readFileSync(
       resolve(__dirname, "../../../familiar/jarvis.frag"), "utf8");
     const vendored = readFileSync(
-      resolve(__dirname, "../src/components/jarvis/jarvis.frag"), "utf8");
+      resolve(__dirname, "../src/bundles/jarvis/jarvis.frag"), "utf8");
     expect(vendored).toBe(canon);
   });
 
@@ -36,7 +36,7 @@ describe("jarvis shader parity", () => {
   // would look harmless in the browser and break the wallpaper silently.
   it("keeps the single-pass grade the desktop host depends on", () => {
     const shader = readFileSync(
-      resolve(__dirname, "../src/components/jarvis/jarvis.frag"), "utf8");
+      resolve(__dirname, "../src/bundles/jarvis/jarvis.frag"), "utf8");
     expect(shader).toContain("uniform float uHDR;");
     expect(shader).toMatch(/if \(uHDR > 0\.5\)/);
     expect(shader).toContain("Single-pass grade");

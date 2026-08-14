@@ -1815,8 +1815,8 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/WorkerGlobalContext.tsx": {
-      "file_lines": 121,
-      "max_function_lines": 78,
+      "file_lines": 112,
+      "max_function_lines": 69,
       "max_parameters": 1,
       "max_complexity": 17,
       "max_nesting_depth": 1,

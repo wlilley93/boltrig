@@ -8,12 +8,14 @@ substitute for runtime, accessibility, or backend-contract tests.
 
 > **Current status:** the root-level 06:41–06:42 UTC captures remain historical.
 > `current/capture-manifest.json` records a fresh seven-state capture at
-> 2026-08-13T22:05:51.027Z, unchanged across the capture at source digest
-> `42fd37bb1e6a3da33fef21e4821a4c79439ba77fe47f30590c9806541f85d550`.
+> 2026-08-13T22:53:59.851Z, unchanged across the capture at source digest
+> `abf7be9a1711d3423cd925604f32192b9c528eaa2e59477a22b7f036b80abf83`.
 > Six route-scoped VDS reviews are refreshed as unsigned `no_authority`
 > records. They establish current coverage only: no frame sign-off, conformity
 > verdict or parity claim exists. New chat remains a separately measured state
-> of the shared Chat route and still lacks a non-invented frame digest.
+> of the shared Chat route and still lacks a non-invented frame digest. The
+> current proof matrix records the resulting passed, failed and vacuous proof
+> populations without treating the unsigned visual review as acceptance.
 
 `figma-connected-inventory.json` is a separate live-source observation recorded
 at 15:05 UTC. Authenticated Figma metadata reads resolved all seven named

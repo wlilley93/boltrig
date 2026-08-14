@@ -4,9 +4,9 @@
   "fileKey": "iVQBKFc3NpRH3zdOOxfPqr",
   "captureEvidence": {
     "manifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-    "manifestDigest": "sha256:8487e3f7ada1c0dd27eb63929d643c7ad7b39175614fbc7961b54f22a1ea4403",
+    "manifestDigest": "sha256:df10f4572e6b1f07be73c3968eb789c38076a8cf9f7543f916792993d4414191",
     "metricsPath": "docs/design/evidence/2026-08-11-console-parity/current/metrics.json",
-    "metricsDigest": "sha256:002375238e742e41564ab596d4ef6462c1b8a9db460eed11b192003e41e0ce65",
+    "metricsDigest": "sha256:9f33535c6e1f61e70b3d61eb7e0ba55c6598ce2e2f02faac2802d64503dde3e0",
     "viewport": "1440x900",
     "statesCompared": 7,
     "statesMissing": 0,
@@ -14,9 +14,9 @@
   },
   "additiveCaptureEvidence": {
     "manifestPath": "docs/design/evidence/2026-08-11-chat-ui-direction/current/capture-manifest.json",
-    "manifestDigest": "sha256:47256a9f7e255db1628141a9025a47dc989bbce1b400a1b13e8ea5859fdd9790",
-    "capturedAt": "2026-08-13T22:05:57.733Z",
-    "captureSourceDigest": "sha256:42fd37bb1e6a3da33fef21e4821a4c79439ba77fe47f30590c9806541f85d550",
+    "manifestDigest": "sha256:0a59e95b14fd780bba38db190cbc9a8cd14a5fc5c825616638b2ba71c12d9db0",
+    "capturedAt": "2026-08-13T22:54:06.717Z",
+    "captureSourceDigest": "sha256:abf7be9a1711d3423cd925604f32192b9c528eaa2e59477a22b7f036b80abf83",
     "state": "chat-direction",
     "shippedScreenshotPath": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
     "shippedScreenshotDigest": "sha256:2273011361fff82429bd1c4f6679dcbe13aabf9a873cb4e02ec654e9af6b1ac9",
@@ -37,34 +37,34 @@
   },
   "servedBuild": {
     "branch": "feat/console-target",
-    "head": "20eb6e8f40aefedd86ff333b27d06b18803954e3",
+    "head": "22b508b369546f550945a7b0a12109ee349f78fd",
     "dirty": true,
-    "captureSourceDigest": "sha256:42fd37bb1e6a3da33fef21e4821a4c79439ba77fe47f30590c9806541f85d550",
+    "captureSourceDigest": "sha256:abf7be9a1711d3423cd925604f32192b9c528eaa2e59477a22b7f036b80abf83",
     "captureSourceDigestAlgorithm": "sha256-path-type-content-v1",
     "captureSourceScope": [
       "apps/worker/src",
       "apps/worker/tests/visual"
     ],
     "sourceUnchangedDuringCapture": true,
-    "capturedAt": "2026-08-13T22:05:51.027Z"
+    "capturedAt": "2026-08-13T22:53:59.851Z"
   },
   "screensLedger": {
     "path": ".vds/ledgers/screens.yaml",
-    "fileDigest": "sha256:6aab596e2b2c9a4b04866741832c6363544e32ebbeea50c07dbf4f2b7a3777e9",
+    "fileDigest": "sha256:e1eebde2d709aa7c540b8857aa83fc2b9ae0a3f8a8d6310003c87c3a45e2c860",
     "sourceDigest": "sha256:882ce5626fa7ed57b47a3dc7db138d993cc0dca4b09521572885e6d9a36dd6c5",
     "contentDigest": "sha256:747f31f1bf87495cb42ba79ce5170dbfa115cbfc71b3ee3c45b125eee0ee4f43"
   },
   "routeLedger": {
     "manifestPath": "docs/design/evidence/2026-08-11-console-parity/current/vds-route-manifest.json",
-    "manifestFileDigest": "sha256:aadf9af3ce520bf65390a398daae53fdf0615399e2ba1a855884123a238b7e00",
+    "manifestFileDigest": "sha256:e46d503e2eb4994912711cb16535d752ca6233833191fc7534e340a6311dcd2c",
     "ledgerPath": ".vds/ledgers/routes.yaml",
-    "ledgerFileDigest": "sha256:54972e998ac7850567915c8c0ed5fdf049f8e1708e215d4ab42329638f3c4b45",
-    "contentDigest": "sha256:ee5ff3e7c403fdf7246cbe6830bb65b97cde97308ffdf344a19fed01769058b3"
+    "ledgerFileDigest": "sha256:305a66f3dcd5b9123f0de7e4e4b2c036a04a3d0edc97be6e4e461388a1161d4d",
+    "contentDigest": "sha256:80830ebb818df6be9949bee7e4174372b3c469e085ae9192279bd43816687991"
   },
   "proofRun": {
     "matrixPath": "docs/design/evidence/2026-08-11-console-parity/current/vds-proof-matrix.json",
-    "matrixDigest": "sha256:75c125dd27b94437206a466f2437899d7545a9c067df6c4d9376f765bf4eb305",
-    "visualReviewProof": ".vds/proofs/PROOF-20260813-220758.yaml",
+    "matrixDigest": "sha256:4cb0cd540b1e67b56ec3a0acf22ec9ad06f8a798235154c79ed6303af8759926",
+    "visualReviewProof": ".vds/proofs/PROOF-20260813-225530.yaml",
     "visualReviewStatus": "vacuous",
     "visualReviewCoverage": "6_current_0_drift_0_never_reviewed_all_unsigned_no_authority"
   },

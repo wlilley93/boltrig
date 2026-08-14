@@ -551,8 +551,9 @@ restart, at which point all three daemons stand down until §13 is resolved.
 ## 13. What still blocks turning it on
 
 **Status at 2026-08-13 23:15. The bridge is STILL IN PLACE and the camera is
-STILL ON.** `BOLTRIG_SENSING_UNMANAGED=1` remains in all three plists. Nothing
-was retired, because the route it was waiting for still is not deployed.
+STILL ON.** The historical unmanaged-sensing escape hatch remains enabled in
+all three external plists. It is not a current Boltrig setting. Nothing was
+retired, because the route it was waiting for still is not deployed.
 
 ### 13.1 The wiring is DONE; the IMAGE is stale
 
@@ -663,10 +664,10 @@ Unchanged in spirit, longer than previously written:
 5. Enrol a device and write the mode-0600 credential from the enrollment
    response.
 6. Let camerad publish a camera binding; turn the camera **on** in Settings.
-7. Only when `camera_gate(force=True)` returns `granted` with
-   `BOLTRIG_SENSING_UNMANAGED` unset: drop the env key from all three plists,
-   delete the `UNMANAGED` constant and its branch from `capture_policy.py`, fix
-   the two stale `/v1/sensing/config` comments, and restart the observer and
-   presence. **Not camerad.**
+7. Only when `camera_gate(force=True)` returns `granted` without the historical
+   unmanaged-sensing escape hatch: drop that old env key from all three external
+   plists, delete the matching `UNMANAGED` constant and branch from
+   `capture_policy.py`, fix the two stale `/v1/sensing/config` comments, and
+   restart the observer and presence. **Not camerad.**
 
 Restarting before step 7 is safe but blank.

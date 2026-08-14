@@ -93,17 +93,17 @@
         { "selector": ".composer-voice-controller", "property": "display", "value": "none" }
       ],
       "required_geometry": [
-        { "selector": ".sidebar.shell-parity", "x": 0, "y": 0, "width": 262, "height": 900 },
-        { "selector": "#shell-pinned-tasks.shell-task-group-label", "height": 18 },
-        { "selector": "#shell-recent-tasks.shell-task-group-label", "height": 18 },
+        { "selector": ".sidebar.shell-parity", "x": 0, "y": 0, "width": 266, "height": 900 },
+        { "selector": "#shell-pinned-tasks.shell-task-group-label", "height": 20 },
+        { "selector": "#shell-recent-tasks.shell-task-group-label", "height": 20 },
         { "selector": ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-main", "height": 31 },
-        { "selector": ".new-chat-transcript .welcome", "x": 521, "y": 250.5, "width": 660, "height": 338 },
-        { "selector": ".new-chat-transcript .welcome h1", "x": 521, "y": 250.5, "width": 660, "height": 38 },
-        { "selector": ".new-chat-transcript .composer.new-context", "x": 521, "y": 310.5, "width": 660, "height": 122 },
-        { "selector": ".new-chat-transcript .composer-frame", "x": 521, "y": 310.5, "width": 660, "height": 89 },
-        { "selector": ".new-chat-transcript .starters", "x": 521, "y": 454.5, "width": 660, "height": 134 },
+        { "selector": ".new-chat-transcript .welcome", "x": 480.5, "y": 255.5, "width": 745, "height": 405 },
+        { "selector": ".new-chat-transcript .welcome h1", "x": 480.5, "y": 255.5, "width": 745, "height": 38 },
+        { "selector": ".new-chat-transcript .composer.new-context", "x": 480.5, "y": 382.5, "width": 745, "height": 122 },
+        { "selector": ".new-chat-transcript .composer-frame", "x": 480.5, "y": 382.5, "width": 745, "height": 89 },
+        { "selector": ".new-chat-transcript .starters", "x": 480.5, "y": 526.5, "width": 745, "height": 134 },
         { "selector": ".new-chat-transcript .starter-card", "height": 32 },
-        { "selector": ".voice-intro", "x": 521, "y": 823, "width": 660, "height": 57 }
+        { "selector": ".voice-intro", "x": 480.5, "y": 315.5, "width": 745, "height": 57 }
       ],
       "required_text": [
         "Pinned",
@@ -133,6 +133,7 @@
       "known_contract_bound_deviations": [
         "Voice availability is represented by the real idle control; no microphone or realtime media session is fabricated.",
         "The latest user direction overrides the duplicated waveform in the static frame: one voice action is shown once, while the real VoiceCall controller remains mounted and hidden behind the empty-draft primary.",
+        "The 2026-08-14 Codex-token direction widens the New-task prompt to 745px and places the live voice invitation directly above its input instead of at the bottom edge of the canvas.",
         "The composer projects the caller-owned risk-based posture from the kernel; the selector changes consent prompts only and never widens tool authority.",
         "Project and host selectors are omitted until a canonical task-context field exists; the fixture does not manufacture a selection control.",
         "Workspace Files remains absent because this new task has no explicit device and root binding; Git, process-inventory and terminal controls have no governed presentation contract."
@@ -231,8 +232,8 @@
         { "selector": ".composer .voice-primary", "count": 1 }
       ],
       "required_geometry": [
-        { "selector": "#shell-pinned-tasks.shell-task-group-label", "height": 18 },
-        { "selector": "#shell-recent-tasks.shell-task-group-label", "height": 18 },
+        { "selector": "#shell-pinned-tasks.shell-task-group-label", "height": 20 },
+        { "selector": "#shell-recent-tasks.shell-task-group-label", "height": 20 },
         { "selector": ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-main", "height": 31 },
         { "selector": ".session-row.active .session-main", "height": 44 },
         { "selector": ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"] .session-row:not(.active) .session-main", "height": 31 },
@@ -323,12 +324,12 @@
         ".fleet-canvas"
       ],
       "required_geometry": [
-        { "selector": ".agents-fleet-topbar", "x": 262, "y": 0, "width": 1178, "height": 48 },
-        { "selector": ".agents-fleet-topbar .console-seg", "x": 284, "y": 18, "width": 290, "height": 29 },
+        { "selector": ".agents-fleet-topbar", "x": 266, "y": 0, "width": 1174, "height": 48 },
+        { "selector": ".agents-fleet-topbar .console-seg", "x": 288, "y": 18, "width": 290, "height": 29 },
         { "selector": ".agents-fleet-topbar .console-primary", "height": 30 },
-        { "selector": ".fleet-summary", "x": 280, "y": 62, "width": 1142, "height": 34 },
-        { "selector": ".fleet-authority-key", "x": 280, "y": 96, "width": 1142, "height": 28 },
-        { "selector": ".fleet-canvas", "x": 280, "y": 136, "width": 1142, "height": 746 }
+        { "selector": ".fleet-summary", "x": 284, "y": 62, "width": 1138, "height": 34 },
+        { "selector": ".fleet-authority-key", "x": 284, "y": 96, "width": 1138, "height": 28 },
+        { "selector": ".fleet-canvas", "x": 284, "y": 136, "width": 1138, "height": 746 }
       ],
       "required_text": [
         "Spend unavailable",
@@ -800,8 +801,8 @@
         { "selector": ".composer .voice-primary", "count": 1 }
       ],
       "required_geometry": [
-        { "selector": "#shell-pinned-tasks.shell-task-group-label", "height": 18 },
-        { "selector": "#shell-recent-tasks.shell-task-group-label", "height": 18 },
+        { "selector": "#shell-pinned-tasks.shell-task-group-label", "height": 20 },
+        { "selector": "#shell-recent-tasks.shell-task-group-label", "height": 20 },
         { "selector": ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-main", "height": 31 },
         { "selector": ".session-row.active .session-main", "height": 44 },
         { "selector": ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"] .session-row:not(.active) .session-main", "height": 31 },

@@ -40,6 +40,7 @@ import {
 import type { CharacterId } from "../character";
 import { DEFAULT_CHARACTER } from "../character";
 import familiarBundle from "../bundles/familiar/character.json";
+import jarvisBundle from "../bundles/jarvis/character.json";
 import {
   characterFromBundle,
   type CharacterCanvasSource,
@@ -50,6 +51,7 @@ import {
   type FamiliarPresentationMode,
 } from "./familiar/FamiliarState";
 import { UNIFORMS as SHADER_UNIFORMS } from "./familiar/FamiliarWebGLRenderer";
+import { UNIFORMS as JARVIS_UNIFORMS } from "./jarvis/JarvisRenderer";
 import { JarvisStage } from "./jarvis/JarvisStage";
 import { jarvisStateFromTurn } from "./jarvis/JarvisState";
 
@@ -162,12 +164,24 @@ const SHADER_SOURCE: CharacterCanvasSource = {
  */
 const FAMILIAR: Character = characterFromBundle(familiarBundle, [SHADER_SOURCE]);
 
-const JARVIS: Character = {
-  id: "jarvis",
-  name: "Jarvis",
-  readsPhenotype: true,
-  wantsBudgets: true,
-  blurb: "An instrument that displays the machine's measured state.",
+/**
+ * The instrument's canvas source — a SECOND shader source, not a variant of the
+ * one above.
+ *
+ * Both bodies are `type: shader`, but they are not interchangeable: the source
+ * above supplies the Familiar's channels (uAudio, uBeat, uMouse, uGesture...)
+ * and Jarvis needs an entirely different set (budgets, work, speech, readout).
+ * Pointing his bundle at `boltrig.canvas.shader` would be REFUSED at
+ * registration by assertUniforms, which is the format working, not fighting us.
+ *
+ * `uGene` is appended because the shader needs it while JarvisRenderer uploads
+ * it once at mount rather than per frame — `supplies` describes what the source
+ * can drive, not which loop drives it.
+ */
+const JARVIS_SOURCE: CharacterCanvasSource = {
+  id: "boltrig.canvas.jarvis",
+  type: "shader",
+  supplies: [...JARVIS_UNIFORMS, "uGene"],
   render: ({ input, mode, phenotype, budgets, turn }) =>
     createElement(JarvisStage, {
       budgets: budgets as never,
@@ -177,6 +191,14 @@ const JARVIS: Character = {
       turn,
     }),
 };
+
+/**
+ * Jarvis, now built from his bundle for the same reason Familiar is: id, name,
+ * blurb, whether he reads the phenotype and whether he polls budgets all come
+ * from the manifest, so the settings surface changes with the JSON. His voice
+ * travels with him there too — a fallback id, never a key.
+ */
+const JARVIS: Character = characterFromBundle(jarvisBundle, [JARVIS_SOURCE]);
 
 registerCharacter(FAMILIAR);
 registerCharacter(JARVIS);

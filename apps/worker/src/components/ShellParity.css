@@ -7,11 +7,45 @@
 /* The rail is a glass layer over the application's own canvas. Alpha is
  * intentional: an opaque --side strip reads as a separate product band and
  * is the visible defect in the desktop Chat captures. */
+.worker-shell:has(.sidebar.shell-parity) {
+  grid-template-columns: 266px minmax(0, 1fr);
+}
+
 .sidebar.shell-parity {
+  width: 266px;
   border-right: 0;
   background: color-mix(in srgb, var(--side) 82%, transparent);
   -webkit-backdrop-filter: blur(22px) saturate(1.05);
   backdrop-filter: blur(22px) saturate(1.05);
+}
+
+/* Codex shell rhythm: one 14px label scale, 32px navigation rows, and a
+ * compact 40px brand rail. Settings remains independently tokened. */
+.shell-parity .side-top {
+  flex-basis: 40px;
+  height: 40px;
+  padding: 0 8px;
+}
+
+.shell-parity .side-brand {
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.shell-parity .side-nav {
+  gap: 0;
+  padding: 2px 8px 0;
+}
+
+.shell-parity .nav-row {
+  height: 32px;
+  padding: 0 8px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.shell-parity .nav-key {
+  font-size: 11px;
 }
 
 /* Pinned tasks are a real hierarchy, not merely a hidden sort key. Keep both
@@ -19,26 +53,33 @@
  * foot and the rail does not gain a second scrollbar. */
 .shell-task-list {
   gap: 0;
-  padding-top: 14px;
+  padding-top: 20px;
 }
 
 .shell-task-group {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .shell-task-group + .shell-task-group {
-  margin-top: 14px;
+  margin-top: 20px;
 }
 
 .shell-task-group-label {
   margin: 0;
   padding: 0 8px;
   color: var(--text-4);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13.5px;
+  line-height: 20px;
+}
+
+.shell-task-group .muted.small {
+  margin: 0;
+  padding: 0 8px;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .shell-task-rows {
@@ -64,7 +105,8 @@
   min-height: 0;
   padding: 7px 8px;
   border-radius: 8px;
-  font-size: 13.5px;
+  font-size: 14px;
+  line-height: 17px;
 }
 
 /* Ordinary recents stay at the compact 31px density. The selected task gets

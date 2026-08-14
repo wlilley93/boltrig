@@ -53,7 +53,7 @@ describe("jarvis gauge arcs", () => {
   // the tests above stop describing what is actually on screen.
   it("agrees with the thresholds compiled into the shader", () => {
     const shader = readFileSync(
-      fileURLToPath(new URL("../src/components/jarvis/jarvis.frag", import.meta.url)),
+      fileURLToPath(new URL("../src/bundles/jarvis/jarvis.frag", import.meta.url)),
       "utf8",
     );
     const warn = shader.match(/smoothstep\(([0-9.]+),\s*([0-9.]+),\s*fill\)/);

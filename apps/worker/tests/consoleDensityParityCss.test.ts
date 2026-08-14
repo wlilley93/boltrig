@@ -30,10 +30,11 @@ describe("live Figma console density", () => {
     expect(56 + 1).toBe(57);
   });
 
-  it("keeps the New-chat voice intro at its canonical 660 by 57 box", () => {
+  it("keeps the New-chat voice intro at its compact 57px height and prompt width", () => {
     const intro = rule(workerCss, ".voice-intro");
 
-    expect(intro).toContain("width: min(660px, calc(100% - 48px));");
+    expect(intro).toContain("width: 100%;");
+    expect(intro).toContain("margin: 0;");
     expect(intro).toContain("padding: 12px 13px 12px 14px;");
     expect(intro).toContain("border: 0;");
     expect(intro).toContain("box-shadow: inset 0 0 0 1px var(--border);");

@@ -20,8 +20,21 @@ cd ../../apps/worker && pnpm install --frozen-lockfile
 BOLTRIG_KERNEL_URL=http://localhost:8000 pnpm dev
 ```
 
-`pnpm tauri dev` opens the same build in the desktop shell. Account sign-in is
-the front door in both browser and desktop. After authenticated startup, a new
+`pnpm tauri dev` opens the same build in the desktop shell. Desktop development
+requires the same canonical origin in both build environments so the webview
+and native transport cannot point at different servers:
+
+```sh
+VITE_API_BASE=https://dev.boltrig.io \
+BOLTRIG_DESKTOP_API_ORIGIN=https://dev.boltrig.io \
+pnpm tauri dev
+```
+
+The Tauri pre-build gate refuses a missing, non-canonical, insecure, or
+mismatched pair. Cargo also invalidates its native build whenever the native
+origin changes; otherwise an older origin can remain embedded in an apparently
+fresh frontend build. Account sign-in is the front door in both browser and
+desktop. After authenticated startup, a new
 desktop automatically bootstraps its revocable computer key; there is no code
 or handoff bundle to copy. Device sessions live in the OS keychain and are
 bound to the exact configured API origin. An unreadable key, or a key belonging

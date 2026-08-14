@@ -29,5 +29,13 @@ logging.getLogger(__name__).info(
 )
 
 from .bootstrap import build_app  # noqa: E402  (logging must be live first)
+from .password_reset_composition import (  # noqa: E402
+    compose_password_reset_delivery,
+)
 
-app = build_app(addons_snapshot=_ADDONS)
+_PASSWORD_RESET_NOTIFIER, _PASSWORD_RESET_PROBE = compose_password_reset_delivery()
+app = build_app(
+    addons_snapshot=_ADDONS,
+    password_reset_notifier=_PASSWORD_RESET_NOTIFIER,
+    password_reset_readiness_probe=_PASSWORD_RESET_PROBE,
+)

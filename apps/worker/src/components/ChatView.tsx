@@ -43,6 +43,7 @@ import type {
 } from "./chat/TaskInspectorModel";
 import { ThemeToggle } from "./chat/ThemeToggle";
 import { TranscriptNavigation } from "./chat/TranscriptNavigation";
+import { VoiceBanner } from "./chat/VoiceBanner";
 import { Welcome } from "./chat/Welcome";
 import { downloadAttachment } from "./chat/attachmentPresentation";
 import { reasonText } from "./chat/chatErrors";
@@ -77,14 +78,6 @@ type ConversationLoadState = {
   phase: "idle" | "loading" | "ready" | "error";
   error: string;
 };
-
-function readVoiceBannerPreference(): boolean {
-  try {
-    return localStorage.getItem("boltrig-worker-voice-banner-dismissed") !== "true";
-  } catch {
-    return true;
-  }
-}
 
 export function ChatView({
   conversationId,
@@ -132,7 +125,6 @@ export function ChatView({
   // The composer draft is lifted so starter cards can fill it (the design's
   // New screen behaviour: a starter fills the draft, it never sends).
   const [draft, setDraft] = useState("");
-  const [voiceBanner, setVoiceBanner] = useState(readVoiceBannerPreference);
   // Queued steers are durable user messages with no run id yet. Keep a small
   // local echo so the row appears as soon as the 202 receipt arrives; the next
   // conversation load reconciles it with the append-only message log.
@@ -927,15 +919,6 @@ export function ChatView({
     }, 0);
   }
 
-  function dismissVoiceBanner() {
-    setVoiceBanner(false);
-    try {
-      localStorage.setItem("boltrig-worker-voice-banner-dismissed", "true");
-    } catch {
-      // This is presentation-only state; the call control remains available.
-    }
-  }
-
   const composer = (
     <Composer
       busy={loading}
@@ -977,6 +960,25 @@ export function ChatView({
         </span>
       ) : undefined}
     />
+  );
+  const newChatPrompt = (
+    <div className="new-chat-prompt-stack">
+      {!callActive && voiceAvailable && (
+        <VoiceBanner
+          identity={(
+            <StageBody
+              input={stageInput}
+              label="chief of staff"
+              mode="conversation"
+              phenotype={phenotype}
+              turn={live}
+            />
+          )}
+          onStartVoice={startVoiceFromComposer}
+        />
+      )}
+      {composer}
+    </div>
   );
 
   // Tabs render live entries while their turn is still the live turn (status
@@ -1215,7 +1217,7 @@ export function ChatView({
           tabIndex={0}
         >
           {isNewState ? (
-            <Welcome onStarter={fillDraft}>{isNewState ? composer : null}</Welcome>
+            <Welcome onStarter={fillDraft}>{newChatPrompt}</Welcome>
           ) : null}
           {conversationId && loadingConversation && (
             <p className="notice" role="status">Loading conversation…</p>
@@ -1299,34 +1301,6 @@ export function ChatView({
           />
         )}
         {!isNewState && composer}
-        {isNewState && !callActive && voiceAvailable && voiceBanner && (
-          <div className="voice-intro">
-            <StageBody
-              input={stageInput}
-              label="chief of staff"
-              mode="conversation"
-              phenotype={phenotype}
-              turn={live}
-            />
-            <span className="voice-intro-copy">
-              <strong>Talk to boltrig</strong>
-              <small>Say it out loud and it starts while you speak</small>
-            </span>
-            <button className="voice-intro-start" onClick={startVoiceFromComposer} type="button">Start</button>
-            <button
-              aria-label="Not now"
-              className="voice-intro-dismiss"
-              onClick={dismissVoiceBanner}
-              title="Not now"
-              type="button"
-            >
-              <svg aria-hidden fill="none" height="12" stroke="currentColor" strokeLinecap="round" strokeWidth="2.3" viewBox="0 0 24 24" width="12">
-                <line x1="6" x2="18" y1="6" y2="18" />
-                <line x1="18" x2="6" y1="6" y2="18" />
-              </svg>
-            </button>
-          </div>
-        )}
       </main>
       {openTabs.length > 0 && canOpenPanes && (
         <SubagentTabs

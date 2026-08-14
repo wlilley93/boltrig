@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -13,6 +14,38 @@ const SESSION_VERSION: u8 = 2;
 const MAX_SESSION_BYTES: usize = 24_576;
 const MAX_TOKEN_BYTES: usize = 16_384;
 const MAX_ROOTS: usize = 64;
+
+#[derive(Default)]
+struct AgentCache {
+    value: Option<Result<Option<StoredDeviceAgent>, String>>,
+}
+
+impl AgentCache {
+    fn get_or_load(
+        &mut self,
+        load: impl FnOnce() -> Result<Option<StoredDeviceAgent>, String>,
+    ) -> Result<Option<StoredDeviceAgent>, String> {
+        if let Some(value) = &self.value {
+            return value.clone();
+        }
+        let value = load();
+        self.value = Some(value.clone());
+        value
+    }
+
+    fn replace(&mut self, value: Result<Option<StoredDeviceAgent>, String>) {
+        self.value = Some(value);
+    }
+}
+
+static AGENT_CACHE: OnceLock<Mutex<AgentCache>> = OnceLock::new();
+
+fn agent_cache() -> MutexGuard<'static, AgentCache> {
+    AGENT_CACHE
+        .get_or_init(|| Mutex::new(AgentCache::default()))
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -187,7 +220,7 @@ fn session_entry() -> Result<keyring::Entry, String> {
         .map_err(|_| "os_keychain_unavailable".to_string())
 }
 
-pub(crate) fn load_agent() -> Result<Option<StoredDeviceAgent>, String> {
+fn load_agent_from_keychain() -> Result<Option<StoredDeviceAgent>, String> {
     match session_entry()?.get_password() {
         Ok(stored) => decode_agent(&stored).map(Some),
         Err(keyring::Error::NoEntry) => Ok(None),
@@ -195,16 +228,31 @@ pub(crate) fn load_agent() -> Result<Option<StoredDeviceAgent>, String> {
     }
 }
 
+pub(crate) fn load_agent() -> Result<Option<StoredDeviceAgent>, String> {
+    // Startup has several legitimate consumers (account bridge, local-agent
+    // projection, and the background device loop). Hold one process-local
+    // single-flight lock across the first Keychain read so macOS presents at
+    // most one authorization prompt for this credential. Cache failures too:
+    // a denied prompt stays denied until restart instead of immediately asking
+    // again from the next consumer.
+    agent_cache().get_or_load(load_agent_from_keychain)
+}
+
 pub(crate) fn save_agent(record: &StoredDeviceAgent) -> Result<(), String> {
     let stored = encode_agent(record)?;
     session_entry()?
         .set_password(&stored)
-        .map_err(|_| "os_keychain_write_failed".to_string())
+        .map_err(|_| "os_keychain_write_failed".to_string())?;
+    agent_cache().replace(Ok(Some(record.clone())));
+    Ok(())
 }
 
 pub(crate) fn remove_agent() -> Result<(), String> {
     match session_entry()?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Ok(()) | Err(keyring::Error::NoEntry) => {
+            agent_cache().replace(Ok(None));
+            Ok(())
+        }
         Err(_) => Err("os_keychain_delete_failed".to_string()),
     }
 }
@@ -231,6 +279,45 @@ mod tests {
             pending_claim: None,
             pending_camera_claim: None,
         }
+    }
+
+    #[test]
+    fn startup_consumers_share_one_session_read_and_mutations_refresh_it() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let cache = Arc::new(Mutex::new(AgentCache::default()));
+        let reads = Arc::new(AtomicUsize::new(0));
+        let threads = (0..8)
+            .map(|_| {
+                let cache = Arc::clone(&cache);
+                let reads = Arc::clone(&reads);
+                std::thread::spawn(move || {
+                    cache
+                        .lock()
+                        .unwrap()
+                        .get_or_load(|| {
+                            reads.fetch_add(1, Ordering::SeqCst);
+                            Ok(Some(record()))
+                        })
+                        .unwrap()
+                        .unwrap()
+                        .device_id
+                })
+            })
+            .collect::<Vec<_>>();
+        for thread in threads {
+            assert_eq!(thread.join().unwrap(), "device_1");
+        }
+        assert_eq!(reads.load(Ordering::SeqCst), 1);
+
+        cache.lock().unwrap().replace(Ok(None));
+        assert!(cache
+            .lock()
+            .unwrap()
+            .get_or_load(|| panic!("a cached mutation must not reread Keychain"))
+            .unwrap()
+            .is_none());
     }
 
     #[test]

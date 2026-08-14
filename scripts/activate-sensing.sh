@@ -759,7 +759,17 @@ if d.get("status") != "ok":
 device = d["device"]["id"]
 fd = os.open(cred, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 with os.fdopen(fd, "w") as fh:
-    json.dump({"device_id": device, "token": d["session_token"]}, fh)
+    # expires_at GOES IN THE CREDENTIAL, beside the token it belongs to. The
+    # session is 24h and capture_policy._maybe_rotate renews it at the halfway
+    # mark, but only if it can see when that is -- and it cannot derive it: the
+    # token is base64url JSON carrying {version, kind, tenant_id, subject_id,
+    # secret} and no expiry, so this reply is the only time the kernel ever says.
+    # It used to be written to $STATE_DIR/session-expires only, which no daemon
+    # reads. That was not unsafe -- an absent expiry reads as UNKNOWN and renews
+    # at the next poll -- but it spent a rotation to learn what was already in
+    # this response, and every rotation is a chance to lose the reply.
+    json.dump({"device_id": device, "token": d["session_token"],
+               "expires_at": d["session_expires_at"]}, fh)
     fh.write("\n")
 open(os.path.join(state, "device-id"), "w").write(device + "\n")
 open(os.path.join(state, "session-expires"), "w").write(d["session_expires_at"] + "\n")
@@ -770,7 +780,7 @@ open(os.path.join(state, "session-expires"), "w").write(d["session_expires_at"] 
   device=$(cat "$STATE_DIR/device-id"); expires=$(cat "$STATE_DIR/session-expires")
   perms=$(stat -f '%Lp' "$CRED" 2>/dev/null)
   note "device_id  $device"
-  note "expires    $expires   <-- 24 hours, and nothing rotates it"
+  note "expires    $expires   <-- 24h; capture_policy renews at the 12h mark"
   note "mode       $perms"
   [ "$perms" = "600" ] || postcondition_failed "$CRED is mode $perms, not 600"
 

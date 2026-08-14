@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 const DISMISS_KEY = "boltrig-worker-voice-banner-dismissed";
 
@@ -10,10 +10,15 @@ function readDismissed(): boolean {
   }
 }
 
-/** The "Try boltrig Voice" invitation above the New-state composer. Rendered
- * only when the caller has verified live voice is actually reachable; the
- * dismissal persists locally (it is a piece of chrome, not account state). */
-export function VoiceBanner({ onStartVoice }: { onStartVoice(): void }) {
+interface VoiceBannerProps {
+  identity: ReactNode;
+  onStartVoice(): void;
+}
+
+/** The live-voice invitation that sits immediately above the New-task input.
+ * The caller supplies the active companion identity; dismissal is local
+ * presentation state and never changes voice availability or account state. */
+export function VoiceBanner({ identity, onStartVoice }: VoiceBannerProps) {
   const [dismissed, setDismissed] = useState(readDismissed);
   if (dismissed) return null;
 
@@ -27,26 +32,25 @@ export function VoiceBanner({ onStartVoice }: { onStartVoice(): void }) {
   }
 
   return (
-    <div className="voice-banner">
-      <span aria-hidden className="voice-banner-mark">
-        <svg fill="currentColor" height="15" viewBox="0 0 24 24" width="15">
-          <rect height="4" rx="1.2" width="2.4" x="4" y="10" />
-          <rect height="10" rx="1.2" width="2.4" x="8.4" y="7" />
-          <rect height="15" rx="1.2" width="2.4" x="12.8" y="4.5" />
-          <rect height="6" rx="1.2" width="2.4" x="17.2" y="9" />
-        </svg>
+    <div className="voice-intro">
+      {identity}
+      <span className="voice-intro-copy">
+        <strong>Talk to boltrig</strong>
+        <small>Say it out loud and it starts while you speak</small>
       </span>
-      <span className="voice-banner-copy">
-        <span>Try boltrig Voice</span>
-        <small>Talk it through and it starts working while you speak</small>
-      </span>
-      <button className="voice-banner-start" onClick={onStartVoice} type="button">
-        Start voice
+      <button
+        aria-label="Start voice chat"
+        className="voice-intro-start"
+        onClick={onStartVoice}
+        type="button"
+      >
+        Start
       </button>
       <button
-        aria-label="Dismiss the voice banner"
-        className="voice-banner-dismiss"
+        aria-label="Not now"
+        className="voice-intro-dismiss"
         onClick={dismiss}
+        title="Not now"
         type="button"
       >
         <svg fill="none" height="12" stroke="currentColor" strokeLinecap="round" strokeWidth="2.3" viewBox="0 0 24 24" width="12">

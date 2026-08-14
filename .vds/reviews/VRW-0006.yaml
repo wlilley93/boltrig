@@ -5,7 +5,7 @@ fileKey: iVQBKFc3NpRH3zdOOxfPqr
 nodeId: 22:2
 shippedScreenshotDigest: sha256:746c8fbe28b2aa04b64d122c53e094df33793a46288afe586768af578f4ea81a
 screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png
-servedBuild: "feat/console-target@20eb6e8f40aefedd86ff333b27d06b18803954e3; dirty; capture-source sha256:42fd37bb1e6a3da33fef21e4821a4c79439ba77fe47f30590c9806541f85d550; capture-manifest sha256:8487e3f7ada1c0dd27eb63929d643c7ad7b39175614fbc7961b54f22a1ea4403"
+servedBuild: "feat/console-target@22b508b369546f550945a7b0a12109ee349f78fd; dirty; capture-source sha256:abf7be9a1711d3423cd925604f32192b9c528eaa2e59477a22b7f036b80abf83; capture-manifest sha256:df10f4572e6b1f07be73c3968eb789c38076a8cf9f7543f916792993d4414191"
 shippedSourceDigest: sha256:36e8f4ba1b1aeeb8dd94ece91283887fe247e0f5ebe63335298dfee06af98624
 frameImageDigest: sha256:b1d04f772b8f54a22ad02fa3e7917262f7ffecffeb65106c187bb0f5b0758213
 frameDigest: sha256:e9aca9ab0c191069ecb2a0e78d157287d9a9dbac94f4bf2ea3235bb0279db909
@@ -39,8 +39,8 @@ deltas:
 - describes: Later product direction removes the editorial Settings-rail footer and adds governed Models plus Camera and presence navigation without changing the frame; these are app-chrome and runtime-truth overrides.
   disposition: belongs_to_app_chrome
   owedBy: SCR-0006
-reviewedBy: Codex deterministic current-capture evidence rebind v17
-reviewedAt: 2026-08-13T22:05:51Z
+reviewedBy: Codex deterministic current-capture evidence rebind v19
+reviewedAt: 2026-08-13T22:53:59Z
 basis:
 - DIR-0007
 - DIR-0015

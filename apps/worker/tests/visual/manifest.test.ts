@@ -366,10 +366,10 @@ describe("console parity evidence manifest", () => {
       ".voice-intro",
     ]));
     expect(newChat!.required_geometry).toEqual(expect.arrayContaining([
-      { selector: ".new-chat-transcript .welcome", x: 521, y: 250.5, width: 660, height: 338 },
-      { selector: ".new-chat-transcript .composer.new-context", x: 521, y: 310.5, width: 660, height: 122 },
-      { selector: ".new-chat-transcript .starters", x: 521, y: 454.5, width: 660, height: 134 },
-      { selector: ".voice-intro", x: 521, y: 823, width: 660, height: 57 },
+      { selector: ".new-chat-transcript .welcome", x: 480.5, y: 255.5, width: 745, height: 405 },
+      { selector: ".new-chat-transcript .composer.new-context", x: 480.5, y: 382.5, width: 745, height: 122 },
+      { selector: ".new-chat-transcript .starters", x: 480.5, y: 526.5, width: 745, height: 134 },
+      { selector: ".voice-intro", x: 480.5, y: 315.5, width: 745, height: 57 },
     ]));
     expect(newChat!.required_visible_counts).toContainEqual({
       selector: ".sidebar-footer > button",
@@ -867,10 +867,10 @@ describe("console parity evidence manifest", () => {
       ".fleet-canvas",
     ]));
     expect(agents!.required_geometry).toEqual(expect.arrayContaining([
-      { selector: ".agents-fleet-topbar", x: 262, y: 0, width: 1178, height: 48 },
-      { selector: ".fleet-summary", x: 280, y: 62, width: 1142, height: 34 },
-      { selector: ".fleet-authority-key", x: 280, y: 96, width: 1142, height: 28 },
-      { selector: ".fleet-canvas", x: 280, y: 136, width: 1142, height: 746 },
+      { selector: ".agents-fleet-topbar", x: 266, y: 0, width: 1174, height: 48 },
+      { selector: ".fleet-summary", x: 284, y: 62, width: 1138, height: 34 },
+      { selector: ".fleet-authority-key", x: 284, y: 96, width: 1138, height: 28 },
+      { selector: ".fleet-canvas", x: 284, y: 136, width: 1138, height: 746 },
     ]));
   });
 

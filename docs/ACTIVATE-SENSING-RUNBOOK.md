@@ -224,18 +224,53 @@ enrolment with a room-calibrated threshold is published over
 
 ---
 
-## The 24-hour problem — read before step 3, and again before step 7
+## The 24-hour problem — CLOSED 2026-08-14, with one bound you must know
 
 `device_route_support.SESSION_TTL` is **24 hours**, enforced in SQL by
-`authenticate_device_session`'s `session_expires_at >= now()`.
+`authenticate_device_session`'s `session_expires_at >= now()`. `capture_policy`
+used to have no rotation code at all, so roughly a day after step 3 every
+`sensing-config` poll returned 401, the gate read `kernel_unreachable`, and the
+camera stood down — correct fail-safe behaviour and a daily outage.
 
-**`capture_policy` never calls `POST /v1/device-agent/{id}/session/rotate`. It has
-no rotation code at all** (grep confirms). So roughly a day after step 3, every
-`sensing-config` poll returns 401, the gate reads `kernel_unreachable`, and the
-camera stands down.
+**`capture_policy._maybe_rotate()` now renews the session**, called from the top
+of `camera_gate()` on every poll. It is a pure function of `(now, expires_at)`
+with no timer behind it, so a daemon restarted every ten seconds behaves like one
+up for a week.
 
-That is *correct fail-safe behaviour*. It is also **a daily outage that arrives
-quietly**. It is the reason step 7 exists as a printout instead of an action.
+**RENEWAL IS PREVENTION, NOT REPAIR — and this is the bound.** `rotate_session`
+calls `authenticate_device` *first*, which requires a live session, so there is
+no route from a lapsed token back to a live one. The only re-issuance path is
+`POST /v1/devices/enrollment/start`, which demands `actor_tier == "human"`. The
+design therefore renews at the **halfway mark** (`ROTATE_MARGIN_S = 12h`), which
+buys two rotations a day and a **12-hour kernel-outage budget**: the kernel may be
+unreachable that long and the session still renews when it returns. Past that the
+session lapses and **only a human re-enrolment brings it back**. That is the
+honest cost, and it is stated rather than hidden.
+
+**Revocation is still absolute, and for the same reason.** `revoke_device` sets
+`revoked_at` *and* NULLs both session columns, so every later rotate is a 401
+forever, and these daemons hold no human credential to re-enrol with. A retry loop
+cannot defeat the control because there is nothing for it to converge on.
+
+**Three daemons share one credential**, and the kernel keeps exactly one live
+token per device. A non-blocking `flock` on `~/.boltrig/sensing-agent.lock` means
+one daemon rotates per window; the new token is written back to the shared file
+atomically and `_credential()` re-reads it every poll, so the other two adopt it
+on their next tick, un-restarted.
+
+### What was measured, 2026-08-14
+
+| Proof | Command | Result |
+| --- | --- | --- |
+| Unit suite | `python -m unittest discover -s tests` in `~/Projects/companion-observer` | **23/23** on 3.14, 3.11 and 3.9 |
+| Real kernel, real enrolment, expiry survived + revocation | in-process `create_app` + `InMemoryStore`, driven through `capture_policy` | **27/27**; ran t+0h→t+73h with **zero** stand-downs across the original 24h expiry, 6 real rotations |
+| Three real processes, one credential, shipping constants | three OS processes against a real kernel on loopback | **1** rotation host-wide, 2 transient refusals out of 180 polls, all three ended `granted` |
+| Same, contention forced ~4000× real rate | as above with margin opened and floor removed | 120 polls, all three recovered, **no permanent lockout** |
+
+A concurrent rotation can still cost a sibling **one** poll: its in-flight request
+was authenticated with a token that got retired mid-flight. `_fetch` re-reads the
+credential and retries **once**; if it loses twice it refuses that tick and
+recovers on the next. The camera skips one frame. It does not stand down.
 
 ---
 
@@ -265,21 +300,51 @@ second camerad contending for the UVC device is recovered only by physically
 unplugging the Pixy. Observer first (its restart costs nothing), then presence,
 then camerad alone and watched.
 
+**Renewal does not need camerad's restart, and that is deliberate.**
+`_credential_blob()` ignores unknown keys, so a camerad still running the
+pre-rotation module keeps working from a file a restarted observer has already
+added `expires_at` to. **Rotation goes live as soon as one of the three
+restarts.** Restart observer, watch a renewal happen (below), and only then take
+camerad's single, watched restart — the one this step already required.
+
 **(b) One branch in `capture_policy.py`**, in
 `~/Projects/companion-observer/capture_policy.py`:
 
-- **line 110** — `UNMANAGED = os.environ.get("BOLTRIG_SENSING_UNMANAGED", "") == "1"`,
-  with its comment on lines 105–109
-- **lines 332–368** — the whole `if UNMANAGED:` branch at the top of
-  `camera_gate()`, ending at
+- **line 111** — `UNMANAGED = os.environ.get("BOLTRIG_SENSING_UNMANAGED", "") == "1"`,
+  with its comment on lines 106–110
+- **lines 821–857** — the whole `if UNMANAGED:` branch inside `camera_gate()`,
+  ending at
   `return Decision(True, GRANTED, "unmanaged host: no kernel sensing route", {})`
 
-Delete both. `camera_gate()` then begins at
+Delete both. `camera_gate()` then runs `_maybe_rotate()` and goes straight to
 `config, reason, detail = sensing_config(force)` — the code step 6 just proved
-GRANTS.
+GRANTS. **Leave the `_maybe_rotate()` call where it is, above the branch.** It is
+above it on purpose: the UNMANAGED branch returns without ever polling, so a
+renewal hung off the poll would never run on a bridged host and the credential
+would lapse inside the very window step 7 has to be reachable in.
 
-> **Do not do either of these while the 24-hour problem is open.** With the
-> bridge removed, that expiry stands the camera down until someone re-enrols by
-> hand. Either teach the agent to rotate first, or keep the bridge and treat this
-> activation as **proven but not adopted**. Proven is already worth having: it
-> means the four-blocker comment in `capture_policy.py` is describing history.
+### New gate before you do any of this: watch one real renewal
+
+Do not accept "the code is there". The runbook's own standard is to have seen it.
+
+1. Restart **observer only** (its restart costs nothing).
+2. Note the token and `expires_at` in `~/.boltrig/sensing-agent.json`.
+3. Force the margin in a *probe process* — never by editing the module's
+   constant:
+   ```
+   cd ~/Projects/companion-observer && ./.venv/bin/python -c "
+   import capture_policy as p
+   p.UNMANAGED = False; p.ROTATE_MARGIN_S = 10**9; p.ROTATE_ATTEMPT_FLOOR_S = 0
+   print('rotated:', p._maybe_rotate())"
+   ```
+4. Confirm the token **changed** and `expires_at` **advanced ~24h**, and that the
+   old token now 401s while the new one 200s on
+   `GET /v1/device-agent/{id}/sensing-config`.
+
+Only then remove the bridge.
+
+> **The 24-hour problem is closed** (see the section above, and the measurements
+> in it). What remains before retiring the bridge is the *other* three blockers
+> the `capture_policy.py` comment names — the deployed kernel image predating the
+> `sensing-config` route, no enrolled device, and no camera binding — plus the
+> step above. Those are steps 1–6 of this runbook, and they are the operator's.

@@ -138,6 +138,36 @@ describe("global Worker identity context", () => {
     expect(api.hitl).not.toHaveBeenCalled();
   });
 
+  it("refreshes a remotely changed role when the client regains focus", async () => {
+    api.meSettings
+      .mockResolvedValueOnce({ profile: { ...profile, role: "member" }, settings: {} })
+      .mockResolvedValueOnce({ profile: { ...profile, role: "superadmin" }, settings: {} });
+    render(
+      <WorkerGlobalContextProvider>
+        <Sidebar
+          route="chat"
+          conversations={[]}
+          selectedConversation={null}
+          onRoute={vi.fn()}
+          onConversation={vi.fn()}
+          onLoadMore={vi.fn()}
+          hasMoreConversations={false}
+        />
+      </WorkerGlobalContextProvider>,
+    );
+
+    expect(await screen.findByRole("button", {
+      name: /Signed in as Alice, role member/i,
+    })).toBeTruthy();
+
+    window.dispatchEvent(new Event("focus"));
+
+    expect(await screen.findByRole("button", {
+      name: /Signed in as Alice, role superadmin/i,
+    })).toBeTruthy();
+    expect(api.meSettings).toHaveBeenCalledTimes(2);
+  });
+
   it("does not poll a global approval queue", async () => {
     api.consoleOverview.mockResolvedValue({ workspace_id: null });
     api.hitl.mockRejectedValue(new Error("offline"));
