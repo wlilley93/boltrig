@@ -537,17 +537,17 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/chat/ModelChip.tsx": {
-      "file_lines": 196,
-      "max_function_lines": 160,
+      "file_lines": 170,
+      "max_function_lines": 98,
       "max_parameters": 3,
-      "max_complexity": 13,
+      "max_complexity": 9,
       "max_nesting_depth": 2,
       "over_limit_functions": [
         {
           "name": "ModelChip",
-          "line": 28,
+          "line": 21,
           "column": 1,
-          "lines": 160,
+          "lines": 98,
           "parameters": 1,
           "complexity": 8,
           "nesting_depth": 1
@@ -723,8 +723,8 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/ChatView.tsx": {
-      "file_lines": 1350,
-      "max_function_lines": 1269,
+      "file_lines": 1349,
+      "max_function_lines": 1268,
       "max_parameters": 3,
       "max_complexity": 105,
       "max_nesting_depth": 4,
@@ -733,7 +733,7 @@
           "name": "ChatView",
           "line": 82,
           "column": 1,
-          "lines": 1269,
+          "lines": 1268,
           "parameters": 1,
           "complexity": 105,
           "nesting_depth": 4
@@ -742,14 +742,14 @@
           "name": "ChatView.send",
           "line": 348,
           "column": 3,
-          "lines": 112,
+          "lines": 110,
           "parameters": 2,
           "complexity": 34,
           "nesting_depth": 4
         },
         {
           "name": "ChatView.reattach",
-          "line": 664,
+          "line": 662,
           "column": 3,
           "lines": 67,
           "parameters": 3,
@@ -758,9 +758,9 @@
         },
         {
           "name": "ChatView.acceptLiveEvent",
-          "line": 732,
+          "line": 730,
           "column": 3,
-          "lines": 63,
+          "lines": 61,
           "parameters": 2,
           "complexity": 21,
           "nesting_depth": 2
@@ -1164,19 +1164,19 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/MobileChat.tsx": {
-      "file_lines": 455,
-      "max_function_lines": 313,
+      "file_lines": 430,
+      "max_function_lines": 286,
       "max_parameters": 2,
-      "max_complexity": 33,
+      "max_complexity": 28,
       "max_nesting_depth": 3,
       "over_limit_functions": [
         {
           "name": "MobileChat",
-          "line": 143,
+          "line": 145,
           "column": 1,
-          "lines": 313,
+          "lines": 286,
           "parameters": 1,
-          "complexity": 33,
+          "complexity": 28,
           "nesting_depth": 3
         }
       ],
