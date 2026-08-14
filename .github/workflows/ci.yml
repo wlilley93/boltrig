@@ -140,6 +140,20 @@ jobs:
         run: cargo test --locked --manifest-path apps/worker/src-tauri/Cargo.toml
       - name: Build an unsigned installer without release secrets
         working-directory: apps/worker
+        # Tauri's beforeBuildCommand is `pnpm run build:desktop`, which starts with
+        # require-desktop-origin.mjs: a desktop build must be PINNED to a known API
+        # origin rather than inheriting a default, or an installer ships pointing at
+        # whatever the builder happened to have set. release.yml supplies the real
+        # origin from repository vars; this job deliberately builds WITHOUT release
+        # secrets, so it pins loopback instead -- which the guard allows explicitly
+        # (http is permitted on localhost/127.0.0.1/[::1], https everywhere else).
+        #
+        # Loopback is the honest value here, not a placeholder to tidy away later: an
+        # artifact built by this job must not be able to talk to production, and the
+        # next step asserts no updater signature was minted for exactly that reason.
+        env:
+          BOLTRIG_DESKTOP_API_ORIGIN: http://127.0.0.1:8000
+          VITE_API_BASE: http://127.0.0.1:8000
         run: pnpm run tauri build --ci --config src-tauri/tauri.ci.conf.json
       - name: Require a real installer and prove no updater signature was minted
         run: |

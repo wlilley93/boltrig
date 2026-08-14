@@ -261,6 +261,9 @@ def test_desktop_updater_accepts_no_webview_release_trust_or_unsigned_path():
         WORKER / "src-tauri" / "tauri.ci.conf.json"
     ).read_text(encoding="utf-8")
     ci_config_payload = json.loads(ci_config)
+    ci_workflow = (
+        ROOT / ".github" / "workflows" / "ci.yml"
+    ).read_text(encoding="utf-8")
 
     assert 'option_env!("BOLTRIG_UPDATER_ENDPOINT")' in native
     assert 'option_env!("BOLTRIG_UPDATER_PUBLIC_KEY")' in native
@@ -288,6 +291,12 @@ def test_desktop_updater_accepts_no_webview_release_trust_or_unsigned_path():
         "$schema": "https://schema.tauri.app/config/2",
         "bundle": {"createUpdaterArtifacts": False},
     }
+    # Unsigned pull-request installers must still satisfy the same mandatory
+    # origin guard as release builds. They use loopback deliberately so a CI
+    # artifact cannot contact production and cannot silently inherit a builder
+    # machine's environment.
+    assert "BOLTRIG_DESKTOP_API_ORIGIN: http://127.0.0.1:8000" in ci_workflow
+    assert "VITE_API_BASE: http://127.0.0.1:8000" in ci_workflow
     assert "dangerousInsecureTransportProtocol" not in config
     for command in (
         "desktop_update_readiness",
