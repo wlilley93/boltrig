@@ -30,6 +30,12 @@
     "travels": false
   },
 
+  "voice": {
+    "fallbackVoiceIds": {
+      "pocket-voice": "marius"
+    }
+  },
+
   "capabilities": {
     "camera": { "wanted": false },
     "presence": { "wanted": false },
