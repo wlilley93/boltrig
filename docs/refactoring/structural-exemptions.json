@@ -46,27 +46,27 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/auth_routes.py": {
-      "max_file_lines": 814,
-      "max_function_lines": 506,
+      "max_file_lines": 821,
+      "max_function_lines": 510,
       "over_limit_functions": [
         {
           "name": "register_auth_routes",
-          "line": 309,
-          "lines": 506
+          "line": 312,
+          "lines": 510
         },
         {
           "name": "register_auth_routes.login",
-          "line": 386,
+          "line": 393,
           "lines": 97
         },
         {
           "name": "register_auth_routes.two_factor_challenge",
-          "line": 668,
+          "line": 675,
           "lines": 91
         }
       ],
       "owner": "identity-maintainers",
-      "reason": "Extract login, invitation, session, and two-factor route groups while retaining one authentication boundary. 2026-07-26: +5 lines only - the COUNTY 8 D7 rotation route was put in auth_password_routes.py rather than here, so this file gained an import and a registrar call instead of ~75 lines of handler. 2026-07-26 (2): +5 more for the D7 login signal - login returns password_change_required so a console routes to the rotation screen instead of discovering the clamp by being refused. Written as a one-line status choice rather than a branch to keep the cost at five.",
+      "reason": "Extract login, invitation, session, and two-factor route groups while retaining one authentication boundary. 2026-07-26: +5 lines only - the COUNTY 8 D7 rotation route was put in auth_password_routes.py rather than here, so this file gained an import and a registrar call instead of ~75 lines of handler. 2026-07-26 (2): +5 more for the D7 login signal - login returns password_change_required so a console routes to the rotation screen instead of discovering the clamp by being refused. Written as a one-line status choice rather than a branch to keep the cost at five. 2026-08-14: +7 lines for the onboarding gate - two `require_user_onboarding` calls on the paths that mint a tenant, so a new user cannot reach the app before onboarding has run. Two call sites rather than a wrapper because the new-tenant and accepted-invitation paths pass different tenant ids.",
       "expires": "2026-12-31"
     },
     "boltrig/api/bootstrap.py": {
@@ -86,17 +86,17 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/initiate.py": {
-      "max_file_lines": 258,
-      "max_function_lines": 96,
+      "max_file_lines": 261,
+      "max_function_lines": 99,
       "over_limit_functions": [
         {
           "name": "_run",
           "line": 65,
-          "lines": 96
+          "lines": 99
         }
       ],
       "owner": "platform-maintainers",
-      "reason": "Extract initiation orchestration phases without changing request validation or execution semantics. 2026-07-26: +11 lines recording a KNOWN LIMIT in the module docstring - the \"refusing to run twice\" guard is a read-then-write with no uniqueness on one owner per tenant, so two concurrent runs with different emails both seat a superadmin. Placed in the docstring rather than inside _run precisely so the note does not grow the function it describes; _run is unchanged at 91 lines and only its line number moved. 2026-07-26: +5 lines to flag the seeded account for forced rotation ([2026] VJS-COUNTY 8, D7) - the seeding path is the flag's only producer. 2026-07-30 (merge with origin/main): +14 lines from #171/#173, the operator-seat order's D1-D7 discharge and the declared development posture. `_run` crosses the function floor at 96 because the seed path now records WHICH credential kind authenticated the caller, which is the distinction [2026] VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001 D4 proved by execution had been conflated with authority.",
+      "reason": "Extract initiation orchestration phases without changing request validation or execution semantics. 2026-07-26: +11 lines recording a KNOWN LIMIT in the module docstring - the \"refusing to run twice\" guard is a read-then-write with no uniqueness on one owner per tenant, so two concurrent runs with different emails both seat a superadmin. Placed in the docstring rather than inside _run precisely so the note does not grow the function it describes; _run is unchanged at 91 lines and only its line number moved. 2026-07-26: +5 lines to flag the seeded account for forced rotation ([2026] VJS-COUNTY 8, D7) - the seeding path is the flag's only producer. 2026-07-30 (merge with origin/main): +14 lines from #171/#173, the operator-seat order's D1-D7 discharge and the declared development posture. `_run` crosses the function floor at 96 because the seed path now records WHICH credential kind authenticated the caller, which is the distinction [2026] VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001 D4 proved by execution had been conflated with authority. 2026-08-14: +3 lines, the same onboarding requirement reaching initiate.",
       "expires": "2026-12-31"
     },
     "boltrig/config/manifest.py": {
