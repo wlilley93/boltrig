@@ -299,8 +299,8 @@ describe("console parity evidence manifest", () => {
     ]));
     expect(plugins!.required_text).toContain("9 connected of 43");
     expect(plugins!.required_geometry).toEqual(expect.arrayContaining([
-      { selector: ".plugins-pane", x: 401, width: 900 },
-      { selector: ".plugins-alert", x: 433, y: 162.5625, width: 836, height: 64.125 },
+      { selector: ".plugins-pane", x: 403, width: 900 },
+      { selector: ".plugins-alert", x: 435, y: 162.5625, width: 836, height: 64.125 },
       { selector: ".plugins-search", y: 277.6875, height: 38 },
       { selector: ".plugins-group:first-child .plugins-row:first-child", height: 57 },
       {
@@ -365,11 +365,20 @@ describe("console parity evidence manifest", () => {
       ".new-chat-transcript button[aria-label=\"Model\"]",
       ".voice-intro",
     ]));
+    expect(newChat!.required_absence_selectors).toEqual(expect.arrayContaining([
+      ".new-chat-transcript .starters",
+      ".new-chat-transcript .starter-card",
+    ]));
+    expect(newChat!.required_absent_text).toEqual(expect.arrayContaining([
+      "Find something out",
+      "Draft something",
+      "Work through a list",
+      "Keep an eye on something",
+    ]));
     expect(newChat!.required_geometry).toEqual(expect.arrayContaining([
-      { selector: ".new-chat-transcript .welcome", x: 480.5, y: 255.5, width: 745, height: 405 },
-      { selector: ".new-chat-transcript .composer.new-context", x: 480.5, y: 382.5, width: 745, height: 122 },
-      { selector: ".new-chat-transcript .starters", x: 480.5, y: 526.5, width: 745, height: 134 },
-      { selector: ".voice-intro", x: 480.5, y: 315.5, width: 745, height: 57 },
+      { selector: ".new-chat-transcript .welcome", x: 480.5, y: 333.5, width: 745, height: 249 },
+      { selector: ".new-chat-transcript .composer.new-context", x: 480.5, y: 460.5, width: 745, height: 122 },
+      { selector: ".voice-intro", x: 480.5, y: 393.5, width: 745, height: 57 },
     ]));
     expect(newChat!.required_visible_counts).toContainEqual({
       selector: ".sidebar-footer > button",
@@ -431,8 +440,8 @@ describe("console parity evidence manifest", () => {
       { selector: ".composer .voice-primary", count: 1 },
     ]));
     expect(chatRun!.required_geometry).toEqual(expect.arrayContaining([
-      { selector: "#shell-pinned-tasks.shell-task-group-label", height: 18 },
-      { selector: "#shell-recent-tasks.shell-task-group-label", height: 18 },
+      { selector: "#shell-pinned-tasks.shell-task-group-label", height: 20 },
+      { selector: "#shell-recent-tasks.shell-task-group-label", height: 20 },
       {
         selector: ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-main",
         height: 31,
@@ -521,8 +530,8 @@ describe("console parity evidence manifest", () => {
     );
     expect(direction!.required_text).toContain("3 done");
     expect(direction!.required_geometry).toEqual(expect.arrayContaining([
-      { selector: "#shell-pinned-tasks.shell-task-group-label", height: 18 },
-      { selector: "#shell-recent-tasks.shell-task-group-label", height: 18 },
+      { selector: "#shell-pinned-tasks.shell-task-group-label", height: 20 },
+      { selector: "#shell-recent-tasks.shell-task-group-label", height: 20 },
       { selector: ".session-row.active .session-main", height: 44 },
       {
         selector: ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"] .session-row:not(.active) .session-main",

@@ -723,24 +723,24 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/ChatView.tsx": {
-      "file_lines": 1381,
-      "max_function_lines": 1293,
+      "file_lines": 1350,
+      "max_function_lines": 1269,
       "max_parameters": 3,
-      "max_complexity": 108,
+      "max_complexity": 105,
       "max_nesting_depth": 4,
       "over_limit_functions": [
         {
           "name": "ChatView",
-          "line": 89,
+          "line": 82,
           "column": 1,
-          "lines": 1293,
+          "lines": 1269,
           "parameters": 1,
-          "complexity": 108,
+          "complexity": 105,
           "nesting_depth": 4
         },
         {
           "name": "ChatView.send",
-          "line": 356,
+          "line": 348,
           "column": 3,
           "lines": 112,
           "parameters": 2,
@@ -749,7 +749,7 @@
         },
         {
           "name": "ChatView.reattach",
-          "line": 672,
+          "line": 664,
           "column": 3,
           "lines": 67,
           "parameters": 3,
@@ -758,7 +758,7 @@
         },
         {
           "name": "ChatView.acceptLiveEvent",
-          "line": 740,
+          "line": 732,
           "column": 3,
           "lines": 63,
           "parameters": 2,
@@ -1020,7 +1020,7 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/jarvis/JarvisRenderer.ts": {
-      "file_lines": 746,
+      "file_lines": 745,
       "max_function_lines": 144,
       "max_parameters": 5,
       "max_complexity": 37,
@@ -1028,7 +1028,7 @@
       "over_limit_functions": [
         {
           "name": "JarvisWebGLRenderer.frame",
-          "line": 602,
+          "line": 601,
           "column": 19,
           "lines": 144,
           "parameters": 1,

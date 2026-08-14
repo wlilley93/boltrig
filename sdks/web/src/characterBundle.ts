@@ -304,6 +304,25 @@ export function bundleWantsBudgets(manifest: CharacterBundleManifest): boolean {
   return manifest.capabilities?.budgets?.wanted === true;
 }
 
+/**
+ * The voice id this character would like a given PROVIDER to speak it with.
+ *
+ * Undefined means the bundle names no voice for that provider, and the correct
+ * response is silence or an honest refusal — never another character's voice.
+ * The schema puts it the same way: "Absent voice means a silent character,
+ * never a substituted one." So callers must not fall back to a default here;
+ * substituting is exactly the failure this returns undefined to prevent.
+ *
+ * Ids only. A provider key never carries a credential — the kernel holds those
+ * and presents them for the duration of one call.
+ */
+export function bundleVoiceId(
+  manifest: CharacterBundleManifest,
+  provider: string,
+): string | undefined {
+  return manifest.voice?.fallbackVoiceIds?.[provider];
+}
+
 /** Does this bundle DECLARE that it would like the camera? A declaration only. */
 export function bundleWantsCamera(manifest: CharacterBundleManifest): boolean {
   return manifest.capabilities?.camera?.wanted === true;

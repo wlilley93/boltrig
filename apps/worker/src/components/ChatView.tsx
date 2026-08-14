@@ -901,11 +901,6 @@ export function ChatView({
     }
   }
 
-  function fillDraft(text: string) {
-    setDraft(text);
-    window.setTimeout(() => draftInputRef.current?.focus(), 0);
-  }
-
   function promptForOutput() {
     const seed = "Create a file or site";
     setDraft((current) => current.trim() ? current : seed);
@@ -1217,7 +1212,7 @@ export function ChatView({
           tabIndex={0}
         >
           {isNewState ? (
-            <Welcome onStarter={fillDraft}>{newChatPrompt}</Welcome>
+            <Welcome>{newChatPrompt}</Welcome>
           ) : null}
           {conversationId && loadingConversation && (
             <p className="notice" role="status">Loading conversation…</p>

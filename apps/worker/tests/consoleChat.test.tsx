@@ -155,14 +155,15 @@ describe("console chat surface", () => {
   it("greets a fresh chat the way the decided target does, chrome-free", async () => {
     renderChat(null);
 
-    // The decided target opens on a quiet mark, one question and four starters.
+    // New tasks open on one question and the real prompt controls, without
+    // suggested openers competing with slash and command discovery.
     // It does NOT open on the Stage at hero size: ADR 0025 placement rule 1 is
     // superseded here by the target, and the unbounded square it put in the
     // welcome was what pushed the composer off a short window.
     expect(screen.getByRole("heading", { level: 1, name: "What needs doing?" }))
       .toBeTruthy();
-    expect(document.querySelectorAll(".welcome .starter-card").length).toBe(4);
-    expect(document.querySelectorAll(".welcome .starter-icon").length).toBe(4);
+    expect(document.querySelector(".welcome .starters")).toBeNull();
+    expect(document.querySelector(".welcome .starter-card")).toBeNull();
     await waitFor(() => {
       expect(document.querySelector(".welcome > .familiar-stage")).toBeNull();
       expect(document.querySelector(".welcome .familiar-stage.hero")).toBeNull();
@@ -188,18 +189,6 @@ describe("console chat surface", () => {
     expect(promptStack?.firstElementChild).toBe(voiceIntro);
     expect(promptStack?.lastElementChild?.classList.contains("composer")).toBe(true);
     expect(screen.getByRole("button", { name: "Start voice chat" })).toBeTruthy();
-  });
-
-  it("fills the composer draft from a starter card without sending", () => {
-    renderChat(null);
-
-    fireEvent.click(screen.getByRole("button", { name: /Find something out/ }));
-
-    const composer = screen.getByRole("textbox", {
-      name: "Task instructions",
-    }) as HTMLTextAreaElement;
-    expect(composer.value).toBe("Find something out");
-    expect(api.streamChat).not.toHaveBeenCalled();
   });
 
   it("opens existing command and skill discovery from slash without inventing a project picker", () => {

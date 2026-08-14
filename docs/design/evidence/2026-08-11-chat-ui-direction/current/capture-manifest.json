@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-14T07:48:03.377Z",
+  "capturedAt": "2026-08-14T08:12:58.720Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "fa1dab1d104624c28f3c2809eebbc3ebd34c3df6eb7a8fb778784e00bcf7846b",
-    "digestAfterCapture": "fa1dab1d104624c28f3c2809eebbc3ebd34c3df6eb7a8fb778784e00bcf7846b",
+    "digestBeforeCapture": "e9484dd786d6116e15ab3a86ce7691f61b9fe5e76542291843ac2a3d3c4bfcc9",
+    "digestAfterCapture": "e9484dd786d6116e15ab3a86ce7691f61b9fe5e76542291843ac2a3d3c4bfcc9",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/console-target",
-    "head": "ea923492d09cfd2937b7f3e1029f346c915e56ce",
+    "head": "041ed6fa2820715fd1b83fd91be367c5d02a9f3e",
     "dirty": true
   },
   "runner": {
@@ -30,17 +30,17 @@
     "browser": "chromium",
     "browserVersion": "149.0.7827.55",
     "browserExecutable": "/Users/williamlilley/Library/Caches/ms-playwright/chromium-1228/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-    "origin": "http://localhost:1420",
+    "origin": "http://localhost:1431",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
   "states": [
     {
       "state": "chat-direction",
-      "url": "http://localhost:1420/tests/visual/parity.html?state=chat-direction&theme=dark",
+      "url": "http://localhost:1431/tests/visual/parity.html?state=chat-direction&theme=dark",
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "2273011361fff82429bd1c4f6679dcbe13aabf9a873cb4e02ec654e9af6b1ac9",
+      "sha256": "8f826691e35070b0e0d97c06b1902d468657d4f5c056fde1f4baefd0439803f8",
       "width": 1440,
       "height": 900,
       "captureContract": {

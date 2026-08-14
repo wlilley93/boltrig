@@ -20,8 +20,6 @@
 
 /* --- New screen ------------------------------------------------------------ */
 
-.starter-icon { display: flex; color: var(--text-3); }
-
 /* The New state draws no header bar, but the theme stays reachable: the
    toggle floats where the header actions would sit. */
 .chat-floating-actions {

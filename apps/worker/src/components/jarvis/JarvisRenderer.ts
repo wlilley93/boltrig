@@ -1,16 +1,10 @@
-// The HUD instrument renderer: jarvis.frag on a WebGL2 canvas.
-//
-// Sibling of FamiliarWebGLRenderer, not a subclass — they share the mount/
-// suspend/destroy shape because the Stage expects it, and nothing else. The
-// instrument has no inner life to wander: everything it shows is either a
-// crossfaded mode weight or live voice, so there is no mood model here.
-//
-// The shader is vendored as the single source of visual truth; this file may
-// only ever decide WHEN something is true, never what it looks like.
-// jarvis.frag now lives in the BUNDLE, beside familiar.frag, because it is the
-// character's body rather than this renderer's private asset — the manifest
-// names it and pins its bytes. jarvis-post.frag stays here: the post pass is
-// Boltrig's machinery, and a bundle "never carries a renderer".
+// The HUD instrument renderer: jarvis.frag on a WebGL2 canvas. It is a sibling
+// of FamiliarWebGLRenderer, not a subclass; only the Stage lifecycle matches.
+// Everything shown is a crossfaded mode weight or live voice, never invented
+// mood. The shader remains the visual source of truth; this file decides WHEN.
+// jarvis.frag lives in the character bundle and is byte-pinned by its manifest.
+// jarvis-post.frag stays here as Boltrig rendering machinery: a bundle never
+// carries a renderer.
 import fragSrc from "../../bundles/jarvis/jarvis.frag?raw";
 import postSrc from "./jarvis-post.frag?raw";
 import {
@@ -31,18 +25,14 @@ import {
   type JarvisRendererStatus,
   type JarvisStageState,
 } from "./JarvisState";
-
 const VERT_SRC = `#version 300 es
 void main() {
   vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
   gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
-// Exported so the canvas source can declare what it is able to drive, the way
-// FamiliarWebGLRenderer's list does. `uGene` is deliberately NOT here: it is
-// identity, uploaded once at mount (see below), not a per-frame channel — so
-// the source adds it explicitly rather than this loop paying for it 60x a
-// second.
+// Exported for the canvas source. `uGene` is identity uploaded once at mount,
+// not a per-frame channel, so it is deliberately absent from this list.
 export const UNIFORMS = [
   "iResolution", "iTime", "uListening", "uThinking", "uWorking", "uSpeaking",
   "uLevel", "uOnset", "uBands", "uWave", "uWaveHead", "uReadout", "uReduced",

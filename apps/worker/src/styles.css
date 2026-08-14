@@ -952,58 +952,11 @@ h1, h2, h3, p { margin-top: 0; }
   text-align: center;
 }
 .welcome-glyph { color: var(--text-4); }
-.welcome .starters {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 100%;
-  margin: 0;
-  padding-left: 12px;
-}
-.welcome .starter-card {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 11px;
-  height: 32px;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--text-2);
-  font-size: 13.5px;
-  text-align: left;
-  cursor: pointer;
-}
-.welcome .starter-card:hover { color: var(--text); background: var(--hover); }
-.welcome .starter-icon { display: flex; color: var(--text-3); }
-.starter-title { font-size: 13.5px; line-height: 1.35; }
-.starter-desc { color: var(--text-3); font-size: 12px; line-height: 1.45; }
 @media (max-width: 560px) {
   .transcript.new-chat-transcript { display: block; }
   .welcome { margin-top: 34px; }
 }
 .welcome > p { max-width: 540px; margin: 0; color: var(--text-3); font-size: 13.5px; line-height: 1.6; }
-.starters {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 11px;
-  width: 100%;
-  margin-top: 16px;
-}
-.starter-card {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  padding: 15px 15px 17px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  color: var(--text);
-  background: var(--card);
-  font-size: 13.5px;
-  line-height: 1.35;
-  text-align: left;
-}
 .message { max-width: 745px; margin: 0 auto 24px; }
 .message-author { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; font-size: 12.5px; color: var(--text-2); }
 .message-author .familiar-orb { width: 28px; height: 28px; }

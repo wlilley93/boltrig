@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { parseCharacterBundle } from "@wlilley93/boltrig-web-sdk";
+import { bundleVoiceId, parseCharacterBundle } from "@wlilley93/boltrig-web-sdk";
 import familiarBundle from "../src/bundles/familiar/character.json";
 import jarvisBundle from "../src/bundles/jarvis/character.json";
 import {
@@ -79,5 +79,26 @@ describe("Jarvis as a character bundle", () => {
   it("and the Familiar is refused by his, for the same reason in reverse", () => {
     expect(() => characterFromBundle(familiarBundle, [jarvisSource]))
       .toThrow(CharacterBundleUnsupported);
+  });
+});
+
+describe("Jarvis's voice", () => {
+  it("names the Fish Audio id it wants to be spoken with", () => {
+    const manifest = parseCharacterBundle(jarvisBundle);
+    expect(bundleVoiceId(manifest, "fish")).toBe("d2d43385f4a749389dda58ecff883bb5");
+  });
+
+  // "Absent voice means a silent character, never a substituted one." A
+  // provider the bundle does not name must come back empty so the caller stays
+  // silent, rather than borrowing whichever voice happens to be configured.
+  it("says nothing for a provider it does not name", () => {
+    const manifest = parseCharacterBundle(jarvisBundle);
+    expect(bundleVoiceId(manifest, "elevenlabs")).toBeUndefined();
+    expect(bundleVoiceId(manifest, "pocket-voice")).toBeUndefined();
+  });
+
+  it("says nothing for the Familiar, who declares no voice at all", () => {
+    const manifest = parseCharacterBundle(familiarBundle);
+    expect(bundleVoiceId(manifest, "fish")).toBeUndefined();
   });
 });

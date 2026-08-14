@@ -47,8 +47,6 @@
         ".new-chat-transcript .welcome h1",
         ".new-chat-transcript .composer.new-context",
         ".new-chat-transcript .composer-frame",
-        ".new-chat-transcript .starters",
-        ".new-chat-transcript .starter-card",
         ".new-chat-transcript button[aria-label=\"Model\"]",
         ".new-chat-transcript .composer-posture",
         ".voice-intro",
@@ -60,6 +58,8 @@
         ".conversation-search",
         ".side-recents-label",
         ".side-workspace",
+        ".new-chat-transcript .starters",
+        ".new-chat-transcript .starter-card",
         ".right-rail",
         ".right-rail .rail-group[aria-label=\"Files\"]",
         ".right-rail .rail-group[aria-label=\"Changes\"]",
@@ -79,7 +79,6 @@
         ".new-chat-transcript .welcome h1",
         ".new-chat-transcript .composer.new-context",
         ".new-chat-transcript button[aria-label=\"Model\"]",
-        ".new-chat-transcript .starter-card",
         ".voice-intro"
       ],
       "required_visible_counts": [
@@ -97,22 +96,16 @@
         { "selector": "#shell-pinned-tasks.shell-task-group-label", "height": 20 },
         { "selector": "#shell-recent-tasks.shell-task-group-label", "height": 20 },
         { "selector": ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-main", "height": 31 },
-        { "selector": ".new-chat-transcript .welcome", "x": 480.5, "y": 255.5, "width": 745, "height": 405 },
-        { "selector": ".new-chat-transcript .welcome h1", "x": 480.5, "y": 255.5, "width": 745, "height": 38 },
-        { "selector": ".new-chat-transcript .composer.new-context", "x": 480.5, "y": 382.5, "width": 745, "height": 122 },
-        { "selector": ".new-chat-transcript .composer-frame", "x": 480.5, "y": 382.5, "width": 745, "height": 89 },
-        { "selector": ".new-chat-transcript .starters", "x": 480.5, "y": 526.5, "width": 745, "height": 134 },
-        { "selector": ".new-chat-transcript .starter-card", "height": 32 },
-        { "selector": ".voice-intro", "x": 480.5, "y": 315.5, "width": 745, "height": 57 }
+        { "selector": ".new-chat-transcript .welcome", "x": 480.5, "y": 333.5, "width": 745, "height": 249 },
+        { "selector": ".new-chat-transcript .welcome h1", "x": 480.5, "y": 333.5, "width": 745, "height": 38 },
+        { "selector": ".new-chat-transcript .composer.new-context", "x": 480.5, "y": 460.5, "width": 745, "height": 122 },
+        { "selector": ".new-chat-transcript .composer-frame", "x": 480.5, "y": 460.5, "width": 745, "height": 89 },
+        { "selector": ".voice-intro", "x": 480.5, "y": 393.5, "width": 745, "height": 57 }
       ],
       "required_text": [
         "Pinned",
         "Recents",
         "What needs doing?",
-        "Find something out",
-        "Draft something",
-        "Work through a list",
-        "Keep an eye on something",
         "Talk to boltrig",
         "Automatic · openai/gpt-5.4",
         "Approve for me"
@@ -127,7 +120,11 @@
         "Everything responding",
         "This run",
         "acme · production",
-        "No project selected"
+        "No project selected",
+        "Find something out",
+        "Draft something",
+        "Work through a list",
+        "Keep an eye on something"
       ],
       "direction_records": ["DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018"],
       "known_contract_bound_deviations": [
@@ -401,8 +398,8 @@
         ".plugins-group:first-child .plugins-row:first-child .plugins-row-toggle"
       ],
       "required_geometry": [
-        { "selector": ".plugins-pane", "x": 401, "width": 900 },
-        { "selector": ".plugins-alert", "x": 433, "y": 162.5625, "width": 836, "height": 64.125 },
+        { "selector": ".plugins-pane", "x": 403, "width": 900 },
+        { "selector": ".plugins-alert", "x": 435, "y": 162.5625, "width": 836, "height": 64.125 },
         { "selector": ".plugins-search", "y": 277.6875, "height": 38 },
         { "selector": ".plugins-group:first-child .plugins-row:first-child", "height": 57 },
         { "selector": ".plugins-group:first-child .plugins-row:first-child .plugins-row-toggle", "height": 56 }

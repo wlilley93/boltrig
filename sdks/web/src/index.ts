@@ -48,6 +48,7 @@ export {
   CHARACTER_BUNDLE_SCHEMA_VERSION,
   CharacterBundleError,
   bundleReadsPhenotype,
+  bundleVoiceId,
   bundleWantsBudgets,
   bundleWantsCamera,
   bundleWantsPresence,

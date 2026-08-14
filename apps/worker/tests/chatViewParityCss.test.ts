@@ -47,7 +47,7 @@ describe("Chat parity geometry", () => {
     expect(workerCss).toMatch(/\.welcome h1,\s*\n\.welcome h2\s*\{[^}]*height:\s*38px/);
     expect(workerCss).toMatch(/\.welcome h1,\s*\n\.welcome h2\s*\{[^}]*line-height:\s*34px/);
     expect(workerCss).toMatch(/\.new-chat-transcript \.welcome\s*\{[^}]*transform:\s*none/);
-    expect(workerCss).toMatch(/\.welcome \.starter-card\s*\{[^}]*height:\s*32px/);
+    expect(workerCss).not.toContain(".welcome .starter-card");
   });
 
   it("uses the canonical inner turn gutter and section rhythm", () => {

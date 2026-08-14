@@ -77,7 +77,7 @@ function LocalChatContent({ controller, conversationId, newTask, onCommandPalett
       role="region"
       tabIndex={0}
     >
-      {newTask && <Welcome onStarter={controller.setDraft}>
+      {newTask && <Welcome>
         <LocalWorkspacePicker
           roots={controller.roots}
           rootId={controller.rootId}
