@@ -1504,7 +1504,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/rbac.py:224	narrow_grants_to
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:216	list_workspaces_for_user	Re-authorize a session's active workspace against CURRENT membership (D4).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:257	request.state	Build the first-party session ``PrincipalResolver`` (D3).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/approval_gate.py:131	held_call.name_redeemer	Refuse to MINT an approval no lane could ever redeem (decision 0018, Order 5).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/camera_agent_routes.py:273	parse_enrollment	Record the enrolled face as KERNEL data, published by the host agent.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/camera_agent_routes.py:300	parse_enrollment	Record the enrolled face as KERNEL data, published by the host agent.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/channel_notify.py:126	eligible_approval_responders	Enqueue an APPROVAL request's notice to every eligible approver.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/channel_policy.py:88	authority.context_for	Stamp the resolved narrowing onto the durable work item.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/events.py:173	max_seq	Record an event and fan it out to current subscribers (non-blocking).
