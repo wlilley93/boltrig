@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from boltrig.adapters.base import VerbSpec
+
 ADAPTER_KINDS = ("craft", "register")
 _DIGEST = {"type": "string", "minLength": 64, "maxLength": 64,
            "pattern": "^[0-9a-f]{64}$"}
@@ -86,3 +88,70 @@ def promote_schema() -> dict[str, Any]:
         "required": ["endpoint_id", "corpus_digest", "price_micros_per_token"],
         "additionalProperties": False,
     }
+
+
+def verb_specs() -> list[VerbSpec]:
+    """The adapter's five verbs, as declared to the kernel.
+
+    Lives here rather than on the adapter because it is a pure function of
+    the schemas above and never touches instance state -- and because
+    adapter.py sits against the 400-line structural ratchet, which is what
+    moved it.
+    """
+    any_out = {"type": "object"}
+    return [
+        VerbSpec(
+            "distill.corpus.build",
+            "distill",
+            corpus_schema(),
+            any_out,
+            "low",
+            "Derive the tenant's training corpus from the governed record "
+            "(erasure-filtered, PII-scrubbed, digest-pinned) and ship it to "
+            "the local trainer sidecar.",
+            idempotency_mode="disabled",  # re-derives; the digest is the identity
+        ),
+        VerbSpec(
+            "distill.train",
+            "distill",
+            train_schema(),
+            any_out,
+            "high",
+            "Train a candidate LoRA from the PINNED BASE over a shipped "
+            "corpus. There is no field to name any other starting point.",
+            idempotency_mode="disabled",
+        ),
+        VerbSpec(
+            "distill.gate",
+            "distill",
+            gate_schema(),
+            any_out,
+            "low",
+            "Score a candidate against the incumbent, mechanically: eval "
+            "cases for craft, held-out likelihood for register. Writes an "
+            "audit row whether it promotes or holds.",
+            idempotency_mode="disabled",
+        ),
+        VerbSpec(
+            "distill.promote",
+            "distill",
+            promote_schema(),
+            any_out,
+            "high",
+            "Activate a candidate endpoint that holds a passing gate "
+            "receipt, and price it in the same act.",
+            idempotency_mode="disabled",
+        ),
+        VerbSpec(
+            "distill.night",
+            "distill",
+            night_schema(),
+            any_out,
+            "high",
+            "One night of sleep distillation: build the corpus, train from "
+            "the pinned base, gate mechanically. Does NOT promote unless "
+            "auto_promote is set; a passing gate leaves the receipt for a "
+            "separate distill.promote.",
+            idempotency_mode="disabled",
+        ),
+    ]

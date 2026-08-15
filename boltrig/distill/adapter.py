@@ -28,6 +28,7 @@ from boltrig.distill.adapter_specs import (
     night_schema,
     promote_schema,
     train_schema,
+    verb_specs,
 )
 from boltrig.distill.corpus import (
     CorpusDataClassRefused,
@@ -67,63 +68,7 @@ class DistillAdapter(HttpAdapter):
         self._transport = transport
 
     def describe(self) -> list[VerbSpec]:
-        any_out = {"type": "object"}
-        return [
-            VerbSpec(
-                "distill.corpus.build",
-                "distill",
-                corpus_schema(),
-                any_out,
-                "low",
-                "Derive the tenant's training corpus from the governed record "
-                "(erasure-filtered, PII-scrubbed, digest-pinned) and ship it to "
-                "the local trainer sidecar.",
-                idempotency_mode="disabled",  # re-derives; the digest is the identity
-            ),
-            VerbSpec(
-                "distill.train",
-                "distill",
-                train_schema(),
-                any_out,
-                "high",
-                "Train a candidate LoRA from the PINNED BASE over a shipped "
-                "corpus. There is no field to name any other starting point.",
-                idempotency_mode="disabled",
-            ),
-            VerbSpec(
-                "distill.gate",
-                "distill",
-                gate_schema(),
-                any_out,
-                "low",
-                "Score a candidate against the incumbent, mechanically: eval "
-                "cases for craft, held-out likelihood for register. Writes an "
-                "audit row whether it promotes or holds.",
-                idempotency_mode="disabled",
-            ),
-            VerbSpec(
-                "distill.promote",
-                "distill",
-                promote_schema(),
-                any_out,
-                "high",
-                "Activate a candidate endpoint that holds a passing gate "
-                "receipt, and price it in the same act.",
-                idempotency_mode="disabled",
-            ),
-            VerbSpec(
-                "distill.night",
-                "distill",
-                night_schema(),
-                any_out,
-                "high",
-                "One night of sleep distillation: build the corpus, train from "
-                "the pinned base, gate mechanically. Does NOT promote unless "
-                "auto_promote is set; a passing gate leaves the receipt for a "
-                "separate distill.promote.",
-                idempotency_mode="disabled",
-            ),
-        ]
+        return verb_specs()
 
     def _handlers(self) -> dict[str, Handler]:
         return {
