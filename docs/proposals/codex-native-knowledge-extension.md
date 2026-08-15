@@ -4,7 +4,7 @@
 - Date: 2026-07-21
 - Runtime boundary: decision 0012, Codex is the only target agent runtime
 - Decision: 0015 supersedes decision 0011's Mem0-primary deployment default
-- Accepted amendment: Cognee ships enabled; other projections are one-click add-ons
+- Accepted amendment: Cognee is the only shipped projection; placeholder providers are retired
 - ADR: `docs/decisions/0015-codex-native-knowledge-extension.md`
 
 ## 1. Decision in one page
@@ -23,13 +23,10 @@ mandatory physical storage roles:
    indexes, and pgvector embeddings.
 
 Everything beyond the canonical storage pair is rebuildable. Cognee is the
-shipped default projection; the other engines are optional:
+only shipped projection:
 
 - Cognee ships enabled to compile entities and relationships as an enrichment
   projection, while remaining rebuildable from Boltrig's canonical records.
-- Supermemory is available as a one-click managed connector or retrieval
-  projection.
-- Mem0 is available as a one-click compatibility projection.
 - OpenSearch, Qdrant, Neo4j, and Iceberg are scale-triggered projections, not
   day-one dependencies.
 - GitHub remains authoritative for code and selected reviewed text, and is a
@@ -64,7 +61,7 @@ canonical control data        canonical bytes
         |
         v
 Rebuildable projections
-Cognee | Supermemory | OpenSearch | Qdrant | graph engine
+Cognee | future measured search/vector/graph engines
 ```
 
 There is therefore no honest single-database answer. There is one Boltrig
@@ -147,9 +144,11 @@ records, representations, stable segments, versioned embedding records,
 Postgres full-text plus pgvector retrieval, typed context, governed HTTP/MCP
 tools and resources, the Codex retrieval skill, the Knowledge console panel,
 provider state, projection status, and reference-safe erasure. The Finder-like
-desktop experience, source connectors, additional datatypes, durable projection
-worker, and credential-backed Supermemory/Mem0 Knowledge adapters remain later
-phases.
+desktop experience, source connectors, additional datatypes, and durable
+projection worker remain later phases. Mem0 and Supermemory were removed from
+the shipped catalogue on 2026-08-15 rather than leaving non-functional choices.
+Cognee now reuses the caller's ordinary scoped chat connection through Bifrost;
+it has no separate browser credential path, and embeddings run locally.
 
 The existing memory surface correctly says it is an evidence shelf, not a
 document database. Knowledge should add the missing document and corpus plane
@@ -165,8 +164,8 @@ the choice. Boltrig now needs a complete canonical catalogue and evidence model.
 Once that exists, making an external memory product the primary recall source
 adds another authority-shaped dependency without filling the object/catalogue
 gap. ADR 0015 restores the native ledger and index as canonical, ships Cognee
-as the enabled enrichment compiler, and demotes Mem0 and Supermemory to
-governed add-on projections.
+as the enabled enrichment compiler. Unimplemented providers do not enter the
+governed catalogue.
 
 The Codex target is also not fully live yet. Decision 0012 is accepted, but the
 current rollout stack remains flag-gated and defaults to legacy execution. This
@@ -526,8 +525,6 @@ existing projection-status pattern.
 | --- | --- | --- |
 | Native Postgres/pgvector | exact, lexical, structured, and configured vector retrieval | on |
 | Cognee | bundled entity/relationship extraction and deep corpus enrichment | on |
-| Supermemory | one-click managed connector/retrieval accelerator | off |
-| Mem0 | one-click compatibility memory projection only | off |
 | OpenSearch | high-scale lexical/hybrid index when measured need appears | absent |
 | Qdrant | high-scale vector projection when measured need appears | absent |
 | Neo4j or equivalent | complex recurring multi-hop analysis | absent |
@@ -835,8 +832,8 @@ and access policies.
 - Supersede decision 0011's Mem0-primary default.
 - Preserve decision 0012's Codex-only target.
 - Name Postgres/pgvector plus ObjectVault as mandatory.
-- Ship Cognee enabled as a rebuildable compiler; expose Mem0, Supermemory, and
-  future engines through the governed add-on catalogue.
+- Ship Cognee enabled as a rebuildable compiler; add a future engine only after
+  its governed lifecycle is complete.
 
 Exit: no active architecture document gives an external memory product or a
 legacy runtime ownership of Knowledge.
@@ -964,7 +961,6 @@ ADOPT
   ObjectVault with filesystem and S3-compatible implementations
   Codex as the only Boltrig agent, consuming Knowledge through MCP
   Cognee bundled and enabled as non-authoritative knowledge compilation
-  Supermemory and Mem0 as one-click, non-authoritative projections
 
 DEFER
   specialist vector/search/graph/lake databases

@@ -537,17 +537,17 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/chat/ModelChip.tsx": {
-      "file_lines": 170,
-      "max_function_lines": 98,
+      "file_lines": 167,
+      "max_function_lines": 93,
       "max_parameters": 3,
       "max_complexity": 9,
       "max_nesting_depth": 2,
       "over_limit_functions": [
         {
           "name": "ModelChip",
-          "line": 21,
+          "line": 23,
           "column": 1,
-          "lines": 98,
+          "lines": 93,
           "parameters": 1,
           "complexity": 8,
           "nesting_depth": 1
@@ -723,33 +723,33 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/ChatView.tsx": {
-      "file_lines": 1349,
-      "max_function_lines": 1268,
+      "file_lines": 1337,
+      "max_function_lines": 1258,
       "max_parameters": 3,
-      "max_complexity": 105,
+      "max_complexity": 102,
       "max_nesting_depth": 4,
       "over_limit_functions": [
         {
           "name": "ChatView",
-          "line": 82,
+          "line": 80,
           "column": 1,
-          "lines": 1268,
+          "lines": 1258,
           "parameters": 1,
-          "complexity": 105,
+          "complexity": 102,
           "nesting_depth": 4
         },
         {
           "name": "ChatView.send",
-          "line": 348,
+          "line": 343,
           "column": 3,
-          "lines": 110,
+          "lines": 111,
           "parameters": 2,
           "complexity": 34,
           "nesting_depth": 4
         },
         {
           "name": "ChatView.reattach",
-          "line": 662,
+          "line": 659,
           "column": 3,
           "lines": 67,
           "parameters": 3,
@@ -758,7 +758,7 @@
         },
         {
           "name": "ChatView.acceptLiveEvent",
-          "line": 730,
+          "line": 727,
           "column": 3,
           "lines": 61,
           "parameters": 2,
@@ -771,7 +771,7 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/CommandPalette.tsx": {
-      "file_lines": 565,
+      "file_lines": 564,
       "max_function_lines": 329,
       "max_parameters": 2,
       "max_complexity": 13,
@@ -779,7 +779,7 @@
       "over_limit_functions": [
         {
           "name": "CommandPalette",
-          "line": 94,
+          "line": 92,
           "column": 1,
           "lines": 329,
           "parameters": 1,
@@ -835,19 +835,19 @@
     },
     "apps/worker/src/components/DeviceSettings.tsx": {
       "file_lines": 517,
-      "max_function_lines": 425,
+      "max_function_lines": 421,
       "max_parameters": 2,
-      "max_complexity": 42,
+      "max_complexity": 39,
       "max_nesting_depth": 4,
       "over_limit_functions": [
         {
           "name": "DeviceSettings",
-          "line": 28,
+          "line": 32,
           "column": 1,
-          "lines": 425,
+          "lines": 421,
           "parameters": 0,
-          "complexity": 42,
-          "nesting_depth": 4
+          "complexity": 39,
+          "nesting_depth": 3
         }
       ],
       "owner": "worker-maintainers",
@@ -981,24 +981,24 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/IntegrationsView.tsx": {
-      "file_lines": 1601,
-      "max_function_lines": 721,
+      "file_lines": 1596,
+      "max_function_lines": 711,
       "max_parameters": 4,
       "max_complexity": 38,
       "max_nesting_depth": 3,
       "over_limit_functions": [
         {
           "name": "IntegrationsView",
-          "line": 93,
+          "line": 98,
           "column": 1,
-          "lines": 721,
+          "lines": 711,
           "parameters": 0,
-          "complexity": 28,
+          "complexity": 22,
           "nesting_depth": 2
         },
         {
           "name": "IntegrationsView.connect",
-          "line": 367,
+          "line": 373,
           "column": 3,
           "lines": 60,
           "parameters": 1,
@@ -1007,7 +1007,7 @@
         },
         {
           "name": "IntegrationRow",
-          "line": 815,
+          "line": 810,
           "column": 1,
           "lines": 174,
           "parameters": 1,
@@ -1596,7 +1596,7 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/settings/CompactSections.tsx": {
-      "file_lines": 774,
+      "file_lines": 641,
       "max_function_lines": 154,
       "max_parameters": 3,
       "max_complexity": 23,
@@ -1604,7 +1604,7 @@
       "over_limit_functions": [
         {
           "name": "AppearanceGroup",
-          "line": 88,
+          "line": 82,
           "column": 1,
           "lines": 154,
           "parameters": 1,
@@ -1613,7 +1613,7 @@
         },
         {
           "name": "useAppearanceSettings",
-          "line": 243,
+          "line": 237,
           "column": 1,
           "lines": 91,
           "parameters": 0,
@@ -1622,21 +1622,12 @@
         },
         {
           "name": "CompactReachingYouSection",
-          "line": 385,
+          "line": 379,
           "column": 1,
           "lines": 95,
           "parameters": 0,
           "complexity": 4,
           "nesting_depth": 2
-        },
-        {
-          "name": "CompactKnowledgeSection",
-          "line": 625,
-          "column": 1,
-          "lines": 118,
-          "parameters": 0,
-          "complexity": 6,
-          "nesting_depth": 1
         }
       ],
       "owner": "worker-maintainers",
@@ -1665,24 +1656,24 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/settings/ModelSettingsSection.tsx": {
-      "file_lines": 530,
-      "max_function_lines": 419,
+      "file_lines": 517,
+      "max_function_lines": 407,
       "max_parameters": 2,
       "max_complexity": 19,
       "max_nesting_depth": 3,
       "over_limit_functions": [
         {
           "name": "ModelSettingsSection",
-          "line": 112,
+          "line": 111,
           "column": 1,
-          "lines": 419,
+          "lines": 407,
           "parameters": 1,
-          "complexity": 7,
+          "complexity": 6,
           "nesting_depth": 0
         },
         {
           "name": "ModelSettingsSection.save",
-          "line": 313,
+          "line": 308,
           "column": 3,
           "lines": 78,
           "parameters": 1,
@@ -1745,7 +1736,7 @@
       "over_limit_functions": [
         {
           "name": "Sidebar",
-          "line": 69,
+          "line": 67,
           "column": 1,
           "lines": 380,
           "parameters": 1,
@@ -1758,24 +1749,24 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/VoiceCall.tsx": {
-      "file_lines": 1669,
-      "max_function_lines": 1081,
+      "file_lines": 1535,
+      "max_function_lines": 954,
       "max_parameters": 3,
-      "max_complexity": 57,
+      "max_complexity": 34,
       "max_nesting_depth": 4,
       "over_limit_functions": [
         {
           "name": "VoiceCall",
-          "line": 190,
+          "line": 191,
           "column": 1,
-          "lines": 1081,
+          "lines": 954,
           "parameters": 1,
-          "complexity": 57,
+          "complexity": 34,
           "nesting_depth": 2
         },
         {
           "name": "VoiceCall.useLayoutEffect[0]",
-          "line": 265,
+          "line": 261,
           "column": 19,
           "lines": 105,
           "parameters": 0,
@@ -1784,16 +1775,16 @@
         },
         {
           "name": "VoiceCall.connect",
-          "line": 588,
+          "line": 564,
           "column": 3,
-          "lines": 222,
+          "lines": 223,
           "parameters": 2,
           "complexity": 9,
           "nesting_depth": 2
         },
         {
           "name": "VoiceCall.connect.<anonymous>",
-          "line": 681,
+          "line": 658,
           "column": 31,
           "lines": 118,
           "parameters": 2,
@@ -1802,7 +1793,7 @@
         },
         {
           "name": "VoiceCall.applyCallEvent",
-          "line": 937,
+          "line": 936,
           "column": 3,
           "lines": 70,
           "parameters": 2,

@@ -101,16 +101,31 @@ public-product gate must remain green: provider configuration is BYO Bifrost,
 and only Familiar and Jarvis ship as companions.
 
 Build locally, transfer into a new timestamped `dist.candidate-*` directory,
-and compare a deterministic relative-path/content digest before swapping. A
+and compare a deterministic relative-path/content digest before promotion. A
 macOS tar stream can contain AppleDouble `._*` metadata; remove those files
-from the candidate before comparing or serving it. Never merge the candidate
-into the live directory. Atomically rename the current directory to a unique
-`dist.rollback-*`, rename the verified candidate to `dist`, and restart with
-`sudo -n systemctl restart boltrig-dev-preview.service`. An unprivileged
-`systemctl` command cannot restart this system unit. Allow the preview process
-up to ten seconds to bind its port before deciding it failed; an immediate
-probe can produce a false negative. On a real failure, stop the unit, move the
-failed candidate aside, restore the rollback directory, and restart.
+from the candidate before comparing or serving it. Keep the candidate and live
+directory distinct; never copy candidate files over the serving tree.
+
+An atomic directory swap must not delete the immutable hashed assets used by
+already-open browser sessions. After the pristine candidate digest matches the
+local build, copy only absent files from the live `dist/assets` directory into
+the candidate with no-overwrite semantics (for example, GNU
+`cp --update=none` or `rsync --ignore-existing`). Never copy
+`index.html`, never overwrite a candidate asset, and record a second digest for
+the final compatibility tree. Keep at least the immediately preceding release's
+hashed assets for the active-session grace period. Hosted/CDN releases follow
+the same ordering: publish new immutable assets first, publish the new index
+last, and defer old-asset deletion. Otherwise a user crossing the release while
+finishing onboarding or changing route can receive a lazy-chunk 404 and a blank
+screen even though a refresh succeeds.
+
+Atomically rename the current directory to a unique `dist.rollback-*`, rename
+the verified compatibility candidate to `dist`, and restart with `sudo -n
+systemctl restart boltrig-dev-preview.service`. An unprivileged `systemctl`
+command cannot restart this system unit. Allow the preview process up to ten
+seconds to bind its port before deciding it failed; an immediate probe can
+produce a false negative. On a real failure, stop the unit, move the failed
+candidate aside, restore the rollback directory, and restart.
 
 Acceptance requires all three public endpoints to return HTTP 200:
 
@@ -123,6 +138,38 @@ https://dev.boltrig.io/readyz
 Keep the static rollback and the separately named backend rollback until the
 authenticated UI smoke is complete. A static-only deploy does not authorize a
 backend, database, production, or CV/opbox change.
+
+The Worker also carries a one-shot dynamic-import recovery boundary. It reloads
+once per failed chunk fingerprint and then renders an explicit Reload action;
+that is a last-resort guard, not a substitute for retaining immutable assets.
+
+When an explicitly authorised development rollout also replaces the kernel or
+Hatchet task-worker source, validate the candidate with the pinned images before
+promotion and take a compressed database dump before applying migrations. Keep
+the stopped kernel container, the previous backend/config/env directories, and
+that dump under the same deployment timestamp until the authenticated smoke is
+complete. `manifest.yaml` is not a secret and must remain readable by the
+images' unprivileged `boltrig` user (normally mode `0644` on a root-owned or
+operator-owned host path); mode `0600` owned by the host operator makes the
+bind-mounted file unreadable and puts the kernel into a restart loop. Secrets
+remain in the mode-`0600` env file. Recreate or restart `hatchet-worker` after
+promoting the manifest: its entrypoint decides whether to start declared local
+helpers before the Python task listener begins, so changing the bind-mounted
+file underneath an already-running worker is insufficient. Acceptance includes
+the worker's own `127.0.0.1:8001/health` receipt in addition to the three public
+endpoints above.
+
+A bind-mounted source update does not install new Python packages. If the
+current lockfile adds a runtime dependency, a container restart can therefore
+look healthy until the first request reaches the new import. Rebuild the normal
+development images, or derive a temporary development overlay from each exact
+currently deployed image digest with `deploy/dev-runtime-overlay.Dockerfile`.
+The overlay must install the complete current `requirements-lock.txt` with
+`--require-hashes`; do not `pip install` an individual package into a running
+container. Record both base digests and the derived image IDs, validate the
+candidate source against those images, and retain the old stopped containers for
+rollback. This overlay is never a production release artifact: production uses
+the full signed kernel and fleet Dockerfiles.
 
 #### Hosted-development BYO model hygiene
 
@@ -148,11 +195,63 @@ truthful pre-onboarding state and cloud sends must remain unavailable.
 The organisation-level `allow_own_ai_keys` flag is changed only through the
 authenticated, approval-gated `PATCH /v1/orgs/current` path. It enables the
 sealed org/workspace/user provider-native hierarchy in **Account → Access**;
-it does not configure Bifrost. The shipping Codex→Bifrost lane still requires a
-provider configured in Bifrost's server-owned admin/secret surface. Do not copy
-a personal root key into the kernel or Bifrost merely to make a smoke test pass.
-Per-user Bifrost onboarding requires a separately reviewed tenant-bound
-provider/virtual-key lifecycle and runtime binding.
+it does not expose a provider key to the browser or an agent. Per-user
+onboarding now completes the server-owned Bifrost lifecycle: the kernel consumes
+the sealed proposal, reconciles a tenant/scope-bound provider key, creates an
+exact-model virtual key, and retains only sealed references. Trusted Codex calls
+receive the virtual key at the model-proxy boundary; the browser, cell and agent
+never receive either the provider credential or that virtual key.
+
+The onboarding proposal is deliberately two-step. The first Continue submits
+the sealed proposal; the second explicitly approves/applies it through the
+ordinary HITL policy. A pending or expired proposal is not configured state.
+Expired proposals cannot be recovered because their plaintext key was never
+stored, so the user must re-enter the provider key. Replacing a key for the same
+scope updates the stable Bifrost provider-key binding; changing provider/model
+rotates the virtual key. Removal revokes the Bifrost virtual key and provider
+key before deleting the local sealed configuration and fails closed if gateway
+revocation cannot be confirmed.
+
+Acceptance for a BYO-model onboarding deployment is therefore all of:
+
+1. `GET /v1/ai-keys` reports the intended exact model with
+   `gateway_ready=true` (never inspect or log secret material);
+2. `GET /v1/chat/model-choices` reports that exact model as the personal
+   default, with `default_source=personal`;
+3. the model trigger names the exact model, not `Automatic`, before a send;
+4. a hard browser refresh preserves the same exact model and leaves Send
+   available; and
+5. the resulting trusted-runtime/model-proxy receipt binds the same model.
+
+`Automatic` is reserved for a runnable platform default. Do not copy an
+operator's personal root key into the kernel or a shared Bifrost configuration
+to make this smoke pass.
+
+#### Voice onboarding and hosted speech services
+
+The optional Voice onboarding step uses the same write-only integration-secret
+boundary as other governed connections. The browser submits provider-declared
+fields once and clears secret inputs before awaiting the response; keys are not
+returned to the Worker, stored in browser state, or exposed to an agent. The
+shipped hosted choices are xAI, ElevenLabs, Deepgram, OpenAI Audio, Fish Audio,
+and an OpenAI-compatible speech endpoint. A user may skip this step without
+blocking onboarding and add voice later.
+
+Register only the adapters that the deployment can actually reach. Official
+provider adapters use their fixed HTTPS origins. A custom/self-hosted speech
+connection must use a canonical HTTPS origin that is reachable from the Boltrig
+server and admitted by the ordinary network allowlist; it is not a browser-to-
+LAN tunnel. Private on-device Pocket/Whisper-style services belong behind the
+desktop device boundary rather than in a hosted-server connection. Connection
+setup is not routing authority: changing the tenant-wide STT/TTS or realtime
+binding remains a separate governed operation, so onboarding must not claim a
+saved key is already the active voice route.
+
+For a voice-enabled deployment, verify the catalogue and connection projection
+without inspecting secret material, then exercise one bounded transcription and
+one bounded synthesis call through the kernel. A degraded initial adapter health
+is expected before the first authenticated provider call and must not be
+presented as a successful provider probe.
 
 ### Channel-gateway bootstrap and failover (not production-admitted yet)
 
@@ -339,19 +438,20 @@ docker run --rm --user 0:0 --entrypoint sh \
 ```
 
 Never run a recursive ownership change against an unresolved variable, a host
-root, or a mounted personal profile. Fleet and Hatchet run independent Chromium
-processes and must not share a browser profile lock:
-
-```env
-BOLTRIG_FLEET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/fleet-worker
-BOLTRIG_HATCHET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/hatchet-worker
-```
-
-They may share the deployment-owned volume because their roots differ. The
-Fleet entrypoint exports its own loopback `BU_CDP_URL`; operators must not point
-it at a desktop browser. If an image build or headless server asks a human to
-enable `chrome://inspect` or approve remote debugging, reject that image: the
-CLI has fallen off the stack-owned browser path.
+root, or a mounted personal profile. One `browser-executor` service owns the
+deployment's Browser Use state and Chromium process. Kernel, Fleet, and Hatchet
+reach it only through `/run/boltrig-browser/browser.sock`; the socket volume is
+read-only everywhere except the executor, and the executor publishes no port.
+The executor is the sole member of the `browser-egress` network. Chromium is
+forced through a loopback proxy that re-applies the public-address/domain policy
+after redirects and page clicks, connects to the single vetted IP, disables
+non-proxied WebRTC UDP and QUIC, and accepts only ports 80/443. Do not add the
+executor to `default`, bypass the proxy, or widen its ports to reach an internal
+application; use a reviewed public endpoint or a purpose-built kernel adapter.
+Do not add browser-profile mounts back to the callers or point `BU_CDP_URL` at a
+desktop browser. If an image build or headless server asks a human to enable
+`chrome://inspect` or approve remote debugging, reject that image: the CLI has
+fallen off the stack-owned browser path.
 
 ### Keep Hatchet identity and recovery state together
 
@@ -475,50 +575,40 @@ app does not encrypt the disk; the deployment does, with no image change:
 - Air-gapped: set `AIR_GAPPED=1`, disable hosted model endpoints, and run the
   `local-model` profile; no component requires internet to start (SEC-20).
 
-## Herdr/OpenCode/Browser CLI stack state
+## Browser CLI stack state
 
-Herdr, OpenCode, and Browser Use CLI state are stack components. The first-party
-images ship pinned CLI binaries (`herdr` in the kernel image, `opencode` and
-`browser-use` in the fleet-worker image), and production must use clean
-service-owned state roots, not an operator's personal terminal, coding-agent, or
-browser profile:
+Browser Use is the only separately shipped stack tool. The fleet image installs
+its hash-locked CLI and production uses separate service-owned roots for the
+ordinary and durable workers, never an operator's personal browser profile:
 
 ```env
-BOLTRIG_HERDR_HOME=/var/lib/boltrig/herdr
-BOLTRIG_OPENCODE_HOME=/var/lib/boltrig/opencode
 BOLTRIG_FLEET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/fleet-worker
 BOLTRIG_HATCHET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/hatchet-worker
 ```
 
 The base compose file backs these with named volumes. The first-party images
 create the root, home, config, data, and state directories as the unprivileged
-`boltrig` user so fresh named volumes start writable by the service; Browser CLI
-also gets a stack-owned cache directory. Do not bind-mount `~/.config/herdr`,
-`~/.local/share/herdr`, `~/.config/opencode`, `.opencode`, or personal browser
-profile state into the stack. Use `make release-validate` before production
-cutover. It runs doctor against the operator configuration inside the verified
-candidate-image context, where all three stack-owned executables exist. A bare
+`boltrig` user so fresh named volumes start writable by the service, including a
+stack-owned cache directory. Do not bind-mount personal browser profile state
+into the stack. Use `make release-validate` before production cutover. It runs
+doctor against the operator configuration inside the verified fleet-image
+context, where the stack-owned executable exists. A bare
 host-side `boltrig doctor --production` remains a useful diagnostic, but its CLI
 checks describe that host and must not be used as release-image evidence.
 
-To upgrade the shipped CLIs, change the pinned Herdr/OpenCode version and sha256
-build args in `deploy/kernel.Dockerfile` / `deploy/fleet.Dockerfile`, or update
-`deploy/browser-cli-requirements.in` and regenerate
+To upgrade Browser Use, update `deploy/browser-cli-requirements.in` and regenerate
 `deploy/browser-cli-requirements.txt` for Browser Use CLI with
 `uv pip compile deploy/browser-cli-requirements.in --overrides deploy/browser-cli-overrides.txt --generate-hashes --python-platform linux -o deploy/browser-cli-requirements.txt`.
 Rebuild the images after any change. Production doctor still requires
 `browser-use` to resolve from the deployed stack path before browser verbs are
-treated as ready. Do not set
-`HERDR_BIN`, `BOLTRIG_OPENCODE_BIN`, or `BOLTRIG_BROWSER_CLI_BIN` to binaries
-under a developer home directory, and do not copy binaries or profiles from a
-developer workstation into production.
+treated as ready. Do not set `BOLTRIG_BROWSER_CLI_BIN` to a binary under a
+developer home directory, and do not copy binaries or profiles from a developer
+workstation into production.
 
-Herdr, OpenCode, and Browser CLI child processes do not inherit the service
-environment wholesale. They receive stack-owned `HOME`/XDG paths and a small
-runtime allowlist (`PATH`, proxy, locale, CA-bundle settings). Only explicit
-scoped handoffs are added, such as OpenCode's per-run Boltrig MCP token or
-Browser CLI's per-run `BU_NAME`. Browser Use cloud/profile env is disabled by
-default:
+Browser CLI child processes do not inherit the service environment wholesale.
+They receive stack-owned `HOME`/XDG paths and a small runtime allowlist (`PATH`,
+proxy, locale, CA-bundle settings). Only explicit scoped handoffs such as the
+per-run `BU_NAME` are added. Browser Use cloud/profile env is disabled by default:
 
 ```env
 BOLTRIG_BROWSER_CLOUD_POLICY=disabled
@@ -532,9 +622,9 @@ process. Do not set personal `BROWSER_USE_*` variables in the service
 environment; they are stripped from child processes and are not a supported
 production configuration.
 
-`GET /v1/platform/status` includes a redacted Herdr/OpenCode/Browser CLI stack
-posture. It reports image-shipped install mode, stack-owned state posture, and
-which container owns the runtime, but it never returns actual state roots,
+`GET /v1/platform/status` includes a redacted Browser CLI stack posture. It
+reports image-shipped install mode, stack-owned state posture, and which
+container owns the runtime, but it never returns actual state roots,
 binary paths, browser auth/session data, Browser Use cloud values, tokens,
 credentials, or user profile locations. Treat it as the operator-facing
 confirmation that the deployed stack is cleanly wired; `boltrig doctor
@@ -589,10 +679,9 @@ only the code.
 redacted deployment-readiness endpoint and returns HTTP 503 whenever a required
 component is not ready. In production it requires reachable Postgres and Redis,
 an `alembic_version` exactly equal to the packaged migration head, complete
-`control.*` registration, safe Herdr/OpenCode/Browser CLI stack posture, a
-kernel-local `herdr --version` probe, and a fresh HMAC-authenticated Redis
-receipt from the fleet worker's local OpenCode, Browser Use, and loopback
-Chromium CDP probes. Receipt keys are deployment-scoped and the signing key is
+`control.*` registration, safe Browser CLI stack posture, and a fresh
+HMAC-authenticated Redis receipt from the fleet worker's local Browser Use and
+loopback Chromium CDP probes. Receipt keys are deployment-scoped and the signing key is
 purpose-derived from `BOLTRIG_AUDIT_HMAC_KEY`, so another service or deployment
 cannot forge or collide with healthy evidence. The receipt expires when the
 worker or its tools stop reporting; the kernel does not assume fleet binaries
@@ -839,8 +928,7 @@ page and reports provider exchange unavailable.
 - [ ] a fresh cluster created the separate Hatchet database through the packaged
       first-boot hook, or an existing cluster was checked/created explicitly
 - [ ] `CA_BUNDLE` set and the bundle mounted; proxy env set if required
-- [ ] `BOLTRIG_HERDR_HOME`, `BOLTRIG_OPENCODE_HOME`,
-      `BOLTRIG_FLEET_BROWSER_CLI_HOME`, and
+- [ ] `BOLTRIG_FLEET_BROWSER_CLI_HOME` and
       `BOLTRIG_HATCHET_BROWSER_CLI_HOME` set to stack-owned roots; the two
       browser roots are different
 - [ ] on Ubuntu 24.04+, the named `boltrig-codex` AppArmor profile is loaded for
@@ -851,8 +939,8 @@ page and reports provider exchange unavailable.
       the same recovery point; durable worker registration is healthy
 - [ ] `make public-product-validate` confirms BYO Bifrost and only Familiar +
       Jarvis ship; any private development route remains deployment-local
-- [ ] Herdr/OpenCode CLI versions and hashes reviewed before image rebuild
-- [ ] `make release-validate` executed `herdr`, `opencode`, and `browser-use`
+- [ ] Browser Use lock and hashes reviewed before image rebuild
+- [ ] `make release-validate` executed `browser-use`
       from the verified candidate-image context and production doctor reported
       zero failures there; no host CLI path was substituted
 - [ ] `/readyz` is 200 only after the fleet worker has published fresh live-tool

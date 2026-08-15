@@ -101,7 +101,7 @@ The dispatcher also publishes paired `tool_call`/`tool_result` (and `hitl`) even
 
 **Public surface.** `GET /v1/admin/credentials` (references only, admin-gated). Never any route that returns material.
 
-**Governed by.** SEC-05 (resolved material never enters the audit log), K-20 (bounded observability), SEC-27 (no tool credential is ever sent to the Pi gateway).
+**Governed by.** SEC-05 (resolved material never enters the audit log), K-20 (bounded observability), SEC-27 (no tool credential is ever sent across the agent boundary).
 
 **Maturity.** Production-grade design; the only shipped `SecretStore` is env-backed (`EnvSecretStore`). Vault/KMS backends are declared seams, not implementations.
 
@@ -223,7 +223,7 @@ Phase 2 (the socket class) landed: the severed `services/channel_gateway` daemon
 
 **One line.** Granted verbs advertised as MCP tools; every `tools/call` runs the unchanged chokepoint.
 
-**Plain language.** A standard wall socket for AI tools. Any MCP-speaking client (the Pi gateway, Claude Code, another agent) plugs in and sees a tool list, but the socket is wired straight back into the one security desk: the tool list shows only what that connection's token is scoped to, and every call runs all ten steps, including the human gate. A run-scoped token (the run's skill grants intersected with the tenant ceiling) is minted per agent run and revoked when it ends.
+**Plain language.** A standard wall socket for AI tools. Any MCP-speaking client (the trusted Codex cell or another approved agent) plugs in and sees a tool list, but the socket is wired straight back into the one security desk: the tool list shows only what that connection's token is scoped to, and every call runs all ten steps, including the human gate. A run-scoped token (the run's skill grants intersected with the tenant ceiling) is minted per agent run and revoked when it ends.
 
 **Key files.** `boltrig/kernel/mcp.py` (`McpFace`: `issue_run_token`, `revoke`, `handle` for run tokens, `handle_user` for console principals; JSON-RPC 2.0 `initialize`/`tools/list`/`tools/call`).
 
@@ -307,41 +307,36 @@ Phase 2 (the socket class) landed: the severed `services/channel_gateway` daemon
 
 **Maturity.** Production-grade, and the true workhorse of the live path. Note: a plain chat turn spawns with an empty skills list, so no skill composition happens on ordinary chat; the cheapest capability wins.
 
-### 2.4 Runtime family (script, hermes, claude-api, pi)
+### 2.4 Runtime family (Codex and deterministic script)
 
 **One line.** The interchangeable reasoning backends a capability names; all degrade to a marked non-crash result without keys.
 
-**Plain language.** Four kinds of worker you can hire, all wearing the same uniform (`Runtime` protocol, returning `AgentResult`). Script is the deterministic no-model fallback: it literally echoes the task back (zero tokens, zero cost). Hermes and Claude-API are single-shot model calls (OpenAI-shaped and Anthropic respectively): no tool loop, one completion. Pi is the only multi-step, tool-calling lane (see 2.5). The honest and load-bearing behaviour: without an API key or endpoint, every non-script runtime returns a degraded result with a reason (`no_api_key`, `no_endpoint`, `no_sidecar`) rather than crashing, and the script runtime is a literal echo. In a keyless environment, "the agent replied" therefore means "the engine echoed", which is why degraded honesty is first on the plan (Part 10). Every runtime prepends the kernel-composed system prompt so the governance cage cannot be stripped. Decision 0012 gate: Codex is the only target agent runtime and script stays the deterministic fallback, so every other lane (hermes, openai, claude-api, pi, opencode, rivet) is staged-cutover rollback residue reachable only when `BOLTRIG_ENABLE_LEGACY_RUNTIMES` is set (default OFF); with the flag unset a legacy lane request returns the typed unavailable result (`runtime_unavailable`, degrade-marked under the requested lane's name) instead of reaching the lane.
+**Plain language.** Every worker wears the same uniform (`Runtime`, returning `AgentResult`), but Boltrig now ships only two implementations. Trusted Codex is the sole model-backed agent runtime. Script is an explicit deterministic, no-model execution seam for offline jobs and tests; it returns zero-token structured output rather than pretending to be an agent reply. A stale capability naming any removed runtime receives a typed `runtime_unavailable` result and executes nothing. There is no feature flag, provider client, subprocess wrapper, binary, or plugin that can revive a retired lane. Codex receives the kernel-composed prompt and exact run-scoped tool ceiling, so the governance boundary cannot be stripped by choosing a different model provider.
 
-**Key files.** `boltrig/fleet/runtime.py` (`Runtime`, `ScriptRuntime`, `HermesRuntime`, `ClaudeApiRuntime`, `build_runtime`), `boltrig/fleet/result.py` (`AgentResult`, where even a degraded run is `ok=True` with `output["_degraded"]` set).
+**Key files.** `boltrig/fleet/runtime.py` (`Runtime`, `ScriptRuntime`, `UnavailableRuntime`, `build_runtime`), `boltrig/fleet/codex_runtime.py` (trusted Codex construction), and `boltrig/fleet/result.py` (`AgentResult`, including typed degraded results).
 
 **Public surface.** None directly; selected by capability data (`AgentCapability.runtime`).
 
-**Governed by.** FR-RUN-01 (pi resolves via `build_runtime`), FR-RUN-05 and P9 (degrade, never crash), US-FLT-04, US-WFL-02 (reasoning runtime else deterministic fallback).
+**Governed by.** FR-RUN-01 and FR-RUN-21 (Codex-only model runtime and inert retired names), FR-RUN-05 and P9 (degrade, never crash), US-FLT-04, US-WFL-02 (reasoning runtime else deterministic fallback).
 
-**Maturity.** Wired-but-thin toward the real backends (single-shot, degrade to echo without keys); production-grade on the degrade path itself.
+**Maturity.** Trusted Codex admission is fail-closed and remains separately gated for production; script and typed-unavailable behavior are production-grade.
 
-### 2.5 PiRuntime and the Pi gateway service - RETIRED
+### 2.5 Retired runtime families
 
-**Retired 2026-07-27** under [2026] VJS-PC 20 L1. See
-`docs/decisions/0020-retire-the-pi-lane.md` for the measurement, the ground, and the
-discharge of the L3 condition. The kernel-side runtime, the standalone gateway
-service and their compose, release and Dependabot wiring are all deleted; a
-capability or manifest still naming `pi` degrades to the typed unavailable result
-exactly as it did while the lane was gated off.
+The former provider-native and alternative agent runtimes are deleted: clients,
+plugins, binaries, state volumes, readiness probes, manifest defaults and revival
+flags. A capability or manifest naming one degrades to a typed unavailable result
+and executes nothing.
 
-This section is kept as a stub rather than deleted because the surrounding document
-is a component map, and a reader arriving from an older reference should find out
-where the component went rather than find a gap. The invariants it used to carry did
-not all go with it: SEC-48 (sandbox egress) and FR-RUN-03 (a run-scoped token's tool
-call passes the chokepoint) were never Pi's and were re-pointed; IAC-003 was
-recovered from a file the deletion removed.
+The dated decision records retain the migration evidence. Runtime code keeps only
+an explicit negative list so old stored data fails closed rather than being
+silently reinterpreted.
 
 ### 2.6 Chat orchestrator and SSE event relay
 
 **One line.** A chat turn becomes a governed work item and a spawned run whose live events stream back over SSE and are persisted.
 
-**Plain language.** The reception phone line with a live intercom. When a message arrives, the service checks you may use this thread (owner-scoped; only org-admin and compliance may read others'), persists your message, mints a run id, and starts the turn in the background while forwarding every event from the relay to your browser as it happens: text deltas, tool calls, sub-agent announcements, inline approval cards. When the run ends, the assistant message (with the full event list) is persisted, so a dropped client can re-attach to the same run and replay what it missed. Offline development uses the bounded in-memory relay. Production requires the Redis Streams backend, sharing the 500-event-per-stream replay window, completion markers, active-run truth and conversation hand-off lock across replicas; the shipped Redis service persists them with AOF. Publishers: the chat executor, the spawner, the dispatch chokepoint, and (relayed) the Pi gateway.
+**Plain language.** The reception phone line with a live intercom. When a message arrives, the service checks you may use this thread (owner-scoped; only org-admin and compliance may read others'), persists your message, mints a run id, and starts the turn in the background while forwarding every event from the relay to your browser as it happens: text deltas, tool calls, sub-agent announcements, inline approval cards. When the run ends, the assistant message (with the full event list) is persisted, so a dropped client can re-attach to the same run and replay what it missed. Offline development uses the bounded in-memory relay. Production requires the Redis Streams backend, sharing the 500-event-per-stream replay window, completion markers, active-run truth and conversation hand-off lock across replicas; the shipped Redis service persists them with AOF. Publishers are the chat executor, the spawner, the dispatch chokepoint and the trusted Codex runtime relay.
 
 **Key files.** `boltrig/fleet/chat.py` (`ChatService`, `build_turn_executor`, `sse`), `boltrig/kernel/events.py` (`EventRelay`).
 
@@ -871,7 +866,7 @@ The whole engine in one trace. A user types "create a ticket for the login bug" 
 2. **Thread.** `ChatService.handle_turn` checks the caller may use this conversation, persists the user message, mints a fresh `run_id`, and starts streaming SSE frames back, beginning with `message_start`.
 3. **Become work.** The turn executor creates a governed `WorkItem` (source `chat`, id = run id, `on_behalf_of` the user) and an `InvocationContext` at tier 1. Continuity composes the conversation's own prior turns into the task, deterministically.
 4. **Spawn.** `Spawner.spawn` runs its pipeline: resolve and merge skills (none on a plain chat turn), validate context, pick the cheapest capable capability, check recursion depth, reserve budget against the tenant and department cards, intersect the child's grants with the parent's ceiling, route the model through the sensitive-to-local guard and (if configured) the gateway, and write an `AGENT_SPAWN` audit row.
-5. **Reason.** The selected runtime runs with the composed system prompt (governance floor first). If it is the Pi lane, the kernel mints a run-scoped MCP token and streams the job to the sandboxed gateway, which loops: model, tool calls, model.
+5. **Reason.** Trusted Codex runs with the composed system prompt (governance floor first), an exact model binding and a run-scoped kernel tool ceiling. Deterministic script jobs perform no model call. A stale runtime name stops here with a typed unavailable result.
 6. **Chokepoint.** Every tool call the run makes (say `ticket.create`) comes back through `POST /v1/mcp` `tools/call` and runs the ten steps of `Dispatcher.invoke`: resolve the verb and binding, validate params, check grants, hit the HITL gate (if `ticket.create` were high consequence, a `PendingHuman` pauses here and an approval card streams inline into the chat), rate limit, idempotency replay, resolve the Jira credential inside the kernel, execute the adapter, validate output, record the idempotent result.
 7. **Audit.** In the same logical step, win or lose, one audit row is written, hash-chained to the previous row, scrubbed of anything secret-shaped, attributing the adapter, the actor, the depth, the latency, and the status. Paired `tool_call`/`tool_result` events were emitted onto the run stream as a side channel that can never break the call.
 8. **Return.** The runtime's result surfaces as the spawn summary; the executor publishes it as a `text_delta`; `message_end` closes the stream; the assistant message, with the full event list and any pending approval id, is persisted. `GET /v1/audit/tree/{run_id}` can now reconstruct everything that just happened, with costs totalled up the tree.

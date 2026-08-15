@@ -124,8 +124,8 @@ This admission gate does not start or change a production service. It requires a
 clean tracked checkout, validates the secure Compose model, and verifies every
 image signature, SBOM, provenance statement, tag, workflow identity, and source
 commit before Docker may use a candidate digest. It then pulls the exact kernel
-and fleet digests, assembles an unpushed ephemeral validation image containing
-only their bytes, executes the image-owned Herdr/OpenCode/Browser CLI probes, and
+and fleet digests, assembles an unpushed ephemeral validation image from the
+verified fleet bytes, executes the image-owned Browser CLI probe, and
 runs production doctor inside that networkless, read-only context. `.env` is
 streamed over stdin, never copied into the image; the validation image is removed
 afterward, while pulled layers may remain cached. Missing tools, network access,

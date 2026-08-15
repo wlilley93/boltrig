@@ -126,7 +126,7 @@ dead, prints that step's rollback, and refuses to go further.
 | Step | Postcondition | What it discriminates |
 |---|---|---|
 | `key` | the line is in `.env` | trivial, but it also *reminds you* the running container has not read it yet |
-| `1-migrate` | `select version_num from alembic_version` == `0074_conversation_steer_queue` | the database's own report, not alembic's exit code |
+| `1-migrate` | `select version_num from alembic_version` == `0075_routine_conversations` | the database's own report, not alembic's exit code |
 | `2-deploy` (1) | `docker exec … grep -c sensing …camera_agent_routes.py` > 0 | **the file inside the running container.** Not the image, not the tag — the bytes actually being served |
 | `2-deploy` (2) | `GET …/sensing-config` → **401**, not 404 | 404 = the old image is still serving; 401 = the route is live and refusing an unauthenticated caller. This is the single clearest signal in the whole run |
 | `2-deploy` (3) | `/readyz` migration `expected == current` | catches a step-1 that silently did nothing |

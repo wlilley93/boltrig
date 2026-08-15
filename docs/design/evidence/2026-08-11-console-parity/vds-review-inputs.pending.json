@@ -4,9 +4,9 @@
   "fileKey": "iVQBKFc3NpRH3zdOOxfPqr",
   "captureEvidence": {
     "manifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-    "manifestDigest": "sha256:602b9093a36b6bb725125266d112cdf8d77975d5d999bf5d812fda8a585a1b8e",
+    "manifestDigest": "sha256:5c39b27c8f1d1376488999aa6cfd30ddce61ec7f4741e243722e9df67d6e6d09",
     "metricsPath": "docs/design/evidence/2026-08-11-console-parity/current/metrics.json",
-    "metricsDigest": "sha256:8f077a46178ed1f044a63f05d4fcaeb41a2e0e023008832243ae4cb6ca2fe4cf",
+    "metricsDigest": "sha256:b4e2ff0b719676b84cf2aacfe61e80ea49516af5e20f6c42db0a1dca0f002c8c",
     "viewport": "1440x900",
     "statesCompared": 7,
     "statesMissing": 0,
@@ -14,12 +14,12 @@
   },
   "additiveCaptureEvidence": {
     "manifestPath": "docs/design/evidence/2026-08-11-chat-ui-direction/current/capture-manifest.json",
-    "manifestDigest": "sha256:cd627075e60b91f9099ff7be327814a3b823397089ade8dc45533c1455ed7cd0",
-    "capturedAt": "2026-08-14T11:55:29.391Z",
-    "captureSourceDigest": "sha256:926f1e6d356f96bdd028e33c00db087b6dcba0b03ec8bb2d7aa9df6976bba474",
+    "manifestDigest": "sha256:6b327c05cc70577af62c9d1b0e1e8f97b717f13e6f707adb468c54dfc8816369",
+    "capturedAt": "2026-08-14T18:59:21.159Z",
+    "captureSourceDigest": "sha256:ba51ddd948e822bec05b269ede16422e535de764c5812bf30d698a39955958d7",
     "state": "chat-direction",
     "shippedScreenshotPath": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-    "shippedScreenshotDigest": "sha256:e6f04155e653dc0447b8ec485ebde810148629c253d35715597e5108dcb18a25",
+    "shippedScreenshotDigest": "sha256:c2e91ec153a6d76f208e4477503e94fe3486916723b7785c0c786520ad8993ae",
     "directionRecords": [
       "DIR-0008",
       "DIR-0009",
@@ -36,7 +36,14 @@
       "DIR-0024",
       "DIR-0025",
       "DIR-0026",
-      "DIR-0027"
+      "DIR-0027",
+      "DIR-0028",
+      "DIR-0029",
+      "DIR-0030",
+      "DIR-0033",
+      "DIR-0035",
+      "DIR-0036",
+      "DIR-0039"
     ],
     "additiveRebindDirectionRecords": [],
     "visualVerdict": "not_assessed",
@@ -44,35 +51,35 @@
   },
   "servedBuild": {
     "branch": "feat/console-target",
-    "head": "c939143914257af9f3f6fa59f5f7fc2a1ee3a9c4",
+    "head": "3f96081c34a08ea0042ec2ce998f60711ce2717b",
     "dirty": true,
-    "captureSourceDigest": "sha256:926f1e6d356f96bdd028e33c00db087b6dcba0b03ec8bb2d7aa9df6976bba474",
+    "captureSourceDigest": "sha256:ba51ddd948e822bec05b269ede16422e535de764c5812bf30d698a39955958d7",
     "captureSourceDigestAlgorithm": "sha256-path-type-content-v1",
     "captureSourceScope": [
       "apps/worker/src",
       "apps/worker/tests/visual"
     ],
     "sourceUnchangedDuringCapture": true,
-    "capturedAt": "2026-08-14T11:55:25.600Z"
+    "capturedAt": "2026-08-14T18:59:13.300Z"
   },
   "screensLedger": {
     "path": ".vds/ledgers/screens.yaml",
-    "fileDigest": "sha256:90e5c2fb6aa74c801b4507daded1099ced40a7739717cbae2bcf55a6c33e2e10",
-    "sourceDigest": "sha256:197b265cc6678d8fcd8271e6f348fabd9e3421fb751c4d7e780bee4b3d738ae8",
-    "contentDigest": "sha256:3205c2eb6ecf50b4bb05d8035b9dd9f77325614c6710f84dfbe229126c524b0e"
+    "fileDigest": "sha256:05c526008c889ed7b0bfde90eb13cd86610cf46e3d823e6530ccf2e1d032afb1",
+    "sourceDigest": "sha256:809ee093c1be67f9d4587d39c819bda748a282eae5118ed35d63a07967d763fa",
+    "contentDigest": "sha256:72b7d5b314da8efa6256d3bf90040131f2e445298b36e72930f0e4248a758cb9"
   },
   "routeLedger": {
     "manifestPath": "docs/design/evidence/2026-08-11-console-parity/current/vds-route-manifest.json",
-    "manifestFileDigest": "sha256:f3708937ba1c2b1173ea7158d02aa49bddf87081ca57b5c968d8df17a8142b9b",
+    "manifestFileDigest": "sha256:96c92117f0725f34727d7bfe8a8f89d31dac6770e004b77bd14472ae58a474e4",
     "ledgerPath": ".vds/ledgers/routes.yaml",
-    "ledgerFileDigest": "sha256:8267afdb293f36ef2503963e3fbf1981c440ca11dbe86a1d70c9c7379e57464a",
-    "contentDigest": "sha256:85c3fbd1cb7ccb77b83bc7e61d2f00dc98803e82900afe2b7c88fb6e4f302b0e"
+    "ledgerFileDigest": "sha256:4dd8cbc51bbdb0904aa6b2c0632965c04e3d0d770a7da2d8ae824007577d55b8",
+    "contentDigest": "sha256:0c5d974658837c60d6b5328e4592d6fb0a30063c6dd3f855991c1673e18c4217"
   },
   "proofRun": {
     "matrixPath": "docs/design/evidence/2026-08-11-console-parity/current/vds-proof-matrix.json",
-    "matrixDigest": "sha256:27807dc322296a5de4392e6c1899603474f4f602547ed5008f993e6ab9c895b5",
-    "visualReviewProof": ".vds/proofs/PROOF-20260814-120515.yaml",
-    "visualReviewProofDigest": "sha256:4f1d4e32adc15d4c6eac7c6d912bd58d94b63837b40f5796a3cc3472911e91f7",
+    "matrixDigest": "sha256:b54b077aa2ee6408633d1d23058ac78fae448a1772ac0098a0a60e0ec92122f5",
+    "visualReviewProof": ".vds/proofs/PROOF-20260814-190603.yaml",
+    "visualReviewProofDigest": "sha256:5bfda984f02131da9feede0b69eec43f09063a2b43c3f070002fe08e89e9415f",
     "visualReviewStatus": "vacuous",
     "visualReviewCoverage": "6_current_0_drift_0_never_reviewed_all_unsigned_no_authority"
   },
@@ -99,12 +106,12 @@
       "frameImageDigest": "sha256:f6a92ec2b856bf772cd95bafb65d8fa2b137ae4eb906339555d18e6425c667be",
       "frameImageWidth": 1440,
       "frameImageHeight": 900,
-      "currentShippedSourceDigest": "sha256:b581b061de11becc1fac67ab78434922cd903b11399f48dc5ff30386aa9270e9",
+      "currentShippedSourceDigest": "sha256:67c25eb29ad34b7bec814ee5b69f8a4dae8f9e813cdc87191a257897e02e8bb1",
       "shippedScreenshotPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
-      "shippedScreenshotDigest": "sha256:fabae259c8ccaada82d7c0b73f32b24f3acc65954d7579bdb73d285295c7cff8",
+      "shippedScreenshotDigest": "sha256:482686991ef9534f06b913f10f1f98f1b6eb6ad5b83cd1f28deb7782964e8fa6",
       "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/chat-run.png",
-      "diffDigest": "sha256:ea2fdffa4c20989fb71c6d87caf3b8b2d099aebfd58fb010dc3d416d0df777d9",
-      "changedPixelRatioGt16": 0.07469135802469136,
+      "diffDigest": "sha256:a9a5ca196b8268c3f75f657070fed03af0c55fba8f53650d2b2cea6f776296bf",
+      "changedPixelRatioGt16": 0.07565586419753087,
       "reviewRecord": ".vds/reviews/VRW-0001.yaml",
       "reviewVerdict": "no_authority",
       "overrideDirectionRecords": [
@@ -123,7 +130,14 @@
         "DIR-0024",
         "DIR-0025",
         "DIR-0026",
-        "DIR-0027"
+        "DIR-0027",
+        "DIR-0028",
+        "DIR-0029",
+        "DIR-0030",
+        "DIR-0033",
+        "DIR-0035",
+        "DIR-0036",
+        "DIR-0039"
       ],
       "legacyDepthLimitedFrameDigest": "sha256:214f01d660057812c66ea2d1fc487c78f01b9c1a78b78b445c90dd2adbbd67f2",
       "requiredBands": [
@@ -150,12 +164,12 @@
       "frameImageDigest": "sha256:8c51c188fa0e2e42c00487baa65db70dfdba88b8bd931c344f9040c3778979fb",
       "frameImageWidth": 1440,
       "frameImageHeight": 900,
-      "currentShippedSourceDigest": "sha256:b581b061de11becc1fac67ab78434922cd903b11399f48dc5ff30386aa9270e9",
+      "currentShippedSourceDigest": "sha256:67c25eb29ad34b7bec814ee5b69f8a4dae8f9e813cdc87191a257897e02e8bb1",
       "shippedScreenshotPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
-      "shippedScreenshotDigest": "sha256:8fb46f52f38f7e2a3e70de06dd3b6405a02c300b6add53f5c6570b32b06a84de",
+      "shippedScreenshotDigest": "sha256:bb8829bcaec5ebcd109aff6ea130ec0b63ee42a3c3c9e4af541d1ceeae6f6e2c",
       "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/new-chat.png",
-      "diffDigest": "sha256:3a07e2f12dc3459eb9853b6d41ad8695b7dcd251387043d2029cc4b0b8279323",
-      "changedPixelRatioGt16": 0.037132716049382716,
+      "diffDigest": "sha256:0aa7a7d7edaea62f2ed94bfa7c6b46d0132a41a43cdaefc59a2d42ab242b1a4a",
+      "changedPixelRatioGt16": 0.04714506172839506,
       "reviewRecord": null,
       "reviewVerdict": null,
       "overrideDirectionRecords": [
@@ -169,7 +183,16 @@
         "DIR-0017",
         "DIR-0018",
         "DIR-0020",
-        "DIR-0021"
+        "DIR-0021",
+        "DIR-0028",
+        "DIR-0029",
+        "DIR-0030",
+        "DIR-0033",
+        "DIR-0035",
+        "DIR-0036",
+        "DIR-0037",
+        "DIR-0038",
+        "DIR-0039"
       ],
       "legacyDepthLimitedFrameDigest": null,
       "requiredBands": [
@@ -199,10 +222,10 @@
       "frameImageHeight": 900,
       "currentShippedSourceDigest": "sha256:e38e8899c42e552612785ad36e3e86014cb25576c23bdc8110b1dd79c693d1b6",
       "shippedScreenshotPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
-      "shippedScreenshotDigest": "sha256:1324427e8ed7dac2c03fd41a848a75cbd1ca24dd05126c804d8504ec55479528",
+      "shippedScreenshotDigest": "sha256:626d32b0b82f7fe4f8e5e2702659294698a9d424507fa392b4dfe8bda718eaa1",
       "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/plugins.png",
-      "diffDigest": "sha256:5a5174ba9d6d9911ee60343cf00f546762238467ebb57d33f87081d4b48ab125",
-      "changedPixelRatioGt16": 0.04669984567901234,
+      "diffDigest": "sha256:b66d8a348e9f767a5348c6b901f14465eb27234a0f7f80fb902113f0236f859b",
+      "changedPixelRatioGt16": 0.047456018518518515,
       "reviewRecord": ".vds/reviews/VRW-0003.yaml",
       "reviewVerdict": "no_authority",
       "overrideDirectionRecords": [
@@ -210,7 +233,12 @@
         "DIR-0015",
         "DIR-0016",
         "DIR-0020",
-        "DIR-0021"
+        "DIR-0021",
+        "DIR-0028",
+        "DIR-0029",
+        "DIR-0030",
+        "DIR-0035",
+        "DIR-0036"
       ],
       "legacyDepthLimitedFrameDigest": "sha256:70be2f7897493f4789e62df03e8c6faf957b0902f85bbf258b0f85f1693e53f3",
       "requiredBands": [
@@ -239,10 +267,10 @@
       "frameImageHeight": 900,
       "currentShippedSourceDigest": "sha256:38596c93fd33c20a52764c2a4d5edbca8f06a8529946440d9ea2ff35dda30c69",
       "shippedScreenshotPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/agents.png",
-      "shippedScreenshotDigest": "sha256:a853d023416e0994b0253d30a80e6da940bd86101680a26adc397d902df607e4",
+      "shippedScreenshotDigest": "sha256:b1a7dfa9680701aca4482c7ded3c45ed270a66b0d64933375b6e9e629ca76043",
       "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/agents.png",
-      "diffDigest": "sha256:09b3e21e5fef4e9a8e514fb76616f960d53c449ec08d0b6ab5bcefc66e4dd34d",
-      "changedPixelRatioGt16": 0.04677160493827161,
+      "diffDigest": "sha256:35e3441065e05b89be6f03eb976f9d2a37005df95331829d5c68e8e96745c8b8",
+      "changedPixelRatioGt16": 0.04754012345679012,
       "reviewRecord": ".vds/reviews/VRW-0002.yaml",
       "reviewVerdict": "no_authority",
       "overrideDirectionRecords": [
@@ -250,7 +278,12 @@
         "DIR-0015",
         "DIR-0016",
         "DIR-0020",
-        "DIR-0021"
+        "DIR-0021",
+        "DIR-0028",
+        "DIR-0029",
+        "DIR-0030",
+        "DIR-0035",
+        "DIR-0036"
       ],
       "legacyDepthLimitedFrameDigest": "sha256:12ff6ddde30da51188b6a11ebfd8a4d865203d5f31b3764b709cc06aee6dc93c",
       "requiredBands": [
@@ -279,10 +312,10 @@
       "frameImageHeight": 900,
       "currentShippedSourceDigest": "sha256:3044e646b0c9c5d5ec1eb9831a86de5d8ae0fbcc96aa6fed1639b51709e8ce45",
       "shippedScreenshotPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png",
-      "shippedScreenshotDigest": "sha256:f2ef2e5405e63a582e1eefd1910be90e2ec57434faf3a4b9392fba99ac4cf6c7",
+      "shippedScreenshotDigest": "sha256:4c6aec81fe97cc71bfced7e009cc939d740bf6cd1389372a26d3a9f03e6f691c",
       "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/command-palette.png",
-      "diffDigest": "sha256:37cbe279f03ebdfa2f26104e5c00438999a754d264df772a1a62bbb1a1113cfe",
-      "changedPixelRatioGt16": 0.04924614197530864,
+      "diffDigest": "sha256:53d41fe6b9d5838bb94775572390b5a38d183f7797960ca0c26339dc61500cf8",
+      "changedPixelRatioGt16": 0.0499483024691358,
       "reviewRecord": ".vds/reviews/VRW-0004.yaml",
       "reviewVerdict": "no_authority",
       "overrideDirectionRecords": [
@@ -295,7 +328,13 @@
         "DIR-0018",
         "DIR-0020",
         "DIR-0021",
-        "DIR-0022"
+        "DIR-0022",
+        "DIR-0028",
+        "DIR-0029",
+        "DIR-0030",
+        "DIR-0033",
+        "DIR-0035",
+        "DIR-0036"
       ],
       "authorityNote": "The shipped palette matches the governing Figma CURRENT SOURCE placement at x=660, y=135 over the truthful completed Chat-run fixture. DECISION-0003 makes Figma govern over the executable HTML crop's x=440 centring disagreement.",
       "legacyDepthLimitedFrameDigest": "sha256:9ae8fb405f8f4bdec541d73acd9ffbe43f866a228398948d37faab61ccd37f86",
@@ -322,18 +361,22 @@
       "frameImageDigest": "sha256:31b55e68eadb7f0a1d8767c9b7435d668b531f2ae38c915ea976bc893d67f45e",
       "frameImageWidth": 1440,
       "frameImageHeight": 900,
-      "currentShippedSourceDigest": "sha256:b927a87c0a07dec7a8806208c268b7d768531a89f738ec9a48e7cf501aff80a2",
+      "currentShippedSourceDigest": "sha256:3cd1faab2e4559b00b2a26ba8cfd3d8792b13f9d310955f01fafea1a6c76eec9",
       "shippedScreenshotPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
-      "shippedScreenshotDigest": "sha256:309d79e3fafe1711574cec5af4ab9bc0cc6cb5a0391acdc61d778c35a88f77a3",
+      "shippedScreenshotDigest": "sha256:89dd4292982780f6ce538dc017f5f9d1e5e33e81d3bb4a24b3a80529c4e71d48",
       "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/call.png",
-      "diffDigest": "sha256:5fb661061c1b5bc91aa0a2adef384350e489bdd190e0f12ba95fd01f8f0582f3",
-      "changedPixelRatioGt16": 0.029300925925925925,
+      "diffDigest": "sha256:f7d58a4f62a86809e5c5e1e26e4ecb653ff8ccdc4b40f5c1d535b6638b849476",
+      "changedPixelRatioGt16": 0.17880632716049383,
       "reviewRecord": ".vds/reviews/VRW-0005.yaml",
       "reviewVerdict": "no_authority",
       "overrideDirectionRecords": [
         "DIR-0010",
         "DIR-0015",
-        "DIR-0016"
+        "DIR-0016",
+        "DIR-0028",
+        "DIR-0029",
+        "DIR-0030",
+        "DIR-0032"
       ],
       "legacyDepthLimitedFrameDigest": "sha256:f45d0e0271e5fef8f5ecc12b799cf023b7693d5cd75e78ffacdfced135038830",
       "requiredBands": [
@@ -361,15 +404,14 @@
       "frameImageHeight": 900,
       "currentShippedSourceDigest": "sha256:36e8f4ba1b1aeeb8dd94ece91283887fe247e0f5ebe63335298dfee06af98624",
       "shippedScreenshotPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png",
-      "shippedScreenshotDigest": "sha256:746c8fbe28b2aa04b64d122c53e094df33793a46288afe586768af578f4ea81a",
+      "shippedScreenshotDigest": "sha256:8bce0fbd0d22b2a968159c66f28da55e329d08789838115c8404b60790afb292",
       "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/settings-you.png",
-      "diffDigest": "sha256:48d97a511d69d2d91815211a36b880e62be2a10853bef5e8ab5d6c31eb172aaf",
-      "changedPixelRatioGt16": 0.026101851851851852,
+      "diffDigest": "sha256:2a8aab3964b22bee2f55ee9e24dcf024b2f7bc8916bc7dbce2dff72557ce8622",
+      "changedPixelRatioGt16": 0.027814043209876543,
       "reviewRecord": ".vds/reviews/VRW-0006.yaml",
       "reviewVerdict": "no_authority",
       "overrideDirectionRecords": [
-        "DIR-0015",
-        "DIR-0019"
+        "DIR-0015"
       ],
       "legacyDepthLimitedFrameDigest": "sha256:e9aca9ab0c191069ecb2a0e78d157287d9a9dbac94f4bf2ea3235bb0279db909",
       "requiredBands": [

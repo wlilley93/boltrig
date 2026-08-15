@@ -37,10 +37,10 @@ updates are grouped by ecosystem to keep the review queue bounded. Major updates
 remain separate because they require an explicit migration and rollback
 assessment.
 
-Herdr and OpenCode are downloaded as native release assets and cannot be parsed
-by Dependabot. Review both pins weekly with the dependency PR queue: update the
-version plus both architecture hashes together, verify the upstream release,
-and rebuild both first-party images. Never update a URL without its hashes.
+Codex is downloaded as a native release asset and cannot be parsed by
+Dependabot. Review its pin with the dependency PR queue: update the version and
+both architecture hashes together, verify the upstream release, and rebuild the
+fleet image. Never update a URL without its hashes.
 
 Security updates do not wait for the weekly window:
 
@@ -91,3 +91,11 @@ its metadata pins older transitive releases. They live in
 with `--no-deps`, and both a CLI/browser smoke and `pip-audit` validate the
 result. Regenerate it with the exact command recorded at the top of the lock and
 remove an override as soon as upstream adopts the fixed version.
+
+The upstream `browser-use` distribution itself depends on several provider
+client libraries, including Anthropic, OpenAI and Ollama. They therefore remain
+only in the isolated Browser Use lock; Boltrig does not register them as model
+runtimes, start their services, or pass them provider credentials. They must not
+be copied into the core/dev lock. Removing them requires an upstream slim
+Browser Use package or replacing that CLI boundary, not pretending its declared
+dependencies are absent.

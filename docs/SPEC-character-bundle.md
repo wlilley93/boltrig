@@ -452,11 +452,35 @@ either. Measured by packing it the way anyone would:
     tar -cf  (no --dereference), unpack elsewhere  ->  21 dangling links
     tar -chf (--dereference),    unpack elsewhere  ->  18 dangling links
 
-`--dereference` does **not** rescue it: 18 remain, because there are symlinks
-nested inside the directories it followed. So the spec's central claim — that a
+`--dereference` does **not** rescue it. So the spec's central claim — that a
 character *brings* its data — is not true of the bundle as it exists on disk. It
 brings references to one operator's home directory, and it is assembled in place
 rather than built.
+
+**Correction, 2026-08-14: the two numbers are right and the reason given for the
+second one is wrong.** Both were re-measured on the same tree and reproduce
+exactly — 21 and 18. But the 18 are not nested links. They are the links whose
+targets **no longer exist on this machine**: of the 21, only `prompts/persona.md`,
+`prompts/bio.md` and `behaviour/camera.json` still resolve, and those three are
+precisely the three that `-h` turned into regular files. 21 − 3 = 18. Confirmed
+by listing the archive: 18 entries carry link type, and the three that do not are
+those three.
+
+That makes the failure **worse** than a nested-link subtlety, because of how
+bsdtar behaves when it cannot follow a link it was told to follow:
+
+    tar -chf /dev/null maya   ->  exit 0, zero bytes on stderr
+
+It does not warn and it does not fail. It silently falls back to storing the
+link. So the archive looks like a successful dereference, and the operator finds
+out at unpack time on another machine. A build step that shells out to `tar -h`
+and checks the exit status would have reported success on every one of these
+runs.
+
+Nested links are still real and still have to be resolved — a link inside a
+directory reached *through* a link is invisible to anything that stops at the
+first hop — which is why the export below resolves every component recursively
+and is tested against a fixture built to have exactly that shape.
 
 This does not invalidate the format; the manifest, the `type` split and the
 capability declarations are all real. It reclassifies the on-disk layout as a
@@ -467,10 +491,76 @@ refuses to publish a bundle containing a path outside its own root.
 
 ## Open questions
 
-- **Bundle format on disk** — directory with a manifest, or an archive? *Now
-  load-bearing rather than cosmetic: see the 2026-08-14 decision above. Any
-  answer needs a recursive-dereference export and a refusal on out-of-root
-  paths, or a bundle "ships" 21 links to nothing.*
+- **Bundle format on disk** — **answered 2026-08-14, and the export step is
+  built: `scripts/export_character_bundle.py`.**
+
+  **A directory, produced by an export.** Not an archive, because the archive
+  question turned out to be the wrong one: `tar` is a transport, and both
+  packings above are of the same non-portable tree. The two forms the layout
+  takes are what matters.
+
+      development view   what sits in the bundle root: symlinks into the
+                         studios that produce the assets, so editing a persona
+                         in its editing source is editing the bundle. Not
+                         portable, and never was meant to be.
+      artifact           what the export writes: regular files only, no link
+                         of any kind, nothing resolving outside its own root.
+                         Copies with cp -R, packs with a plain tar -cf.
+
+  The manifest stays the contract in both, so nothing above about `type`, the
+  `visual` split or the capability declarations changes.
+
+  **What the export does.** Resolves every path component recursively, so a link
+  nested inside a directory that was itself reached through a link is resolved
+  in its turn; copies content rather than links; verifies each manifest asset
+  against the `sha256` the manifest states; then walks what it staged and
+  refuses to ship it if a single entry is a link or resolves outside the root.
+  That last pass is the check this section asked for, and it is run on the
+  artifact rather than on the sources — dereferencing an out-of-root source is
+  the entire job, since today every byte of the bundle lives outside it. Every
+  out-of-root source is listed by real path in the report, so nothing crosses
+  the boundary unseen.
+
+  **What it refuses outright**, naming each offender and writing nothing:
+
+      kernel biometrics    an enrolled face or its calibration. Already settled
+                           above as kernel data; the export enforces it by
+                           RESOLVED path, so an anchor image that is really a
+                           link to enrolled.npz is caught by target, not name.
+      user camera data     diary entries, retained frames, the observation log,
+                           the fact sheet.
+      populated secrets    a key, token, presigned URL or credential file, by
+                           filename and by scanning text content. Also a
+                           `credentials.providers` entry that is not a bare
+                           provider name.
+      digest mismatch      an asset whose bytes disagree with the manifest.
+      unresolvable link    dangling, looping or absolute — there is nothing to
+                           copy, and an absolute target describes one disk.
+
+  **What it quarantines** — excluded from the artifact, struck from the exported
+  manifest, reported, exit still 0: **cloned voice bytes**. A voice LoRA and its
+  reference audio are a clone of a real person, and `fallbackVoiceIds` is what
+  portability actually needs. The exported manifest keeps the ids and loses the
+  `selfHosted` block, which is the rule the bundle tree's own ignore file
+  already states: referenced by name, never shipped as bytes.
+
+  Anchor images, the visual LoRA, example clips and the baked performance file
+  are kept — they are the *character's* likeness, which this spec assigns to the
+  character.
+
+  **Measured on a fixture that reproduces Maya's exact link geometry** (the same
+  21 relative targets, plus 18 links nested inside the two directories a
+  dereferencing pack would follow): 21 dangling after `tar -cf`, and after the
+  export, **0** — packed with a plain `tar -cf`, unpacked in an unrelated
+  directory, with the whole source sandbox renamed away first so nothing could
+  resolve by luck. Re-running the export over its own output is idempotent, and
+  it refuses to overwrite a destination that is not a previous export.
+
+  **Maya herself does not export today**, and that is the finding the tool was
+  written to surface: 18 of her 21 links are dangling *in place*, because
+  `gen-pipeline/store/clips` and `gen-pipeline/store/voice` are absent from this
+  machine. The bundle cannot bring data it cannot reach. Restoring the store, or
+  repointing the links, is a prerequisite to a first real export.
 - **`emotion` is still unset** — the schema wants a model name that the bound
   canvas source declares it supports, and no companion source is registered yet.
   Blocked on the private companion renderer, not on a decision.

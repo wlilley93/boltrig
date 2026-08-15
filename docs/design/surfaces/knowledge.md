@@ -14,7 +14,7 @@ The three task modes are fixed:
 
 1. **Library** adds and manages canonical source documents. This is the default.
 2. **Search** finds authorised passages and exposes their immutable citation.
-3. **Providers** shows the bundled compiler and governed add-on catalogue.
+3. **Compiler** shows the bundled Cognee enrichment state.
 
 These are in-slide tasks, not new deck rows.
 
@@ -60,14 +60,19 @@ The `knowledge/retrieval` skill is read-only and labels retrieved material
 | Provider | Shipped state | Authority |
 |---|---|---|
 | Cognee | Bundled and enabled | Rebuildable compiler only |
-| Supermemory | Visible, unavailable | External projection only |
-| Mem0 | Visible, unavailable | Compatibility projection only |
 
 Cognee enable and disable actions run through high-consequence governed verbs.
-The action changes provider state, not canonical storage. Supermemory and Mem0
-have no credential-backed projection adapter in this build, so their controls
-are disabled and the service refuses enablement. Older persisted enabled rows
-are reconciled to unavailable rather than permitted to fail every compile.
+The action changes provider state, not canonical storage. Mem0 and Supermemory
+were retired from the shipped catalogue on 2026-08-15 because their Knowledge
+connectors were not implemented. Upgrade code disables any old enabled rows and
+public reads omit them.
+
+Cognee does not ask the user for another AI key. Each operation reuses the same
+tenant/workspace/user AI connection selected for ordinary chat, through a
+server-side Bifrost virtual key restricted to that exact model. The provider key
+stays sealed in the kernel and local embeddings are keyless. Concurrent users'
+routes are carried in request-local Cognee contexts rather than process-global
+environment variables.
 
 ## 6. Codex and MCP contract
 
@@ -77,8 +82,8 @@ invoke `knowledge.asset.list` and `knowledge.asset.original` through the normal
 dispatcher, so they retain grant checks, workspace scope, rate limits, output
 validation, and audit.
 
-Codex is the agent runtime. Cognee, Hatchet, Bifrost, Mem0, and Supermemory are
-processors or infrastructure, never agents and never policy authorities.
+Codex is the agent runtime. Cognee, Hatchet, and Bifrost are processors or
+infrastructure, never agents and never policy authorities.
 
 ## 7. Current boundary
 
@@ -95,5 +100,5 @@ are already installed.
 - Every passage retains an immutable revision citation.
 - Source occurrence and embedding model provenance are inspectable.
 - Erasure is deliberate and reference-safe.
-- Cognee is visibly bundled; add-ons are visibly non-authoritative.
+- Cognee is visibly bundled and remains non-authoritative.
 - Browser, HTTP, MCP tool, and MCP resource paths reuse governed verbs.
