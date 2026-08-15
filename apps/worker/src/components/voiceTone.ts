@@ -63,8 +63,20 @@ export const TARGET_AIR_GAP_DB = 3;
  */
 export const TARGET_SIBILANT_DB = -24;
 
-/** Bounds on the automatic correction. It fixes a tilt; it is not an effect. */
-export const MAX_TILT_GAIN_DB = 12;
+/**
+ * Bounds on the automatic correction. It fixes a tilt; it is not an effect.
+ *
+ * Raised from 12 to 16 on 2026-08-15, by ear. At 12 both Maya and Joi sat ON
+ * the clamp -- Maya's measured deficit is 17.0 dB -- so the ceiling was setting
+ * their correction rather than the measurement, which is the wrong thing to be
+ * in charge. Sixteen lets the measurement decide for every voice seen so far
+ * except Maya, who remains one decibel short of what she asks for.
+ *
+ * It is not unbounded, and should not become so: past this a shelf amplifies
+ * whatever noise sits above the sibilant band as much as any signal, and the
+ * failure mode is hiss that no amount of level matching hides.
+ */
+export const MAX_TILT_GAIN_DB = 16;
 export const MIN_TILT_GAIN_DB = 0;
 
 /** A character's declared shaping may not exceed this in either direction. */
