@@ -32,6 +32,10 @@ def _conversation_view(chat_service: Any, tenant_id: str, conversation: Any) -> 
         "status": conversation.status.value,
         "updated_at": conversation.updated_at.isoformat(),
         "working": chat_service.conversation_is_working(tenant_id, conversation.id),
+        "origin": conversation.origin.value,
+        "source_ref": conversation.source_ref,
+        "source_run_id": conversation.source_run_id,
+        "companion_id": conversation.companion_id,
     }
 
 

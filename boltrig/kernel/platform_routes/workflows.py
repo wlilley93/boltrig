@@ -42,6 +42,22 @@ def _lifecycle(workflow, schedule_record=None) -> dict:
     }
 
 
+def _routine(workflow) -> dict | None:
+    """Project only the closed, non-secret v1 routine authoring contract."""
+    from boltrig.workflows.routine_contract import routine_spec
+
+    spec = routine_spec(workflow.definition)
+    if spec is None:
+        return None
+    return {
+        "version": 1,
+        "name": spec.name,
+        "goal": spec.goal,
+        "companion_id": spec.companion_id,
+        "notify": {"completion": spec.notify_completion},
+    }
+
+
 _OCCURRENCE_REASONS = frozenset(
     {
         "manual_retry_requested",
@@ -123,6 +139,7 @@ def _register_read_routes(app, P, K) -> None:
                     "version": workflow.version,
                     "source": workflow.source.value,
                     "intent_tags": workflow.intent_tags,
+                    "routine": _routine(workflow),
                     **_lifecycle(workflow, schedules.get(workflow.id)),
                 }
                 for workflow in workflows
@@ -141,6 +158,7 @@ def _register_read_routes(app, P, K) -> None:
                         "source": workflow.source.value,
                         "definition": workflow.definition,
                         "intent_tags": workflow.intent_tags,
+                        "routine": _routine(workflow),
                         **_lifecycle(workflow, schedule),
                     }
                 )

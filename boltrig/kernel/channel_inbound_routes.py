@@ -21,20 +21,16 @@ from boltrig.models import (
 )
 from boltrig.work.normalise import normalise
 
+from .work_authority import stamp_creator_ceiling
+
 from .channel_principal import resolve_channel_principal
 from .channel_workflow_trigger_bridge import bound_event_response
 from .channel_policy import chat_is_allowed, stamp_thread_ceiling, thread_ceiling
 
 
-async def channel_inbound(
-    channel_id: str, body: dict, request: Request, kernel
-) -> JSONResponse:
+async def channel_inbound(channel_id: str, body: dict, request: Request, kernel) -> JSONResponse:
     channel = await kernel.store.get_channel_by_id(channel_id)
-    if (
-        channel is None
-        or not channel.enabled
-        or channel.transport not in ("webhook", "socket")
-    ):
+    if channel is None or not channel.enabled or channel.transport not in ("webhook", "socket"):
         return JSONResponse({"error": "unknown_channel"}, status_code=404)
     candidate = await _verified_candidate(kernel, channel, body, request)
     if isinstance(candidate, JSONResponse):
@@ -42,20 +38,14 @@ async def channel_inbound(
     from boltrig.store.postgres import set_current_tenant
 
     set_current_tenant(channel.tenant_id)
-    sender = str(
-        body.get(channel.config.get("sender_field", "sender")) or ""
-    ).strip()
+    sender = str(body.get(channel.config.get("sender_field", "sender")) or "").strip()
     if not sender:
-        return JSONResponse(
-            {"status": "error", "reason": "no sender"}, status_code=400
-        )
+        return JSONResponse({"status": "error", "reason": "no sender"}, status_code=400)
     # ``allowed_chats`` is opt-in policy-as-data. Its presence switches the
     # channel into allowlist mode; malformed or missing chat ids fail closed,
     # while channels without the key retain their historical behaviour.
     if not chat_is_allowed(channel, body):
-        return JSONResponse(
-            {"status": "denied", "reason": "chat_not_allowed"}, status_code=403
-        )
+        return JSONResponse({"status": "denied", "reason": "chat_not_allowed"}, status_code=403)
     principal = await _resolve_sender(kernel, channel, sender, body)
     if isinstance(principal, JSONResponse):
         return principal
@@ -66,9 +56,7 @@ async def channel_inbound(
     if delivery and await is_duplicate_delivery(
         kernel.store, channel.tenant_id, channel.id, str(delivery)
     ):
-        return JSONResponse(
-            {"status": "duplicate", "reason": "delivery already ingested"}
-        )
+        return JSONResponse({"status": "duplicate", "reason": "delivery already ingested"})
     return await _terminal_or_work(
         kernel,
         channel,
@@ -84,41 +72,29 @@ async def _verified_candidate(kernel, channel, body, request):
     from .channel_routes import _channel_secret
 
     credential = (
-        await kernel.store.get_credential_ref(
-            channel.tenant_id, channel.credential_ref
-        )
+        await kernel.store.get_credential_ref(channel.tenant_id, channel.credential_ref)
         if channel.credential_ref
         else None
     )
     secret = await _channel_secret(kernel, credential)
     if not secret:
-        return JSONResponse(
-            {"error": "channel_misconfigured"}, status_code=503
-        )
+        return JSONResponse({"error": "channel_misconfigured"}, status_code=503)
     try:
         return verify_and_normalise(body, dict(request.headers), secret)
     except WebhookAuthError:
-        return JSONResponse(
-            {"status": "denied", "reason": "signature"}, status_code=401
-        )
+        return JSONResponse({"status": "denied", "reason": "signature"}, status_code=401)
     except WebhookValidationError as exc:
-        return JSONResponse(
-            {"status": "error", "reason": str(exc)}, status_code=400
-        )
+        return JSONResponse({"status": "error", "reason": str(exc)}, status_code=400)
 
 
 async def _resolve_sender(kernel, channel, sender: str, body: dict):
     from .channel_routes import _consume_pairing, _self_onboard
 
-    principal = await resolve_channel_principal(
-        kernel.store, channel, sender
-    )
+    principal = await resolve_channel_principal(kernel.store, channel, sender)
     if principal is None and channel.unpaired_behavior == "pair":
         code = str(body.get("pairing_code") or "").strip()
         if code and await _consume_pairing(kernel, channel, sender, code):
-            principal = await resolve_channel_principal(
-                kernel.store, channel, sender
-            )
+            principal = await resolve_channel_principal(kernel.store, channel, sender)
     if principal is None:
         try:
             principal = await _self_onboard(kernel, channel, sender)
@@ -188,18 +164,15 @@ async def _terminal_or_work(
     )
     if terminal is not None:
         return terminal
-    item = normalise(
-        body, source=channel.platform, tenant_id=channel.tenant_id
-    )
+    item = normalise(body, source=channel.platform, tenant_id=channel.tenant_id)
     item.on_behalf_of = principal.subject
     item.target, item.reply_route = target, reply_route
     item.reply_route["sender"] = sender
+    stamp_creator_ceiling(item, principal.grants)
     stamp_thread_ceiling(item, reply_route.get("thread"), ceiling)
     await kernel.store.create_work_item(item)
     await _audit_intake(kernel, channel, principal, item)
-    return JSONResponse(
-        {"status": "ok", "work_item": item.id}, status_code=202
-    )
+    return JSONResponse({"status": "ok", "work_item": item.id}, status_code=202)
 
 
 async def _audit_intake(kernel, channel, principal, item) -> None:
@@ -226,9 +199,7 @@ async def _audit_intake(kernel, channel, principal, item) -> None:
 def register_channel_inbound_route(app, *, get_kernel) -> None:
     kernel = Depends(get_kernel)
 
-    async def endpoint(
-        channel_id: str, body: dict, request: Request, k=kernel
-    ):
+    async def endpoint(channel_id: str, body: dict, request: Request, k=kernel):
         return await channel_inbound(channel_id, body, request, k)
 
     app.add_api_route(

@@ -1,0 +1,233 @@
+"""Kernel-only lifecycle for a scoped user/workspace/org Bifrost binding.
+
+The browser's provider key is sealed by the existing ``ai_configs`` flow. This
+facade turns it into one provider key and one exact-model virtual key, retaining
+only sealed references. HTTP validation and Bifrost object administration live
+in the adjacent transport/admin collaborators so this module owns only the
+governed binding lifecycle.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any
+
+import httpx
+
+from boltrig.models.model_id_policy import exact_model_id
+
+from .bifrost_user_admin import BIFROST_PROVIDERS, BifrostUserAdmin
+from .bifrost_user_transport import (
+    BifrostUserBindingUnavailable,
+    ascii_secret,
+    safe_identifier,
+)
+
+_PROVIDER_ALIASES = {
+    "google": "gemini",
+    "google-generative-ai": "gemini",
+    "x-ai": "xai",
+}
+
+
+@dataclass(frozen=True, repr=False, slots=True)
+class BifrostUserBinding:
+    provider: str
+    model_id: str
+    provider_key_id: str
+    virtual_key_id: str
+    virtual_key: str
+    credential_ref: str
+
+    def __repr__(self) -> str:
+        return "BifrostUserBinding(redacted=True)"
+
+
+def binding_credential_ref(tenant_id: str, resolution: Any) -> str:
+    level = str(getattr(resolution, "level", "") or "")
+    scope_id = str(getattr(resolution, "scope_id", "") or "")
+    modality = str(getattr(resolution, "modality", "text") or "text").lower()
+    if not tenant_id or not level or not scope_id or modality not in {"text", "vision"}:
+        raise BifrostUserBindingUnavailable(
+            "scoped AI credential metadata is unavailable"
+        )
+    digest = hashlib.sha256(
+        f"{tenant_id}\0{level}\0{scope_id}\0{modality}".encode()
+    ).hexdigest()
+    return f"bifrost_binding:{digest}"
+
+
+def _binding_ids(tenant_id: str, resolution: Any) -> tuple[str, str, str]:
+    ref = binding_credential_ref(tenant_id, resolution)
+    digest = ref.rsplit(":", 1)[-1]
+    return ref, f"bt-{digest[:32]}", f"boltrig-{digest[:24]}"
+
+
+def _provider_and_model(resolution: Any) -> tuple[str, str, str]:
+    model_id = exact_model_id(getattr(resolution, "model", None))
+    configured = str(getattr(resolution, "provider", "") or "").strip().lower()
+    configured = _PROVIDER_ALIASES.get(configured, configured)
+    prefix, separator, provider_model = model_id.partition("/")
+    provider = (
+        _PROVIDER_ALIASES.get(prefix.lower(), prefix.lower())
+        if separator
+        else configured
+    )
+    if not provider or provider not in BIFROST_PROVIDERS:
+        raise BifrostUserBindingUnavailable(
+            "the selected provider is not supported by Bifrost"
+        )
+    if configured and configured not in {provider, "custom"}:
+        raise BifrostUserBindingUnavailable(
+            "the selected provider and model do not match"
+        )
+    raw_model = provider_model if separator else model_id
+    if not raw_model or len(raw_model) > 160:
+        raise BifrostUserBindingUnavailable("the selected model is invalid")
+    return provider, raw_model, f"{provider}/{raw_model}"
+
+
+class BifrostUserGateway:
+    """Idempotent facade for a scope's exact Bifrost model credential."""
+
+    def __init__(
+        self,
+        *,
+        env: Mapping[str, str] | None = None,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self._admin = BifrostUserAdmin(env=env, client=client)
+        self._lock = asyncio.Lock()
+
+    def __repr__(self) -> str:
+        return "BifrostUserGateway(redacted=True)"
+
+    async def load(
+        self, store: Any, tenant_id: str, resolution: Any
+    ) -> BifrostUserBinding | None:
+        ref = binding_credential_ref(tenant_id, resolution)
+        sealed = await store.get_credential_ref(tenant_id, ref)
+        if not isinstance(sealed, dict) or not sealed:
+            return None
+        provider, _raw_model, model_id = _provider_and_model(resolution)
+        try:
+            virtual_key = ascii_secret(sealed.get("secret"), "Bifrost virtual key")
+            provider_key_id = safe_identifier(
+                sealed.get("provider_key_id"), "provider key id"
+            )
+            virtual_key_id = safe_identifier(
+                sealed.get("virtual_key_id"), "virtual key id"
+            )
+        except BifrostUserBindingUnavailable:
+            return None
+        expected_ref = getattr(resolution, "credential_ref", None)
+        if (
+            sealed.get("provider") != provider
+            or sealed.get("model_id") != model_id
+            or sealed.get("source_credential_ref") != expected_ref
+        ):
+            return None
+        return BifrostUserBinding(
+            provider=provider,
+            model_id=model_id,
+            provider_key_id=provider_key_id,
+            virtual_key_id=virtual_key_id,
+            virtual_key=virtual_key,
+            credential_ref=ref,
+        )
+
+    async def ensure(
+        self,
+        store: Any,
+        tenant_id: str,
+        resolution: Any,
+        provider_key: str,
+    ) -> BifrostUserBinding:
+        ascii_secret(provider_key, "provider key")
+        existing = await self.load(store, tenant_id, resolution)
+        if existing is not None and await self.is_usable(existing):
+            return existing
+        async with self._lock:
+            existing = await self.load(store, tenant_id, resolution)
+            if existing is not None and await self.is_usable(existing):
+                return existing
+            return await self._provision(
+                store, tenant_id, resolution, provider_key
+            )
+
+    async def revoke(self, store: Any, tenant_id: str, resolution: Any) -> None:
+        """Revoke the scope's virtual/provider keys before local deletion."""
+
+        ref = binding_credential_ref(tenant_id, resolution)
+        sealed = await store.get_credential_ref(tenant_id, ref)
+        if not isinstance(sealed, dict) or not sealed:
+            return
+        await self._admin.revoke_metadata(sealed)
+        await store.delete_credential_ref(tenant_id, ref)
+
+    async def is_usable(self, binding: BifrostUserBinding) -> bool:
+        return await self._admin.is_usable(binding)
+
+    async def _provision(
+        self,
+        store: Any,
+        tenant_id: str,
+        resolution: Any,
+        provider_key: str,
+    ) -> BifrostUserBinding:
+        provider, raw_model, model_id = _provider_and_model(resolution)
+        ref, provider_key_id, virtual_key_name = _binding_ids(tenant_id, resolution)
+        previous = await store.get_credential_ref(tenant_id, ref)
+        if (
+            isinstance(previous, dict)
+            and previous
+            and previous.get("provider") != provider
+        ):
+            await self._admin.revoke_metadata(previous)
+        await self._admin.ensure_provider(provider)
+        await self._admin.ensure_provider_key(
+            provider, provider_key_id, raw_model, provider_key
+        )
+        virtual_key_id, virtual_key = await self._admin.ensure_virtual_key(
+            virtual_key_name, provider, provider_key_id, raw_model
+        )
+        binding = BifrostUserBinding(
+            provider=provider,
+            model_id=model_id,
+            provider_key_id=provider_key_id,
+            virtual_key_id=virtual_key_id,
+            virtual_key=virtual_key,
+            credential_ref=ref,
+        )
+        if not await self.is_usable(binding):
+            raise BifrostUserBindingUnavailable(
+                "Bifrost could not verify that the selected key can use this model"
+            )
+        await store.set_credential_ref(
+            tenant_id,
+            ref,
+            {
+                "store": "bifrost",
+                "ref": virtual_key_id,
+                "secret": virtual_key,
+                "provider": provider,
+                "model_id": model_id,
+                "source_credential_ref": getattr(
+                    resolution, "credential_ref", None
+                ),
+                "provider_key_id": provider_key_id,
+                "virtual_key_id": virtual_key_id,
+            },
+        )
+        return binding
+
+
+__all__ = [
+    "BifrostUserBinding",
+    "BifrostUserBindingUnavailable",
+    "BifrostUserGateway",
+    "binding_credential_ref",
+]

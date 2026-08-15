@@ -12,7 +12,7 @@ TASK_ULTRACODE_AGENT = "boltrig-ultracode-agent"
 
 
 class UltracodeRunInput(BaseModel):
-    """Pure-data input for a phased OpenCode/Ultracode workflow."""
+    """Pure-data input for a phased Boltrig workflow."""
 
     tenant: str
     workflow: dict[str, Any] = Field(default_factory=dict)

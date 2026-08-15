@@ -40,12 +40,11 @@ Honest degradations (documented, not hidden):
     from the surviving facts only, so a recall after forget cannot return the
     fact from any layer.
 
-Model configuration. Cognee reads its own env names (pydantic settings):
-``LLM_PROVIDER`` / ``LLM_MODEL`` / ``LLM_ENDPOINT`` / ``LLM_API_KEY`` and
-``EMBEDDING_PROVIDER`` / ``EMBEDDING_MODEL`` / ``EMBEDDING_ENDPOINT`` /
-``EMBEDDING_API_KEY`` / ``EMBEDDING_DIMENSIONS`` (OpenAI-compatible endpoints
-included; ``fastembed`` gives keyless local embeddings). The engine maps its
-config block onto those env names without overriding values already set::
+Model configuration. Normal Knowledge operations receive the caller's scoped
+chat model as an explicit request value and reach it through the same server-side
+Bifrost binding. The raw provider key never enters Cognee. Embeddings use bundled
+``fastembed`` locally and need no key. Static server deployments retain the older
+explicit Cognee config block as a backwards-compatible fallback::
 
     {"llm": {"provider": ..., "model": ..., "endpoint": ..., "api_key": ...},
      "embedding": {...same keys..., "dimensions": ...},
@@ -57,15 +56,20 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-import threading
 from typing import Any
 
 from boltrig.kernel.pii import contains_secret
 
+from .cognee_runtime import (
+    CogneeRuntimeModel,
+    _explicit_config as _explicit_config,
+    _require_cognee as _require_cognee,
+    local_embeddings_available,
+    runtime_configs,
+)
 from .engine import EngineFact, RecallHit, signal_delta
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
-_COGNEE_IMPORT_LOCK = threading.Lock()
 
 
 def _slug(value: str, max_len: int = 24) -> str:
@@ -83,32 +87,6 @@ def _item_payload(item: Any) -> tuple[str, float | None]:
     if isinstance(item, dict):
         return str(item.get("text") or item.get("content") or item), item.get("score")
     return (getattr(item, "text", None) or str(item)), getattr(item, "score", None)
-
-
-def _require_cognee() -> Any:
-    # Cognee imports python-dotenv and may otherwise load the host repository's
-    # ambient .env into os.environ. A projection library must never activate
-    # unrelated Boltrig process settings or ingest undelegated credentials. The
-    # documented python-dotenv kill switch prevents the load; the snapshot is a
-    # defence-in-depth cleanup for any other import-time mutation.
-    with _COGNEE_IMPORT_LOCK:
-        before = dict(os.environ)
-        os.environ["PYTHON_DOTENV_DISABLED"] = "1"
-        try:
-            import cognee
-        except ImportError as exc:  # pragma: no cover - exercised via monkeypatched import
-            raise RuntimeError(
-                "CogneeEngine requires the 'cognee' package "
-                "(pip install 'boltrig[cognee]'). Memory engines are ADOPTED, "
-                "not built (MEM-ENG-01)."
-            ) from exc
-        finally:
-            for key in set(os.environ) - set(before):
-                os.environ.pop(key, None)
-            for key, value in before.items():
-                if os.environ.get(key) != value:
-                    os.environ[key] = value
-    return cognee
 
 
 class CogneeEngine:
@@ -152,11 +130,26 @@ class CogneeEngine:
         self._apply_env(cognee)
         return cognee
 
+    @staticmethod
+    def _local_embeddings_available() -> bool:
+        return local_embeddings_available()
+
+    def _runtime_configs(
+        self, runtime_model: CogneeRuntimeModel | None
+    ) -> tuple[Any | None, Any | None]:
+        return runtime_configs(runtime_model)
+
     def _dataset(self, tenant_id: str, owner_scope: str) -> str:
         return dataset_for(tenant_id, owner_scope)
 
     # --- MemoryEngine --------------------------------------------------------
-    async def remember(self, tenant_id: str, facts: list[EngineFact]) -> list[str]:
+    async def remember(
+        self,
+        tenant_id: str,
+        facts: list[EngineFact],
+        *,
+        runtime_model: CogneeRuntimeModel | None = None,
+    ) -> list[str]:
         # SEC-42 defence in depth: refuse secret-bearing content before the cognee
         # import, so nothing secret can ever reach the package or its stores. The
         # adapter already screens at the ingestion boundary; this is the second net.
@@ -168,17 +161,27 @@ class CogneeEngine:
                     "refusing to persist into cognee (SEC-42)"
                 )
         cognee = self._ready()
+        llm_config, embedding_config = self._runtime_configs(runtime_model)
         ids: list[str] = []
         touched: set[str] = set()
         for f in facts:
             ds = self._dataset(tenant_id, f.owner_scope)
-            await cognee.add(f.content, dataset_name=ds)
+            await cognee.add(
+                f.content,
+                dataset_name=ds,
+                llm_config=llm_config,
+                embedding_config=embedding_config,
+            )
             self._index.setdefault(tenant_id, {})[f.id] = f
             self._scopes.setdefault(tenant_id, set()).add(f.owner_scope)
             touched.add(ds)
             ids.append(f.id)
         if touched:
-            await cognee.cognify(datasets=sorted(touched))
+            await cognee.cognify(
+                datasets=sorted(touched),
+                llm_config=llm_config,
+                embedding_config=embedding_config,
+            )
         return ids
 
     async def recall(
@@ -190,8 +193,10 @@ class CogneeEngine:
         mode: str = "graph_completion",
         limit: int = 20,
         max_hops: int = 4,
+        runtime_model: CogneeRuntimeModel | None = None,
     ) -> list[RecallHit]:
         cognee = self._ready()
+        llm_config, embedding_config = self._runtime_configs(runtime_model)
         allowed = set(scopes)
         store = self._index.get(tenant_id, {})
         in_scope = {fid: f for fid, f in store.items() if f.owner_scope in allowed}
@@ -215,6 +220,8 @@ class CogneeEngine:
                 query_type=SearchType.CHUNKS,
                 datasets=datasets,
                 top_k=max(limit * 4, limit),
+                llm_config=llm_config,
+                embedding_config=embedding_config,
             )
             for rank, item in enumerate(items):
                 text, base = _item_payload(item)
@@ -272,11 +279,13 @@ class CogneeEngine:
         fact_ids: list[str] | None = None,
         source_ref: str | None = None,
         scopes: list[str] | None = None,
+        runtime_model: CogneeRuntimeModel | None = None,
     ) -> list[str]:
         """REAL erasure (SEC-44): resolve targets (plus derived relationship nodes),
         then drop each affected (tenant, scope) dataset in cognee and rebuild it
         from the surviving facts only."""
         cognee = self._ready()
+        llm_config, embedding_config = self._runtime_configs(runtime_model)
         store = self._index.get(tenant_id, {})
         allowed = set(scopes) if scopes is not None else None
 
@@ -301,7 +310,11 @@ class CogneeEngine:
         # derived edges/facts: drop relationship nodes that referenced a removed
         # node, and prune dangling edges everywhere (complete erasure, SEC-44).
         for f in list(store.values()):
-            if f.kind == "relationship" and any(r in removed for r in f.relates_to) and _erasable(f):
+            if (
+                f.kind == "relationship"
+                and any(r in removed for r in f.relates_to)
+                and _erasable(f)
+            ):
                 store.pop(f.id, None)
                 affected_scopes.add(f.owner_scope)
                 removed.add(f.id)
@@ -316,15 +329,24 @@ class CogneeEngine:
             survivors = [f for f in store.values() if f.owner_scope == scope]
             if survivors:
                 for f in survivors:
-                    await cognee.add(f.content, dataset_name=ds)
-                await cognee.cognify(datasets=[ds])
+                    await cognee.add(
+                        f.content,
+                        dataset_name=ds,
+                        llm_config=llm_config,
+                        embedding_config=embedding_config,
+                    )
+                await cognee.cognify(
+                    datasets=[ds],
+                    llm_config=llm_config,
+                    embedding_config=embedding_config,
+                )
             else:
                 live.discard(scope)
         for fid in removed:
             self._weight.pop((tenant_id, fid), None)
         return sorted(removed)
 
-    async def health(self) -> str:
+    async def health(self, runtime_model: CogneeRuntimeModel | None = None) -> str:
         """'down' + reason when cognee is unimportable; 'degraded' + reason when it
         is importable but no LLM is configured (cognify would fail); else 'ok'."""
         try:
@@ -332,6 +354,12 @@ class CogneeEngine:
         except Exception as exc:
             self.health_reason = f"cognee not importable: {exc}"
             return "down"
+        if runtime_model is not None:
+            if not self._local_embeddings_available():
+                self.health_reason = "Cognee needs its bundled local embedding support"
+                return "degraded"
+            self.health_reason = None
+            return "ok"
         llm_cfg = self._config.get("llm") or {}
         provider = os.environ.get("LLM_PROVIDER") or llm_cfg.get("provider") or "openai"
         api_key = os.environ.get("LLM_API_KEY") or llm_cfg.get("api_key")

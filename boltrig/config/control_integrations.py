@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Any
+from urllib.parse import urlsplit
 
 from boltrig.adapters.base import Result
 from boltrig.kernel.integration_credentials import integration_manual_secret_ref
@@ -37,6 +38,17 @@ def validate_integration_secret_fields(
             return None, "field_length_invalid"
         if any(ord(character) < 32 or ord(character) == 127 for character in value):
             return None, "field_contains_control_characters"
+        if name == "base_url":
+            parsed = urlsplit(value)
+            if (
+                parsed.scheme != "https"
+                or not parsed.hostname
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.query
+                or parsed.fragment
+            ):
+                return None, "base_url_must_be_canonical_https_origin"
         values[name] = value
     return values, None
 

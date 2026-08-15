@@ -97,7 +97,14 @@ async def register_questions_verb(store: Store, tenant_id: str) -> None:
             noun_id=QUESTIONS_NOUN,
             input_schema=QUESTIONS_INPUT_SCHEMA,
             output_schema=QUESTIONS_OUTPUT_SCHEMA,
-            description="Ask the user a clarifying question and pause for the answer.",
+            description=(
+                "Ask one necessary clarifying question, then pause for its answer. "
+                "Use this only when the missing choice materially changes the safe "
+                "result. When choices are useful, put the recommended one first, "
+                "label it '(Recommended)', and keep the options mutually exclusive. "
+                "Use secure input with a bounded purpose for a secret the agent must "
+                "never receive."
+            ),
             consequence=Consequence.LOW,
         )
     )

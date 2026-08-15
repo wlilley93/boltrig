@@ -15,10 +15,9 @@ from .corpus import (
     build_corpus,
 )
 from .corpus_io import corpus_jsonl_lines
-from .gate import CaseScore, GateVerdict, craft_verdict, register_verdict
+from .gate import GateVerdict, register_verdict
 
 __all__ = [
-    "CaseScore",
     "Corpus",
     "CorpusDataClassRefused",
     "CorpusTenantMismatch",
@@ -27,6 +26,5 @@ __all__ = [
     "SftRecord",
     "build_corpus",
     "corpus_jsonl_lines",
-    "craft_verdict",
     "register_verdict",
 ]

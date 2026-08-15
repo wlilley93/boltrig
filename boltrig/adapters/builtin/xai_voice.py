@@ -112,6 +112,7 @@ class XaiVoiceAdapter(HttpAdapter):
     version = "0.1.0"
     source = "builtin"
     user_agent = "boltrig-xai-voice/1.0"
+    setup_without_probe = True
 
     def __init__(
         self,
@@ -186,7 +187,10 @@ class XaiVoiceAdapter(HttpAdapter):
         )
 
     async def health(self) -> str:
-        return "unknown"
+        # No credential is available to a background probe.  Loaded means the
+        # typed setup contract is usable; provider/key validity remains
+        # unverified until an authenticated invocation, so never report "ok".
+        return "degraded"
 
     # --- handlers ------------------------------------------------------------
     async def _speak(

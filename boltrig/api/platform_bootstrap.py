@@ -48,18 +48,7 @@ def _platform_policy_inputs(
     }
 
 
-def _bind_distill_eval(kernel: Any, tenant: str, eval_runner: Any) -> None:
-    """The distill adapter's craft gate uses the composition-owned EvalRunner
-    (never constructing its own spawner - the CODEX-COMPOSITION-1 source gate);
-    injected late like ``control.set_admin`` below."""
-    distill = kernel.loader.peek(tenant, "distill")
-    if distill is not None and hasattr(distill, "set_eval"):
-        distill.set_eval(eval_runner)
-
-
-def _bind_control_services(
-    control: Any, admin: Any, workflows: Any, model_catalogue: Any
-) -> None:
+def _bind_control_services(control: Any, admin: Any, workflows: Any, model_catalogue: Any) -> None:
     if control is not None and hasattr(control, "set_admin"):
         control.set_admin(admin)
     if control is not None and hasattr(control, "set_workflows"):
@@ -124,7 +113,6 @@ def _build_platform_services(
     _bind_control_services(control, admin, workflows, model_catalogue)
 
     eval_runner = EvalRunner(kernel, spawner, workflows=workflows)
-    _bind_distill_eval(kernel, tenant, eval_runner)
     status = StackToolStatusProvider(ModelGatewayStatusProvider())
     codex_execution = build_codex_execution_stack(settings, kernel.store)
     return {

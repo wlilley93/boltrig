@@ -128,7 +128,7 @@ def _agent(raw: dict[str, Any], index: int) -> dict[str, Any]:
     }
     for key in (
         "capability", "skills", "prefer", "model_profile", "ai_profile",
-        "repo_root", "opencode_auto", "opencode_agent", "conversation_id",
+        "repo_root", "conversation_id",
         "memory", "run_type",
     ):
         if key in raw:

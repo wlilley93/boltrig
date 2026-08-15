@@ -45,7 +45,6 @@ async def _default_bootstrap() -> dict[str, Any]:
         effective_manifest_from_desired,
         record_permanent_fleet_startup_observation,
     )
-
     from .pump import build_org
     from boltrig.api.model_runtime_composition import compose_process_model_runtime
 
@@ -78,11 +77,20 @@ async def _default_bootstrap() -> dict[str, Any]:
             manifest = None
     tenant = manifest.tenant_id if manifest is not None else _DEFAULT_TENANT
     spawner = _build_process_spawner(kernel, manifest, codex_config, model_catalogue)
+    codex_execution = build_codex_execution_stack(load_settings(), kernel.store)
     pump = build_org(
         kernel,
         spawner,
         manifest,
-        codex_execution=build_codex_execution_stack(load_settings(), kernel.store),
+        codex_execution=codex_execution,
+    )
+    from .hatchet_app import _routine_chat_service
+
+    chat = _routine_chat_service(
+        kernel,
+        spawner,
+        chat_config=manifest.chat if manifest is not None else None,
+        codex_execution=codex_execution,
     )
     await _publish_birth_profile_startup(
         kernel,
@@ -99,4 +107,4 @@ async def _default_bootstrap() -> dict[str, Any]:
             os.environ.get("HOSTNAME") or "fleet-worker",
         )
     wire_hitl_resume(kernel, pump=pump)
-    return {"kernel": kernel, "pump": pump, "spawner": spawner}
+    return {"kernel": kernel, "pump": pump, "spawner": spawner, "chat": chat}

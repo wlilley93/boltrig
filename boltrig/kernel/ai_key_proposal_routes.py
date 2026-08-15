@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
+from typing import Any
 
+from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from boltrig.kernel.control_routes import dispatch_control_route
@@ -133,6 +136,22 @@ async def _finalize_approved(
             status_code=409,
         )
     await audit(kernel, principal, "ai_key.set", proposal_audit(proposal))
+    activated = await activate_ai_key_config(
+        kernel,
+        principal,
+        proposal.level,
+        proposal.scope_id,
+        proposal.modality,
+    )
+    if activated is not None:
+        await audit(
+            kernel,
+            principal,
+            "ai_key.gateway.unavailable",
+            proposal_audit(proposal),
+            status="unavailable",
+        )
+        return activated
     return JSONResponse(
         {
             "status": "ok",
@@ -146,6 +165,53 @@ async def _finalize_approved(
     )
 
 
+async def activate_ai_key_config(kernel, principal, level, scope_id, modality):
+    """Provision the exact approved key/model into Bifrost, keys-only outward."""
+
+    from boltrig.identity import AiKeyResolution, load_ai_key_material
+    from boltrig.identity.bifrost_user_binding import (
+        BifrostUserBindingUnavailable,
+        BifrostUserGateway,
+    )
+
+    config = await kernel.store.get_ai_config(
+        principal.tenant_id,
+        level,
+        scope_id,
+        modality,
+    )
+    if config is None:
+        return JSONResponse(
+            {"status": "unavailable", "reason": "approved AI configuration is unavailable"},
+            status_code=503,
+        )
+    resolution = AiKeyResolution(
+        level=config.level,
+        scope_id=config.scope_id,
+        modality=config.modality,
+        credential_ref=config.credential_ref,
+        provider=config.provider,
+        model=config.model,
+        base_url=config.base_url,
+    )
+    material = await load_ai_key_material(kernel.store, principal.tenant_id, resolution)
+    if material is None:
+        return JSONResponse(
+            {"status": "unavailable", "reason": "approved provider credential is unavailable"},
+            status_code=503,
+        )
+    try:
+        await BifrostUserGateway().ensure(
+            kernel.store, principal.tenant_id, resolution, material
+        )
+    except BifrostUserBindingUnavailable as error:
+        return JSONResponse(
+            {"status": "unavailable", "reason": str(error)},
+            status_code=503,
+        )
+    return None
+
+
 async def _invalidate_reapproval(kernel, principal, proposal, pending):
     body = json.loads(bytes(pending.body))
     replacement_id = str(body.get("hitl_request_id") or "")
@@ -154,17 +220,20 @@ async def _invalidate_reapproval(kernel, principal, proposal, pending):
     await _invalidate_state(kernel, principal, proposal, "invalidated")
 
 
-def register_ai_key_proposal_routes(
-    app,
-    P,
-    K,
-    audit,
-    authorize,
-    admin_roles,
-    workspace_admin_roles,
-) -> None:
-    @app.get("/v1/ai-keys/proposals")
-    async def list_ai_key_proposals(k=K, p=P) -> dict:
+@dataclass(frozen=True)
+class _RouteDeps:
+    app: Any
+    principal: Any
+    kernel: Any
+    audit: Any
+    authorize: Any
+    admin_roles: Any
+    workspace_admin_roles: Any
+
+
+def _register_proposal_read_routes(deps: _RouteDeps) -> None:
+    @deps.app.get("/v1/ai-keys/proposals")
+    async def list_ai_key_proposals(k=deps.kernel, p=deps.principal) -> dict:
         proposals = await k.store.list_ai_key_secret_proposals(
             p.tenant_id, p.subject, p.on_behalf_of
         )
@@ -175,16 +244,20 @@ def register_ai_key_proposal_routes(
             ]
         }
 
-    @app.get("/v1/ai-keys/proposals/{proposal_id}")
-    async def get_ai_key_proposal(proposal_id: str, k=K, p=P) -> JSONResponse:
+    @deps.app.get("/v1/ai-keys/proposals/{proposal_id}")
+    async def get_ai_key_proposal(proposal_id: str, k=deps.kernel, p=deps.principal):
         proposal = await _load_owned_proposal(k, p, proposal_id)
         if proposal is None:
             return _not_found()
         state = await proposal_state(k, p, proposal)
         return JSONResponse({"status": state, "proposal": proposal_view(proposal, state)})
 
-    @app.post("/v1/ai-keys/proposals/{proposal_id}/finalize")
-    async def finalize_ai_key_proposal(proposal_id: str, k=K, p=P) -> JSONResponse:
+
+def _register_finalize_route(deps: _RouteDeps) -> None:
+    @deps.app.post("/v1/ai-keys/proposals/{proposal_id}/finalize")
+    async def finalize_ai_key_proposal(
+        proposal_id: str, k=deps.kernel, p=deps.principal
+    ) -> JSONResponse:
         proposal = await _load_owned_proposal(k, p, proposal_id)
         if proposal is None:
             return _not_found()
@@ -198,14 +271,65 @@ def register_ai_key_proposal_routes(
             k,
             p,
             proposal,
-            audit,
-            authorize,
-            admin_roles,
-            workspace_admin_roles,
+            deps.audit,
+            deps.authorize,
+            deps.admin_roles,
+            deps.workspace_admin_roles,
         )
 
-    @app.delete("/v1/ai-keys/proposals/{proposal_id}")
-    async def invalidate_ai_key_proposal(proposal_id: str, k=K, p=P) -> JSONResponse:
+
+def _register_approve_route(deps: _RouteDeps) -> None:
+    @deps.app.post("/v1/ai-keys/proposals/{proposal_id}/approve")
+    async def approve_and_finalize_ai_key_proposal(
+        proposal_id: str, k=deps.kernel, p=deps.principal
+    ) -> JSONResponse:
+        """Explicit requester click; hidden approval id never crosses HTTP."""
+
+        proposal = await _load_owned_proposal(k, p, proposal_id)
+        if proposal is None:
+            return _not_found()
+        state = await proposal_state(k, p, proposal)
+        if state == "pending":
+            from boltrig.kernel.hitl_http import respond_to_hitl
+
+            try:
+                await respond_to_hitl(
+                    k,
+                    p,
+                    proposal.approval_id,
+                    "approve",
+                    "Approved during provider setup",
+                )
+            except HTTPException as error:
+                return JSONResponse(
+                    {"status": "denied", "reason": str(error.detail)},
+                    status_code=error.status_code,
+                )
+            proposal = await _load_owned_proposal(k, p, proposal_id)
+            if proposal is None:
+                return _not_found()
+            state = await proposal_state(k, p, proposal)
+        if state != "approved":
+            return JSONResponse(
+                {"status": state, "proposal": proposal_view(proposal, state)},
+                status_code=409,
+            )
+        return await _finalize_approved(
+            k,
+            p,
+            proposal,
+            deps.audit,
+            deps.authorize,
+            deps.admin_roles,
+            deps.workspace_admin_roles,
+        )
+
+
+def _register_invalidate_route(deps: _RouteDeps) -> None:
+    @deps.app.delete("/v1/ai-keys/proposals/{proposal_id}")
+    async def invalidate_ai_key_proposal(
+        proposal_id: str, k=deps.kernel, p=deps.principal
+    ) -> JSONResponse:
         proposal = await _load_owned_proposal(k, p, proposal_id)
         if proposal is None:
             return _not_found()
@@ -214,10 +338,28 @@ def register_ai_key_proposal_routes(
         )
         if proposal.approval_id:
             await k.store.expire_hitl(p.tenant_id, proposal.approval_id)
-        await audit(k, p, "ai_key.proposal.invalidate", proposal_audit(proposal))
+        await deps.audit(k, p, "ai_key.proposal.invalidate", proposal_audit(proposal))
         result = invalidated or proposal
         state = invalidated.status if invalidated is not None else "invalidated"
         return JSONResponse({"status": state, "proposal": proposal_view(result, state)})
+
+
+def register_ai_key_proposal_routes(
+    app,
+    P,
+    K,
+    audit,
+    authorize,
+    admin_roles,
+    workspace_admin_roles,
+) -> None:
+    deps = _RouteDeps(
+        app, P, K, audit, authorize, admin_roles, workspace_admin_roles
+    )
+    _register_proposal_read_routes(deps)
+    _register_finalize_route(deps)
+    _register_approve_route(deps)
+    _register_invalidate_route(deps)
 
 
 def _not_found():
@@ -225,6 +367,7 @@ def _not_found():
 
 
 __all__ = [
+    "activate_ai_key_config",
     "proposal_audit",
     "proposal_params",
     "proposal_view",

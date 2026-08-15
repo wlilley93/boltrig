@@ -28,7 +28,7 @@ NOTIFICATION_EVENTS = (
     {
         "id": WORK_STATUS_EVENT,
         "label": "Work completed",
-        "description": "Channel-originated work reached a terminal state.",
+        "description": "A requested or automatic run reached a terminal state.",
     },
 )
 NOTIFICATION_EVENT_IDS = frozenset(event["id"] for event in NOTIFICATION_EVENTS)

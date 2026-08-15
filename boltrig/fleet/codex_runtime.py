@@ -97,6 +97,7 @@ class CodexRuntime:
         kernel_tools: CodexKernelToolWiring | None = None,
         model_id: str | None = None,
         model_endpoint_id: str | None = None,
+        gateway_virtual_key: str | None = None,
         model_bindings: CodexAssignmentModelBindingRegistry | None = None,
     ) -> None:
         if kernel_tools is not None and type(kernel_tools) is not CodexKernelToolWiring:
@@ -114,6 +115,7 @@ class CodexRuntime:
         self._kernel_tools = kernel_tools
         self._model_id = model_id
         self._model_endpoint_id = model_endpoint_id
+        self._gateway_virtual_key = gateway_virtual_key
         self._model_bindings = model_bindings
 
     async def run(
@@ -138,6 +140,7 @@ class CodexRuntime:
                         tenant_id=context.tenant_id,
                         model_id=self._model_id,
                         endpoint_id=self._model_endpoint_id,
+                        gateway_virtual_key=self._gateway_virtual_key,
                     )
                 )
                 binding_registered = True
@@ -369,6 +372,7 @@ def build_trusted_codex_runtime(codex_config: dict[str, Any] | None, cost_tier: 
         kernel_tools=kernel_tools,
         model_id=model_id,
         model_endpoint_id=cfg.get("model_endpoint_id"),
+        gateway_virtual_key=cfg.get("gateway_virtual_key"),
         model_bindings=provider.model_bindings,
     )
 

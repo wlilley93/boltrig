@@ -10,8 +10,7 @@ from ._shared import audit_authoring, platform_state
 
 # Runtime names a worker capability. Codex is the only target agent runtime
 # (decision 0012); script is the deterministic non-agent fallback. Everything
-# else (pi/hermes/opencode/rivet and the old "*-worker" capability names) is
-# staged-cutover residue and is refused at intake rather than recorded.
+# else is retired and refused at intake rather than recorded.
 _DEFAULT_RUNTIME = "codex"
 _SUPPORTED_RUNTIMES = frozenset({"codex", "script"})
 

@@ -1,6 +1,6 @@
 """Shared harness for script-runtime builtin adapters (subprocess CLIs).
 
-The browser-cli and herdr adapters both shell out to an external CLI with the
+The browser-cli adapter shells out to an external CLI with the
 same machinery: a scrubbed child environment (no user/provider secrets leak
 into the child), an output cap, timeout-with-termination, and stdout
 JSON-or-text decoding. One home so the two adapters cannot drift.

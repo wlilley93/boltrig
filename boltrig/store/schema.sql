@@ -539,11 +539,19 @@ CREATE TABLE IF NOT EXISTS conversations (
     user_id     TEXT NOT NULL,                          -- owner
     title       TEXT,
     status      TEXT NOT NULL DEFAULT 'active',         -- active | closed
+    origin      TEXT NOT NULL DEFAULT 'user'
+                CHECK (origin IN ('user','routine')),
+    source_ref  TEXT,
+    source_run_id TEXT,
+    companion_id TEXT CHECK (companion_id IS NULL OR companion_id IN ('familiar','jarvis')),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS conversations_user_idx ON conversations (tenant_id, user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS conversations_routine_run_idx
+    ON conversations (tenant_id, source_run_id)
+    WHERE origin='routine' AND source_run_id IS NOT NULL;
 
 -- Round Three: versioned configuration & library edits (C1/C2/C3). Every in-app
 -- authoring/admin change is recorded here so it round-trips to manifest/YAML and

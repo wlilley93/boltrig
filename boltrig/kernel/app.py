@@ -150,7 +150,7 @@ def _mcp_wire_response(body: dict, result: dict) -> Response:
     the streamable-HTTP contract is 202 with an empty body. Returning
     ``{"id": null, "result": {}}`` - the old behaviour - is a protocol violation
     that strict clients (Codex's rmcp worker) treat as a fatal transport error,
-    killing the whole MCP connection. pi/opencode tolerated it; Codex does not.
+    killing the whole MCP connection. Historical clients tolerated it; Codex does not.
     Request-shaped messages (with an ``id``) keep the 200 JSON body unchanged.
     """
     if isinstance(body, dict) and body.get("id") is None:

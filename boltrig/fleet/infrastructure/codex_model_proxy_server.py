@@ -115,6 +115,7 @@ class PerCellModelProxyServer:
         upstream_key: str,
         client: httpx.AsyncClient,
         allowed_model: str,
+        upstream_virtual_key: str | None = None,
         allowed_tools: frozenset[str] = frozenset(),
         allowed_reasoning_effort: str | None = None,
         native_collaboration: NativeCollaborationWireGate | None = None,
@@ -147,6 +148,14 @@ class PerCellModelProxyServer:
         self._verify = verify_bearer
         self._base = upstream_base_url.rstrip("/")
         self._key = upstream_key
+        if upstream_virtual_key is not None and (
+            type(upstream_virtual_key) is not str
+            or not upstream_virtual_key
+            or len(upstream_virtual_key) > 8192
+            or any(ord(character) < 0x21 or ord(character) > 0x7E for character in upstream_virtual_key)
+        ):
+            raise TypeError("upstream_virtual_key must be bounded printable ASCII or None")
+        self._virtual_key = upstream_virtual_key
         self._client = client
         self._server: uvicorn.Server | None = None
         self._task: asyncio.Task[None] | None = None
@@ -225,10 +234,14 @@ class PerCellModelProxyServer:
         headers = {
             "content-type": request.headers.get("content-type", "application/json"),
             "accept": request.headers.get("accept", "application/json"),
-            # The kernel-only upstream key is injected here and NEVER seen by the
-            # cell; the cell's own bearer is dropped, not forwarded.
-            "authorization": f"Bearer {self._key}",
         }
+        # Kernel-only gateway credentials are injected here and NEVER seen by
+        # the cell; its own bearer is dropped, not forwarded. A scoped virtual
+        # key narrows Bifrost to the caller's exact provider key and model.
+        if self._key:
+            headers["authorization"] = f"Bearer {self._key}"
+        if self._virtual_key:
+            headers["x-bf-vk"] = self._virtual_key
         try:
             upstream_request = self._client.build_request(
                 request.method, f"{self._base}/{tail}", content=body, headers=headers

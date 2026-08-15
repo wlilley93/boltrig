@@ -53,6 +53,7 @@ from .context import (
 from .conversation import (
     Conversation as Conversation,
     ConversationMessage as ConversationMessage,
+    ConversationOrigin as ConversationOrigin,
     ConversationStatus as ConversationStatus,
     ConversationSummary as ConversationSummary,
     MessageRole as MessageRole,

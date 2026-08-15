@@ -39,6 +39,7 @@ from .loader import SkillNotFound, resolve_skill
 from .schema import SkillValidationError
 
 _OBJ: dict = {"type": "object"}
+MAX_SKILL_SEARCH_RESULTS = 100
 
 
 def _matches(skill: Any, query: str) -> bool:
@@ -62,26 +63,59 @@ class SkillShelfAdapter:
     def describe(self) -> list[VerbSpec]:
         return [
             VerbSpec(
-                verb_id="skill.search", noun_id="skill",
-                input_schema={"type": "object", "properties": {
-                    "query": {"type": "string"}, "limit": {"type": "integer"}}},
-                output_schema=_OBJ, consequence="low",
-                description="Browse the skill shelf by description (no bodies)"),
+                verb_id="skill.search",
+                noun_id="skill",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": MAX_SKILL_SEARCH_RESULTS,
+                        },
+                    },
+                },
+                output_schema=_OBJ,
+                consequence="low",
+                description=(
+                    "Search the versioned skill shelf by id or description before "
+                    "loading a skill. Results contain selection metadata only, never "
+                    "the instruction body. Use a narrow query when the shelf is large."
+                ),
+            ),
             VerbSpec(
-                verb_id="skill.describe", noun_id="skill",
-                input_schema={"type": "object",
-                              "properties": {"id": {"type": "string"}},
-                              "required": ["id"]},
-                output_schema=_OBJ, consequence="low",
-                description="A skill's selection metadata + its context_requirements"),
+                verb_id="skill.describe",
+                noun_id="skill",
+                input_schema={
+                    "type": "object",
+                    "properties": {"id": {"type": "string"}},
+                    "required": ["id"],
+                },
+                output_schema=_OBJ,
+                consequence="low",
+                description=(
+                    "Inspect one exact skill's description, requested tool grants, "
+                    "inheritance, and context requirements without loading its body. "
+                    "Use this to decide whether the skill fits the current task."
+                ),
+            ),
             VerbSpec(
-                verb_id="skill.load", noun_id="skill",
-                input_schema={"type": "object",
-                              "properties": {"id": {"type": "string"},
-                                             "context": {"type": "object"}},
-                              "required": ["id"]},
-                output_schema=_OBJ, consequence="low",
-                description="Load a skill's body bound to this job's context"),
+                verb_id="skill.load",
+                noun_id="skill",
+                input_schema={
+                    "type": "object",
+                    "properties": {"id": {"type": "string"}, "context": {"type": "object"}},
+                    "required": ["id"],
+                },
+                output_schema=_OBJ,
+                consequence="low",
+                description=(
+                    "Resolve and load one exact versioned skill, including inherited "
+                    "instructions, bound to the supplied job context. Loading returns "
+                    "requested grants as data and never widens the run's authority."
+                ),
+            ),
         ]
 
     async def execute(
@@ -102,13 +136,18 @@ class SkillShelfAdapter:
     # --- the shelf: descriptions only, never bodies (SEC-57 / FR-SKILL-01) ---
     async def _search(self, tenant: str, params: dict) -> Result:
         query = str(params.get("query") or "")
-        limit = max(1, int(params.get("limit") or 50))
+        limit = min(MAX_SKILL_SEARCH_RESULTS, max(1, int(params.get("limit") or 50)))
         skills = await self._store.list_skills(tenant)
         shelf = [
-            {"id": s.id, "version": s.version,
-             "description": s.description or s.id,  # fall back to the id as a label
-             "tool_grant_count": len(s.tool_grants), "extends": s.extends}
-            for s in skills if _matches(s, query)
+            {
+                "id": s.id,
+                "version": s.version,
+                "description": s.description or s.id,  # fall back to the id as a label
+                "tool_grant_count": len(s.tool_grants),
+                "extends": s.extends,
+            }
+            for s in skills
+            if _matches(s, query)
         ]
         shelf.sort(key=lambda e: e["id"])
         return Result.success({"skills": shelf[:limit], "count": len(shelf)})
@@ -116,21 +155,29 @@ class SkillShelfAdapter:
     async def _describe(self, tenant: str, params: dict) -> Result:
         skill = await self._store.get_skill(tenant, params["id"])
         if skill is None:
-            return Result.failure(AdapterError(ErrorClass.NOT_FOUND, f"unknown skill {params['id']}"))
+            return Result.failure(
+                AdapterError(ErrorClass.NOT_FOUND, f"unknown skill {params['id']}")
+            )
         # selection metadata: what it is, what it wants, what the job must supply -
         # NOT the prompt_fragment body (that comes from skill.load).
-        return Result.success({
-            "id": skill.id, "version": skill.version,
-            "description": skill.description or skill.id,
-            "extends": skill.extends, "tool_grants": skill.tool_grants,
-            "context_requirements": skill.context_requirements,
-        })
+        return Result.success(
+            {
+                "id": skill.id,
+                "version": skill.version,
+                "description": skill.description or skill.id,
+                "extends": skill.extends,
+                "tool_grants": skill.tool_grants,
+                "context_requirements": skill.context_requirements,
+            }
+        )
 
     async def _load(self, tenant: str, params: dict) -> Result:
         try:
             resolved = await resolve_skill(self._store, tenant, params["id"])
         except SkillNotFound:
-            return Result.failure(AdapterError(ErrorClass.NOT_FOUND, f"unknown skill {params['id']}"))
+            return Result.failure(
+                AdapterError(ErrorClass.NOT_FOUND, f"unknown skill {params['id']}")
+            )
         except SkillValidationError as exc:  # e.g. a cyclic extends chain
             return Result.failure(AdapterError(ErrorClass.INVALID, str(exc)))
 
@@ -151,14 +198,17 @@ class SkillShelfAdapter:
         # The customised instance: the composed body bound to this job's context.
         # tool_grants are returned as DATA (what the skill wants) - loading does
         # NOT grant them; the caller still only holds its own grants (SEC-57).
-        return Result.success({
-            "id": resolved.id, "version": resolved.version,
-            "description": resolved.description or resolved.id,
-            "prompt_fragment": resolved.prompt_fragment,
-            "tool_grants": resolved.tool_grants,
-            "context_requirements": schema,
-            "bound_context": job_context,
-        })
+        return Result.success(
+            {
+                "id": resolved.id,
+                "version": resolved.version,
+                "description": resolved.description or resolved.id,
+                "prompt_fragment": resolved.prompt_fragment,
+                "tool_grants": resolved.tool_grants,
+                "context_requirements": schema,
+                "bound_context": job_context,
+            }
+        )
 
 
 def build_skill_shelf_adapter(store: Any) -> SkillShelfAdapter:

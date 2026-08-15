@@ -18,6 +18,7 @@ from boltrig.workflows.scheduler import (
     workflow_schedule_state,
 )
 from boltrig.workflows.loop_contract import require_valid_loop_contract
+from boltrig.workflows.routine_contract import require_valid_routine_contract
 
 from .control_workflow_occurrences import (
     retry_workflow_schedule_occurrence_record
@@ -66,6 +67,7 @@ async def upsert_workflow_record(
     )
     definition = dict(params.get("definition", {}))
     require_valid_loop_contract(definition)
+    require_valid_routine_contract(definition)
     if existing is not None:
         lifecycle = existing.definition.get("_boltrig_lifecycle")
         if lifecycle is not None:
@@ -105,6 +107,7 @@ async def upsert_draft_record(
         raise ValueError("workflow id prefix is reserved")
     definition = dict(params.get("definition", {}))
     require_valid_loop_contract(definition)
+    require_valid_routine_contract(definition)
     draft = WorkflowDefinition(
         id=draft_id_for(workflow_id),
         tenant_id=tenant_id,

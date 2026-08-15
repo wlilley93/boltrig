@@ -324,12 +324,10 @@ def _check_edge(env: Mapping[str, str], prod: bool, checks: list[DoctorCheck]) -
         _add(checks, *check)
 
 
-# Runtime kinds that have been REMOVED from the codebase, not merely gated off.
-# A capability or manifest still naming one degrades to the typed unavailable
-# result rather than crashing (P9), so this is drift to report, never a deploy
-# blocker. `pi` (PC-20 L1) and `hermes` (2026-08-06) are both retired; see
-# docs/decisions/0020-retire-the-pi-lane.md. This tuple only ever GROWS.
-_RETIRED_RUNTIMES = ("pi", "hermes")
+# Removed runtime names are migration drift, never revival targets.
+_RETIRED_RUNTIMES = frozenset(
+    "pi hermes openai claude-api opencode rivet rivet_agentos rivet-agentos".split()
+)
 
 
 def _check_runtime(
@@ -493,14 +491,6 @@ def _check_memory_posture(prod: bool, manifest: FleetManifest, checks: list[Doct
     else:
         _add(checks, "ok", "memory_residency", "Memory endpoints are local-sensitive.")
 
-    if prod and str(memory.get("engine", "")).lower() == "local":
-        _add(
-            checks,
-            "warn",
-            "memory_engine",
-            "memory.engine=local; Boltrig v2 production usually wants Mem0 primary"
-            " with Cognee as an optional projection.",
-        )
     if not is_truthy(str((memory.get("ingest") or {}).get("screen_content", False))):
         _add(checks, "warn", "memory_screening", "Memory ingest content screening is disabled.")
 

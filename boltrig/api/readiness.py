@@ -24,39 +24,46 @@ from .background_readiness import read_background_job_readiness
 from .codex_readiness import codex_runtime_check
 from .readiness_dependencies import database_checks, password_reset_check
 
-EXPECTED_ALEMBIC_HEAD = "0074_conversation_steer_queue"
+EXPECTED_ALEMBIC_HEAD = "0075_routine_conversations"
 
 _PRODUCTION_NAMES = {"prod", "production", "staging"}
-# The tools /readyz requires. Codex is the only target agent runtime (decision
-# 0012): opencode is staged-cutover residue - still reported by the stack-tool
-# status snapshot when deployed, but never readiness-GATING.
-_STACK_TOOL_IDS = frozenset({"herdr", "browser-cli"})
+# Browser automation is the only separately shipped stack tool. Codex has its
+# own admission check and no retired agent runtime participates in readiness.
+_STACK_TOOL_IDS = frozenset({"browser-cli"})
 
 
-def _required_stack_tool_ids() -> frozenset[str]:
+def _required_stack_tool_ids(
+    manifest: Any, env: Mapping[str, str]
+) -> frozenset[str]:
     """The stack tools THIS tenant's readiness may require.
 
-    Herdr is kernel-owned and unconditional. browser-cli is required only where
-    the manifest declares browser automation, because the fleet entrypoint starts
+    Browser CLI is required only where the manifest declares automation, because
+    the fleet entrypoint starts
     Chromium on exactly that predicate - a fixed required set would gate /readyz
     on a tool the deployment deliberately no longer runs, which is an outage
     dressed as a health check.
 
     ``browser_automation_wanted`` answers False for an unreadable manifest, so a
-    kernel that cannot see one requires only herdr. That is the safe direction
-    here: the failure it can cause is a browser-using tenant reporting ready
+    kernel that cannot see one requires no stack tools. The failure it can cause
+    is a browser-using tenant reporting ready
     without its browser, which surfaces loudly at first use, against a whole
     deployment stuck at 503 for a capability nobody asked for.
     """
+    if manifest is not None:
+        from boltrig.api.doctor_stack_state import needs_browser_cli
+
+        return _STACK_TOOL_IDS if needs_browser_cli(manifest) else frozenset()
+    if is_truthy(env.get("BOLTRIG_REQUIRE_STACK_TOOL_HEALTH")):
+        return _STACK_TOOL_IDS
+
     from boltrig.fleet.browser_runtime import browser_automation_wanted
 
     if browser_automation_wanted():
         return _STACK_TOOL_IDS
-    return _STACK_TOOL_IDS - {"browser-cli"}
+    return frozenset()
 
 PostgresProbe = Callable[[], Awaitable[tuple[bool, tuple[str, ...]]]]
 RedisProbe = Callable[[str, float], Awaitable[bool]]
-HerdrProbe = Callable[[Mapping[str, str], float], Awaitable[bool]]
 FleetReceiptProbe = Callable[[str, str, float, float, bytes], Awaitable[tuple[bool, str]]]
 PasswordResetProbe = Callable[[], bool | Awaitable[bool]]
 
@@ -128,7 +135,6 @@ class ReadinessService:
         env: Mapping[str, str] | None = None,
         postgres_probe: PostgresProbe | None = None,
         redis_probe: RedisProbe | None = None,
-        herdr_probe: HerdrProbe | None = None,
         fleet_receipt_probe: FleetReceiptProbe | None = None,
         password_reset_notifier: Any = None,
         password_reset_probe: PasswordResetProbe | None = None,
@@ -141,7 +147,6 @@ class ReadinessService:
         self._env = env
         self._postgres_probe = postgres_probe
         self._redis_probe = redis_probe or _probe_redis
-        self._herdr_probe = herdr_probe
         self._fleet_receipt_probe = fleet_receipt_probe
         self._password_reset_notifier = password_reset_notifier
         self._password_reset_probe = password_reset_probe
@@ -157,7 +162,7 @@ class ReadinessService:
             return copy.deepcopy(cached[1])
         # /readyz is deliberately unauthenticated for orchestrators. Coalesce
         # concurrent checks and briefly cache the redacted result so traffic
-        # cannot amplify into unbounded Herdr subprocesses or dependency probes.
+        # cannot amplify into unbounded dependency probes.
         async with self._cache_lock:
             cached = self._cache
             if cached is not None and loop.time() - cached[0] < cache_ttl:
@@ -270,13 +275,13 @@ class ReadinessService:
             )
             return failed, gateway
 
-        required_tools = _required_stack_tool_ids()
+        required_tools = _required_stack_tool_ids(self._manifest, env)
         tool_ok = required_tools <= components.keys() and all(
             components[name].get("status") == "ok" for name in required_tools
         )
         live_health = "not_required"
         stack_reason = None if tool_ok else "posture_failed"
-        if tool_ok and (
+        if required_tools and tool_ok and (
             _production(env) or is_truthy(env.get("BOLTRIG_REQUIRE_STACK_TOOL_HEALTH"))
         ):
             live_ok, live_reason = await self._stack_tool_live_check(env, timeout_s)
@@ -315,21 +320,12 @@ class ReadinessService:
     async def _stack_tool_live_check(
         self, env: Mapping[str, str], timeout_s: float
     ) -> tuple[bool, str | None]:
-        """Combine owner-local Herdr proof with the fresh fleet receipt."""
-        herdr_probe = self._herdr_probe
+        """Verify the fresh, authenticated fleet-owned browser receipt."""
         receipt_probe = self._fleet_receipt_probe
-        if herdr_probe is None or receipt_probe is None:
-            from boltrig.fleet.stack_tool_health import probe_herdr
+        if receipt_probe is None:
             from boltrig.fleet.stack_tool_receipts import read_fleet_tool_receipt
 
-            herdr_probe = herdr_probe or probe_herdr
-            receipt_probe = receipt_probe or read_fleet_tool_receipt
-        try:
-            herdr_ok = await asyncio.wait_for(herdr_probe(env, timeout_s), timeout=timeout_s)
-        except Exception:
-            herdr_ok = False
-        if not herdr_ok:
-            return False, "herdr_probe_failed"
+            receipt_probe = read_fleet_tool_receipt
 
         redis_url = str(env.get("REDIS_URL") or "").strip()
         if not redis_url:

@@ -1,31 +1,19 @@
-"""The ``distill`` adapter: sleep distillation as governed verbs (decision 0023).
+"""Governed sleep-distillation verbs (decision 0023).
 
-Four verbs behind the one chokepoint, so every step of the nightly
-consolidation is granted, gated, rate-limited and audited like any other
-action:
+Every nightly-consolidation step is granted, gated, rate-limited and audited:
 
     distill.corpus.build   derive + ship the tenant corpus (low)
     distill.train          train a candidate adapter from the pinned base (high)
     distill.gate           score candidate vs incumbent, mechanically (low)
     distill.promote        activate + price a gated candidate (high)
 
-The trainer/server sidecar runs NATIVE on the Mac host (mlx needs Metal, which
-does not exist inside the OrbStack VM - the whisper precedent), so this
-adapter passes the egress guard's one documented ``allow_internal`` opt-in for
-a fixed, operator-configured URL. Never an agent-influenced one
-(``tests/invariants.yaml`` INJ-02 family).
-
 Like the memory adapter, this one needs the store and audit writer, so it is
-composed by ``boltrig.distill.bootstrap.register_distill`` from the manifest's
-``distill:`` section rather than the ``adapters:`` module_ref list. The craft
-gate additionally needs the composition-owned EvalRunner; platform bootstrap
-injects it late via ``set_eval`` (the ``control.set_admin`` pattern) - a new
-spawner is never constructed here (CODEX-COMPOSITION-1 source gate).
+composed from the manifest's ``distill:`` section rather than a module ref.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -47,6 +35,7 @@ from boltrig.distill.corpus import (
     build_corpus,
 )
 from boltrig.distill.corpus_io import corpus_jsonl_lines
+from boltrig.distill.policy import overnight_enabled
 from boltrig.models import ActionType, AuditEvent, InvocationContext, utcnow
 
 _GATE_AUDIT_SCAN = 500  # how far back promote looks for its gate receipt
@@ -67,7 +56,6 @@ class DistillAdapter(HttpAdapter):
         cost: Any,
         base_pin: str,
         base_url: str,
-        serve_url: str | None = None,  # chat-serving endpoint for candidates
         timeout: float = 600.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
@@ -76,46 +64,59 @@ class DistillAdapter(HttpAdapter):
         self._audit = audit
         self._cost = cost
         self._base_pin = base_pin
-        self._serve_url = serve_url
         self._transport = transport
-        self._eval: Any | None = None
-
-    # Late binding from platform bootstrap (the control.set_admin pattern):
-    # the craft gate uses the composition-owned EvalRunner or degrades typed.
-    def set_eval(self, eval_runner: Any) -> None:
-        self._eval = eval_runner
 
     def describe(self) -> list[VerbSpec]:
         any_out = {"type": "object"}
         return [
             VerbSpec(
-                "distill.corpus.build", "distill", corpus_schema(), any_out, "low",
+                "distill.corpus.build",
+                "distill",
+                corpus_schema(),
+                any_out,
+                "low",
                 "Derive the tenant's training corpus from the governed record "
                 "(erasure-filtered, PII-scrubbed, digest-pinned) and ship it to "
                 "the local trainer sidecar.",
                 idempotency_mode="disabled",  # re-derives; the digest is the identity
             ),
             VerbSpec(
-                "distill.train", "distill", train_schema(), any_out, "high",
+                "distill.train",
+                "distill",
+                train_schema(),
+                any_out,
+                "high",
                 "Train a candidate LoRA from the PINNED BASE over a shipped "
                 "corpus. There is no field to name any other starting point.",
                 idempotency_mode="disabled",
             ),
             VerbSpec(
-                "distill.gate", "distill", gate_schema(), any_out, "low",
+                "distill.gate",
+                "distill",
+                gate_schema(),
+                any_out,
+                "low",
                 "Score a candidate against the incumbent, mechanically: eval "
                 "cases for craft, held-out likelihood for register. Writes an "
                 "audit row whether it promotes or holds.",
                 idempotency_mode="disabled",
             ),
             VerbSpec(
-                "distill.promote", "distill", promote_schema(), any_out, "high",
+                "distill.promote",
+                "distill",
+                promote_schema(),
+                any_out,
+                "high",
                 "Activate a candidate endpoint that holds a passing gate "
                 "receipt, and price it in the same act.",
                 idempotency_mode="disabled",
             ),
             VerbSpec(
-                "distill.night", "distill", night_schema(), any_out, "high",
+                "distill.night",
+                "distill",
+                night_schema(),
+                any_out,
+                "high",
                 "One night of sleep distillation: build the corpus, train from "
                 "the pinned base, gate mechanically. Does NOT promote unless "
                 "auto_promote is set; a passing gate leaves the receipt for a "
@@ -134,9 +135,19 @@ class DistillAdapter(HttpAdapter):
         }
 
     async def _night(
-        self, params: dict[str, Any], client: httpx.AsyncClient,
+        self,
+        params: dict[str, Any],
+        client: httpx.AsyncClient,
         context: InvocationContext,
     ) -> Result:
+        if not await overnight_enabled(self._store, context.tenant_id):
+            return Result.failure(
+                AdapterError(
+                    ErrorClass.UNAUTHORISED,
+                    "overnight behaviour is off for this organisation",
+                    retryable=False,
+                )
+            )
         return await run_night(self, params, client, context)
 
     def _auth(self, credential: Credential) -> tuple[dict[str, str], httpx.Auth | None]:
@@ -164,9 +175,7 @@ class DistillAdapter(HttpAdapter):
         reason as local-whisper: the target IS internal, by design, and is never
         an agent-supplied URL. Scheme/air-gap/list checks still apply."""
         try:
-            assert_egress_allowed(
-                str(client.base_url.join(url)), {"allow_internal": True}
-            )
+            assert_egress_allowed(str(client.base_url.join(url)), {"allow_internal": True})
         except EgressBlocked as exc:
             return AdapterError(ErrorClass.INVALID, str(exc), retryable=False)
         await self._limiter.acquire()
@@ -174,7 +183,8 @@ class DistillAdapter(HttpAdapter):
             resp = await client.request(method, url, json=payload)
         except httpx.HTTPError as exc:
             return AdapterError(
-                ErrorClass.UNAVAILABLE, f"distill sidecar unreachable: {exc}",
+                ErrorClass.UNAVAILABLE,
+                f"distill sidecar unreachable: {exc}",
                 retryable=True,
             )
         if not 200 <= resp.status_code < 300:
@@ -183,16 +193,20 @@ class DistillAdapter(HttpAdapter):
 
     # --- handlers -------------------------------------------------------------
     async def _corpus_build(
-        self, params: dict[str, Any], client: httpx.AsyncClient,
+        self,
+        params: dict[str, Any],
+        client: httpx.AsyncClient,
         context: InvocationContext,
     ) -> Result:
         endpoint_id = str(params["target_endpoint_id"])
         endpoint = await self._store.get_model_endpoint(context.tenant_id, endpoint_id)
         if endpoint is None:
             return Result.failure(
-                AdapterError(ErrorClass.NOT_FOUND,
-                             f"target endpoint '{endpoint_id}' not found",
-                             retryable=False)
+                AdapterError(
+                    ErrorClass.NOT_FOUND,
+                    f"target endpoint '{endpoint_id}' not found",
+                    retryable=False,
+                )
             )
         try:
             corpus = await build_corpus(
@@ -203,31 +217,32 @@ class DistillAdapter(HttpAdapter):
                 target_data_class=endpoint.data_class,
             )
         except (CorpusTenantMismatch, CorpusDataClassRefused) as exc:
-            return Result.failure(
-                AdapterError(ErrorClass.INVALID, str(exc), retryable=False)
-            )
+            return Result.failure(AdapterError(ErrorClass.INVALID, str(exc), retryable=False))
         body = {"jsonl": "\n".join(corpus_jsonl_lines(corpus))}
         shipped = await self._call(client, "PUT", f"/corpus/{corpus.digest}", body)
         if isinstance(shipped, AdapterError):
             return Result.failure(shipped)
-        return Result.success({
-            "digest": corpus.digest,
-            "base_pin": corpus.base_pin,
-            "records": len(corpus.records),
-            "held_out": len(corpus.held_out),
-            # "look at your data": composition + dedup at a glance, so a night
-            # that trained mostly on merely-clean synthetic turns is visible
-            # in its receipt, not discovered in its behaviour.
-            "signals": corpus.signal_counts,
-            "deduped": corpus.deduped,
-            "erasure_watermark": (
-                corpus.erasure_watermark.isoformat()
-                if corpus.erasure_watermark else None
-            ),
-        })
+        return Result.success(
+            {
+                "digest": corpus.digest,
+                "base_pin": corpus.base_pin,
+                "records": len(corpus.records),
+                "held_out": len(corpus.held_out),
+                # "look at your data": composition + dedup at a glance, so a night
+                # that trained mostly on merely-clean synthetic turns is visible
+                # in its receipt, not discovered in its behaviour.
+                "signals": corpus.signal_counts,
+                "deduped": corpus.deduped,
+                "erasure_watermark": (
+                    corpus.erasure_watermark.isoformat() if corpus.erasure_watermark else None
+                ),
+            }
+        )
 
     async def _train(
-        self, params: dict[str, Any], client: httpx.AsyncClient,
+        self,
+        params: dict[str, Any],
+        client: httpx.AsyncClient,
         context: InvocationContext,
     ) -> Result:
         digest = str(params["corpus_digest"])
@@ -236,8 +251,7 @@ class DistillAdapter(HttpAdapter):
         # the sidecar refuses a corpus whose header pin differs. Training can
         # never resume from a prior adapter because no request field exists to
         # express one - here, in the schema, or in the sidecar contract.
-        body = {"corpus_digest": digest, "adapter_kind": kind,
-                "base_pin": self._base_pin}
+        body = {"corpus_digest": digest, "adapter_kind": kind, "base_pin": self._base_pin}
         trained = await self._call(client, "POST", "/train", body)
         if isinstance(trained, AdapterError):
             return Result.failure(trained)
@@ -249,15 +263,19 @@ class DistillAdapter(HttpAdapter):
                     retryable=False,
                 )
             )
-        return Result.success({
-            "adapter_id": str(trained.get("adapter_id") or ""),
-            "base_pin": self._base_pin,
-            "corpus_digest": digest,
-            "adapter_kind": kind,
-        })
+        return Result.success(
+            {
+                "adapter_id": str(trained.get("adapter_id") or ""),
+                "base_pin": self._base_pin,
+                "corpus_digest": digest,
+                "adapter_kind": kind,
+            }
+        )
 
     async def _gate(
-        self, params: dict[str, Any], client: httpx.AsyncClient,
+        self,
+        params: dict[str, Any],
+        client: httpx.AsyncClient,
         context: InvocationContext,
     ) -> Result:
         digest = str(params["corpus_digest"])
@@ -265,14 +283,13 @@ class DistillAdapter(HttpAdapter):
         candidate = str(params["candidate_model"])
         incumbent = str(params["incumbent_model"])
         if kind == "register":
+
             async def call(method: str, url: str, payload: Any) -> dict[str, Any] | AdapterError:
                 return await self._call(client, method, url, payload)
 
             verdict_or_error = await register_gate(call, digest, incumbent, candidate)
         else:
-            verdict_or_error = await craft_gate(
-                self._eval, self._store, self._serve_url, context, incumbent, candidate
-            )
+            verdict_or_error = await craft_gate()
         if isinstance(verdict_or_error, AdapterError):
             return Result.failure(verdict_or_error)
         verdict = verdict_or_error
@@ -304,16 +321,20 @@ class DistillAdapter(HttpAdapter):
                 },
             )
         )
-        return Result.success({
-            "promote": verdict.promote,
-            "reason": verdict.reason,
-            "incumbent_score": verdict.incumbent_score,
-            "candidate_score": verdict.candidate_score,
-            "regressed_cases": list(verdict.regressed_cases),
-        })
+        return Result.success(
+            {
+                "promote": verdict.promote,
+                "reason": verdict.reason,
+                "incumbent_score": verdict.incumbent_score,
+                "candidate_score": verdict.candidate_score,
+                "regressed_cases": list(verdict.regressed_cases),
+            }
+        )
 
     async def _promote(
-        self, params: dict[str, Any], client: httpx.AsyncClient,
+        self,
+        params: dict[str, Any],
+        client: httpx.AsyncClient,
         context: InvocationContext,
     ) -> Result:
         endpoint_id = str(params["endpoint_id"])
@@ -322,8 +343,9 @@ class DistillAdapter(HttpAdapter):
         endpoint = await self._store.get_model_endpoint(context.tenant_id, endpoint_id)
         if endpoint is None:
             return Result.failure(
-                AdapterError(ErrorClass.NOT_FOUND,
-                             f"endpoint '{endpoint_id}' not found", retryable=False)
+                AdapterError(
+                    ErrorClass.NOT_FOUND, f"endpoint '{endpoint_id}' not found", retryable=False
+                )
             )
         receipt = await self._gate_receipt(context.tenant_id, digest, endpoint.model)
         if receipt is None:
@@ -335,9 +357,7 @@ class DistillAdapter(HttpAdapter):
                     retryable=False,
                 )
             )
-        await self._store.set_model_endpoint_active(
-            context.tenant_id, endpoint_id, True
-        )
+        await self._store.set_model_endpoint_active(context.tenant_id, endpoint_id, True)
         # DIS-8: priced in the same act as the promotion, else cost accounting
         # bills the tier default ($5/M) and trips hard-stop budgets early.
         self._cost.set_price(endpoint.model, price)
@@ -361,16 +381,16 @@ class DistillAdapter(HttpAdapter):
                 },
             )
         )
-        return Result.success({
-            "endpoint_id": endpoint_id,
-            "model": endpoint.model,
-            "is_active": True,
-            "price_micros_per_token": price,
-        })
+        return Result.success(
+            {
+                "endpoint_id": endpoint_id,
+                "model": endpoint.model,
+                "is_active": True,
+                "price_micros_per_token": price,
+            }
+        )
 
-    async def _gate_receipt(
-        self, tenant_id: str, digest: str, model: str
-    ) -> AuditEvent | None:
+    async def _gate_receipt(self, tenant_id: str, digest: str, model: str) -> AuditEvent | None:
         """Find the newest passing gate row for (digest, model). Promotion
         state is DERIVED from the audit chain - the WorkflowPromotion ruling:
         no table, no writer, no trigger."""
@@ -381,5 +401,5 @@ class DistillAdapter(HttpAdapter):
                 and event.detail.get("corpus_digest") == digest
                 and event.detail.get("candidate") == model
             ):
-                return event
+                return cast(AuditEvent, event)
         return None

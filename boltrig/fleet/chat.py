@@ -43,7 +43,7 @@ from boltrig.fleet.chat_regeneration import (
 from boltrig.fleet.chat_queue import ChatQueueService
 from boltrig.fleet.chat_stream_drive import drive_turn_events, safe_exec
 from boltrig.fleet.chat_turn_execution import build_turn_executor
-from boltrig.fleet.chat_turn_flow import TurnRequest, stream_turn
+from boltrig.fleet.chat_turn_flow import TurnRequest, decision_request_id, stream_turn
 from boltrig.models import (
     Conversation,
     ConversationMessage,
@@ -174,6 +174,16 @@ class ChatService(ChatQueueService):
             raise ConversationForbidden("not permitted to read this conversation")
         return await self._store.list_messages(tenant_id, conversation_id)
 
+    async def get_conversation(
+        self, tenant_id: str, user_id: str, role: str, conversation_id: str
+    ) -> Conversation | None:
+        conversation = await self._store.get_conversation(tenant_id, conversation_id)
+        if conversation is None:
+            return None
+        if not _can_read(conversation, user_id, role):
+            raise ConversationForbidden("not permitted to read this conversation")
+        return conversation
+
     async def context_compaction_view(
         self,
         tenant_id: str,
@@ -201,6 +211,7 @@ class ChatService(ChatQueueService):
         idempotency_key: str | None = None,
         origin: str | None = None,
         model_profile_id: str | None = None, model_choice_id: str | None = None,
+        input_role: MessageRole = MessageRole.USER,
     ) -> AsyncIterator[dict[str, Any]]:
         request = TurnRequest(
             tenant_id=tenant_id,
@@ -217,6 +228,7 @@ class ChatService(ChatQueueService):
             origin=origin,
             model_profile_id=model_profile_id,
             model_choice_id=model_choice_id,
+            input_role=input_role,
         )
         async for event in stream_turn(self, request):
             yield event
@@ -316,10 +328,7 @@ class ChatService(ChatQueueService):
             collected.append(event)
 
         text = "".join(e.get("delta", "") for e in collected if e.get("type") == "text_delta")
-        hitl_id = next(
-            (e.get("hitl_request_id") for e in collected if e.get("type") == "hitl"),
-            None,
-        )
+        hitl_id = decision_request_id(collected)
         new_message = ConversationMessage(
             id=uuid.uuid4().hex,
             conversation_id=conversation_id,

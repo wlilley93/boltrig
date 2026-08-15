@@ -38,7 +38,6 @@ from boltrig.models import (
     WorkStatus,
     utcnow,
 )
-from boltrig.work import normalise
 from boltrig.workflows.generator import learn_from_success
 from boltrig.workflows.library import WorkflowLibrary
 
@@ -46,6 +45,7 @@ from . import lease_token, permanent_runtime as permanent
 from .authority import context_for, route_to_head
 from .chief_of_staff import ChiefOfStaff, Department
 from .department_head import DepartmentHead, tree_root_id
+from .work_follow_ons import persist_new_work_items
 
 if TYPE_CHECKING:  # type-only seams (fleet imports stay kernel-free)
     from boltrig.api.codex_execution import CodexExecutionStack
@@ -97,7 +97,8 @@ def workflow_target_id(item: WorkItem) -> str | None:
     target = getattr(item, "target", None) or ""
     if not target.startswith(WORKFLOW_TARGET_PREFIX):
         return None
-    return target[len(WORKFLOW_TARGET_PREFIX):].strip() or None
+    return target[len(WORKFLOW_TARGET_PREFIX) :].strip() or None
+
 
 # Transport-layer errors (httpx, asyncpg) can embed request URLs / DSNs - internal
 # hosts, credentials - in str(exc), and a FAILED item's result is caller-visible.
@@ -135,51 +136,6 @@ def outcome_score(terminal_status: str, degraded: bool) -> dict[str, Any]:
         "terminal_status": terminal_status,
         "degraded": bool(degraded),
     }
-
-
-async def persist_new_work_items(
-    store: Any, parent: WorkItem, new_items: list[Any] | None, *, source: str
-) -> list[WorkItem]:
-    """Persist a step's discovered follow-on work as PENDING children (D7).
-
-    Each entry becomes a normalised PENDING :class:`WorkItem` parented to the step's item
-    (owner/department unset - the org lane routes it), so the pump picks it up on a later
-    cycle instead of the follow-on being dropped.
-
-    D4 of [2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001, stated in the terms the
-    order requires: the existing-intent check below NARROWS the duplicate-child
-    window. It is NOT a fence and must never be described as one. A child row
-    cannot be made atomic with a predicate on the parent's lease, so two workers
-    running the same body can still both read "no such child" and both create one.
-    What the check removes is the common case - a re-run whose siblings are already
-    committed - and what it leaves is the instant between the two reads. Closing
-    that needs a uniqueness constraint on (parent_id, intent), which is a schema
-    change and a separate matter.
-    """
-    created: list[WorkItem] = []
-    existing: set[str] = set()
-    if new_items:
-        try:
-            siblings = await store.list_work_items(parent.tenant_id, parent_id=parent.id)
-            existing = {s.intent for s in siblings}
-        except Exception:  # best-effort by construction: never block the follow-on
-            log.warning("could not read existing children of %s", parent.id, exc_info=True)
-    for raw in new_items or []:
-        payload = dict(raw) if isinstance(raw, dict) else {"intent": str(raw)}
-        child = normalise(payload, source, parent.tenant_id)
-        if child.intent in existing:
-            log.info(
-                "skipping follow-on %r for %s: a child with that intent already exists",
-                child.intent, parent.id,
-            )
-            continue
-        child.parent_id = parent.id
-        child.depth = parent.depth + 1
-        child.on_behalf_of, child.workspace_id = parent.on_behalf_of, parent.workspace_id
-        await store.create_work_item(child)
-        existing.add(child.intent)
-        created.append(child)
-    return created
 
 
 class WorkPump:
@@ -246,9 +202,7 @@ class WorkPump:
     # --- the serving loop -------------------------------------------------------
     async def run_once(self, tenant_id: str) -> bool:
         """Claim and process at most one work item. Returns whether one was claimed."""
-        item = await self._store.claim_work_item(
-            tenant_id, self.worker_id, self.lease_seconds
-        )
+        item = await self._store.claim_work_item(tenant_id, self.worker_id, self.lease_seconds)
         if item is None:
             return False
         # D2: the fence value is whatever the CLAIM handed out, carried to the
@@ -278,20 +232,20 @@ class WorkPump:
         store = self._store
         tenant = item.tenant_id
         run_id = item.hatchet_run_id or item.id
-        # Shadow Codex root admission (SEC-172): a ROOT (parent_id is None) records one
-        # execution-neutral decision; None=off => no-op, fail-open. Replay-safe (insert-once).
+        # SEC-172: roots record one replay-safe, execution-neutral shadow decision.
         if self._codex_execution is not None and item.parent_id is None:
             await self._codex_execution.shadow_admit(item.tenant_id, item.workspace_id, item.id)
 
         if item.status == WorkStatus.BLOCKED:  # blocked work is a human's, not a retry's
             await self._park(
-                item, run_id, reason="blocked",
+                item,
+                run_id,
+                reason="blocked",
                 detail="the item is blocked; a human must unblock or re-queue it",
             )
             return item
 
-        # Cooperative server-side cancel ([2026] VJS-COUNTY 6, D3/D4): consulted at every step
-        # boundary; CANCELLED is written in the `finally`, durable even if a later step raises.
+        # Cooperative cancel is consulted at boundaries and settled in the finally (D3/D4).
         cancelled = await self._store.is_run_cancel_requested(tenant, run_id)
         try:
             if cancelled:  # boundary 0: before any dispatch, nothing has run yet
@@ -300,10 +254,7 @@ class WorkPump:
             ctx = await self._context_for(item, run_id)
             wf_id = workflow_target_id(item)
             if wf_id is not None:
-                # SEC-178: an addressed workflow is honored BEFORE any routing -
-                # the CoS path is untouched when no workflow target is present.
-                # The boundary-1 cancel refresh is mirrored so a cancel landing
-                # before the trigger still takes effect (the finally settles it).
+                # SEC-178: honor the address before routing and recheck cancel before trigger.
                 cancelled = await self._store.is_run_cancel_requested(tenant, run_id)
                 if cancelled:
                     return item
@@ -311,7 +262,9 @@ class WorkPump:
             head = await route_to_head(self._cos, self.heads, store, item, run_id, ctx)
             if head is None:  # SEC-165: unroutable parks; it never mis-routes
                 await self._park(
-                    item, run_id, reason="unroutable_department",
+                    item,
+                    run_id,
+                    reason="unroutable_department",
                     detail="the routed department has no head; a human must route it",
                 )
                 return item
@@ -378,34 +331,49 @@ class WorkPump:
             )
         except LookupError:
             await store.upsert_checkpoint(
-                tenant, run_id, "route", "done",
+                tenant,
+                run_id,
+                "route",
+                "done",
                 output={"workflow": wf_id, "error": "unknown_workflow"},
             )
             await self._park(
-                item, run_id, reason="unknown_workflow",
+                item,
+                run_id,
+                reason="unknown_workflow",
                 detail=f"the addressed workflow '{wf_id}' is unknown; a human must route it",
             )
             return item
-        await store.upsert_checkpoint(
-            tenant, run_id, "route", "done", output={"workflow": wf_id}
-        )
+        await store.upsert_checkpoint(tenant, run_id, "route", "done", output={"workflow": wf_id})
         item.status = WorkStatus.DONE
         item.result = {"workflow": descriptor}
         self._stamp_outcome(item, WorkStatus.DONE.value)
         await lease_token.write(store, item, what="addressed-workflow done")
         await store.upsert_checkpoint(
-            tenant, run_id, "execute", "done",
+            tenant,
+            run_id,
+            "execute",
+            "done",
             output={"workflow": wf_id, "run_id": descriptor.get("run_id")},
         )
         await self._audit.write(
             AuditEvent(
-                tenant_id=tenant, ts=utcnow(), actor=self.worker_id,
-                actor_tier="tier1", action_type=ActionType.TOOL_CALL,
-                status="ok", run_id=run_id, verb="workflow.trigger",
-                on_behalf_of=item.on_behalf_of, workspace_id=item.workspace_id,
-                detail={"work_item_id": item.id, "workflow": wf_id,
-                        "run_id": descriptor.get("run_id"),
-                        "engine": descriptor.get("engine")},
+                tenant_id=tenant,
+                ts=utcnow(),
+                actor=self.worker_id,
+                actor_tier="tier1",
+                action_type=ActionType.TOOL_CALL,
+                status="ok",
+                run_id=run_id,
+                verb="workflow.trigger",
+                on_behalf_of=item.on_behalf_of,
+                workspace_id=item.workspace_id,
+                detail={
+                    "work_item_id": item.id,
+                    "workflow": wf_id,
+                    "run_id": descriptor.get("run_id"),
+                    "engine": descriptor.get("engine"),
+                },
             )
         )
         await self._notify_terminal(item)
@@ -420,7 +388,9 @@ class WorkPump:
         if item.convergent and item.degraded:
             # D6: a convergent item whose aggregate is degraded is never DONE.
             await self._park(
-                item, run_id, reason="convergent_degraded",
+                item,
+                run_id,
+                reason="convergent_degraded",
                 detail="a convergent item's aggregate is degraded; it needs a human",
             )
             return item
@@ -432,7 +402,10 @@ class WorkPump:
         await self._maybe_learn(item, outcome)
         await lease_token.write(self._store, item, what="settle done")
         await self._store.upsert_checkpoint(
-            item.tenant_id, run_id, "execute", "done",
+            item.tenant_id,
+            run_id,
+            "execute",
+            "done",
             output={"spawned": outcome.get("spawned", 0), "degraded": item.degraded},
         )
         await self._reflect(item, run_id, WorkStatus.DONE.value)
@@ -457,7 +430,8 @@ class WorkPump:
         """
         item = await self._store.get_work_item(tenant_id, item_id)
         if item is None or item.status not in (
-            WorkStatus.AWAITING_HUMAN, WorkStatus.BLOCKED,
+            WorkStatus.AWAITING_HUMAN,
+            WorkStatus.BLOCKED,
         ):
             return None
         item.status = WorkStatus.PENDING
@@ -516,7 +490,9 @@ class WorkPump:
         if settled is not None and settled.status in SETTLED_STATUSES:
             log.warning(
                 "work item %s faulted after settling as %s; not re-opening it (%s)",
-                item.id, settled.status.value, type(exc).__name__,
+                item.id,
+                settled.status.value,
+                type(exc).__name__,
             )
             return
         will_retry = item.attempts < self.max_attempts
@@ -534,7 +510,10 @@ class WorkPump:
             self._stamp_outcome(item, WorkStatus.FAILED.value)
         await lease_token.write(self._store, item, what="retry/fail")
         await self._store.upsert_checkpoint(
-            item.tenant_id, run_id, "execute", "failed",
+            item.tenant_id,
+            run_id,
+            "execute",
+            "failed",
             output={"error": type(exc).__name__, "will_retry": will_retry},
         )
         if not will_retry:  # reflect only on the terminal failure, not each retry
@@ -554,18 +533,23 @@ class WorkPump:
             question=f"work item {item.id} needs a human ({reason}).",
             context=detail,
             urgency=Urgency.ASYNC,
-            work_item_id=item.id, requested_by="chief-of-staff", requested_on_behalf_of=item.on_behalf_of, workspace_id=item.workspace_id, department_scope=[item.owner_member] if item.owner_member else None,
+            work_item_id=item.id,
+            requested_by="chief-of-staff",
+            requested_on_behalf_of=item.on_behalf_of,
+            workspace_id=item.workspace_id,
+            department_scope=[item.owner_member] if item.owner_member else None,
         )
         await self._await_human(item, run_id, request.id)
 
-    async def _await_human(
-        self, item: WorkItem, run_id: str, hitl_request_id: str | None
-    ) -> None:
+    async def _await_human(self, item: WorkItem, run_id: str, hitl_request_id: str | None) -> None:
         item.status = WorkStatus.AWAITING_HUMAN
         self._stamp_outcome(item, WorkStatus.AWAITING_HUMAN.value)
         await lease_token.write(self._store, item, what="awaiting-human")
         await self._store.upsert_checkpoint(
-            item.tenant_id, run_id, "execute", "awaiting_human",
+            item.tenant_id,
+            run_id,
+            "execute",
+            "awaiting_human",
             hitl_request_id=hitl_request_id,
         )
         await self._reflect(item, run_id, WorkStatus.AWAITING_HUMAN.value)
@@ -586,18 +570,22 @@ class WorkPump:
         # D8: a refused cancel is logged by lease_token.write and NEVER swallowed -
         # no consume-or-delete may be added on this path.
         await lease_token.write(self._store, item, what="cancel")
-        await self._store.upsert_checkpoint(
-            item.tenant_id, run_id, "execute", "cancelled"
-        )
+        await self._store.upsert_checkpoint(item.tenant_id, run_id, "execute", "cancelled")
         # D4: one audit row marks the transition. Best-effort chain via the shared
         # writer; keys only (no intent/content), matching the bounded-observability
         # rule (K-20).
         await self._audit.write(
             AuditEvent(
-                tenant_id=item.tenant_id, ts=utcnow(), actor=self.worker_id,
-                actor_tier="tier1", action_type=ActionType.TOOL_CALL,
-                status="cancelled", run_id=run_id, verb="work.cancel",
-                on_behalf_of=item.on_behalf_of, workspace_id=item.workspace_id,
+                tenant_id=item.tenant_id,
+                ts=utcnow(),
+                actor=self.worker_id,
+                actor_tier="tier1",
+                action_type=ActionType.TOOL_CALL,
+                status="cancelled",
+                run_id=run_id,
+                verb="work.cancel",
+                on_behalf_of=item.on_behalf_of,
+                workspace_id=item.workspace_id,
                 detail={"work_item_id": item.id, "reason": "cancel_requested"},
             )
         )
@@ -626,9 +614,7 @@ class WorkPump:
                 # then would destroy the record decision 0018 replays from, turning
                 # an approved write into Order 6(i)'s refusal. Skipping is self-
                 # healing: settle_held_call sweeps when the hold resolves.
-                await sweep_run_credentials_if_settled(
-                    self._kernel.store, item.tenant_id, run_id
-                )
+                await sweep_run_credentials_if_settled(self._kernel.store, item.tenant_id, run_id)
             except Exception:
                 log.warning("secure-input sweep failed for run %s", run_id, exc_info=True)
 
@@ -659,8 +645,7 @@ class WorkPump:
         except asyncio.CancelledError:
             raise
         except Exception:  # learning is best-effort; never fail the run (P9)
-            log.debug("learn_from_success failed for %s; continuing", item.id,
-                      exc_info=True)
+            log.debug("learn_from_success failed for %s; continuing", item.id, exc_info=True)
 
     async def _reflect(self, item: WorkItem, run_id: str, terminal_status: str) -> None:
         from boltrig.fleet.reflection import reflect_terminal_item
@@ -695,26 +680,34 @@ def build_org(
     for tier in tiers:
         name = tier.department or tier.name
         skills = [s for s in tier.supported_skills if "*" not in s]
-        departments.append(
-            Department(name=name, domain_skills=skills, intent_keywords=[name])
-        )
+        departments.append(Department(name=name, domain_skills=skills, intent_keywords=[name]))
         heads[name] = DepartmentHead(
             name,
             skills,
             [],
             DEFAULT_SPAWN_BUDGET,
-            spawner=spawner, runtime=permanent.head(spawner, manifest, tier, name),
+            spawner=spawner,
+            runtime=permanent.head(spawner, manifest, tier, name),
             store=kernel.store,
         )
     if not heads:  # P9: no hierarchy -> the minimal default org, never a crash
         departments = [Department(name="general")]
         heads["general"] = DepartmentHead(
-            "general", [], [], DEFAULT_SPAWN_BUDGET,
-            spawner=spawner, store=kernel.store,
+            "general",
+            [],
+            [],
+            DEFAULT_SPAWN_BUDGET,
+            spawner=spawner,
+            store=kernel.store,
         )
     chief = ChiefOfStaff(kernel, departments, runtime=permanent.chief(spawner, manifest))
     return WorkPump(
-        kernel, spawner, chief, heads, executor,
-        max_attempts=max_attempts, lease_seconds=lease_seconds,
+        kernel,
+        spawner,
+        chief,
+        heads,
+        executor,
+        max_attempts=max_attempts,
+        lease_seconds=lease_seconds,
         codex_execution=codex_execution,
     )

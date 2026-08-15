@@ -35,7 +35,6 @@ _BUILTIN_MODULES: dict[str, str] = {
     "jira": "boltrig.adapters.builtin.jira",
     "crm-sql": "boltrig.adapters.builtin.crm_sql",
     "memory-tickets": "boltrig.adapters.builtin.memory_tickets",
-    "herdr": "boltrig.adapters.builtin.herdr",
     "runpod": "boltrig.adapters.builtin.runpod",
     "browser-cli": "boltrig.adapters.builtin.browser_cli",
 }
@@ -790,7 +789,7 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
         chat=_parse_chat(doc.get("chat") or {}),
         extra={k: doc[k] for k in (
             "evaluation", "notifications", "personal_agents", "memory", "knowledge",
-            "runtimes", "mcp", "chat", "stack", "mastra", "rivet_agentos",
+            "runtimes", "mcp", "chat", "stack", "mastra",
             "browser_cli", "langfuse", "reconcile", "distill",
         ) if k in doc},
     )

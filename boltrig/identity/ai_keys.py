@@ -44,6 +44,8 @@ class AiKeyResolution:
     """
 
     level: str
+    scope_id: str | None = None
+    modality: str = "text"
     credential_ref: str | None = None
     provider: str | None = None
     model: str | None = None
@@ -58,6 +60,8 @@ class AiKeyResolution:
 def _from_config(level: str, config) -> AiKeyResolution:
     return AiKeyResolution(
         level=level,
+        scope_id=config.scope_id,
+        modality=getattr(config, "modality", "text"),
         credential_ref=config.credential_ref,
         provider=config.provider,
         model=config.model,

@@ -10,10 +10,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from boltrig.kernel.work_authority import CHANNEL_THREAD_CEILING_KEY
 from boltrig.models import Channel, GrantSet, WorkItem
 
 _CHAT_FIELDS = ("chat", "chat_id", "channel", "channel_id", "thread", "thread_id")
-_CEILING_KEY = "_channel_thread_ceiling"
+_CEILING_KEY = CHANNEL_THREAD_CEILING_KEY
 
 
 def chat_id(channel: Channel, body: dict[str, Any]) -> str | None:
@@ -118,4 +119,10 @@ def ceiling_from_item(item: WorkItem) -> GrantSet | None:
         return GrantSet.of([])
 
 
-__all__ = ["chat_id", "chat_is_allowed", "ceiling_from_item", "stamp_thread_ceiling", "thread_ceiling"]
+__all__ = [
+    "chat_id",
+    "chat_is_allowed",
+    "ceiling_from_item",
+    "stamp_thread_ceiling",
+    "thread_ceiling",
+]

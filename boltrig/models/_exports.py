@@ -45,6 +45,7 @@ PUBLIC_MODEL_EXPORTS = [
     "RealtimeCallSession",
     "Conversation",
     "ConversationMessage",
+    "ConversationOrigin",
     "ConversationStatus",
     "ConversationSummary",
     "MessageRole",

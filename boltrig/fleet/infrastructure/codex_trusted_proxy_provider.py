@@ -286,10 +286,7 @@ class TrustedProxyCodexPhaseCellProvider:
                 model_binding,
             )
             proxy, arguments, socket_name, config_receipt = await self._prepare_cell(
-                admission,
-                holder,
-                slot,
-                kernel_scope,
+                admission, holder, slot, kernel_scope, model_binding
             )
             model_id = admission.compilation.policy.model.model_id
             layout = admission.layout
@@ -350,6 +347,7 @@ class TrustedProxyCodexPhaseCellProvider:
         holder: GenerationHolder,
         slot: CellSlot | None,
         kernel_scope: CodexKernelToolScope | None,
+        model_binding: CodexAssignmentModelBinding,
     ) -> tuple[
         PerCellModelProxyServer,
         tuple[str, ...],
@@ -362,6 +360,7 @@ class TrustedProxyCodexPhaseCellProvider:
             policy.allowed_tools,
             policy.model_id,
             policy.reasoning_effort,
+            gateway_virtual_key=model_binding.gateway_virtual_key,
             native_collaboration=policy.native_collaboration,
         )
         layout = admission.layout
@@ -381,12 +380,7 @@ class TrustedProxyCodexPhaseCellProvider:
             tree_dirs=per_cell_tree_dirs(layout) if slot else [],
             kernel_scope=kernel_scope,
         )
-        return (
-            proxy,
-            composed.receipt.app_server_arguments,
-            socket_name,
-            composed.receipt,
-        )
+        return proxy, composed.receipt.app_server_arguments, socket_name, composed.receipt
 
     async def _register_spawned_cell(
         self,
@@ -558,6 +552,7 @@ class TrustedProxyCodexPhaseCellProvider:
         allowed_model: str,
         allowed_reasoning_effort: str | None = None,
         *,
+        gateway_virtual_key: str | None = None,
         native_collaboration: native_proxy.NativeCollaborationWireGate | None = None,
     ) -> PerCellModelProxyServer:
         return await native_proxy.start_codex_model_proxy(
@@ -566,6 +561,7 @@ class TrustedProxyCodexPhaseCellProvider:
             allowed_tools,
             allowed_model,
             allowed_reasoning_effort,
+            gateway_virtual_key=gateway_virtual_key,
             native_collaboration=native_collaboration,
         )
 

@@ -13,6 +13,24 @@ from boltrig.models.libraries import (
 _OBJECT: dict[str, Any] = {"type": "object"}
 _STRING: dict[str, Any] = {"type": "string"}
 _STRINGS: dict[str, Any] = {"type": "array", "items": _STRING}
+_ROUTINE: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "version": {"const": 1},
+        "name": {"type": "string", "minLength": 1, "maxLength": 120},
+        "goal": {"type": "string", "minLength": 1, "maxLength": 4_000},
+        "companion_id": {"type": "string", "enum": ["familiar", "jarvis"]},
+        "notify": {
+            "type": "object",
+            "properties": {
+                "completion": {"type": "boolean"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    "required": ["version", "name", "goal", "companion_id"],
+    "additionalProperties": False,
+}
 _LOOP_BINDINGS: dict[str, Any] = {
     "type": "object",
     "maxProperties": WORKFLOW_LOOP_MAX_BINDINGS,
@@ -59,6 +77,7 @@ WORKFLOW_DEFINITION_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "steps": {"type": "array", "items": _STEP},
+        "_boltrig_routine": _ROUTINE,
     },
     "additionalProperties": True,
 }

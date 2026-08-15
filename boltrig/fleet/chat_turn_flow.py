@@ -35,6 +35,17 @@ class TurnRequest:
     origin: str | None
     model_profile_id: str | None
     model_choice_id: str | None
+    input_role: MessageRole
+
+
+def decision_request_id(events: list[dict[str, Any]]) -> str | None:
+    """Return the first canonical HITL id from approval or question frames."""
+    for event in events:
+        if event.get("type") == "hitl" and event.get("hitl_request_id"):
+            return str(event["hitl_request_id"])
+        if event.get("type") == "question" and event.get("question_id"):
+            return str(event["question_id"])
+    return None
 
 
 async def _reserve_or_queue(service, request, conversation, records, run_id):
@@ -71,7 +82,7 @@ async def _reserve_or_queue(service, request, conversation, records, run_id):
                 id=message_id,
                 conversation_id=conversation.id,
                 tenant_id=request.tenant_id,
-                role=MessageRole.USER,
+                role=request.input_role,
                 content=request.message,
                 attachments=records,
             )
@@ -94,7 +105,7 @@ async def _persist_direct_input(
             id=uuid.uuid4().hex,
             conversation_id=conversation_id,
             tenant_id=request.tenant_id,
-            role=MessageRole.USER,
+            role=request.input_role,
             content=request.message,
             attachments=records,
             run_id=run_id,
@@ -154,10 +165,7 @@ async def _persist_assistant(service, request, conversation, run_id: str, collec
     text = "".join(
         event.get("delta", "") for event in collected if event.get("type") == "text_delta"
     )
-    hitl_id = next(
-        (event.get("hitl_request_id") for event in collected if event.get("type") == "hitl"),
-        None,
-    )
+    hitl_id = decision_request_id(collected)
     await service._store.add_message(  # noqa: SLF001
         ConversationMessage(
             id=uuid.uuid4().hex,

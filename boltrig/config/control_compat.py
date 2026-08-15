@@ -182,6 +182,27 @@ async def _delete_ai_key(store: Any, tenant_id: str, params: dict[str, Any], con
     existing = await store.get_ai_config(tenant_id, level, scope_id, modality)
     if existing is None:
         raise LookupError("AI key not found")
+    from boltrig.identity import AiKeyResolution
+    from boltrig.identity.bifrost_user_binding import (
+        BifrostUserGateway,
+        binding_credential_ref,
+    )
+
+    resolution = AiKeyResolution(
+        level=existing.level,
+        scope_id=existing.scope_id,
+        modality=existing.modality,
+        credential_ref=existing.credential_ref,
+        provider=existing.provider,
+        model=existing.model,
+        base_url=existing.base_url,
+    )
+    binding_ref = binding_credential_ref(tenant_id, resolution)
+    if await store.get_credential_ref(tenant_id, binding_ref):
+        # External authority is revoked first. If the gateway is unavailable,
+        # leave the local config intact so deletion can be retried rather than
+        # orphaning a live virtual key.
+        await BifrostUserGateway().revoke(store, tenant_id, resolution)
     await store.delete_ai_config(tenant_id, level, scope_id, modality)
     await store.set_credential_ref(tenant_id, existing.credential_ref, {})
     return {"level": level, "scope_id": scope_id, "modality": modality}

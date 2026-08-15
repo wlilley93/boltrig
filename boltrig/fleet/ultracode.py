@@ -1,4 +1,4 @@
-"""Boltrig v2 phased OpenCode workflow runner.
+"""Boltrig phased-agent workflow runner.
 
 This is the durable workflow spine for dynamic phase/agent plans. It validates a
 pure-data workflow spec, runs phases in dependency order, and executes each agent
@@ -84,13 +84,10 @@ def _ctx_for(base: InvocationContext, run_id: str, phase: dict, agent: dict) -> 
             "ultracode_run_id": run_id,
             "ultracode_phase_id": phase["id"],
             "ultracode_agent_id": agent["id"],
-            "opencode_title": f"{phase['id']}:{agent['id']}",
         }
     )
     for key in (
         "repo_root",
-        "opencode_auto",
-        "opencode_agent",
         "conversation_id",
         "model_profile",
         "ai_profile",

@@ -764,10 +764,10 @@ class PostgresStore(
     # --- conversations ---
     async def create_conversation(self, c: Conversation):
         await self._pool.execute(
-            """INSERT INTO conversations (id, tenant_id, user_id, title, status, created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7)
+            """INSERT INTO conversations (id, tenant_id, user_id, title, status, origin, source_ref, source_run_id, companion_id, created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
                ON CONFLICT (tenant_id, id) DO NOTHING""",
-            c.id, c.tenant_id, c.user_id, c.title, c.status.value, c.created_at, c.updated_at,
+            c.id, c.tenant_id, c.user_id, c.title, c.status.value, c.origin.value, c.source_ref, c.source_run_id, c.companion_id, c.created_at, c.updated_at,
         )
 
     async def get_conversation(self, tenant_id, conv_id):
@@ -842,9 +842,9 @@ class PostgresStore(
 
     async def update_conversation(self, c: Conversation):
         await self._pool.execute(
-            """UPDATE conversations SET title=$3, status=$4, updated_at=$5
+            """UPDATE conversations SET title=$3, status=$4, origin=$5, source_ref=$6, source_run_id=$7, companion_id=$8, updated_at=$9
                WHERE tenant_id=$1 AND id=$2""",
-            c.tenant_id, c.id, c.title, c.status.value, c.updated_at,
+            c.tenant_id, c.id, c.title, c.status.value, c.origin.value, c.source_ref, c.source_run_id, c.companion_id, c.updated_at,
         )
 
     async def restore_closed_conversation(

@@ -6,9 +6,11 @@ import contextlib
 from typing import TYPE_CHECKING, Any
 
 from boltrig.config.manifest import ChatConfig
+from boltrig.kernel.work_authority import stamp_creator_ceiling
 from boltrig.models import (
     EMPTY_GRANTS,
     BoltrigError,
+    GrantSet,
     InvocationContext,
     WorkItem,
     WorkStatus,
@@ -53,8 +55,9 @@ def _work_item(
     message: str,
     origin: str | None,
     workspace_id: str | None,
+    ceiling: GrantSet,
 ) -> WorkItem:
-    return WorkItem(
+    item = WorkItem(
         id=run_id,
         tenant_id=tenant_id,
         source="chat",
@@ -68,6 +71,8 @@ def _work_item(
         on_behalf_of=user_id,
         workspace_id=workspace_id,
     )
+    stamp_creator_ceiling(item, ceiling)
+    return item
 
 
 def _invocation_context(
@@ -125,9 +130,7 @@ async def _turn_task(
         history = await kernel.store.list_messages(tenant_id, conversation_id)
         summary = None
         if compaction_enabled(cfg):
-            summary = await kernel.store.get_latest_conversation_summary(
-                tenant_id, conversation_id
-            )
+            summary = await kernel.store.get_latest_conversation_summary(tenant_id, conversation_id)
         task = compose_turn_task(history, message, summary=summary, config=cfg)
     profile = await kernel.store.get_user(tenant_id, user_id)
     display_name = (profile.display_name or "").strip() if profile else ""
@@ -157,9 +160,7 @@ def _script_runtime_without_reply(result: dict[str, Any]) -> bool:
     )
 
 
-def _publish_reply(
-    relay, run_id, model_profile_id, model_choice_id, result, item
-) -> None:
+def _publish_reply(relay, run_id, model_profile_id, model_choice_id, result, item) -> None:
     publish_model_routing(
         relay,
         run_id,
@@ -182,9 +183,7 @@ def _publish_reply(
             {"type": "text_delta", "delta": reply, "degraded": True},
         )
         return
-    already_text = any(
-        event.get("type") == "text_delta" for event in relay.snapshot(run_id)
-    )
+    already_text = any(event.get("type") == "text_delta" for event in relay.snapshot(run_id))
     if not already_text:
         relay.publish(run_id, {"type": "text_delta", "delta": reply})
 
@@ -212,17 +211,13 @@ async def _spawn_turn(
             partial_on_budget=True,
             announce_child=False,
         )
-        _publish_reply(
-            relay, item.id, model_profile_id, model_choice_id, result, item
-        )
+        _publish_reply(relay, item.id, model_profile_id, model_choice_id, result, item)
         await persist_new_work_items(
             kernel.store, item, result.get("new_work_items"), source="chat"
         )
         item.status = WorkStatus.DONE
     except BoltrigError as exc:
-        relay.publish(
-            item.id, {"type": "text_delta", "delta": f"({exc.reason})"}
-        )
+        relay.publish(item.id, {"type": "text_delta", "delta": f"({exc.reason})"})
         item.status = WorkStatus.FAILED
     except Exception as exc:
         relay.publish(
@@ -263,9 +258,7 @@ async def _execute_turn(
     skills = await _turn_skills(kernel, cfg, tenant_id, role)
     ceiling = grants if grants is not None else EMPTY_GRANTS
     warn_if_no_usable_authority(role, ceiling, skills)
-    item = _work_item(
-        tenant_id, user_id, run_id, message, origin, workspace_id
-    )
+    item = _work_item(tenant_id, user_id, run_id, message, origin, workspace_id, ceiling)
     await kernel.store.create_work_item(item)
     if on_behalf_bearer:
         await seal_on_behalf_bearer(

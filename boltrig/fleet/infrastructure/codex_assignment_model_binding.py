@@ -29,6 +29,7 @@ class CodexAssignmentModelBinding:
     tenant_id: str
     model_id: str
     endpoint_id: str | None = None
+    gateway_virtual_key: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.assignment) is not PhaseAssignmentRef:
@@ -52,6 +53,18 @@ class CodexAssignmentModelBinding:
                 opaque_model_choice_id(self.endpoint_id)
             except ValueError as error:
                 raise CodexAssignmentModelBindingError(str(error)) from None
+        if self.gateway_virtual_key is not None and (
+            type(self.gateway_virtual_key) is not str
+            or not self.gateway_virtual_key
+            or len(self.gateway_virtual_key) > 8192
+            or any(
+                ord(character) < 0x21 or ord(character) > 0x7E
+                for character in self.gateway_virtual_key
+            )
+        ):
+            raise CodexAssignmentModelBindingError(
+                "gateway virtual key must be bounded printable ASCII"
+            )
 
     def __repr__(self) -> str:
         return "CodexAssignmentModelBinding(redacted=True)"

@@ -56,8 +56,12 @@ def work_specs() -> list[VerbSpec]:
                 "convergent": {"type": "boolean"},
             },
             ["intent"],
-            "Create a canonical internal Work item in the active workspace",
-            consequence="low",
+            (
+                "Create a canonical internal Work item in the active workspace. "
+                "The fleet may claim and execute pending work, so creation requires "
+                "an exact human approval."
+            ),
+            consequence="high",
         ),
         _spec(
             "control.work.assign",

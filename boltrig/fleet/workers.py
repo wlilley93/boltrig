@@ -64,6 +64,7 @@ class LocalDurableExecutor:
         self.steps: list[StepRecord] = []
         self.events: list[dict[str, Any]] = []
         self._tasks: dict[str, Callable[..., Awaitable[Any]]] = {}
+        self._paused_tasks: dict[str, tuple[str, dict[str, Any]]] = {}
 
     def register_task(self, name: str, fn: Callable[..., Awaitable[Any]]) -> None:
         """Register a named task body for ``enqueue`` (offline queue seam)."""
@@ -78,14 +79,28 @@ class LocalDurableExecutor:
         (fail-closed, K-13). Returns the run id."""
         fn = self._tasks[task_name]  # KeyError = unregistered task, fail-closed
         rid = self.new_run_id()
-        await self.run_step(f"task:{task_name}", fn, payload, run_id=rid)
+        result = await self.run_step(f"task:{task_name}", fn, payload, run_id=rid)
+        if isinstance(result, dict) and result.get("status") == "paused":
+            scope = result.get("resume_scope") or payload.get("run_id")
+            if not isinstance(scope, str) or not scope:
+                raise RuntimeError("paused_task_resume_scope_missing")
+            self._paused_tasks[scope] = (task_name, dict(payload))
         return rid
 
     async def push_event(
         self, key: str, payload: dict, scope: str | None = None
     ) -> None:
-        """Record an event in memory (assertable in tests; no engine offline)."""
+        """Record an event and re-enter a paused task through ``enqueue``.
+
+        This remains explicitly non-durable: a process restart loses the in-memory
+        waiter. Within one development process it mirrors Hatchet's scoped event
+        resume instead of accepting an answer that can never continue.
+        """
         self.events.append({"key": key, "payload": payload, "scope": scope})
+        paused = self._paused_tasks.pop(scope, None) if scope else None
+        if paused is not None:
+            task_name, task_payload = paused
+            await self.enqueue(task_name, task_payload)
 
     def new_run_id(self) -> str:
         """Allocate a run id for a workflow/agent run."""

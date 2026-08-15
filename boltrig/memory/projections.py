@@ -2,7 +2,7 @@
 
 The MemoryAdapter commits the canonical fact/erasure through the existing
 kernel-governed path. This module mirrors that canonical event into secondary
-backends such as Mem0 or Cognee and records per-projection state. Projection
+backends such as Cognee and records per-projection state. Projection
 backends are never authority; they are catch-up indexes.
 """
 
@@ -143,7 +143,7 @@ class MemoryProjectionFanout(InlineRetryMixin):
         store: Any,
         projections: list[MemoryProjection] | None = None,
         *,
-        primary_projection_id: str = "mem0",
+        primary_projection_id: str = "cognee",
         retry_failed: bool = True,
     ) -> None:
         self._store = store

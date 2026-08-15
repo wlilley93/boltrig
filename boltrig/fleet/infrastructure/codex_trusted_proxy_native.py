@@ -66,7 +66,8 @@ async def start_codex_model_proxy(
     allowed_model: str,
     allowed_reasoning_effort: str | None,
     *,
-    native_collaboration: NativeCollaborationWireGate | None,
+    gateway_virtual_key: str | None = None,
+    native_collaboration: NativeCollaborationWireGate | None = None,
 ) -> PerCellModelProxyServer:
     effort = (
         backend._reasoning_effort.value
@@ -77,6 +78,7 @@ async def start_codex_model_proxy(
         verify_bearer=tracking_bearer_verifier(backend._grant_store, holder),
         upstream_base_url=backend._upstream_base_url,
         upstream_key=backend._upstream_key,
+        upstream_virtual_key=gateway_virtual_key,
         client=backend._client,
         allowed_model=allowed_model,
         allowed_reasoning_effort=effort,

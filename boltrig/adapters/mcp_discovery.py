@@ -11,6 +11,8 @@ from typing import Any
 from boltrig.models import MCP_MAX_TOOL_SNAPSHOT, McpToolSnapshot
 from boltrig.models.mcp_lifecycle import validate_mcp_tool_snapshot
 
+from .mcp_tool_policy import external_description
+
 _TOOL_VERB_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 log = logging.getLogger("boltrig.adapters.mcp_consumer")
 
@@ -63,15 +65,13 @@ def snapshot_from_response(
         seen.add(name)
         input_schema = tool.get("inputSchema", {})
         output_schema = tool.get("outputSchema") or {}
-        if not isinstance(input_schema, dict) or not isinstance(
-            output_schema, dict
-        ):
+        if not isinstance(input_schema, dict) or not isinstance(output_schema, dict):
             raise McpDiscoveryInvalid
         try:
             snapshot.append(
                 McpToolSnapshot(
                     name=name,
-                    description=str(tool.get("description") or ""),
+                    description=external_description(str(tool.get("description") or "")),
                     consequence=consequence_for(tool),
                     input_schema=input_schema,
                     output_schema=output_schema,
@@ -85,4 +85,3 @@ def snapshot_from_response(
     except ValueError as exc:
         raise McpDiscoveryInvalid from exc
     return discovered
-

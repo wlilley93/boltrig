@@ -42,6 +42,52 @@ def _default_model_name(request: Request) -> str | None:
     return value
 
 
+async def _scoped_ai_default(kernel, principal, platform: dict):
+    """Return the caller's configured default without projecting credential metadata."""
+
+    from boltrig.identity import resolve_ai_key
+    from boltrig.identity.bifrost_user_binding import (
+        BifrostUserBindingUnavailable,
+        BifrostUserGateway,
+    )
+
+    try:
+        resolution = await resolve_ai_key(
+            kernel.store,
+            principal.tenant_id,
+            workspace_id=principal.active_workspace_id,
+            user_id=principal.subject,
+            modality="text",
+        )
+    except Exception:
+        return None
+    if resolution.is_default:
+        return None
+    try:
+        model = exact_model_id(resolution.model)
+    except ValueError:
+        raw_model = resolution.model
+        return (
+            raw_model if isinstance(raw_model, str) else None,
+            False,
+            "model_id_unsupported",
+        )
+    if not platform.get("codex_trusted_provider_configured"):
+        return model, False, "trusted_codex_unavailable"
+    if not platform.get("model_gateway_configured"):
+        return model, False, "model_gateway_unavailable"
+    try:
+        gateway = BifrostUserGateway()
+        binding = await gateway.load(kernel.store, principal.tenant_id, resolution)
+        if binding is None:
+            return model, False, "provider_not_connected"
+        if not await gateway.is_usable(binding):
+            return model, False, "model_not_advertised"
+    except BifrostUserBindingUnavailable:
+        return model, False, "model_gateway_unavailable"
+    return model, True, None
+
+
 def _choice_availability(
     model: str,
     platform: dict,
@@ -156,7 +202,12 @@ def register(app, P, K) -> None:
         """Project exact model names, never endpoint topology or credentials."""
 
         platform = platform_state(request)
-        default_model = _default_model_name(request)
+        scoped_default = await _scoped_ai_default(k, p, platform)
+        default_model = (
+            scoped_default[0]
+            if scoped_default is not None
+            else _default_model_name(request)
+        )
         endpoints = sorted(
             (
                 endpoint
@@ -186,7 +237,10 @@ def register(app, P, K) -> None:
             ),
             None,
         )
-        if catalogue_available:
+        if scoped_default is not None:
+            default_available = scoped_default[1]
+            default_unavailable_reason = scoped_default[2]
+        elif catalogue_available:
             default_available, default_unavailable_reason = _model_availability(
                 default_model,
                 platform,
@@ -196,8 +250,12 @@ def register(app, P, K) -> None:
             default_available = False
             default_unavailable_reason = "catalogue_unavailable"
         return {
-            "status": "ok" if catalogue_available else "unavailable",
-            "reason": None if catalogue_available else catalogue.get("reason"),
+            "status": "ok"
+            if catalogue_available or default_available
+            else "unavailable",
+            "reason": None
+            if catalogue_available or default_available
+            else catalogue.get("reason"),
             "choices": [
                 {
                     "id": endpoint.id,
@@ -210,6 +268,7 @@ def register(app, P, K) -> None:
                 for endpoint, available, reason in projected
             ],
             "default_model_name": default_model,
+            "default_source": "personal" if scoped_default is not None else "platform",
             "default_choice_id": default_choice_id,
             "default_available": default_available,
             "default_unavailable_reason": default_unavailable_reason,

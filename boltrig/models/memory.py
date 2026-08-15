@@ -68,8 +68,8 @@ class MemoryErasure:
 class MemoryProjectionStatus:
     """Per-backend projection state for kernel-led memory fanout.
 
-    The canonical memory fact/erasure is owned by Boltrig. Mem0, Cognee, or any
-    other backend is a projection with its own write/delete state and external
+    The canonical memory fact/erasure is owned by Boltrig. Cognee or any other
+    backend is a projection with its own write/delete state and external
     reference. This row is the operator-visible answer to "did the projection
     catch up?" without making the projection authoritative.
     """

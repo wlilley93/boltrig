@@ -1,40 +1,8 @@
-"""The registered durable tasks: pure-data inputs, governed bodies (Beat 5).
+"""Registered durable tasks: pure-data inputs and governed bodies.
 
-Four tasks replace the P1-1 demos (ping / hitl_demo) as the production
-durability backbone:
-
-  * ``boltrig-invoke`` - one governed verb call as a durable unit. The input is
-    pure data (noun, verb, params, a context envelope); the body reconstructs
-    the :class:`InvocationContext` and re-enters ``kernel.invoke`` - the single
-    chokepoint - so an enqueued call is validated, grant-checked, HITL-gated and
-    audited exactly like a direct one (FR-EXE-06).
-  * ``boltrig-work-item`` - the pump's claimed-item body by id. The worker
-    process owns a kernel + org pump (mirroring api/worker.py); the engine
-    re-runs the body on a crash (US-EXE-02).
-  * ``boltrig-workflow-run`` - the workflow interpreter with BOTH durability
-    seams wired: each step dispatches inside an ``executor.run_step`` boundary
-    AND checkpoint-resume is active (NFR-REL-02), with a deterministic per-step
-    idempotency key closing the completed-but-uncheckpointed crash window
-    (SEC-15). A HITL pause durable-waits for the scoped approval event and
-    re-enters the interpreter, which replays checkpointed steps and hands the
-    paused step its approval id, so the kernel CAS executes the gated verb
-    exactly once (NFR-REL-03, SEC-14).
-  * ``boltrig-ultracode-run`` / ``boltrig-ultracode-agent`` - a phased Boltrig
-    v2/OpenCode workflow from pure data. The parent validates the workflow
-    contract and fans out phase-agent bodies through a separate task seam; each
-    agent still runs through the fleet spawner so cost, audit, and degraded
-    honesty stay on the standard runtime path.
-  * ``boltrig-memory-projection`` - one Mem0/Cognee projection catch-up write or
-    delete after the canonical ledger has already committed.
-
-Correlation of an approval to a run is by SCOPE (the run id), not by baking the
-id into the event key - that is how Hatchet routes a user event to one durable
-wait. ``hatchet_sdk`` is imported defensively so importing this module is safe
-without the optional [durable] extra; the input models and context types are
-module-level so the SDK can resolve task annotations (py3.14). The task bodies
-are plain module functions, also registered on the LocalDurableExecutor via
-:func:`register_boltrig_tasks` - one body, two carriages (US-EXE-05). This
-module is in the fleet layer; the kernel and models import nothing from it.
+Direct and queued execution share these bodies. Every verb re-enters
+``kernel.invoke``; workflow retries use checkpoints and exact HITL scopes; agent
+and memory tasks retain their standard fleet boundaries.
 """
 
 from __future__ import annotations
@@ -43,8 +11,6 @@ import asyncio
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
-
-from pydantic import BaseModel, Field
 
 from boltrig.models import (
     InvocationContext,
@@ -65,6 +31,7 @@ from .hatchet_ultracode import (
     register_local_ultracode_tasks,
 )
 from .hatchet_bootstrap import _default_bootstrap
+from .hatchet_contract import InvokeInput, WorkItemInput, WorkflowRunInput
 from .workers import HatchetExecutor
 
 __all__ = [
@@ -93,37 +60,6 @@ APPROVAL_EVENT_KEY = "boltrig:approval"
 TASK_INVOKE = "boltrig-invoke"
 TASK_WORK_ITEM = "boltrig-work-item"  # matches pump.WORK_ITEM_TASK (read-only there)
 TASK_WORKFLOW_RUN = "boltrig-workflow-run"
-
-
-class InvokeInput(BaseModel):
-    """Pure-data input for one governed verb call (FR-EXE-06)."""
-
-    tenant: str
-    noun: str
-    verb: str
-    params: dict[str, Any] = Field(default_factory=dict)
-    ctx_envelope: dict[str, Any]
-    run_id: str | None = None
-    step: str | None = None  # observability label; carried, never trusted
-
-
-class WorkItemInput(BaseModel):
-    """Pure-data input for the pump's claimed-item body. Field names match the
-    payload the pump enqueues ({tenant_id, item_id}; pump.py is read-only)."""
-
-    tenant_id: str
-    item_id: str
-
-
-class WorkflowRunInput(BaseModel):
-    """Pure-data input for an interpreted workflow run (NFR-REL-02)."""
-
-    tenant: str
-    workflow_id: str
-    workflow_snapshot: dict[str, Any]
-    inputs: dict[str, Any] = Field(default_factory=dict)
-    ctx_envelope: dict[str, Any]
-    run_id: str
 
 
 try:  # module-level so the task decorators' get_type_hints can resolve annotations
@@ -165,20 +101,17 @@ async def invoke_task_body(kernel: Any, payload: dict[str, Any]) -> dict[str, An
 
 
 async def run_workflow_body(
-    kernel: Any, payload: dict[str, Any], *, executor: Any | None = None
+    kernel: Any,
+    payload: dict[str, Any],
+    *,
+    executor: Any | None = None,
+    routine_chat: Any | None = None,
 ) -> dict[str, Any]:
-    """Run a stored workflow through the interpreter with BOTH durability
-    seams wired (NFR-REL-02): each step dispatches inside its own
-    ``executor.run_step`` boundary AND the checkpoint seam replays completed
-    steps, so a re-run never re-dispatches them. A HITL pause is checkpointed
-    with its request id, and a resume re-invokes the paused step with that
-    approval id (the CAS makes execution exactly-once, NFR-REL-03). What the
-    per-step boundary itself guarantees depends on the executor: recorded
-    bookkeeping on the local fallback, an honest pass-through on
-    ``HatchetExecutor`` today (the SDK exposes no durable child-step API) -
-    there the engine's whole-task retry plus checkpoints plus the per-step
-    idempotency keys are the recovery story. ``executor=None`` keeps the
-    legacy inline shape for direct callers."""
+    """Run a stored workflow with step boundaries and checkpoint replay.
+
+    Exact HITL requests resume through the same occurrence. Engine retries,
+    checkpoints, and per-step idempotency close the crash window (NFR-REL-02/03).
+    ``executor=None`` retains the direct inline carriage."""
     from boltrig.workflows.interpreter import run_workflow_definition
     from boltrig.workflows.snapshot import workflow_from_snapshot
 
@@ -192,16 +125,39 @@ async def run_workflow_body(
         workspace_id=ctx.workspace_id,
     )
     run_id = payload.get("run_id")
+    from boltrig.workflows.routine_contract import routine_spec
+
+    routine = routine_spec(wf.definition)
     try:
-        record = await run_workflow_definition(
-            kernel,
-            wf,
-            dict(payload.get("inputs") or {}),
-            ctx,
-            executor=executor,
-            run_id=run_id,
-            store=kernel.store,
-        )
+        if routine is not None:
+            conversation_id = payload.get("conversation_id")
+            if routine_chat is None:
+                raise RuntimeError("routine_chat_unavailable")
+            if not run_id or not conversation_id:
+                raise RuntimeError("routine_conversation_binding_missing")
+            from .routine_run import run_routine_conversation
+
+            record = await run_routine_conversation(
+                routine_chat,
+                kernel.store,
+                tenant_id=tenant,
+                workflow_id=wf.id,
+                occurrence_run_id=run_id,
+                conversation_id=conversation_id,
+                spec=routine,
+                inputs=dict(payload.get("inputs") or {}),
+                context=ctx,
+            )
+        else:
+            record = await run_workflow_definition(
+                kernel,
+                wf,
+                dict(payload.get("inputs") or {}),
+                ctx,
+                executor=executor,
+                run_id=run_id,
+                store=kernel.store,
+            )
     except Exception:
         # An infrastructure/task exception is not a terminal workflow verdict:
         # Hatchet may retry it. Leave the logical occurrence in flight so the
@@ -240,6 +196,31 @@ async def work_item_task_body(pump: Any, payload: dict[str, Any]) -> dict[str, A
     return {"handled": True, "item_id": payload["item_id"]}
 
 
+def _routine_chat_service(
+    kernel: Any,
+    spawner: Any,
+    *,
+    chat_config: Any | None = None,
+    codex_execution: Any | None = None,
+) -> Any:
+    """Compose the same ChatService contract for a headless routine worker."""
+    from .chat import ChatService
+    from .chat_turn_execution import build_turn_executor
+
+    return ChatService(
+        kernel.store,
+        kernel.events,
+        turn_executor=build_turn_executor(
+            kernel,
+            spawner,
+            chat_config=chat_config,
+            codex_execution=codex_execution,
+        ),
+        chat_config=chat_config,
+        kernel=kernel,
+    )
+
+
 def register_boltrig_tasks(
     executor: Any,
     kernel: Any,
@@ -257,13 +238,16 @@ def register_boltrig_tasks(
     register = getattr(executor, "register_task", None)
     if register is None:
         return
+    routine_chat = _routine_chat_service(kernel, spawner) if spawner is not None else None
 
     async def _invoke(payload: dict[str, Any]) -> dict[str, Any]:
         return await invoke_task_body(kernel, payload)
 
     async def _workflow_run(payload: dict[str, Any]) -> dict[str, Any]:
         # The combined path: per-step run_step boundaries AND checkpoints.
-        return await run_workflow_body(kernel, payload, executor=executor)
+        return await run_workflow_body(
+            kernel, payload, executor=executor, routine_chat=routine_chat
+        )
 
     register(TASK_INVOKE, _invoke)
     register(TASK_WORKFLOW_RUN, _workflow_run)
@@ -275,6 +259,46 @@ def register_boltrig_tasks(
             return await work_item_task_body(pump, payload)
 
         register(TASK_WORK_ITEM, _work_item)
+
+
+async def _run_durable_workflow(
+    resources: dict[str, Any],
+    inp: WorkflowRunInput,
+    ctx: Any,
+    executor: Any,
+    condition_type: Any,
+) -> dict[str, Any]:
+    """Re-enter one workflow after each exact, engine-persisted HITL wait."""
+    payload = inp.model_dump()
+    record = await run_workflow_body(
+        resources["kernel"],
+        payload,
+        executor=executor,
+        routine_chat=resources.get("chat"),
+    )
+    waits = 0
+    while record.get("status") == "paused":
+        waits += 1
+        # Routine turns can pause on a child scope. The scope comes from the
+        # canonical HITL row through run_workflow_body, never from model output.
+        resume_scope = record.get("resume_scope") or inp.run_id
+        await ctx.aio_wait_for(
+            f"approval-{inp.run_id}-{waits}",
+            condition_type(
+                event_key=APPROVAL_EVENT_KEY,
+                scope=resume_scope,
+                expression="true",
+                consider_events_since=datetime.now(timezone.utc)
+                - timedelta(minutes=10),
+            ),
+        )
+        record = await run_workflow_body(
+            resources["kernel"],
+            payload,
+            executor=executor,
+            routine_chat=resources.get("chat"),
+        )
+    return record
 
 
 def build_hatchet_app(
@@ -323,29 +347,9 @@ def build_hatchet_app(
     )
     async def workflow_run(inp: WorkflowRunInput, ctx: DurableContext) -> dict:
         res = await _resources()
-        # run_step is an honest pass-through today (its docstring says why).
-        executor = HatchetExecutor(hatchet)
-        record = await run_workflow_body(res["kernel"], inp.model_dump(), executor=executor)
-        waits = 0
-        while record.get("status") == "paused":
-            # Durable pause: block until the approval event for THIS run arrives
-            # (fixed key + per-run scope; the engine persists the wait, so a
-            # worker restart resumes the same run, NFR-REL-01). The signal key is
-            # unique per wait so repeated pauses in one run each register.
-            waits += 1
-            await ctx.aio_wait_for(
-                f"approval-{inp.run_id}-{waits}",
-                UserEventCondition(
-                    event_key=APPROVAL_EVENT_KEY,
-                    scope=inp.run_id,
-                    expression="true",
-                    consider_events_since=datetime.now(timezone.utc) - timedelta(minutes=10),
-                ),
-            )
-            # Re-enter the interpreter: checkpointed steps replay, the paused
-            # step re-invokes with its approval id (CAS exactly-once, NFR-REL-03).
-            record = await run_workflow_body(res["kernel"], inp.model_dump(), executor=executor)
-        return record
+        return await _run_durable_workflow(
+            res, inp, ctx, HatchetExecutor(hatchet), UserEventCondition
+        )
 
     memory_workflows = register_hatchet_memory_projection_task(hatchet, _resources)
     ultracode_workflows = register_hatchet_ultracode_tasks(hatchet, _resources)

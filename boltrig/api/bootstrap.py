@@ -16,6 +16,7 @@ from typing import Any
 from boltrig.api.birth_profile_startup import (
     publish_birth_profile_startup as _publish_birth_profile_startup_impl,
 )
+from boltrig.api.agent_tool_bootstrap import register_agent_support
 from boltrig.api.device_bootstrap import register_device_actions
 from boltrig.api.camera_bootstrap import register_camera_actions
 from boltrig.api.hitl_resume_bridge import resume_held_write_route
@@ -38,7 +39,7 @@ from boltrig.knowledge import register_knowledge
 from boltrig.kernel import Kernel
 from boltrig.kernel.events import build_event_relay
 from boltrig.kernel.ratelimit import build_counter
-from boltrig.distill.bootstrap import register_distill as _register_distill
+from boltrig.distill.bootstrap import register_distill
 from boltrig.memory.bootstrap import register_memory as _register_memory
 from boltrig.store import InMemoryStore, Store
 
@@ -120,7 +121,7 @@ async def _seed_default(kernel: Kernel, *, model_catalogue: Any = None) -> None:
         await _register_desktop_hands(kernel, _DEFAULT_TENANT)
     await _register_control_plane(kernel, _DEFAULT_TENANT, model_catalogue=model_catalogue)
     await _register_web_fetch(kernel, _DEFAULT_TENANT, {})
-    await _register_skill_shelf(kernel, _DEFAULT_TENANT)
+    await register_agent_support(kernel, _DEFAULT_TENANT)
     await _register_channel_send(kernel, _DEFAULT_TENANT)
     await register_device_actions(kernel, _DEFAULT_TENANT)
     await register_camera_actions(kernel, _DEFAULT_TENANT)
@@ -190,16 +191,6 @@ async def _register_channel_send(kernel: Kernel, tenant_id: str, manifest=None) 
     diversion = announced_diversion_fn(manifest)
     await kernel.register_adapter(tenant_id, build_channel_send(kernel.store, diversion=diversion))
     log.info("channel.send verb registered (governed outbound, HITL by default)")
-
-
-async def _register_skill_shelf(kernel: Kernel, tenant_id: str) -> None:
-    """Register the on-demand skill shelf so an agent can browse + load skills by
-    description through the chokepoint (Round Fifteen; FR-SKILL-01/02, SEC-57).
-    The engine owns the shelf mechanism; the project owns the skill content."""
-    from boltrig.skills.shelf import build_skill_shelf_adapter
-
-    await kernel.register_adapter(tenant_id, build_skill_shelf_adapter(kernel.store))
-    log.info("skill shelf registered (skill.search/describe/load)")
 
 
 async def _register_consumed_mcp(kernel: Kernel, tenant_id: str, mcp_cfg) -> None:
@@ -273,9 +264,9 @@ async def _seed_from_manifest(kernel: Kernel, manifest, *, model_catalogue: Any 
     await provision_builtin_integration_catalogue(kernel.store, manifest.tenant_id)
     await _register_memory(kernel, manifest.tenant_id, manifest.section("memory"))
     await register_knowledge(kernel, manifest.tenant_id, manifest.section("knowledge"))
-    await _register_distill(kernel, manifest.tenant_id, manifest.section("distill"))
+    await register_distill(kernel, manifest.tenant_id, manifest.section("distill"))
     await _register_control_plane(kernel, manifest.tenant_id, model_catalogue=model_catalogue)
-    await _register_skill_shelf(kernel, manifest.tenant_id)
+    await register_agent_support(kernel, manifest.tenant_id)
     await _register_channel_send(kernel, manifest.tenant_id, manifest)
     await register_device_actions(kernel, manifest.tenant_id)
     await register_camera_actions(kernel, manifest.tenant_id)

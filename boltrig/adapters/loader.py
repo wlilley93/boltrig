@@ -34,7 +34,13 @@ class AdapterLoader:
     def register(self, tenant_id: str, adapter: Adapter) -> None:
         """Register (or hot-replace) a live adapter instance."""
         self._live[(tenant_id, adapter.id)] = adapter
-        self._health[(tenant_id, adapter.id)] = "unknown"
+        # A small set of reviewed adapters can accept a closed write-only
+        # credential contract without contacting the provider.  Mark only that
+        # setup posture as degraded; it is deliberately not an "ok" provider
+        # health claim.  Every other adapter keeps the fail-closed unknown.
+        self._health[(tenant_id, adapter.id)] = (
+            "degraded" if getattr(adapter, "setup_without_probe", False) else "unknown"
+        )
 
     def unload(self, tenant_id: str, adapter_id: str) -> None:
         """Forget a live instance (governed adapter delete). No-op if absent."""

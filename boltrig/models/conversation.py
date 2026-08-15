@@ -21,6 +21,17 @@ class ConversationStatus(str, Enum):
     CLOSED = "closed"
 
 
+class ConversationOrigin(str, Enum):
+    """Who opened the conversation.
+
+    ``ROUTINE`` is deliberately a conversation property, not a title convention:
+    automated work must remain identifiable after a user renames the chat.
+    """
+
+    USER = "user"
+    ROUTINE = "routine"
+
+
 class MessageRole(str, Enum):
     USER = "user"
     ASSISTANT = "assistant"
@@ -35,6 +46,10 @@ class Conversation:
     user_id: UserId  # owner (RBAC: only owner + scoped roles, SEC-25)
     title: str | None = None
     status: ConversationStatus = ConversationStatus.ACTIVE
+    origin: ConversationOrigin = ConversationOrigin.USER
+    source_ref: str | None = None
+    source_run_id: RunId | None = None
+    companion_id: str | None = None
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)
 

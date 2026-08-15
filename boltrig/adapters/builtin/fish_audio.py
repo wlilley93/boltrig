@@ -135,6 +135,7 @@ class FishAudioAdapter(HttpAdapter):
     version = "0.1.0"
     source = "builtin"
     user_agent = "boltrig-fish-audio/1.0"
+    setup_without_probe = True
 
     def __init__(
         self,
@@ -237,7 +238,9 @@ class FishAudioAdapter(HttpAdapter):
         )
 
     async def health(self) -> str:
-        return "unknown"
+        # The loader cannot authenticate a background probe without resolving
+        # tenant secret material.  Expose setup as degraded, not falsely ok.
+        return "degraded"
 
     # --- handlers ------------------------------------------------------------
     async def _speak(

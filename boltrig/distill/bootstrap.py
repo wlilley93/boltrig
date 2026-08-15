@@ -10,11 +10,11 @@ Manifest shape::
     distill:
       enabled: true
       sidecar_url: http://host.orb.internal:8930     # trainer/scorer (fixed, operator-owned)
-      serve_url: http://host.orb.internal:8931/v1    # candidate chat serving (mlx_lm.server)
       base_pin: mlx-community/Qwen2.5-7B-Instruct-4bit@main
 
-``serve_url`` unset leaves the register lane fully working and makes the
-craft gate refuse typed (the trainer serves no chat completions).
+The register lane remains available. The craft lane refuses typed until an
+inactive candidate can enter the governed Codex/Bifrost admission path; an
+operator-supplied provider URL is deliberately not a routing seam.
 """
 
 from __future__ import annotations
@@ -52,18 +52,12 @@ async def register_distill(kernel: Any, tenant_id: str, distill_cfg: Any) -> Non
         or os.environ.get("BOLTRIG_DISTILL_URL")
         or _DEFAULT_SIDECAR_URL
     )
-    serve_url = str(
-        distill_cfg.get("serve_url")
-        or os.environ.get("BOLTRIG_DISTILL_SERVE_URL")
-        or ""
-    ) or None
     adapter = DistillAdapter(
         kernel.store,
         audit=kernel.audit,
         cost=kernel.cost,
         base_pin=base_pin,
         base_url=sidecar_url,
-        serve_url=serve_url,  # unset => craft gate refuses typed
         # a 7B nightly train routinely outlives the default HTTP timeout
         timeout=float(distill_cfg.get("timeout_seconds") or 1800),
     )

@@ -24,29 +24,9 @@ def stack_state_checks(
     env: Mapping[str, str], *, production: bool, manifest: FleetManifest
 ) -> tuple[StackStateCheck, ...]:
     checks: list[StackStateCheck] = []
-    herdr_needed = _needs_herdr(manifest)
-    opencode_needed = _needs_opencode(manifest)
     browser_needed = needs_browser_cli(manifest)
-    herdr_home = (env.get("BOLTRIG_HERDR_HOME") or "").strip()
-    opencode_home = (env.get("BOLTRIG_OPENCODE_HOME") or "").strip()
     browser_home = (env.get("BOLTRIG_BROWSER_CLI_HOME") or "").strip()
 
-    if herdr_needed:
-        checks.append(_home_check("BOLTRIG_HERDR_HOME", herdr_home, "herdr", production))
-        checks.append(_bin_check("HERDR_BIN", env.get("HERDR_BIN"), "herdr", production, env))
-    if opencode_needed:
-        checks.append(
-            _home_check("BOLTRIG_OPENCODE_HOME", opencode_home, "opencode", production)
-        )
-        checks.append(
-            _bin_check(
-                "BOLTRIG_OPENCODE_BIN",
-                env.get("BOLTRIG_OPENCODE_BIN"),
-                "opencode",
-                production,
-                env,
-            )
-        )
     if browser_needed:
         checks.append(
             _home_check("BOLTRIG_BROWSER_CLI_HOME", browser_home, "browser-cli", production)
@@ -61,33 +41,7 @@ def stack_state_checks(
                 default_command="browser-use",
             )
         )
-    if herdr_home and opencode_home and Path(herdr_home) == Path(opencode_home):
-        checks.append(
-            StackStateCheck(
-                "stack_tool_home_collision",
-                "fail" if production else "warn",
-                "Herdr and OpenCode state roots point at the same directory.",
-                "Use separate stack-owned roots, e.g. /var/lib/boltrig/herdr and "
-                "/var/lib/boltrig/opencode.",
-            )
-        )
     return tuple(checks)
-
-
-def _needs_herdr(manifest: FleetManifest) -> bool:
-    stack = manifest.section("stack")
-    if str(stack.get("cockpit") or "").lower() == "herdr":
-        return True
-    return any(adapter.id == "herdr" for adapter in manifest.adapters)
-
-
-def _needs_opencode(manifest: FleetManifest) -> bool:
-    stack = manifest.section("stack")
-    if str(stack.get("coding_agent") or "").lower() == "opencode":
-        return True
-    if any(runtime.runtime == "opencode" for runtime in manifest.ephemeral_runtimes):
-        return True
-    return any(endpoint.kind == "opencode" for endpoint in manifest.models.endpoints)
 
 
 def needs_browser_cli(manifest: FleetManifest) -> bool:
@@ -226,15 +180,13 @@ def _is_personal_tool_state(raw: str, tool: str) -> bool:
     )
     if any(fragment in lowered for fragment in personal_fragments):
         return True
-    if tool == "opencode" and (lowered.endswith("/.opencode") or lowered == ".opencode"):
-        return True
     names = "|".join(re.escape(alias) for alias in aliases)
     return bool(
         re.match(
-            rf"^/(home|users)/[^/]+/(\.config|\.local|\.opencode|herdr|opencode|{names})",
+            rf"^/(home|users)/[^/]+/(\.config|\.local|{names})",
             lowered,
         )
-        or re.match(rf"^/root/(\.config|\.local|\.opencode|herdr|opencode|{names})", lowered)
+        or re.match(rf"^/root/(\.config|\.local|{names})", lowered)
     )
 
 

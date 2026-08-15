@@ -1,4 +1,4 @@
-"""Safe platform-status snapshot for shipped Herdr/OpenCode/browser tools."""
+"""Safe platform-status snapshot for shipped browser automation."""
 
 from __future__ import annotations
 
@@ -38,31 +38,13 @@ class _Tool:
 
 _TOOLS = (
     _Tool(
-        "herdr",
-        "operator_cockpit",
-        "BOLTRIG_HERDR_HOME",
-        "/var/lib/boltrig/herdr",
-        "HERDR_BIN",
-        "herdr",
-        "kernel",
-    ),
-    _Tool(
-        "opencode",
-        "coding_agent",
-        "BOLTRIG_OPENCODE_HOME",
-        "/var/lib/boltrig/opencode",
-        "BOLTRIG_OPENCODE_BIN",
-        "opencode",
-        "fleet-worker",
-    ),
-    _Tool(
         "browser-cli",
         "browser_automation",
         "BOLTRIG_BROWSER_CLI_HOME",
         "/var/lib/boltrig/browser-cli",
         "BOLTRIG_BROWSER_CLI_BIN",
         "browser-use",
-        "fleet-worker",
+        "browser-executor",
     ),
 )
 
@@ -160,7 +142,7 @@ def _tool_component(tool: _Tool, env: Mapping[str, str]) -> dict[str, Any]:
 
 
 class StackToolStatusProvider:
-    """Merge Herdr/OpenCode/Browser CLI stack posture into platform status."""
+    """Merge Browser CLI stack posture into platform status."""
 
     def __init__(
         self,
