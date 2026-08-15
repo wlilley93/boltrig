@@ -2,6 +2,8 @@
 
 import { animated, useSpring } from "@react-spring/web";
 
+import { BrandWordmark } from "./brand-wordmark";
+
 /**
  * Persistent site header: the Boltrig wordmark (left, scrolls to the top) and the
  * two standing calls to action (right): "Request access" (primary, the honest next
@@ -27,14 +29,9 @@ export const SiteHeader = () => {
       <a
         href="#arrival"
         aria-label="Boltrig home"
-        className="pointer-events-auto inline-flex items-center gap-2.5 text-brain-sky transition-colors hover:text-white max-md:min-h-11"
+        className="pointer-events-auto inline-flex min-h-11 items-center text-white transition-colors hover:text-brain-sky"
       >
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden className="drop-shadow-[0_0_10px_rgba(61,211,240,0.5)]">
-          <path d="M7.5 3.5H4.5V20.5H7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
-          <path d="M16.5 3.5H19.5V20.5H16.5" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
-          <path d="M13.2 4.5L8.5 12.6H12L10.8 19.5L15.5 11.4H12L13.2 4.5Z" fill="currentColor" />
-        </svg>
-        <span className="text-base font-semibold tracking-tight text-white">boltrig</span>
+        <BrandWordmark className="text-[1.05rem]" />
       </a>
 
       <nav className="pointer-events-auto flex items-center gap-2 md:gap-3">

@@ -36,7 +36,7 @@ describe("console format helpers", () => {
     const overview = {
       platform: {
         components: [component("runpod", "ok")],
-        runtimes: [component("opencode", "unknown")],
+        runtimes: [component("codex", "unknown")],
       },
     } as ConsoleOverview;
     expect(platformSummary(overview)).toBe("unknown · 2 services");

@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Boltrig Archivo";
+  src: url("/fonts/Archivo-Boltrig-ExtraBold.woff") format("woff");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 800;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -45,6 +53,17 @@ body {
      screen, stranding the first section above the fold. See changelog 2026-06-06.) */
   min-height: 100vh;
   width: 100%;
+}
+
+.boltrig-wordmark {
+  display: inline-block;
+  font-family: "Boltrig Archivo", Archivo, Arial, sans-serif;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  line-height: .9;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 @layer base {

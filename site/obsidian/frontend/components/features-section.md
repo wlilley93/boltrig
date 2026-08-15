@@ -43,8 +43,7 @@ shipped behavior, not a parsed policy field or integration seam. In particular:
 - a manual memory fact can omit its source reference;
 - Knowledge currently accepts text, Markdown, and PDF originals; multimodal and
   structured formats remain later phases;
-- Cognee is bundled and enabled as a rebuildable compiler, while Supermemory and
-  Mem0 require configured external connections before their governed enable action;
+- Cognee is bundled and enabled as the only shipped rebuildable compiler;
 - socket channel delivery without an outbound URL remains a queue seam; and
 - generic MQ, OCR, and file-share drivers remain seams.
 

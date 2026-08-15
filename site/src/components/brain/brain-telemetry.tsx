@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { animated, easings, useSpring } from "@react-spring/web";
 
 import { STORY_SECTIONS } from "@/data/story";
+import { BrandWordmark } from "@/components/common/brand-wordmark";
 
 import { useStory } from "./story/use-story";
 import { useBrainControls } from "./use-brain-controls";
@@ -101,13 +102,12 @@ export const BrainTelemetry = () => {
       className="fixed inset-x-0 bottom-0 z-30 flex h-9 items-center gap-4 overflow-hidden border-t border-brain-sky/15 bg-brain-void/55 px-5 text-[0.6rem] uppercase tracking-[0.2em] text-brain-sky/80 backdrop-blur-md md:h-10 md:gap-5 md:px-8"
     >
       {/* Brand */}
-      <span className="flex items-center gap-2 font-semibold text-brain-sky/90">
+      <span className="flex items-center gap-2 text-brain-sky/90">
         <animated.span
           style={{ opacity: pulse.o }}
           className="h-1.5 w-1.5 rounded-full bg-brain-sky shadow-[0_0_10px_2px] shadow-brain-azure/60"
         />
-        BOLTRIG
-        <span className="hidden text-brain-sky/35 sm:inline">{"// GOVERNED"}</span>
+        <BrandWordmark />
       </span>
 
       <Seg label="DISPATCH" className="hidden xl:flex">
