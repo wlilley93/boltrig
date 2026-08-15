@@ -20,7 +20,9 @@ root="${BOLTRIG_BROWSER_CLI_HOME:-/var/lib/boltrig/browser-cli}"
 # volume mounted there, that mkdir failed and the container crash-looped BEFORE
 # reaching the gate that would have said no browser was needed -- so the deploy
 # died on a directory for a browser it was never going to start. 2026-08-13.
-if python -m boltrig.fleet.browser_runtime; then
+if python -m boltrig.fleet.browser_runtime \
+  && { [ "${BOLTRIG_BROWSER_EXECUTOR_SERVER:-}" = "1" ] \
+    || [ -z "${BOLTRIG_BROWSER_EXECUTOR_SOCKET:-}" ]; }; then
   export HOME="$root/home"
   export XDG_CONFIG_HOME="$root/config"
   export XDG_DATA_HOME="$root/data"
@@ -52,8 +54,12 @@ if python -m boltrig.fleet.browser_runtime; then
     --disable-component-update \
     --disable-default-apps \
     --disable-sync \
+    --disable-quic \
+    --force-webrtc-ip-handling-policy=disable_non_proxied_udp \
     --no-first-run \
     --no-default-browser-check \
+    --proxy-server="http://127.0.0.1:${BOLTRIG_BROWSER_PROXY_PORT:-9223}" \
+    --proxy-bypass-list='<-loopback>' \
     --remote-debugging-address=127.0.0.1 \
     --remote-debugging-port=9222 \
     --user-data-dir="$profile" \
@@ -78,7 +84,11 @@ if python -m boltrig.fleet.browser_runtime; then
   # worker ready. It connects only to the loopback CDP endpoint above.
   printf '%s\n' 'print(page_info())' | browser-use > /tmp/boltrig-browser-prime.log
 else
-  echo "fleet-entrypoint: browser automation not declared; Chromium not started" >&2
+  if [ -n "${BOLTRIG_BROWSER_EXECUTOR_SOCKET:-}" ]; then
+    echo "fleet-entrypoint: browser automation delegated to isolated executor" >&2
+  else
+    echo "fleet-entrypoint: browser automation not declared; Chromium not started" >&2
+  fi
 fi
 
 exec "$@"

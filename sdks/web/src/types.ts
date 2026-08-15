@@ -507,6 +507,10 @@ export interface ConversationSummary {
   updated_at: string;
   /** Server-owned active-run truth; older kernels may omit this field. */
   working?: boolean;
+  origin?: "user" | "routine";
+  source_ref?: string | null;
+  source_run_id?: string | null;
+  companion_id?: string | null;
 }
 
 export interface ConversationsResponse {
@@ -635,6 +639,10 @@ export interface ConversationModelContext {
 }
 
 export interface ConversationResponse {
+  conversation?: Pick<
+    ConversationSummary,
+    "id" | "title" | "status" | "origin" | "source_ref" | "source_run_id" | "companion_id"
+  >;
   messages: ChatMessage[];
   active_run_id?: string | null;
   model_context?: ConversationModelContext;
@@ -1353,6 +1361,15 @@ export interface WorkflowStepDefinition extends Record<string, unknown> {
 
 export interface WorkflowDefinition extends Record<string, unknown> {
   steps?: unknown[];
+  _boltrig_routine?: RoutineDefinition;
+}
+
+export interface RoutineDefinition {
+  version: 1;
+  name: string;
+  goal: string;
+  companion_id: "familiar" | "jarvis";
+  notify?: { completion?: boolean };
 }
 
 export type WorkflowScheduleObservedStatus =
@@ -1386,6 +1403,7 @@ export interface WorkflowSummary {
   status: "active" | "archived";
   schedule?: { cron: string; timezone: string } | null;
   schedule_state?: WorkflowScheduleState;
+  routine?: RoutineDefinition | null;
 }
 
 export interface WorkflowsResponse {
@@ -1401,6 +1419,7 @@ export interface WorkflowDetail {
   status: "active" | "archived";
   schedule?: { cron: string; timezone: string } | null;
   schedule_state?: WorkflowScheduleState;
+  routine?: RoutineDefinition | null;
 }
 
 export interface UpsertWorkflowRequest {
@@ -1609,6 +1628,7 @@ export interface ChatModelChoicesResponse {
   choices: ChatModelChoice[];
   default_choice_id?: string | null;
   default_model_name?: string | null;
+  default_source?: "personal" | "platform";
   default_available?: boolean;
   default_unavailable_reason?: string | null;
 }
@@ -2106,6 +2126,7 @@ export interface WorkflowRunDescriptor {
   status?: string;
   inputs?: Record<string, unknown>;
   queued_at?: string;
+  conversation_id?: string;
   error?: string;
   [key: string]: unknown;
 }
@@ -4043,6 +4064,7 @@ export interface AiKeyView {
   modality?: AiKeyModality;
   base_url?: string | null;
   has_key: boolean;
+  gateway_ready?: boolean;
   updated_at?: string | null;
 }
 
@@ -4060,6 +4082,12 @@ export interface SetAiKeyRequest {
   modality?: AiKeyModality;
   base_url?: string;
   api_key: string;
+}
+
+export interface ActivateAiKeyRequest {
+  level: AiKeyLevel;
+  scope_id?: string;
+  modality?: AiKeyModality;
 }
 
 export type AiKeyProposalStatus =

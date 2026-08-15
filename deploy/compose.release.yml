@@ -25,6 +25,15 @@ services:
     environment:
       BOLTRIG_RELEASE_MODE: ${BOLTRIG_RELEASE_MODE:?set BOLTRIG_RELEASE_MODE to exactly core or full}
 
+  # Chromium/browser-use execute in a separate hardened process but reuse the
+  # exact signed fleet image. No fifth image or mutable runtime is admitted.
+  browser-executor:
+    build: !reset null
+    image: ${BOLTRIG_FLEET_IMAGE:?set BOLTRIG_FLEET_IMAGE to an image@sha256 digest}
+    pull_policy: always
+    environment:
+      BOLTRIG_RELEASE_MODE: ${BOLTRIG_RELEASE_MODE:?set BOLTRIG_RELEASE_MODE to exactly core or full}
+
   # The durable Hatchet task server is a second entry point from the fleet image.
   # Pin and pull it explicitly: leaving the base build/local tag in place makes a
   # no-build release depend on whatever bytes happen to exist on the host.

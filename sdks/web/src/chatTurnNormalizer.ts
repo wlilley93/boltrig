@@ -273,7 +273,7 @@ function handleHitl(ev: ChatHitlEvent, acc: Accumulator) {
   const entry: HitlEntry = {
     hitlRequestId: ev.hitl_request_id,
     kind,
-    question: ev.question ?? "A governed action needs your response.",
+    question: ev.question ?? "An action needs your response.",
     options: ev.options ?? [],
     verb: ev.verb,
     requestedBy: ev.requested_by,

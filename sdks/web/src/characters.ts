@@ -123,6 +123,12 @@ export interface Character<TNode = unknown, TPhenotype = unknown, TGenotype = un
    * asked, so a character that wants nothing makes no request.
    */
   wantsSensing?: readonly string[];
+  /**
+   * Provider-specific voice ids declared by the character bundle. These are
+   * public model/voice names, never credentials. Absence means this character
+   * is silent on that provider; hosts must not substitute another voice.
+   */
+  voiceIds?: Readonly<Record<string, string>>;
   blurb: string;
   render(props: CharacterRenderProps<TPhenotype, TGenotype>): TNode;
 }
@@ -178,6 +184,13 @@ export function registerCharacter<TNode, TPhenotype, TGenotype>(
   if (typeof character.readsPhenotype !== "boolean" || typeof character.render !== "function") {
     throw new TypeError("character must declare readsPhenotype and a render function");
   }
+  if (character.voiceIds) {
+    for (const [provider, voice] of Object.entries(character.voiceIds)) {
+      if (!isSafeLabel(provider, 64) || !isSafeLabel(voice, 128)) {
+        throw new TypeError("character voice ids must be safe provider/voice labels");
+      }
+    }
+  }
   if (REGISTRY.has(character.id)) {
     throw new TypeError(`character id is already registered: ${character.id}`);
   }
@@ -190,7 +203,12 @@ export function registerCharacter<TNode, TPhenotype, TGenotype>(
   // normally treat the contract as declarative. Storing that live reference
   // lets it change its id/name/render after validation, so the map key, the
   // Settings label and the body actually rendered can silently disagree.
-  const registered = Object.freeze({ ...character });
+  const registered = Object.freeze({
+    ...character,
+    ...(character.voiceIds
+      ? { voiceIds: Object.freeze({ ...character.voiceIds }) }
+      : {}),
+  });
   REGISTRY.set(character.id, registered as unknown as Character<never>);
   revision += 1;
   // Registration is already committed at this point. A broken host listener

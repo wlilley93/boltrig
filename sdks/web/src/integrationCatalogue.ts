@@ -75,7 +75,7 @@ export const WORKER_INTEGRATION_CATALOGUE: readonly IntegrationCatalogueEntry[] 
     entries.map((entry) => ({
       ...entry,
       auth: entry.auth ?? ["oauth2"],
-      description: entry.description ?? `Connect ${entry.label} through a governed Boltrig adapter.`,
+      description: entry.description ?? `Connect ${entry.label} to Boltrig.`,
       certification: "uncertified" as const,
     })),
   );

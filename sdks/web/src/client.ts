@@ -1,6 +1,7 @@
 import type {
   ActivateAdapterRequest,
   ActivateAdapterResponse,
+  ActivateAiKeyRequest,
   AddWorkspaceMemberRequest,
   AddWorkspaceMemberResponse,
   AdminInvitationsResponse,
@@ -543,6 +544,10 @@ export class BoltrigClient {
     return this.json("/v1/ai-keys", "PUT", body, true);
   }
 
+  activateAiKey(body: ActivateAiKeyRequest): Promise<SetAiKeyResponse> {
+    return this.json("/v1/ai-keys/activate", "POST", body, true);
+  }
+
   aiKeyProposals(): Promise<AiKeyProposalsResponse> {
     return this.request("/v1/ai-keys/proposals", { tolerateStatus: true });
   }
@@ -559,6 +564,15 @@ export class BoltrigClient {
       `/v1/ai-keys/proposals/${encodeURIComponent(proposalId)}/finalize`,
       "POST",
       undefined,
+      true,
+    );
+  }
+
+  approveAiKeyProposal(proposalId: string): Promise<AiKeyProposalResponse> {
+    return this.json(
+      `/v1/ai-keys/proposals/${encodeURIComponent(proposalId)}/approve`,
+      "POST",
+      {},
       true,
     );
   }

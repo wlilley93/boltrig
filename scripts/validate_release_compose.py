@@ -28,6 +28,7 @@ from boltrig.release_mode import RELEASE_MODE_ENV, validate_release_mode  # noqa
 FIRST_PARTY_SERVICES = (
     "kernel",
     "fleet-worker",
+    "browser-executor",
     "hatchet-worker",
     "worker-ui",
     "backup",
@@ -53,7 +54,7 @@ def _reject_unadmitted_channels(services: dict[str, Any]) -> None:
 
 def _validate_release_mode_binding(services: dict[str, Any]) -> None:
     bound_modes: dict[str, str] = {}
-    for name in ("kernel", "fleet-worker", "hatchet-worker"):
+    for name in ("kernel", "fleet-worker", "browser-executor", "hatchet-worker"):
         service = services.get(name)
         environment = service.get("environment") if isinstance(service, dict) else None
         value = environment.get(RELEASE_MODE_ENV) if isinstance(environment, dict) else None
@@ -87,6 +88,26 @@ def validate_release_compose(document: dict[str, Any], *, secure: bool) -> None:
     _validate_release_mode_binding(services)
     if services["hatchet-worker"]["image"] != services["fleet-worker"]["image"]:
         raise ValueError("release Hatchet worker does not use the fleet-worker image digest")
+    if services["browser-executor"]["image"] != services["fleet-worker"]["image"]:
+        raise ValueError("release browser executor does not use the fleet-worker image digest")
+    executor = services["browser-executor"]
+    executor_ports = executor.get("ports") or []
+    if executor_ports:
+        raise ValueError("release browser executor publishes a host port")
+    executor_networks = executor.get("networks") or {}
+    network_names = (
+        set(executor_networks)
+        if isinstance(executor_networks, (dict, list))
+        else set()
+    )
+    if network_names != {"browser-egress"}:
+        raise ValueError("release browser executor is not isolated on browser-egress")
+    executor_health = executor.get("healthcheck")
+    executor_health_test = (
+        executor_health.get("test") if isinstance(executor_health, dict) else None
+    )
+    if "boltrig.fleet.browser_executor --health" not in " ".join(executor_health_test or []):
+        raise ValueError("release browser executor has no Unix-socket healthcheck")
     hatchet_worker = services["hatchet-worker"]
     healthcheck = hatchet_worker.get("healthcheck")
     health_test = healthcheck.get("test") if isinstance(healthcheck, dict) else None

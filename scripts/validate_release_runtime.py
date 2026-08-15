@@ -1,12 +1,11 @@
 """Run production doctor in the exact signed release-image tool context.
 
 The normal doctor intentionally resolves stack CLIs from its own execution
-environment. Running it on the deployment host would therefore inspect stray
-host installs even though Herdr ships in the kernel image and OpenCode/Browser
-Use ship in the fleet image. This admission step first verifies all release
-digests against the protected workflow, then creates an ephemeral validation
-image containing only the signed fleet image plus Herdr copied from the signed
-kernel image. The tool probes and doctor run are networkless and read-only.
+environment. Running it on the deployment host would therefore inspect a stray
+Browser Use install even though the tool ships in the fleet image. This step
+first verifies all release digests against the protected workflow, then creates
+an ephemeral validation image from the signed fleet image. The tool probe and
+doctor run are networkless and read-only.
 """
 
 from __future__ import annotations
@@ -34,8 +33,6 @@ import os
 import subprocess
 
 tools = (
-    ("herdr", "/usr/local/bin/herdr", "herdr"),
-    ("opencode", "/usr/local/bin/opencode", "opencode"),
     ("browser-use", "/usr/local/bin/browser-use", "browser-cli"),
 )
 for name, executable, state_name in tools:
@@ -52,11 +49,6 @@ for name, executable, state_name in tools:
     for path in state.values():
         if path.startswith(root):
             os.makedirs(path, mode=0o700, exist_ok=True)
-    if name == "herdr":
-        state["HERDR_CONFIG_PATH"] = f"{root}/config/config.toml"
-    if name == "opencode":
-        state["OPENCODE_CONFIG_DIR"] = f"{root}/config/opencode"
-        os.makedirs(state["OPENCODE_CONFIG_DIR"], mode=0o700, exist_ok=True)
     completed = subprocess.run(
         (executable, "--version"),
         check=False,
@@ -177,8 +169,6 @@ def validate_release_runtime(
         "--network=none",
         "--tag",
         tag,
-        "--build-arg",
-        f"BOLTRIG_KERNEL_IMAGE={images['BOLTRIG_KERNEL_IMAGE']}",
         "--build-arg",
         f"BOLTRIG_FLEET_IMAGE={images['BOLTRIG_FLEET_IMAGE']}",
         "-",
