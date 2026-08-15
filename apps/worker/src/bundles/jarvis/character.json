@@ -36,7 +36,23 @@
     "fallbackVoiceIds": {
       "fish": "d2d43385f4a749389dda58ecff883bb5",
       "pocket-voice": "jarvis"
-    }
+    },
+    "tone": [
+      {
+        "type": "peaking",
+        "frequency": 3000,
+        "gainDb": 5,
+        "q": 1.2,
+        "reason": "Consonant clarity. Jarvis reports state and asks questions, and at ~120 Hz his fundamental sits an octave under the other characters, so the presence band is where his words are told apart rather than merely heard."
+      },
+      {
+        "type": "peaking",
+        "frequency": 350,
+        "gainDb": -4,
+        "q": 1.0,
+        "reason": "Boxiness. A male fundamental near 120 Hz puts strong second and third harmonics right here; they crowd the vowels rather than adding weight, and cutting reads as clarity, not thinness."
+      }
+    ]
   },
 
   "capabilities": {

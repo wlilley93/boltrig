@@ -34,8 +34,34 @@
 // description of a chain; the caller builds the nodes. That keeps it testable
 // without a browser and keeps the policy in one readable place.
 
+// TWO DEFICITS, NOT ONE, because voices fail in two different ways and a
+// measure that sees only one is blind to half of them.
+//
+//   A CLIFF: sibilance present, nothing above it. Joi -- 5-8k at -26.6 but
+//   8-11k at -43.2. The gap is the defect; her overall level is fine.
+//
+//   A DEFICIT: the whole top end low but evenly so. Maya -- 5-8k at -41.0,
+//   seventeen dB below Vera, with a gap of only 1.3. Nothing wrong with her
+//   shape; there is simply almost no high end to shape.
+//
+// An earlier version measured the cliff alone. It derived a correct +12 dB for
+// Joi and NOTHING AT ALL for Maya and Vera -- two of the four voices a
+// listening pass had just said were improved by a shelf. Whichever deficit
+// asks for more gain wins.
+
 /** Where a voice should sit: air within this of the sibilant band. */
 export const TARGET_AIR_GAP_DB = 3;
+
+/**
+ * Sibilant-band level, relative to the body, that a voice should reach.
+ *
+ * From Vera, measured at -23.7 dB. She is the reference deliberately: she is
+ * the only one of the four that is NOT a clone, she needed no correction by
+ * ear, and she is what the engine sounds like before cloning takes the top end
+ * off. Lifting the clones toward her is restoring what cloning removed rather
+ * than inventing a house sound.
+ */
+export const TARGET_SIBILANT_DB = -24;
 
 /** Bounds on the automatic correction. It fixes a tilt; it is not an effect. */
 export const MAX_TILT_GAIN_DB = 12;
@@ -208,11 +234,15 @@ export function tiltCorrection(samples: Float32Array,
   const air = bandDb(samples, sampleRate, AIR[0], AIR[1]);
   if (![body, sibilant, air].every(Number.isFinite)) return null;
 
-  // The deficit is measured against the SIBILANT band, not against a fixed
-  // dBFS figure, so a quiet utterance is not mistaken for a dull one. Loudness
-  // is a separate stage and must not leak into this one.
-  const gap = sibilant - air;
-  const wanted = clamp(gap - TARGET_AIR_GAP_DB, MIN_TILT_GAIN_DB, MAX_TILT_GAIN_DB);
+  // Both deficits are measured RELATIVE to the body band, never against a
+  // fixed dBFS figure, so a quiet utterance is never mistaken for a dull one.
+  // Loudness is a separate stage and must not leak into this one.
+  const gap = sibilant - air;                 // the cliff  (Joi's failure)
+  const level = sibilant - body;              // the deficit (Maya's failure)
+  const fromGap = gap - TARGET_AIR_GAP_DB;
+  const fromLevel = TARGET_SIBILANT_DB - level;
+  const wanted = clamp(Math.max(fromGap, fromLevel),
+                       MIN_TILT_GAIN_DB, MAX_TILT_GAIN_DB);
   if (wanted <= 0.5) return null;
 
   // Above the peak, never on it. A shelf cornered at the sibilance peak lifts
@@ -220,12 +250,14 @@ export function tiltCorrection(samples: Float32Array,
   // harshness.
   const peak = sibilancePeakHz(samples, sampleRate);
   const corner = Math.min(peak * 1.35, sampleRate / 2 - 500);
+  const because = fromLevel > fromGap
+    ? `top end ${(-level).toFixed(1)} dB under the body, ${fromLevel.toFixed(1)} short of target`
+    : `air ${gap.toFixed(1)} dB below sibilance`;
   return {
     type: "highshelf",
     frequency: Math.round(corner),
     gainDb: Number(wanted.toFixed(2)),
-    reason: `air ${gap.toFixed(1)} dB below sibilance; corner set above the ` +
-            `${Math.round(peak)} Hz peak`,
+    reason: `${because}; corner set above the ${Math.round(peak)} Hz peak`,
   };
 }
 
