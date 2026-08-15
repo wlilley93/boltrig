@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-15T21:48:29.947Z",
+  "capturedAt": "2026-08-15T22:38:23.004Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,12 +16,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "a633aa1fdbf43c7d70d03fdaf4ba6c5911ae78a02b9ea452296b2c9fe1145966",
-    "digestAfterCapture": "a633aa1fdbf43c7d70d03fdaf4ba6c5911ae78a02b9ea452296b2c9fe1145966",
+    "digestBeforeCapture": "d032d589cce5cc48697dec123aa84402ea915c5242137ff41f7e8ed3db1e6bd4",
+    "digestAfterCapture": "d032d589cce5cc48697dec123aa84402ea915c5242137ff41f7e8ed3db1e6bd4",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/console-target",
-    "head": "afdf239710e5589709b12f089c3cc299b4cd9b57",
-    "dirty": false
+    "head": "e7c9d33e2851e478c8045bb603f33110b8bc9a1b",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
@@ -57,7 +57,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -237,7 +237,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
