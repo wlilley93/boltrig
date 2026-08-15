@@ -37,4 +37,31 @@ describe("composer attachments", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove reference.png" }));
     expect(remove).toHaveBeenCalledWith(file);
   });
+
+  it("previews a text attachment without expanding it into the composer", () => {
+    const text = "First line of the pasted excerpt\nSecond line stays inside the thumbnail";
+    render(
+      <AttachmentStatus
+        attachmentLimits={{
+          max_count: 8,
+          max_bytes: 262_144,
+          max_total_bytes: 1_048_576,
+          model_readable_media_types: ["text/*"],
+        }}
+        fileError=""
+        files={[{
+          name: "pasted-text.txt",
+          media_type: "text/plain",
+          data: btoa(text),
+          size: text.length,
+        }]}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("pasted-text.txt")).toBeTruthy();
+    expect(document.querySelector(".composer-attachment-visual.text pre")?.textContent)
+      .toBe(text);
+    expect(screen.getByText("model-readable")).toBeTruthy();
+  });
 });

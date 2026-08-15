@@ -37,11 +37,11 @@ describe("Chat parity geometry", () => {
     expect(css).toContain("border-color: var(--accent)");
   });
 
-  it("sizes either New-chat companion at the canonical 30px", () => {
+  it("sizes either New-chat companion at the reference's 48px", () => {
     expect(css).toContain(".voice-intro > .familiar-stage.conversation");
     expect(css).toContain(".voice-intro > .jarvis-stage");
-    expect(css).toContain("width: 30px");
-    expect(css).toMatch(/\.voice-intro > \.jarvis-stage\s*\{[^}]*height:\s*30px[^}]*min-height:\s*30px/);
+    expect(css).toContain("width: 48px");
+    expect(css).toMatch(/\.voice-intro > \.jarvis-stage\s*\{[^}]*height:\s*48px[^}]*min-height:\s*48px/);
   });
 
   it("keeps the semantic New-chat h1 on the decided centred 28px treatment", () => {

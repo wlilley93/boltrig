@@ -33,6 +33,23 @@ const choices = [
 afterEach(cleanup);
 
 describe("chat model switcher", () => {
+  it("shows a personal server default as the actual model after refresh", () => {
+    render(
+      <ModelChip
+        choices={[]}
+        defaultAvailable
+        defaultModelName="openai/gpt-5.4"
+        defaultModelSource="personal"
+        onChange={vi.fn()}
+        value=""
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Model" });
+    expect(trigger.textContent).toContain("openai/gpt-5.4");
+    expect(trigger.textContent).not.toContain("Automatic");
+  });
+
   it("shows exact model names and sends only the opaque selected id", () => {
     const onChange = vi.fn();
     render(

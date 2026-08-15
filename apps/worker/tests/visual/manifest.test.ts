@@ -184,6 +184,20 @@ describe("console parity evidence manifest", () => {
     }
   });
 
+  it("keeps the companion layer clear and places truthful Projects before Recents", () => {
+    for (const id of ["new-chat", "chat-run", "agents", "plugins", "command-palette", "chat-direction"]) {
+      const state = manifest.states.find((candidate) => candidate.id === id);
+      expect(state, id).toBeDefined();
+      expect(state!.direction_records, id).toEqual(expect.arrayContaining(["DIR-0035", "DIR-0036"]));
+      expect(state!.required_presence_selectors, id)
+        .toContain("#shell-projects.shell-task-group-label");
+      expect(state!.required_exact_text, id).toEqual(expect.arrayContaining([
+        { selector: "#shell-projects", text: "Projects" },
+        { selector: ".shell-project-empty", text: "No projects" },
+      ]));
+    }
+  });
+
   it("keeps richer tool receipts closed in capture while binding their on-demand direction", () => {
     for (const id of ["chat-run", "command-palette", "chat-direction"]) {
       const state = manifest.states.find((candidate) => candidate.id === id);
@@ -213,11 +227,12 @@ describe("console parity evidence manifest", () => {
       "The background is the same completed persisted turn as Chat run; no live HITL, computer-use or spend state is fabricated.",
     );
     expect(palette!.direction_records).toEqual([
-      "DIR-0006", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0028", "DIR-0029", "DIR-0030",
+      "DIR-0006", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0028", "DIR-0029", "DIR-0030", "DIR-0033", "DIR-0035", "DIR-0036",
     ]);
     expect(palette!.required_presence_selectors).toEqual(expect.arrayContaining([
       ".sidebar.shell-parity",
       "#shell-pinned-tasks.shell-task-group-label",
+      "#shell-projects.shell-task-group-label",
       "#shell-recent-tasks.shell-task-group-label",
       ".transcript-navigation[aria-label=\"Transcript navigation\"]",
       ".right-rail .chat-rail-glass",
@@ -247,7 +262,7 @@ describe("console parity evidence manifest", () => {
       count: 8,
     });
     expect(palette!.required_visible_counts).toEqual(expect.arrayContaining([
-      { selector: ".shell-task-group-label", count: 2 },
+      { selector: ".shell-task-group-label", count: 3 },
       { selector: ".transcript-navigation", count: 1 },
       { selector: ".transcript-navigation > button", count: 2 },
     ]));
@@ -257,9 +272,10 @@ describe("console parity evidence manifest", () => {
     ]));
     expect(palette!.required_exact_text).toEqual(expect.arrayContaining([
       { selector: "#shell-pinned-tasks", text: "Pinned" },
+      { selector: "#shell-projects", text: "Projects" },
       { selector: "#shell-recent-tasks", text: "Recents" },
       { selector: ".command-row:nth-child(1) .command-row-label", text: "New chat" },
-      { selector: ".command-row:nth-child(6) .command-row-label", text: "Camera and presence settings" },
+      { selector: ".command-row:nth-child(6) .command-row-label", text: "Behaviour settings" },
       { selector: ".command-row:nth-child(8) .command-row-label", text: "Spending settings" },
     ]));
     expect(palette!.required_absent_text).toEqual(expect.arrayContaining([
@@ -277,7 +293,7 @@ describe("console parity evidence manifest", () => {
       | undefined;
 
     expect(plugins).toBeDefined();
-    expect(plugins!.direction_records).toEqual(["DIR-0004", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021", "DIR-0028", "DIR-0029", "DIR-0030"]);
+    expect(plugins!.direction_records).toEqual(["DIR-0004", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021", "DIR-0028", "DIR-0029", "DIR-0030", "DIR-0035", "DIR-0036"]);
     expect(plugins!.required_presence_selectors).not.toContain(".sidebar.shell-parity");
     expect(plugins!.required_presence_selectors).toEqual(expect.arrayContaining([
       ".plugins-pane",
@@ -304,8 +320,8 @@ describe("console parity evidence manifest", () => {
     expect(plugins!.required_text).toContain("9 connected of 43");
     expect(plugins!.required_geometry).toEqual(expect.arrayContaining([
       { selector: ".plugins-pane", x: 403, width: 900 },
-      { selector: ".plugins-alert", x: 435, y: 162.5625, width: 836, height: 64.125 },
-      { selector: ".plugins-search", y: 277.6875, height: 38 },
+      { selector: ".plugins-alert", x: 435, y: 140.875, width: 836, height: 64.125 },
+      { selector: ".plugins-search", y: 256, height: 38 },
       { selector: ".plugins-group:first-child .plugins-row:first-child", height: 57 },
       {
         selector: ".plugins-group:first-child .plugins-row:first-child .plugins-row-toggle",
@@ -338,13 +354,17 @@ describe("console parity evidence manifest", () => {
       expect(state!.direction_records).toEqual([
         "DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021",
         ...(state!.id === "chat-run" ? ["DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027"] : []),
-        "DIR-0028", "DIR-0029", "DIR-0030",
+        "DIR-0028", "DIR-0029", "DIR-0030", "DIR-0033", "DIR-0035", "DIR-0036",
+        ...(state!.id === "new-chat" ? ["DIR-0037", "DIR-0038"] : []),
+        "DIR-0039",
       ]);
       expect(state!.required_presence_selectors).toContain(".sidebar.shell-parity");
       expect(state!.required_presence_selectors).toEqual(expect.arrayContaining([
         ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"]",
+        ".shell-task-group[aria-labelledby=\"shell-projects\"]",
         ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"]",
         "#shell-pinned-tasks.shell-task-group-label",
+        "#shell-projects.shell-task-group-label",
         "#shell-recent-tasks.shell-task-group-label",
       ]));
       expect(state!.required_presence_selectors).not.toContain(".conversation-search");
@@ -355,6 +375,8 @@ describe("console parity evidence manifest", () => {
         ".side-workspace",
         ".message-author",
         ".subagent-fanout",
+        ".composer[data-drop-active=\"true\"]",
+        ".composer-drop-target",
         ...unboundWorkspacePanelSelectors,
       ]));
       expect(state!.required_absent_text).toEqual(expect.arrayContaining([
@@ -388,8 +410,35 @@ describe("console parity evidence manifest", () => {
     ]));
     expect(newChat!.required_geometry).toEqual(expect.arrayContaining([
       { selector: ".new-chat-transcript .welcome", x: 480.5, y: 40, width: 745, height: 836 },
-      { selector: ".new-chat-transcript .composer.new-context", x: 480.5, y: 754, width: 745, height: 122 },
-      { selector: ".voice-intro", x: 480.5, y: 687, width: 745, height: 57 },
+      { selector: ".new-chat-transcript .composer.new-context", x: 480.5, y: 740, width: 745, height: 136 },
+      { selector: ".voice-intro", x: 492.5, y: 664, width: 721, height: 66 },
+    ]));
+    expect(newChat!.required_computed_styles).toEqual(expect.arrayContaining([
+      {
+        selector: ".new-chat-transcript .composer-frame",
+        property: "backdrop-filter",
+        value: "blur(24px) saturate(1.18)",
+      },
+      {
+        selector: ".new-chat-transcript .composer-frame",
+        property: "border-radius",
+        value: "16px",
+      },
+      {
+        selector: ".new-chat-transcript .composer-add-trigger svg",
+        property: "stroke-width",
+        value: "2.2px",
+      },
+      {
+        selector: ".new-chat-transcript .composer-dictate svg",
+        property: "stroke-width",
+        value: "2.2px",
+      },
+      {
+        selector: ".new-chat-transcript .composer-dictate",
+        property: "color",
+        value: "rgb(180, 180, 180)",
+      },
     ]));
     expect(newChat!.required_visible_counts).toContainEqual({
       selector: ".sidebar-footer > button",
@@ -400,7 +449,7 @@ describe("console parity evidence manifest", () => {
       count: 1,
     });
     expect(newChat!.required_visible_counts).toEqual(expect.arrayContaining([
-      { selector: ".shell-task-group-label", count: 2 },
+      { selector: ".shell-task-group-label", count: 3 },
       {
         selector: ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-row",
         count: 1,
@@ -438,7 +487,7 @@ describe("console parity evidence manifest", () => {
       y: 16,
     });
     expect(chatRun!.required_visible_counts).toEqual(expect.arrayContaining([
-      { selector: ".shell-task-group-label", count: 2 },
+      { selector: ".shell-task-group-label", count: 3 },
       { selector: ".transcript-navigation", count: 1 },
       { selector: ".transcript-navigation > button", count: 2 },
       { selector: ".transcript-tool-summary", count: 1 },
@@ -451,6 +500,7 @@ describe("console parity evidence manifest", () => {
     ]));
     expect(chatRun!.required_geometry).toEqual(expect.arrayContaining([
       { selector: "#shell-pinned-tasks.shell-task-group-label", height: 20 },
+      { selector: "#shell-projects.shell-task-group-label", height: 20 },
       { selector: "#shell-recent-tasks.shell-task-group-label", height: 20 },
       { selector: ".session-row.active .session-main", height: 31 },
       {
@@ -526,7 +576,7 @@ describe("console parity evidence manifest", () => {
       "/v1/conversations/direction-thread",
     );
     expect(direction!.direction_records).toEqual([
-      "DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027", "DIR-0028", "DIR-0029", "DIR-0030",
+      "DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027", "DIR-0028", "DIR-0029", "DIR-0030", "DIR-0033", "DIR-0035", "DIR-0036", "DIR-0039",
     ]);
     expect(direction!.reference_digest_manifest).toBe(
       "docs/design/evidence/2026-08-11-chat-ui-direction/references.sha256",
@@ -535,6 +585,7 @@ describe("console parity evidence manifest", () => {
     expect(direction!.negative_reference_paths).toHaveLength(3);
     expect(direction!.required_visible_selectors).toEqual(expect.arrayContaining([
       "#shell-pinned-tasks.shell-task-group-label",
+      "#shell-projects.shell-task-group-label",
       "#shell-recent-tasks.shell-task-group-label",
       ".transcript-navigation[aria-label=\"Transcript navigation\"]",
     ]));
@@ -556,6 +607,8 @@ describe("console parity evidence manifest", () => {
       ".right-rail [aria-label=\"Conversation title\"]",
       ".run-progress",
       ".queued-messages",
+      ".composer[data-drop-active=\"true\"]",
+      ".composer-drop-target",
       ...unboundWorkspacePanelSelectors,
     ]));
     expect(direction!.required_text).toContain(
@@ -564,6 +617,7 @@ describe("console parity evidence manifest", () => {
     expect(direction!.required_text).toContain("3 done");
     expect(direction!.required_geometry).toEqual(expect.arrayContaining([
       { selector: "#shell-pinned-tasks.shell-task-group-label", height: 20 },
+      { selector: "#shell-projects.shell-task-group-label", height: 20 },
       { selector: "#shell-recent-tasks.shell-task-group-label", height: 20 },
       { selector: ".session-row.active .session-main", height: 31 },
       {
@@ -581,7 +635,7 @@ describe("console parity evidence manifest", () => {
       value: "0",
     });
     expect(direction!.required_visible_counts).toEqual(expect.arrayContaining([
-      { selector: ".shell-task-group-label", count: 2 },
+      { selector: ".shell-task-group-label", count: 3 },
       { selector: ".transcript-navigation", count: 1 },
       { selector: ".transcript-navigation > button", count: 2 },
       { selector: ".transcript-tool-summary", count: 2 },
@@ -773,94 +827,85 @@ describe("console parity evidence manifest", () => {
     }
   });
 
-  it("fails the Call fixture closed on its deterministic recovered-call notice", async () => {
+  it("fails the Call fixture closed on its immersive character-and-controls contract", async () => {
     const call = manifest.states.find((state) => state.id === "call") as
       | ContractState
       | undefined;
     expect(call).toBeDefined();
-    expect(call!.direction_records).toEqual(["DIR-0005", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0028", "DIR-0029", "DIR-0030"]);
+    expect(call!.direction_records).toEqual(["DIR-0005", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0028", "DIR-0029", "DIR-0030", "DIR-0032", "DIR-0040"]);
     expect(call!.required_presence_selectors).toEqual(expect.arrayContaining([
-      ".voice-call-title",
       ".voice-call-leave",
-      ".voice-call-notice",
-      ".voice-call-participants",
-      ".voice-call-participant",
       ".voice-call-controls",
+      ".voice-call-text",
+      ".voice-call-primary-familiar",
     ]));
     expect(call!.required_visible_selectors).toEqual(expect.arrayContaining([
-      ".voice-call-title",
       ".voice-call-leave",
-      ".voice-call-notice",
-      ".voice-call-participants",
-      ".voice-call-participant",
       ".voice-call-controls",
+      ".voice-call-text",
       '.voice-call-controls button[aria-pressed="false"]',
       '.voice-call-primary-familiar [data-renderer="webgl2"], .voice-call-primary-familiar [data-renderer="badge"]',
     ]));
+    expect(call!.required_absence_selectors).toEqual(expect.arrayContaining([
+      ".voice-call-title",
+      ".voice-call-elapsed",
+      ".voice-call-notice",
+      ".voice-call-participants",
+      ".voice-call-participant",
+      ".voice-call-state",
+      ".voice-call-saying",
+      ".voice-call-typed",
+      ".voice-stage",
+    ]));
     expect(call!.required_geometry).toEqual(expect.arrayContaining([
-      {
-        selector: ".voice-call-notice",
-        x: 1180,
-        y: 649,
-        width: 236,
-        tolerance: 1.5,
-      },
-      { selector: ".voice-call-primary-familiar", width: 150, height: 150 },
+      { selector: ".voice-call-primary-familiar", width: 1120 },
       {
         selector: ".voice-call-primary-familiar .familiar-stage",
-        width: 150,
-        height: 150,
+        width: 730,
+        height: 730,
       },
+      { selector: ".voice-call-text", width: 745, height: 58 },
     ]));
     expect(call!.required_computed_styles).toEqual(expect.arrayContaining([
       {
         selector: ".voice-call-primary-familiar .familiar-stage-canvas",
         property: "position",
-        value: "absolute",
+        value: "static",
       },
       {
         selector: ".voice-call-primary-familiar .familiar-stage-canvas",
         property: "width",
-        value: "184px",
+        value: "730px",
       },
       {
         selector: ".voice-call-primary-familiar .familiar-stage-canvas",
         property: "height",
-        value: "184px",
+        value: "730px",
       },
     ]));
     expect(call!.required_text).toEqual(expect.arrayContaining([
-      "Renewal outreach · you and the chief of staff",
       "Leave",
-      "A voice call from this conversation can be resumed.",
-      "Mute",
+      "Resume call",
+      "Mute me",
+      "Silence Familiar",
     ]));
     expect(call!.required_exact_text).toEqual(expect.arrayContaining([
-      {
-        selector: ".session-row.active .session-title > span:first-child",
-        text: "Renewal outreach",
-      },
-      {
-        selector: ".voice-call-title",
-        text: "Renewal outreach · you and the chief of staff",
-      },
       { selector: ".voice-call-leave", text: "Leave" },
+      { selector: ".voice-call-text button", text: "Resume call" },
       {
         selector: '.voice-call-controls button[aria-pressed="false"]',
-        text: "Mute",
+        text: "Mute me",
       },
     ]));
-    expect(call!.settled_when).toContain("visibly pinned recovery notice");
+    expect(call!.settled_when).toContain("immersive Call dialog");
 
     const source = await import("node:fs/promises").then(({ readFile }) => readFile(
       new URL("./parity.tsx", import.meta.url),
       "utf8",
     ));
-    expect(source).toContain('if (visualState.id === "call")');
-    expect(source).toContain(
-      'document.documentElement.dataset.visualPinRecoveredCallNotice = "true"',
-    );
-    expect(source).toContain('document.querySelector(".voice-call-notice")');
+    expect(source).toContain('if (id === "call")');
+    expect(source).toContain('document.querySelector(".voice-call-text")');
+    expect(source).not.toContain("visualPinRecoveredCallNotice");
     expect(source).toContain("satisfies ConversationResponse");
     expect(source).not.toContain("conversation: { id: \"voice-thread\"");
   });
@@ -907,7 +952,7 @@ describe("console parity evidence manifest", () => {
       | ContractState
       | undefined;
     expect(agents).toBeDefined();
-    expect(agents!.direction_records).toEqual(["DIR-0003", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021", "DIR-0028", "DIR-0029", "DIR-0030"]);
+    expect(agents!.direction_records).toEqual(["DIR-0003", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021", "DIR-0028", "DIR-0029", "DIR-0030", "DIR-0035", "DIR-0036"]);
     expect(agents!.required_visible_selectors).toEqual(expect.arrayContaining([
       ".agents-fleet-topbar .console-seg",
       ".agents-fleet-topbar .console-primary",

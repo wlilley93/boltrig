@@ -35,6 +35,11 @@ vi.mock("../src/desktop", () => native);
 
 import { AuthGate } from "../src/components/AuthGate";
 
+const completedAccount = (settings: Record<string, unknown> = {}) => ({
+  profile: { id: "owner", email: "owner@example.io", role: "owner" },
+  settings: { "setup.onboarding_version": 1, ...settings },
+});
+
 beforeEach(() => {
   window.location.hash = "#/chat";
   vi.stubEnv("VITE_API_BASE", "https://kernel.boltrig.test");
@@ -92,10 +97,7 @@ afterEach(() => {
 
 describe("Worker password recovery", () => {
   it("applies the authoritative character before private UI first renders", async () => {
-    api.meSettings.mockResolvedValue({
-      profile: { id: "owner", email: "owner@example.io", role: "owner" },
-      settings: { "agent.character": "jarvis" },
-    });
+    api.meSettings.mockResolvedValue(completedAccount({ "agent.character": "jarvis" }));
     function PrivateWorker() {
       return (
         <div data-character-at-render={document.documentElement.dataset.character}>
@@ -115,6 +117,9 @@ describe("Worker password recovery", () => {
   });
 
   it("retains the login response CSRF token before desktop connection starts", async () => {
+    api.meSettings
+      .mockRejectedValueOnce(new Error("no session"))
+      .mockResolvedValue(completedAccount());
     api.login.mockResolvedValue({ status: "ok", csrf_token: "login-csrf" });
     render(<AuthGate><div>Private Worker</div></AuthGate>);
 
@@ -131,10 +136,7 @@ describe("Worker password recovery", () => {
   });
 
   it("connects a new desktop automatically after account authentication", async () => {
-    api.meSettings.mockResolvedValue({
-      profile: { id: "owner", email: "owner@example.io", role: "owner" },
-      settings: {},
-    });
+    api.meSettings.mockResolvedValue(completedAccount());
     api.startDeviceEnrollment.mockResolvedValue({
       authorization_code: "one-time-bootstrap",
       expires_at: "2030-01-01T00:00:00Z",
@@ -162,10 +164,7 @@ describe("Worker password recovery", () => {
   });
 
   it("requires confirmation before replacing a different account's local key", async () => {
-    api.meSettings.mockResolvedValue({
-      profile: { id: "owner", email: "owner@example.io", role: "owner" },
-      settings: {},
-    });
+    api.meSettings.mockResolvedValue(completedAccount());
     api.devices.mockResolvedValue({ devices: [] });
     native.desktopDeviceStatus.mockResolvedValue({
       state: "online",
@@ -269,6 +268,9 @@ describe("Worker password recovery", () => {
   });
 
   it("completes the two-factor challenge without changing the login challenge token", async () => {
+    api.meSettings
+      .mockRejectedValueOnce(new Error("no session"))
+      .mockResolvedValue(completedAccount());
     api.login.mockResolvedValue({
       status: "2fa_required",
       challenge_token: "challenge-exact-token",
@@ -297,9 +299,11 @@ describe("Worker password recovery", () => {
   });
 
   it("requires the temporary password to be rotated before private UI mounts", async () => {
-    api.meSettings.mockRejectedValue(new BoltrigApiError(403, {
-      detail: "password_change_required",
-    }));
+    api.meSettings
+      .mockRejectedValueOnce(new BoltrigApiError(403, {
+        detail: "password_change_required",
+      }))
+      .mockResolvedValue(completedAccount());
     api.changePassword.mockResolvedValue({ status: "ok" });
     render(<AuthGate><div>Private Worker</div></AuthGate>);
 
@@ -322,9 +326,11 @@ describe("Worker password recovery", () => {
   });
 
   it("finishes required two-factor enrollment before private UI mounts", async () => {
-    api.meSettings.mockRejectedValue(new BoltrigApiError(403, {
-      detail: "two_factor_enrollment_required",
-    }));
+    api.meSettings
+      .mockRejectedValueOnce(new BoltrigApiError(403, {
+        detail: "two_factor_enrollment_required",
+      }))
+      .mockResolvedValue(completedAccount());
     api.twoFactorEnrollBegin.mockResolvedValue({
       status: "ok",
       secret: "AUTH-SECRET",
@@ -350,8 +356,7 @@ describe("Worker password recovery", () => {
   it("rechecks a refresh 401 before returning an authenticated tab to sign-in", async () => {
     api.meSettings
       .mockResolvedValueOnce({
-        profile: { id: "owner", email: "owner@example.io", role: "owner" },
-        settings: {},
+        ...completedAccount(),
       })
       .mockRejectedValueOnce(new BoltrigApiError(401, {}));
     api.refreshSession.mockRejectedValueOnce(new BoltrigApiError(401, {}));

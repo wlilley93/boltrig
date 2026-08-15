@@ -19,7 +19,7 @@ T = "acme"
 
 
 class _Projection:
-    id = "mem0"
+    id = "cognee"
 
     def __init__(self, *, fail: bool = False):
         self.fail = fail
@@ -30,7 +30,7 @@ class _Projection:
         self.remembered.append((tenant_id, fact.id, context.actor))
         if self.fail:
             raise RuntimeError("projection down")
-        return ProjectionResult.written(f"mem0:{fact.id}")
+        return ProjectionResult.written(f"cognee:{fact.id}")
 
     async def forget(self, tenant_id, *, fact_id, projection_ref, context):
         self.forgotten.append((tenant_id, fact_id, projection_ref, context.actor))
@@ -103,7 +103,7 @@ async def test_queued_projection_returns_pending_then_worker_finalises():
     rows = await fanout.remember(T, _fact(), _ctx())
 
     assert rows == [{
-        "projection_id": "mem0",
+        "projection_id": "cognee",
         "operation": "remember",
         "status": "pending",
         "fact_id": "f1",
@@ -115,7 +115,7 @@ async def test_queued_projection_returns_pending_then_worker_finalises():
     stored = await store.list_memory_projection_statuses(T, fact_id="f1")
 
     assert final["status"] == "written"
-    assert final["projection_ref"] == "mem0:f1"
+    assert final["projection_ref"] == "cognee:f1"
     assert stored[0].status == "written"
     assert projection.remembered == [(T, "f1", "alice")]
 
@@ -134,7 +134,7 @@ async def test_local_executor_registration_runs_projection_task_body():
 
     assert rows[0]["status"] == "pending"
     assert stored[0].status == "written"
-    assert stored[0].projection_ref == "mem0:f1"
+    assert stored[0].projection_ref == "cognee:f1"
     assert executor.steps[0].name == f"task:{TASK_MEMORY_PROJECTION}"
 
 
@@ -154,7 +154,7 @@ async def test_hatchet_registration_exposes_memory_projection_workflow():
     out = await workflows[TASK_MEMORY_PROJECTION].aio_run(queue.calls[0][1])
 
     assert out["status"] == "written"
-    assert out["projection_ref"] == "mem0:f1"
+    assert out["projection_ref"] == "cognee:f1"
 
 
 async def test_queued_projection_forget_preserves_projection_ref():
@@ -172,13 +172,13 @@ async def test_queued_projection_forget_preserves_projection_ref():
 
     assert rows[0]["status"] == "pending"
     assert final == {
-        "projection_id": "mem0",
+        "projection_id": "cognee",
         "operation": "forget",
         "status": "deleted",
         "fact_id": "f1",
-        "projection_ref": "mem0:f1",
+        "projection_ref": "cognee:f1",
     }
-    assert projection.forgotten == [(T, "f1", "mem0:f1", "bob")]
+    assert projection.forgotten == [(T, "f1", "cognee:f1", "bob")]
 
 
 async def test_projection_task_rejects_tenant_mismatch():
@@ -196,9 +196,9 @@ async def test_projection_task_rejects_tenant_mismatch():
 
 def test_projection_builder_selects_queued_fanout_when_configured():
     fanout = build_memory_projection_fanout(InMemoryStore(), {
-        "primary_projection": "mem0",
+        "primary_projection": "cognee",
         "fanout": {"execution": "queued"},
-        "projections": [{"id": "mem0", "enabled": "true"}],
+        "projections": [{"id": "cognee", "enabled": "true"}],
     })
 
     assert isinstance(fanout, QueuedMemoryProjectionFanout)

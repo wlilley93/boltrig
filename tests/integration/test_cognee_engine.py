@@ -25,22 +25,32 @@ tools/json_schema modes, which instructor rejects.)
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import builtins
 import os
 import re
 import sys
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 import uuid
 
 import pytest
 
-from boltrig.memory.cognee import CogneeEngine, _require_cognee, dataset_for
+from boltrig.memory.cognee import (
+    CogneeEngine,
+    CogneeRuntimeModel,
+    _explicit_config,
+    _require_cognee,
+    dataset_for,
+)
 from boltrig.memory.engine import EngineFact
 
 _COGNEE_PRESENT = importlib.util.find_spec("cognee") is not None
-_LIVE = os.environ.get("BOLTRIG_COGNEE_LIVE") == "1" and _COGNEE_PRESENT and bool(
-    os.environ.get("LLM_API_KEY")
+_LIVE = (
+    os.environ.get("BOLTRIG_COGNEE_LIVE") == "1"
+    and _COGNEE_PRESENT
+    and bool(os.environ.get("LLM_API_KEY"))
 )
 _live = pytest.mark.skipif(
     not _LIVE,
@@ -53,8 +63,9 @@ _live = pytest.mark.skipif(
 
 
 def _fact(fid: str, scope: str, content: str, **kw) -> EngineFact:
-    return EngineFact(id=fid, owner_scope=scope, kind=kw.pop("kind", "entity"),
-                      content=content, **kw)
+    return EngineFact(
+        id=fid, owner_scope=scope, kind=kw.pop("kind", "entity"), content=content, **kw
+    )
 
 
 # --- always-run: honest degradation without cognee ----------------------------
@@ -65,6 +76,25 @@ async def test_health_is_down_with_reason_when_cognee_unimportable(monkeypatch):
     assert "cognee" in (engine.health_reason or "")
 
 
+@pytest.mark.invariant("KNO-04")
+async def test_health_reports_missing_enrichment_model_without_claiming_outage(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "boltrig.memory.cognee._require_cognee",
+        lambda: SimpleNamespace(),
+    )
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+
+    engine = CogneeEngine()
+
+    assert await engine.health() == "degraded"
+    assert engine.health_reason == (
+        "cognee importable but no LLM configured (set LLM_API_KEY or memory.llm.api_key)"
+    )
+
+
 async def test_operations_raise_typed_unavailable_error_without_cognee(monkeypatch):
     monkeypatch.setitem(sys.modules, "cognee", None)
     engine = CogneeEngine()
@@ -72,6 +102,101 @@ async def test_operations_raise_typed_unavailable_error_without_cognee(monkeypat
         await engine.remember("acme", [_fact("f1", "user:alice", "clean note")])
     with pytest.raises(RuntimeError, match="cognee"):
         await engine.recall("acme", "note", scopes=["user:alice"])
+
+
+@pytest.mark.invariant("KNO-05")
+async def test_runtime_model_is_forwarded_request_locally_to_cognee(monkeypatch):
+    fake = SimpleNamespace(add=AsyncMock(), cognify=AsyncMock())
+    engine = CogneeEngine()
+    monkeypatch.setattr(engine, "_ready", lambda: fake)
+    monkeypatch.setattr(engine, "_runtime_configs", lambda route: ("llm", "embedding"))
+    route = CogneeRuntimeModel(
+        model_id="openai/gpt-5.4",
+        endpoint="http://bifrost:8080/v1",
+        api_key="gateway-secret",
+        extra_headers=(("x-bf-vk", "vk-scoped"),),
+    )
+
+    await engine.remember(
+        "acme",
+        [_fact("f1", "user:alice", "clean note")],
+        runtime_model=route,
+    )
+
+    assert fake.add.await_args.kwargs["llm_config"] == "llm"
+    assert fake.add.await_args.kwargs["embedding_config"] == "embedding"
+    assert fake.cognify.await_args.kwargs["llm_config"] == "llm"
+    assert fake.cognify.await_args.kwargs["embedding_config"] == "embedding"
+
+
+@pytest.mark.invariant("KNO-05")
+def test_request_config_constructor_never_reads_settings_sources():
+    class SettingsLike:
+        def __init__(self, **values):
+            raise AssertionError("the BaseSettings constructor must not run")
+
+        @classmethod
+        def model_construct(cls, **values):
+            return SimpleNamespace(__pydantic_extra__=None, **values)
+
+    config = _explicit_config(SettingsLike, selected="only-this")
+
+    assert vars(config) == {
+        "__pydantic_extra__": None,
+        "selected": "only-this",
+    }
+
+
+@pytest.mark.skipif(not _COGNEE_PRESENT, reason="exact Cognee config contract")
+@pytest.mark.invariant("KNO-05")
+def test_exact_cognee_configs_do_not_absorb_unrelated_process_secrets(monkeypatch):
+    poison = "must-not-enter-cognee-config"
+    monkeypatch.setenv("UNRELATED_PLATFORM_SECRET", poison)
+    route = CogneeRuntimeModel(
+        model_id="openai/gpt-5.4",
+        endpoint="http://bifrost:8080/v1",
+        api_key="gateway-secret",
+        extra_headers=(("x-bf-vk", "vk-scoped"),),
+    )
+
+    llm, embedding = CogneeEngine()._runtime_configs(route)
+    rendered = repr((llm.model_dump(exclude_none=True), embedding.model_dump(exclude_none=True)))
+
+    assert poison not in rendered
+    assert not llm.__pydantic_extra__
+    assert not embedding.__pydantic_extra__
+    assert llm.llm_args == {"extra_headers": {"x-bf-vk": "vk-scoped"}}
+
+
+@pytest.mark.skipif(not _COGNEE_PRESENT, reason="exact Cognee context contract")
+@pytest.mark.invariant("KNO-05")
+async def test_exact_cognee_context_keeps_concurrent_model_routes_isolated(monkeypatch):
+    from cognee import context_global_variables as context
+
+    monkeypatch.setattr(context, "backend_access_control_enabled", lambda: False)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    routes = (SimpleNamespace(model="route-a"), SimpleNamespace(model="route-b"))
+
+    async def observe(route):
+        async with context.set_database_global_context_variables(
+            "dataset",
+            uuid.uuid4(),
+            llm_config=route,
+        ):
+            if route is routes[0]:
+                entered.set()
+                await release.wait()
+            else:
+                await entered.wait()
+                release.set()
+            await asyncio.sleep(0)
+            return context.llm_config.get()
+
+    observed = await asyncio.gather(*(observe(route) for route in routes))
+
+    assert observed == list(routes)
+    assert context.llm_config.get() is None
 
 
 @pytest.mark.invariant("SEC-27")
@@ -146,13 +271,22 @@ def _tenant() -> str:
 @pytest.mark.invariant("MEM-ENG-03")
 async def test_live_remember_recall_roundtrip_with_provenance(live_engine):
     t = _tenant()
-    ids = await live_engine.remember(t, [
-        _fact("f1", "user:alice", "the quarterly revenue target is 1.2 million euros",
-              source_kind="document", source_ref="doc:q3-plan"),
-    ])
+    ids = await live_engine.remember(
+        t,
+        [
+            _fact(
+                "f1",
+                "user:alice",
+                "the quarterly revenue target is 1.2 million euros",
+                source_kind="document",
+                source_ref="doc:q3-plan",
+            ),
+        ],
+    )
     assert ids == ["f1"]
     hits = await live_engine.recall(
-        t, "what is the quarterly revenue target", scopes=["user:alice"], mode="similarity")
+        t, "what is the quarterly revenue target", scopes=["user:alice"], mode="similarity"
+    )
     assert hits, "the remembered fact must be recallable"
     top = hits[0]
     assert top.fact.id == "f1"
@@ -166,13 +300,19 @@ async def test_live_remember_recall_roundtrip_with_provenance(live_engine):
 @pytest.mark.invariant("MEM-ENG-03")
 async def test_live_recall_is_isolated_per_tenant_and_scope(live_engine):
     ta, tb = _tenant(), _tenant()
-    await live_engine.remember(ta, [
-        _fact("a1", "user:alice", "the zephyr project launch date is in march"),
-        _fact("b1", "user:bob", "bob keeps notes about office plants"),
-    ])
-    await live_engine.remember(tb, [
-        _fact("c1", "user:alice", "tenant b talks about accounting only"),
-    ])
+    await live_engine.remember(
+        ta,
+        [
+            _fact("a1", "user:alice", "the zephyr project launch date is in march"),
+            _fact("b1", "user:bob", "bob keeps notes about office plants"),
+        ],
+    )
+    await live_engine.remember(
+        tb,
+        [
+            _fact("c1", "user:alice", "tenant b talks about accounting only"),
+        ],
+    )
     # same tenant, other scope: bob's datasets cannot yield alice's fact
     hits = await live_engine.recall(ta, "zephyr project launch date", scopes=["user:bob"])
     assert all("zephyr" not in h.fact.content for h in hits)
@@ -186,9 +326,12 @@ async def test_live_recall_is_isolated_per_tenant_and_scope(live_engine):
 @pytest.mark.invariant("MEM-ENG-03")
 async def test_live_forget_erasure_is_real(live_engine):
     t = _tenant()
-    await live_engine.remember(t, [
-        _fact("e1", "user:alice", "the secret santa budget is fifty pounds"),
-    ])
+    await live_engine.remember(
+        t,
+        [
+            _fact("e1", "user:alice", "the secret santa budget is fifty pounds"),
+        ],
+    )
     hits = await live_engine.recall(t, "secret santa budget", scopes=["user:alice"])
     assert any(h.fact.id == "e1" for h in hits)
     removed = await live_engine.forget(t, fact_ids=["e1"], scopes=["user:alice"])
@@ -203,8 +346,11 @@ async def test_live_forget_erasure_is_real(live_engine):
 
     try:
         items = await cognee.search(
-            query_text="secret santa budget", query_type=SearchType.CHUNKS,
-            datasets=[dataset_for(t, "user:alice")], top_k=5)
+            query_text="secret santa budget",
+            query_type=SearchType.CHUNKS,
+            datasets=[dataset_for(t, "user:alice")],
+            top_k=5,
+        )
     except Exception:
         items = []  # dataset gone entirely: erased
     assert all("secret santa" not in str(i) for i in items)
@@ -216,10 +362,13 @@ async def test_live_improve_boosts_ranking_observably(live_engine):
     per-item reweight primitive): a positive signal adds +1.0 to the target's
     recall score, observably changing the ranking."""
     t = _tenant()
-    await live_engine.remember(t, [
-        _fact("f1", "user:alice", "meeting notes from monday standup"),
-        _fact("f2", "user:alice", "meeting notes from friday retro"),
-    ])
+    await live_engine.remember(
+        t,
+        [
+            _fact("f1", "user:alice", "meeting notes from monday standup"),
+            _fact("f2", "user:alice", "meeting notes from friday retro"),
+        ],
+    )
     before = await live_engine.recall(t, "", scopes=["user:alice"], mode="similarity")
     base = {h.fact.id: h.score for h in before}
     assert base["f1"] == base["f2"]  # weight-only ranking on the empty query

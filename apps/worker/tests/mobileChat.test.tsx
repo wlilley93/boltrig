@@ -1,10 +1,21 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NormalizedTurn } from "@wlilley93/boltrig-web-sdk";
 
 import { MobileChat } from "../src/components/MobileChat";
+
+const api = vi.hoisted(() => ({
+  invokeApprovalState: vi.fn(),
+  respondHitl: vi.fn(),
+}));
+vi.mock("../src/client", () => ({ client: api }));
+
+beforeEach(() => {
+  api.invokeApprovalState.mockReset().mockResolvedValue({ status: "pending" });
+  api.respondHitl.mockReset().mockResolvedValue({ status: "answered" });
+});
 
 afterEach(() => {
   cleanup();
@@ -272,7 +283,7 @@ describe("mobile surface", () => {
     expect(onSteerQueued).toHaveBeenCalledWith(queued);
   });
 
-  it("keeps live questions answerable and durable question receipts read-only", () => {
+  it("keeps live and canonically pending durable questions answerable", async () => {
     const question = {
       questionId: "q1",
       prompt: "Which account owner?",
@@ -288,13 +299,13 @@ describe("mobile surface", () => {
 
     live.unmount();
     renderMobile({ turn: turnWith({ ended: true, questions: [question] }) });
+    await waitFor(() => expect(api.invokeApprovalState).toHaveBeenCalledWith("q1"));
     expect(screen.getByText("Which account owner?")).toBeTruthy();
-    expect(screen.getByText(/completed turn and is no longer answerable/)).toBeTruthy();
-    expect(screen.queryByRole("textbox", { name: "Live question answer" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Noether" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Live question answer" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Noether" })).toBeTruthy();
   });
 
-  it("keeps a durable HITL receipt read-only even when a responder is available", () => {
+  it("answers a canonically pending durable approval from the run chat", async () => {
     const onRespondHitl = vi.fn().mockResolvedValue(true);
     renderMobile({
       onRespondHitl,
@@ -312,13 +323,13 @@ describe("mobile surface", () => {
     });
 
     expect(screen.getByText("Publish the report?")).toBeTruthy();
-    expect(screen.getByText(/completed turn and is no longer answerable/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Deny" })).toBeNull();
+    await waitFor(() => expect(api.invokeApprovalState).toHaveBeenCalledWith("h-settled"));
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await waitFor(() => expect(api.respondHitl).toHaveBeenCalledWith("h-settled", "approve"));
     expect(onRespondHitl).not.toHaveBeenCalled();
   });
 
-  it("retains read-only decisions from earlier durable turns", () => {
+  it("reconciles decisions from earlier durable turns", async () => {
     renderMobile({
       messages: [{
         id: "assistant-earlier",
@@ -345,10 +356,10 @@ describe("mobile surface", () => {
       turn: turnWith({ tools: [{ key: "latest-tool", verb: "file.read", status: "ok" }] }),
     });
 
+    await waitFor(() => expect(api.invokeApprovalState).toHaveBeenCalledWith("question-earlier"));
     expect(screen.getByText("Who should own the account?")).toBeTruthy();
-    expect(screen.getByText(/completed turn and is no longer answerable/)).toBeTruthy();
-    expect(screen.queryByRole("textbox", { name: "Live question answer" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Noether" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Live question answer" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Noether" })).toBeTruthy();
   });
 
   it("exposes disclosure state and preserves exact activity statuses", () => {

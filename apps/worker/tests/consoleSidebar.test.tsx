@@ -174,11 +174,12 @@ describe("console sidebar", () => {
     api.readiness.mockResolvedValue({ status: "ready", checks: {} });
     const { onRoute } = renderSidebar();
 
-    // The decided target's sidebar carries four surfaces and no second group.
+    // The stable shell keeps product surfaces in one primary group.
     const expectations: Array<[string, WorkerRoute, string, number, number]> = [
       ["New chat", "chat", "0 0 20 20", 1, 0],
       ["Agents", "agents", "0 0 20 20", 2, 3],
       ["Plugins", "integrations", "0 0 20 20", 1, 0],
+      ["Browser", "browser", "0 0 24 24", 3, 0],
       ["Routines", "automations", "0 0 18 18", 1, 0],
     ];
     for (const [label, route, viewBox, pathCount, circleCount] of expectations) {
@@ -469,7 +470,15 @@ describe("console sidebar", () => {
     );
 
     const pinnedGroup = screen.getByRole("region", { name: "Pinned" });
+    const projectsGroup = screen.getByRole("region", { name: "Projects" });
     const recentGroup = screen.getByRole("region", { name: "Recents" });
+    expect(within(projectsGroup).getByText("No projects")).toBeTruthy();
+    expect(
+      pinnedGroup.compareDocumentPosition(projectsGroup) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      projectsGroup.compareDocumentPosition(recentGroup) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(within(pinnedGroup).getByText("Pinned task")).toBeTruthy();
     expect(within(pinnedGroup).queryByText("Recent task")).toBeNull();
     expect(within(recentGroup).getByText("Recent task")).toBeTruthy();
@@ -493,9 +502,13 @@ describe("console sidebar", () => {
     expect(shellParityCss).toMatch(/\.sidebar\.shell-parity\s*\{[\s\S]*?width:\s*266px/);
     expect(shellParityCss).toMatch(/\.shell-parity \.nav-row\s*\{[\s\S]*?height:\s*32px[\s\S]*?font-size:\s*14px/);
     expect(shellParityCss).toMatch(/\.shell-parity \.nav-row:focus-visible\s*\{[\s\S]*?outline:\s*2px[\s\S]*?outline-offset:\s*-2px/);
-    expect(shellParityCss).toMatch(/\.shell-task-list\s*\{[\s\S]*?padding-top:\s*20px/);
-    expect(shellParityCss).toMatch(/\.shell-task-group \+ \.shell-task-group\s*\{[\s\S]*?margin-top:\s*20px/);
+    expect(shellParityCss).toMatch(/\.shell-parity \.side-top\s*\{[\s\S]*?z-index:\s*50[\s\S]*?overflow:\s*visible/);
+    expect(shellParityCss).toMatch(/\.shell-parity \.side-nav\s*\{[\s\S]*?padding:\s*6px 8px 0/);
+    expect(shellParityCss).toMatch(/\.companion-menu\s*\{[\s\S]*?z-index:\s*60[\s\S]*?background:\s*color-mix\(in srgb, var\(--side\) 94%, var\(--text\) 6%\)/);
+    expect(shellParityCss).toMatch(/\.shell-task-list\s*\{[\s\S]*?padding-top:\s*26px/);
+    expect(shellParityCss).toMatch(/\.shell-task-group \+ \.shell-task-group\s*\{[\s\S]*?margin-top:\s*22px/);
     expect(shellParityCss).toMatch(/\.shell-task-group-label\s*\{[\s\S]*?font-size:\s*13\.5px/);
+    expect(shellParityCss).toMatch(/\.shell-project-empty\s*\{[\s\S]*?font-size:\s*13px/);
     expect(shellParityCss).toContain(".shell-task-group-label");
     expect(shellParityCss).toContain(".shell-task-rows");
     expect(shellParityCss).toContain(".shell-parity .session-row {");

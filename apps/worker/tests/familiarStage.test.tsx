@@ -243,6 +243,7 @@ describe("FamiliarWebGLRenderer lifecycle", () => {
 
   it("uploads the Voice portrait scale on a deterministic reduced-motion frame", () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("devicePixelRatio", 2);
     const frozenAfternoon = new Date(2026, 7, 11, 15, 0, 0).getTime();
     const dateNow = vi.spyOn(Date, "now").mockReturnValue(frozenAfternoon);
     const onFirstPaint = vi.fn();
@@ -285,6 +286,8 @@ describe("FamiliarWebGLRenderer lifecycle", () => {
     expect(values.get("uAperture")).toBe(1);
     expect(values.get("iTime")).toBe(0);
     expect(values.get("uDay")).toBe(1);
+    expect(canvas.width).toBe(300);
+    expect(canvas.height).toBe(300);
     expect(onFirstPaint).toHaveBeenCalledTimes(1);
     internals.frame(5_100);
     expect(onFirstPaint).toHaveBeenCalledTimes(1);

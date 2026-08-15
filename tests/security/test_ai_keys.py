@@ -1,9 +1,8 @@
 """Per-org / workspace / user AI keys ([2026] VJS-COUNTY 8, D5).
 
-FR-AIKEY-02 : resolve_ai_key precedence user -> workspace -> org -> env/manifest
-              default, and the spawner wires the resolved (sealed) key into the
-              model-key seam; a tenant with no config falls back to the env key
-              (backward-compat, the critical rule).
+FR-AIKEY-02 : resolve_ai_key precedence user -> workspace -> org -> unconfigured
+              default. The Codex resolver loads only sealed, scoped material;
+              ambient provider keys never revive a provider-native runtime.
 SEC-112     : allow_own_ai_keys=False makes a workspace/user key IGNORED - only the
               org (or env) key is used, so a member cannot bring their own key
               unless the org opts in.
@@ -23,25 +22,70 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from boltrig.fleet.spawn import Spawner
+from boltrig.fleet.runtime_resolver import RuntimeResolver
 from boltrig.identity import load_ai_key_material, resolve_ai_key
+from boltrig.identity.bifrost_user_binding import (
+    BifrostUserBinding,
+    BifrostUserGateway,
+    binding_credential_ref,
+)
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.models import (
-    AgentCapability,
     AiConfig,
     CredentialResolution,
     GrantSet,
     InvocationContext,
-    ModelEndpoint,
     Organisation,
     TenantPermissions,
+    User,
     WorkspaceMember,
 )
 from boltrig.store import InMemoryStore
 from boltrig.store.sealing import is_sealed
 
 T = "acme"
+
+
+@pytest.fixture(autouse=True)
+def _bounded_bifrost(monkeypatch):
+    """Existing route tests exercise governance, not a live Bifrost process."""
+
+    monkeypatch.setenv("BOLTRIG_MODEL_GATEWAY_URL", "http://bifrost:8080/v1")
+
+    async def ensure(self, store, tenant_id, resolution, provider_key):
+        assert provider_key
+        ref = binding_credential_ref(tenant_id, resolution)
+        provider = str(resolution.provider)
+        model = str(resolution.model)
+        model_id = model if "/" in model else f"{provider}/{model}"
+        binding = BifrostUserBinding(
+            provider=provider,
+            model_id=model_id,
+            provider_key_id="provider-key",
+            virtual_key_id="virtual-key",
+            virtual_key="vk-test-only",
+            credential_ref=ref,
+        )
+        await store.set_credential_ref(
+            tenant_id,
+            ref,
+            {
+                "secret": binding.virtual_key,
+                "provider": binding.provider,
+                "model_id": binding.model_id,
+                "source_credential_ref": resolution.credential_ref,
+                "provider_key_id": binding.provider_key_id,
+                "virtual_key_id": binding.virtual_key_id,
+            },
+        )
+        return binding
+
+    async def usable(self, binding):
+        return True
+
+    monkeypatch.setattr(BifrostUserGateway, "ensure", ensure)
+    monkeypatch.setattr(BifrostUserGateway, "is_usable", usable)
 
 
 def _run(coro):
@@ -71,7 +115,7 @@ async def _put_config(store, level, scope_id, cred_id, key, *, modality="text") 
     ))
 
 
-# --- FR-AIKEY-02: precedence user -> workspace -> org -> default ---------------
+# --- FR-AIKEY-02: precedence user -> workspace -> org -> default -------------
 @pytest.mark.invariant("FR-AIKEY-02")
 def test_resolve_precedence_user_workspace_org_default():
     async def go():
@@ -126,52 +170,33 @@ def test_vision_key_is_optional_and_falls_back_to_the_main_text_key():
 
 
 @pytest.mark.invariant("FR-AIKEY-02")
-def test_no_config_tenant_falls_back_to_env_key(monkeypatch):
-    # The backward-compat rule: a tenant with NO org row and NO ai_config resolves to
-    # the default level, and the spawner-built runtime uses the ENV provider key
-    # exactly as before (an existing single-tenant deploy is unchanged).
+def test_no_config_tenant_does_not_use_an_ambient_provider_key(monkeypatch):
     async def go():
         store = await _store(allow_own=None)  # no org row at all
-        k = Kernel(store)
-        await store.upsert_model_endpoint(
-            ModelEndpoint(id="ep", tenant_id=T, kind="openai", model="gpt",
-                          base_url="http://local/v1")
-        )
-        cap = AgentCapability("w", T, "openai", ["*"], 2, True, "standard",
-                              model_endpoint="ep")
         ctx = InvocationContext(tenant_id=T, actor="w", on_behalf_of="u1")
-        rt = await Spawner(k)._runtime_for(T, cap, ctx)
-        # No config -> the runtime carries no override and reads the env key.
-        assert rt._api_key() == "sk-env-default"
+        material, resolution = await RuntimeResolver(Kernel(store))._resolve_ai_key(
+            T, ctx
+        )
+        assert material is None
+        assert resolution is not None and resolution.is_default
 
-    monkeypatch.delenv("BOLTRIG_OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-env-default")
-    # openai is a legacy lane (decision 0012): reachable only behind the flag.
-    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
     _run(go())
 
 
 @pytest.mark.invariant("FR-AIKEY-02")
-def test_spawner_wires_resolved_sealed_key_into_the_runtime(monkeypatch):
-    # The model-key seam: with a user-level AI key configured (allow_own on), the
-    # spawner resolves + loads the SEALED key and the runtime uses IT, not the env key.
+def test_runtime_resolver_loads_the_scoped_sealed_key(monkeypatch):
     async def go():
         store = await _store(allow_own=True)
-        k = Kernel(store)
         await _put_config(store, "user", "u1", "cred-user", "sk-user-sealed")
-        await store.upsert_model_endpoint(
-            ModelEndpoint(id="ep", tenant_id=T, kind="openai", model="gpt",
-                          base_url="http://local/v1")
-        )
-        cap = AgentCapability("w", T, "openai", ["*"], 2, True, "standard",
-                              model_endpoint="ep")
         ctx = InvocationContext(tenant_id=T, actor="w", on_behalf_of="u1")
-        rt = await Spawner(k)._runtime_for(T, cap, ctx)
-        assert rt._api_key() == "sk-user-sealed"  # the sealed key, NOT the env key
+        material, resolution = await RuntimeResolver(Kernel(store))._resolve_ai_key(
+            T, ctx
+        )
+        assert material == "sk-user-sealed"
+        assert resolution is not None and resolution.credential_ref == "cred-user"
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-env-default")
-    # openai is a legacy lane (decision 0012): reachable only behind the flag.
-    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
     _run(go())
 
 
@@ -180,23 +205,10 @@ def test_spawner_wires_resolved_sealed_key_into_the_runtime(monkeypatch):
 def test_production_runtime_refuses_ambient_ai_key_fallback(monkeypatch):
     async def go():
         store = await _store(allow_own=None)
-        kernel = Kernel(store)
-        await store.upsert_model_endpoint(
-            ModelEndpoint(
-                id="ep",
-                tenant_id=T,
-                kind="openai",
-                model="gpt",
-                base_url="https://models.example/v1",
-            )
-        )
-        capability = AgentCapability(
-            "w", T, "openai", ["*"], 2, True, "standard", model_endpoint="ep"
-        )
         context = InvocationContext(tenant_id=T, actor="w", on_behalf_of="u1")
 
         with pytest.raises(CredentialResolution, match="scoped credential"):
-            await Spawner(kernel)._runtime_for(T, capability, context)
+            await RuntimeResolver(Kernel(store))._resolve_ai_key(T, context)
 
     monkeypatch.setenv("BOLTRIG_ENV", "production")
     monkeypatch.setenv("OPENAI_API_KEY", "ambient-key-must-not-be-used")
@@ -218,12 +230,10 @@ def test_configured_missing_ai_key_never_falls_through_to_ambient(monkeypatch):
                 credential_ref="missing-ref",
             )
         )
-        kernel = Kernel(store)
-        capability = AgentCapability("w", T, "openai", ["*"], 2, True, "standard")
         context = InvocationContext(tenant_id=T, actor="w", on_behalf_of="u1")
 
         with pytest.raises(CredentialResolution, match="material is unavailable"):
-            await Spawner(kernel)._runtime_for(T, capability, context)
+            await RuntimeResolver(Kernel(store))._resolve_ai_key(T, context)
 
     monkeypatch.delenv("BOLTRIG_ENV", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "ambient-key-must-not-be-used")
@@ -397,3 +407,72 @@ def test_set_key_route_is_role_scoped():
     assert put("user", "bob", _hdr(role="member", subject="bob")).status_code == 403
     # ...but the org itself may still set its own key.
     assert put("org", None, _hdr()).status_code == 200
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-113")
+@pytest.mark.invariant("FR-AIKEY-03")
+def test_onboarding_approval_is_explicit_and_activates_the_exact_saved_model():
+    k, app, store = _app()
+    _run(store.upsert_user(User(
+        id="admin",
+        tenant_id=T,
+        email="admin@example.test",
+        role="superadmin",
+        status="active",
+    )))
+    client = TestClient(app)
+
+    staged = client.put(
+        "/v1/ai-keys",
+        headers=_hdr(role="superadmin"),
+        json={
+            "level": "user",
+            "scope_id": "admin",
+            "provider": "openai",
+            "model": "openai/gpt-5.4",
+            "api_key": "provider-secret",
+        },
+    )
+    assert staged.status_code == 202
+    assert "hitl_request_id" not in staged.text
+    proposal_id = staged.json()["proposal"]["id"]
+
+    applied = client.post(
+        f"/v1/ai-keys/proposals/{proposal_id}/approve",
+        headers=_hdr(role="superadmin"),
+    )
+
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["status"] == "ok"
+    assert "hitl_request_id" not in applied.text
+    config = _run(store.get_ai_config(T, "user", "admin", "text"))
+    assert config is not None and config.model == "openai/gpt-5.4"
+    listed = client.get("/v1/ai-keys", headers=_hdr(role="superadmin")).json()
+    assert listed["ai_keys"][0]["gateway_ready"] is True
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-113")
+@pytest.mark.invariant("FR-AIKEY-03")
+def test_existing_approved_key_can_be_reconciled_without_resubmitting_secret():
+    k, app, store = _app()
+    _run(_put_config(
+        store,
+        "user",
+        "admin",
+        "approved-provider-secret",
+        "provider-secret",
+    ))
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/ai-keys/activate",
+        headers=_hdr(role="superadmin"),
+        json={"level": "user", "scope_id": "admin", "modality": "text"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "ok"
+    listed = client.get("/v1/ai-keys", headers=_hdr(role="superadmin")).json()
+    assert listed["ai_keys"][0]["gateway_ready"] is True

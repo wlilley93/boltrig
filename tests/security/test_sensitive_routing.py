@@ -8,8 +8,8 @@ data is unconstrained. The guard is also enforced on the spawn path.
 import pytest
 
 from boltrig.fleet import build_spawner
+from boltrig.fleet.codex_model_selection import resolve_base_model
 from boltrig.fleet.model_router import select_model_endpoint
-from boltrig.fleet.spawn import Spawner
 from boltrig.kernel import Kernel
 from boltrig.kernel.audit import AuditWriter
 from boltrig.models import (
@@ -82,7 +82,7 @@ async def test_spawn_blocks_sensitive_on_hosted_capability():
     s = await _store_with_endpoints()
     s.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     await s.upsert_capability(
-        AgentCapability("hosted-worker", T, "claude-api", ["*"], 2, True, "standard",
+        AgentCapability("hosted-worker", T, "codex", ["*"], 2, True, "standard",
                         model_endpoint="hosted")
     )
     await s.upsert_skill(
@@ -100,16 +100,14 @@ async def test_spawn_blocks_sensitive_on_hosted_capability():
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-12")
-async def test_sensitive_ignores_external_ai_config_and_routes_local(monkeypatch):
-    # openai/claude-api are legacy lanes (decision 0012): enable them explicitly
-    # so the routing assertions exercise the real runtimes.
-    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
+async def test_ai_key_profile_cannot_override_governed_model_endpoint():
     # An AI config ([2026] VJS-COUNTY 8, D5) that names an EXTERNAL provider must NOT
     # move sensitive data off the local endpoint: for a sensitive call the config's
     # provider/model/base_url are ignored and the local sensitive endpoint wins
     # (SEC-12 residency composes with COUNTY 5 - a config narrows/redirects a standard
-    # route, never widens a sensitive one). The SAME config DOES route a NON-sensitive
-    # call, proving the guard is what suppresses it, not a broken config.
+    # route, never widens a sensitive one). Provider keys are credentials, not a
+    # second model-routing authority: the same config cannot rewrite a standard
+    # governed endpoint either.
     s = await _store_with_endpoints()
     s.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     await s.create_org(
@@ -121,23 +119,46 @@ async def test_sensitive_ignores_external_ai_config_and_routes_local(monkeypatch
         provider="claude", model="claude-remote", credential_ref="cred-user",
         base_url="http://external/v1",
     ))
-    # The capability's own endpoint is the LOCAL sensitive one (an openai-shaped vllm).
-    cap = AgentCapability("worker", T, "openai", ["*"], 2, True, "standard",
+    cap = AgentCapability("worker", T, "codex", ["*"], 2, True, "standard",
                           model_endpoint="local")
-    spawner = Spawner(Kernel(s))
+    kernel = Kernel(s)
 
     # SENSITIVE: the config is ignored - runtime stays the capability default and the
     # endpoint stays the local sensitive model, never the external claude route.
     sens_ctx = InvocationContext(tenant_id=T, actor="worker", on_behalf_of="u1",
                                  extra={"data_class": "sensitive"})
-    rt = await spawner._runtime_for(T, cap, sens_ctx)
-    assert rt.runtime == "openai"                 # NOT 'claude-api' from the config
-    assert rt.endpoint.model == "local-llm"       # NOT 'claude-remote' from the config
-    assert rt.endpoint.data_class == "sensitive"  # the local residency endpoint
+    sensitive, _, _, _, endpoint = await resolve_base_model(
+        kernel=kernel,
+        tenant_id=T,
+        capability=cap,
+        context=sens_ctx,
+        pinned_policy=False,
+        sensitive_endpoint_id=None,
+    )
+    assert sensitive is True
+    assert endpoint is not None and endpoint.model == "local-llm"
+    assert endpoint.data_class == "sensitive"
 
-    # NON-sensitive: the very same config now DOES route (provider + model applied),
-    # so the suppression above is the residency guard, not an inert config.
+    # Standard routing also remains on the explicitly governed endpoint.
     std_ctx = InvocationContext(tenant_id=T, actor="worker", on_behalf_of="u1")
-    cap_default = AgentCapability("worker-default", T, "openai", ["*"], 2, True, "standard")
-    rt2 = await spawner._runtime_for(T, cap_default, std_ctx)
-    assert rt2.runtime == "claude-api" and rt2.endpoint.model == "claude-remote"
+    cap_default = AgentCapability(
+        "worker-default",
+        T,
+        "codex",
+        ["*"],
+        2,
+        True,
+        "standard",
+        model_endpoint="hosted",
+    )
+    sensitive, _, _, _, endpoint = await resolve_base_model(
+        kernel=kernel,
+        tenant_id=T,
+        capability=cap_default,
+        context=std_ctx,
+        pinned_policy=False,
+        sensitive_endpoint_id=None,
+    )
+    assert sensitive is False
+    assert endpoint is not None and endpoint.id == "hosted"
+    assert endpoint.model == "claude"

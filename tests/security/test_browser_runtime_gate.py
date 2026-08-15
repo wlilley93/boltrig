@@ -30,7 +30,7 @@ _BASE = """
 organisation: Acme
 tenant_id: acme
 stack:
-  cockpit: herdr
+  cockpit: boltrig_ui
 identity:
   provider: oidc
 models:
@@ -74,7 +74,10 @@ def test_each_declaring_limb_wants_a_browser(tmp_path: Path, extra: str) -> None
     demanding it.
     """
     if extra.startswith("  "):  # a stack-section limb belongs under `stack:`
-        text = _BASE.replace("  cockpit: herdr\n", "  cockpit: herdr\n" + extra)
+        text = _BASE.replace(
+            "  cockpit: boltrig_ui\n",
+            "  cockpit: boltrig_ui\n" + extra,
+        )
         path = tmp_path / "m.yaml"
         path.write_text(text, encoding="utf-8")
         assert browser_automation_wanted(str(path)) is True
@@ -223,13 +226,13 @@ async def test_heartbeat_omits_the_key_rather_than_reporting_it_broken(
 # --- the readiness gate that requires it ----------------------------------
 
 
-class _HerdrOnlyStatus:
-    """What a worker that started no Chromium actually reports: herdr, alone."""
+class _NoBrowserStatus:
+    """What a worker that started no Chromium reports."""
 
     async def snapshot(self, *, tenant_id: str, workspace_id: str | None) -> dict:
         del tenant_id, workspace_id
         return {
-            "components": [{"id": "herdr", "status": "ok", "metadata": {}}],
+            "components": [],
             "runtimes": [],
         }
 
@@ -243,6 +246,7 @@ async def _stack_tools_check(manifest: str) -> dict:
     only assertion worth making is on the check readiness actually emits.
     """
     from boltrig.api.readiness import ReadinessService
+    from boltrig.config.manifest import load_manifest
     from boltrig.kernel import Kernel
     from boltrig.store import InMemoryStore
 
@@ -251,7 +255,8 @@ async def _stack_tools_check(manifest: str) -> dict:
         Kernel(InMemoryStore()),
         tenant_id="acme",
         env={},
-        status_provider=_HerdrOnlyStatus(),
+        manifest=load_manifest(manifest),
+        status_provider=_NoBrowserStatus(),
     )
     stack, _gateway = await service._platform_checks({}, 0.5)
     return stack
@@ -269,7 +274,7 @@ async def test_readiness_stops_requiring_a_browser_it_does_not_run(
     monkeypatch.setenv("BOLTRIG_MANIFEST", _manifest(tmp_path))
     stack = await _stack_tools_check(_manifest(tmp_path))
     assert stack["status"] == "ok", stack
-    assert stack["expected"] == 1
+    assert stack["expected"] == 0
 
 
 @pytest.mark.asyncio
@@ -285,7 +290,7 @@ async def test_readiness_still_fails_when_a_declared_browser_is_missing(
     monkeypatch.setenv("BOLTRIG_MANIFEST", manifest)
     stack = await _stack_tools_check(manifest)
     assert stack["status"] == "failed", stack
-    assert stack["expected"] == 2
+    assert stack["expected"] == 1
 
 
 def test_receipt_round_trips_with_no_browser(

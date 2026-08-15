@@ -21,7 +21,7 @@ class _NoopProjections:
     async def compile(self, tenant_id, asset, segments, context):
         return []
 
-    async def erase(self, tenant_id, asset_id, segment_ids):
+    async def erase(self, tenant_id, asset_id, segment_ids, context=None):
         return []
 
 

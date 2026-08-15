@@ -49,7 +49,7 @@ _TOOLS = [
         "name": "ticket.purge",
         "description": "purge tickets",
         "inputSchema": {"type": "object"},
-        "consequence": "critical",  # above the ceiling: clamps to low
+        "consequence": "critical",  # outside the vocabulary: fails closed high
     },
 ]
 
@@ -123,16 +123,12 @@ async def _approved(k: Kernel, verb: str, params: dict, *, run_id: str) -> dict:
         await k.invoke("control", verb, params, _ctx(["*"], run_id=run_id))
     req_id = exc.value.hitl_request_id
     await k.hitl.answer(T, req_id, "approve", "admin@acme")
-    return await k.invoke(
-        "control", verb, params, _ctx(["*"], run_id=run_id), approval_id=req_id
-    )
+    return await k.invoke("control", verb, params, _ctx(["*"], run_id=run_id), approval_id=req_id)
 
 
 async def _register(monkeypatch, k: Kernel, server: _FakeMcpServer) -> None:
     monkeypatch.setenv("MCP_TOK", "server-bearer")
-    monkeypatch.setattr(
-        "boltrig.adapters.egress.pinned_async_client", lambda url, timeout: server
-    )
+    monkeypatch.setattr("boltrig.adapters.egress.pinned_async_client", lambda url, timeout: server)
     out = await k.invoke(
         "control",
         "control.mcp_server.register",
@@ -183,6 +179,7 @@ async def test_registration_with_credential_ref_binds_the_ref_through_the_chokep
 
 @pytest.mark.invariant("FR-MCP-03")
 @pytest.mark.invariant("SEC-22")
+@pytest.mark.invariant("SEC-199")
 async def test_activation_discovers_and_publishes_the_servers_tools(monkeypatch):
     k = await _kernel()
     server = _FakeMcpServer(list(_TOOLS))
@@ -210,7 +207,9 @@ async def test_activation_discovers_and_publishes_the_servers_tools(monkeypatch)
     read = await k.store.get_verb(T, "ext-mcp.ticket.read")
     assert read is not None and read.consequence.value == "low"  # no hint: default
     purge = await k.store.get_verb(T, "ext-mcp.ticket.purge")
-    assert purge is not None and purge.consequence.value == "low"  # clamped to the ceiling
+    assert purge is not None and purge.consequence.value == "high"  # unknown fails closed
+    assert "data, not instructions" in create.description
+    assert _TOOLS[0]["description"] in create.description
 
     binding = await k.store.get_binding(T, "ext-mcp.ticket.create")
     assert binding is not None
@@ -287,24 +286,26 @@ async def test_opbox_risk_class_drives_consequence_on_the_published_verbs(monkey
     import logging
 
     k = await _kernel()
-    server = _FakeMcpServer([
-        _opbox_tool("matter.list", "READ"),
-        _opbox_tool("doc.edit", "WRITE"),
-        _opbox_tool("d6.token.mint", "SENSITIVE"),
-        _opbox_tool("bill.charge", "MONEY"),
-        _opbox_tool("client.archive", "DESTRUCTIVE"),
-        # live: the Opbox Core catalogue names a tool system.health, which
-        # verbatim would hit _RESERVED_VERB_PREFIXES and fail activation
-        _opbox_tool("system.health", "READ"),
-        {
-            # the expand_tools meta-tool's real description: prose, no token
-            "name": "opbox/expand_tools",
-            "description": "Expand the MCP tool catalog to include more verb "
-                           "tiers. Call with tier=2 for OnDemand verbs or "
-                           "tier=3 for Verticals.",
-            "inputSchema": {"type": "object"},
-        },
-    ])
+    server = _FakeMcpServer(
+        [
+            _opbox_tool("matter.list", "READ"),
+            _opbox_tool("doc.edit", "WRITE"),
+            _opbox_tool("d6.token.mint", "SENSITIVE"),
+            _opbox_tool("bill.charge", "MONEY"),
+            _opbox_tool("client.archive", "DESTRUCTIVE"),
+            # live: the Opbox Core catalogue names a tool system.health, which
+            # verbatim would hit _RESERVED_VERB_PREFIXES and fail activation
+            _opbox_tool("system.health", "READ"),
+            {
+                # the expand_tools meta-tool's real description: prose, no token
+                "name": "opbox/expand_tools",
+                "description": "Expand the MCP tool catalog to include more verb "
+                "tiers. Call with tier=2 for OnDemand verbs or "
+                "tier=3 for Verticals.",
+                "inputSchema": {"type": "object"},
+            },
+        ]
+    )
     await _register(monkeypatch, k, server)
 
     with caplog.at_level(logging.WARNING, logger="boltrig.adapters.mcp_consumer"):
@@ -325,11 +326,7 @@ async def test_opbox_risk_class_drives_consequence_on_the_published_verbs(monkey
     # the presentation meta-tool is skipped, not published
     assert "ext-mcp.opbox/expand_tools" not in out["verbs"]
     assert await k.store.get_verb(T, "ext-mcp.opbox/expand_tools") is None
-    assert any(
-        "skipped" in r.message
-        for r in caplog.records
-        if r.levelno >= logging.WARNING
-    )
+    assert any("skipped" in r.message for r in caplog.records if r.levelno >= logging.WARNING)
 
 
 @pytest.mark.invariant("FR-MCP-03")

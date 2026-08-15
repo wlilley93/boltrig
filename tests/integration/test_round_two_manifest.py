@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pytest
-import yaml
 
 from boltrig.config import BudgetConfig, export_runtime_environment, load_manifest
 
@@ -15,7 +14,15 @@ _ACTIVE_MANIFEST = "manifest.yaml"
 # failure: the runtime gate returns UnavailableRuntime, so EVERY run degrades with
 # "runtime_unavailable" while the stack reports healthy on every surface. That is
 # how the boltrig.io deployment came to be unable to answer at all.
-_RETIRED_RUNTIMES = {"pi", "hermes", "openai", "claude-api", "opencode", "rivet", "rivet_agentos"}
+_RETIRED_RUNTIMES = {
+    "pi",
+    "hermes",
+    "openai",
+    "claude-api",
+    "opencode",
+    "rivet",
+    "rivet_agentos",
+}
 
 
 def test_manifest_still_loads_with_round_two_sections():
@@ -31,9 +38,8 @@ def test_no_default_lane_targets_a_retired_runtime(manifest_path):
 
     `worker-cheap` is the capability every spawn rule routes to, and the tier
     hierarchy is what a chat turn runs on - a retired runtime on any of them makes
-    the tenant's agent dead on arrival. rivet/opencode capabilities are retained
-    UNWIRED so a non-Codex leaf stays re-wirable ([2026] VJS-PC 20 cond.1), so this
-    checks the lanes that are actually DEFAULTED to, not every declared capability.
+    the tenant's agent dead on arrival. Retired capabilities are absent, so this
+    checks every declared default lane and guards old stored manifests too.
 
     ``manifest.yaml`` is the ACTIVE manifest of whatever checkout this runs in and
     is gitignored - a deployment artifact, not a repo file - so that leg is a local
@@ -68,22 +74,6 @@ def test_manifest_budget_window_vocabulary_is_closed():
         BudgetConfig(window="weekly")
 
 
-@pytest.mark.security
-@pytest.mark.invariant("SEC-24")
-def test_pi_is_retired_and_stays_restrictive_if_ever_re_wired():
-    """pi is retired from the roster (decision 0012), but the routing seam stays
-    live with it re-wirable (VJS-PC 20 cond.1) - so SEC-24 still binds the day
-    anyone flips it back on."""
-    with open(_MANIFEST, encoding="utf-8") as fh:
-        doc = yaml.safe_load(fh)
-    pi = doc["runtimes"]["pi"]
-    assert pi.get("enabled") is False, "pi is retired; a roster entry must not be enabled"
-    sandbox = pi.get("sandbox")
-    if sandbox is not None:
-        assert sandbox["native_tools"] is False  # no Pi filesystem/bash/network tools
-        assert set(sandbox["network_allow"]) <= {"kernel_mcp", "model_endpoint"}
-
-
 def test_manifest_preserves_boltrig_v2_stack_sections():
     m = load_manifest(_MANIFEST)
     assert m.section("stack") == {
@@ -101,34 +91,22 @@ def test_manifest_preserves_boltrig_v2_stack_sections():
     }
     assert m.section("mastra")["compile_to"] == "hatchet"
     assert m.section("mastra")["plan_contract"] == "boltrig.mastra.v1"
-    assert m.section("rivet_agentos")["enabled"] is True
-    assert m.section("rivet_agentos")["network_allow"] == ["kernel_mcp", "model_endpoint"]
     assert m.section("browser_cli")["enabled"] is True
-    assert m.section("browser_cli")["runtime"] == "rivet_agentos"
     assert m.section("browser_cli")["cloud_policy"] == "disabled"
     assert m.section("langfuse")["secret_key_ref"] == "LANGFUSE_SECRET_KEY"
 
     memory = m.section("memory")
     assert memory["authority"] == "kernel_ledger"
     assert memory["primary_projection"] is None
-    assert [p["id"] for p in memory["projections"]] == ["mem0", "cognee"]
-    assert [p["enabled"] for p in memory["projections"]] == [False, False]
+    assert memory["projections"] == []
     assert memory["fanout"]["mode"] == "ledger_then_projection"
     assert memory["fanout"]["execution"] == "inline"
 
     knowledge = m.section("knowledge")
     assert knowledge["enabled"] is True
     assert knowledge["vault"]["kind"] == "filesystem"
-    assert [provider["id"] for provider in knowledge["providers"]] == [
-        "cognee",
-        "supermemory",
-        "mem0",
-    ]
-    assert [provider["enabled"] for provider in knowledge["providers"]] == [
-        True,
-        False,
-        False,
-    ]
+    assert [provider["id"] for provider in knowledge["providers"]] == ["cognee"]
+    assert [provider["enabled"] for provider in knowledge["providers"]] == [True]
 
 
 @pytest.mark.invariant("FR-HOST-13")
@@ -162,11 +140,8 @@ def test_checked_in_manifests_preserve_v2_entrypoints(path):
     assert m.section("stack")["cockpit"] == "boltrig_ui"
     assert m.section("stack")["coding_agent"] == "codex"
     assert m.section("stack")["browser_automation"] == "browser_cli"
-    assert {"herdr", "browser-cli"} <= adapters
-    assert "rivet-worker" in runtimes
-    assert runtimes["rivet-worker"].runtime == "rivet_agentos"
-    assert "opencode-worker" in runtimes
-    assert runtimes["opencode-worker"].runtime == "opencode"
+    assert "browser-cli" in adapters
+    assert all(runtime.runtime not in _RETIRED_RUNTIMES for runtime in runtimes.values())
 
 
 def test_local_active_manifest_preserves_v2_entrypoints_when_present():

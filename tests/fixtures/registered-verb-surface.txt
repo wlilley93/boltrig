@@ -41,11 +41,23 @@
 # positive against a verb that exists. Native targets are recorded with runtime
 # `native` and are definitionally not consumed - the kernel authors them.
 browser.auth.status	browser-cli	script
+browser.click	browser-cli	script
 browser.doctor	browser-cli	script
+browser.frame.read	browser-cli	script
+browser.frames.list	browser-cli	script
+browser.inspect	browser-cli	script
+browser.key.press	browser-cli	script
+browser.navigate	browser-cli	script
 browser.page.info	browser-cli	script
 browser.remote.start	browser-cli	script
 browser.remote.stop	browser-cli	script
+browser.scroll	browser-cli	script
+browser.snapshot	browser-cli	script
+browser.tab.close	browser-cli	script
 browser.tab.open	browser-cli	script
+browser.tab.select	browser-cli	script
+browser.tabs.list	browser-cli	script
+browser.type	browser-cli	script
 calendar.create_event	ms-graph	http
 channel.send	channel-send	script
 chat.ask_user	native:questions	native
@@ -144,12 +156,6 @@ document.read	ms-graph	http
 document.search	ms-graph	http
 document.update	ms-graph	http
 email.send	ms-graph	http
-herdr.pane.list	herdr	script
-herdr.pane.read	herdr	script
-herdr.pane.run	herdr	script
-herdr.pane.split	herdr	script
-herdr.snapshot	herdr	script
-herdr.tab.create	herdr	script
 knowledge.asset.erase	knowledge	script
 knowledge.asset.get	knowledge	script
 knowledge.asset.list	knowledge	script
@@ -280,3 +286,8 @@ ticket.read	memory-tickets	script
 ticket.search	jira	http
 ticket.update	jira	http
 web.fetch	web	http
+# Source-authored additions after the Classical Visas capture above. These rows
+# are registered unconditionally by the current kernel boot and are kept here so
+# packaged skills can be checked before the next tenant evidence refresh.
+work.get	work-board	script
+work.list	work-board	script

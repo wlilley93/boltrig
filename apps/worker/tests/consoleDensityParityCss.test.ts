@@ -30,15 +30,31 @@ describe("live Figma console density", () => {
     expect(56 + 1).toBe(57);
   });
 
-  it("keeps the New-chat voice intro at its compact 57px height and prompt width", () => {
+  it("matches the roomier New-chat voice invitation and glass composer", () => {
     const intro = rule(workerCss, ".voice-intro");
+    const frame = rule(workerCss, ".composer.new-context .composer-frame");
+    const context = rule(workerCss, ".composer.new-context .composer-context");
 
-    expect(intro).toContain("width: 100%;");
-    expect(intro).toContain("margin: 0;");
-    expect(intro).toContain("padding: 12px 13px 12px 14px;");
+    expect(intro).toContain("width: calc(100% - 24px);");
+    expect(intro).toContain("min-height: 66px;");
+    expect(intro).toContain("margin: 0 12px;");
+    expect(intro).toContain("padding: 9px 13px 9px 14px;");
     expect(intro).toContain("border: 0;");
     expect(intro).toContain("box-shadow: inset 0 0 0 1px var(--border);");
-    expect(33 + 12 * 2).toBe(57);
+    expect(frame).toContain("min-height: 96px;");
+    expect(frame).toContain("backdrop-filter: blur(24px) saturate(1.18);");
+    expect(context).toContain("height: 40px;");
+    expect(context).toContain("margin-bottom: 0;");
+  });
+
+  it("lights the composer as the window's attachment drop target", () => {
+    const active = rule(workerCss, ".composer[data-drop-active=\"true\"] .composer-frame");
+    const target = rule(workerCss, ".composer-drop-target");
+
+    expect(active).toContain("border-color: color-mix(in srgb, var(--accent) 78%, white 22%);");
+    expect(active).toContain("0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent)");
+    expect(target).toContain("backdrop-filter: blur(12px) saturate(1.12);");
+    expect(target).toContain("pointer-events: none;");
   });
 
   it("keeps Settings card rows on the 13/14px vertical rhythm", () => {

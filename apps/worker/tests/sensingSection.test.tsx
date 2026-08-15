@@ -110,13 +110,12 @@ afterEach(() => {
 });
 
 describe("camera and presence settings", () => {
-  it("is a top-level settings section, not a card buried under Advanced", () => {
+  it("keeps old sensing links valid inside the top-level Behaviour section", () => {
     expect(isSettingsSection("sensing")).toBe(true);
-    const entry = SETTINGS_SECTIONS.find((section) => section.id === "sensing");
-    expect(entry?.label).toBe("Camera and presence");
-    // Directly after "You": consent about the user's own hardware sits with the
-    // other things that are about them, not with device plumbing.
-    expect(SETTINGS_SECTIONS.findIndex((section) => section.id === "sensing")).toBe(1);
+    const entry = SETTINGS_SECTIONS.find((section) => section.id === "behaviour");
+    expect(entry?.label).toBe("Behaviour");
+    expect(SETTINGS_SECTIONS.findIndex((section) => section.id === "behaviour")).toBe(1);
+    expect(SETTINGS_SECTIONS.some((section) => section.id === "sensing")).toBe(false);
   });
 
   it("shows the camera off by safe default and turns it on through the kernel", async () => {
@@ -134,6 +133,20 @@ describe("camera and presence settings", () => {
       expect(screen.getByRole("switch", { name: "Camera" }).getAttribute("aria-checked"))
         .toBe("true");
     });
+  });
+
+  it("keeps the compact Sight and Presence views plain, with details behind info controls", async () => {
+    api.sensing.mockResolvedValue(CAMERA_ON);
+    const view = render(<SensingSection head={false} view="sight" />);
+
+    expect(await screen.findByRole("button", { name: "About sight" })).toBeTruthy();
+    expect(screen.getByRole("tooltip").textContent).toContain("captures no camera frame");
+    expect(screen.queryByText(/record never outlives its image/)).toBeNull();
+
+    view.rerender(<SensingSection head={false} view="presence" />);
+    expect(await screen.findByRole("button", { name: "About presence" })).toBeTruthy();
+    expect(screen.getByRole("tooltip").textContent).toContain("not an identity check");
+    expect(screen.queryByText("It is never included in a character bundle")).toBeNull();
   });
 
   it("draws the honest refusal a character gets, with its reason", async () => {

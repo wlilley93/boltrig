@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import tempfile
 from pathlib import Path
 
 import pytest
 
 from boltrig.fleet.stack_tool_health import (
     _probe_browser_cdp,
+    _probe_browser_executor,
     heartbeat_interval,
     probe_fleet_tools,
-    probe_herdr,
     probe_timeout,
 )
 from boltrig.fleet.stack_tool_receipts import (
@@ -31,29 +32,7 @@ _WANTS_BROWSER = frozenset({"browser-cli"})
 
 
 @pytest.mark.invariant("FR-OPS-03")
-async def test_herdr_probe_executes_exact_argv_without_a_shell(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    # Shell metacharacters are legal filename characters.  This succeeds only
-    # when the configured path is passed as one exact executable argv element.
-    executable = tmp_path / "herdr; exit 9"
-    executable.write_text(
-        "#!/bin/sh\n"
-        "printf 'deployment-secret'\n"
-        "printf 'deployment-secret' >&2\n"
-        '[ "$#" -eq 1 ] && [ "$1" = \'--version\' ]\n',
-        encoding="utf-8",
-    )
-    executable.chmod(0o700)
-
-    assert await probe_herdr({"HERDR_BIN": str(executable)}, 0.5) is True
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert captured.err == ""
-
-
-@pytest.mark.invariant("FR-OPS-03")
-async def test_fleet_probe_requires_both_binaries_and_live_loopback_cdp(
+async def test_fleet_probe_requires_browser_binary_and_live_loopback_cdp(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     seen: list[str] = []
@@ -79,7 +58,6 @@ async def test_fleet_probe_requires_both_binaries_and_live_loopback_cdp(
 
     statuses = await probe_fleet_tools(
         {
-            "BOLTRIG_OPENCODE_BIN": "/stack/opencode",  # residue: must be ignored
             "BOLTRIG_BROWSER_CLI_BIN": "/stack/browser-use",
         },
         0.5,
@@ -115,6 +93,56 @@ async def test_browser_probe_accepts_only_a_chromium_cdp_response() -> None:
     port = server.sockets[0].getsockname()[1]
     async with server:
         assert await _probe_browser_cdp(0.5, port=port) is True
+
+
+@pytest.mark.invariant("FR-OPS-03")
+async def test_browser_probe_accepts_only_the_private_executor_health_receipt() -> None:
+    async def handler(reader, writer) -> None:
+        await reader.readuntil(b"\r\n\r\n")
+        body = b'{"status":"ok"}'
+        writer.write(
+            b"HTTP/1.1 200 OK\r\n"
+            + f"Content-Length: {len(body)}\r\n".encode("ascii")
+            + b"Connection: close\r\n\r\n"
+            + body
+        )
+        await writer.drain()
+        writer.close()
+
+    with tempfile.TemporaryDirectory(prefix="bex-", dir="/tmp") as root:
+        socket_path = Path(root) / "browser.sock"
+        server = await asyncio.start_unix_server(handler, str(socket_path))
+        async with server:
+            assert await _probe_browser_executor(str(socket_path), 0.5) is True
+
+
+@pytest.mark.invariant("FR-OPS-03")
+async def test_fleet_probe_uses_the_shared_executor_instead_of_local_cdp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def forbidden_version(*_args, **_kwargs) -> bool:
+        raise AssertionError("delegating workers must not initialise another Browser CLI home")
+
+    async def live_executor(path: str, _timeout: float) -> bool:
+        assert path == "/run/boltrig-browser/browser.sock"
+        return True
+
+    async def forbidden_cdp(_timeout: float) -> bool:
+        raise AssertionError("delegating workers must not probe a local Chromium")
+
+    monkeypatch.setattr("boltrig.fleet.stack_tool_health._probe_version", forbidden_version)
+    monkeypatch.setattr("boltrig.fleet.stack_tool_health._probe_browser_executor", live_executor)
+    monkeypatch.setattr("boltrig.fleet.stack_tool_health._probe_browser_cdp", forbidden_cdp)
+    monkeypatch.setattr(
+        "boltrig.fleet.browser_runtime.browser_automation_wanted", lambda *_a, **_k: True
+    )
+
+    statuses = await probe_fleet_tools(
+        {"BOLTRIG_BROWSER_EXECUTOR_SOCKET": "/run/boltrig-browser/browser.sock"},
+        0.5,
+    )
+
+    assert statuses == {"browser-cli": True}
 
 
 @pytest.mark.invariant("FR-OPS-03")

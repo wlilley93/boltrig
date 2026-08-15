@@ -28,6 +28,7 @@ from boltrig.models import (
     AuditEvent,
     Channel,
     Conversation,
+    ConversationOrigin,
     ConversationMessage,
     EvalCase,
     EvalRun,
@@ -142,6 +143,30 @@ async def store(request):
     close = getattr(s, "close", None)
     if close is not None:
         await close()
+
+
+@pytest.mark.store
+@pytest.mark.invariant("NFR-REL-05")
+async def test_routine_conversation_provenance_roundtrips_on_both_stores(store):
+    conversation = Conversation(
+        id="routine-conversation",
+        tenant_id=T,
+        user_id="alice",
+        title="Routine · Morning priorities",
+        origin=ConversationOrigin.ROUTINE,
+        source_ref="morning-priorities",
+        source_run_id="occurrence-1",
+        companion_id="jarvis",
+    )
+    await store.create_conversation(conversation)
+
+    stored = await store.get_conversation(T, conversation.id)
+
+    assert stored is not None
+    assert stored.origin is ConversationOrigin.ROUTINE
+    assert stored.source_ref == "morning-priorities"
+    assert stored.source_run_id == "occurrence-1"
+    assert stored.companion_id == "jarvis"
 
 
 @pytest.mark.store
@@ -1150,9 +1175,9 @@ async def test_list_memory_facts_is_newest_first(store):
 async def test_memory_projection_status_upserts_and_filters_on_both_stores(store):
     base = utcnow()
     row = MemoryProjectionStatus(
-        id="mem0:remember:f1",
+        id="cognee:remember:f1",
         tenant_id=T,
-        projection_id="mem0",
+        projection_id="cognee",
         operation="remember",
         status="pending",
         fact_id="f1",
@@ -1168,7 +1193,9 @@ async def test_memory_projection_status_upserts_and_filters_on_both_stores(store
     )
     await store.upsert_memory_projection_status(row)
     await store.upsert_memory_projection_status(
-        MemoryProjectionStatus(**{**row.__dict__, "status": "written", "projection_ref": "mem0:f1"})
+        MemoryProjectionStatus(
+            **{**row.__dict__, "status": "written", "projection_ref": "cognee:f1"}
+        )
     )
     await store.upsert_memory_projection_status(
         MemoryProjectionStatus(
@@ -1186,7 +1213,7 @@ async def test_memory_projection_status_upserts_and_filters_on_both_stores(store
 
     rows = await store.list_memory_projection_statuses(T, fact_id="f1")
     assert [(r.projection_id, r.status, r.projection_ref) for r in rows] == [
-        ("mem0", "written", "mem0:f1")
+        ("cognee", "written", "cognee:f1")
     ]
     assert rows[0].enqueue_attempts == 1
     assert rows[0].operation_attempts == 1

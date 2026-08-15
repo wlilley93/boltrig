@@ -943,7 +943,7 @@ describe("Worker native automation authoring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add step" }));
 
     expect(screen.getByLabelText("Step id")).toBeTruthy();
-    expect((screen.getByLabelText("Governed action") as HTMLInputElement).value).toBe("work.create");
+    expect((screen.getByLabelText("Action") as HTMLInputElement).value).toBe("work.create");
     expect(screen.getByLabelText("Depends on")).toBeTruthy();
     expect(screen.getByLabelText("Parameters (JSON object)")).toBeTruthy();
     expect(screen.queryByRole("combobox", { name: "Source" })).toBeNull();
@@ -2366,7 +2366,7 @@ describe("Worker integration honesty", () => {
 
     render(<IntegrationsView />);
     expect(screen.getByLabelText("Search integrations")).toBeTruthy();
-    await screen.findByText(/Connection management is not enabled/);
+    await screen.findByText(/Plugin setup is unavailable/);
     expect(screen.getAllByRole("button", { name: /^Open .* details$/ })).toHaveLength(40);
     expect(screen.getByRole("heading", { name: "Work tracking" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open Slack details" }));
@@ -2383,6 +2383,31 @@ describe("Worker integration honesty", () => {
     expect(screen.getAllByRole("button", { name: /^Open .* details$/ })).toHaveLength(40);
     expect(screen.getByText("0 connected of 40")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Files and design" })).toBeTruthy();
+  });
+
+  it("opens a simple searchable plugin picker and hands the choice to setup", async () => {
+    api.integrationCatalogue.mockResolvedValue({ integrations: [ticketEntry] });
+    api.integrationConnections.mockResolvedValue({ connections: [] });
+
+    render(<IntegrationsView />);
+    await waitFor(() => expect(api.integrationConnections).toHaveBeenCalled());
+    const trigger = screen.getByRole("button", { name: "Add plugin" });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const dialog = screen.getByRole("dialog", { name: "Add a plugin" });
+    expect(within(dialog).getByLabelText("Search plugins")).toBeTruthy();
+    expect(within(dialog).queryByRole("button", { name: "Add Apollo" })).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText("Search plugins"), {
+      target: { value: "Tickets" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add Tickets" }));
+
+    expect(screen.queryByRole("dialog", { name: "Add a plugin" })).toBeNull();
+    expect(await screen.findByRole("region", { name: "Tickets details" })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Close Tickets details" }),
+    ));
   });
 
   it("keeps OAuth browser return and provider exchange explicitly unavailable", async () => {

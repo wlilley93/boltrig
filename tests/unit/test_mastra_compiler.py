@@ -10,7 +10,7 @@ def test_mastra_steps_compile_to_valid_phased_workflow():
     spec = compile_mastra_plan({
         "name": "auth-refactor",
         "goal": "Refactor auth safely.",
-        "defaults": {"capability": "opencode-worker", "max_total_agents": 4},
+        "defaults": {"capability": "codex-worker", "max_total_agents": 4},
         "steps": [
             {
                 "id": "discovery",
@@ -30,7 +30,7 @@ def test_mastra_steps_compile_to_valid_phased_workflow():
 
     assert validate_workflow(spec)["source"] == "mastra"
     assert spec["workflow_name"] == "auth-refactor"
-    assert spec["defaults"]["capability"] == "opencode-worker"
+    assert spec["defaults"]["capability"] == "codex-worker"
     assert [phase["id"] for phase in spec["phases"]] == ["discovery", "plan"]
     assert spec["phases"][0]["agents"][0]["prompt"] == "Map auth files."
     assert spec["phases"][1]["depends_on"] == ["discovery"]

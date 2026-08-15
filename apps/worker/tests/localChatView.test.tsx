@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -15,14 +15,28 @@ const local = vi.hoisted(() => ({
   saveLocalConversation: vi.fn(),
   stopLocalAgentTurn: vi.fn(),
 }));
+const replySpeech = vi.hoisted(() => ({
+  prime: vi.fn(),
+  readReply: vi.fn().mockResolvedValue(undefined),
+  stop: vi.fn(),
+}));
 
 vi.mock("../src/client", () => ({ client: api }));
+vi.mock("../src/components/chat/useReplySpeech", () => ({
+  useReplySpeech: () => ({
+    enabled: true,
+    loaded: true,
+    provider: "pocket-voice",
+    ...replySpeech,
+  }),
+}));
 vi.mock("../src/localAgentClient", async (importOriginal) => ({
   ...await importOriginal<typeof import("../src/localAgentClient")>(),
   ...local,
 }));
 
 import { LocalChatView } from "../src/components/LocalChatView";
+import { LONG_TEXT_ATTACHMENT_THRESHOLD } from "../src/components/chat/ComposerAttachments";
 
 beforeEach(() => {
   api.approvalPosture.mockResolvedValue({ posture: "risk_based" });
@@ -39,6 +53,9 @@ beforeEach(() => {
   local.putLocalAgentPosture.mockImplementation(async (posture) => ({ posture }));
   local.saveLocalConversation.mockImplementation(() => undefined);
   local.stopLocalAgentTurn.mockResolvedValue(undefined);
+  replySpeech.prime.mockReset();
+  replySpeech.readReply.mockReset().mockResolvedValue(undefined);
+  replySpeech.stop.mockReset();
 });
 
 afterEach(() => {
@@ -48,6 +65,29 @@ afterEach(() => {
 });
 
 describe("desktop local chat", () => {
+  it("does not advertise cloud attachment ingress for text-only local tasks", async () => {
+    render(<LocalChatView
+      conversationId={null}
+      onChanged={vi.fn()}
+      onConversation={vi.fn()}
+    />);
+
+    const input = await screen.findByLabelText("Task instructions") as HTMLTextAreaElement;
+    await waitFor(() => expect(input.disabled).toBe(false));
+    const transfer = {
+      files: [],
+      getData: () => "x".repeat(LONG_TEXT_ATTACHMENT_THRESHOLD),
+      types: ["text/plain"],
+    } as unknown as DataTransfer;
+    fireEvent.dragEnter(window, { dataTransfer: transfer });
+    expect(input.closest(".composer")?.getAttribute("data-drop-active")).toBeNull();
+    expect(screen.queryByText("Drop to attach")).toBeNull();
+
+    const paste = createEvent.paste(input, { clipboardData: transfer });
+    fireEvent(input, paste);
+    expect(paste.defaultPrevented).toBe(false);
+  });
+
   it("points an unbound desktop to the shipped Advanced settings section", async () => {
     local.localAgentRoots.mockResolvedValue([]);
     render(<LocalChatView
@@ -125,12 +165,14 @@ describe("desktop local chat", () => {
     fireEvent.keyDown(input, { key: "Enter", code: "Enter", keyCode: 13 });
 
     await waitFor(() => expect(local.runLocalAgentTurn).toHaveBeenCalledOnce());
+    expect(replySpeech.prime).toHaveBeenCalledOnce();
     await waitFor(() => expect(local.saveLocalConversation).toHaveBeenCalled());
     expect(onWorkingChange).toHaveBeenCalledWith("local:thread-1", true);
     expect(onConversation).not.toHaveBeenCalled();
 
     await act(async () => finish());
     await waitFor(() => expect(onConversation).toHaveBeenCalledWith("local:thread-1"));
+    expect(replySpeech.readReply).toHaveBeenCalledWith("turn-1", "Local answer");
     expect(onWorkingChange).toHaveBeenLastCalledWith("local:thread-1", false);
     expect(await screen.findByText("Local answer")).toBeTruthy();
     expect(local.runLocalAgentTurn.mock.calls[0]?.[0]).toEqual({

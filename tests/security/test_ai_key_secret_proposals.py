@@ -11,6 +11,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from boltrig.identity.bifrost_user_binding import (
+    BifrostUserBinding,
+    BifrostUserGateway,
+    binding_credential_ref,
+)
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.kernel.hitl_expiry import expire_tenant_once
@@ -27,6 +32,43 @@ from boltrig.store.sealing import is_sealed
 T = "ai-proposal-tenant"
 SECRET = "sk-proposal-secret-material-0123456789"
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(autouse=True)
+def _bounded_bifrost(monkeypatch):
+    """Proposal tests exercise governance, with a runnable gateway boundary."""
+
+    monkeypatch.setenv("BOLTRIG_MODEL_GATEWAY_URL", "http://bifrost:8080/v1")
+
+    async def ensure(self, store, tenant_id, resolution, provider_key):
+        assert provider_key
+        ref = binding_credential_ref(tenant_id, resolution)
+        provider = str(resolution.provider)
+        model = str(resolution.model)
+        model_id = model if "/" in model else f"{provider}/{model}"
+        binding = BifrostUserBinding(
+            provider=provider,
+            model_id=model_id,
+            provider_key_id="provider-key",
+            virtual_key_id="virtual-key",
+            virtual_key="vk-test-only",
+            credential_ref=ref,
+        )
+        await store.set_credential_ref(
+            tenant_id,
+            ref,
+            {
+                "secret": binding.virtual_key,
+                "provider": binding.provider,
+                "model_id": binding.model_id,
+                "source_credential_ref": resolution.credential_ref,
+                "provider_key_id": binding.provider_key_id,
+                "virtual_key_id": binding.virtual_key_id,
+            },
+        )
+        return binding
+
+    monkeypatch.setattr(BifrostUserGateway, "ensure", ensure)
 
 
 def _run(coro):

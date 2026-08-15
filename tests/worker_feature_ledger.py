@@ -462,11 +462,6 @@ MANIFEST_EXTRA_FEATURES: dict[str, FeatureCoverage] = {
         ("not_product", "not_product", "not_product", "not_product", "not_product"),
         "Internal legacy compiler input with no governed production entry; do not advertise it in Worker.",
     ),
-    "rivet_agentos": _coverage(
-        "manifest extra:rivet_agentos",
-        ("not_product", "not_product", "not_product", "not_product", "not_product"),
-        "Legacy runtime residue behind an explicit disabled gate; Codex is the target runtime.",
-    ),
     "browser_cli": _coverage(
         "manifest extra:browser_cli",
         ("worker", "deployment", "worker", "worker", "deployment"),
@@ -852,16 +847,6 @@ CLI_COMMAND_FEATURES: dict[str, FeatureCoverage] = {
         ("worker", "worker", "worker", "worker", "worker"),
         "Terminal Chat is a thin alternate client of the same kernel and gateway contracts.",
     ),
-    "opencode-plugin": _coverage(
-        "boltrig/api/cli.py:opencode-plugin",
-        ("not_product", "not_product", "not_product", "not_product", "not_product"),
-        "Retained external-client compatibility must not be presented as a target agent runtime.",
-    ),
-    "install": _coverage(
-        "boltrig/api/cli.py:opencode-plugin install",
-        ("not_product", "not_product", "not_product", "not_product", "not_product"),
-        "Nested OpenCode installation is retained compatibility, not a Worker lifecycle.",
-    ),
     "doctor": _coverage(
         "boltrig/api/cli.py:doctor",
         ("worker", "deployment", "deployment", "worker", "deployment"),
@@ -1054,14 +1039,6 @@ STRATEGIC_PRODUCT_FEATURES: dict[str, FeatureCoverage] = {
         "operator action; no durable drift projection, exact-snapshot reconciliation "
         "or recovery receipt exists.",
     ),
-    "credential-backed-external-knowledge-projections": _coverage(
-        "boltrig/knowledge/projections.py",
-        ("worker", "missing", "missing", "worker", "missing"),
-        "Supermemory and Mem0 remain visible but explicitly unavailable, and older "
-        "enabled rows are repaired to that honest state. Credential binding, provider "
-        "health, compile/erase and recovery adapters do not exist, so Worker cannot "
-        "enable them or claim an external projection lifecycle.",
-    ),
 }
 
 
@@ -1111,7 +1088,7 @@ INTERNAL_OR_LEGACY_FEATURES: dict[str, FeatureCoverage] = {
     "legacy-agent-runtimes": _coverage(
         "boltrig/fleet/runtime.py",
         ("not_product", "not_product", "not_product", "not_product", "not_product"),
-        "Pi/Hermes/OpenCode/Rivet paths are disabled rollback residue; Codex is the target runtime.",
+        "Retired runtime names fail closed and cannot be revived; Codex is the only model-backed runtime.",
     ),
     "message-queue-and-ocr-seams": _coverage(
         "boltrig/adapters/builtin/mq_file.py",

@@ -156,6 +156,13 @@ PATCH /v1/me/profile updateMeProfile
 """,
 )
 _surface(
+    "apps/worker/src/components/onboarding/useProviderSetup.ts",
+    """
+POST /v1/ai-keys/activate activateAiKey
+POST /v1/ai-keys/proposals/{proposal_id}/approve approveAiKeyProposal
+""",
+)
+_surface(
     "apps/worker/src/components/AccountSecuritySections.tsx",
     """
 GET /v1/me/tokens meTokens
@@ -693,4 +700,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 }
 
 
-EXPECTED_ROUTE_COUNT = 278
+EXPECTED_ROUTE_COUNT = 280

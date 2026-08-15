@@ -12,8 +12,10 @@ const api = vi.hoisted(() => ({
   conversation: vi.fn(),
   conversations: vi.fn(),
   followConversation: vi.fn(),
+  invokeApprovalState: vi.fn(),
   modelProfiles: vi.fn(),
   reorderConversationQueue: vi.fn(),
+  respondHitl: vi.fn(),
   restoreMyConversation: vi.fn(),
   streamChat: vi.fn(),
 }));
@@ -50,6 +52,8 @@ beforeEach(() => {
     }],
   });
   api.modelProfiles.mockResolvedValue({ profiles: [] });
+  api.invokeApprovalState.mockResolvedValue({ status: "pending" });
+  api.respondHitl.mockResolvedValue({ status: "answered" });
   api.reorderConversationQueue.mockImplementation(async (_id, body) => ({
     status: "ok",
     message_ids: body.message_ids,
@@ -476,9 +480,9 @@ describe("Worker chat continuity", () => {
     expect(await screen.findByText("Settled live answer.")).toBeTruthy();
     expect(screen.getAllByText("Queued mobile steer")).toHaveLength(1);
     expect(screen.getByRole("region", { name: "Queued messages" })).toBeTruthy();
-    expect(screen.getByText("Choose an owner")).toBeTruthy();
-    expect(screen.queryByRole("textbox", { name: "Live question answer" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Noether" })).toBeNull();
+    expect(await screen.findByText("Choose an owner")).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Live question answer" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Noether" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     await waitFor(() => expect(api.cancelRun).toHaveBeenCalledWith("run-a"));

@@ -22,8 +22,8 @@ MANIFEST = """
 organisation: Acme
 tenant_id: acme
 stack:
-  cockpit: herdr
-  coding_agent: opencode
+  cockpit: boltrig_ui
+  coding_agent: codex
 identity:
   provider: oidc
 models:
@@ -40,8 +40,6 @@ models:
   default: standard
   sensitive_endpoint: local-sensitive
 runtimes:
-  pi:
-    enabled: true
   gateway:
     base_url: http://bifrost:8080/v1
 memory:
@@ -64,8 +62,8 @@ def _manifest(tmp_path: Path) -> Path:
 def _browser_manifest(tmp_path: Path) -> Path:
     path = tmp_path / "manifest-browser.yaml"
     text = MANIFEST.replace(
-        "  coding_agent: opencode\n",
-        "  coding_agent: opencode\n  browser_automation: browser_cli\n",
+        "  coding_agent: codex\n",
+        "  coding_agent: codex\n  browser_automation: browser_cli\n",
     )
     path.write_text(
         text
@@ -101,8 +99,6 @@ def _secure_env(tmp_path: Path | None = None) -> dict[str, str]:
         "BOLTRIG_ALLOWED_HOSTS": "api.acme.test",
         "BOLTRIG_CORS_ORIGINS": "https://app.acme.test",
         "BOLTRIG_DOMAIN": "boltrig.acme.test",
-        "BOLTRIG_HERDR_HOME": "/var/lib/boltrig/herdr",
-        "BOLTRIG_OPENCODE_HOME": "/var/lib/boltrig/opencode",
         "BACKUP_REMOTE": "s3:acme/boltrig",
         "BACKUP_PASSPHRASE": "b" * 32,
         "BACKUP_DATABASES": "boltrig,hatchet",
@@ -110,8 +106,6 @@ def _secure_env(tmp_path: Path | None = None) -> dict[str, str]:
     }
     if tmp_path is not None:
         env["PATH"] = ""
-        env["HERDR_BIN"] = _fake_tool(tmp_path, "herdr")
-        env["BOLTRIG_OPENCODE_BIN"] = _fake_tool(tmp_path, "opencode")
     return env
 
 
@@ -134,7 +128,16 @@ def test_doctor_reports_a_manifest_still_enabling_the_retired_pi_runtime(tmp_pat
     than crashing, so this is a WARN and never a deploy blocker - but silence
     would leave the operator no way to find the drift at all.
     """
-    report = run_doctor(env=_secure_env(tmp_path), manifest_path=_manifest(tmp_path), production=True)
+    path = tmp_path / "manifest-retired.yaml"
+    path.write_text(
+        MANIFEST.replace(
+            "runtimes:\n",
+            "runtimes:\n  pi:\n    enabled: true\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    report = run_doctor(env=_secure_env(tmp_path), manifest_path=path, production=True)
     retired = [c for c in report.checks if c.name == "retired_runtime_pi"]
     assert len(retired) == 1
     assert retired[0].status == "warn"
@@ -152,13 +155,13 @@ def test_doctor_stays_silent_on_a_manifest_that_does_not_enable_a_retired_runtim
     fires on every manifest, which would train the operator to ignore it.
     """
     path = tmp_path / "manifest-clean.yaml"
-    path.write_text(MANIFEST.replace("  pi:\n    enabled: true\n", ""), encoding="utf-8")
+    path.write_text(MANIFEST, encoding="utf-8")
     report = run_doctor(env=_secure_env(tmp_path), manifest_path=path, production=True)
     assert not [c for c in report.checks if c.name.startswith("retired_runtime_")]
 
     disabled = tmp_path / "manifest-disabled.yaml"
     disabled.write_text(
-        MANIFEST.replace("  pi:\n    enabled: true\n", "  pi:\n    enabled: false\n"),
+        MANIFEST.replace("runtimes:\n", "runtimes:\n  pi:\n    enabled: false\n", 1),
         encoding="utf-8",
     )
     report = run_doctor(env=_secure_env(tmp_path), manifest_path=disabled, production=True)
@@ -186,72 +189,8 @@ def test_production_doctor_flags_deploy_blockers(tmp_path):
         "dev_auth",
         "auth_mode",
         "allowed_hosts",
-        "herdr_stack_home",
-        "herdr_stack_cli",
-        "opencode_stack_home",
-        "opencode_stack_cli",
         "backup_remote",
     }.issubset(failures)
-
-
-@pytest.mark.invariant("FR-HOST-09")
-@pytest.mark.invariant("FR-RUN-17")
-@pytest.mark.parametrize(
-    ("herdr_home", "opencode_home", "expected"),
-    [
-        ("/home/will/.config/herdr", "/var/lib/boltrig/opencode", {"herdr_stack_home"}),
-        ("/var/lib/boltrig/herdr", "/Users/will/.opencode", {"opencode_stack_home"}),
-        ("$HOME/.config/herdr", "/var/lib/boltrig/opencode", {"herdr_stack_home"}),
-        ("/root/.local/share/herdr", "/var/lib/boltrig/opencode", {"herdr_stack_home"}),
-        ("/home/dev/herdr", "/var/lib/boltrig/opencode", {"herdr_stack_home"}),
-        ("/var/lib/boltrig/herdr", ".opencode", {"opencode_stack_home"}),
-        (
-            "/var/lib/boltrig/agent-state",
-            "/var/lib/boltrig/agent-state",
-            {"stack_tool_home_collision"},
-        ),
-    ],
-)
-def test_production_doctor_rejects_personal_herdr_opencode_state(
-    tmp_path, herdr_home, opencode_home, expected
-):
-    env = {
-        **_secure_env(tmp_path),
-        "BOLTRIG_HERDR_HOME": herdr_home,
-        "BOLTRIG_OPENCODE_HOME": opencode_home,
-    }
-
-    report = run_doctor(env=env, manifest_path=_manifest(tmp_path), production=True)
-    failures = {check.name for check in report.checks if check.status == "fail"}
-
-    assert expected.issubset(failures)
-
-
-@pytest.mark.invariant("FR-HOST-10")
-@pytest.mark.invariant("FR-RUN-18")
-@pytest.mark.parametrize(
-    ("herdr_bin", "opencode_bin", "expected"),
-    [
-        ("/home/will/.local/bin/herdr", None, {"herdr_stack_cli"}),
-        (None, "/Users/will/.opencode/bin/opencode", {"opencode_stack_cli"}),
-        ("/does/not/exist/herdr", None, {"herdr_stack_cli"}),
-        (None, "not-on-path-opencode", {"opencode_stack_cli"}),
-        ("relative/herdr", None, {"herdr_stack_cli"}),
-    ],
-)
-def test_production_doctor_rejects_missing_or_personal_herdr_opencode_bins(
-    tmp_path, herdr_bin, opencode_bin, expected
-):
-    env = _secure_env(tmp_path)
-    if herdr_bin is not None:
-        env["HERDR_BIN"] = herdr_bin
-    if opencode_bin is not None:
-        env["BOLTRIG_OPENCODE_BIN"] = opencode_bin
-
-    report = run_doctor(env=env, manifest_path=_manifest(tmp_path), production=True)
-    failures = {check.name for check in report.checks if check.status == "fail"}
-
-    assert expected.issubset(failures)
 
 
 @pytest.mark.invariant("FR-HOST-11")

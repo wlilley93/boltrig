@@ -136,19 +136,24 @@ describe("Models settings", () => {
     render(<ModelSettingsSection />);
 
     expect(await screen.findByText(active.model)).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Text" })).toBeTruthy();
+    expect(screen.getByText("Your models")).toBeTruthy();
+    expect(screen.getByText("Available models")).toBeTruthy();
+    expect(screen.getByText("Keys stay private.")).toBeTruthy();
+    expect(screen.queryByText(/Bifrost/i)).toBeNull();
     expect(screen.getByText(retired.model)).toBeTruthy();
     expect(screen.queryByText(nonChat.model)).toBeNull();
-    expect(screen.getByText("In switcher")).toBeTruthy();
-    expect(screen.getAllByText("Not in switcher")).toHaveLength(2);
+    expect(screen.getByText("Ready")).toBeTruthy();
+    expect(screen.getAllByText("Unavailable")).toHaveLength(2);
     expect(screen.getByText("Removed")).toBeTruthy();
-    expect(screen.getByLabelText("Exact Bifrost model name")).toBeTruthy();
+    expect(screen.getByLabelText("Model")).toBeTruthy();
     expect(screen.getByText("6 text models")).toBeTruthy();
-    expect(screen.getByLabelText("Exact Bifrost model name").getAttribute("list"))
-      .toBe("bifrost-chat-models");
+    expect(screen.getByLabelText("Model").getAttribute("list"))
+      .toBe("available-chat-models");
     const legacyRow = screen.getByText(legacy.model).closest<HTMLElement>(".settings-row")!;
     const legacyChange = within(legacyRow).getByRole("button", { name: "Change" });
     expect(legacyChange).toHaveProperty("disabled", true);
-    expect(legacyChange.getAttribute("title")).toContain("cannot be rewritten");
+    expect(legacyChange.getAttribute("title")).toBe("Managed elsewhere.");
   });
 
   it("labels legacy routes whose stored model name is blank without inventing one", async () => {
@@ -161,10 +166,10 @@ describe("Models settings", () => {
 
     render(<ModelSettingsSection />);
 
-    const label = await screen.findByText("Model name unavailable");
+    const label = await screen.findByText("Unknown model");
     const row = label.closest<HTMLElement>(".settings-row")!;
-    expect(label.textContent).toBe("Model name unavailable");
-    expect(within(row).getByText("Not in switcher")).toBeTruthy();
+    expect(label.textContent).toBe("Unknown model");
+    expect(within(row).getByText("Unavailable")).toBeTruthy();
   });
 
   it("keeps vision and voice as working modality views without exposing credentials", async () => {
@@ -177,11 +182,10 @@ describe("Models settings", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Voice" }));
     expect(await screen.findByText(voice.model)).toBeTruthy();
-    expect(screen.getByText("XAI realtime")).toBeTruthy();
-    expect(screen.getByLabelText("Exact realtime voice model name")).toBeTruthy();
+    expect(screen.getByLabelText("Model")).toBeTruthy();
     expect(screen.queryByText("Omnivoice / local")).toBeNull();
     expect(screen.queryByText("ElevenLabs")).toBeNull();
-    expect(screen.queryByLabelText("Exact Bifrost model name")).toBeNull();
+    expect(screen.queryByText("Voice route support")).toBeNull();
     expect(screen.queryByLabelText(/API key/i)).toBeNull();
   });
 
@@ -195,13 +199,13 @@ describe("Models settings", () => {
     await screen.findByText(active.model);
     fireEvent.click(screen.getByRole("tab", { name: "Voice" }));
 
-    fireEvent.change(await screen.findByLabelText("Internal choice ID"), {
+    fireEvent.change(await screen.findByLabelText("Route name"), {
       target: { value: "primary-voice" },
     });
-    fireEvent.change(screen.getByLabelText("Exact realtime voice model name"), {
+    fireEvent.change(screen.getByLabelText("Model"), {
       target: { value: "grok-voice-v1" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Request model addition" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
 
     await waitFor(() => expect(api.invoke).toHaveBeenCalledWith(expect.objectContaining({
       noun: "control",
@@ -227,9 +231,9 @@ describe("Models settings", () => {
     const row = (await screen.findByText(active.model)).closest<HTMLElement>(".settings-row")!;
     fireEvent.click(within(row).getByRole("button", { name: "Change" }));
 
-    const exactName = await screen.findByLabelText("Exact Bifrost model name");
+    const exactName = await screen.findByLabelText("Model");
     fireEvent.change(exactName, { target: { value: "anthropic/claude-opus-4-1" } });
-    fireEvent.click(screen.getByRole("button", { name: "Request model change" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(await screen.findByText(
       "This model change is waiting for approval in the originating chat.",
@@ -265,16 +269,16 @@ describe("Models settings", () => {
     const row = (await screen.findByText(active.model)).closest<HTMLElement>(".settings-row")!;
     fireEvent.click(within(row).getByRole("button", { name: "Change" }));
 
-    const exactName = await screen.findByLabelText("Exact Bifrost model name");
+    const exactName = await screen.findByLabelText("Model");
     const options = [...document.querySelectorAll<HTMLOptionElement>(
-      "#bifrost-chat-models option",
+      "#available-chat-models option",
     )].map((option) => option.getAttribute("value"));
     expect(options).not.toContain(visionOnlyModel);
     fireEvent.change(exactName, { target: { value: visionOnlyModel } });
-    fireEvent.click(screen.getByRole("button", { name: "Request model change" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(await screen.findByText(
-      "Choose an exact Bifrost model that advertises every selected modality (text + vision).",
+      "Choose a model that supports text + vision.",
     )).toBeTruthy();
     expect(api.invoke).not.toHaveBeenCalled();
   });
@@ -288,10 +292,10 @@ describe("Models settings", () => {
     render(<ModelSettingsSection />);
     const row = (await screen.findByText(active.model)).closest<HTMLElement>(".settings-row")!;
     fireEvent.click(within(row).getByRole("button", { name: "Change" }));
-    fireEvent.change(await screen.findByLabelText("Exact Bifrost model name"), {
+    fireEvent.change(await screen.findByLabelText("Model"), {
       target: { value: "anthropic/claude-opus-4-1" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Request model change" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(await screen.findByText(
       "This model change is waiting for approval in the originating chat.",
     )).toBeTruthy();
@@ -317,13 +321,13 @@ describe("Models settings", () => {
     render(<ModelSettingsSection />);
     await screen.findByText(active.model);
 
-    fireEvent.change(screen.getByLabelText("Internal choice ID"), {
+    fireEvent.change(screen.getByLabelText("Route name"), {
       target: { value: "new-chat-route" },
     });
-    fireEvent.change(screen.getByLabelText("Exact Bifrost model name"), {
+    fireEvent.change(screen.getByLabelText("Model"), {
       target: { value: "openai/gpt-5.4" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Request model addition" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
 
     await waitFor(() => expect(api.invoke).toHaveBeenCalledOnce());
     expect(api.invoke.mock.calls[0]![0]).toMatchObject({
@@ -342,13 +346,13 @@ describe("Models settings", () => {
     render(<ModelSettingsSection />);
     await screen.findByText(active.model);
 
-    fireEvent.change(screen.getByLabelText("Internal choice ID"), {
+    fireEvent.change(screen.getByLabelText("Route name"), {
       target: { value: nonChat.id },
     });
-    fireEvent.change(screen.getByLabelText("Exact Bifrost model name"), {
+    fireEvent.change(screen.getByLabelText("Model"), {
       target: { value: "openai/gpt-5.4" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Request model addition" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
 
     expect(await screen.findByText(
       "That ID already belongs to another model endpoint and cannot be replaced here.",
@@ -364,9 +368,10 @@ describe("Models settings", () => {
     });
     render(<ModelSettingsSection />);
 
-    expect(await screen.findByText("Unavailable")).toBeTruthy();
-    expect(screen.getByText(/gateway_timeout/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Request model addition" }))
+    expect((await screen.findAllByText("Unavailable")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Try again later.")).toBeTruthy();
+    expect(screen.queryByText(/gateway_timeout/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Add model" }))
       .toHaveProperty("disabled", true);
     expect(api.invoke).not.toHaveBeenCalled();
   });
@@ -380,16 +385,16 @@ describe("Models settings", () => {
     render(<ModelSettingsSection />);
 
     expect(await screen.findByText("0 text models")).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Internal choice ID"), {
+    fireEvent.change(screen.getByLabelText("Route name"), {
       target: { value: "custom-route" },
     });
-    fireEvent.change(screen.getByLabelText("Exact Bifrost model name"), {
+    fireEvent.change(screen.getByLabelText("Model"), {
       target: { value: "custom/model-without-architecture" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Request model addition" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
 
     expect(await screen.findByText(
-      "Choose an exact Bifrost model that advertises every selected modality (text).",
+      "Choose a model that supports text.",
     )).toBeTruthy();
     expect(api.invoke).not.toHaveBeenCalled();
   });
@@ -408,12 +413,12 @@ describe("Models settings", () => {
 
     render(<ModelSettingsSection />);
     const activeRow = (await screen.findByText(active.model)).closest<HTMLElement>(".settings-row")!;
-    fireEvent.click(within(activeRow).getByRole("button", { name: "Remove model" }));
+    fireEvent.click(within(activeRow).getByRole("button", { name: "Remove" }));
     const confirmation = await screen.findByRole("alertdialog", {
       name: "Confirm model removal",
     });
-    expect(confirmation.textContent).toContain("everywhere, not only in");
-    expect(confirmation.textContent).toContain("Agent references: none");
+    expect(confirmation.textContent).toContain("This removes it everywhere it is used.");
+    expect(confirmation.textContent).not.toContain("Agent references");
     expect(api.retireModelEndpoint).not.toHaveBeenCalled();
     fireEvent.click(within(confirmation).getByRole("button", {
       name: "Confirm removal",
@@ -432,7 +437,7 @@ describe("Models settings", () => {
     const retiredRow = screen.getByText(retired.model).closest<HTMLElement>(".settings-row")!;
     fireEvent.click(within(retiredRow).getByRole("button", { name: "Restore" }));
     await waitFor(() => expect(api.restoreModelEndpoint).toHaveBeenCalledWith(retired.id));
-    expect(screen.getByText(`${retired.model} was restored to model routing.`)).toBeTruthy();
+    expect(screen.getByText(`${retired.model} was restored.`)).toBeTruthy();
   });
 
   it("does not call a degraded response saved before canonical refresh", async () => {
@@ -444,16 +449,16 @@ describe("Models settings", () => {
     render(<ModelSettingsSection />);
     await screen.findByText(active.model);
 
-    fireEvent.change(screen.getByLabelText("Internal choice ID"), {
+    fireEvent.change(screen.getByLabelText("Route name"), {
       target: { value: "degraded-route" },
     });
-    fireEvent.change(screen.getByLabelText("Exact Bifrost model name"), {
+    fireEvent.change(screen.getByLabelText("Model"), {
       target: { value: "openai/gpt-5.4" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Request model addition" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
 
     expect(await screen.findByText(
-      "Canonical model state was refreshed after a degraded response; no save is inferred.",
+      "Couldn’t confirm the change. The list has been refreshed.",
     )).toBeTruthy();
     expect(screen.queryByText("Model saved.")).toBeNull();
   });

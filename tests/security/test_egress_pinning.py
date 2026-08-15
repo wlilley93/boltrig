@@ -20,7 +20,7 @@ import socket
 import httpcore
 import pytest
 
-from boltrig.adapters.egress import EgressBlocked, pinned_async_client
+from boltrig.adapters.egress import EgressBlocked, pinned_async_client, resolve_host
 from boltrig.models import GrantSet, InvocationContext
 
 _PUBLIC = "93.184.216.34"  # what the guard resolves the attacker domain to
@@ -41,6 +41,28 @@ def _spy_connect(recorder: list[str]):
 
 def _ctx() -> InvocationContext:
     return InvocationContext(tenant_id="acme", grants=GrantSet.of(["*"]), actor="u", run_id="rH2")
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-61")
+def test_resolve_host_preserves_resolver_preference_while_deduplicating(monkeypatch):
+    """The pinned address follows the host resolver's reachability preference.
+
+    Losing that order to a set made an IPv4-only browser container randomly pin
+    an IPv6 answer even when getaddrinfo had deliberately put IPv4 first.
+    """
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda _host, _port: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0)),
+            (socket.AF_INET, socket.SOCK_DGRAM, 17, "", ("93.184.216.34", 0)),
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2606:2800:220:1::", 0, 0, 0)),
+        ],
+    )
+
+    assert resolve_host("public.example") == ["93.184.216.34", "2606:2800:220:1::"]
 
 
 @pytest.mark.security

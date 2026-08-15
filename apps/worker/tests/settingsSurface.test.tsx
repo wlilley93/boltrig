@@ -14,12 +14,14 @@ const api = vi.hoisted(() => ({
   restoreMyConversation: vi.fn(),
   searchConversations: vi.fn(),
   auditSearch: vi.fn(),
+  currentOrg: vi.fn(),
   meSettings: vi.fn(),
   meNotifications: vi.fn(),
   putMeSettings: vi.fn(),
   putApprovalPosture: vi.fn(),
   knowledgeProviders: vi.fn(),
   setKnowledgeProvider: vi.fn(),
+  updateCurrentOrg: vi.fn(),
   invokeApprovalState: vi.fn(),
 }));
 const desktop = vi.hoisted(() => ({ runtime: false }));
@@ -57,6 +59,17 @@ beforeEach(() => {
   api.cost.mockResolvedValue({ total_cost_micros: 0, by_actor: {}, scope: "all" });
   api.conversations.mockResolvedValue({ conversations: [] });
   api.auditSearch.mockResolvedValue({ results: [], scope: "all", limit: 50, offset: 0, next_offset: null });
+  api.currentOrg.mockResolvedValue({
+    organisation: {
+      id: "acme",
+      name: "Acme",
+      slug: "acme",
+      settings: {},
+      allow_own_ai_keys: true,
+      require_two_factor: true,
+      updated_at: "2026-08-15T10:00:00Z",
+    },
+  });
   api.meSettings.mockResolvedValue({
     profile: { id: "u", email: "will@acme.co", role: "org-admin" },
     settings: {
@@ -65,6 +78,7 @@ beforeEach(() => {
       font_scale: "1",
       "a11y.reduced_motion": false,
       "a11y.high_contrast": false,
+      "voice.read_replies": false,
     },
   });
   api.meNotifications.mockResolvedValue({
@@ -106,6 +120,18 @@ beforeEach(() => {
   });
   api.knowledgeProviders.mockResolvedValue({ providers: [] });
   api.setKnowledgeProvider.mockResolvedValue({ status: "ok" });
+  api.updateCurrentOrg.mockResolvedValue({
+    status: "ok",
+    organisation: {
+      id: "acme",
+      name: "Acme",
+      slug: "acme",
+      settings: { "behaviour.overnight.enabled": true },
+      allow_own_ai_keys: true,
+      require_two_factor: true,
+      updated_at: "2026-08-15T10:01:00Z",
+    },
+  });
   api.invokeApprovalState.mockResolvedValue({ status: "pending" });
   localStorage.clear();
   document.documentElement.classList.remove("reduce-motion");
@@ -142,7 +168,7 @@ describe("settings surface", () => {
       />,
     );
 
-    expect(SETTINGS_SECTIONS.length).toBe(12);
+    expect(SETTINGS_SECTIONS.length).toBe(10);
     for (const entry of SETTINGS_SECTIONS) {
       expect(screen.getByRole("button", { name: entry.label })).toBeTruthy();
     }
@@ -223,7 +249,7 @@ describe("settings surface", () => {
     expect(document.documentElement.style.getPropertyValue("--font-scale")).toBe("1");
   });
 
-  it("reads real delivery routes and marks unsupported reach and voice controls unavailable", async () => {
+  it("reads real delivery routes, persists reply speech, and marks unsupported call controls unavailable", async () => {
     render(<SettingsSectionPane section="you" />);
 
     await screen.findByText("Reaching you");
@@ -234,6 +260,15 @@ describe("settings surface", () => {
       (screen.getByLabelText("Send approval notifications to") as HTMLSelectElement).value,
     ).toBe("Slack · Ops"));
     expect(screen.getByText("Quiet hours are not available.")).toBeTruthy();
+
+    const readReplies = screen.getByRole("switch", { name: "Read out replies" });
+    await waitFor(() => expect((readReplies as HTMLButtonElement).disabled).toBe(false));
+    expect(readReplies.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(readReplies);
+    await waitFor(() => expect(api.putMeSettings).toHaveBeenCalledWith({
+      settings: { "voice.read_replies": true },
+    }));
+    expect(readReplies.getAttribute("aria-checked")).toBe("true");
 
     const takeCalls = screen.getByRole("switch", { name: "Take calls" });
     const holdAtGate = screen.getByRole("switch", { name: "Hold the line at a gate" });
@@ -291,26 +326,28 @@ describe("settings surface", () => {
     expect(document.documentElement.dataset.character).toBe("late-character");
   });
 
-  it("keeps unavailable Knowledge providers visible but not actionable", async () => {
+  it("explains when Cognee needs a model without showing retired providers", async () => {
     api.knowledgeProviders.mockResolvedValue({
       providers: [{
-        id: "supermemory",
-        display_name: "Supermemory",
-        role: "managed_context",
-        enabled: false,
-        bundled: false,
-        health: "unavailable",
-        status: "unavailable",
-        last_error: "Credential-backed projection adapter is not implemented in this build.",
+        id: "cognee",
+        display_name: "Cognee",
+        role: "knowledge_compiler",
+        enabled: true,
+        bundled: true,
+        health: "degraded",
+        status: "degraded",
+        last_error: "model unavailable",
       }],
     });
 
     render(<SettingsSectionPane section="knowledge" />);
 
-    const providerSwitch = await screen.findByRole("switch", { name: "Enable Supermemory" });
-    expect((providerSwitch as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByText(/Credential-backed projection adapter is not implemented/)).toBeNull();
-    expect(screen.getByText("managed_context")).toBeTruthy();
+    expect(await screen.findByText("needs a model")).toBeTruthy();
+    expect(screen.getByText(/needs an AI model before it can enrich/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "About Cognee" })).toBeTruthy();
+    expect(screen.getByRole("tooltip").textContent).toContain("same server-side AI connection as chat");
+    expect(screen.queryByText("Supermemory")).toBeNull();
+    expect(screen.queryByText("Mem0")).toBeNull();
     expect(api.setKnowledgeProvider).not.toHaveBeenCalled();
   });
 
@@ -485,37 +522,61 @@ describe("settings surface", () => {
     expect(screen.getByText(/does not stop work · Resets \d+ Aug/)).toBeTruthy();
   });
 
-  it("tells the truth about a workspace where no night has run", async () => {
+  it("makes overnight one concise, organisation-backed switch", async () => {
     render(<SettingsSectionPane section="overnight" />);
-    await waitFor(() => {
-      expect(screen.getByText("No night has run here yet")).toBeTruthy();
-    });
-    // The mechanism is described, never scored: no invented pass/fail words.
-    expect(screen.getByText("What a night has to prove")).toBeTruthy();
-    expect(screen.getByText("The rules it works under")).toBeTruthy();
-    expect(screen.queryByText("passed")).toBeNull();
+    const toggle = await screen.findByRole("switch", { name: "Enable overnight" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("button", { name: "About overnight" })).toBeTruthy();
+    expect(screen.getByRole("tooltip").textContent).toContain("Nothing is applied automatically");
+    expect(screen.getByRole("tab", { name: "Overnight" }).getAttribute("aria-selected"))
+      .toBe("true");
+    expect(screen.queryByText("What a night has to prove")).toBeNull();
+
+    fireEvent.click(toggle);
+    await waitFor(() => expect(api.updateCurrentOrg).toHaveBeenCalledWith({
+      settings: { "behaviour.overnight.enabled": true },
+    }));
   });
 
-  it("reads a held night from the gate receipt, not from demo data", async () => {
-    api.auditSearch.mockResolvedValue({
-      results: [{
-        seq: 7,
-        ts: "2026-08-09T03:00:00Z",
-        actor: "distill",
-        verb: "distill.gate",
-        status: "distill_gate_hold",
-        run_id: "run_1",
-      }],
-      scope: "all",
-      limit: 50,
-      offset: 0,
-      next_offset: null,
-    });
+  it("puts Presence, Overnight, Sight, and Memory behind one Behaviour destination", async () => {
+    render(<SettingsSectionPane section="behaviour" />);
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Presence", "Overnight", "Sight", "Memory",
+    ]);
+    fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
+    expect(await screen.findByText("Nothing configured")).toBeTruthy();
+  });
+
+  it("replays only the exact approved overnight change", async () => {
+    api.updateCurrentOrg
+      .mockResolvedValueOnce({
+        status: "pending_human",
+        hitl_request_id: "approval-overnight",
+      })
+      .mockResolvedValueOnce({
+        status: "ok",
+        organisation: {
+          id: "acme",
+          name: "Acme",
+          slug: "acme",
+          settings: { "behaviour.overnight.enabled": true },
+          allow_own_ai_keys: true,
+          require_two_factor: true,
+          updated_at: "2026-08-15T10:01:00Z",
+        },
+      });
+    api.invokeApprovalState.mockResolvedValue({ status: "approved" });
+
     render(<SettingsSectionPane section="overnight" />);
-    await waitFor(() => {
-      expect(screen.getByText("The last practice was held back")).toBeTruthy();
-    });
-    expect(screen.getByText("held back").getAttribute("data-tone")).toBe("amber");
+    fireEvent.click(await screen.findByRole("switch", { name: "Enable overnight" }));
+    fireEvent.click(await screen.findByRole("button", {
+      name: "Check approval and apply exact change",
+    }));
+
+    await waitFor(() => expect(api.updateCurrentOrg).toHaveBeenLastCalledWith(
+      { settings: { "behaviour.overnight.enabled": true } },
+      "approval-overnight",
+    ));
   });
 
   it("lists only shortcuts the build binds, from the shared registry", () => {

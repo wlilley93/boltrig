@@ -17,7 +17,7 @@ describe("Worker routes", () => {
 
   it("recognises every first-party Worker section", () => {
     for (const route of [
-      "home", "chat", "runs", "work", "agents", "automations",
+      "home", "chat", "runs", "work", "agents", "automations", "browser",
       "knowledge", "memory", "integrations", "channels", "build",
       "evaluations", "account", "organisation", "settings",
     ]) {

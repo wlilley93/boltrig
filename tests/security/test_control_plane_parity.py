@@ -259,7 +259,6 @@ _LOW_VERBS = {
     "control.mcp_server.register",
     "control.integration.connect",
     "control.notification.test",
-    "control.work.create",
     "control.work.assign",
 }
 

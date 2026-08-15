@@ -1,7 +1,5 @@
 """Ephemeral spawn: cheapest-capable selection, depth + context guards (Epic FLT)."""
 
-import stat
-
 import pytest
 
 from boltrig.fleet import build_spawner
@@ -13,7 +11,6 @@ from boltrig.models import (
     DepthExceeded,
     GrantSet,
     InvocationContext,
-    ModelEndpoint,
     Skill,
     TenantPermissions,
 )
@@ -30,7 +27,7 @@ async def _kernel_with_caps() -> Kernel:
         AgentCapability("script-worker", T, "python-script", ["*"], 2, True, "cheap")
     )
     await store.upsert_capability(
-        AgentCapability("claude-api-worker", T, "claude-api", ["*"], 2, True, "expensive")
+        AgentCapability("codex-expensive", T, "codex", ["*"], 2, True, "expensive")
     )
     await store.upsert_capability(
         AgentCapability("preferred-script", T, "python-script", ["*"], 2, True, "expensive")
@@ -91,166 +88,6 @@ async def test_every_spawn_caps_skill_requirements_to_parent_authority():
     assert res["output"]["tools"] == []
 
 
-@pytest.mark.invariant("FR-RUN-15")
-async def test_opencode_spawn_preserves_workspace_for_scoped_mcp(monkeypatch, tmp_path):
-    # opencode is a legacy lane (decision 0012): reachable only behind the flag.
-    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
-    store = InMemoryStore()
-    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
-    await store.upsert_model_endpoint(
-        ModelEndpoint(
-            id="opencode-ornith",
-            tenant_id=T,
-            kind="opencode",
-            model="ornith/test",
-            base_url=None,
-        )
-    )
-    await store.upsert_capability(
-        AgentCapability(
-            "opencode-worker",
-            T,
-            "opencode",
-            ["*"],
-            2,
-            True,
-            "cheap",
-            model_endpoint="opencode-ornith",
-        )
-    )
-    await store.upsert_skill(
-        Skill(
-            id="analysis/decompose",
-            tenant_id=T,
-            version="1.0.0",
-            prompt_fragment="Decompose the task.",
-            tool_grants=["ticket.read"],
-        )
-    )
-    script = tmp_path / "fake-opencode"
-    script.write_text(
-        "#!/usr/bin/env python3\n"
-        "import json\n"
-        "print(json.dumps({'type': 'message', 'text': 'ok'}))\n",
-        encoding="utf-8",
-    )
-    script.chmod(script.stat().st_mode | stat.S_IXUSR)
-    monkeypatch.setenv("BOLTRIG_OPENCODE_BIN", str(script))
-    monkeypatch.setenv("BOLTRIG_OPENCODE_MCP_URL", "http://kernel.example/v1/mcp")
-
-    kernel = Kernel(store)
-    issued: list[dict] = []
-
-    def issue_token(*args, **kwargs):
-        issued.append({"args": args, "kwargs": kwargs})
-        return "RUN_TOKEN"
-
-    monkeypatch.setattr(kernel.mcp, "issue_run_token", issue_token)
-    spawner = build_spawner(kernel)
-    parent = InvocationContext(
-        tenant_id=T,
-        run_id="parent-run",
-        workspace_id="ws-1",
-        ip_address="203.0.113.10",
-        user_agent="test-agent",
-        grants=GrantSet.of(["*"]),
-        actor="head",
-        on_behalf_of="alice",
-        extra={"principal_role": "org-admin"},
-    )
-    res = await spawner.spawn(T, "decompose epic", ["analysis/decompose"], {}, parent)
-    events = await store.audit_query(T, run_id=res["run_id"])
-
-    assert res["agent_type"] == "opencode-worker"
-    assert events[-1].workspace_id == "ws-1"
-    assert issued
-    assert issued[0]["kwargs"] == {
-        "run_id": res["run_id"],
-        "actor": "opencode-worker",
-        "skills": ("analysis/decompose",),
-        "workspace_id": "ws-1",
-        "on_behalf_of": "alice",
-        "extra": {"principal_role": "org-admin"},
-    }
-    assert issued[0]["args"][0] == T
-
-
-async def test_rivet_spawn_preserves_workspace_for_scoped_mcp(monkeypatch):
-    from boltrig.fleet.rivet_runtime import RivetAgentOSRuntime
-
-    # rivet is a legacy lane (decision 0012): reachable only behind the flag.
-    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
-    monkeypatch.setenv("RIVET_AGENTOS_URL", "http://rivet-agentos:2468")
-    monkeypatch.setenv("BOLTRIG_RIVET_MCP_URL", "http://kernel.example/v1/mcp")
-    store = InMemoryStore()
-    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
-    await store.upsert_model_endpoint(
-        ModelEndpoint(
-            id="standard",
-            tenant_id=T,
-            kind="openai",
-            model="glm-5.2",
-            base_url="https://models.example/v1",
-        )
-    )
-    await store.upsert_capability(
-        AgentCapability(
-            "rivet-worker", T, "rivet_agentos", ["*"], 2, True, "cheap",
-            model_endpoint="standard",
-        )
-    )
-    await store.upsert_skill(
-        Skill(
-            id="analysis/decompose",
-            tenant_id=T,
-            version="1.0.0",
-            prompt_fragment="Decompose the task.",
-            tool_grants=["ticket.read"],
-        )
-    )
-    seen = {}
-
-    async def fake_post(self, url, payload, headers):
-        seen.update({"url": url, "payload": payload, "headers": headers})
-        return 200, {"summary": "done", "output": {"ok": True}, "tokens_used": 5}
-
-    monkeypatch.setattr(RivetAgentOSRuntime, "_post", fake_post)
-    kernel = Kernel(store)
-    issued: list[dict] = []
-
-    def issue_token(*args, **kwargs):
-        issued.append({"args": args, "kwargs": kwargs})
-        return "RIVET_RUN_TOKEN"
-
-    revoked: list[str] = []
-    monkeypatch.setattr(kernel.mcp, "issue_run_token", issue_token)
-    monkeypatch.setattr(kernel.mcp, "revoke", revoked.append)
-    spawner = build_spawner(kernel)
-    parent = InvocationContext(
-        tenant_id=T,
-        run_id="parent-run",
-        workspace_id="ws-1",
-        grants=GrantSet.of(["*"]),
-        actor="head",
-    )
-
-    res = await spawner.spawn(
-        T, "decompose epic", ["analysis/decompose"], {"capability": "rivet-worker"}, parent
-    )
-
-    assert res["agent_type"] == "rivet-worker"
-    assert res["degraded"] is False
-    assert seen["url"] == "http://rivet-agentos:2468/runs"
-    assert seen["payload"]["mcp"] == {
-        "url": "http://kernel.example/v1/mcp",
-        "token": "RIVET_RUN_TOKEN",
-    }
-    assert seen["payload"]["context"]["workspace_id"] == "ws-1"
-    assert seen["payload"]["context"]["skills"] == ["analysis/decompose"]
-    assert issued[0]["kwargs"]["workspace_id"] == "ws-1"
-    assert revoked == ["RIVET_RUN_TOKEN"]
-
-
 @pytest.mark.invariant("US-FLT-04")
 async def test_preferred_capability_chosen_when_capable():
     kernel = await _kernel_with_caps()
@@ -264,9 +101,6 @@ async def test_preferred_capability_chosen_when_capable():
 
 async def test_preferred_runtime_is_honoured_over_cost_order():
     kernel = await _kernel_with_caps()
-    await kernel.store.upsert_capability(
-        AgentCapability("codex-worker", T, "codex", ["*"], 2, True, "expensive")
-    )
     spawner = build_spawner(kernel)
 
     res = await spawner.spawn(
@@ -277,7 +111,7 @@ async def test_preferred_runtime_is_honoured_over_cost_order():
         _ctx(),
     )
 
-    assert res["agent_type"] == "codex-worker"
+    assert res["agent_type"] == "codex-expensive"
 
 
 async def test_script_runtime_alias_selects_python_script_capability():

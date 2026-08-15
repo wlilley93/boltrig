@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const api = vi.hoisted(() => ({
   approvalPosture: vi.fn(),
@@ -12,13 +12,39 @@ const api = vi.hoisted(() => ({
   conversation: vi.fn(),
   conversations: vi.fn(),
   createCall: vi.fn(),
+  invokeApprovalState: vi.fn(),
   modelProfiles: vi.fn(),
   putApprovalPosture: vi.fn(),
+  respondHitl: vi.fn(),
   runEvents: vi.fn(),
   streamChat: vi.fn(),
 }));
+const replySpeech = vi.hoisted(() => ({
+  prime: vi.fn(),
+  readReply: vi.fn().mockResolvedValue(undefined),
+  stop: vi.fn(),
+}));
 
 vi.mock("../src/client", () => ({ client: api }));
+vi.mock("../src/components/chat/useReplySpeech", () => ({
+  useLiveReplySpeech: ({ callActive, live }: {
+    callActive: boolean;
+    live: { cancelled: boolean; ended: boolean; runId?: string; text: string };
+  }) => {
+    useEffect(() => {
+      if (!live.runId || !live.ended || live.cancelled || !live.text.trim()) return;
+      void replySpeech.readReply(live.runId, live.text);
+    }, [live.cancelled, live.ended, live.runId, live.text]);
+    useEffect(() => { if (callActive) replySpeech.stop(); }, [callActive]);
+    return replySpeech.prime;
+  },
+  useReplySpeech: () => ({
+    enabled: true,
+    loaded: true,
+    provider: "pocket-voice",
+    ...replySpeech,
+  }),
+}));
 // A stub call control: placement rule 3 is about where the Stage sits for the
 // life of a call, not about realtime media, so the stub only raises the
 // call-active signal the way the real control does. It keeps the real idle
@@ -39,6 +65,36 @@ vi.mock("../src/components/VoiceCall", () => ({
 
 import { ChatView } from "../src/components/ChatView";
 import { CommandPalette } from "../src/components/CommandPalette";
+import {
+  CHAT_QUEUE_DRAG_TYPE,
+  LONG_TEXT_ATTACHMENT_THRESHOLD,
+} from "../src/components/chat/ComposerAttachments";
+
+function attachmentFile(name: string, text: string): File {
+  return {
+    name,
+    size: new TextEncoder().encode(text).byteLength,
+    type: "text/plain",
+    arrayBuffer: vi.fn().mockResolvedValue(new TextEncoder().encode(text).buffer),
+  } as unknown as File;
+}
+
+function transfer({
+  files = [],
+  text = "",
+  types = files.length ? ["Files"] : ["text/plain"],
+}: {
+  files?: File[];
+  text?: string;
+  types?: string[];
+}): DataTransfer {
+  return {
+    dropEffect: "none",
+    files,
+    getData: (type: string) => type === "text/plain" ? text : "",
+    types,
+  } as unknown as DataTransfer;
+}
 
 beforeEach(() => {
   document.documentElement.dataset.theme = "dark";
@@ -71,6 +127,8 @@ beforeEach(() => {
     default_model_name: "openai/gpt-5.4",
     default_available: true,
   });
+  api.invokeApprovalState.mockResolvedValue({ status: "consumed" });
+  api.respondHitl.mockResolvedValue({ status: "ok" });
   api.conversations.mockResolvedValue({
     conversations: [{
       id: "conversation-a",
@@ -81,6 +139,9 @@ beforeEach(() => {
   });
   api.modelProfiles.mockResolvedValue({ profiles: [] });
   api.runEvents.mockResolvedValue([]);
+  replySpeech.prime.mockReset();
+  replySpeech.readReply.mockReset().mockResolvedValue(undefined);
+  replySpeech.stop.mockReset();
 });
 
 afterEach(() => {
@@ -195,6 +256,16 @@ describe("console chat surface", () => {
     expect(newComposer?.firstElementChild?.classList.contains("composer-context")).toBe(true);
     expect(newComposer?.lastElementChild?.classList.contains("composer-frame")).toBe(true);
     expect(screen.getByRole("button", { name: "Start voice chat" })).toBeTruthy();
+    expect(screen.getByText("Talk to Familiar")).toBeTruthy();
+
+    // Composer action glyphs share one legible Codex-weight stroke family.
+    // Dictation remains explicitly unavailable even though its icon no longer
+    // fades into the canvas.
+    const addAction = screen.getByRole("button", { name: "Add" });
+    const dictateAction = screen.getByRole("button", { name: "Dictation unavailable" });
+    expect(addAction.querySelector("svg")?.getAttribute("stroke-width")).toBe("2.2");
+    expect(dictateAction.querySelector("svg")?.getAttribute("stroke-width")).toBe("2.2");
+    expect(dictateAction.getAttribute("aria-disabled")).toBe("true");
   });
 
   it("opens existing command and skill discovery from slash without inventing a project picker", () => {
@@ -209,6 +280,81 @@ describe("console chat surface", () => {
     expect(screen.queryByText("No project selected")).toBeNull();
     expect(screen.queryByTitle("Project selection is not available in this client"))
       .toBeNull();
+  });
+
+  it("lights the composer for external drags and stages a window drop", async () => {
+    renderChat(null);
+    const textarea = screen.getByRole("textbox", { name: "Task instructions" }) as HTMLTextAreaElement;
+    await waitFor(() => expect(textarea.disabled).toBe(false));
+    const composer = textarea.closest(".composer")!;
+    const dataTransfer = transfer({ files: [attachmentFile("brief.txt", "Attach this brief")] });
+
+    fireEvent.dragEnter(window, { dataTransfer });
+    expect(composer.getAttribute("data-drop-active")).toBe("true");
+    expect(screen.getByRole("status").textContent).toContain("Drop to attach");
+    expect(screen.getByRole("status").textContent).toContain("Files, media, or text");
+
+    fireEvent.drop(window, { dataTransfer });
+    expect(composer.getAttribute("data-drop-active")).toBeNull();
+    expect(await screen.findByText("brief.txt")).toBeTruthy();
+
+    fireEvent.dragEnter(window, {
+      dataTransfer: transfer({ text: "queued-message", types: [CHAT_QUEUE_DRAG_TYPE, "text/plain"] }),
+    });
+    expect(composer.getAttribute("data-drop-active")).toBeNull();
+
+    const textTransfer = transfer({ text: "A dragged excerpt keeps its surrounding whitespace.\n" });
+    fireEvent.dragEnter(window, { dataTransfer: textTransfer });
+    expect(composer.getAttribute("data-drop-active")).toBe("true");
+    fireEvent.drop(window, { dataTransfer: textTransfer });
+    expect(await screen.findByText("dropped-text.txt")).toBeTruthy();
+
+    const oversized = {
+      name: "oversized.bin",
+      size: 262_145,
+      type: "application/octet-stream",
+      arrayBuffer: vi.fn(),
+    } as unknown as File;
+    const oversizedTransfer = transfer({ files: [oversized] });
+    fireEvent.dragEnter(window, { dataTransfer: oversizedTransfer });
+    fireEvent.drop(window, { dataTransfer: oversizedTransfer });
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "oversized.bin is too large. Each file must be 256 KB or smaller.",
+    );
+    expect(screen.queryByText("oversized.bin")).toBeNull();
+  });
+
+  it("stages long pasted text as a readable attachment without replacing the draft", async () => {
+    renderChat(null);
+    const textarea = screen.getByRole("textbox", { name: "Task instructions" }) as HTMLTextAreaElement;
+    await waitFor(() => expect(textarea.disabled).toBe(false));
+    fireEvent.change(textarea, { target: { value: "Summarise the attached excerpt" } });
+    const longText = `Header\n${"A substantial pasted excerpt. ".repeat(100)}`
+      .slice(0, LONG_TEXT_ATTACHMENT_THRESHOLD + 200);
+    const longPaste = createEvent.paste(textarea, {
+      clipboardData: transfer({ text: longText }),
+    });
+
+    fireEvent(textarea, longPaste);
+    expect(longPaste.defaultPrevented).toBe(true);
+    expect(textarea.value).toBe("Summarise the attached excerpt");
+    expect(await screen.findByText("pasted-text.txt")).toBeTruthy();
+
+    const shortPaste = createEvent.paste(textarea, {
+      clipboardData: transfer({ text: "short excerpt" }),
+    });
+    fireEvent(textarea, shortPaste);
+    expect(shortPaste.defaultPrevented).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send ↑" }));
+    await waitFor(() => expect(api.streamChat).toHaveBeenCalledOnce());
+    const request = api.streamChat.mock.calls[0]![0];
+    expect(request.attachments).toHaveLength(1);
+    expect(request.attachments[0]).toMatchObject({
+      name: "pasted-text.txt",
+      media_type: "text/plain",
+    });
+    expect(atob(request.attachments[0].data)).toBe(longText);
   });
 
   it("restores the empty composer after dismissing slash-opened commands", async () => {
@@ -278,6 +424,36 @@ describe("console chat surface", () => {
     const request = api.streamChat.mock.calls[0]![0];
     expect(request.model_choice_id).toBe("opaque-sonnet-route");
     expect(request).not.toHaveProperty("model_profile_id");
+  });
+
+  it("primes audio on submit and reads a newly completed reply once", async () => {
+    api.conversation.mockResolvedValue({
+      messages: [{ id: "assistant-a", role: "assistant", content: "Finished reply" }],
+      active_run_id: null,
+    });
+    api.streamChat.mockImplementation(async (_request, onEvent) => {
+      onEvent({ type: "message_start", run_id: "run-spoken", conversation_id: "conversation-spoken" });
+      onEvent({ type: "text_delta", run_id: "run-spoken", delta: "Finished reply" });
+      onEvent({ type: "message_end", run_id: "run-spoken" });
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      return undefined;
+    });
+    renderChat(null);
+
+    await screen.findByRole("button", { name: "Model" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Task instructions" }), {
+      target: { value: "Say the result" },
+    });
+    const send = screen.getByRole("button", { name: "Send ↑" }) as HTMLButtonElement;
+    await waitFor(() => expect(send.disabled).toBe(false));
+    fireEvent.click(send);
+
+    expect(replySpeech.prime).toHaveBeenCalledOnce();
+    await waitFor(() => expect(replySpeech.readReply).toHaveBeenCalledWith(
+      "run-spoken",
+      "Finished reply",
+    ));
+    expect(replySpeech.readReply).toHaveBeenCalledTimes(1);
   });
 
   it("fails closed when the selected automatic model is unavailable", async () => {
@@ -367,8 +543,9 @@ describe("console chat surface", () => {
     // The click reaches VoiceCall's own start control, so the call machinery
     // (capability fallbacks, media teardown) stays in one place.
     await waitFor(() => {
-      expect(document.querySelector(".voice-stage")).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "New chat" })).toBeTruthy();
     });
+    expect(document.querySelector(".voice-stage")).toBeNull();
 
     // A non-empty draft flips the primary back to Send.
     fireEvent.change(screen.getByRole("textbox", { name: "Task instructions" }), {
@@ -433,7 +610,7 @@ describe("console chat surface", () => {
     expect(document.querySelector(".chat-header .familiar-stage")).toBeNull();
   });
 
-  it("returns the one Stage to the centre for the life of a voice call", async () => {
+  it("does not leave a second character Stage behind the voice modal", async () => {
     api.conversation.mockResolvedValue({
       messages: [
         { id: "m1", role: "user", content: "First ask" },
@@ -446,14 +623,14 @@ describe("console chat surface", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Start a voice call" }));
 
-    // The call owns the one centred Stage. The main response stays unlabelled:
-    // no child identity is borrowed merely because a call is active.
+    // VoiceCall's portal owns the one full-resolution Stage. This mocked
+    // controller intentionally supplies no modal, so ChatView must leave no
+    // duplicate WebGL Stage running invisibly behind it.
     await waitFor(() => {
-      const stages = document.querySelectorAll(".familiar-stage");
-      expect(stages.length).toBe(1);
-      expect(stages[0]!.closest(".voice-stage")).toBeTruthy();
-      expect(stages[0]!.classList.contains("voice")).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Renewal outreach" })).toBeTruthy();
     });
+    expect(document.querySelector(".voice-stage")).toBeNull();
+    expect(document.querySelectorAll(".familiar-stage")).toHaveLength(0);
     const newest = [...document.querySelectorAll("article.message.assistant")]
       .find((article) => article.textContent?.includes("Newest answer"));
     expect(newest?.querySelector(".message-author")).toBeNull();
@@ -703,7 +880,7 @@ describe("console chat surface", () => {
     expect(await screen.findByText("2 subagents")).toBeTruthy();
   });
 
-  it("replays a settled approval as a card that cannot be re-answered", async () => {
+  it("reconciles a consumed approval in a settled transcript as read-only", async () => {
     api.conversation.mockResolvedValue({
       messages: [
         { id: "m1", role: "user", content: "Do the renewals" },
@@ -725,9 +902,60 @@ describe("console chat surface", () => {
     renderChat("conversation-a");
 
     expect(await screen.findByText("Raise 3 tickets")).toBeTruthy();
-    // The request belongs to a dead turn: no approve/deny is offered.
+    await waitFor(() => expect(api.invokeApprovalState).toHaveBeenCalledWith("h1"));
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
-    expect(screen.getByText(/can no longer be answered here/)).toBeTruthy();
+    expect(screen.getByText(/request is consumed and is no longer answerable/)).toBeTruthy();
+  });
+
+  it("answers a still-pending approval from its reopened run chat", async () => {
+    api.invokeApprovalState.mockResolvedValue({ status: "pending" });
+    api.conversation.mockResolvedValue({
+      messages: [{
+        id: "m2",
+        role: "assistant",
+        content: "Stopped for approval",
+        events: [{
+          type: "hitl",
+          hitl_request_id: "routine-approval",
+          kind: "approval",
+          question: "Send the prepared update",
+          options: [],
+          verb: "channel.send",
+        }],
+      }],
+      active_run_id: null,
+    });
+    renderChat("conversation-a");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+    await waitFor(() => expect(api.respondHitl).toHaveBeenCalledWith(
+      "routine-approval",
+      "approve",
+    ));
+    await waitFor(() => expect(api.conversation.mock.calls.length).toBeGreaterThanOrEqual(2));
+    expect(screen.getByText(/decision "approve" was recorded/)).toBeTruthy();
+  });
+
+  it("labels an automatic routine chat from server-owned provenance", async () => {
+    api.conversation.mockResolvedValue({
+      conversation: {
+        id: "conversation-a",
+        title: "Renamed by the user",
+        status: "active",
+        origin: "routine",
+        source_ref: "morning-priorities",
+        source_run_id: "routine-run-1",
+        companion_id: "jarvis",
+      },
+      messages: [],
+      active_run_id: null,
+    });
+    renderChat("conversation-a");
+
+    expect(await screen.findByRole("region", { name: "Automatic routine run" })).toBeTruthy();
+    expect(screen.getByText("morning-priorities · Jarvis")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "View in Runs" }));
+    expect(window.location.hash).toBe("#/runs");
   });
 
   it("flips the theme from an active conversation header and persists the choice", async () => {

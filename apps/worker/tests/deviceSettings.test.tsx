@@ -218,6 +218,7 @@ describe("Worker desktop device lifecycle", () => {
     await waitFor(() => expect(api.devices).toHaveBeenCalled());
     const download = screen.getByRole("link", { name: "Download Boltrig Desktop" });
     expect(download.getAttribute("href")).toBe("https://downloads.boltrig.test/desktop");
+    expect(screen.queryByText("This computer’s connection")).toBeNull();
     expect(screen.queryByText(/one-time enrollment code/i)).toBeNull();
     expect(api.startDeviceEnrollment).not.toHaveBeenCalled();
     expect((screen.getByLabelText("Opaque root label") as HTMLInputElement).disabled).toBe(true);
@@ -231,8 +232,8 @@ describe("Worker desktop device lifecycle", () => {
     vi.stubEnv("VITE_DESKTOP_DOWNLOAD_URL", "http://downloads.boltrig.test/desktop");
     native.hasDesktopRuntime.mockReturnValue(false);
     render(<DeviceSettings />);
-    expect(await screen.findByText(/signed desktop download has not been published/i))
-      .toBeTruthy();
+    await waitFor(() => expect(api.devices).toHaveBeenCalled());
+    expect(screen.queryByText(/signed desktop download has not been published/i)).toBeNull();
     expect(screen.queryByRole("link", { name: "Download Boltrig Desktop" })).toBeNull();
     expect(api.startDeviceEnrollment).not.toHaveBeenCalled();
   });

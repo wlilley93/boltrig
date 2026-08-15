@@ -133,13 +133,16 @@ class FakeAudioContext {
     start: ReturnType<typeof vi.fn>;
     stop: ReturnType<typeof vi.fn>;
   }> = [];
+  gains: Array<FakeAudioNode & { gain: { value: number } }> = [];
   createMediaStreamSource = vi.fn(() => new FakeAudioNode());
   createScriptProcessor = vi.fn(() => Object.assign(new FakeAudioNode(), {
     onaudioprocess: null,
   }));
-  createGain = vi.fn(() => Object.assign(new FakeAudioNode(), {
-    gain: { value: 1 },
-  }));
+  createGain = vi.fn(() => {
+    const gain = Object.assign(new FakeAudioNode(), { gain: { value: 1 } });
+    this.gains.push(gain);
+    return gain;
+  });
   analysers: Array<FakeAudioNode & {
     fftSize: number;
     micLevel: number;
@@ -314,7 +317,7 @@ describe("Worker realtime voice continuity", () => {
     );
   });
 
-  it("uses a definite article for a common-noun call participant", async () => {
+  it("keeps conversation context accessible without painting call metadata", async () => {
     api.currentCall.mockResolvedValue({
       call: {
         ...call,
@@ -336,13 +339,12 @@ describe("Worker realtime voice continuity", () => {
       />,
     );
 
-    expect(await screen.findByText(
-      "Renewal outreach · you and the chief of staff",
-    )).toBeTruthy();
+    expect(await screen.findByText("Voice call for Renewal outreach")).toBeTruthy();
+    expect(document.querySelector(".voice-call-title")).toBeNull();
+    expect(document.querySelector(".voice-call-elapsed")).toBeNull();
   });
 
-  it("auto-dismisses a recovered-call notice after the production quiet interval", async () => {
-    vi.useFakeTimers();
+  it("keeps recovered connection copy out of the visual call chrome", async () => {
     api.currentCall.mockResolvedValue({ call: { ...call, status: "active" } });
     api.callEvents.mockReset().mockResolvedValue({ events: [] });
 
@@ -353,28 +355,15 @@ describe("Worker realtime voice continuity", () => {
         onError={vi.fn()}
       />,
     );
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
     const recoveryCopy = "A voice call from this conversation can be resumed.";
-    expect(screen.getByText(recoveryCopy)).toBeTruthy();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(9_799);
-    });
-    expect(screen.getByText(recoveryCopy)).toBeTruthy();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1);
-    });
-    expect(screen.queryByText(recoveryCopy)).toBeNull();
+    expect(await screen.findByText(recoveryCopy)).toBeTruthy();
+    expect(document.querySelector(".voice-call-notice")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Dismiss call notice" })).toBeNull();
   });
 
-  it("pins only the visual fixture's recovered-call notice until explicit dismissal", async () => {
-    vi.useFakeTimers();
-    document.documentElement.dataset.visualPinRecoveredCallNotice = "true";
+  it("shows an urgent approval exception until it is explicitly dismissed", async () => {
     api.currentCall.mockResolvedValue({ call: { ...call, status: "active" } });
-    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+    api.callEvents.mockReset().mockResolvedValue({ events: [pending] });
 
     render(
       <VoiceCall
@@ -383,20 +372,12 @@ describe("Worker realtime voice continuity", () => {
         onError={vi.fn()}
       />,
     );
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const recoveryCopy = "A voice call from this conversation can be resumed.";
-    expect(screen.getByText(recoveryCopy)).toBeTruthy();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(20_000);
-    });
-    expect(screen.getByText(recoveryCopy)).toBeTruthy();
-
+    const approvalCopy = "Approval needed for ticket.create. Review it in the originating chat to continue.";
+    expect((await screen.findByText(approvalCopy)).closest("article")?.getAttribute(
+      "data-urgent",
+    )).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "Dismiss call notice" }));
-    expect(screen.queryByText(recoveryCopy)).toBeNull();
+    expect(screen.queryByText(approvalCopy)?.closest("article")).toBeNull();
   });
 
   it("does not reopen a stale recovered call after navigating from conversation A to B", async () => {
@@ -581,7 +562,7 @@ describe("Worker realtime voice continuity", () => {
     )).toBeNull();
   });
 
-  it("centres the bound genotype and lets participant buttons change only visual focus", async () => {
+  it("centres the primary bound genotype without participant chrome", async () => {
     const multiAgentCall = {
       ...call,
       participants: [
@@ -632,20 +613,11 @@ describe("Worker realtime voice continuity", () => {
       }));
     });
 
-    const chief = await screen.findByRole("img", { name: "Chief of staff Familiar · ready" });
+    const chief = await screen.findByRole("img", { name: "Familiar · ready" });
     expect(chief.getAttribute("data-familiar-body")).toBe("cassini");
-    const lyellButton = screen.getByRole("button", { name: "Show Lyell in the call centre" });
-    const lyellBadge = lyellButton.querySelector<HTMLElement>(".familiar-orb");
-    expect(lyellBadge?.dataset.renderer).toBe("badge");
-    expect(lyellBadge?.style.width).toBe("30px");
     expect(document.querySelectorAll(".familiar-stage")).toHaveLength(1);
-    fireEvent.click(lyellButton);
-    const lyell = await screen.findByRole("img", { name: "Lyell Familiar · ready" });
-    expect(lyell.getAttribute("data-familiar-body")).toBe("kepler");
-    expect(document.querySelectorAll(".familiar-stage")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Show Chief of staff in the call centre" })
-      .querySelector<HTMLElement>(".familiar-orb")?.dataset.renderer).toBe("badge");
-    expect(screen.getByText("Viewing Lyell. Call audio and routing are unchanged.")).toBeTruthy();
+    expect(document.querySelector(".voice-call-participants")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Show Lyell/ })).toBeNull();
     expect(api.createCall).toHaveBeenCalledTimes(1);
   });
 
@@ -679,17 +651,31 @@ describe("Worker realtime voice continuity", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Voice call" });
     expect(dialog.getAttribute("data-screen-label")).toBe("Call");
-    expect(screen.getByText("Voice call · you and Boltrig")).toBeTruthy();
+    expect(document.body.classList.contains("voice-call-present")).toBe(true);
+    expect(screen.getByRole("textbox", { name: "Type a message to the call" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Leave" })).toBeTruthy();
+    expect(document.querySelector(".voice-call-title")).toBeNull();
+    expect(document.querySelector(".voice-call-participants")).toBeNull();
+    expect(document.querySelector(".voice-call-state")).toBeNull();
     expect(screen.queryByRole("button", { name: "Hold everything" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Mute" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mute me" }));
     expect(microphoneTrack.enabled).toBe(false);
-    expect(screen.getByRole("button", { name: "Unmute" }).getAttribute(
+    expect(screen.getByRole("button", { name: "Unmute me" }).getAttribute(
       "aria-pressed",
     )).toBe("true");
-    fireEvent.click(screen.getByRole("button", { name: "Unmute" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unmute me" }));
     expect(microphoneTrack.enabled).toBe(true);
+
+    const playbackGain = FakeAudioContext.instances[0]?.gains[1];
+    expect(playbackGain?.gain.value).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: "Silence Familiar" }));
+    expect(playbackGain?.gain.value).toBe(0);
+    expect(screen.getByRole("button", { name: "Hear Familiar" }).getAttribute(
+      "aria-pressed",
+    )).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Hear Familiar" }));
+    expect(playbackGain?.gain.value).toBe(1);
   });
 
   it("keeps the selected Jarvis character on the full-window call Stage", async () => {
@@ -712,6 +698,7 @@ describe("Worker realtime voice continuity", () => {
 
     await waitFor(() => expect(document.querySelector(".jarvis-stage")).toBeTruthy());
     expect(document.querySelector(".familiar-stage")).toBeNull();
+    expect(screen.getByRole("button", { name: "Silence Jarvis" })).toBeTruthy();
   });
 
   it("sends typed mid-call text over the media socket and shows the echoed line", async () => {
@@ -764,7 +751,9 @@ describe("Worker realtime voice continuity", () => {
         }),
       }));
     });
-    expect(await screen.findByText("You typed: got your text?")).toBeTruthy();
+    expect(await screen.findByText((_, element) => (
+      element?.tagName === "P" && element.textContent === "You: got your text?"
+    ))).toBeTruthy();
   });
 
   it("does not carry a typed call draft from conversation A into recovered call B", async () => {
@@ -872,7 +861,7 @@ describe("Worker realtime voice continuity", () => {
     expect(lateSibling.inert).toBe(true);
 
     const leave = screen.getByRole("button", { name: "Leave" });
-    const mute = screen.getByRole("button", { name: "Mute" });
+    const mute = screen.getByRole("button", { name: "Silence Familiar" });
     mute.focus();
     fireEvent.keyDown(mute, { key: "Tab" });
     expect(document.activeElement).toBe(leave);
@@ -887,6 +876,7 @@ describe("Worker realtime voice continuity", () => {
     fireEvent.keyDown(dialog, { key: "Escape" });
     await waitFor(() => expect(api.endCall).toHaveBeenCalledWith(call.id));
     expect(await screen.findByText("Call ended")).toBeTruthy();
+    expect(document.body.classList.contains("voice-call-present")).toBe(false);
 
     expect(rendered.container.hasAttribute("aria-hidden")).toBe(false);
     expect(rendered.container.hasAttribute("inert")).toBe(false);

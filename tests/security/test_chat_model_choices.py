@@ -7,9 +7,14 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
+from boltrig.identity import AiKeyResolution
+from boltrig.identity.bifrost_user_binding import (
+    BifrostUserGateway,
+    binding_credential_ref,
+)
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
-from boltrig.models import ModelEndpoint
+from boltrig.models import AiConfig, ModelEndpoint, Organisation
 from boltrig.store import InMemoryStore
 
 _HEADERS = {
@@ -122,6 +127,7 @@ def test_chat_model_choices_are_tenant_scoped_exact_and_catalogue_verified() -> 
     assert body["status"] == "ok"
     assert body["reason"] is None
     assert body["default_model_name"] == "provider/base-model-20260812"
+    assert body["default_source"] == "platform"
     assert body["default_choice_id"] == "default-choice"
     assert body["default_available"] is True
     assert body["default_unavailable_reason"] is None
@@ -172,11 +178,95 @@ def test_catalogue_failure_marks_every_safe_choice_unavailable() -> None:
             }
         ],
         "default_model_name": "provider/base-model-20260812",
+        "default_source": "platform",
         "default_choice_id": None,
         "default_available": False,
         "default_unavailable_reason": "catalogue_unavailable",
     }
     assert catalogue.calls == 1
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-02")
+@pytest.mark.invariant("FR-AIKEY-03")
+def test_personal_model_is_the_exact_available_default_after_refresh(monkeypatch) -> None:
+    store = InMemoryStore()
+    resolution = AiKeyResolution(
+        level="user",
+        scope_id="alice",
+        modality="text",
+        credential_ref="approved-key",
+        provider="openai",
+        model="openai/gpt-5.4",
+    )
+
+    async def seed() -> None:
+        await store.create_org(Organisation(
+            id="acme",
+            name="Acme",
+            slug="acme",
+            allow_own_ai_keys=True,
+        ))
+        await store.set_credential_ref("acme", "approved-key", {"secret": "provider-secret"})
+        await store.set_ai_config(AiConfig(
+            tenant_id="acme",
+            level="user",
+            scope_id="alice",
+            provider="openai",
+            model="openai/gpt-5.4",
+            credential_ref="approved-key",
+        ))
+        await store.set_credential_ref(
+            "acme",
+            binding_credential_ref("acme", resolution),
+            {
+                "secret": "vk-scoped-secret",
+                "provider": "openai",
+                "model_id": "openai/gpt-5.4",
+                "source_credential_ref": "approved-key",
+                "provider_key_id": "provider-key",
+                "virtual_key_id": "virtual-key",
+            },
+        )
+
+    async def usable(self, binding) -> bool:
+        return binding.model_id == "openai/gpt-5.4"
+
+    asyncio.run(seed())
+    monkeypatch.setenv("BOLTRIG_MODEL_GATEWAY_URL", "http://bifrost:8080/v1")
+    monkeypatch.setattr(BifrostUserGateway, "is_usable", usable)
+    personal_catalogue = _Catalogue({
+        "status": "unavailable",
+        "models": [],
+        "reason": "gateway_timeout",
+    })
+    client = TestClient(create_app(
+        Kernel(store),
+        platform={
+            "bifrost_models": personal_catalogue,
+            "codex_trusted_provider_configured": True,
+            "codex_model_id": "provider/platform-default",
+            "model_gateway_configured": True,
+        },
+    ))
+
+    response = client.get("/v1/chat/model-choices", headers=_HEADERS)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {
+        "status": "ok",
+        "reason": None,
+        "choices": [],
+        "default_model_name": "openai/gpt-5.4",
+        "default_source": "personal",
+        "default_choice_id": None,
+        "default_available": True,
+        "default_unavailable_reason": None,
+    }
+    assert "provider-secret" not in response.text
+    assert "vk-scoped-secret" not in response.text
+    assert personal_catalogue.calls == 1
 
 
 @pytest.mark.security

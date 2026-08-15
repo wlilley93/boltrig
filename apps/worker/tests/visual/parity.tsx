@@ -89,13 +89,6 @@ Math.random = () => {
 document.documentElement.dataset.theme = visualTheme;
 document.documentElement.dataset.visualState = visualState.id;
 document.documentElement.dataset.visualViewport = `${manifest.viewport.width}x${manifest.viewport.height}`;
-if (visualState.id === "call") {
-  // Keep the fixture's real recovered-call notice deterministic without
-  // changing the production lifetime of any other notice.
-  document.documentElement.dataset.visualPinRecoveredCallNotice = "true";
-} else {
-  delete document.documentElement.dataset.visualPinRecoveredCallNotice;
-}
 // This entrypoint intentionally bypasses main.tsx so requests can be mocked
 // before the client is imported. Mirror the fixture's persisted/server motion
 // setting here as well, before Familiar renderers are constructed.
@@ -865,7 +858,7 @@ function surfaceIsReady(id: VisualState["id"]): boolean {
       && document.querySelector(".voice-intro")
       && document.querySelectorAll(".shell-parity .session-row:not(.closed) .session-main").length === 4
       && bodyHas("What needs doing?")
-      && bodyHas("Talk to boltrig")
+      && bodyHas("Talk to Familiar")
     );
   }
   if (id === "chat-run") {
@@ -899,13 +892,15 @@ function surfaceIsReady(id: VisualState["id"]): boolean {
   if (id === "call") {
     return Boolean(
       document.querySelector('[data-screen-label="Call"]')
-      && document.querySelector(".voice-call-notice")
+      && document.querySelector(".voice-call-text")
+      && document.querySelector(".voice-call-controls")
       && document.querySelector(
         '.voice-call-primary-familiar [data-renderer="webgl2"], '
         + '.voice-call-primary-familiar [data-renderer="badge"]',
       )
-      && bodyHas("A voice call from this conversation can be resumed.")
-      && bodyHas("Revenue-ops came back: three of the twenty are at risk."),
+      && bodyHas("Leave")
+      && bodyHas("Mute me")
+      && bodyHas("Silence Familiar"),
     );
   }
   return Boolean(

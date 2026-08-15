@@ -285,7 +285,7 @@ describe("Automation primary-surface honesty", () => {
     const rail = await screen.findByLabelText("Routine rail");
 
     fireEvent.click(await screen.findByRole("button", { name: /^Step script/ }));
-    expect((within(rail).getByLabelText("Governed action") as HTMLInputElement).disabled)
+    expect((within(rail).getByLabelText("Action") as HTMLInputElement).disabled)
       .toBe(true);
     expect((within(rail).getByLabelText("Parameters (JSON object)") as HTMLTextAreaElement).disabled)
       .toBe(true);
@@ -296,7 +296,7 @@ describe("Automation primary-surface honesty", () => {
     expect(within(rail).getAllByText(/executed=false/).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: /^Step repeat/ }));
-    expect((within(rail).getByLabelText("Governed action") as HTMLInputElement).disabled)
+    expect((within(rail).getByLabelText("Action") as HTMLInputElement).disabled)
       .toBe(false);
     expect((within(rail).getByLabelText("Parameters (JSON object)") as HTMLTextAreaElement).disabled)
       .toBe(false);

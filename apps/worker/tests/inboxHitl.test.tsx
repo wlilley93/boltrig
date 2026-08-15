@@ -216,7 +216,7 @@ describe("live chat owner questions", () => {
       "secure-question",
       "  exact secret value  ",
     ));
-    await screen.findByText("Answer accepted. The run is continuing.");
+    await screen.findByText("Answer accepted.");
     expect(screen.queryByDisplayValue("  exact secret value  ")).toBeNull();
   });
 });

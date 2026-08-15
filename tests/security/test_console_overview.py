@@ -43,7 +43,7 @@ class _StatusProvider:
                 }
             ],
             "runtimes": {
-                "opencode": {
+                "codex": {
                     "status": "degraded",
                     "metadata": {"model": "ornith", "token": "never"},
                 }
@@ -104,7 +104,7 @@ async def _seed(kernel: Kernel) -> None:
                 ts=utcnow(),
                 run_id=run_id,
                 workspace_id=workspace,
-                actor="opencode-worker",
+                actor="codex-worker",
                 actor_tier="ephemeral",
                 action_type=ActionType.AGENT_SPAWN,
                 status=status,
@@ -116,7 +116,7 @@ async def _seed(kernel: Kernel) -> None:
                         "profile": "deep",
                         "provider": "cerebras",
                         "model": "qwen-3-coder",
-                        "runtime": "opencode",
+                        "runtime": "codex",
                         "api_key": "secret",
                         "base_url": "https://secret.example/v1",
                     }
@@ -133,7 +133,7 @@ async def _seed(kernel: Kernel) -> None:
             question="Approve the next deploy step?",
             context="deployment",
             options=["approve", "deny"],
-            requested_by="opencode-worker",
+            requested_by="codex-worker",
             workspace_id="ws-1",
         ),
     )
@@ -147,7 +147,7 @@ async def _seed(kernel: Kernel) -> None:
             question="Other workspace approval",
             context="deployment",
             options=["approve", "deny"],
-            requested_by="opencode-worker",
+            requested_by="codex-worker",
             workspace_id="ws-2",
         ),
     )
@@ -176,9 +176,9 @@ def test_console_overview_is_scoped_bounded_and_redacted():
     assert body["tenant_id"] == T
     assert body["workspace_id"] == "ws-1"
     assert body["platform"]["components"][0]["metadata"] == {"alive_seconds": 120}
-    assert body["platform"]["runtimes"][0]["id"] == "opencode"
+    assert body["platform"]["runtimes"][0]["id"] == "codex"
     assert body["cost"]["total_cost_micros"] == 250
-    assert body["cost"]["by_actor"] == {"opencode-worker": 250}
+    assert body["cost"]["by_actor"] == {"codex-worker": 250}
     assert body["budgets"][0]["spent_micros"] == 250
     assert len(body["recent_runs"]) == 1
     assert body["recent_runs"][0]["run_id"] == "r1"

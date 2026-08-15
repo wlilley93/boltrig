@@ -115,9 +115,16 @@ invariants:
       - tests/unit/test_execution_ledger_models.py::test_lifecycle_matrices_and_terminal_metadata_fail_closed
       - tests/unit/test_execution_transport_models.py::test_pending_recorded_event_and_outbox_keep_scopes_and_keys_distinct
   FR-RUN-21:
-    description: 'The multi-runtime routing mechanism stays LIVE CODE with at least one non-Codex leaf re-wirable by configuration alone and no fresh order, which is the condition [2026] VJS-PC 20 L3 attaches to collapsing the wired roster to Codex.'
+    description: 'Codex is the only shipped model-backed agent runtime and script is the only deterministic non-agent runtime; retired provider-native, OpenCode, Rivet, Pi and Hermes names remain inert even when the historical legacy opt-in environment variable is present, and the runtime module exposes no revival API.'
     tests:
-      - tests/security/test_legacy_runtime_gate.py::test_the_multi_runtime_routing_seam_stays_live
+      - tests/security/test_retired_runtime_gate.py::test_retired_runtime_names_are_inert_even_with_old_opt_in_env
+      - tests/security/test_retired_runtime_gate.py::test_script_remains_the_only_non_codex_runtime
+      - tests/security/test_retired_runtime_gate.py::test_runtime_module_exposes_no_legacy_revival_api
+  FR-RUN-22:
+    description: 'Every composed agent tier and the separately attested kernel-tool lane receive the same stable operating method beneath the governance floor: understand before acting, inspect before mutation, choose specialised capabilities, preserve surrounding file/code work, research with provenance, delegate with a bounded contract, independently challenge material changes, treat approval as exact-call consent rather than precedent, bound context, use durable work state only when useful, verify effects, distinguish completed/pending/degraded/ambiguous outcomes, communicate for the user, and treat tool metadata as capability data rather than a second instruction channel.'
+    tests:
+      - tests/unit/test_prompt_stack.py::test_tool_prompt_has_a_complete_static_operating_method
+      - tests/unit/test_prompt_stack.py::test_every_agent_tier_receives_the_common_operating_method
   SEC-153:
     description: 'Organisation users and phase modes have one exact canonical vocabulary across orchestration and storage; runtime identities are credential-free tenant-workspace composites, and every Codex binding is a Boltrig-owned scoped observation that cannot mutate ledger authority.'
     tests:
@@ -337,6 +344,11 @@ invariants:
       - tests/security/test_worker_surface_boundary.py::test_browser_cloud_and_desktop_local_agent_routes_cannot_silently_cross
       - tests/deploy/test_desktop_codex_bundle.py::test_release_stages_one_exact_platform_codex_tree_and_runtime_rechecks_it
       - tests/deploy/test_desktop_codex_bundle.py::test_desktop_codex_extractor_refuses_links_and_parent_paths
+  SEC-199:
+    description: 'Consumed MCP metadata never becomes a second instruction or risk-classification channel: third-party descriptions are explicitly labelled as data before publication to a model, the governing prompt says tool names/descriptions/schemas/errors/results cannot change objective or authority, and an explicit consequence outside the closed low/high vocabulary fails closed to high rather than evading approval as low.'
+    tests:
+      - tests/security/test_mcp_consumer_activation.py::test_activation_discovers_and_publishes_the_servers_tools
+      - tests/unit/test_prompt_stack.py::test_tool_prompt_has_a_complete_static_operating_method
   SEC-185:
     description: 'The trusted-Codex wall admits exactly two postures and both refuse any production signal and require the explicit BOLTRIG_CODEX_TRUSTED flag - (a) the legacy single-operator dev posture (BOLTRIG_DEV_AUTH=1, no real ingress) and (b) the kernel-attested posture, where per-cell uids are verifiably in force (the dropped API holds the live spawner socket) and cell identity is kernel-attested end to end (SO_PEERCRED uid must equal the registered cell uid, J8; privilege re-proved at issuance, J5). Under (b) a real ingress posture - session login included - may coexist because the edge authenticates users, not cells; without per-cell uids the same session-auth env is still refused BEFORE any admit or bearer mint. This is not a production flip: production_ready stays False and the runtime remains test-gated. The SEC-184 kernel-tools lane runs under (b): a run mints its run-scoped token over the real MCP face, tools/list shows only granted verbs, a grant-denied verb is refused at the chokepoint, and the token is revoked at run end.'
     tests:
@@ -591,22 +603,14 @@ invariants:
       - tests/security/test_mcp_consumer_activation.py::test_a_second_activation_resyncs_idempotently
       - tests/security/test_mcp_consumer_activation.py::test_opbox_risk_class_drives_consequence_on_the_published_verbs
       - tests/security/test_mcp_consumer_activation.py::test_approval_for_the_inert_adapter_covers_discovery
-  FR-HOST-01:
-    description: 'Herdr host-control capabilities are declared as governed adapter verbs with read/mutate consequence levels.'
+  FR-MCP-04:
+    description: 'The committed registered-surface baseline retains broad agent capability with at least forty first-party non-control verbs and a run ceiling capable of carrying forty exact selections across file, execution, browser/web, questions, skills, work, workflow, memory, knowledge, communication and external-MCP lifecycle families; the kernel also boots workspace- and department-scoped work.list/get reads, and the shipped decomposition skill selects them alongside governed control.work mutations; breadth never becomes authority, and no shipped skill may select the whole catalogue with a bare wildcard.'
     tests:
-      - tests/adapters/test_herdr_adapter.py::test_herdr_adapter_declares_read_and_mutating_verbs
-  FR-HOST-02:
-    description: 'Herdr snapshot is read through the CLI/socket seam and returned as structured data.'
-    tests:
-      - tests/adapters/test_herdr_adapter.py::test_herdr_snapshot_runs_cli_and_returns_structured_json
-  FR-HOST-03:
-    description: 'Herdr pane commands are executed with argv and never receive kernel credentials.'
-    tests:
-      - tests/adapters/test_herdr_adapter.py::test_herdr_pane_run_uses_argv_not_shell_and_no_credentials
-  FR-HOST-04:
-    description: 'Herdr host-control failures map to retryable adapter failures, not crashes.'
-    tests:
-      - tests/adapters/test_herdr_adapter.py::test_herdr_unavailable_maps_to_retryable_adapter_failure
+      - tests/security/test_agent_tool_surface.py::test_offline_default_kernel_boot_exceeds_the_reference_tool_count
+      - tests/security/test_agent_tool_surface.py::test_registered_catalogue_exceeds_the_broad_agent_tool_floor
+      - tests/security/test_agent_tool_surface.py::test_catalogue_breadth_does_not_turn_into_a_blanket_run_grant
+      - tests/adapters/test_work_read_adapter.py::test_work_reads_are_workspace_department_scoped_and_bounded
+      - tests/adapters/test_work_read_adapter.py::test_work_reader_declares_agent_facing_read_tools
   FR-HOST-05:
     description: 'Runpod pod controls are declared as governed adapter verbs with read/mutate consequence levels.'
     tests:
@@ -623,29 +627,17 @@ invariants:
     description: 'Runpod control fails closed when no API credential is resolved.'
     tests:
       - tests/adapters/test_runpod_adapter.py::test_runpod_missing_credential_fails_closed
-  FR-HOST-09:
-    description: 'Herdr host-control uses stack-owned home/config state in compose, the image prepares writable service-owned Herdr state roots for the unprivileged runtime user, and production doctor rejects developer-user Herdr state paths.'
-    tests:
-      - tests/adapters/test_herdr_adapter.py::test_herdr_uses_stack_owned_home_when_configured
-      - tests/unit/test_doctor.py::test_production_doctor_rejects_personal_herdr_opencode_state
-      - tests/deploy/test_compose_hardening.py::test_herdr_opencode_state_is_stack_owned_in_compose
-      - tests/deploy/test_compose_hardening.py::test_herdr_opencode_state_roots_are_owned_by_service_user_in_images
-  FR-HOST-10:
-    description: 'The kernel image ships a pinned Herdr CLI binary inside the stack image, and production doctor rejects missing or developer-user Herdr binary paths, so host-control does not depend on a personal workstation install.'
-    tests:
-      - tests/deploy/test_compose_hardening.py::test_herdr_opencode_clis_ship_inside_first_party_images
-      - tests/unit/test_doctor.py::test_production_doctor_rejects_missing_or_personal_herdr_opencode_bins
   FR-HOST-11:
-    description: 'Browser CLI automation ships a pinned hash-locked Browser Use CLI tool venv, uses stack-owned home/config/data/cache state, compose mounts only stack Browser Use CLI state, production doctor rejects developer-user Browser CLI state or missing/personal browser-use binaries, and timed-out child processes are terminated.'
+    description: 'Browser CLI automation ships a pinned hash-locked Browser Use CLI tool venv, uses one stack-owned isolated Chromium executor with a private Unix socket and no published port, mounts writable Browser Use state only into that executor, production doctor rejects developer-user Browser CLI state or missing/personal browser-use binaries, and timed-out child processes are terminated.'
     tests:
       - tests/adapters/test_browser_cli_adapter.py::test_browser_cli_uses_stack_owned_home_when_configured
       - tests/adapters/test_browser_cli_adapter.py::test_browser_cli_timeout_terminates_child
       - tests/unit/test_doctor.py::test_production_doctor_rejects_personal_or_missing_browser_cli
-      - tests/deploy/test_compose_hardening.py::test_herdr_opencode_state_is_stack_owned_in_compose
+      - tests/deploy/test_compose_hardening.py::test_browser_cli_state_is_stack_owned_in_compose
       - tests/deploy/test_compose_hardening.py::test_browser_cli_state_roots_are_stack_owned
       - tests/deploy/test_compose_hardening.py::test_browser_cli_never_relies_on_a_runtime_browser_download
   FR-HOST-12:
-    description: 'Platform status reports Herdr, OpenCode, and Browser CLI as shipped stack tools with stack-owned state posture, and never exposes user profile paths, binary paths, browser auth/session state, tokens, or credentials.'
+    description: 'Platform status reports Browser CLI as the only separately shipped stack tool with stack-owned state posture, and never exposes user profile paths, binary paths, browser auth/session state, tokens, or credentials.'
     tests:
       - tests/security/test_platform_status.py::test_stack_tool_status_reports_shipped_tools_without_user_paths
       - tests/security/test_platform_status.py::test_stack_tool_status_degrades_personal_state_without_leaking_it
@@ -657,12 +649,15 @@ invariants:
       - tests/integration/test_round_two_manifest.py::test_manifest_exports_browser_cloud_policy_without_secret_material
       - tests/integration/test_round_two_manifest.py::test_manifest_export_does_not_override_browser_cloud_policy
       - tests/deploy/test_compose_hardening.py::test_browser_cli_cloud_policy_is_stack_prefixed_in_deploy_config
-  FR-HOST-14:
-    description: 'Herdr and OpenCode child processes receive a minimal stack-owned environment; provider/user secrets, personal sockets, and deployment posture variables are not inherited unless a scoped runtime handoff explicitly adds them, and timed-out Herdr child processes are terminated.'
+  SEC-BRW-01:
+    description: 'Visual browser control exposes only fixed, bounded kernel verbs: every click/type/scroll/key action is bound to the exact caller-owned displayed frame, stale frames refuse the effect, frame bytes remain ephemeral and owner-scoped, no raw script or CDP method is caller-selectable, and Chromium egress is forced through a loopback-only proxy that pins a vetted public IP and refuses private/link-local destinations.'
     tests:
-      - tests/adapters/test_herdr_adapter.py::test_herdr_child_env_does_not_inherit_user_or_provider_secrets
-      - tests/adapters/test_herdr_adapter.py::test_herdr_timeout_terminates_child
-      - tests/security/test_opencode_runtime.py::test_opencode_child_env_does_not_inherit_user_or_provider_secrets
+      - tests/adapters/test_browser_cli_adapter.py::test_browser_snapshot_is_bounded_ephemeral_and_owner_scoped
+      - tests/adapters/test_browser_cli_adapter.py::test_browser_click_is_fixed_script_and_bound_to_displayed_frame
+      - tests/adapters/test_browser_cli_adapter.py::test_browser_type_quotes_text_and_rejects_unknown_frames_without_running
+      - tests/unit/test_browser_egress_proxy.py::test_browser_proxy_pins_vetted_public_http_and_scrubs_proxy_headers
+      - tests/unit/test_browser_egress_proxy.py::test_browser_proxy_refuses_private_destinations_before_connecting
+      - tests/unit/test_browser_egress_proxy.py::test_browser_proxy_pins_https_connect_tunnel
   SEC-01:
     description: 'Real auth - an invalid/missing bearer is rejected 401; a valid token is scoped.'
     tests:
@@ -711,6 +706,17 @@ invariants:
     description: 'Adapter-native failures preserve stable transport semantics instead of collapsing into opaque internal errors - not found, unauthorised, invalid, conflict, and internal failures map to 404, 403, 400, 409, and 502 respectively while the HTTP envelope exposes only the bounded reason code.'
     tests:
       - tests/kernel/test_adapter_error_mapping.py::test_adapter_error_class_maps_to_safe_transport_error
+  NFR-REL-05:
+    description: 'Every v1 routine occurrence allocates one deterministic owner-scoped conversation before durable enqueue, binds that conversation to the exact workflow/run/companion provenance, and executes its plain-language goal through the normal authenticated ChatService authority. Trigger inputs remain untrusted data, graph steps are absent, and a held action is surfaced by its canonical HITL request in that same run chat rather than a second routine-specific approval system.'
+    tests:
+      - tests/integration/test_conversational_routines.py::test_v1_contract_rejects_graphs_and_unknown_companions
+      - tests/integration/test_conversational_routines.py::test_trigger_allocates_one_owner_scoped_chat_before_enqueue
+      - tests/integration/test_conversational_routines.py::test_trigger_refuses_a_preexisting_conversation_binding_collision
+      - tests/integration/test_conversational_routines.py::test_routine_uses_normal_chat_authority_and_surfaces_hitl
+      - tests/integration/test_conversational_routines.py::test_answer_reenters_same_routine_chat_with_untrusted_data
+      - tests/integration/test_conversational_routines.py::test_local_executor_reenters_the_exact_paused_scope
+      - tests/integration/test_conversational_routines.py::test_hatchet_task_executes_routine_as_the_bound_chat
+      - tests/store/test_store_parity.py::test_routine_conversation_provenance_roundtrips_on_both_stores
   FR-EXE-06:
     description: 'Task bodies re-enter the chokepoint - governance is not bypassable from inside a durable task (an ungranted verb fails closed and the denial is audited; a payload/envelope tenant mismatch is refused).'
     tests:
@@ -724,7 +730,7 @@ invariants:
       - tests/security/test_sensitive_routing.py::test_sensitive_data_blocked_from_hosted_and_audited
       - tests/security/test_sensitive_routing.py::test_sensitive_data_routes_to_local_endpoint
       - tests/security/test_sensitive_routing.py::test_spawn_blocks_sensitive_on_hosted_capability
-      - tests/security/test_sensitive_routing.py::test_sensitive_ignores_external_ai_config_and_routes_local
+      - tests/security/test_sensitive_routing.py::test_ai_key_profile_cannot_override_governed_model_endpoint
   SEC-15:
     description: 'Idempotent replay is tenant-, authenticated actor/delegation-, noun/verb-, workspace-, and canonical-request-bound; one atomic owner executes while concurrent reuse fails closed, completed non-secret results replay before execution-side gates, expired pre-execution claims are reclaimable, expired executing claims become reconciliation-required uncertainty, and secret-shaped results are completed uncacheable without persisting bearer material.'
     tests:
@@ -797,84 +803,19 @@ invariants:
       - tests/security/test_mcp_face.py::test_tools_call_runs_chokepoint_and_audits
       - tests/security/test_mcp_face.py::test_mcp_hitl_gate_parity
   FR-RUN-01:
-    description: 'The ''pi'' runtime is RETIRED, not gated ([2026] VJS-PC 20 L1): it cannot be restored by the legacy opt-in flag, a capability or manifest still naming it degrades to the typed unavailable result rather than crashing, and the doctor reports a manifest that still enables it.'
+    description: 'Historical third-party agent runtimes are retired, not gated: no legacy opt-in can restore them, a stale capability name degrades to a typed unavailable result rather than executing or crashing, and doctor reports an enabled retired manifest block.'
     tests:
-      - tests/security/test_legacy_runtime_gate.py::test_a_retired_pi_capability_still_degrades_rather_than_crashing
-      - tests/security/test_legacy_runtime_gate.py::test_the_opt_in_flag_does_not_bring_pi_back
+      - tests/security/test_retired_runtime_gate.py::test_retired_runtime_names_are_inert_even_with_old_opt_in_env
       - tests/unit/test_doctor.py::test_doctor_reports_a_manifest_still_enabling_the_retired_pi_runtime
       - tests/unit/test_doctor.py::test_doctor_stays_silent_on_a_manifest_that_does_not_enable_a_retired_runtime
   FR-RUN-03:
     description: 'A run-scoped token''s tool call passes the full kernel chokepoint (out-of-scope denied).'
     tests:
       - tests/security/test_mcp_face.py::test_a_run_scoped_token_cannot_exceed_its_grants_at_the_chokepoint
-  FR-RUN-06:
-    description: 'An ''openai'' capability resolves via build_runtime to OpenAiRuntime.'
-    tests:
-      - tests/security/test_openai_runtime.py::test_build_runtime_resolves_openai
-  FR-RUN-07:
-    description: 'OpenAiRuntime degrades (never crashes) when no model endpoint is configured.'
-    tests:
-      - tests/security/test_openai_runtime.py::test_openai_runtime_degrades_without_endpoint
-  FR-RUN-08:
-    description: 'OpenAiRuntime reads real OpenAI usage and its body carries no tool/verb credential.'
-    tests:
-      - tests/security/test_openai_runtime.py::test_openai_runtime_reads_usage_and_carries_no_credential
-  FR-RUN-09:
-    description: 'OpenAiRuntime attempts a keyless local endpoint (vLLM/Ollama) rather than hard-degrading.'
-    tests:
-      - tests/security/test_openai_runtime.py::test_openai_runtime_allows_keyless_local_endpoint
-  FR-RUN-10:
-    description: 'An ''opencode'' capability resolves via build_runtime to OpenCodeRuntime.'
-    tests:
-      - tests/security/test_opencode_runtime.py::test_build_runtime_resolves_opencode
-  FR-RUN-11:
-    description: 'OpenCodeRuntime degrades when no pinned OpenCode model endpoint is configured.'
-    tests:
-      - tests/security/test_opencode_runtime.py::test_opencode_degrades_without_pinned_model
-  FR-RUN-12:
-    description: 'OpenCodeRuntime degrades when the OpenCode CLI is unavailable.'
-    tests:
-      - tests/security/test_opencode_runtime.py::test_opencode_degrades_when_cli_missing
-  FR-RUN-13:
-    description: 'OpenCodeRuntime consumes JSON CLI events and reports usage without sending tool credentials.'
-    tests:
-      - tests/security/test_opencode_runtime.py::test_opencode_runs_json_cli_and_keeps_tool_credentials_out
-  FR-RUN-14:
-    description: 'OpenCodeRuntime auto-approval is explicit opt-in, not the default.'
-    tests:
-      - tests/security/test_opencode_runtime.py::test_opencode_auto_approval_is_opt_in
-  FR-RUN-15:
-    description: 'OpenCodeRuntime receives a run-scoped MCP connection through process env and revokes it after the run.'
-    tests:
-      - tests/security/test_opencode_runtime.py::test_opencode_scopes_mcp_token_to_env_and_revokes
-      - tests/security/test_opencode_runtime.py::test_opencode_timeout_terminates_child_and_revokes
-      - tests/integration/test_fleet_spawn.py::test_opencode_spawn_preserves_workspace_for_scoped_mcp
-  FR-RUN-16:
-    description: 'The OpenCode project plugin consumes the scoped Boltrig MCP env handoff locally, without mutating global OpenCode config or embedding tokens.'
-    tests:
-      - tests/security/test_opencode_plugin.py::test_opencode_plugin_installer_writes_project_local_env_consumer
-      - tests/security/test_opencode_plugin.py::test_cli_installs_opencode_plugin_without_changing_cwd
-  FR-RUN-17:
-    description: 'OpenCodeRuntime uses stack-owned home/config/state in compose, the image prepares writable service-owned OpenCode state roots for the unprivileged runtime user, and production doctor rejects developer-user OpenCode state paths.'
-    tests:
-      - tests/security/test_opencode_runtime.py::test_opencode_uses_stack_owned_home_when_configured
-      - tests/unit/test_doctor.py::test_production_doctor_rejects_personal_herdr_opencode_state
-      - tests/deploy/test_compose_hardening.py::test_herdr_opencode_state_is_stack_owned_in_compose
-      - tests/deploy/test_compose_hardening.py::test_herdr_opencode_state_roots_are_owned_by_service_user_in_images
-  FR-RUN-18:
-    description: 'The fleet image ships a pinned OpenCode CLI binary inside the stack image, and production doctor rejects missing or developer-user OpenCode binary paths, so coding-agent execution does not depend on a personal workstation install.'
-    tests:
-      - tests/deploy/test_compose_hardening.py::test_herdr_opencode_clis_ship_inside_first_party_images
-      - tests/unit/test_doctor.py::test_production_doctor_rejects_missing_or_personal_herdr_opencode_bins
-  SEC-24:
-    description: 'The Pi gateway is sandboxed - no native tools, egress only to the kernel + model. pi is RETIRED from the roster (decision 0012) but the routing seam stays live and re-wirable ([2026] VJS-PC 20 cond.1), so this invariant is not dead law: it binds the day anyone flips it back on, and the test asserts both halves (retired now, restrictive if re-enabled).'
-    tests:
-      - tests/integration/test_round_two_manifest.py::test_pi_is_retired_and_stays_restrictive_if_ever_re_wired
   SEC-27:
-    description: 'No tool credential is ever sent to a leaf runtime - only model access and run-scoped MCP tokens.'
+    description: 'Provider integration imports cannot absorb ambient process secrets or mutate Boltrig runtime posture.'
     tests:
-      - tests/security/test_opencode_runtime.py::test_opencode_runs_json_cli_and_keeps_tool_credentials_out
-      - tests/security/test_opencode_runtime.py::test_opencode_scopes_mcp_token_to_env_and_revokes
+      - tests/integration/test_cognee_engine.py::test_cognee_import_cannot_load_host_dotenv_into_process
   SEC-28:
     description: 'Severability - the kernel and models import nothing from the sidecars, and the standalone channel sidecar imports no boltrig package code; the boundary is HTTP/MCP only.'
     tests:
@@ -1102,12 +1043,6 @@ invariants:
     description: 'The model gateway (Bifrost) is wired into the stack - a profile-gated bifrost service on sandbox, genesis/dev starts the gateway profile, and the documented /v1 gateway URL matches it - so activation is provider keys, not architecture work.'
     tests:
       - tests/security/test_round_six.py::test_bifrost_is_wired_into_the_stack
-  FR-GW-02:
-    description: 'Bifrost/model profiles are config-only provider/model/base-url selections for standard data, while sensitive data ignores profiles and stays on the local residency endpoint.'
-    tests:
-      - tests/security/test_model_routing.py::test_model_profile_selects_provider_model_and_route
-      - tests/security/test_model_routing.py::test_model_profile_is_ignored_for_sensitive_data
-      - tests/security/test_model_routing.py::test_manifest_model_profiles_feed_runtime_resolver
   FR-GW-03:
     description: 'The platform status surface reports the stack-owned model gateway as configured or inert, with cache/profile posture only, and never exposes gateway URLs, keys, tokens, or credentials.'
     tests:
@@ -1119,7 +1054,6 @@ invariants:
       - tests/security/test_model_gateway_live_health.py::test_model_gateway_live_health_polls_internal_endpoint_and_redacts_payload
       - tests/security/test_model_gateway_live_health.py::test_model_gateway_live_health_rejects_external_hosts_without_polling
       - tests/security/test_model_gateway_live_health.py::test_model_gateway_live_health_probe_failure_degrades_not_crashes
-      - tests/security/test_model_routing.py::test_manifest_model_profiles_feed_runtime_resolver
   FR-GW-05:
     description: 'Bifrost model discovery is author-only and read-only: the server calls only the configured internal /v1/models route with its server-held bearer, disables redirects and environment proxies, bounds time/body/rows/pages/cursors, validates the pinned token-pagination schema, projects only id/name/input modalities, and returns an empty typed unavailable result on every failure without disclosing gateway topology, provider configuration, credentials, or partial rows.'
     tests:
@@ -1134,9 +1068,11 @@ invariants:
       - tests/security/test_bifrost_model_catalogue.py::test_catalogue_cache_singleflights_and_expires_fail_closed
       - tests/security/test_bifrost_model_catalogue.py::test_catalogue_slow_body_cannot_extend_the_wall_clock_deadline
   FR-SKILL-01:
-    description: 'The skill shelf (skill.search) returns lightweight descriptions only - never the prompt_fragment body - and filters by query (progressive disclosure).'
+    description: 'The skill shelf (skill.search) returns lightweight descriptions only - never the prompt_fragment body - filters by query, and enforces the same bounded result count at both its published schema and direct adapter seam (progressive disclosure).'
     tests:
       - tests/security/test_round_fifteen.py::test_skill_search_returns_descriptions_not_bodies
+      - tests/unit/test_skill_loader.py::test_skill_search_clamps_a_nonpositive_limit
+      - tests/unit/test_skill_loader.py::test_skill_search_caps_direct_callers_and_declares_the_same_schema_bound
   FR-SKILL-02:
     description: 'skill.load composes the inheritance-merged body bound to the job''s context, validated against the skill''s context_requirements (ContextRequirementsUnmet on mismatch).'
     tests:
@@ -1672,28 +1608,19 @@ invariants:
       - tests/store/test_ai_config.py::test_ai_config_row_holds_a_credential_ref_never_a_raw_key
       - tests/store/test_ai_config.py::test_ai_config_level_must_be_valid
   FR-AIKEY-02:
-    description: 'resolve_ai_key honours the precedence user -> workspace -> org -> manifest/env default and the spawner wires the resolved SEALED key into the model-key seam (D5) - the resolver returns the highest-precedence configured level (loading its material from the sealed credential store) and, when nothing is configured, the default level with no credential ref so the runtime falls back to the env-configured provider key exactly as before (the backward-compat rule); a tenant with a user-level key sees the runtime carry that sealed key, a tenant with none sees the runtime carry the env key.'
+    description: 'resolve_ai_key honours user -> workspace -> org precedence and the Codex routing seam loads only sealed scoped material. With no configured row it returns an explicit unconfigured default and never consumes ambient provider credentials or revives a provider-native runtime.'
     tests:
       - tests/security/test_ai_keys.py::test_resolve_precedence_user_workspace_org_default
-      - tests/security/test_ai_keys.py::test_no_config_tenant_falls_back_to_env_key
-      - tests/security/test_ai_keys.py::test_spawner_wires_resolved_sealed_key_into_the_runtime
-  FR-AIKEY-03:
-    description: 'A resolved (non-default) ai_config drives model/provider ROUTING (D5) - its provider selects the RUNTIME (via runtime_for_provider) and its model / optional base_url override the endpoint the runtime pins to, so a config routes the call and not merely the key; a tenant with NO config dispatches the capability''s env-default runtime + endpoint model byte-for-byte as before (backward-compat), a config that omits base_url keeps the endpoint''s own host, and an UNKNOWN provider degrades to the env default runtime (runtime_for_provider -> None) without crashing the run while the sealed key still resolves (the key seam is independent of the routing degrade). Sensitive data is EXEMPT (the local endpoint wins regardless - see SEC-12).'
-    tests:
-      - tests/security/test_model_routing.py::test_no_config_dispatches_the_env_default_runtime_and_model
-      - tests/security/test_model_routing.py::test_ai_config_provider_and_model_select_runtime_and_endpoint
-      - tests/security/test_model_routing.py::test_config_without_base_url_keeps_the_endpoint_host
-      - tests/security/test_model_routing.py::test_unknown_provider_degrades_to_the_env_default_without_crashing
+      - tests/security/test_ai_keys.py::test_no_config_tenant_does_not_use_an_ambient_provider_key
+      - tests/security/test_ai_keys.py::test_runtime_resolver_loads_the_scoped_sealed_key
   FR-AGENT-MODEL-OVERRIDE-01:
-    description: 'An agent capability with an explicit model endpoint keeps that endpoint model and host while still resolving the configured sealed provider key; the endpoint may select a model but can never replace the Codex execution host with a legacy OpenAI-shaped runtime.'
+    description: 'An agent capability model endpoint may select the exact Bifrost model but can never replace the Codex execution host with a provider-native runtime.'
     tests:
-      - tests/security/test_model_routing.py::test_explicit_agent_endpoint_overrides_the_main_key_model
-      - tests/security/test_model_routing.py::test_explicit_endpoint_does_not_replace_the_codex_execution_host
+      - tests/unit/test_runtime_resolver_codex.py::test_pinned_codex_profile_refuses_a_different_composed_model
   FR-AIKEY-VISION-01:
-    description: 'Vision routing uses an optional modality-specific org AI key and model endpoint when configured, and otherwise falls back to the main text key without weakening key sealing, scope precedence, or provider routing.'
+    description: 'Vision credential resolution uses an optional modality-specific org AI key and otherwise falls back to the main text key without weakening key sealing or scope precedence.'
     tests:
       - tests/security/test_ai_keys.py::test_vision_key_is_optional_and_falls_back_to_the_main_text_key
-      - tests/security/test_model_routing.py::test_inherited_vision_route_uses_the_optional_main_vision_key
   SEC-112:
     description: 'allow_own_ai_keys=False makes a workspace/user AI key IGNORED at resolution (D5) - when the org forbids member-owned keys, resolve_ai_key skips any workspace/user row and uses only the org key (or the env default when the org has none), so a workspace or a user can never bring their own key unless the org opts in; flipping the org to allow own keys immediately restores the user-key precedence.'
     tests:
@@ -1710,6 +1637,21 @@ invariants:
     description: 'The governed set-key route is role-scoped so a caller cannot set a level above its authority (D5, SEC-36) - PUT /v1/ai-keys refuses an org-level key from a non-admin (403) and accepts it from an org-admin, refuses a workspace-level key from a non-owner/admin of that workspace, and refuses a user-level key for anyone but the caller themselves; workspace/user levels additionally require the org allow_own_ai_keys gate (refused up front when false), while the org may always set its own key.'
     tests:
       - tests/security/test_ai_keys.py::test_set_key_route_is_role_scoped
+  FR-AIKEY-03:
+    description: 'An explicitly approved scoped AI key is reconciled into a server-owned Bifrost provider-key plus exact-model virtual-key binding before it becomes a runnable chat default. The response exposes only gateway_ready; chat projects the exact personal model after reload instead of an invented Automatic choice, and an already-approved sealed row can be reconciled without resubmitting plaintext.'
+    tests:
+      - tests/security/test_ai_keys.py::test_onboarding_approval_is_explicit_and_activates_the_exact_saved_model
+      - tests/security/test_ai_keys.py::test_existing_approved_key_can_be_reconciled_without_resubmitting_secret
+      - tests/security/test_bifrost_user_binding.py::test_scoped_key_provisions_exact_virtual_key_and_seals_it
+      - tests/security/test_chat_model_choices.py::test_personal_model_is_the_exact_available_default_after_refresh
+  SEC-AIKEY-01:
+    description: 'Scoped Bifrost BYOK material remains kernel-confined and replacement-safe: tenant/scope identity determines stable bounded records, same-scope key replacement updates the provider key, provider/model change rotates the virtual key, removal revokes both external records before local deletion, and only the virtual key reaches the model proxy while the cell bearer and provider credential never reach upstream or a client.'
+    tests:
+      - tests/security/test_bifrost_user_binding.py::test_replacement_rotates_the_stable_scope_in_place_and_revoke_cleans_it
+      - tests/security/test_bifrost_user_binding.py::test_binding_ids_are_tenant_and_credential_scoped
+      - tests/security/test_bifrost_user_binding.py::test_openai_compatible_route_keeps_virtual_key_as_exact_scope
+      - tests/unit/test_runtime_resolver_codex.py::test_personal_default_carries_only_the_scoped_virtual_key_to_codex
+      - tests/unit/test_codex_model_proxy_server.py::test_scoped_virtual_key_is_injected_without_forwarding_the_cell_bearer
 
   # --- Workspace-scoped workflow resources ([2026] VJS-COUNTY 8, D2) ----------
   FR-WFL-11:
@@ -1740,10 +1682,10 @@ invariants:
       - tests/integration/test_ultracode_run.py::test_ultracode_replays_completed_agent_checkpoint
       - tests/integration/test_ultracode_run.py::test_hatchet_child_runner_uses_registered_agent_task
   FR-WFL-16:
-    description: 'Ultracode injects compact scoped memory through the governed memory.recall seam when granted, prefers the configured primary projection such as Mem0, keeps owner/provenance filters and untrusted prompt wrapping, and writes run summaries back through memory.remember when granted.'
+    description: 'Ultracode injects compact scoped memory through the governed memory.recall seam when granted, prefers a configured primary projection, keeps owner/provenance filters and untrusted prompt wrapping, and writes run summaries back through memory.remember when granted.'
     tests:
       - tests/integration/test_ultracode_memory.py::test_ultracode_injects_only_scoped_memory_into_agent_prompt
-      - tests/integration/test_ultracode_memory.py::test_ultracode_recall_uses_mem0_projection_when_configured
+      - tests/integration/test_ultracode_memory.py::test_ultracode_recall_uses_the_configured_projection
       - tests/integration/test_ultracode_memory.py::test_ultracode_memory_injection_requires_recall_grant
       - tests/integration/test_ultracode_memory.py::test_ultracode_stores_run_summary_through_memory_adapter
   FR-WFL-17:
@@ -1952,7 +1894,7 @@ invariants:
     tests:
       - tests/deploy/test_compose_hardening.py::test_compose_validation_is_clean_checkout_safe
   FR-OPS-03:
-    description: '/healthz remains liveness while unauthenticated /readyz is a bounded, redacted, fail-closed deep readiness gate - production requires reachable Postgres and Redis plus the exact packaged Alembic head, a live control adapter whose complete verb surface is persisted and bound back to that actual adapter with every required runtime collaborator wired, complete stack-tool posture, a kernel-local Herdr execution probe, and a fresh HMAC-authenticated deployment-scoped fleet receipt proving fleet-local Browser Use and Chromium CDP health without assuming shared containers (OpenCode dropped with decision 0012); concurrent calls are coalesced and briefly cached; optional Hatchet/model-gateway probes become required when enabled, and password-reset delivery can be made required only with both an injected notifier and a bounded redacted readiness probe; failures return redacted 503 responses and the packaged head is graph-checked against Alembic.'
+    description: '/healthz remains liveness while unauthenticated /readyz is a bounded, redacted, fail-closed deep readiness gate - production requires reachable Postgres and Redis plus the exact packaged Alembic head, a live control adapter whose complete verb surface is persisted and bound back to that actual adapter with every required runtime collaborator wired, and, when browser automation is enabled, complete Browser Use posture plus a fresh HMAC-authenticated deployment-scoped fleet receipt proving the private executor, Browser Use and live Chromium health; concurrent calls are coalesced and briefly cached; optional Hatchet/model-gateway probes become required when enabled, and password-reset delivery can be made required only with both an injected notifier and a bounded redacted readiness probe; failures return redacted 503 responses and the packaged head is graph-checked against Alembic.'
     tests:
       - tests/unit/test_readiness.py::test_readyz_keeps_optional_dependencies_disabled_in_development
       - tests/unit/test_readiness.py::test_password_reset_delivery_readiness_requires_notifier_and_probe
@@ -1961,14 +1903,14 @@ invariants:
       - tests/unit/test_readiness.py::test_readyz_requires_persisted_control_verbs_and_control_owned_bindings
       - tests/unit/test_readiness.py::test_readyz_requires_control_runtime_collaborators
       - tests/unit/test_readiness.py::test_readyz_rejects_untrustworthy_fleet_tool_receipts_in_production
-      - tests/unit/test_readiness.py::test_readyz_explicit_stack_tool_health_requires_kernel_owned_herdr
       - tests/unit/test_readiness.py::test_readyz_coalesces_concurrent_unauthenticated_probes
       - tests/unit/test_readiness.py::test_readyz_persists_the_fallback_service_across_requests
       - tests/unit/test_readiness.py::test_readyz_route_returns_503_with_redacted_component_failures
       - tests/unit/test_readiness_gateway_posture.py::test_an_explicit_false_health_flag_does_not_arm_a_probe
-      - tests/unit/test_stack_tool_health.py::test_herdr_probe_executes_exact_argv_without_a_shell
-      - tests/unit/test_stack_tool_health.py::test_fleet_probe_requires_both_binaries_and_live_loopback_cdp
+      - tests/unit/test_stack_tool_health.py::test_fleet_probe_requires_browser_binary_and_live_loopback_cdp
       - tests/unit/test_stack_tool_health.py::test_browser_probe_accepts_only_a_chromium_cdp_response
+      - tests/unit/test_stack_tool_health.py::test_browser_probe_accepts_only_the_private_executor_health_receipt
+      - tests/unit/test_stack_tool_health.py::test_fleet_probe_uses_the_shared_executor_instead_of_local_cdp
       - tests/unit/test_stack_tool_health.py::test_fleet_receipt_requires_schema_freshness_and_all_tools
       - tests/unit/test_stack_tool_health.py::test_fleet_receipt_rejects_forged_or_cross_deployment_evidence
       - tests/unit/test_stack_tool_health.py::test_heartbeat_budget_cannot_outlive_its_previous_receipt
@@ -2093,7 +2035,7 @@ invariants:
       - tests/security/test_budget_governance.py::test_budget_control_verbs_reject_non_admin_even_with_grants
   # --- the delegated (pump) lane runs at the requesting principal's authority ---
   SEC-164:
-    description: 'The delegated pump lane executes a work item at the REQUESTING principal''s authority, never the tenant permission ceiling - the item''s on_behalf_of/workspace_id resolve through the same effective_grants_for_request the request path uses, so a low-privilege principal''s item cannot receive or dispatch a verb its principal lacks even when the selected skill declares that tool grant, a principal holding the verb still gets it, a deactivated principal carries nothing, and an item naming no principal (or one with no user record) fails closed to EMPTY_GRANTS rather than inheriting the tenant ceiling. The tenant ceiling remains the separate axis GrantChecker enforces at dispatch, and on_behalf_of provenance through the tree and the audit trail is unchanged. This aligns the pump with the SEC-29 / SEC-78 / SEC-139 capping every other spawn entry point already applies.'
+    description: 'The delegated pump lane executes a work item at the REQUESTING principal''s authority, never the tenant permission ceiling - the item''s on_behalf_of/workspace_id resolve through the same effective_grants_for_request the request path uses, so a low-privilege principal''s item cannot receive or dispatch a verb its principal lacks even when the selected skill declares that tool grant, a principal holding the verb still gets it, a deactivated principal carries nothing, and an item naming no principal (or one with no user record) fails closed to EMPTY_GRANTS rather than inheriting the tenant ceiling. Every production-created Work item also carries a server-stamped creation-time grant ceiling; execution intersects the principal''s current grants with that snapshot, so later promotion cannot widen already-queued work, malformed stamps fail closed, and model-created descendants inherit the trusted parent stamp rather than authority-shaped payload data. The tenant ceiling remains the separate axis GrantChecker enforces at dispatch, and on_behalf_of provenance through the tree and the audit trail is unchanged. This aligns the pump with the SEC-29 / SEC-78 / SEC-139 capping every other spawn entry point already applies.'
     tests:
       - tests/security/test_pump_principal_authority.py::test_low_privilege_principals_item_cannot_execute_a_verb_it_lacks
       - tests/security/test_pump_principal_authority.py::test_a_principal_holding_the_verb_still_gets_it
@@ -2102,6 +2044,10 @@ invariants:
       - tests/security/test_pump_principal_authority.py::test_a_deactivated_principal_carries_no_authority
       - tests/security/test_pump_principal_authority.py::test_system_originated_item_still_completes_and_audits_on_behalf_of
       - tests/security/test_pump_principal_authority.py::test_on_behalf_of_is_still_carried_through_the_tree_and_the_audit
+      - tests/security/test_pump_principal_authority.py::test_creator_ceiling_survives_promotion_and_propagates_to_follow_on_work
+      - tests/security/test_pump_principal_authority.py::test_malformed_creator_ceiling_fails_closed
+      - tests/security/test_work_lifecycle.py::test_work_create_assign_status_and_audit_are_canonical
+      - tests/security/test_channel_policy.py::test_thread_ceiling_is_stamped_and_narrows_execution_authority
   SEC-165:
     description: 'Pump routing fails closed - a work item routed to a department with no configured head is parked for a human (an AWAITING_HUMAN escalation) rather than silently executing under an arbitrary fallback head, because the run''s context claims owner_member as its principal_scope and a mis-route would make that scope claim untrue. Nothing spawns for an unroutable item.'
     tests:
@@ -2220,10 +2166,23 @@ invariants:
       - tests/knowledge/test_object_vault.py::test_s3_vault_enforces_the_same_digest_prefix_and_erasure_contract
       - tests/knowledge/test_postgres_knowledge.py::test_postgres_knowledge_round_trip_provenance_search_and_erase
   KNO-04:
-    description: 'Cognee is bundled and enabled by default. Supermemory and Mem0 remain non-authoritative catalogue entries but are explicitly unavailable until credential-backed projection adapters exist: startup repairs stale enabled rows, the service refuses enablement and both user interfaces disable the action rather than accepting guaranteed failure.'
+    description: 'Cognee is the only shipped Knowledge compiler and remains a rebuildable projection rather than an authority. Retired Mem0 and Supermemory rows are disabled during upgrade, omitted from public provider reads, and cannot be enabled through the service.'
     tests:
-      - tests/knowledge/test_knowledge_service.py::test_cognee_is_default_and_unimplemented_addons_refuse_enablement
+      - tests/knowledge/test_knowledge_service.py::test_cognee_is_the_only_shipped_knowledge_provider
+      - tests/knowledge/test_knowledge_service.py::test_retired_provider_rows_are_disabled_and_hidden
+      - tests/integration/test_cognee_engine.py::test_health_reports_missing_enrichment_model_without_claiming_outage
       - tests/deploy/test_compose_hardening.py::test_knowledge_and_bundled_cognee_have_stack_owned_persistent_storage
+  KNO-05:
+    description: 'Cognee reuses the caller''s normal tenant/workspace/user chat model connection through one exact Bifrost virtual-key route. Provider plaintext stays in the sealed kernel store, existing bindings need no plaintext resubmission, request-local model configuration prevents cross-tenant process-global leakage, and local embeddings require no second API key.'
+    tests:
+      - tests/security/test_cognee_model_binding.py::test_cognee_reuses_scoped_chat_route_without_retaining_provider_key
+      - tests/security/test_cognee_model_binding.py::test_existing_bifrost_binding_needs_no_plaintext_resubmission
+      - tests/security/test_cognee_model_binding.py::test_cognee_model_resolution_is_tenant_bound_and_default_is_keyless
+      - tests/integration/test_cognee_engine.py::test_runtime_model_is_forwarded_request_locally_to_cognee
+      - tests/integration/test_cognee_engine.py::test_request_config_constructor_never_reads_settings_sources
+      - tests/integration/test_cognee_engine.py::test_exact_cognee_configs_do_not_absorb_unrelated_process_secrets
+      - tests/integration/test_cognee_engine.py::test_exact_cognee_context_keeps_concurrent_model_routes_isolated
+      - tests/knowledge/test_knowledge_service.py::test_cognee_health_and_compile_use_the_callers_chat_route
 
   # --- wayland add-on: voluntary expression through the chokepoint ---
   WL-3:
@@ -2502,7 +2461,7 @@ invariants:
       - tests/store/test_retention_purge.py::test_restore_transition_is_owner_scoped_and_idempotent_on_both_stores
       - tests/store/test_retention_purge.py::test_restore_racing_retention_never_resurrects_a_purged_row
   SEC-WRK-15:
-    description: 'The Worker Work lifecycle has one mutation implementation: create and assign/unassign, plus approved status and reparent operations, are registered control.work verbs and every HTTP action delegates through the canonical dispatcher. Created rows are internal canonical Boltrig work in the authenticated active workspace; the surface never claims or attempts source-system writeback, and audit detail is bounded to parameter key names.'
+    description: 'The Worker Work lifecycle has one mutation implementation: create, assign/unassign, status and reparent operations are registered control.work verbs and every HTTP action delegates through the canonical dispatcher. Creation is high consequence because a pending item is pump-claimable and remains absent until exact approval; status and reparent are also approved, while assignment keeps its bounded direct-edit posture. Created rows are internal canonical Boltrig work in the authenticated active workspace; the surface never claims or attempts source-system writeback, and audit detail is bounded to parameter key names.'
     tests:
       - tests/security/test_work_lifecycle.py::test_work_create_assign_status_and_audit_are_canonical
   SEC-WRK-16:
@@ -2709,10 +2668,9 @@ invariants:
       - tests/unit/test_distill_adapter.py::test_promote_flips_active_only_with_a_matching_receipt
       - tests/unit/test_distill_adapter.py::test_a_holding_gate_receipt_does_not_authorise_promotion
   DIS-6:
-    description: 'The craft gate promotes only when the candidate mean is >= the incumbent mean AND every case passing on the incumbent still passes on the candidate: a rising mean can never smuggle a silent case regression past the gate (decision 0023).'
+    description: 'The craft gate fails closed until an inactive candidate can be evaluated through the same governed Codex/Bifrost admission path as ordinary execution; the retired direct-provider context override cannot be revived as a second routing authority (decision 0023 amendment).'
     tests:
-      - tests/unit/test_distill_adapter.py::test_craft_verdict_holds_on_case_regression_even_with_higher_mean
-      - tests/unit/test_distill_adapter.py::test_craft_verdict_promotes_on_equal_mean_without_regression
+      - tests/unit/test_distill_adapter.py::test_craft_gate_refuses_the_retired_direct_provider_route
   DIS-7:
     description: 'Every gate run writes a hash-chained audit receipt - promote AND hold alike - carrying the corpus digest, base pin, both scores and the reason, so a night that changed nothing is as attributable as a night that promoted (decision 0023).'
     tests:
@@ -2726,6 +2684,10 @@ invariants:
     tests:
       - tests/unit/test_distill_adapter.py::test_register_verdict_holds_on_entropy_collapse_despite_better_likelihood
       - tests/unit/test_distill_adapter.py::test_register_gate_fetches_diversity_and_holds_on_collapse
+  DIS-10:
+    description: 'Automated overnight distillation is organisation-owned and defaults toward off: distill.night refuses before corpus construction or any sidecar request unless the governed organisation setting behaviour.overnight.enabled is exactly true.'
+    tests:
+      - tests/unit/test_distill_adapter.py::test_night_refuses_before_sidecar_work_when_organisation_turns_it_off
   EMO-6:
     description: 'Attachment is the bounded slow bond (decision 0024): it accumulates ONLY through appraisal deltas, decays in REAL days never tempo-scaled (the bond lives on the human calendar), lifts only the configured expression baselines (connection/warmth/tenderness rest warmer on a bonded engine; a fresh engine is the 0013 engine verbatim), survives the snapshot round trip, and is exposed solely as the tenth phenotype scalar - expression yes, action no.'
     tests:

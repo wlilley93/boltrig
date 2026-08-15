@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
+from boltrig.kernel.work_authority import creator_ceiling_from_item
 from boltrig.models import GrantSet, TenantPermissions, WorkStatus, utcnow
 from boltrig.store import InMemoryStore
 
@@ -29,11 +30,22 @@ def _app() -> tuple[Kernel, TestClient]:
     return kernel, TestClient(create_app(kernel))
 
 
-def _create(client: TestClient, intent: str, **body) -> dict:
-    response = client.post(
+async def _create(kernel: Kernel, client: TestClient, intent: str, **body) -> dict:
+    payload = {"intent": intent, "idempotency_key": f"create-{intent}", **body}
+    before = {item.id for item in await kernel.store.list_work_items(T)}
+    held = client.post(
         "/v1/work",
         headers=H,
-        json={"intent": intent, "idempotency_key": f"create-{intent}", **body},
+        json=payload,
+    )
+    assert held.status_code == 202, held.text
+    assert {item.id for item in await kernel.store.list_work_items(T)} == before
+    request_id = held.json()["hitl_request_id"]
+    await kernel.hitl.answer(T, request_id, "approve", "reviewer")
+    response = client.post(
+        "/v1/work",
+        headers={**H, "x-boltrig-approval-id": request_id},
+        json=payload,
     )
     assert response.status_code == 200, response.text
     return response.json()["item"]
@@ -61,13 +73,18 @@ async def _approve(
 @pytest.mark.security
 @pytest.mark.invariant("SEC-WRK-15")
 @pytest.mark.invariant("SEC-WRK-32")
+@pytest.mark.invariant("SEC-164")
 async def test_work_create_assign_status_and_audit_are_canonical() -> None:
     kernel, client = _app()
-    created = _create(client, "Prepare launch", owner_member="engineering")
+    created = await _create(kernel, client, "Prepare launch", owner_member="engineering")
     assert created["source"] == "internal"
     stored = await kernel.store.get_work_item(T, created["id"])
+    assert stored is not None
     assert stored.workspace_id == "workspace-a"
     assert stored.on_behalf_of == "author"
+    creator_ceiling = creator_ceiling_from_item(stored)
+    assert creator_ceiling is not None
+    assert creator_ceiling.permits("control.work.create")
 
     assigned = client.patch(
         f"/v1/work/{created['id']}/assignment",
@@ -99,7 +116,7 @@ async def test_work_create_assign_status_and_audit_are_canonical() -> None:
 @pytest.mark.invariant("SEC-WRK-32")
 async def test_work_approval_is_bound_to_the_exact_mutable_item() -> None:
     kernel, client = _app()
-    item = _create(client, "Mutable", owner_member="engineering")
+    item = await _create(kernel, client, "Mutable", owner_member="engineering")
     path = f"/v1/work/{item['id']}/status"
     body = {"status": "blocked"}
     held = client.patch(path, headers=H, json=body)
@@ -131,7 +148,7 @@ async def test_work_change_between_gate_and_adapter_write_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     kernel, client = _app()
-    item = _create(client, "Race", owner_member="engineering")
+    item = await _create(kernel, client, "Race", owner_member="engineering")
     path = f"/v1/work/{item['id']}/status"
     body = {"status": "blocked"}
     held = client.patch(path, headers=H, json=body)
@@ -162,10 +179,8 @@ async def test_work_change_between_gate_and_adapter_write_fails_closed(
 @pytest.mark.invariant("SEC-WRK-17")
 async def test_scope_cycle_and_live_lease_mutations_fail_closed() -> None:
     kernel, client = _app()
-    root = _create(client, "Root", owner_member="engineering")
-    child = _create(
-        client, "Child", owner_member="engineering", parent_id=root["id"]
-    )
+    root = await _create(kernel, client, "Root", owner_member="engineering")
+    child = await _create(kernel, client, "Child", owner_member="engineering", parent_id=root["id"])
     path_wins = client.patch(
         f"/v1/work/{child['id']}/assignment",
         headers=H,
@@ -187,9 +202,17 @@ async def test_scope_cycle_and_live_lease_mutations_fail_closed() -> None:
         json={"owner_member": "sales"},
     )
     assert hidden.status_code == 404
-    missing_parent = client.post(
+    missing_parent_held = client.post(
         "/v1/work",
         headers=H,
+        json={"intent": "Orphan", "parent_id": "does-not-exist"},
+    )
+    assert missing_parent_held.status_code == 202
+    missing_parent_id = missing_parent_held.json()["hitl_request_id"]
+    await kernel.hitl.answer(T, missing_parent_id, "approve", "reviewer")
+    missing_parent = client.post(
+        "/v1/work",
+        headers={**H, "x-boltrig-approval-id": missing_parent_id},
         json={"intent": "Orphan", "parent_id": "does-not-exist"},
     )
     assert missing_parent.status_code == 404

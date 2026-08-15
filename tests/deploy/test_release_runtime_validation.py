@@ -39,8 +39,6 @@ def _operator_inputs(tmp_path: Path) -> tuple[Path, Path]:
     env.write_text(
         "\n".join(
             (
-                "HERDR_BIN=/usr/local/bin/herdr",
-                "BOLTRIG_OPENCODE_BIN=/usr/local/bin/opencode",
                 "BOLTRIG_BROWSER_CLI_BIN=/usr/local/bin/browser-use",
             )
         )
@@ -54,8 +52,7 @@ def _operator_inputs(tmp_path: Path) -> tuple[Path, Path]:
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-137")
-@pytest.mark.invariant("FR-HOST-10")
-@pytest.mark.invariant("FR-RUN-18")
+@pytest.mark.invariant("FR-HOST-11")
 def test_release_runtime_verifies_evidence_before_image_context_doctor(
     tmp_path: Path,
 ) -> None:
@@ -99,16 +96,13 @@ def test_release_runtime_verifies_evidence_before_image_context_doctor(
     assert "--network=none" in build
     assert build[-1] == "-", "the build must receive no filesystem context"
     assert (
-        f"BOLTRIG_KERNEL_IMAGE=ghcr.io/{EXPECTED_REPOSITORY}-kernel@sha256:{'1' * 64}"
-        in build
-    )
-    assert (
         f"BOLTRIG_FLEET_IMAGE=ghcr.io/{EXPECTED_REPOSITORY}-fleet@sha256:{'2' * 64}"
         in build
     )
     build_stdin = calls[first_docker][1]
     assert build_stdin is not None
-    assert "FROM ${BOLTRIG_KERNEL_IMAGE}" in build_stdin
+    assert "FROM ${BOLTRIG_FLEET_IMAGE}" in build_stdin
+    assert "BOLTRIG_KERNEL_IMAGE" not in build_stdin
     assert env.read_text(encoding="utf-8") not in build_stdin
 
     docker_runs = [command for command in commands if command[:2] == ("docker", "run")]
@@ -126,12 +120,7 @@ def test_release_runtime_verifies_evidence_before_image_context_doctor(
 
     probe = next(command for command in docker_runs if "-c" in command)
     probe_program = probe[probe.index("-c") + 1]
-    for executable in (
-        "/usr/local/bin/herdr",
-        "/usr/local/bin/opencode",
-        "/usr/local/bin/browser-use",
-    ):
-        assert executable in probe_program
+    assert "/usr/local/bin/browser-use" in probe_program
     assert '"--version"' in probe_program
     assert '"PATH": "/usr/local/bin:/usr/bin:/bin"' in probe_program
     assert "env=state" in probe_program
@@ -207,18 +196,15 @@ def test_failed_candidate_doctor_is_blocking_and_ephemeral_image_is_removed(
 
 
 @pytest.mark.security
-@pytest.mark.invariant("FR-HOST-10")
-@pytest.mark.invariant("FR-RUN-18")
+@pytest.mark.invariant("FR-HOST-11")
 def test_release_doctor_image_contains_only_signed_image_owned_tool_bytes() -> None:
     dockerfile = (
         Path(__file__).resolve().parents[2] / "deploy" / "release-doctor.Dockerfile"
     ).read_text(encoding="utf-8")
 
-    assert "FROM ${BOLTRIG_KERNEL_IMAGE} AS kernel_release" in dockerfile
     assert "FROM ${BOLTRIG_FLEET_IMAGE} AS release_doctor" in dockerfile
-    assert (
-        "COPY --from=kernel_release /usr/local/bin/herdr /usr/local/bin/herdr"
-        in dockerfile
-    )
+    assert "BOLTRIG_KERNEL_IMAGE" not in dockerfile
+    assert "herdr" not in dockerfile.lower()
+    assert "opencode" not in dockerfile.lower()
     assert "COPY ." not in dockerfile
     assert "ADD " not in dockerfile

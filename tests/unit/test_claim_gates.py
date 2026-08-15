@@ -69,7 +69,22 @@ def test_health_gate_examples_are_not_mistaken_for_application_routes() -> None:
 def test_health_gate_parses_python_module_entrypoints() -> None:
     services = check_health_claims.parse_services(REPO_ROOT / "docker-compose.yml")
     assert services["fleet-worker"]["command"] == "python -m boltrig.api.worker"
+    assert services["browser-executor"]["command"] == "python -m boltrig.fleet.browser_executor"
     assert services["hatchet-worker"]["command"] == "python -m boltrig.fleet.hatchet_worker"
+
+
+@pytest.mark.invariant("NFR-MNT-05")
+def test_health_gate_accepts_only_the_executor_own_live_unix_socket_probe() -> None:
+    probe = "CMD-SHELL python -m boltrig.fleet.browser_executor --health"
+    command = "python -m boltrig.fleet.browser_executor"
+
+    assert check_health_claims.consults_private_socket_readiness(probe, command)[0] is True
+    assert check_health_claims.consults_private_socket_readiness(
+        probe, "python -m boltrig.api.worker"
+    )[0] is False
+    assert check_health_claims.consults_private_socket_readiness(
+        "python -m boltrig.fleet.browser_executor", command
+    )[0] is False
 
 
 def _write_exemptions(tmp_path: Path, monkeypatch, entry: dict) -> Path:

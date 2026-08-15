@@ -56,8 +56,21 @@ def test_release_image_environment_requires_every_first_party_digest(tmp_path: P
 def _compose_document() -> dict:
     services = {
         name: {"image": f"registry.invalid/boltrig/{name}@sha256:{'1' * 64}"}
-        for name in ("kernel", "fleet-worker", "hatchet-worker", "worker-ui", "backup")
+        for name in (
+            "kernel",
+            "fleet-worker",
+            "browser-executor",
+            "hatchet-worker",
+            "worker-ui",
+            "backup",
+        )
     }
+    services["browser-executor"]["image"] = services["fleet-worker"]["image"]
+    services["browser-executor"]["environment"] = {"BOLTRIG_RELEASE_MODE": "core"}
+    services["browser-executor"]["healthcheck"] = {
+        "test": ["CMD-SHELL", "python -m boltrig.fleet.browser_executor --health"]
+    }
+    services["browser-executor"]["networks"] = {"browser-egress": None}
     services["hatchet-worker"]["image"] = services["fleet-worker"]["image"]
     services["hatchet-worker"]["environment"] = {
         "HATCHET_CLIENT_WORKER_HEALTHCHECK_ENABLED": "true"
@@ -94,11 +107,11 @@ def test_release_compose_validator_rejects_builds_tags_and_source_mounts() -> No
     document["services"]["worker-ui"]["image"] = "registry.invalid/boltrig/worker-ui:v1.2.3"
     with pytest.raises(ValueError, match="not pinned by image digest"):
         validate_release_compose(document, secure=False)
-    document["services"]["worker-ui"]["image"] = f"registry.invalid/boltrig/worker-ui@sha256:{'2' * 64}"
-
-    document["services"]["backup"]["volumes"].append(
-        {"target": "/usr/local/bin/backup.sh"}
+    document["services"]["worker-ui"]["image"] = (
+        f"registry.invalid/boltrig/worker-ui@sha256:{'2' * 64}"
     )
+
+    document["services"]["backup"]["volumes"].append({"target": "/usr/local/bin/backup.sh"})
     with pytest.raises(ValueError, match="replaces signed code"):
         validate_release_compose(document, secure=False)
 
@@ -161,6 +174,29 @@ def test_release_requires_hatchet_worker_to_share_the_pinned_fleet_image() -> No
 
 
 @pytest.mark.security
+@pytest.mark.invariant("SEC-137")
+def test_release_requires_a_private_browser_executor_from_the_pinned_fleet_image() -> None:
+    document = _compose_document()
+    validate_release_compose(document, secure=False)
+
+    document["services"]["browser-executor"]["image"] = (
+        f"registry.invalid/boltrig/other-browser@sha256:{'2' * 64}"
+    )
+    with pytest.raises(ValueError, match="browser executor does not use the fleet-worker"):
+        validate_release_compose(document, secure=False)
+
+    document = _compose_document()
+    document["services"]["browser-executor"]["ports"] = [{"published": 9222}]
+    with pytest.raises(ValueError, match="publishes a host port"):
+        validate_release_compose(document, secure=False)
+
+    document = _compose_document()
+    document["services"]["browser-executor"].pop("healthcheck")
+    with pytest.raises(ValueError, match="no Unix-socket healthcheck"):
+        validate_release_compose(document, secure=False)
+
+
+@pytest.mark.security
 @pytest.mark.invariant("IAC-005")
 def test_release_compose_binds_one_exact_mode_to_every_codex_capable_process() -> None:
     document = _compose_document()
@@ -171,18 +207,12 @@ def test_release_compose_binds_one_exact_mode_to_every_codex_capable_process() -
         validate_release_compose(document, secure=False)
 
     document = _compose_document()
-    document["services"]["fleet-worker"]["environment"]["BOLTRIG_RELEASE_MODE"] = (
-        "CORE"
-    )
-    with pytest.raises(
-        ValueError, match="fleet-worker has no exact BOLTRIG_RELEASE_MODE"
-    ):
+    document["services"]["fleet-worker"]["environment"]["BOLTRIG_RELEASE_MODE"] = "CORE"
+    with pytest.raises(ValueError, match="fleet-worker has no exact BOLTRIG_RELEASE_MODE"):
         validate_release_compose(document, secure=False)
 
     document = _compose_document()
-    document["services"]["hatchet-worker"]["environment"][
-        "BOLTRIG_RELEASE_MODE"
-    ] = "full"
+    document["services"]["hatchet-worker"]["environment"]["BOLTRIG_RELEASE_MODE"] = "full"
     with pytest.raises(ValueError, match="release services disagree"):
         validate_release_compose(document, secure=False)
 
@@ -205,9 +235,7 @@ def test_release_compose_binds_one_exact_mode_to_every_codex_capable_process() -
             "whatsapp-bridge",
             {
                 "profiles": ["channels"],
-                "build": {
-                    "context": "/checkout/services/channel_gateway/whatsapp_bridge"
-                },
+                "build": {"context": "/checkout/services/channel_gateway/whatsapp_bridge"},
                 "image": "boltrig/channel-gateway-whatsapp-bridge:1.0.0",
             },
         ),
@@ -215,10 +243,7 @@ def test_release_compose_binds_one_exact_mode_to_every_codex_capable_process() -
             "renamed-channel-service",
             {
                 "profiles": ["channels"],
-                "image": (
-                    "registry.invalid/boltrig/renamed-channel-service@sha256:"
-                    f"{'3' * 64}"
-                ),
+                "image": (f"registry.invalid/boltrig/renamed-channel-service@sha256:{'3' * 64}"),
             },
         ),
     ],

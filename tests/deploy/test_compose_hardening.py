@@ -162,8 +162,7 @@ def test_backup_sidecar_ships_profile_gated():
     services = _base()["services"]
     assert services["hatchet-engine"]["volumes"] == ["hatchet_config:/config"]
     assert (
-        "${HATCHET_DATABASE_NAME:-hatchet}"
-        in services["backup"]["environment"]["BACKUP_DATABASES"]
+        "${HATCHET_DATABASE_NAME:-hatchet}" in services["backup"]["environment"]["BACKUP_DATABASES"]
     )
     assert (
         "${HATCHET_DATABASE_NAME:-hatchet}"
@@ -184,13 +183,9 @@ def test_fresh_postgres_boot_creates_the_separate_hatchet_database() -> None:
     postgres = _base()["services"]["postgres"]
     mounts = " ".join(postgres["volumes"])
     assert (
-        "deploy/postgres-init-hatchet.sh:"
-        "/docker-entrypoint-initdb.d/00-hatchet-db.sh:ro" in mounts
+        "deploy/postgres-init-hatchet.sh:/docker-entrypoint-initdb.d/00-hatchet-db.sh:ro" in mounts
     )
-    assert (
-        postgres["environment"]["HATCHET_DATABASE_NAME"]
-        == "${HATCHET_DATABASE_NAME:-hatchet}"
-    )
+    assert postgres["environment"]["HATCHET_DATABASE_NAME"] == "${HATCHET_DATABASE_NAME:-hatchet}"
 
     initializer = _REPO / "deploy" / "postgres-init-hatchet.sh"
     assert initializer.stat().st_mode & 0o111
@@ -201,55 +196,45 @@ def test_fresh_postgres_boot_creates_the_separate_hatchet_database() -> None:
 
 
 @pytest.mark.security
-@pytest.mark.invariant("FR-HOST-09")
 @pytest.mark.invariant("FR-HOST-11")
-@pytest.mark.invariant("FR-RUN-17")
-def test_herdr_opencode_state_is_stack_owned_in_compose():
+def test_browser_cli_state_is_stack_owned_in_compose():
     services = _base()["services"]
     kernel = services["kernel"]
     fleet = services["fleet-worker"]
     hatchet = services["hatchet-worker"]
+    executor = services["browser-executor"]
 
-    assert kernel["environment"]["BOLTRIG_HERDR_HOME"].endswith("/var/lib/boltrig/herdr}")
-    assert fleet["environment"]["BOLTRIG_OPENCODE_HOME"].endswith(
-        "/var/lib/boltrig/opencode}"
+    assert executor["environment"]["BOLTRIG_BROWSER_CLI_HOME"].endswith(
+        "/var/lib/boltrig/browser-cli/executor"
     )
-    fleet_browser_home = fleet["environment"]["BOLTRIG_BROWSER_CLI_HOME"]
-    hatchet_browser_home = hatchet["environment"]["BOLTRIG_BROWSER_CLI_HOME"]
-    assert fleet_browser_home.endswith("/var/lib/boltrig/browser-cli/fleet-worker}")
-    assert hatchet_browser_home.endswith("/var/lib/boltrig/browser-cli/hatchet-worker}")
-    assert fleet_browser_home != hatchet_browser_home
-    assert fleet["environment"]["BOLTRIG_BROWSER_CLI_BIN"].endswith(
-        "/usr/local/bin/browser-use}"
-    )
-    mounts = [*kernel.get("volumes", ()), *fleet.get("volumes", ())]
-    joined = " ".join(str(mount) for mount in mounts)
-    assert "herdr_data:/var/lib/boltrig/herdr" in joined
-    assert "opencode_data:/var/lib/boltrig/opencode" in joined
-    assert "browser_cli_data:/var/lib/boltrig/browser-cli" in joined
-    assert "~/.config" not in joined
-    assert "~/.local" not in joined
-    assert "/.opencode" not in joined
+    assert executor["environment"]["BOLTRIG_BROWSER_EXECUTOR_SERVER"] == "1"
+    assert executor["environment"]["BOLTRIG_BROWSER_PROXY_PORT"] == "9223"
+    assert executor["networks"] == ["browser-egress"]
+    assert executor.get("ports") is None
+    assert "browser_cli_data:/var/lib/boltrig/browser-cli" in " ".join(executor["volumes"])
+    assert "browser_executor_socket:/run/boltrig-browser" in executor["volumes"]
+
+    for caller in (kernel, fleet, hatchet):
+        assert caller["environment"]["BOLTRIG_BROWSER_EXECUTOR_SOCKET"] == (
+            "/run/boltrig-browser/browser.sock"
+        )
+        mounts = " ".join(caller.get("volumes", ()))
+        assert "browser_executor_socket:/run/boltrig-browser:ro" in mounts
+        assert "browser_cli_data:" not in mounts
+        assert "~/.config" not in mounts
+        assert "~/.local" not in mounts
 
 
 @pytest.mark.security
-@pytest.mark.invariant("FR-HOST-09")
-@pytest.mark.invariant("FR-RUN-17")
-def test_herdr_opencode_state_roots_are_owned_by_service_user_in_images():
-    kernel_dockerfile = _text("deploy/kernel.Dockerfile")
+@pytest.mark.invariant("FR-HOST-11")
+def test_browser_cli_state_roots_are_owned_by_service_user_in_image():
     fleet_dockerfile = _text("deploy/fleet.Dockerfile")
 
-    assert "install -d -o boltrig -g boltrig" in kernel_dockerfile
-    assert "/var/lib/boltrig/herdr/home" in kernel_dockerfile
-    assert "/var/lib/boltrig/herdr/config" in kernel_dockerfile
-    assert "/var/lib/boltrig/herdr/data" in kernel_dockerfile
-    assert "/var/lib/boltrig/herdr/state" in kernel_dockerfile
-
     assert "install -d -o boltrig -g boltrig" in fleet_dockerfile
-    assert "/var/lib/boltrig/opencode/home" in fleet_dockerfile
-    assert "/var/lib/boltrig/opencode/config/opencode" in fleet_dockerfile
-    assert "/var/lib/boltrig/opencode/data" in fleet_dockerfile
-    assert "/var/lib/boltrig/opencode/state" in fleet_dockerfile
+    assert "/var/lib/boltrig/browser-cli/home" in fleet_dockerfile
+    assert "/var/lib/boltrig/browser-cli/config" in fleet_dockerfile
+    assert "/var/lib/boltrig/browser-cli/data" in fleet_dockerfile
+    assert "/var/lib/boltrig/browser-cli/state" in fleet_dockerfile
 
 
 @pytest.mark.invariant("KNO-04")
@@ -260,9 +245,7 @@ def test_knowledge_and_bundled_cognee_have_stack_owned_persistent_storage():
     dockerfile = _text("deploy/kernel.Dockerfile")
     lock = _text("requirements-lock.txt")
 
-    assert environment["BOLTRIG_KNOWLEDGE_VAULT"].endswith(
-        "/var/lib/boltrig/knowledge}"
-    )
+    assert environment["BOLTRIG_KNOWLEDGE_VAULT"].endswith("/var/lib/boltrig/knowledge}")
     assert environment["BOLTRIG_COGNEE_ROOT"].endswith("/var/lib/boltrig/cognee}")
     assert "knowledge_data:/var/lib/boltrig/knowledge" in mounts
     assert "cognee_data:/var/lib/boltrig/cognee" in mounts
@@ -278,10 +261,7 @@ def test_browser_cli_state_roots_are_stack_owned():
     env_example = _text(".env.example")
     lock = _text("deploy/browser-cli-requirements.txt")
 
-    assert (
-        "BOLTRIG_FLEET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/fleet-worker"
-        in env_example
-    )
+    assert "BOLTRIG_FLEET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/fleet-worker" in env_example
     assert (
         "BOLTRIG_HATCHET_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli/hatchet-worker"
         in env_example
@@ -298,8 +278,7 @@ def test_browser_cli_state_roots_are_stack_owned():
     # The property is that the lock installs the version the SOURCE pins, at a real
     # hash. Which version that is belongs to browser-cli-requirements.in.
     source = _text("deploy/browser-cli-requirements.in")
-    pinned = [ln.strip() for ln in source.splitlines()
-              if ln.strip().startswith("browser-use==")]
+    pinned = [ln.strip() for ln in source.splitlines() if ln.strip().startswith("browser-use==")]
     assert len(pinned) == 1, f"browser-cli-requirements.in must pin browser-use once: {pinned}"
     name, _, version = pinned[0].partition("==")
     assert f"\n{name}=={version}" in f"\n{lock}", (
@@ -342,6 +321,10 @@ def test_browser_cli_never_relies_on_a_runtime_browser_download():
     assert "playwright install" not in fleet_dockerfile
     assert "--remote-debugging-address=127.0.0.1" in entrypoint
     assert "--remote-debugging-port=9222" in entrypoint
+    assert '--proxy-server="http://127.0.0.1:${BOLTRIG_BROWSER_PROXY_PORT:-9223}"' in entrypoint
+    assert "--proxy-bypass-list='<-loopback>'" in entrypoint
+    assert "--force-webrtc-ip-handling-policy=disable_non_proxied_udp" in entrypoint
+    assert "--disable-quic" in entrypoint
     assert "browser-use" in entrypoint
 
 
@@ -379,25 +362,17 @@ def test_browser_cli_cloud_policy_is_stack_prefixed_in_deploy_config():
 
 
 @pytest.mark.security
-@pytest.mark.invariant("FR-HOST-10")
-@pytest.mark.invariant("FR-RUN-18")
-def test_herdr_opencode_clis_ship_inside_first_party_images():
+@pytest.mark.invariant("FR-RUN-01")
+def test_retired_agent_clis_are_absent_from_first_party_images():
     kernel_dockerfile = _text("deploy/kernel.Dockerfile")
     fleet_dockerfile = _text("deploy/fleet.Dockerfile")
 
-    assert "ARG HERDR_VERSION=0.7.3" in kernel_dockerfile
-    assert "HERDR_LINUX_AMD64_SHA256=" in kernel_dockerfile
-    assert "github.com/ogulcancelik/herdr/releases/download" in kernel_dockerfile
-    assert "/usr/local/bin/herdr" in kernel_dockerfile
-    assert "herdr --version" in kernel_dockerfile
-    assert "~/.local/bin" not in kernel_dockerfile
-
-    assert "ARG OPENCODE_VERSION=1.17.16" in fleet_dockerfile
-    assert "OPENCODE_LINUX_AMD64_SHA256=" in fleet_dockerfile
-    assert "opencode-linux-x64-baseline" in fleet_dockerfile
-    assert "/usr/local/bin/opencode" in fleet_dockerfile
-    assert "opencode --version" in fleet_dockerfile
-    assert "~/.opencode/bin" not in fleet_dockerfile
+    rendered = (kernel_dockerfile + fleet_dockerfile).lower()
+    assert "herdr" not in rendered
+    assert "opencode" not in rendered
+    assert "rivet" not in rendered
+    assert "/opt/boltrig/codex/codex" in fleet_dockerfile
+    assert "/usr/local/bin/browser-use" in fleet_dockerfile
 
 
 @pytest.mark.security
@@ -466,7 +441,7 @@ def test_release_publishes_only_scanned_signed_digest_images_with_sboms():
     assert 'test "$promoted_digest" = "$digest"' in workflow
     # And promotion must prove the bytes it is about to publish hash to that digest
     # BEFORE publishing them, so a registry that returned anything else stops the run.
-    assert 'fetched="sha256:$(sha256sum manifest.bin | cut -d\' \' -f1)"' in workflow
+    assert "fetched=\"sha256:$(sha256sum manifest.bin | cut -d' ' -f1)\"" in workflow
     assert 'if [ "$fetched" != "$digest" ]; then' in workflow
     assert "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6" in workflow
 
@@ -480,7 +455,7 @@ def test_release_requires_canonical_success_for_the_exact_commit():
     assert "actions: read" in workflow
     assert gate in workflow
     assert "X-GitHub-Api-Version: 2022-11-28" in workflow
-    assert 'actions/workflows/$workflow_file/runs' in workflow
+    assert "actions/workflows/$workflow_file/runs" in workflow
     assert '-f branch="$DEFAULT_BRANCH"' in workflow
     assert '-f head_sha="$RELEASE_COMMIT"' in workflow
     assert "require_successful_workflow ci.yml 'ci / quality'" in workflow
@@ -495,6 +470,7 @@ def test_release_compose_uses_only_required_digest_images_without_builds():
     variables = {
         "kernel": "BOLTRIG_KERNEL_IMAGE",
         "fleet-worker": "BOLTRIG_FLEET_IMAGE",
+        "browser-executor": "BOLTRIG_FLEET_IMAGE",
         "hatchet-worker": "BOLTRIG_FLEET_IMAGE",
         "worker-ui": "BOLTRIG_WORKER_UI_IMAGE",
         "backup": "BOLTRIG_BACKUP_IMAGE",
@@ -505,7 +481,7 @@ def test_release_compose_uses_only_required_digest_images_without_builds():
         assert config["image"].startswith(f"${{{variable}:?")
         assert config["pull_policy"] == "always"
 
-    for service in ("kernel", "fleet-worker", "hatchet-worker"):
+    for service in ("kernel", "fleet-worker", "browser-executor", "hatchet-worker"):
         assert services[service]["environment"]["BOLTRIG_RELEASE_MODE"].startswith(
             "${BOLTRIG_RELEASE_MODE:?"
         )
