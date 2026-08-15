@@ -27,6 +27,9 @@ export interface LocalChatControllerProps {
   onConversation(id: string): void;
   onChanged(): void;
   onWorkingChange?(conversationId: string, working: boolean): void;
+  /** Internal presentation callback. The local runtime never receives voice
+   * settings or audio; the Worker reads the already-settled answer afterward. */
+  onReplyCompleted?(replyId: string, text: string): void | Promise<void>;
 }
 
 export function useLocalChatController(props: LocalChatControllerProps) {
@@ -271,6 +274,12 @@ function persistTurn(
   context.projection.eventsRef.current = [];
   context.projection.setEvents([]);
   context.props.onChanged();
+  if (assistant.content.trim()) {
+    void context.props.onReplyCompleted?.(
+      assistant.run_id ?? assistant.id,
+      assistant.content,
+    );
+  }
 }
 
 function settleFailedTurn(context: TurnContext, session: TurnSession, reason: unknown) {

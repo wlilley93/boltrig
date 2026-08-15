@@ -3,7 +3,10 @@ import type { QuestionEntry } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../client";
 
-export function LiveQuestionCard({ question }: { question: QuestionEntry }) {
+export function LiveQuestionCard({ question, onAnswered }: {
+  question: QuestionEntry;
+  onAnswered?(): void;
+}) {
   const [answer, setAnswer] = useState("");
   const [status, setStatus] = useState("");
   const [answered, setAnswered] = useState(false);
@@ -19,7 +22,8 @@ export function LiveQuestionCard({ question }: { question: QuestionEntry }) {
       if (result.status === "ok") {
         setAnswered(true);
         setAnswer("");
-        setStatus("Answer accepted. The run is continuing.");
+        setStatus("Answer accepted.");
+        onAnswered?.();
       } else {
         setStatus(result.reason ?? `Answer was not accepted (${result.status}).`);
       }

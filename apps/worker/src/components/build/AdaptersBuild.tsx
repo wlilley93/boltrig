@@ -377,7 +377,7 @@ export function AdaptersBuild() {
           )}
         </section>
         <form className="settings-card author-form" onSubmit={(event) => void registerMcp(event)}>
-          <p className="eyebrow">MCP</p><h2>Register a governed MCP server</h2>
+          <p className="eyebrow">MCP</p><h2>Connect an MCP server</h2>
           <div className="author-grid">
             <label><span>Identifier</span><input className="field-control" required value={mcpId} onChange={(event) => setMcpId(event.target.value)} /></label>
             <label><span>URL</span><input className="field-control" type="url" required value={mcpUrl} onChange={(event) => setMcpUrl(event.target.value)} /></label>

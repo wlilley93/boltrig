@@ -1,0 +1,43 @@
+.behaviour-tabs {
+  background: var(--card-2);
+  border-radius: 10px;
+  display: grid;
+  gap: 2px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0 0 24px;
+  padding: 3px;
+}
+
+.behaviour-tabs button {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-3);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.behaviour-tabs button[aria-selected="true"] {
+  background: var(--seg-active);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+}
+
+.behaviour-tabs button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.behaviour-tabs + [role="tabpanel"] .console-table {
+  overflow: visible;
+}
+
+@media (max-width: 520px) {
+  .behaviour-tabs button {
+    font-size: 12px;
+    padding-inline: 5px;
+  }
+}

@@ -869,7 +869,7 @@ export function ChannelsView() {
         <ExactApprovalFinalizer controller={exactApproval} />
         {surfaceState === "loading" && <Unavailable title="Loading channels">Checking your channel administration scope.</Unavailable>}
         {surfaceState === "denied" && <Unavailable title="Channel administration denied">Your current role cannot view or change channel configuration.</Unavailable>}
-        {surfaceState === "unavailable" && <Unavailable title="Channels unavailable">The governed channel service could not be reached.</Unavailable>}
+        {surfaceState === "unavailable" && <Unavailable title="Channels unavailable">The channel service could not be reached.</Unavailable>}
         {surfaceState === "ready" && creating && (
           <ConnectChannelForm
             addressingCatalogue={addressingCatalogue}
@@ -2087,7 +2087,7 @@ function ChannelSendTest({ channel }: { channel: ChannelSummary }) {
       : {};
     setMessage(output.status === "queued"
       ? "Queued for sidecar delivery; delivery is not yet confirmed."
-      : "The governed channel adapter accepted the test message.");
+      : "The test message was accepted.");
     setText("");
   }
 
@@ -2128,7 +2128,7 @@ function ChannelSendTest({ channel }: { channel: ChannelSummary }) {
 
   return (
     <form className="detail-section admin-form compact" aria-label="Send channel test" onSubmit={(event) => void send(event)}>
-      <p className="eyebrow">Governed test message</p>
+      <p className="eyebrow">Test message</p>
       <p className="muted small">This uses the high-consequence <code>channel.send</code> verb and may pause for approval.</p>
       <ExactApprovalFinalizer controller={exactApproval} />
       <label><span>Message</span><textarea className="field-control" rows={3} required value={text} onChange={(event) => { exactApproval.invalidate(); setText(event.target.value); }} /></label>

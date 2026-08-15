@@ -9,8 +9,12 @@ import type { WorkerIdentity } from "../WorkerGlobalContext";
 const AgentsView = lazyNamed(() => import("../ParityViews"), "AgentsView");
 const ChatView = lazyNamed(() => import("../ChatView"), "ChatView");
 const LocalChatView = lazyNamed(() => import("../LocalChatView"), "LocalChatView");
-const AutomationsView = lazyNamed(() => import("../AutomationView"), "AutomationsView");
+const RoutinesView = lazyNamed(() => import("../RoutinesView"), "RoutinesView");
 const BuildView = lazyNamed(() => import("../BuildView"), "BuildView");
+const BrowserWorkspace = lazyNamed(
+  () => import("../browser/BrowserWorkspace"),
+  "BrowserWorkspace",
+);
 const ChannelsView = lazyNamed(() => import("../ChannelsView"), "ChannelsView");
 const EvaluationsView = lazyNamed(() => import("../EvaluationsView"), "EvaluationsView");
 const HomeView = lazyNamed(() => import("../OperationsView"), "HomeView");
@@ -58,7 +62,7 @@ function RouteContent(props: AppRouteSurfaceProps) {
 }
 
 const CORE_ROUTES = new Set<WorkerRoute>([
-  "home", "chat", "automations", "channels", "build", "evaluations", "integrations",
+  "home", "chat", "automations", "channels", "build", "browser", "evaluations", "integrations",
 ]);
 
 function CoreRoute(props: AppRouteSurfaceProps) {
@@ -77,9 +81,10 @@ function CoreRoute(props: AppRouteSurfaceProps) {
         onChanged={props.onChanged}
         onWorkingChange={props.onWorkingChange}
       />;
-    case "automations": return <AutomationsView />;
+    case "automations": return <RoutinesView />;
     case "channels": return <ChannelsView />;
     case "build": return <BuildView />;
+    case "browser": return <BrowserWorkspace />;
     case "evaluations": return <EvaluationsView />;
     case "integrations": return <IntegrationsView />;
     default: return null;

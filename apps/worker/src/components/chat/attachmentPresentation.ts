@@ -50,3 +50,15 @@ export function modelReadable(mediaType: string, patterns: string[]): boolean {
       : normalized === pattern.toLowerCase()
   ));
 }
+
+export function attachmentTextPreview(attachment: ChatAttachment): string | null {
+  if (!attachment.media_type.toLowerCase().startsWith("text/")) return null;
+  try {
+    const binary = atob(attachment.data).slice(0, 1_024);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const text = new TextDecoder().decode(bytes).replace(/\r\n?/g, "\n").trim();
+    return text ? text.slice(0, 600) : null;
+  } catch {
+    return null;
+  }
+}

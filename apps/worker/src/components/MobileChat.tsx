@@ -10,6 +10,7 @@ import { FamiliarBadge } from "./familiar/FamiliarBadge";
 import { LiveQuestionCard } from "./LiveQuestionCard";
 import { WorkDisclosure } from "./chat/WorkDisclosure";
 import { MobileQueuedMessages } from "./chat/MobileQueuedMessages";
+import { PersistedDecision } from "./chat/PersistedDecision";
 import "./chat/chat.css";
 import "./MobileChatParity.css";
 
@@ -46,11 +47,9 @@ function StateWord({ state }: { state: string }) {
 function MobilePendingRow({
   hitl,
   onRespond,
-  settled,
 }: {
   hitl: HitlEntry;
   onRespond?(id: string, decision: string): Promise<boolean>;
-  settled?: boolean;
 }) {
   const [phase, setPhase] = useState<"open" | "sending" | "done" | "failed">("open");
   const [decision, setDecision] = useState("");
@@ -102,9 +101,6 @@ function MobilePendingRow({
           The response was not accepted. It may already be settled; return to the originating chat.
         </p>
       )}
-      {settled && (
-        <p className="m-pending-note">This request belongs to a completed turn and is no longer answerable.</p>
-      )}
     </div>
   );
 }
@@ -113,30 +109,34 @@ function MobileDecisions({
   turn,
   answerable,
   onRespondHitl,
+  onDecisionResolved,
 }: {
   turn: NormalizedTurn;
   answerable: boolean;
   onRespondHitl?(id: string, decision: string): Promise<boolean>;
+  onDecisionResolved?(): void;
 }) {
   if (turn.hitls.length === 0 && turn.questions.length === 0) return null;
   return (
     <div className="m-card m-pending">
-      {turn.hitls.map((hitl) => (
-        <MobilePendingRow
-          hitl={hitl}
-          key={hitl.hitlRequestId}
-          onRespond={answerable ? onRespondHitl : undefined}
-          settled={!answerable}
+      {turn.hitls.map((hitl) => answerable ? (
+        <MobilePendingRow hitl={hitl} key={hitl.hitlRequestId} onRespond={onRespondHitl} />
+      ) : (
+        <PersistedDecision
+          decision={{ kind: "approval", entry: hitl }} key={hitl.hitlRequestId}
+          onResolved={onDecisionResolved} tech={false}
         />
       ))}
       {turn.questions.map((question) => answerable ? (
-        <LiveQuestionCard key={question.questionId} question={question} />
+        <LiveQuestionCard
+          key={question.questionId} onAnswered={onDecisionResolved}
+          question={question}
+        />
       ) : (
-        <div className="m-settled-question" key={question.questionId}>
-          <strong>Question from this run</strong>
-          <p>{question.prompt}</p>
-          <p>This question belongs to a completed turn and is no longer answerable.</p>
-        </div>
+        <PersistedDecision
+          decision={{ kind: "question", entry: question }} key={question.questionId}
+          onResolved={onDecisionResolved} tech={false}
+        />
       ))}
     </div>
   );
@@ -170,6 +170,7 @@ export function MobileChat({
   composerValue,
   onComposerChange,
   onRespondHitl,
+  onDecisionResolved,
 }: {
   title: string;
   subtitle: string;
@@ -197,14 +198,13 @@ export function MobileChat({
   busy: boolean;
   composerValue: string;
   onComposerChange(value: string): void;
+  onDecisionResolved?(): void;
   /** Governed approval responder (client.respondHitl behind it); resolves
       true when the kernel accepted the decision. Absent, pending rows stay
       read-only - the surface never draws a button that goes nowhere. */
   onRespondHitl?(id: string, decision: string): Promise<boolean>;
 }) {
-  // The mobile surface owns the whole screen: the shell's floating menu button
-  // would otherwise sit on top of the back control. The flag is on the root so
-  // the shell chrome can stand down without this component reaching into it.
+  // The root flag lets the full-screen mobile surface suppress shell chrome.
   useEffect(() => {
     document.documentElement.dataset.mobileSurface = "chat";
     return () => { delete document.documentElement.dataset.mobileSurface; };
@@ -298,7 +298,7 @@ export function MobileChat({
                 </ul>
               )}
               {durableTurn && (
-                <MobileDecisions turn={durableTurn} answerable={false} />
+                <MobileDecisions answerable={false} onDecisionResolved={onDecisionResolved} turn={durableTurn} />
               )}
             </article>
           );

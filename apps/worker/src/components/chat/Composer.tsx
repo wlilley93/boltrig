@@ -1,7 +1,5 @@
 import {
-  useLayoutEffect,
-  useRef,
-  useState,
+  type ClipboardEvent,
   type Dispatch,
   type FormEvent,
   type ReactNode,
@@ -22,12 +20,12 @@ import {
   type ApprovalRuntime,
 } from "../ApprovalPostureControl";
 import { ModelChip } from "./ModelChip";
-import {
-  arrayBufferToBase64,
-  formatBytes,
-} from "./attachmentPresentation";
 import { ComposerAddMenu } from "./ComposerAddMenu";
-import { AttachmentStatus } from "./ComposerAttachments";
+import {
+  AttachmentStatus,
+  useComposerAttachmentIngress,
+  useComposerAttachments,
+} from "./ComposerAttachments";
 
 export interface ComposerProps {
   busy: boolean;
@@ -38,6 +36,7 @@ export interface ComposerProps {
   modelChoices: ChatModelChoice[];
   modelChoice: string;
   defaultModelName?: string | null;
+  defaultModelSource?: "personal" | "platform";
   defaultModelAvailable: boolean;
   defaultModelUnavailableReason?: string | null;
   modelChoicesLoaded: boolean;
@@ -73,68 +72,13 @@ export interface ComposerProps {
   onCommandPalette?(): void;
 }
 
-function useComposerAttachments(
-  conversationKey: string | null,
-  attachmentLimits: ChatAttachmentLimits,
-) {
-  const [files, setFiles] = useState<ChatAttachment[]>([]);
-  const [fileError, setFileError] = useState("");
-  const input = useRef<HTMLInputElement>(null);
-  const conversationKeyRef = useRef(conversationKey);
-  conversationKeyRef.current = conversationKey;
-
-  useLayoutEffect(() => {
-    setFiles([]);
-    setFileError("");
-    if (input.current) input.current.value = "";
-  }, [conversationKey]);
-
-  async function addFiles(list: FileList | null) {
-    if (!list) return;
-    const owner = conversationKey;
-    setFileError("");
-    const selected = Array.from(list);
-    if (files.length + selected.length > attachmentLimits.max_count) {
-      setFileError(`Attach at most ${attachmentLimits.max_count} files to one turn.`);
-      return;
-    }
-    const tooLarge = selected.find((file) => file.size > attachmentLimits.max_bytes);
-    if (tooLarge) {
-      setFileError(
-        `${tooLarge.name} is too large. Each file must be ${formatBytes(attachmentLimits.max_bytes)} or smaller.`,
-      );
-      return;
-    }
-    const total = files.reduce((sum, file) => sum + (file.size ?? 0), 0)
-      + selected.reduce((sum, file) => sum + file.size, 0);
-    if (total > attachmentLimits.max_total_bytes) {
-      setFileError(
-        `Attachments must total ${formatBytes(attachmentLimits.max_total_bytes)} or less.`,
-      );
-      return;
-    }
-    const added = await Promise.all(selected.map(async (file) => ({
-      name: file.name,
-      media_type: file.type || "application/octet-stream",
-      data: arrayBufferToBase64(await file.arrayBuffer()),
-      size: file.size,
-    })));
-    if (conversationKeyRef.current !== owner) return;
-    setFiles((current) => [...current, ...added]);
-  }
-
-  return {
-    addFiles,
-    fileError,
-    files,
-    input,
-    ownsConversation: (owner: string | null) => conversationKeyRef.current === owner,
-    setFiles,
-  };
-}
-
 export function Composer(props: ComposerProps) {
   const staged = useComposerAttachments(props.conversationKey, props.attachmentLimits);
+  const ingress = useComposerAttachmentIngress({
+    addFiles: staged.addFiles,
+    addText: staged.addText,
+    enabled: !props.attachmentsDisabled && !props.disabled && !props.closed,
+  });
   const selectedModelAvailable = props.modelChoice
     ? props.modelChoices.some((choice) => choice.id === props.modelChoice && choice.available)
     : props.defaultModelAvailable;
@@ -163,9 +107,14 @@ export function Composer(props: ComposerProps) {
   }
 
   return (
-    <form className={`composer${props.closed ? " closed" : ""}${props.newContext ? " new-context" : " conversation-context"}`} onSubmit={submit}>
+    <form
+      className={`composer${props.closed ? " closed" : ""}${props.newContext ? " new-context" : " conversation-context"}`}
+      data-drop-active={ingress.dragActive ? "true" : undefined}
+      onSubmit={submit}
+    >
       {props.newContext && <ComposerContext runtime={props.agentRuntime ?? "cloud"} />}
       <div className="composer-frame">
+        {ingress.dragActive && <ComposerDropTarget />}
         {props.closed && (
           <p className="composer-closed" role="status">
             Restore this conversation to continue it.
@@ -177,7 +126,7 @@ export function Composer(props: ComposerProps) {
           files={staged.files}
           onRemove={(file) => staged.setFiles((items) => items.filter((item) => item !== file))}
         />
-        <ComposerTextarea {...props} />
+        <ComposerTextarea {...props} onPaste={ingress.onPaste} />
         <ComposerTools
           {...props}
           addFiles={staged.addFiles}
@@ -190,7 +139,9 @@ export function Composer(props: ComposerProps) {
   );
 }
 
-function ComposerTextarea(props: ComposerProps) {
+function ComposerTextarea(props: ComposerProps & {
+  onPaste(event: ClipboardEvent<HTMLTextAreaElement>): void;
+}) {
   return (
     <textarea
       aria-label="Task instructions"
@@ -207,6 +158,7 @@ function ComposerTextarea(props: ComposerProps) {
       ref={props.inputRef}
       value={props.value}
       onChange={(event) => props.onChange(event.target.value)}
+      onPaste={props.onPaste}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing || event.keyCode === 229) return;
         if (event.key === "/" && !event.currentTarget.value && props.onCommandPalette) {
@@ -223,8 +175,21 @@ function ComposerTextarea(props: ComposerProps) {
   );
 }
 
+function ComposerDropTarget() {
+  return (
+    <div aria-live="polite" className="composer-drop-target" role="status">
+      <svg aria-hidden fill="none" height="22" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="22">
+        <path d="M12 16V4" /><polyline points="7 9 12 4 17 9" />
+        <path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+      </svg>
+      <strong>Drop to attach</strong>
+      <small>Files, media, or text</small>
+    </div>
+  );
+}
+
 type ComposerToolsProps = ComposerProps & {
-  addFiles(list: FileList | null): Promise<void>;
+  addFiles(list: FileList | readonly File[] | null): Promise<boolean>;
   fileInputRef: RefObject<HTMLInputElement>;
   modelReady: boolean;
   voicePrimaryVisible: boolean;
@@ -239,6 +204,7 @@ function ComposerTools(props: ComposerToolsProps) {
           <ModelChip
             choices={props.modelChoices}
             defaultModelName={props.defaultModelName}
+            defaultModelSource={props.defaultModelSource}
             defaultAvailable={props.defaultModelAvailable}
             defaultUnavailableReason={props.defaultModelUnavailableReason}
             value={props.modelChoice}
@@ -290,7 +256,7 @@ function ComposerActions(props: ComposerToolsProps) {
           title="Dictation is not available in this client"
           type="button"
         >
-          <svg aria-hidden fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16">
+          <svg aria-hidden fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeWidth="2.2" viewBox="0 0 24 24" width="16">
             <rect height="11" rx="3" width="6" x="9" y="3" />
             <path d="M5 11a7 7 0 0 0 14 0" />
             <line x1="12" x2="12" y1="18" y2="21" />

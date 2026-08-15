@@ -25,16 +25,14 @@ import {
 import { FamiliarBadge } from "./familiar/FamiliarBadge";
 import { StageBody, useFamiliarBody, type StageTurnInput } from "./StageBody";
 import { useCharacter } from "./characters";
-import {
-  familiarStateFromTurn,
-  type FamiliarPresentationMode,
-} from "./familiar/FamiliarState";
+import { familiarStateFromTurn } from "./familiar/FamiliarState";
 import { MobileChat } from "./MobileChat";
 import { VoiceCall } from "./VoiceCall";
 import { Composer } from "./chat/Composer";
 import { LiveTurn, Message } from "./chat/ChatMessages";
 import { ComposerRunStatus } from "./chat/QueuedMessages";
 import { RunSectionView } from "./chat/RunSectionView";
+import { RoutineRunBanner, useConversationProvenance } from "./chat/RoutineRunBanner";
 import { SubagentTabs } from "./chat/SubagentTabs";
 import { TaskInspector } from "./chat/TaskInspector";
 import type {
@@ -50,6 +48,7 @@ import { reasonText } from "./chat/chatErrors";
 import { useChatModelOptions } from "./chat/useChatModelOptions";
 import { useChatProjection } from "./chat/useChatProjection";
 import { useConversationQueue } from "./chat/useConversationQueue";
+import { useLiveReplySpeech } from "./chat/useReplySpeech";
 import { useStagePhenotype } from "./chat/useStagePhenotype";
 import { useTechDetails } from "./chat/useTechDetails";
 import { useTranscriptViewport } from "./chat/useTranscriptViewport";
@@ -74,11 +73,10 @@ interface ChatViewProps {
   onCommandPalette?(): void;
 }
 
-type ConversationLoadState = {
-  conversationId: string | null;
-  phase: "idle" | "loading" | "ready" | "error";
-  error: string;
+type ConversationLoadState = { conversationId: string | null;
+  phase: "idle" | "loading" | "ready" | "error"; error: string;
 };
+
 export function ChatView({
   conversationId,
   onConversation,
@@ -96,6 +94,7 @@ export function ChatView({
     attachmentLimits,
     defaultModelAvailable,
     defaultModelName,
+    defaultModelSource,
     defaultModelUnavailableReason,
     modelChoice,
     modelChoices,
@@ -104,6 +103,7 @@ export function ChatView({
   } = useChatModelOptions();
   const [conversationTitle, setConversationTitle] = useState("");
   const [conversationStatus, setConversationStatus] = useState("");
+  const conversationProvenance = useConversationProvenance();
   const [modelContext, setModelContext] = useState<ConversationModelContext | null>(null);
   const [conversationLoad, setConversationLoad] = useState<ConversationLoadState>(() => (
     conversationId
@@ -159,7 +159,7 @@ export function ChatView({
   const [callActive, setCallActive] = useState(false);
   const selectedCharacterId = useFamiliarBody();
   const selectedCharacter = useCharacter(selectedCharacterId);
-  const { pageHidden, phenotype } = useStagePhenotype(
+  const { phenotype } = useStagePhenotype(
     selectedCharacter.readsPhenotype && !callActive,
   );
   const [taskDetailsOpen, setTaskDetailsOpen] = useState(false);
@@ -226,11 +226,8 @@ export function ChatView({
     && conversationLoad.phase === "ready"
   );
 
-  // A route change is a hard data boundary. Layout timing matters here: a
-  // normal effect permits one painted frame of the previous conversation under
-  // the new route. Reset every conversation-owned projection before paint,
-  // while preserving an in-flight stream whose message_start just assigned
-  // its new conversation id.
+  const primeReplySpeech = useLiveReplySpeech({ callActive, conversationKey: conversationId, live, onActivity: setVoiceActivity, onError: setError });
+  // Reset route-owned projections before paint while retaining an adopted live stream.
   useLayoutEffect(() => {
     const ownsLiveStream = Boolean(
       conversationId
@@ -238,9 +235,7 @@ export function ChatView({
       && controllersRef.current.size > 0
     );
 
-    // A stream-created conversation adopts the already-open stream instead of
-    // invalidating it when its new id reaches the hash. Every other selection
-    // change is a hard generation boundary for sends, follows and stops.
+    // Adopt a stream-created conversation; every other selection is a hard boundary.
     if (!ownsLiveStream) conversationGenerationRef.current += 1;
     // Model selection is a per-conversation next-turn choice. Never carry an
     // explicit route from task A into task B. The null -> newly-created route
@@ -251,8 +246,7 @@ export function ChatView({
     setError("");
     setContinuity("");
     setRetryFollow(false);
-    // The design's New tab resets the draft on entry; switching conversations
-    // likewise drops a stale draft rather than carrying it across tasks.
+    // New and switched tasks drop stale drafts.
     setDraft("");
     queue.reset();
     setMessages([]);
@@ -263,6 +257,7 @@ export function ChatView({
     setMaterializedOutputs({});
     setConversationTitle("");
     setConversationStatus("");
+    conversationProvenance.clear();
     setModelContext(null);
     const priorLive = liveConversationRef.current;
     if (!ownsLiveStream && (
@@ -364,6 +359,7 @@ export function ChatView({
       );
       return true;
     }
+    primeReplySpeech();
     setError("");
     setContinuity("");
     setRetryFollow(false);
@@ -440,7 +436,7 @@ export function ChatView({
       if (controllerOwnsGeneration(controller, generation)) {
         setError(reasonText(reason));
         if (liveConversationRef.current) {
-          setContinuity("Live updates paused. The run is still governed server-side.");
+          setContinuity("Live updates paused. The run is still continuing safely.");
           setRetryFollow(true);
         }
       }
@@ -554,6 +550,7 @@ export function ChatView({
     setArtifactCursor(artifactResult.next_cursor ?? null);
     setConversationTitle(summary.title || "Untitled task");
     setConversationStatus(summary.status);
+    conversationProvenance.load(thread, summary);
     return thread;
   }
 
@@ -834,16 +831,11 @@ export function ChatView({
     window.setTimeout(() => taskDetailsTriggerRef.current?.focus(), 0);
   }
 
-  // One Familiar Stage per client (ADR 0025). The decided console uses it in
-  // the New-chat voice invitation and, for the life of a call, centred above
-  // the conversation. Main responses have no author identity in the current
-  // protocol, so they do not borrow a child subagent's Stage or name.
+  // One Familiar Stage per client (ADR 0025). The new-chat invitation uses a
+  // compact preview; once voice starts, VoiceCall's portalled modal owns the
+  // one full-resolution Stage. Chat must not leave a second WebGL renderer
+  // running invisibly behind that modal.
   const stageIsHero = messages.length === 0 && events.length === 0;
-  const stageMode: FamiliarPresentationMode = pageHidden
-    ? "minimised"
-    : callActive
-      ? "voice"
-      : "conversation";
   // The turn facts both bodies read. StageBody picks which one depicts them.
   const stageInput: StageTurnInput = {
     loading,
@@ -855,9 +847,6 @@ export function ChatView({
     voiceOnset: voiceActivity.onset,
   };
   const stageState = familiarStateFromTurn(stageInput);
-  const stage = (
-    <StageBody input={stageInput} mode={stageMode} phenotype={phenotype} turn={live} />
-  );
 
   // The decided target's New screen is chrome-free: no header row, the glyph
   // and question are the top of the surface. A conversation (or a live call)
@@ -919,6 +908,7 @@ export function ChatView({
       modelChoices={modelChoices}
       modelChoice={modelChoice}
       defaultModelName={defaultModelName}
+      defaultModelSource={defaultModelSource}
       defaultModelAvailable={defaultModelAvailable}
       defaultModelUnavailableReason={defaultModelUnavailableReason}
       modelChoicesLoaded={modelChoicesLoaded}
@@ -956,6 +946,7 @@ export function ChatView({
     <div className="new-chat-prompt-stack">
       {!callActive && voiceAvailable && (
         <VoiceBanner
+          companionName={selectedCharacter.name}
           identity={(
             <StageBody
               input={stageInput}
@@ -981,9 +972,6 @@ export function ChatView({
       ? live.subagents.find((entry) => entry.key === tab.key)
       : undefined) ?? tab.agent);
 
-  // The task-details trigger renders once, at the same tree position for
-  // every width, so a breakpoint flip never detaches the node mid-measure:
-  // the mobile/console swap happens beneath it. Its placement is CSS.
   if (phone) {
     // The mobile surface replaces the console conversation, not the chat
     // contract: the task-details sheet (artifacts, run facts, conversation
@@ -1028,11 +1016,14 @@ export function ChatView({
             );
           }}
           onRetryConversation={retryConversationLoad}
+          onDecisionResolved={retryConversationLoad}
           onReorderQueued={queue.reorder}
           onRespondHitl={async (id, decision) => {
             try {
               const result = await client.respondHitl(id, decision, "");
-              return result.status === "ok" || result.status === "answered";
+              const accepted = result.status === "ok" || result.status === "answered";
+              if (accepted) retryConversationLoad();
+              return accepted;
             } catch {
               return false;
             }
@@ -1197,9 +1188,6 @@ export function ChatView({
           </div>
         </header>
         ) : null}
-        {callActive && (
-          <div className="voice-stage" aria-hidden={false}>{stage}</div>
-        )}
         <div
           aria-label="Conversation transcript"
           className={isNewState ? "transcript new-chat-transcript" : "transcript"}
@@ -1227,14 +1215,14 @@ export function ChatView({
               </button>
             </p>
           )}
+          <RoutineRunBanner provenance={conversationProvenance.value} />
           {transcriptMessages.map((message) => (
             <Message
               key={message.id}
               message={message}
               tech={tech}
+              onDecisionResolved={retryConversationLoad}
               durationSeconds={message.run_id ? turnDurations[message.run_id] : undefined}
-              // Settled turns' chips stay static marks: their entries' keys
-              // belong to a dead index space and cannot honestly open a tab.
             />
           ))}
           {modelContext?.compacted && (

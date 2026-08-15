@@ -1,83 +1,195 @@
+import { forwardRef, useImperativeHandle } from "react";
 import type { UserProfile } from "@wlilley93/boltrig-web-sdk";
 
+import {
+  AI_PROVIDERS,
+  exactModelId,
+  modelAcceptsVision,
+} from "./providerCatalogue";
+import { SearchablePicker, type SearchableOption } from "./SearchablePicker";
 import { useProviderSetup } from "./useProviderSetup";
 
-export function ProviderStep({ profile }: { profile: UserProfile }) {
+export interface ProviderStepHandle {
+  complete: () => Promise<boolean>;
+}
+
+export const ProviderStep = forwardRef<ProviderStepHandle, { profile: UserProfile }>(
+function ProviderStep({ profile }, ref) {
   const setup = useProviderSetup(profile);
-  const modelReady = Boolean(setup.readiness?.models?.default_available);
-  const defaultName = setup.readiness?.models?.default_model_name
-    ?? "the configured default model";
+  useImperativeHandle(ref, () => ({ complete: setup.complete }), [setup.complete]);
 
   return (
     <div className="onboarding-step provider-step">
       <div className="onboarding-heading onboarding-rise">
-        <p className="onboarding-kicker">Connect intelligence</p>
-        <h1>Bring the model you trust</h1>
-        <p>Boltrig keeps provider credentials server-side and write-only. You can also use a model your workspace already provides.</p>
+        <h1>Choose your AI</h1>
       </div>
-      <ReadinessCard ready={modelReady} defaultName={defaultName} />
       {!setup.readiness
         ? <ProviderLoading />
         : setup.canAddKey
           ? <ProviderKeyForm setup={setup} />
           : <ManagedKeyNotice />}
-      {setup.readiness?.keyCount ? (
-        <p className="onboarding-status">
-          {setup.readiness.keyCount} provider {setup.readiness.keyCount === 1 ? "key" : "keys"} already configured.
-        </p>
-      ) : null}
       {setup.message && <p className="onboarding-status" role="status">{setup.message}</p>}
     </div>
   );
-}
+});
 
-function ReadinessCard({ ready, defaultName }: { ready: boolean; defaultName: string }) {
+function ProviderKeyForm({ setup }: { setup: ReturnType<typeof useProviderSetup> }) {
+  const provider = AI_PROVIDERS.find((entry) => entry.id === setup.provider)
+    ?? AI_PROVIDERS[0];
+  const selectedModel = provider?.models.find(
+    (entry) => exactModelId(provider.id, entry.id) === setup.model,
+  ) ?? null;
+  const providerOptions: SearchableOption[] = AI_PROVIDERS.map((entry) => ({
+    value: entry.id,
+    label: entry.name,
+    detail: entry.detail ?? (entry.id === "llama" ? "Meta’s Llama API" : entry.id),
+    info: entry.info,
+  }));
+  const modelOptions: SearchableOption[] = (provider?.models ?? []).map((entry) => ({
+    value: exactModelId(provider.id, entry.id),
+    label: entry.name ?? entry.id,
+    detail: modelAcceptsVision(entry) ? "Text + vision" : "Text",
+  }));
+
+  function selectProvider(providerId: string) {
+    setup.setProvider(providerId);
+    setup.setModel("");
+    if (providerId !== "custom") setup.setBaseUrl("");
+  }
+
   return (
-    <div className={`readiness-card onboarding-rise ${ready ? "ready" : "quiet"}`} style={{ "--onboarding-delay": "80ms" } as React.CSSProperties}>
-      <span className="readiness-icon" aria-hidden="true">{ready ? "✓" : "◇"}</span>
-      <span>
-        <strong>{ready ? "Workspace AI is ready" : "No workspace model is ready yet"}</strong>
-        <small>{ready
-          ? `Automatic will use ${defaultName}.`
-          : "You can continue. An administrator can connect a Bifrost model route later."}</small>
-      </span>
+    <div className="onboarding-key-form onboarding-rise" style={{ "--onboarding-delay": "80ms" } as React.CSSProperties}>
+      <div className="onboarding-provider-stack">
+        <SearchablePicker
+          emptyText="No providers match that search."
+          label="Provider"
+          onChange={selectProvider}
+          options={providerOptions}
+          placeholder="Choose a provider"
+          searchLabel="Search providers"
+          value={setup.provider}
+        />
+        <label>
+          <span>API key</span>
+          <input
+            aria-label="Provider API key"
+            autoComplete="off"
+            onChange={(event) => setup.setKeyPresent(Boolean(event.currentTarget.value))}
+            ref={setup.apiKeyInput}
+            required
+            type="password"
+          />
+        </label>
+        {provider?.id === "custom" ? (
+          <CustomModelFields setup={setup} />
+        ) : provider?.requiresBaseUrl ? (
+          <OllamaModelFields providerId={provider.id} setup={setup} />
+        ) : modelOptions.length === 0 ? (
+          <ExactModelField disabled={!setup.keyPresent} providerId={provider.id} setup={setup} />
+        ) : (
+          <div className="onboarding-model-choice">
+            <SearchablePicker
+              disabled={!setup.keyPresent}
+              emptyText="No models match that search."
+              label="Model"
+              onChange={setup.setModel}
+              options={modelOptions}
+              placeholder={setup.keyPresent ? "Choose a model" : "Enter your API key first"}
+              searchLabel="Search models"
+              value={setup.model}
+            />
+          </div>
+        )}
+      </div>
+      {selectedModel ? <CapabilityNotice vision={modelAcceptsVision(selectedModel)} /> : null}
     </div>
   );
 }
 
-function ProviderKeyForm({ setup }: { setup: ReturnType<typeof useProviderSetup> }) {
+function ExactModelField({
+  disabled,
+  providerId,
+  required = true,
+  setup,
+}: {
+  disabled: boolean;
+  providerId: string;
+  required?: boolean;
+  setup: ReturnType<typeof useProviderSetup>;
+}) {
+  const prefix = `${providerId}/`;
+  const value = setup.model.startsWith(prefix) ? setup.model.slice(prefix.length) : setup.model;
   return (
-    <form className="onboarding-key-form onboarding-rise" onSubmit={(event) => void setup.saveKey(event)} style={{ "--onboarding-delay": "160ms" } as React.CSSProperties}>
-      <div className="onboarding-form-intro"><strong>Add a direct provider key</strong><span>Optional · sealed before approval</span></div>
-      <div className="onboarding-provider-row">
-        <label><span>Provider</span><select value={setup.provider} onChange={(event) => setup.setProvider(event.target.value)}><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option><option value="xai">xAI</option><option value="openrouter">OpenRouter</option></select></label>
-        <label><span>Exact model</span><input autoComplete="off" onChange={(event) => setup.setModel(event.target.value)} placeholder="provider/model-name" required value={setup.model} /></label>
-      </div>
-      <label><span>API key <em>write only</em></span><input aria-label="Provider API key" autoComplete="off" ref={setup.apiKeyInput} required type="password" /></label>
-      <details>
-        <summary>Custom API origin</summary>
-        <label><span>Base URL</span><input inputMode="url" onChange={(event) => setup.setBaseUrl(event.target.value)} placeholder="https://api.example.com/v1" value={setup.baseUrl} /></label>
-      </details>
-      <button className="onboarding-secondary" disabled={setup.busy || !setup.model.trim()} type="submit">{setup.busy ? "Sealing…" : "Seal provider key"}</button>
-      <p className="onboarding-key-note">A direct key does not configure Bifrost by itself. Voice providers are connected later in Settings → Models.</p>
-    </form>
+    <label className="onboarding-exact-model">
+      <span>Model name</span>
+      <input
+        aria-label="Exact model"
+        autoComplete="off"
+        disabled={disabled}
+        onChange={(event) => setup.setModel(exactModelId(providerId, event.target.value))}
+        placeholder={disabled ? "Enter your API key first" : "model-name"}
+        required={required}
+        value={value}
+      />
+    </label>
+  );
+}
+
+function CustomModelFields({ setup }: { setup: ReturnType<typeof useProviderSetup> }) {
+  return (
+    <div className="onboarding-custom-fields">
+      <label><span>API address</span><input inputMode="url" onChange={(event) => setup.setBaseUrl(event.target.value)} placeholder="https://api.example.com/v1" required value={setup.baseUrl} /></label>
+      <label><span>Model name</span><input aria-label="Exact model" autoComplete="off" onChange={(event) => setup.setModel(event.target.value)} placeholder="model-name" required value={setup.model} /></label>
+    </div>
+  );
+}
+
+function OllamaModelFields({
+  providerId,
+  setup,
+}: {
+  providerId: string;
+  setup: ReturnType<typeof useProviderSetup>;
+}) {
+  return (
+    <div className="onboarding-custom-fields">
+      <label>
+        <span>API address</span>
+        <input
+          aria-label="Ollama API address"
+          inputMode="url"
+          onChange={(event) => setup.setBaseUrl(event.target.value)}
+          placeholder="https://ollama.example.com/v1"
+          required
+          value={setup.baseUrl}
+        />
+      </label>
+      <ExactModelField disabled={!setup.keyPresent} providerId={providerId} setup={setup} />
+    </div>
+  );
+}
+
+function CapabilityNotice({ vision }: { vision: boolean }) {
+  return (
+    <p className={`onboarding-capability ${vision ? "vision" : "text"}`} role="status">
+      <span aria-hidden="true">{vision ? "◉" : "Aa"}</span>
+      <strong>{vision ? "Text + images" : "Text only"}</strong>
+    </p>
   );
 }
 
 function ManagedKeyNotice() {
   return (
-    <div className="readiness-card quiet onboarding-rise" style={{ "--onboarding-delay": "160ms" } as React.CSSProperties}>
-      <span className="readiness-icon" aria-hidden="true">↗</span>
-      <span><strong>Your organisation manages provider keys</strong><small>Ask an administrator to allow personal keys or connect a workspace model route.</small></span>
-    </div>
+    <p className="onboarding-inline-note onboarding-rise" style={{ "--onboarding-delay": "80ms" } as React.CSSProperties}>
+      Your organisation manages your AI.
+    </p>
   );
 }
 
 function ProviderLoading() {
   return (
-    <div className="readiness-card quiet onboarding-rise" aria-busy="true" style={{ "--onboarding-delay": "160ms" } as React.CSSProperties}>
-      <span className="readiness-icon" aria-hidden="true">···</span>
-      <span><strong>Checking key policy</strong><small>Boltrig is reading the workspace's safe configuration metadata.</small></span>
-    </div>
+    <p className="onboarding-inline-note onboarding-rise" aria-busy="true" style={{ "--onboarding-delay": "80ms" } as React.CSSProperties}>
+      Checking your AI…
+    </p>
   );
 }

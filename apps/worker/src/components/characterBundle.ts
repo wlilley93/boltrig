@@ -152,6 +152,9 @@ export function characterFromBundle(
     readsPhenotype: bundleReadsPhenotype(manifest),
     render: (props) => source.render(props, manifest),
   };
+  if (manifest.voice?.fallbackVoiceIds) {
+    character.voiceIds = Object.freeze({ ...manifest.voice.fallbackVoiceIds });
+  }
   if (bundleWantsBudgets(manifest)) character.wantsBudgets = true;
   // DECLARED, never installed. The bundle says which sensing capabilities it
   // would like; the Stage asks the kernel and hands back the answer, refusal

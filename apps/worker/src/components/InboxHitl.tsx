@@ -97,7 +97,7 @@ export function InboxQueue() {
         <div className="page-intro">
           <div>
             <h2>Human decisions</h2>
-            <p>Approvals, owner questions, clarifications and escalations from governed runs.</p>
+            <p>Approvals, questions, clarifications and escalations from runs.</p>
           </div>
           <button className="secondary-button" onClick={() => void refresh()}>Refresh</button>
         </div>

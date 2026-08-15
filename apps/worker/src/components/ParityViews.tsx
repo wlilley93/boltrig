@@ -739,7 +739,7 @@ function WorkDetail({ detail, onClose, onSelect, onChanged }: { detail: WorkDeta
         <Fact label="On behalf of" value={detail.item.on_behalf_of ?? "Self"} />
       </dl>
       <div className="detail-section">
-        <p className="eyebrow">Governed lifecycle</p>
+        <p className="eyebrow">Lifecycle</p>
         <div className="stack">
           <label className="field-label">Owner<input className="field-control" value={owner} onChange={(event) => {
             finalizer.invalidate();
@@ -993,7 +993,7 @@ export function AgentsView() {
         {surfaceState === "loading" && <Unavailable title="Loading agent profiles">Checking the author-visible agent inventory.</Unavailable>}
         {surfaceState === "denied" && <Unavailable title="Agent access denied">Your current role cannot view or author agent profiles.</Unavailable>}
         {surfaceState === "not-found" && <Unavailable title="Agent inventory not found">This deployment does not expose the canonical agent inventory route.</Unavailable>}
-        {surfaceState === "unavailable" && <Unavailable title="Agents unavailable">The governed agent inventory could not be reached.</Unavailable>}
+        {surfaceState === "unavailable" && <Unavailable title="Agents unavailable">The agent inventory could not be reached.</Unavailable>}
         {surfaceState === "ready" && unknownAgent && <Unavailable title="Agent profile not found">No visible agent profile matches “{selectedAgentName}”.</Unavailable>}
         {surfaceState === "ready" && !unknownAgent && (
           <PermanentFleetTopology
@@ -1042,7 +1042,7 @@ export function AgentsView() {
               },
               {
                 available: true,
-                description: "An empty agent with no permissions at all. Grant each capability deliberately in the governed author.",
+                description: "An empty agent with no permissions at all. Add each capability deliberately.",
                 icon: <CreateMethodIcon kind="empty" />,
                 onSelect: () => {
                   setCreatingAgent(false);
@@ -1423,7 +1423,7 @@ export function MemoryView() {
         {surfaceState === "loading" && <Unavailable title="Loading memory">Loading facts in your permitted memory scopes.</Unavailable>}
         {surfaceState === "denied" && <Unavailable title="Memory access denied">Your current role cannot browse memory in this workspace.</Unavailable>}
         {surfaceState === "not-found" && <Unavailable title="Memory not found">This deployment does not expose the canonical memory browse route.</Unavailable>}
-        {surfaceState === "unavailable" && <Unavailable title="Memory unavailable">The governed memory service could not be reached.</Unavailable>}
+        {surfaceState === "unavailable" && <Unavailable title="Memory unavailable">The memory service could not be reached.</Unavailable>}
         {surfaceState === "ready" && detailState === "loading" && <Unavailable title="Loading memory detail">Loading the exact scoped fact.</Unavailable>}
         {surfaceState === "ready" && detailState === "denied" && <Unavailable title="Memory detail denied">Your current role cannot inspect that memory fact.</Unavailable>}
         {surfaceState === "ready" && detailState === "not-found" && <Unavailable title="Memory fact not found">That memory fact is outside your current scope or no longer exists.</Unavailable>}

@@ -23,6 +23,11 @@ import {
   governedResultReason,
   useExactApprovalFinalizer,
 } from "./ExactApprovalFinalizer";
+import {
+  AddPluginModal,
+  PluginInventoryStatus,
+  PluginPageHeading,
+} from "./integrations/PluginPicker";
 import "./IntegrationsView.css";
 
 type ConnectionApiState = "loading" | "available" | "unavailable";
@@ -108,6 +113,7 @@ export function IntegrationsView() {
   const [statusFilter, setStatusFilter] = useState<InventoryStatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<InventoryCategory | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [addPluginOpen, setAddPluginOpen] = useState(false);
   const [setupEntryId, setSetupEntryId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [setupBusy, setSetupBusy] = useState(false);
@@ -384,7 +390,7 @@ export function IntegrationsView() {
     if (!entry.auth.includes("oauth2")) {
       setMessage(entry.auth.includes("manual_secret")
         ? "This connector does not publish a structured secret-field schema. No credential was requested."
-        : "This connector needs a governed pairing contract that is not available here.");
+        : "This connector needs a pairing method that is not available here.");
       return;
     }
     setSetupEntryId(null);
@@ -582,6 +588,15 @@ export function IntegrationsView() {
     setCategoryFilter(value);
   }
 
+  function choosePlugin(entry: IntegrationCatalogueEntry) {
+    clearFilters();
+    const key = integrationKey(entry.id);
+    setSelectedKey(key);
+    setSetupEntryId(canStartIntegrationSetup(entry, apiState) ? entry.id : null);
+    setIssueFocusKey(key);
+    setAddPluginOpen(false);
+  }
+
   const revocationApprovalOpen = (
     revocationFinalizer.state === "waiting"
     || revocationFinalizer.state === "checking"
@@ -591,13 +606,7 @@ export function IntegrationsView() {
   return (
     <div className="plugins-page">
       <main className="plugins-pane">
-        <header className="plugins-heading">
-          <h1>Plugins</h1>
-          <p>
-            Everything plugged into boltrig: the systems it can act in, where work arrives from,
-            and what extends it. Adding one teaches it more to do — it never hands out permission.
-          </p>
-        </header>
+        <PluginPageHeading onAdd={() => setAddPluginOpen(true)} />
 
         <div className="plugins-wrap">
           {issues.length > 0 && (
@@ -715,33 +724,11 @@ export function IntegrationsView() {
               </div>
             </div>
 
-            {apiState === "unavailable" && (
-              <p className="plugins-api-state" role="status">
-                Connection management is not enabled. The catalogue below is presentation metadata;
-                setup stays unavailable until the kernel publishes a reviewed contract.
-              </p>
-            )}
-            {apiState === "loading" && (
-              <p className="plugins-api-state" role="status">Checking the governed connection service…</p>
-            )}
-            {mcpApiState === "loading" && (
-              <p className="plugins-api-state" role="status">Checking your own server inventory…</p>
-            )}
-            {mcpApiState === "denied" && (
-              <p className="plugins-api-state" role="status">
-                Your current session cannot read MCP server inventory. No server state is inferred.
-              </p>
-            )}
-            {mcpApiState === "unavailable" && (
-              <p className="plugins-api-state" role="status">
-                MCP server inventory is unavailable here. No server state is inferred.
-              </p>
-            )}
-            {mcpApiState === "available" && mcpTruncated && (
-              <p className="plugins-api-state" role="status">
-                The server returned a truncated MCP inventory; this view shows only the reported page.
-              </p>
-            )}
+            <PluginInventoryStatus
+              connectionState={apiState}
+              mcpState={mcpApiState}
+              mcpTruncated={mcpTruncated}
+            />
             {message && <p className="plugins-notice" role="status">{message}</p>}
             <ExactApprovalFinalizer controller={revocationFinalizer} />
 
@@ -808,6 +795,14 @@ export function IntegrationsView() {
           <RuntimeAddons addons={addons} state={addonApiState} />
         </details>
       </main>
+      {addPluginOpen && (
+        <AddPluginModal
+          connectedIds={new Set(connections.map((item) => item.integration_id))}
+          entries={catalogue}
+          onClose={() => setAddPluginOpen(false)}
+          onSelect={choosePlugin}
+        />
+      )}
     </div>
   );
 }
@@ -1411,7 +1406,7 @@ function integrationSubline(
   }
   if (method === "OAuth") return `Sign in with ${entry.label}`;
   if (method === "Provider key") return "A provider key you paste once";
-  if (method === "Pairing") return "Pair through a governed channel contract";
+  if (method === "Pairing") return "Pair through the channel setup";
   return "No credential method declared";
 }
 
@@ -1439,7 +1434,7 @@ function setupMethodCopy(
     return `Boltrig asks the kernel for the provider launch and shows a connection only after canonical confirmation. Current return state: ${returnState}.`;
   }
   if (method === "Pairing") {
-    return "Pairing is declared, but this view has no governed pairing operation. No account will be treated as paired here.";
+    return "Pairing is listed, but setup is not available here. No account will be treated as paired.";
   }
   return "No authentication method is declared, so this view will not ask for a credential.";
 }
@@ -1523,7 +1518,7 @@ function mcpAccessCopy(server: McpServerSummary): string {
   if (server.tool_snapshot.status === "never_discovered") {
     return "The server has not reported a successful discovery snapshot, so this view does not claim that any tools are available.";
   }
-  return "Tool count and publication state come from the server's durable discovery snapshot. Tool consequences remain governed in MCP operations.";
+  return "Tool count and availability come from the server's latest successful check. Actions still follow your approval settings.";
 }
 
 function mcpIssueSummary(server: McpServerSummary): string | null {

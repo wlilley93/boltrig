@@ -7,6 +7,7 @@ import { bootstrapCharacter } from "./character";
 // stock build — see characterPlugins.ts.
 import "./characterPlugins";
 import { AuthGate } from "./components/AuthGate";
+import { WorkerErrorBoundary } from "./components/WorkerErrorBoundary";
 import { WorkerGlobalContextProvider } from "./components/WorkerGlobalContext";
 import { bootstrapAppearance } from "./theme";
 import "./styles.css";
@@ -23,10 +24,12 @@ window.addEventListener("drop", (event) => event.preventDefault());
 
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
-    <AuthGate>
-      <WorkerGlobalContextProvider>
-        <App />
-      </WorkerGlobalContextProvider>
-    </AuthGate>
+    <WorkerErrorBoundary>
+      <AuthGate>
+        <WorkerGlobalContextProvider>
+          <App />
+        </WorkerGlobalContextProvider>
+      </AuthGate>
+    </WorkerErrorBoundary>
   </React.StrictMode>,
 );

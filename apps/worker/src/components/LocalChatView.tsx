@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   normalizeEvents,
   type ChatAttachmentLimits,
@@ -18,6 +18,7 @@ import {
   type LocalChatControllerProps,
 } from "./chat/useLocalChatController";
 import { useTranscriptViewport } from "./chat/useTranscriptViewport";
+import { useReplySpeech } from "./chat/useReplySpeech";
 import { Welcome } from "./chat/Welcome";
 import "./chat/chat.css";
 import "./chat/ChatViewParity.css";
@@ -35,7 +36,17 @@ interface LocalChatViewProps extends LocalChatControllerProps {
 }
 
 export function LocalChatView(props: LocalChatViewProps) {
-  const controller = useLocalChatController(props);
+  const [speechError, setSpeechError] = useState("");
+  const replySpeech = useReplySpeech({
+    conversationKey: props.conversationId,
+    onActivity: () => undefined,
+    onError: setSpeechError,
+  });
+  const controller = useLocalChatController({
+    ...props,
+    onReplyCompleted: replySpeech.readReply,
+  });
+  useEffect(() => setSpeechError(""), [props.conversationId]);
   const newTask = !props.conversationId;
   return <div className="chat-layout local-chat-layout" data-rail-collapsed="true">
     <main className="chat-main">
@@ -45,16 +56,27 @@ export function LocalChatView(props: LocalChatViewProps) {
         conversationId={props.conversationId}
         newTask={newTask}
         onCommandPalette={props.onCommandPalette}
+        onPrimeSpeech={replySpeech.prime}
+        speechError={speechError}
       />
     </main>
   </div>;
 }
 
-function LocalChatContent({ controller, conversationId, newTask, onCommandPalette }: {
+function LocalChatContent({
+  controller,
+  conversationId,
+  newTask,
+  onCommandPalette,
+  onPrimeSpeech,
+  speechError,
+}: {
   controller: LocalChatController;
   conversationId: string | null;
   newTask: boolean;
   onCommandPalette?: () => void;
+  onPrimeSpeech(): void;
+  speechError: string;
 }) {
   const live = normalizeEvents(controller.events);
   const transcript = useTranscriptViewport({
@@ -66,6 +88,7 @@ function LocalChatContent({ controller, conversationId, newTask, onCommandPalett
     conversationId={conversationId}
     newTask={newTask}
     onCommandPalette={onCommandPalette}
+    onPrimeSpeech={onPrimeSpeech}
   />;
   return <>
     <div
@@ -95,6 +118,7 @@ function LocalChatContent({ controller, conversationId, newTask, onCommandPalett
         startedAt={null}
       />}
       {controller.error && <p className="notice" role="alert">{controller.error}</p>}
+      {speechError && <p className="notice" role="status">{speechError}</p>}
     </div>
     {!newTask && <TranscriptNavigation
       model={transcript.navigation}
@@ -104,11 +128,18 @@ function LocalChatContent({ controller, conversationId, newTask, onCommandPalett
   </>;
 }
 
-function LocalComposer({ controller, conversationId, newTask, onCommandPalette }: {
+function LocalComposer({
+  controller,
+  conversationId,
+  newTask,
+  onCommandPalette,
+  onPrimeSpeech,
+}: {
   controller: LocalChatController;
   conversationId: string | null;
   newTask: boolean;
   onCommandPalette?: () => void;
+  onPrimeSpeech(): void;
 }) {
   const draftRef = useRef<HTMLTextAreaElement>(null);
   return <Composer
@@ -130,7 +161,10 @@ function LocalComposer({ controller, conversationId, newTask, onCommandPalette }
     onChange={controller.setDraft}
     onCommandPalette={onCommandPalette}
     onModelChoice={() => undefined}
-    onSend={controller.send}
+    onSend={(message, attachments) => {
+      onPrimeSpeech();
+      return controller.send(message, attachments);
+    }}
     onStop={controller.stop}
     inputRef={draftRef}
     value={controller.draft}

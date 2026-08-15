@@ -103,7 +103,7 @@ export function useExactApprovalFinalizer<
 }): ExactApprovalFinalizerController<TInput, TResult> {
   const [pending, setPending] = useState<PendingExactMutation<TInput> | null>(null);
   const [state, setState] = useState<ExactApprovalFinalizationState>(null);
-  const [lastLabel, setLastLabel] = useState("Governed change");
+  const [lastLabel, setLastLabel] = useState("Change");
   const [busy, setBusy] = useState(false);
 
   function begin(input: TInput, result: GovernedResult, label: string): boolean {

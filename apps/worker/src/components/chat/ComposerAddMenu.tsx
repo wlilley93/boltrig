@@ -80,7 +80,7 @@ export function ComposerAddMenu({
         ref={openerRef}
         type="button"
       >
-        <svg aria-hidden fill="none" height="17" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" viewBox="0 0 24 24" width="17">
+        <svg aria-hidden fill="none" height="17" stroke="currentColor" strokeLinecap="round" strokeWidth="2.2" viewBox="0 0 24 24" width="17">
           <line x1="12" x2="12" y1="5" y2="19" />
           <line x1="5" x2="19" y1="12" y2="12" />
         </svg>
@@ -158,7 +158,7 @@ function buildSections({
     {
       label: "Agent tools",
       actions: [
-        { id: "work", label: "Work and goals", description: "Review governed work", icon: "work", run: route("work") },
+        { id: "work", label: "Work and goals", description: "Review active work", icon: "work", run: route("work") },
         { id: "routines", label: "Routines", description: "Build scheduled or triggered work", icon: "routine", run: route("automations") },
         { id: "skills", label: "Record a skill", description: "Teach an approved repeatable method", icon: "skill", run: route("build", "skills") },
       ],
@@ -167,7 +167,7 @@ function buildSections({
       label: "Workspace",
       actions: [
         { id: "plugins", label: "Plugins", description: "Connect external context", icon: "plugin", run: route("integrations") },
-        { id: "knowledge", label: "Knowledge", description: "Browse governed sources", icon: "knowledge", run: route("knowledge") },
+        { id: "knowledge", label: "Knowledge", description: "Browse sources", icon: "knowledge", run: route("knowledge") },
       ],
     },
   ];

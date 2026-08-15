@@ -11,6 +11,7 @@ function readDismissed(): boolean {
 }
 
 interface VoiceBannerProps {
+  companionName: string;
   identity: ReactNode;
   onStartVoice(): void;
 }
@@ -18,7 +19,7 @@ interface VoiceBannerProps {
 /** The live-voice invitation that sits immediately above the New-task input.
  * The caller supplies the active companion identity; dismissal is local
  * presentation state and never changes voice availability or account state. */
-export function VoiceBanner({ identity, onStartVoice }: VoiceBannerProps) {
+export function VoiceBanner({ companionName, identity, onStartVoice }: VoiceBannerProps) {
   const [dismissed, setDismissed] = useState(readDismissed);
   if (dismissed) return null;
 
@@ -35,7 +36,7 @@ export function VoiceBanner({ identity, onStartVoice }: VoiceBannerProps) {
     <div className="voice-intro">
       {identity}
       <span className="voice-intro-copy">
-        <strong>Talk to boltrig</strong>
+        <strong>Talk to {companionName}</strong>
         <small>Say it out loud and it starts while you speak</small>
       </span>
       <button

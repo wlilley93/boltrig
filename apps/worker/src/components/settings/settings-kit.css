@@ -99,6 +99,64 @@
 .settings-kit-button:disabled { opacity: .6; cursor: default; }
 .settings-kit-button[data-tone="danger"] { color: var(--red); }
 
+.settings-info-wrap {
+  align-items: center;
+  display: inline-flex;
+  position: relative;
+}
+
+.settings-info {
+  align-items: center;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--text-3) 38%, transparent);
+  border-radius: 999px;
+  color: var(--text-3);
+  cursor: help;
+  display: inline-flex;
+  font: 600 10px/1 var(--font-ui);
+  height: 17px;
+  justify-content: center;
+  padding: 0;
+  width: 17px;
+}
+
+.settings-info:hover,
+.settings-info:focus-visible {
+  border-color: var(--text-2);
+  color: var(--text-1);
+  outline: none;
+}
+
+.settings-info-tip {
+  background: color-mix(in srgb, var(--card-2) 94%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .22);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 400;
+  left: 50%;
+  line-height: 1.4;
+  max-width: min(260px, calc(100vw - 32px));
+  opacity: 0;
+  padding: 9px 10px;
+  pointer-events: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  transform: translate(-50%, -3px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  visibility: hidden;
+  width: max-content;
+  z-index: 20;
+}
+
+.settings-info-wrap:hover .settings-info-tip,
+.settings-info:focus-visible + .settings-info-tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  visibility: visible;
+}
+
 .settings-status { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 
 /* --- Tone dots, state words and humanised rows ---------------------------- */

@@ -5,11 +5,14 @@ export function audioTracks(stream: MediaStream): MediaStreamTrack[] {
   return typeof getAudioTracks === "function" ? getAudioTracks.call(stream) : stream.getTracks();
 }
 
-export function createVoicePlaybackAnalyser(context: AudioContext): AnalyserNode {
+export function createVoicePlaybackAnalyser(
+  context: AudioContext,
+  output: AudioNode = context.destination,
+): AnalyserNode {
   const analyser = context.createAnalyser();
   analyser.fftSize = 1024;
   analyser.smoothingTimeConstant = 0.5;
-  analyser.connect(context.destination);
+  analyser.connect(output);
   return analyser;
 }
 

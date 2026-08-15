@@ -717,7 +717,7 @@ export function AutomationsView() {
         setMessage("Save is waiting for approval in the originating chat.");
       } else if (result.status === "ok") {
         setDirty(false);
-        setMessage("Workflow saved through the governed authoring route.");
+        setMessage("Workflow saved.");
         setSelectedWorkflowId(draft.id);
         await refreshList();
       } else {
@@ -1317,9 +1317,9 @@ export function AutomationsView() {
           {detailError && <p className="notice" role="alert">{detailError}</p>}
           <ExactApprovalFinalizer controller={exactApproval} />
         </div>
-        {surfaceState === "loading" && <Unavailable title="Loading automations">Loading the governed workflow library.</Unavailable>}
+        {surfaceState === "loading" && <Unavailable title="Loading automations">Loading workflows.</Unavailable>}
         {surfaceState === "denied" && <Unavailable title="Automation access denied">Your current role cannot view or author workflows.</Unavailable>}
-        {surfaceState === "unavailable" && <Unavailable title="Automations unavailable">The governed workflow library could not be reached.</Unavailable>}
+        {surfaceState === "unavailable" && <Unavailable title="Automations unavailable">Workflows could not be reached.</Unavailable>}
         {surfaceState === "ready" && !draft && (
           <RoutinePicker
             onNew={newWorkflow}
@@ -1932,7 +1932,7 @@ function WorkflowEditor(props: WorkflowEditorProps) {
           <div className="rc-body">
             {draft.steps.length === 0 ? (
               <p className="dag-empty" style={{ flex: 1, margin: 16 }}>
-                Add the first governed step. An empty workflow is valid but does no work.
+                Add the first step. An empty workflow is valid but does no work.
               </p>
             ) : (
               <RoutineCanvas
@@ -1974,7 +1974,7 @@ function WorkflowEditor(props: WorkflowEditorProps) {
                   aria-selected="false"
                   disabled
                   role="tab"
-                  title="Unavailable in this build — no governed routine-chat authoring API is exposed."
+                  title="Unavailable in this build — chat-based routine setup is not available."
                   type="button"
                 >
                   Build with chat
@@ -1988,7 +1988,7 @@ function WorkflowEditor(props: WorkflowEditorProps) {
                     A routine is data, not code.
                     {spec.preserved
                       ? " Shown as stored: the current draft cannot be serialized — either this definition is preserved read-only, or a field is not valid JSON yet."
-                      : " This is exactly what Save sends through the governed authoring route."}
+                      : " This is exactly what Save sends."}
                   </p>
                   <pre aria-label="Workflow spec JSON">{spec.text}</pre>
                 </div>

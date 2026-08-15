@@ -29,7 +29,7 @@
 }
 
 /* The console's composer controls are 28px except for its 30px round primary.
- * Keeping this Chat-scoped also makes the New frame exactly 89px tall and the
+ * Keeping this Chat-scoped also makes the New frame exactly 96px tall and the
  * open-conversation frame approximately 85px without shrinking global icon
  * targets on unrelated surfaces. */
 .chat-main .composer .composer-tools .icon-button {
@@ -62,23 +62,23 @@
   margin-bottom: 0;
 }
 
-/* The canonical 30px New-chat mark is above the 24px flat-badge threshold,
- * so it gets the genotype-capable glossy Stage at the same visible size. */
+/* The voice invitation uses the reference's 48px identity mark so it reads as
+ * a distinct suggestion above the composer rather than another toolbar row. */
 .voice-intro > .familiar-stage.conversation {
-  flex: 0 0 30px;
-  width: 30px;
+  flex: 0 0 48px;
+  width: 48px;
   margin: 0;
 }
 
 /* Jarvis normally fills a large instrument panel and therefore carries a
  * viewport-sized minimum height. In this compact invitation it is the same
- * 30px identity mark as the Familiar; constrain every dimension so selecting
+ * 48px identity mark as the Familiar; constrain every dimension so selecting
  * Jarvis cannot expand the row and squeeze its copy out of view. */
 .voice-intro > .jarvis-stage {
-  flex: 0 0 30px;
-  width: 30px;
-  height: 30px;
-  min-height: 30px;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  min-height: 48px;
   margin: 0;
 }
 

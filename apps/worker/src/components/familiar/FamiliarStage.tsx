@@ -46,7 +46,6 @@ export function FamiliarStage({
       rendererRef.current = null;
     };
   }, []);
-
   useEffect(() => {
     rendererRef.current?.update(state);
   }, [state]);
@@ -67,12 +66,13 @@ export function FamiliarStage({
 
   const busy = state.working || state.speaking;
   const identity = familiarVisualIdentity(genotype);
+  const accessibleName = familiarStageAccessibleName(label);
   return (
     <div
       ref={hostRef}
       className={`familiar-stage ${mode}${rendererKind === "badge" ? " fallback" : ""}`}
       role="img"
-      aria-label={`${label ?? "Boltrig"} Familiar · ${busy ? "working" : "ready"}`}
+      aria-label={`${accessibleName} · ${busy ? "working" : "ready"}`}
       aria-busy={rendererKind === "pending" ? "true" : undefined}
       data-familiar-body={identity.body}
       data-genotype-source={identity.source}
@@ -89,4 +89,11 @@ export function FamiliarStage({
       )}
     </div>
   );
+}
+
+function familiarStageAccessibleName(label?: string) {
+  const trimmed = label?.trim();
+  return trimmed?.toLocaleLowerCase() === "familiar"
+    ? trimmed
+    : `${trimmed || "Boltrig"} Familiar`;
 }

@@ -130,7 +130,7 @@ export function RemembersTab() {
     return <Unavailable title="Memory access denied">Your current role cannot browse memory in this workspace.</Unavailable>;
   }
   if (state === "unavailable") {
-    return <Unavailable title="Memory unavailable">The governed memory service could not be reached.</Unavailable>;
+    return <Unavailable title="Memory unavailable">The memory service could not be reached.</Unavailable>;
   }
 
   return (

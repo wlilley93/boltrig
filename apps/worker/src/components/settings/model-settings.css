@@ -30,14 +30,6 @@
   box-shadow: 0 1px 4px rgb(0 0 0 / 18%);
 }
 
-.model-settings-intro {
-  max-width: 70ch;
-  margin: 0 0 18px;
-  color: var(--text-3);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
 .model-settings-actions {
   display: flex;
   align-items: center;

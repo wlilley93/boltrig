@@ -191,6 +191,7 @@ const JARVIS_SOURCE: CharacterCanvasSource = {
   render: ({ input, mode, phenotype, budgets, turn }) =>
     createElement(JarvisStage, {
       budgets: budgets as never,
+      highResolution: mode === "voice",
       phenotype,
       state: jarvisStateFromTurn(input),
       suspended: mode === "minimised",

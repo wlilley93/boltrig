@@ -23,6 +23,7 @@ export function JarvisStage({
   accent,
   scale,
   labels = "svg",
+  highResolution = false,
   className,
 }: {
   state: JarvisStageState;
@@ -56,12 +57,12 @@ export function JarvisStage({
    * desktop GLES wallpaper host must pass "shader". Keep both working.
    */
   labels?: "shader" | "svg";
+  highResolution?: boolean;
   className?: string;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<JarvisWebGLRenderer | null>(null);
   const [fallback, setFallback] = useState(false);
-
   // accent/scale are construction-time identity, not per-frame state: changing
   // them rebuilds the renderer rather than being smuggled in through update().
   const accentKey = accent ? accent.join(",") : "";
@@ -72,6 +73,7 @@ export function JarvisStage({
       accent,
       scale,
       labels: labels === "svg" ? "none" : "shader",
+      maxDevicePixelRatio: highResolution ? 2 : 1.25,
     });
     rendererRef.current = renderer;
     renderer.mount(host);
@@ -81,12 +83,10 @@ export function JarvisStage({
       rendererRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accentKey, scale, labels]);
-
+  }, [accentKey, scale, labels, highResolution]);
   useEffect(() => {
     rendererRef.current?.update(state);
   }, [state]);
-
   useEffect(() => {
     rendererRef.current?.applyWork(turn ? workFromTurn(turn) : null);
   }, [turn]);

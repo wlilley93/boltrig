@@ -1,4 +1,5 @@
-// The settings surface the decided target draws: twelve sections under four heads.
+// The settings surface the decided target draws. Related behaviour controls live
+// behind one section with four small views instead of competing for rail space.
 // Operations remains a valid deep-linked pane for the workspace home, but it
 // is deliberately not a settings-navigation entry in the canonical console,
 // whose nav replaces the app sidebar while Settings is open.
@@ -9,7 +10,10 @@
 
 export type SettingsSection =
   | "you"
+  | "behaviour"
+  // Legacy deep links remain valid and open the matching Behaviour view.
   | "sensing"
+  | "sight"
   | "autonomy"
   | "spend"
   | "models"
@@ -47,14 +51,10 @@ export const SETTINGS_SECTIONS: SettingsEntry[] = [
     lead: "How boltrig looks, speaks and reaches you.",
   },
   {
-    // A top-level section rather than a card under Advanced, deliberately.
-    // Advanced is device plumbing and developer switches; this is a CONSENT
-    // surface about the user's own hardware, and it earns the same standing as
-    // the approval posture next to it.
-    id: "sensing",
-    label: "Camera and presence",
-    title: "Camera and presence",
-    lead: "What this computer may see, how long it keeps it, and when it stops.",
+    id: "behaviour",
+    label: "Behaviour",
+    title: "Behaviour",
+    lead: "What Boltrig may notice, remember, and do while you are away.",
   },
   {
     id: "autonomy",
@@ -72,7 +72,7 @@ export const SETTINGS_SECTIONS: SettingsEntry[] = [
     id: "models",
     label: "Models",
     title: "Models",
-    lead: "The exact models boltrig may use for a chat.",
+    lead: "Choose the models Boltrig uses.",
   },
   {
     id: "shortcuts",
@@ -81,20 +81,8 @@ export const SETTINGS_SECTIONS: SettingsEntry[] = [
     lead: "Everything you can reach without the mouse.",
   },
   {
-    id: "knowledge",
-    label: "Knowledge",
-    head: "Its work",
-    title: "Knowledge",
-    lead: "What it can read, and what it is allowed to remember.",
-  },
-  {
-    id: "overnight",
-    label: "Overnight",
-    title: "Overnight",
-    lead: "Once a day it practises on your work, and keeps only what holds up.",
-  },
-  {
     id: "health",
+    head: "Its work",
     label: "Health",
     title: "Health",
     // The design's lead, kept because the pane now actually draws both halves:
@@ -123,11 +111,59 @@ export const SETTINGS_SECTIONS: SettingsEntry[] = [
   },
 ];
 
+const LEGACY_BEHAVIOUR_ENTRIES: Partial<Record<SettingsSection, SettingsEntry>> = {
+  sensing: {
+    id: "sensing",
+    label: "Behaviour",
+    title: "Behaviour",
+    lead: "What Boltrig may notice, remember, and do while you are away.",
+  },
+  sight: {
+    id: "sight",
+    label: "Behaviour",
+    title: "Behaviour",
+    lead: "What Boltrig may notice, remember, and do while you are away.",
+  },
+  knowledge: {
+    id: "knowledge",
+    label: "Behaviour",
+    title: "Behaviour",
+    lead: "What Boltrig may notice, remember, and do while you are away.",
+  },
+  overnight: {
+    id: "overnight",
+    label: "Behaviour",
+    title: "Behaviour",
+    lead: "What Boltrig may notice, remember, and do while you are away.",
+  },
+};
+
 export function settingsEntry(id: string): SettingsEntry {
   if (id === "operations") return OPERATIONS_ENTRY;
+  if (Object.prototype.hasOwnProperty.call(LEGACY_BEHAVIOUR_ENTRIES, id)) {
+    return LEGACY_BEHAVIOUR_ENTRIES[id as SettingsSection]!;
+  }
   return SETTINGS_SECTIONS.find((entry) => entry.id === id) ?? SETTINGS_SECTIONS[0];
 }
 
 export function isSettingsSection(value: string): value is SettingsSection {
-  return value === "operations" || SETTINGS_SECTIONS.some((entry) => entry.id === value);
+  return value === "operations"
+    || Object.prototype.hasOwnProperty.call(LEGACY_BEHAVIOUR_ENTRIES, value)
+    || SETTINGS_SECTIONS.some((entry) => entry.id === value);
+}
+
+export function isBehaviourSettingsSection(section: SettingsSection): boolean {
+  return section === "behaviour"
+    || section === "sensing"
+    || section === "sight"
+    || section === "knowledge"
+    || section === "overnight";
+}
+
+export function isActiveSettingsEntry(
+  current: SettingsSection | undefined,
+  entry: SettingsSection,
+): boolean {
+  if (!current) return false;
+  return entry === "behaviour" ? isBehaviourSettingsSection(current) : current === entry;
 }

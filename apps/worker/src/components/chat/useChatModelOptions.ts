@@ -14,6 +14,7 @@ const DEFAULT_ATTACHMENT_LIMITS: ChatAttachmentLimits = {
 export function useChatModelOptions() {
   const [modelChoices, setModelChoices] = useState<ChatModelChoice[]>([]);
   const [defaultModelName, setDefaultModelName] = useState<string | null>(null);
+  const [defaultModelSource, setDefaultModelSource] = useState<"personal" | "platform">("platform");
   const [defaultModelAvailable, setDefaultModelAvailable] = useState(false);
   const [defaultModelUnavailableReason, setDefaultModelUnavailableReason] = useState<string | null>(null);
   const [modelChoicesLoaded, setModelChoicesLoaded] = useState(false);
@@ -24,6 +25,7 @@ export function useChatModelOptions() {
     void client.chatModelChoices().then((result) => {
       setModelChoices(result.choices);
       setDefaultModelName(result.default_model_name ?? null);
+      setDefaultModelSource(result.default_source ?? "platform");
       setDefaultModelAvailable(result.status === "unavailable"
         ? false
         : result.default_available ?? Boolean(result.default_model_name));
@@ -45,6 +47,7 @@ export function useChatModelOptions() {
     attachmentLimits,
     defaultModelAvailable,
     defaultModelName,
+    defaultModelSource,
     defaultModelUnavailableReason,
     modelChoice,
     modelChoices,

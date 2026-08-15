@@ -312,7 +312,7 @@ export class FamiliarWebGLRenderer {
     const canvas = this.canvas;
     if (!canvas) return;
     const css = canvas.clientWidth || 1;
-    const scale = Math.min(window.devicePixelRatio || 1, 1.25);
+    const scale = Math.min(window.devicePixelRatio || 1, this.mode === "voice" ? 2 : 1.25);
     const size = Math.max(1, Math.round(css * scale));
     if (canvas.width !== size || canvas.height !== size) {
       canvas.width = size;

@@ -239,6 +239,44 @@ button.subagent-fan-row:hover .subagent-fan-name { color: var(--text); }
 .chat-layout[data-rail-collapsed="true"] { grid-template-columns: minmax(0, 1fr); }
 .chat-layout[data-rail-collapsed="true"] > .right-rail:not(.task-details-sheet) { display: none; }
 
+/* Automatic work is still a normal conversation, but its origin must remain
+   visible after the title is renamed. The run id stays opaque; Runs owns its
+   detailed projection. */
+.routine-run-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 745px);
+  margin: 4px auto 18px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+}
+.routine-run-mark {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 65%, transparent);
+}
+.routine-run-banner > span:nth-child(2) { display: grid; gap: 2px; min-width: 0; }
+.routine-run-banner strong { color: var(--text); font-size: 12.5px; }
+.routine-run-banner small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.routine-run-banner .text-button { font-size: 11.5px; }
+
+@media (prefers-reduced-transparency: reduce) {
+  .routine-run-banner { background: var(--paper); }
+}
+
 /* --- Mobile approvals ------------------------------------------------------ */
 
 /* The pending row grows a second line for its actions/receipt. */

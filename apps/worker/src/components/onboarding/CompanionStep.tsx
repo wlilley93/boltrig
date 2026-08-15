@@ -1,6 +1,4 @@
 import type { CharacterId } from "../../character";
-import type { FamiliarGenotype } from "@wlilley93/boltrig-web-sdk";
-import { FamiliarBadge } from "../familiar/FamiliarBadge";
 import { FamiliarStage } from "../familiar/FamiliarStage";
 import { RESTING_STAGE_STATE } from "../familiar/FamiliarState";
 import { JarvisStage } from "../jarvis/JarvisStage";
@@ -28,23 +26,10 @@ const CHOICES: CompanionChoice[] = [
   },
 ];
 
-const FAMILIAR_POSTER: FamiliarGenotype = {
-  source: "agent_capability.name.v1",
-  seed: 42,
-  body: "cassini",
-  palette: ["#dbeafe", "#3b82f6", "#172554"],
-  markings: ["constellation"],
-  accessories: ["orbit-ring"],
-};
-
 export function CompanionStep({
-  name,
-  onName,
   selected,
   onSelect,
 }: {
-  name: string;
-  onName: (value: string) => void;
   selected: CharacterId;
   onSelect: (id: CharacterId) => void;
 }) {
@@ -53,20 +38,9 @@ export function CompanionStep({
       <div className="onboarding-heading onboarding-rise">
         <p className="onboarding-kicker">Make it yours</p>
         <h1>Choose your companion</h1>
-        <p>You can switch later. The companion changes how Boltrig feels, never what it is allowed to do.</p>
+        <p>Choose who you’d like to work with. You can switch at any time.</p>
       </div>
-      <label className="onboarding-name onboarding-rise" style={{ "--onboarding-delay": "70ms" } as React.CSSProperties}>
-        <span>What should Boltrig call you?</span>
-        <input
-          autoComplete="name"
-          maxLength={80}
-          onChange={(event) => onName(event.target.value)}
-          placeholder="Your name"
-          required
-          value={name}
-        />
-      </label>
-      <p className="companion-prompt onboarding-rise" style={{ "--onboarding-delay": "110ms" } as React.CSSProperties}>Now choose who meets you in the workspace.</p>
+      <p className="companion-prompt onboarding-rise" style={{ "--onboarding-delay": "70ms" } as React.CSSProperties}>Meet them both.</p>
       <div className="companion-grid" role="radiogroup" aria-label="Companion">
         {CHOICES.map((choice, index) => {
           const active = selected === choice.id;
@@ -83,15 +57,15 @@ export function CompanionStep({
               tabIndex={active ? 0 : -1}
               type="button"
             >
-              <span className={`companion-art ${choice.id}`}>
-                <CompanionArt id={choice.id} active={active} />
+              <span className={`companion-art ${choice.id}`} aria-hidden="true">
+                <CompanionArt id={choice.id} />
               </span>
               <span className="companion-copy">
                 <strong>{choice.name}</strong>
                 <span>{choice.blurb}</span>
                 <small>{choice.note}</small>
               </span>
-              <span className="companion-check" aria-hidden="true">✓</span>
+              {active ? <span className="companion-check" aria-hidden="true">✓</span> : null}
             </button>
           );
         })}
@@ -117,13 +91,9 @@ function handleCompanionKey(
   next?.focus();
 }
 
-function CompanionArt({ id, active }: { id: CharacterId; active: boolean }) {
+function CompanionArt({ id }: { id: CharacterId }) {
   if (id === "familiar") {
-    return active
-      ? <FamiliarStage mode="hero" state={RESTING_STAGE_STATE} label="Familiar preview" />
-      : <FamiliarBadge genotype={FAMILIAR_POSTER} state="ready" label="Familiar preview" size={116} />;
+    return <FamiliarStage mode="hero" state={RESTING_STAGE_STATE} label="Familiar preview" />;
   }
-  return active
-    ? <JarvisStage state={RESTING_JARVIS_STATE} suspended={false} />
-    : <span className="jarvis-poster" aria-hidden="true"><i /><b>J</b></span>;
+  return <JarvisStage labels="shader" state={RESTING_JARVIS_STATE} suspended={false} />;
 }

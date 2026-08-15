@@ -161,7 +161,7 @@ export function AgentProfileEditor({
     if (draft.modelRouteMode === "multimodal" && textEndpoint && (
       !endpointSupports(textEndpoint, "text") || !endpointSupports(textEndpoint, "vision")
     )) {
-      setMessage("Choose a Bifrost endpoint that advertises both text and vision, or switch to separate models.");
+      setMessage("Choose a model that supports both text and vision, or switch to separate models.");
       setBusy(false);
       return;
     }
@@ -218,7 +218,7 @@ export function AgentProfileEditor({
   return (
     <form className="settings-card author-form agent-profile-editor" onSubmit={(event) => void save(event)}>
       <div className="section-heading">
-        <div><p className="eyebrow">Governed profile</p><h2>{initial ? `Edit ${initial.name}` : "Create an agent"}</h2></div>
+        <div><p className="eyebrow">Agent profile</p><h2>{initial ? `Edit ${initial.name}` : "Create an agent"}</h2></div>
         <button className="icon-button" type="button" aria-label="Close profile editor" onClick={() => { finalizer.invalidate(); onCancel(); }}>×</button>
       </div>
       <p>Profiles describe a Boltrig worker Codex may convene. Effective grants remain capped by the initiating identity.</p>

@@ -18,6 +18,7 @@ const primary: Array<{
   },
   { route: "agents", label: "Agents", icon: "agentBranch" },
   { route: "integrations", label: "Plugins", icon: "pluginGrid" },
+  { route: "browser", label: "Browser", icon: "browser" },
   { route: "automations", label: "Routines", icon: "routineClock" },
 ];
 

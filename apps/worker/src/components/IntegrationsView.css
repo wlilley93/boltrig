@@ -31,9 +31,12 @@
 
 .plugins-heading {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 8px;
 }
+
+.plugins-heading-copy { display: flex; min-width: 0; flex-direction: column; gap: 8px; }
 
 .plugins-heading h1 {
   margin: 0;
@@ -50,6 +53,109 @@
   line-height: 1.55;
   text-wrap: pretty;
 }
+
+.plugins-add-button {
+  min-height: 34px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.add-plugin-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  display: grid;
+  place-items: start center;
+  padding: 12vh 20px 24px;
+  background: color-mix(in srgb, var(--bg) 68%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.add-plugin-modal {
+  width: min(520px, 100%);
+  max-height: min(650px, 78vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-2);
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.add-plugin-modal > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 18px 12px;
+}
+
+.add-plugin-modal h2,
+.add-plugin-modal p { margin: 0; }
+.add-plugin-modal h2 { font-size: 18px; font-weight: 500; }
+.add-plugin-modal header p { margin-top: 4px; color: var(--text-3); font-size: 12.5px; }
+
+.add-plugin-modal > header > button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 20px;
+  cursor: pointer;
+}
+.add-plugin-modal > header > button:hover { background: var(--hover); color: var(--text); }
+
+.add-plugin-search {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 18px 10px;
+  padding: 0 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text-4);
+}
+.add-plugin-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 13px; }
+
+.add-plugin-list { overflow-y: auto; padding: 0 8px 10px; }
+.add-plugin-list > button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.add-plugin-list > button:hover { background: var(--hover); }
+.add-plugin-list > button:disabled { opacity: .48; cursor: default; }
+.add-plugin-list > button:disabled:hover { background: transparent; }
+.add-plugin-list > button > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.add-plugin-list strong { font-size: 13.5px; font-weight: 500; }
+.add-plugin-list small { overflow: hidden; color: var(--text-3); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.add-plugin-list em { color: var(--text-4); font-size: 11.5px; font-style: normal; }
+.add-plugin-list > p { padding: 24px 12px; color: var(--text-3); font-size: 13px; text-align: center; }
+.add-plugin-mark { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--border-2); border-radius: 9px; background: var(--card-2); font-size: 13px; font-weight: 600; }
 
 .plugins-wrap,
 .plugins-inventory,
@@ -817,6 +923,8 @@
 
 @media (max-width: 700px) {
   .plugins-pane { padding: 28px 18px 64px; }
+  .plugins-heading { align-items: stretch; flex-direction: column; }
+  .plugins-add-button { align-self: flex-start; }
   .plugins-heading h1 { font-size: 23px; }
   .plugins-row-detail { padding-left: 14px; }
   .plugins-row-meta { display: none; }

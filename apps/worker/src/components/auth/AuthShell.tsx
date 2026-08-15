@@ -1,3 +1,5 @@
+import { BrandWordmark } from "../BrandWordmark";
+
 export function AuthSplash() {
   return (
     <main className="auth-surface">
@@ -39,10 +41,9 @@ export function AuthCard({
     <main className="auth-surface">
       <section className="auth-card">
         <div className="auth-brand">
-          <span className="bolt-mark">ϟ</span>
-          <span>Boltrig Worker</span>
+          <BrandWordmark />
         </div>
-        <p className="eyebrow">Governed workspace</p>
+        <p className="eyebrow">Your workspace</p>
         <h1>{title}</h1>
         <p className="auth-lead">{lead}</p>
         {children}

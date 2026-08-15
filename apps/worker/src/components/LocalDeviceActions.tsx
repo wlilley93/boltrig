@@ -454,7 +454,7 @@ export function LocalDeviceActions({
   return (
     <section className="settings-card author-form device-action-panel">
       <div className="section-heading">
-        <div><p className="eyebrow">Local actions</p><h2>Run through the governed dispatcher</h2></div>
+        <div><p className="eyebrow">Local actions</p><h2>Run an action on this device</h2></div>
         <span className="row-meta">{localDevice ? "this device" : desktop ? "remote device" : "browser only"}</span>
       </div>
       {!desktop && (

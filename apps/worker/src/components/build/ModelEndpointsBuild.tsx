@@ -304,7 +304,7 @@ export function ModelEndpointsBuild() {
     <div className="build-layout">
       <section className="settings-card build-inventory">
         <div className="section-heading"><div><p className="eyebrow">{activeCount}/{endpoints.length} active</p><h2>Model endpoints</h2></div><div className="inline-actions"><button className="secondary-button" onClick={clearForm}>New</button><button className="secondary-button" onClick={() => void refresh()}>Refresh</button></div></div>
-        {endpoints.length === 0 ? <Unavailable title="No endpoints visible">Add the first governed endpoint, or configure it through a tenant manifest.</Unavailable> : (
+        {endpoints.length === 0 ? <Unavailable title="No endpoints visible">Add the first model connection, or configure one for this workspace.</Unavailable> : (
           <div className="data-list">{endpoints.map((endpoint) => (
             <button className="data-row" key={endpoint.id} onClick={() => void edit(endpoint)}>
               <span className={`activity-dot ${endpoint.is_active ? "ok" : "paused"}`} />
@@ -384,7 +384,7 @@ export function ModelEndpointsBuild() {
         <p>Sensitive data still routes only to endpoints declared local by server policy. Retiring an endpoint preserves its configuration and references, but every new route or binding to it fails closed until restore.</p>
         <div className="author-grid">
           <label><span>Identifier</span><input className="field-control" required disabled={Boolean(hydratedExisting)} value={id} onChange={(event) => { finalizer.invalidate(); setId(event.target.value); }} /></label>
-          <label><span>Kind</span><select className="field-control" value={kind} onChange={(event) => { finalizer.invalidate(); setKind(event.target.value); }}><option value="bifrost">Bifrost gateway</option><option value="openai">OpenAI-compatible</option><option value="local">Local</option></select></label>
+          <label><span>Kind</span><select className="field-control" value={kind} onChange={(event) => { finalizer.invalidate(); setKind(event.target.value); }}><option value="bifrost">Provider gateway</option><option value="openai">OpenAI-compatible</option><option value="local">Local</option></select></label>
           <label><span>Model</span><input className="field-control" required value={model} onChange={(event) => { finalizer.invalidate(); setModel(event.target.value); }} /></label>
           <label><span>Base URL (optional)</span><input className="field-control" type="url" value={baseUrl} onChange={(event) => { finalizer.invalidate(); setBaseUrl(event.target.value); }} /></label>
           <label><span>Fallback endpoint id</span><input className="field-control" value={fallback} onChange={(event) => { finalizer.invalidate(); setFallback(event.target.value); }} /><small>Stored for explicit health-based failover; it never bypasses retirement.</small></label>

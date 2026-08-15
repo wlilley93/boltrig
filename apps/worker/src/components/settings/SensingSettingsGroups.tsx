@@ -7,6 +7,7 @@ import { client } from "../../client";
 import {
   SettingsButton,
   SettingsGroup,
+  SettingsInfo,
   SettingsRow,
   SettingsSelect,
   SettingsToggle,
@@ -50,20 +51,29 @@ function capabilityName(capability: string): string {
   return capability === "presence" ? "Presence" : "Camera observations";
 }
 
-function CameraToggleRow({ busy, save, sensing }: {
+function CameraToggleRow({ busy, compact, save, sensing }: {
   busy: boolean;
+  compact: boolean;
   save: SensingSave;
   sensing: SensingResponse;
 }) {
   const { camera } = sensing;
   return (
     <SettingsRow
-      control={<SettingsToggle disabled={busy} label="Camera" on={camera.enabled} onToggle={(next) => void save(
-        () => client.putSensingCamera({ enabled: next }),
-        { ...sensing, camera: { ...camera, enabled: next } },
-        "The camera setting could not be saved.",
-      )} />}
-      desc={camera.source === "safe_default" && !camera.enabled
+      control={<div className="settings-status">
+        {compact && (
+          <SettingsInfo
+            label="About sight"
+            text="When Sight is off, Boltrig captures no camera frame. Turning it on does not bypass quiet hours or retention."
+          />
+        )}
+        <SettingsToggle disabled={busy} label="Camera" on={camera.enabled} onToggle={(next) => void save(
+          () => client.putSensingCamera({ enabled: next }),
+          { ...sensing, camera: { ...camera, enabled: next } },
+          "The camera setting could not be saved.",
+        )} />
+      </div>}
+      desc={compact ? undefined : camera.source === "safe_default" && !camera.enabled
         ? "Off because nobody has turned it on. Nothing is being watched."
         : "When this is off, no frame is captured and no character can ask for one."}
       tech="sensing.camera.enabled"
@@ -72,10 +82,11 @@ function CameraToggleRow({ busy, save, sensing }: {
   );
 }
 
-function CameraChoiceRow({ binding, busy, cameras, deviceId, enabled, onChoose }: {
+function CameraChoiceRow({ binding, busy, cameras, compact, deviceId, enabled, onChoose }: {
   binding: SensingResponse["camera"]["binding"];
   busy: boolean;
   cameras: CameraChoice[];
+  compact: boolean;
   deviceId: string | null;
   enabled: boolean;
   onChoose(choice: CameraChoice | null): void;
@@ -93,17 +104,20 @@ function CameraChoiceRow({ binding, busy, cameras, deviceId, enabled, onChoose }
         options={options.includes(value) ? options : [...options, value]}
         value={value}
       />}
-      desc={choosable
-        ? "One of the cameras this computer published. Nothing else can be selected."
-        : "This computer has published no camera to choose from."}
+      desc={compact
+        ? (choosable ? undefined : "No camera is available on this computer.")
+        : choosable
+          ? "One of the cameras this computer published. Nothing else can be selected."
+          : "This computer has published no camera to choose from."}
       tech="sensing.camera.binding"
       title="Which camera"
     />
   );
 }
 
-function RetentionRow({ busy, save, sensing }: {
+function RetentionRow({ busy, compact, save, sensing }: {
   busy: boolean;
+  compact: boolean;
   save: SensingSave;
   sensing: SensingResponse;
 }) {
@@ -125,15 +139,16 @@ function RetentionRow({ busy, save, sensing }: {
         options={RETENTION_OPTIONS.map((option) => option.label)}
         value={retentionLabel(camera.retention_hours)}
       />}
-      desc="Frames and the observations describing them are deleted together, so a record never outlives its image."
+      desc={compact ? undefined : "Frames and the observations describing them are deleted together, so a record never outlives its image."}
       tech="sensing.camera.retention_hours"
       title="Keep what it saw"
     />
   );
 }
 
-function QuietHoursRow({ busy, save, sensing }: {
+function QuietHoursRow({ busy, compact, save, sensing }: {
   busy: boolean;
+  compact: boolean;
   save: SensingSave;
   sensing: SensingResponse;
 }) {
@@ -153,30 +168,32 @@ function QuietHoursRow({ busy, save, sensing }: {
         <SettingsSelect disabled={busy} label="Quiet hours start" onChange={(label) => change("start", label)} options={HOURS} value={hourLabel(camera.quiet_hours.start)} />
         <SettingsSelect disabled={busy} label="Quiet hours end" onChange={(label) => change("end", label)} options={HOURS} value={hourLabel(camera.quiet_hours.end)} />
       </div>}
-      desc="Between these times nothing is captured, whatever a character asks for."
+      desc={compact ? undefined : "Between these times nothing is captured, whatever a character asks for."}
       tech="sensing.camera.quiet_hours"
       title="Quiet hours"
     />
   );
 }
 
-export function CameraSettingsGroup({ busy, cameras, deviceId, save, sensing }: {
+export function CameraSettingsGroup({ busy, cameras, compact = false, deviceId, save, sensing }: {
   busy: boolean;
   cameras: CameraChoice[];
+  compact?: boolean;
   deviceId: string | null;
   save: SensingSave;
   sensing: SensingResponse;
 }) {
   return (
     <SettingsGroup
-      foot="Boltrig controls the camera connection for this computer. A character may request access, but never owns the camera and is told when access is off."
-      title="What this computer may see"
+      foot={compact ? undefined : "Boltrig controls the camera connection for this computer. A character may request access, but never owns the camera and is told when access is off."}
+      title={compact ? undefined : "What this computer may see"}
     >
-      <CameraToggleRow busy={busy} save={save} sensing={sensing} />
+      <CameraToggleRow busy={busy} compact={compact} save={save} sensing={sensing} />
       <CameraChoiceRow
         binding={sensing.camera.binding}
         busy={busy}
         cameras={cameras}
+        compact={compact}
         deviceId={deviceId}
         enabled={sensing.camera.enabled}
         onChoose={(choice) => void save(
@@ -188,30 +205,39 @@ export function CameraSettingsGroup({ busy, cameras, deviceId, save, sensing }: 
           "The camera choice could not be saved.",
         )}
       />
-      <RetentionRow busy={busy} save={save} sensing={sensing} />
-      <QuietHoursRow busy={busy} save={save} sensing={sensing} />
+      <RetentionRow busy={busy} compact={compact} save={save} sensing={sensing} />
+      <QuietHoursRow busy={busy} compact={compact} save={save} sensing={sensing} />
     </SettingsGroup>
   );
 }
 
-export function PresenceSettingsGroup({ busy, save, sensing }: {
+export function PresenceSettingsGroup({ busy, compact = false, save, sensing }: {
   busy: boolean;
+  compact?: boolean;
   save: SensingSave;
   sensing: SensingResponse;
 }) {
   const { enrollment, presence } = sensing;
   const blocker = presence.blocked_by ?? null;
   return (
-    <SettingsGroup title="Who is in the room">
+    <SettingsGroup title={compact ? undefined : "Who is in the room"}>
       <SettingsRow
-        control={<SettingsToggle disabled={busy || blocker !== null} label="Presence" on={presence.enabled} onToggle={(next) => void save(
-          () => client.putSensingPresence({ enabled: next }),
-          { ...sensing, presence: { ...presence, enabled: next } },
-          "The presence setting could not be saved.",
-        )} />}
+        control={<div className="settings-status">
+          {compact && (
+            <SettingsInfo
+              label="About presence"
+              text="Presence answers whether your enrolled face is in view. It is not an identity check, and it turns off when Sight is off."
+            />
+          )}
+          <SettingsToggle disabled={busy || blocker !== null} label="Presence" on={presence.enabled} onToggle={(next) => void save(
+            () => client.putSensingPresence({ enabled: next }),
+            { ...sensing, presence: { ...presence, enabled: next } },
+            "The presence setting could not be saved.",
+          )} />
+        </div>}
         desc={blocker
           ? PRESENCE_BLOCKER_COPY[blocker] ?? "Presence is not available."
-          : "Whether it is you in front of the camera. One answer for every character."}
+          : compact ? undefined : "Whether it is you in front of the camera. One answer for every character."}
         tech="sensing.presence.enabled"
         title="Presence"
       />
@@ -228,15 +254,19 @@ export function PresenceSettingsGroup({ busy, save, sensing }: {
           tone="danger"
         />}
         desc={enrollment.present
-          ? `${enrollment.count} samples, recognised at ${enrollment.threshold ?? "—"}. ${enrollment.far_measured ? "The false-accept rate has been measured." : "The false-accept rate has NOT been measured, so this is not an identity check."}`
+          ? compact
+            ? "Ready on this computer."
+            : `${enrollment.count} samples, recognised at ${enrollment.threshold ?? "—"}. ${enrollment.far_measured ? "The false-accept rate has been measured." : "The false-accept rate has NOT been measured, so this is not an identity check."}`
           : "No face has been enrolled on this computer."}
         tech="sensing.enrollment"
         title="The enrolled face"
       />
-      <SettingsRow
-        desc="Anchor images are the character's face and travel with it. The enrolled face is yours, and Boltrig keeps it here."
-        title="It is never included in a character bundle"
-      />
+      {!compact && (
+        <SettingsRow
+          desc="Anchor images are the character's face and travel with it. The enrolled face is yours, and Boltrig keeps it here."
+          title="It is never included in a character bundle"
+        />
+      )}
     </SettingsGroup>
   );
 }

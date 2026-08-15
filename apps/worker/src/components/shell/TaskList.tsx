@@ -39,6 +39,10 @@ export function TaskList(props: TaskListProps) {
           <div className="shell-task-rows">{model.pinnedConversations.map(row)}</div>
         </section>
       )}
+      <section aria-labelledby="shell-projects" className="shell-task-group shell-project-group">
+        <p className="shell-task-group-label" id="shell-projects">Projects</p>
+        <p className="shell-project-empty">No projects</p>
+      </section>
       <section aria-labelledby="shell-recent-tasks" className="shell-task-group">
         <p className="shell-task-group-label" id="shell-recent-tasks">Recents</p>
         <div className="shell-task-rows">

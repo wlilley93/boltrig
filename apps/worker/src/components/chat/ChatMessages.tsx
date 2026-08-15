@@ -8,8 +8,9 @@ import {
 } from "@wlilley93/boltrig-web-sdk";
 
 import { LiveQuestionCard } from "../LiveQuestionCard";
-import { InlineApproval, SettledApproval } from "./InlineApproval";
+import { InlineApproval } from "./InlineApproval";
 import { OrderedWorkTranscript } from "./OrderedWorkTranscript";
+import { PersistedDecision } from "./PersistedDecision";
 import { SubagentChips } from "./SubagentChips";
 import {
   attachmentIdentity,
@@ -21,11 +22,13 @@ export function Message({
   message,
   tech,
   durationSeconds,
+  onDecisionResolved,
   onOpenSubagent,
 }: {
   message: ChatMessage;
   tech: boolean;
   durationSeconds?: number;
+  onDecisionResolved?(): void;
   onOpenSubagent?(agent: SubagentEntry): void;
 }) {
   const turn = useMemo(() => normalizeEvents(message.events ?? []), [message.events]);
@@ -56,7 +59,8 @@ export function Message({
           </button>
         ))}
         {message.events?.length ? (
-          <TurnDecisions turn={turn} settled tech={tech} onOpenSubagent={onOpenSubagent} />
+          <TurnDecisions turn={turn} settled tech={tech} onDecisionResolved={onDecisionResolved}
+            onOpenSubagent={onOpenSubagent} />
         ) : null}
       </div>
     </article>
@@ -119,11 +123,13 @@ export function TurnDecisions({
   turn,
   settled = false,
   tech,
+  onDecisionResolved,
   onOpenSubagent,
 }: {
   turn: NormalizedTurn;
   settled?: boolean;
   tech: boolean;
+  onDecisionResolved?(): void;
   onOpenSubagent?(agent: SubagentEntry): void;
 }) {
   const decisions = turn.timeline.filter(
@@ -140,34 +146,31 @@ export function TurnDecisions({
       />
       {decisions.map((item) => {
         if (item.kind === "hitl") {
-          // A settled transcript replays the hitl event, but its request
-          // belongs to a dead turn; the card must never invite re-answering.
-          if (settled) return <SettledApproval entry={item.entry} tech={tech} key={item.key} />;
+          if (settled) return <PersistedDecision
+            decision={{ kind: "approval", entry: item.entry }}
+            tech={tech}
+            onResolved={onDecisionResolved}
+            key={item.key}
+          />;
           return (
             <InlineApproval
               entry={item.entry}
               tech={tech}
               disabled={turn.ended}
+              onResolved={onDecisionResolved}
               key={item.key}
             />
           );
         }
         if (item.kind === "question") {
-          // A settled transcript replays the question event, but its HITL
-          // request is already resolved; rendering the interactive card would
-          // invite re-answering (including re-typing secure secrets) against
-          // a dead request.
-          if (settled) return (
-            <div className="approval-card live-question" key={item.key}>
-              <strong>Question from this run</strong>
-              <p>{item.entry.prompt}</p>
-              <p className="muted small">
-                This question was part of a completed turn and is no longer
-                answerable.
-              </p>
-            </div>
-          );
-          return <LiveQuestionCard question={item.entry} key={item.key} />;
+          if (settled) return <PersistedDecision
+            decision={{ kind: "question", entry: item.entry }}
+            tech={tech}
+            onResolved={onDecisionResolved}
+            key={item.key}
+          />;
+          return <LiveQuestionCard question={item.entry} key={item.key}
+            onAnswered={onDecisionResolved} />;
         }
         return null;
       })}

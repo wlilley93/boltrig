@@ -333,10 +333,10 @@ export function KnowledgeView() {
           {error && <p className="notice">{error}</p>}
           {message && <p className="notice" role="status">{message}</p>}
           <ExactApprovalFinalizer controller={mutationFinalizer} />
-          {surfaceState === "loading" && <Unavailable title="Loading knowledge">Loading governed sources and provider state.</Unavailable>}
-          {surfaceState === "denied" && <Unavailable title="Knowledge access denied">Your current role cannot view this governed source library.</Unavailable>}
+          {surfaceState === "loading" && <Unavailable title="Loading knowledge">Loading sources.</Unavailable>}
+          {surfaceState === "denied" && <Unavailable title="Knowledge access denied">Your current role cannot view this source library.</Unavailable>}
           {surfaceState === "not-found" && <Unavailable title="Knowledge not found">This deployment does not expose the canonical knowledge library route.</Unavailable>}
-          {surfaceState === "unavailable" && <Unavailable title="Knowledge unavailable">The governed knowledge service could not be reached.</Unavailable>}
+          {surfaceState === "unavailable" && <Unavailable title="Knowledge unavailable">The knowledge service could not be reached.</Unavailable>}
           {surfaceState === "ready" && tab === "files" && (
             <>
               <div className="knowledge-actions">
@@ -399,7 +399,7 @@ export function KnowledgeView() {
                 </section>
               )}
               {assets.length === 0 && !error ? (
-                <Unavailable title="No source documents">Add the first governed source with &ldquo;Add a file&rdquo;.</Unavailable>
+                <Unavailable title="No source documents">Add the first source with &ldquo;Add a file&rdquo;.</Unavailable>
               ) : (
                 <div className="console-table-wrap">
                   <div className="console-table">

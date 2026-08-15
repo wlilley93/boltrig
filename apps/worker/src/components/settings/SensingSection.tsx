@@ -98,7 +98,13 @@ function useSensing() {
   return { busy, message, save, sensing, setMessage, state };
 }
 
-export function SensingSection({ head = true }: { head?: boolean }) {
+export function SensingSection({
+  head = true,
+  view = "all",
+}: {
+  head?: boolean;
+  view?: "all" | "presence" | "sight";
+}) {
   const { busy, message, save, sensing, setMessage, state } = useSensing();
   const { cameras, deviceId } = useDiscoveredCameras();
 
@@ -117,15 +123,20 @@ export function SensingSection({ head = true }: { head?: boolean }) {
   return (
     <>
       {head && <SectionHead section="sensing" />}
-      <CameraSettingsGroup
-        busy={busy}
-        cameras={cameras}
-        deviceId={deviceId}
-        save={save}
-        sensing={sensing}
-      />
-      <PresenceSettingsGroup busy={busy} save={save} sensing={sensing} />
-      <CapabilitySettingsGroup decisions={sensing.capabilities} />
+      {view !== "presence" && (
+        <CameraSettingsGroup
+          busy={busy}
+          cameras={cameras}
+          compact={view !== "all"}
+          deviceId={deviceId}
+          save={save}
+          sensing={sensing}
+        />
+      )}
+      {view !== "sight" && (
+        <PresenceSettingsGroup busy={busy} compact={view !== "all"} save={save} sensing={sensing} />
+      )}
+      {view === "all" && <CapabilitySettingsGroup decisions={sensing.capabilities} />}
       {message && (
         <p className="notice" role="alert">
           {message}{" "}

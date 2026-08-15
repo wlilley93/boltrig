@@ -49,20 +49,18 @@ export const workerCommands: Command[] = [
   // The first four entries mirror the console rail; deeper destinations remain
   // searchable without displacing the task-first vocabulary in an empty palette.
   { route: "chat", label: "New chat", description: "Start something new", keywords: "new task chat codex voice call", hint: "Go" },
-  { route: "agents", label: "Agents", description: "Configure governed Codex worker profiles", keywords: "subagents profiles familiar runtime" },
+  { route: "agents", label: "Agents", description: "Configure agent profiles", keywords: "subagents profiles familiar runtime" },
   { route: "integrations", label: "Plugins", description: "Manage provider connections", keywords: "integrations connectors oauth external plugin" },
   { route: "automations", label: "Routines", description: "Author workflows, DAGs, triggers, and schedules", keywords: "automations hatchet workflow cron webhook routine" },
   // Every settings destination in the downloaded target is directly
   // addressable by the current hash router, so the palette exposes the same
   // one-search-away catalogue without inventing controls or state.
   { route: "settings", routeId: "you", label: "You settings", description: "Appearance, voice and personal preferences", keywords: "theme identity profile", hint: "Settings" },
-  { route: "settings", routeId: "sensing", label: "Camera and presence settings", description: "Review camera, retention, and presence consent", keywords: "camera presence sensing privacy retention", hint: "Settings" },
+  { route: "settings", routeId: "behaviour", label: "Behaviour settings", description: "Presence, sight, learning, and overnight", keywords: "camera presence sensing privacy retention cognee knowledge nightly", hint: "Settings" },
   { route: "settings", routeId: "autonomy", label: "Autonomy settings", description: "Review what stops and governs work", keywords: "approval permissions posture", hint: "Settings" },
   { route: "settings", routeId: "spend", label: "Spending settings", description: "Review cost and budget ceilings", keywords: "budget cost money", hint: "Settings" },
-  { route: "settings", routeId: "models", label: "Models settings", description: "Choose the exact models boltrig may use", keywords: "bifrost llm text vision voice routes", hint: "Settings" },
+  { route: "settings", routeId: "models", label: "Models settings", description: "Choose the models Boltrig may use", keywords: "llm text vision voice routes", hint: "Settings" },
   { route: "settings", routeId: "shortcuts", label: "Keyboard shortcuts settings", description: "See the shortcuts this build actually binds", keywords: "keys commands keyboard", hint: "Settings" },
-  { route: "settings", routeId: "knowledge", label: "Knowledge settings", description: "Review governed sources and storage", keywords: "files citations storage", hint: "Settings" },
-  { route: "settings", routeId: "overnight", label: "Overnight settings", description: "Inspect overnight practice and gates", keywords: "practice improve nightly", hint: "Settings" },
   { route: "settings", routeId: "health", label: "Health settings", description: "See what is working and what is bounded", keywords: "status checks readiness", hint: "Settings" },
   { route: "settings", routeId: "organisation", label: "Organisation settings", description: "Review workspace people and policy", keywords: "members roles audit", hint: "Settings" },
   { route: "settings", routeId: "advanced", label: "Advanced settings", description: "Device and developer controls", keywords: "technical desktop device", hint: "Settings" },
@@ -77,14 +75,14 @@ export const workerCommands: Command[] = [
   { route: "home", label: "Home", description: "See workspace activity and operational status", keywords: "overview dashboard" },
   { route: "work", label: "Work", description: "Browse canonical work and project dependencies", keywords: "tasks projects queue dag" },
   { route: "runs", label: "Runs", description: "Inspect execution, cost, and subagent topology", keywords: "history audit subagents codex" },
-  { route: "evaluations", label: "Evaluations", description: "Test governed agent behavior", keywords: "eval fixtures regression" },
-  { route: "knowledge", label: "Knowledge", description: "Search and manage governed sources", keywords: "documents rag files citations" },
+  { route: "evaluations", label: "Evaluations", description: "Test agent behaviour", keywords: "eval fixtures regression" },
+  { route: "knowledge", label: "Knowledge", description: "Search and manage sources", keywords: "documents rag files citations" },
   { route: "memory", label: "Memory", description: "Browse, recall, and improve durable memory", keywords: "facts remember ingest kernel" },
   { route: "channels", label: "Channels", description: "Connect external message and event channels", keywords: "webhook messaging pairing" },
   { route: "build", label: "Build", description: "Author capabilities and model endpoints", keywords: "skills mcp models tools" },
   { route: "build", routeId: "skills", label: "Skills", description: "What the agents know how to do, and where it came from", keywords: "build capabilities know-how provenance" },
   { route: "integrations", label: "Plugins and sources", description: "Choose connected context for a task", keywords: "slash context sources plugins integrations", hint: "Plugins" },
-  { route: "build", routeId: "actions", label: "Actions", description: "Every governed verb an agent can reach", keywords: "build verbs registry approval" },
+  { route: "build", routeId: "actions", label: "Actions", description: "Everything an agent can do", keywords: "build verbs registry approval" },
   { route: "account", label: "Account", description: "Manage your profile, security, and automation", keywords: "identity auth devices keys" },
   { route: "organisation", label: "Organisation", description: "Manage workspace members and policy", keywords: "team roles directory workspace" },
   { route: "settings", label: "Operations", routeId: "operations", description: "Review runtime posture, audit and budget evidence", keywords: "operate operations health audit budgets status" },
@@ -320,7 +318,7 @@ export function CommandPalette({
           <kbd>esc</kbd>
         </div>
         {searchState.kind === "loading" && (
-          <p className="command-api-state">Searching governed content…</p>
+          <p className="command-api-state">Searching your workspace…</p>
         )}
         {searchState.kind === "unavailable" && (
           <p className="command-api-state error" role="alert">
@@ -459,7 +457,7 @@ function sourceStatusCopy(source: FederatedSearchSourceResult): string {
 
 function announcement(optionCount: number, searchState: SearchState): string {
   const resultCopy = `${optionCount} ${optionCount === 1 ? "result" : "results"} available.`;
-  if (searchState.kind === "loading") return `${resultCopy} Searching governed content.`;
+  if (searchState.kind === "loading") return `${resultCopy} Searching your workspace.`;
   if (searchState.kind === "unavailable") {
     return `${resultCopy} Content search is unavailable; navigation commands still work.`;
   }
@@ -483,6 +481,7 @@ const COMMAND_ICON_PATHS: Record<string, string[]> = {
   integrations: ["M8 3v5M16 3v5", "M5.5 8h13v3a6.5 6.5 0 0 1-13 0z", "M12 17.5V21"],
   automations: ["M4.5 5.5h5v4h-5zM14.5 5.5h5v4h-5zM9.5 14.5h5v4h-5z", "M7 9.5v2.5h10V9.5M12 12v2.5"],
   "settings:you": ["M12 4.6a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8z", "M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"],
+  "settings:behaviour": ["M3 12h4l2-5 4 10 2-5h6"],
   "settings:autonomy": ["M12 3l7 3v5.5c0 4.6-3 7.2-7 8.5-4-1.3-7-3.9-7-8.5V6z"],
   "settings:spend": ["M12 3.5a8.5 8.5 0 1 0 8.5 8.5", "M12 12l4.5-3.5"],
   "settings:shortcuts": ["M3.5 6.5h17v11h-17z", "M7 10h.01M11 10h.01M15 10h.01M8 14h8"],

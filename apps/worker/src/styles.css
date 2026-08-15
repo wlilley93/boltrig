@@ -2,6 +2,14 @@
 @import "../../../docs/design/imported/tokens/spacing.css";
 @import "../../../docs/design/imported/tokens/typography.css";
 
+@font-face {
+  font-family: "Boltrig Archivo";
+  src: url("./assets/Archivo-Boltrig-ExtraBold.woff") format("woff");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 800;
+}
+
 /* Boltrig Console token system.
  *
  * The 2026-08-11 downloaded "Boltrig Console" design component supplies the geometry
@@ -208,15 +216,15 @@ h1, h2, h3, p { margin-top: 0; }
   letter-spacing: .06em;
   text-transform: uppercase;
 }
-.bolt-mark {
-  display: grid;
-  place-items: center;
-  width: 27px;
-  height: 27px;
-  border-radius: 9px;
-  color: #fff;
-  background: var(--accent);
-  font-size: 18px;
+.boltrig-wordmark {
+  display: inline-block;
+  font-family: "Boltrig Archivo", Archivo, Arial, sans-serif;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  line-height: .9;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 /* The gate is the first console screen, so it is drawn like one: a flat ground,
@@ -238,7 +246,7 @@ h1, h2, h3, p { margin-top: 0; }
   border-radius: 12px;
   background: var(--card);
 }
-.auth-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 30px; font-size: 13px; font-weight: 600; }
+.auth-brand { display: flex; align-items: center; margin-bottom: 30px; font-size: 17px; }
 .auth-card h1 { margin-bottom: 7px; font-size: 26px; font-weight: 500; letter-spacing: -.3px; }
 .auth-lead { margin-bottom: 26px; color: var(--text-3); font-size: 14px; line-height: 1.55; }
 .auth-form { display: grid; gap: 14px; }
@@ -1069,13 +1077,51 @@ h1, h2, h3, p { margin-top: 0; }
   border: 1px solid var(--border-2);
   border-radius: 14px;
   background: transparent;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
   /* Model and approval menus open above this frame. Clipping here made both
      controls appear to do nothing even though their state changed. */
   overflow: visible;
 }
 .composer.new-context { position: relative; z-index: 2; width: 100%; margin: 0; }
-.composer.new-context .composer-frame { background: var(--card); }
-.composer.new-context textarea { min-height: 41px; height: 41px; padding: 14px 16px 2px; }
+.composer.new-context .composer-frame {
+  min-height: 96px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 4%), transparent 68%),
+    color-mix(in srgb, var(--card-2) 84%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 5%),
+    0 18px 46px rgb(0 0 0 / 16%);
+  -webkit-backdrop-filter: blur(24px) saturate(1.18);
+  backdrop-filter: blur(24px) saturate(1.18);
+}
+.composer[data-drop-active="true"] .composer-frame {
+  border-color: color-mix(in srgb, var(--accent) 78%, white 22%);
+  background: color-mix(in srgb, var(--card-2) 86%, var(--accent) 14%);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent),
+    0 18px 46px rgb(0 0 0 / 18%);
+}
+.composer-drop-target {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 3px;
+  border-radius: inherit;
+  color: var(--text);
+  background: color-mix(in srgb, var(--card-2) 84%, transparent);
+  -webkit-backdrop-filter: blur(12px) saturate(1.12);
+  backdrop-filter: blur(12px) saturate(1.12);
+  pointer-events: none;
+}
+.composer-drop-target svg { margin-bottom: 2px; color: var(--accent); }
+.composer-drop-target strong { font-size: 13.5px; font-weight: 600; }
+.composer-drop-target small { color: var(--text-2); font-size: 11px; }
+.composer.new-context textarea { min-height: 48px; height: 48px; padding: 15px 16px 4px; }
 .composer textarea {
   display: block; resize: none; width: 100%; min-height: 64px; max-height: 180px;
   padding: 14px 16px 4px; border: 0; outline: 0; color: var(--text); background: transparent;
@@ -1107,7 +1153,7 @@ h1, h2, h3, p { margin-top: 0; }
 }
 .composer-posture:hover { color: var(--text); background: var(--hover); }
 .composer-posture > span { width: 6px; height: 6px; border-radius: 99px; background: currentColor; }
-.composer-dictate[aria-disabled="true"] { color: var(--text-3); cursor: not-allowed; }
+.composer-dictate[aria-disabled="true"] { color: var(--text-2); cursor: not-allowed; }
 .composer-context {
   position: relative;
   z-index: 1;
@@ -1120,6 +1166,11 @@ h1, h2, h3, p { margin-top: 0; }
   border-bottom: 0;
   border-radius: 12px 12px 0 0;
   background: var(--inset);
+}
+.composer.new-context .composer-context {
+  height: 40px;
+  margin-bottom: 0;
+  padding: 0 13px;
 }
 .composer-context-item {
   display: flex;
@@ -1164,15 +1215,16 @@ button.composer-context-item:hover { color: var(--text); }
   flex: 0 0 auto;
   align-items: center;
   gap: 13px;
-  width: 100%;
-  margin: 0;
-  padding: 12px 13px 12px 14px;
+  width: calc(100% - 24px);
+  min-height: 66px;
+  margin: 0 12px;
+  padding: 9px 13px 9px 14px;
   border: 0;
   border-radius: 13px;
   background: var(--card);
   box-shadow: inset 0 0 0 1px var(--border);
 }
-.voice-intro .familiar-orb { flex: 0 0 auto; width: 30px; height: 30px; }
+.voice-intro .familiar-orb { flex: 0 0 auto; width: 48px; height: 48px; }
 .voice-intro-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
 .voice-intro-copy strong { font-size: 13.5px; font-weight: 400; }
 .voice-intro-copy small { overflow: hidden; color: var(--text-3); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
@@ -1200,6 +1252,22 @@ button.composer-context-item:hover { color: var(--text); }
   font-size: 18px;
 }
 .voice-intro-dismiss:hover { color: var(--text); background: var(--hover); }
+@media (prefers-reduced-transparency: reduce) {
+  .composer.new-context .composer-frame {
+    background: var(--card-2);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .composer-drop-target {
+    background: var(--card-2);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .composer.new-context .composer-frame { background: var(--card-2); }
+  .composer-drop-target { background: var(--card-2); }
+}
 /* The model control reads as a quiet label with a chevron, not a form field:
    the decided target puts it beside send as "Best available". */
 .composer-model {
@@ -2567,6 +2635,37 @@ button.composer-context-item:hover { color: var(--text); }
 .source-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .mobile-menu, .sidebar-scrim { display: none; }
 .route-loading { display: grid; min-height: 50vh; place-items: center; color: var(--muted); font-size: 11px; }
+
+.worker-recovery {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+}
+.worker-recovery-card {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+.worker-recovery-brand {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.worker-recovery-card h1 { margin: 0; font-size: 23px; letter-spacing: -.02em; }
+.worker-recovery-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.worker-recovery-card .primary-button { margin-top: 6px; }
 
 /* 1375px is the first viewport that can hold the 266px Shell rail, the
    745px chat column with 24px gutters, and the 316px task inspector without

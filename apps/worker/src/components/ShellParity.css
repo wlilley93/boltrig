@@ -28,8 +28,11 @@
 /* Codex shell rhythm: one 14px label scale, 32px navigation rows, and a
  * compact 40px brand rail. Settings remains independently tokened. */
 .shell-parity .side-top {
+  position: relative;
+  z-index: 50;
   flex-basis: 40px;
   height: 40px;
+  overflow: visible;
   padding: 0 8px;
 }
 
@@ -74,11 +77,12 @@
   right: auto;
   bottom: auto;
   left: 0;
+  z-index: 60;
   width: 242px;
   max-height: min(420px, calc(100vh - 52px));
   padding: 5px;
   border-color: color-mix(in srgb, var(--text) 14%, transparent);
-  background: color-mix(in srgb, var(--paper-2) 96%, transparent);
+  background: color-mix(in srgb, var(--side) 94%, var(--text) 6%);
   -webkit-backdrop-filter: blur(22px) saturate(1.1);
   backdrop-filter: blur(22px) saturate(1.1);
 }
@@ -143,8 +147,10 @@
 }
 
 .shell-parity .side-nav {
+  position: relative;
+  z-index: 1;
   gap: 0;
-  padding: 2px 8px 0;
+  padding: 6px 8px 0;
 }
 
 .shell-parity .nav-row {
@@ -168,7 +174,7 @@
  * foot and the rail does not gain a second scrollbar. */
 .shell-task-list {
   gap: 0;
-  padding-top: 20px;
+  padding-top: 26px;
 }
 
 .shell-task-group {
@@ -179,7 +185,7 @@
 }
 
 .shell-task-group + .shell-task-group {
-  margin-top: 20px;
+  margin-top: 22px;
 }
 
 .shell-task-group-label {
@@ -193,6 +199,14 @@
 .shell-task-group .muted.small {
   margin: 0;
   padding: 0 8px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.shell-project-empty {
+  margin: 0;
+  padding: 0 8px;
+  color: var(--text-4);
   font-size: 13px;
   line-height: 20px;
 }

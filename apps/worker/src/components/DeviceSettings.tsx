@@ -24,7 +24,11 @@ import {
   LocalDeviceActions,
   clearLocalDeviceActionSession,
 } from "./LocalDeviceActions";
-
+import {
+  desktopConnectionVisible,
+  needsLocalEnrollmentCleanup,
+  trustedComputersVisible,
+} from "./deviceSettingsVisibility";
 export function DeviceSettings() {
   const desktop = hasDesktopRuntime();
   const [devices, setDevices] = useState<EnrolledDevice[]>([]);
@@ -318,38 +322,34 @@ export function DeviceSettings() {
       (rootId) => !localServerDevice.roots.some((root) => root.id === rootId),
     ) ?? []
     : [];
-  const localEnrollmentNeedsCleanup = desktop && (
-    nativeStatus?.state === "reenrollment_required"
-    || Boolean(
-      nativeStatus?.device_id
-      && devicesLoaded
-      && available
-      && !localServerDevice,
-    )
-  );
+  const localEnrollmentNeedsCleanup = needsLocalEnrollmentCleanup({
+    available, desktop, devicesLoaded, localServerDevice, nativeStatus,
+  });
   const desktopDownloadUrl = configuredDesktopDownloadUrl();
   const localConnectionReady = Boolean(localServerDevice) && !localEnrollmentNeedsCleanup;
+  const showDesktopConnection = desktopConnectionVisible(desktop, desktopDownloadUrl);
+  const showTrustedComputers = trustedComputersVisible(available, devicesError);
   return (
     <>
-      <DesktopConnectionCard
-        available={available}
-        busy={busy}
-        connected={localConnectionReady}
-        desktop={desktop}
-        downloadUrl={desktopDownloadUrl}
-        label={label}
-        needsCleanup={localEnrollmentNeedsCleanup}
-        onConnect={() => void connectDesktop()}
-        onLabel={setLabel}
-      />
-      <section className="settings-card">
+      {showDesktopConnection && (
+        <DesktopConnectionCard
+          available={available}
+          busy={busy}
+          connected={localConnectionReady}
+          desktop={desktop}
+          downloadUrl={desktopDownloadUrl}
+          label={label}
+          needsCleanup={localEnrollmentNeedsCleanup}
+          onConnect={() => void connectDesktop()}
+          onLabel={setLabel}
+        />
+      )}
+      {desktop && <section className="settings-card">
         <div className="section-heading">
           <div><p className="eyebrow">Native agent</p><h2>This computer’s connection</h2></div>
           <span className="row-meta">{nativeStatus?.state ?? (desktop ? "checking" : "not available")}</span>
         </div>
-        {!desktop ? (
-          <p className="muted">A browser cannot hold a computer key or local folder access.</p>
-        ) : nativeStatus?.device_id ? (
+        {nativeStatus?.device_id ? (
           <p>
             Device <code>{nativeStatus.device_id}</code> · {nativeStatus.root_ids.length} locally bound root{nativeStatus.root_ids.length === 1 ? "" : "s"}.
             {nativeStatus.reason ? ` ${nativeStatus.reason}.` : ""}
@@ -398,8 +398,8 @@ export function DeviceSettings() {
             </button>
           </div>
         )}
-      </section>
-      <section className="settings-card">
+      </section>}
+      {showTrustedComputers && <section className="settings-card">
         <p className="eyebrow">Trusted computers</p>
         {devicesError ? <p className="muted">{devicesError} <button className="secondary-button" type="button" onClick={refresh}>Retry</button></p> : !available ? <p className="muted">Trusted computers are not enabled on this deployment.</p> : devices.length === 0 ? <p className="muted">No trusted computers.</p> : devices.map((item) => {
           const local = desktop && nativeStatus?.device_id === item.id;
@@ -413,7 +413,7 @@ export function DeviceSettings() {
             </button>
           );
         })}
-      </section>
+      </section>}
       {device && (
         <section className="settings-card author-form">
           <div className="section-heading"><div><p className="eyebrow">Computer folders</p><h2>{device.label}</h2></div><span className="row-meta">{selectedIsLocal ? "local" : "remote · view only"}</span></div>

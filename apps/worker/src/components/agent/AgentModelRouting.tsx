@@ -33,8 +33,8 @@ export function AgentModelRouting({
 
   return (
     <fieldset className="agent-model-routing">
-      <legend>Bifrost model routing</legend>
-      <p className="muted small">Choose one multimodal model, or route text and vision through separate governed endpoints.</p>
+      <legend>Model routing</legend>
+      <p className="muted small">Choose one multimodal model, or use separate text and vision models.</p>
       <label><span>Model arrangement</span><select className="field-control" value={value.modelRouteMode} onChange={(event) => onChange({ ...value, modelRouteMode: event.target.value as AgentModelRoutingValue["modelRouteMode"], visionModelEndpoint: event.target.value === "multimodal" ? "" : value.visionModelEndpoint })}><option value="multimodal">One multimodal model</option><option value="separate">Text + separate vision models</option></select></label>
       <label><span>{value.modelRouteMode === "multimodal" ? "Multimodal model" : "Text model"}</span><select className="field-control" value={value.modelEndpoint} onChange={(event) => onChange({ ...value, modelEndpoint: event.target.value })}><option value="">Main API key (default)</option>{(value.modelRouteMode === "multimodal" ? multimodal : text).map((endpoint) => <option disabled={!endpoint.is_active} value={endpoint.id} key={endpoint.id}>{endpoint.id} · {endpoint.model}{endpoint.is_active ? "" : " (retired)"}</option>)}</select></label>
       {value.modelRouteMode === "separate" && <label><span>Vision model</span><select className="field-control" value={value.visionModelEndpoint} onChange={(event) => onChange({ ...value, visionModelEndpoint: event.target.value })}><option value="">Main vision key (if configured)</option>{vision.map((endpoint) => <option disabled={!endpoint.is_active} value={endpoint.id} key={endpoint.id}>{endpoint.id} · {endpoint.model}{endpoint.is_active ? "" : " (retired)"}</option>)}</select></label>}

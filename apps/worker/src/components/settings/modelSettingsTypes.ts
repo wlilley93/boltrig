@@ -11,7 +11,7 @@ export type EndpointModality = "text" | "vision" | "stt" | "tts" | "realtime";
 export function modelEndpointLabel(
   endpoint: Pick<ModelEndpointInfo, "model">,
 ): string {
-  return endpoint.model.trim() || "Model name unavailable";
+  return endpoint.model.trim() || "Unknown model";
 }
 
 export function supportsCatalogueModality(model: BifrostModelView, view: ModelView): boolean {

@@ -37,15 +37,13 @@ export const SETTINGS_INDEX: SettingsIndexRow[] = [
   { section: "you", title: "Change password" },
   { section: "you", title: "Activity and export", desc: "Your recent account activity" },
 
-  // Camera and presence — the consent surface for this computer's hardware.
-  { section: "sensing", title: "Camera", desc: "Whether this computer may watch the room at all", tech: "sensing.camera.enabled" },
-  { section: "sensing", title: "Which camera", desc: "The camera this computer's agent published", tech: "sensing.camera.binding" },
-  { section: "sensing", title: "Keep what it saw", desc: "How long frames and their observations survive", tech: "sensing.camera.retention_hours" },
-  { section: "sensing", title: "Quiet hours", desc: "When nothing is captured, whatever a character asks for", tech: "sensing.camera.quiet_hours" },
+  // Behaviour — four compact views sharing one navigation destination.
+  { section: "sight", title: "Sight", desc: "Camera, retention, and quiet hours", tech: "sensing.camera.enabled" },
+  { section: "sight", title: "Which camera", desc: "The camera this computer published", tech: "sensing.camera.binding" },
   { section: "sensing", title: "Presence", desc: "Whether it is you in front of the camera", tech: "sensing.presence.enabled" },
-  { section: "sensing", title: "The enrolled face", desc: "Kernel data about you; forget it here", tech: "sensing.enrollment" },
-  { section: "sensing", title: "It is never included in a character bundle", desc: "Anchor images are the character's face; the enrolled face is yours" },
-  { section: "sensing", title: "What a character is told", desc: "The honest refusal a character gets when a capability is off" },
+  { section: "sensing", title: "The enrolled face", desc: "Forget the local face enrolment", tech: "sensing.enrollment" },
+  { section: "overnight", title: "Overnight", desc: "Allow checked overnight practice", tech: "behaviour.overnight.enabled" },
+  { section: "knowledge", title: "Cognee", desc: "Connect related knowledge for later recall" },
 
   // Autonomy.
   { section: "autonomy", title: "Agent tool approvals", desc: "Ask for approval, approve safe actions, or grant full access for this runtime", tech: "agentic.approval_posture" },
@@ -53,16 +51,16 @@ export const SETTINGS_INDEX: SettingsIndexRow[] = [
   { section: "autonomy", title: "Credentials stay server-side" },
 
   // Spending.
-  { section: "spend", title: "Total so far", desc: "Every governed call this workspace has paid for" },
+  { section: "spend", title: "Total so far", desc: "Everything this workspace has paid for" },
   { section: "spend", title: "Ceilings", desc: "Spend meters per budget window" },
   { section: "spend", title: "Where it went", desc: "Spend attributed per actor" },
 
-  // Models — exact Bifrost-facing names and their recoverable lifecycle.
-  { section: "models", title: "Managed model routes", desc: "Exact model names shown in the chat switcher" },
-  { section: "models", title: "Add a model", desc: "Add a governed Bifrost model choice" },
-  { section: "models", title: "Change a model", desc: "Update an existing governed model choice" },
-  { section: "models", title: "Remove a model", desc: "Retire a route everywhere while retaining its configuration" },
-  { section: "models", title: "Restore a model", desc: "Return a retired route to model routing; switcher eligibility is checked separately" },
+  // Models — choices and their recoverable lifecycle.
+  { section: "models", title: "Your models", desc: "Models available to Boltrig" },
+  { section: "models", title: "Add model", desc: "Add a model" },
+  { section: "models", title: "Change model", desc: "Change a model" },
+  { section: "models", title: "Remove model", desc: "Remove a model wherever it is used" },
+  { section: "models", title: "Restore model", desc: "Restore a removed model" },
 
   // Keyboard shortcuts — drawn from the registry, one source of truth.
   ...SHORTCUTS.map((shortcut) => ({
@@ -71,15 +69,6 @@ export const SETTINGS_INDEX: SettingsIndexRow[] = [
     desc: shortcut.desc,
     tech: shortcut.keys.join(" "),
   })),
-
-  // Knowledge — KnowledgeView's real surface.
-  { section: "knowledge", title: "Knowledge providers", desc: "Where indexed passages live, and their health" },
-  { section: "knowledge", title: "Upload knowledge", desc: "Governed assets with revisions and citations" },
-
-  // Overnight.
-  { section: "overnight", title: "What the record shows", desc: "Gate receipts from overnight practice" },
-  { section: "overnight", title: "What a night has to prove", desc: "The mechanical checks before anything is kept" },
-  { section: "overnight", title: "The rules it works under", desc: "Rebuild from base, habits never facts, erasure by exclusion" },
 
   // Health.
   { section: "health", title: "Everything that has to be working", desc: "Readiness checks, in plain words" },

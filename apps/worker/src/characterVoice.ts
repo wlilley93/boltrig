@@ -19,7 +19,11 @@
 //
 // `undefined` still means silence. Nothing in this file invents a voice.
 
-import { bundleVoiceId, type CharacterBundleManifest } from "@wlilley93/boltrig-web-sdk";
+import {
+  bundleVoiceId,
+  type Character,
+  type CharacterBundleManifest,
+} from "@wlilley93/boltrig-web-sdk";
 
 import type { CharacterId } from "./character";
 
@@ -31,6 +35,9 @@ import type { CharacterId } from "./character";
  * make picking one silently repoint the other.
  */
 export const VOICE_OVERRIDE_SETTING_KEY = "agent.voice";
+
+/** Persisted opt-in for speaking completed text-chat replies. */
+export const READ_REPLIES_SETTING_KEY = "voice.read_replies";
 
 /**
  * The provider a browsable override applies to.
@@ -101,6 +108,29 @@ export function resolveVoiceId(
     if (chosen) return chosen;
   }
   return bundleVoiceId(manifest, provider);
+}
+
+/** Registry equivalent of resolveVoiceId for a character already installed. */
+export function resolveRegisteredVoiceId(
+  character: Pick<Character, "id" | "voiceIds">,
+  provider: string,
+  settings: Record<string, unknown> | undefined,
+): string | undefined {
+  if (provider === OVERRIDE_PROVIDER) {
+    const chosen = voiceOverrideFromSettings(settings, character.id);
+    if (chosen) return chosen;
+  }
+  return character.voiceIds?.[provider];
+}
+
+export function readRepliesFromSettings(
+  settings: Record<string, unknown> | undefined,
+): boolean {
+  return settings?.[READ_REPLIES_SETTING_KEY] === true;
+}
+
+export function readRepliesToSettings(enabled: boolean): Record<string, unknown> {
+  return { [READ_REPLIES_SETTING_KEY]: enabled };
 }
 
 /**

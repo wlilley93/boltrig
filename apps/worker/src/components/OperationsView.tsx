@@ -80,7 +80,7 @@ export function HomeView({
           <button className="primary-button" onClick={() => onRoute("chat")}>Start a task</button>
         </div>
         {error && <p className="notice">{error}</p>}
-        {!overview && !error ? <Unavailable title="Loading your workspace">Reading the governed console projection.</Unavailable> : overview && (
+        {!overview && !error ? <Unavailable title="Loading your workspace">Loading your workspace.</Unavailable> : overview && (
           <>
             <div className="pulse-grid">
               <Pulse
@@ -1139,7 +1139,7 @@ function MemoryProjectionDeliveryCard({
       <p className="notice">
         Manual retry is unavailable because Boltrig does not retain the original
         projection payload in these receipts. Recover from the canonical memory
-        source through a future governed replay contract; this view does not
+        source through a future replay contract; this view does not
         create a second write path.
       </p>
     </section>

@@ -4,6 +4,8 @@ import type {
 } from "@wlilley93/boltrig-web-sdk";
 import { useState, type DragEvent, type KeyboardEvent } from "react";
 
+import { CHAT_QUEUE_DRAG_TYPE } from "./ComposerAttachments";
+
 const PREVIEWABLE_IMAGES = new Set([
   "image/gif",
   "image/jpeg",
@@ -165,6 +167,7 @@ function useQueueReorder(
     dragStart(event: DragEvent, message: ChatMessage) {
       if (disabled) { event.preventDefault(); return; }
       event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData(CHAT_QUEUE_DRAG_TYPE, message.id);
       event.dataTransfer.setData("text/plain", message.id);
       setDraggingId(message.id); setDragOrder(sourceOrder);
     },

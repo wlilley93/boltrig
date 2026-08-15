@@ -18,7 +18,7 @@ export function ConnectionInstructions() {
       <p className="eyebrow">Developer connections</p>
       <h2>Connect a client to Boltrig</h2>
       {!instructions ? (
-        <p className="muted">Loading governed endpoints…</p>
+        <p className="muted">Loading connections…</p>
       ) : (
         <>
           <dl className="fact-grid">

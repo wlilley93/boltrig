@@ -8,16 +8,14 @@ import type { ConversationSummary } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../client";
 import type { WorkerRoute } from "../routes";
-import { SETTINGS_SECTIONS, type SettingsSection } from "../settingsSections";
+import { isActiveSettingsEntry, SETTINGS_SECTIONS, type SettingsSection } from "../settingsSections";
 import { ShellIcon, type ShellIconName } from "./shell/ShellIcon";
 import { ShellNav } from "./shell/ShellNav";
 import { TaskList } from "./shell/TaskList";
 import { useWorkerGlobalContext } from "./WorkerGlobalContext";
 import "./ShellParity.css";
 
-// The user menu is intentionally small. The app's task surfaces stay in the
-// primary rail; account actions are the only things that belong behind the
-// identity control.
+// Task surfaces stay in the rail; account actions belong behind identity.
 const accountMenuItems: Array<{
   action: "spend" | "invite" | "settings" | "logout";
   label: string;
@@ -403,8 +401,8 @@ export function Sidebar({
                 <p className="settings-side-head">{entry.head}</p>
               )}
               <button
-                aria-current={settingsSection === entry.id ? "page" : undefined}
-                className={settingsSection === entry.id ? "nav-row active" : "nav-row"}
+                aria-current={isActiveSettingsEntry(settingsSection, entry.id) ? "page" : undefined}
+                className={isActiveSettingsEntry(settingsSection, entry.id) ? "nav-row active" : "nav-row"}
                 onClick={() => onSettingsSection(entry.id)}
                 type="button"
               >
@@ -448,7 +446,9 @@ export function Sidebar({
 }
 const settingsIcons: Record<SettingsSection, ShellIconName> = {
   you: "user",
+  behaviour: "pulse",
   sensing: "camera",
+  sight: "camera",
   autonomy: "shield",
   spend: "gauge",
   models: "code",

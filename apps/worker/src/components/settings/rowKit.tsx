@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { setDeveloperDetails, useDeveloperDetails } from "./devDetails";
 import "./settings-kit.css";
@@ -89,6 +89,26 @@ export function SettingsToggle({ on, onToggle, label, disabled = false }: {
     >
       <i aria-hidden />
     </button>
+  );
+}
+
+export function SettingsInfo({ label, text }: { label: string; text: string }) {
+  const tooltipId = useId();
+  return (
+    <span className="settings-info-wrap">
+      <button
+        aria-describedby={tooltipId}
+        aria-label={label}
+        className="settings-info"
+        type="button"
+      >
+        <svg aria-hidden fill="none" height="11" stroke="currentColor" strokeLinecap="round" strokeWidth="2" viewBox="0 0 16 16" width="11">
+          <circle cx="8" cy="8" r="6" />
+          <path d="M8 7v4M8 4.5h.01" />
+        </svg>
+      </button>
+      <span className="settings-info-tip" id={tooltipId} role="tooltip">{text}</span>
+    </span>
   );
 }
 

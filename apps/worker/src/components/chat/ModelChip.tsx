@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChatModelChoice } from "@wlilley93/boltrig-web-sdk";
 
 import "./ModelChip.css";
 import { ModelRuntimePopover } from "./ModelRuntimePopover";
-import { buildModelOptions, nextAvailable } from "./modelChipOptions";
+import { nextAvailable } from "./modelChipOptions";
 import type { ChipOption } from "./modelChipOptions";
+import { useModelChipOptions } from "./useModelChipOptions";
 
 interface ModelChipProps {
   choices: ChatModelChoice[];
   defaultModelName?: string | null;
+  defaultModelSource?: "personal" | "platform";
   defaultAvailable?: boolean;
   defaultUnavailableReason?: string | null;
   value: string;
@@ -25,12 +27,7 @@ export function ModelChip(props: ModelChipProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
-  const options = useMemo(() => buildModelOptions({
-    choices: props.choices,
-    defaultModelName: props.defaultModelName,
-    defaultAvailable: props.defaultAvailable ?? Boolean(props.defaultModelName),
-    defaultUnavailableReason: props.defaultUnavailableReason,
-  }), [props.choices, props.defaultAvailable, props.defaultModelName, props.defaultUnavailableReason]);
+  const options = useModelChipOptions(props);
   const selectedIndex = Math.max(0, options.findIndex((option) => option.id === props.value));
   const selected = options[selectedIndex]!;
 

@@ -100,16 +100,15 @@ const BLOOM_DIVISOR = 4;
 const BLOOM_THRESHOLD = 0.55;
 const BLOOM_KNEE = 0.25;
 const BLOOM_STRENGTH = 0.80;
-
 interface RenderTarget {
   fbo: WebGLFramebuffer;
   tex: WebGLTexture;
   width: number;
   height: number;
 }
-
 export interface JarvisRendererOptions {
   reducedMotion?: boolean;
+  maxDevicePixelRatio?: number;
   /** Linear RGB accent; defaults to the instrument's own violet. */
   accent?: readonly [number, number, number];
   /** Dial size multiplier; 1.0 is the tuned default. */
@@ -138,7 +137,6 @@ export interface JarvisRendererOptions {
    */
   fit?: "auto" | "fixed";
 }
-
 export class JarvisWebGLRenderer {
   readonly kind = "webgl2" as const;
 
@@ -153,6 +151,7 @@ export class JarvisWebGLRenderer {
   private lastReducedFrame = -Infinity;
 
   private readonly reducedMotion: boolean;
+  private readonly maxDevicePixelRatio: number;
   private readonly accent: readonly [number, number, number];
   private readonly scale: number;
   private readonly labels: "shader" | "none";
@@ -234,6 +233,7 @@ export class JarvisWebGLRenderer {
         && typeof window.matchMedia === "function"
         && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
     this.accent = options?.accent ?? [0.478, 0.365, 0.878];
+    this.maxDevicePixelRatio = Math.max(1, Math.min(2, options?.maxDevicePixelRatio ?? 1.25));
     this.scale = options?.scale ?? 1;
     this.labels = options?.labels ?? "shader";
     this.wantBloom = options?.bloom ?? true;
@@ -563,7 +563,7 @@ export class JarvisWebGLRenderer {
   private resizeCanvas(): void {
     const canvas = this.canvas;
     if (!canvas) return;
-    const scale = Math.min(window.devicePixelRatio || 1, 1.25);
+    const scale = Math.min(window.devicePixelRatio || 1, this.maxDevicePixelRatio);
     const w = Math.max(1, Math.round((canvas.clientWidth || 1) * scale));
     const h = Math.max(1, Math.round((canvas.clientHeight || 1) * scale));
     if (canvas.width !== w || canvas.height !== h) {

@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import type {
-  KnowledgeMutationResponse,
-  KnowledgeProvider,
   MeSettingsResponse,
   MeNotificationItem,
   NotificationCatalogue,
@@ -19,10 +17,6 @@ import {
 } from "../../character";
 import { useCharacterOptions } from "../characters";
 import { isDesktop } from "../../desktop";
-import {
-  ExactApprovalFinalizer,
-  useExactApprovalFinalizer,
-} from "../ExactApprovalFinalizer";
 import {
   appearanceFromSettings,
   appearanceToSettings,
@@ -44,7 +38,7 @@ import {
   StateWord,
   type Tone,
 } from "./rowKit";
-
+import { ReadRepliesSetting } from "./ReadRepliesSetting";
 // Compact row-idiom panes for the identity, organisation, knowledge and
 // advanced settings sections. Every row reads real SDK data; the larger
 // operational views remain separate from the default settings path.
@@ -443,7 +437,7 @@ function CompactReachingYouSection() {
         eventRow("Escalations", "escalation", "A sub-agent asked for more authority than it has."),
         eventRow("Budget warnings", "budget_warning", "Spend crossed the warning threshold."),
         eventRow("Failures", "failure", "A run failed or a connection degraded."),
-        eventRow("Work status changes", "work_status", "Every status change."),
+        eventRow("Work completed", "work_status", "When requested or automatic work finishes."),
       ]}
       title="Reaching you"
       >
@@ -479,8 +473,7 @@ function CompactReachingYouSection() {
 }
 
 function CompactTalkingToItSection() {
-  return (
-    <SettingsGroup
+  return <SettingsGroup
       advanced={[
         <SettingsRow
           control={(
@@ -506,6 +499,7 @@ function CompactTalkingToItSection() {
       foot="A call goes through exactly what a message does. Same checks, same record, plus a transcript."
       title="Talking to it"
     >
+      <ReadRepliesSetting />
       <SettingsRow
         control={(
           <SettingsToggle disabled label="Take calls" on={false} onToggle={() => {}} />
@@ -522,11 +516,11 @@ function CompactTalkingToItSection() {
       />
       <span className="settings-visually-hidden">Call availability is checked when a call starts.</span>
       <span className="settings-visually-hidden">Calls wait for approval and resume from the originating chat.</span>
-    </SettingsGroup>
-  );
+    </SettingsGroup>;
 }
 
 /** Live appearance rows used by Settings search instead of destination links. */
+// They share the same caller-scoped settings record as the full appearance pane.
 export function CompactAppearanceSearchResults({ titles }: { titles: string[] }) {
   const {
     appearance, busy, changeAppearance, changeCharacter, character, message, state,
@@ -611,133 +605,6 @@ export function CompactOrganisationSection() {
         />
       )}
     </SettingsGroup>
-  );
-}
-
-function providerTone(provider: KnowledgeProvider): { tone: Tone; state: string } {
-  if (!provider.enabled) return { tone: "unknown", state: "off" };
-  if (provider.health === "ok") return { tone: "green", state: "fine" };
-  if (provider.health === "degraded") return { tone: "amber", state: "struggling" };
-  if (provider.health === "down") return { tone: "red", state: "down" };
-  return { tone: "unknown", state: provider.health || "unknown" };
-}
-
-export function CompactKnowledgeSection() {
-  const [providers, setProviders] = useState<KnowledgeProvider[] | null>(null);
-  const [state, setState] = useState<"loading" | "ready" | "unavailable">("loading");
-  const [message, setMessage] = useState("");
-  const mutationFinalizer = useExactApprovalFinalizer<
-    { providerId: string; enabled: boolean },
-    KnowledgeMutationResponse
-  >({
-    isCurrent: (input) => providers?.some((provider) => (
-      provider.id === input.providerId && provider.enabled !== input.enabled
-    )) ?? false,
-    replay: (input, approvalId) => client.setKnowledgeProvider(
-      input.providerId,
-      input.enabled,
-      approvalId,
-    ),
-    onApplied: async (_result, input) => {
-      setMessage(`Provider ${input.enabled ? "enabled" : "disabled"}.`);
-      await refreshProviders();
-    },
-    onRefused: (result) => {
-      setMessage(result.reason ?? "The approved Knowledge provider change was not applied.");
-    },
-    onUncertain: async () => {
-      await refreshProviders();
-    },
-  });
-
-  async function refreshProviders() {
-    try {
-      const result = await client.knowledgeProviders();
-      setProviders(result.providers ?? []);
-      setState("ready");
-    } catch {
-      setState("unavailable");
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    if (typeof client.knowledgeProviders !== "function") {
-      setState("unavailable");
-      return;
-    }
-    void client.knowledgeProviders()
-      .then((result) => {
-        if (cancelled) return;
-        setProviders(result.providers ?? []);
-        setState("ready");
-      })
-      .catch(() => { if (!cancelled) setState("unavailable"); });
-    return () => { cancelled = true; };
-  }, []);
-
-  async function setProvider(provider: KnowledgeProvider, enabled: boolean) {
-    if (provider.status === "unavailable") {
-      setMessage(`${provider.display_name} is unavailable.`);
-      return;
-    }
-    setMessage("");
-    mutationFinalizer.invalidate();
-    const input = { providerId: provider.id, enabled };
-    try {
-      const result = await client.setKnowledgeProvider(provider.id, enabled);
-      if (mutationFinalizer.begin(input, result, "Knowledge provider change")) {
-        setMessage("Provider change is waiting for approval in the originating chat.");
-        return;
-      }
-      setMessage(result.reason ?? `Provider ${enabled ? "enabled" : "disabled"}.`);
-      if (result.status === "ok") await refreshProviders();
-    } catch {
-      setMessage(
-        `${provider.display_name} could not be changed. Its last reported state is unchanged; it is safe to retry.`,
-      );
-    }
-  }
-
-  if (state === "loading") return <p className="muted small">Reading knowledge providers…</p>;
-  if (state === "unavailable" || providers === null) {
-    return <p className="notice">Knowledge providers could not be read.</p>;
-  }
-
-  return (
-    <>
-      {message && <p className="console-foot" role="status">{message}</p>}
-      <ExactApprovalFinalizer controller={mutationFinalizer} />
-      <SettingsGroup title="Where knowledge lives">
-        {providers.length === 0 ? (
-          <SettingsRow
-            desc="No knowledge provider is configured in this workspace."
-            title="Nothing configured"
-          />
-        ) : providers.map((provider) => {
-          const { tone, state: word } = providerTone(provider);
-          return (
-            <SettingsRow
-              control={(
-                <div className="settings-status">
-                  <StateWord tone={tone}>{word}</StateWord>
-                  <SettingsToggle
-                    disabled={provider.status === "unavailable"}
-                    label={`${provider.enabled ? "Disable" : "Enable"} ${provider.display_name}`}
-                    on={provider.enabled}
-                    onToggle={(enabled) => void setProvider(provider, enabled)}
-                  />
-                </div>
-              )}
-              desc={provider.role}
-              key={provider.id}
-              tech={provider.id}
-              title={provider.display_name}
-            />
-          );
-        })}
-      </SettingsGroup>
-    </>
   );
 }
 

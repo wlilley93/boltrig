@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
-import { createPortal } from "react-dom";
 import type {
   CallCreateResponse,
   CallEvent,
@@ -16,12 +15,17 @@ import { isDesktop } from "../desktop";
 import { StageBody, useFamiliarBody, type StageTurnInput } from "./StageBody";
 import { useCharacter } from "./characters";
 import { useStagePhenotype } from "./chat/useStagePhenotype";
-import { FamiliarBadge } from "./familiar/FamiliarBadge";
+import {
+  VoiceCallScreen,
+  VoiceTranscript,
+  type VoiceLine,
+} from "./voice/VoiceCallScreen";
 import {
   attachBargeInCapture, BARGE_IN_NOTICE, bargeInHostFields, requestSelfHostedInterrupt,
   startBargeInGate, stopBargeInGate, type BargeInHost,
 } from "./voiceBargeInGraph";
 import { audioTracks, createVoicePlaybackAnalyser, resamplePcm16, safeDisconnect } from "./voiceMedia";
+import { UtteranceGain, pcm16ToFloat } from "./voiceLoudness";
 import "./VoiceCall.css";
 
 interface VoiceCallProps {
@@ -46,14 +50,6 @@ interface VoiceCallProps {
   showOptions?: boolean;
 }
 
-interface VoiceLine {
-  id: string;
-  speaker: "You" | "Boltrig";
-  text: string;
-  /** True when the line was typed mid-call rather than spoken. */
-  typed?: boolean;
-}
-
 type IncomingCallEvent = Pick<CallEvent, "type" | "payload"> &
   Partial<Pick<CallEvent, "id" | "call_id" | "participant_id" | "created_at">>;
 
@@ -66,8 +62,13 @@ interface MediaResources extends BargeInHost {
   processor: ScriptProcessorNode;
   source: MediaStreamAudioSourceNode;
   mute: GainNode;
+  /** User-controlled call output. Playback analysis stays upstream so the
+   * selected character can remain expressive while its sound is muted. */
+  playbackGain: GainNode;
   /** Familiar lift (ADR 0025): fires as assistant playback starts/stops. */
   onPlayback?: (speaking: boolean) => void;
+  /** One loudness gain per UTTERANCE, never per chunk -- see playPcm. */
+  utteranceGain: UtteranceGain;
   /** Voice embodiment (A4): playback routes through this analyser; a ~30Hz
    * sampler emits bounded spectral features only - PCM never leaves the graph. */
   analyser?: AnalyserNode;
@@ -209,10 +210,9 @@ export function VoiceCall({
   const [recovered, setRecovered] = useState(false);
   const [recentCalls, setRecentCalls] = useState<RealtimeCall[]>([]);
   const [muted, setMuted] = useState(false);
+  const [characterMuted, setCharacterMuted] = useState(false);
   const [textDraft, setTextDraft] = useState("");
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [dismissedNotice, setDismissedNotice] = useState("");
-  const [focusedParticipantId, setFocusedParticipantId] = useState<string | null>(null);
   const [familiarActivity, setFamiliarActivity] = useState<VoiceFeatures>({
     ...QUIET_VOICE_FEATURES,
     bands: [...QUIET_VOICE_FEATURES.bands],
@@ -226,7 +226,7 @@ export function VoiceCall({
   const readyRef = useRef(false);
   const endingRef = useRef(false);
   const mutedRef = useRef(false);
-  const callStartedAtRef = useRef<number | null>(null);
+  const characterMutedRef = useRef(false);
   const connectionAttemptRef = useRef(0);
   const playAtRef = useRef(0);
   const callScreenRef = useRef<HTMLElement | null>(null);
@@ -253,10 +253,6 @@ export function VoiceCall({
   useEffect(() => () => onCallActiveRef.current?.(false), []);
   const seenEventIdsRef = useRef(new Set<string>());
   const pendingApprovalsRef = useRef(new Set<string>());
-
-  useEffect(() => {
-    setFocusedParticipantId(null);
-  }, [call?.id]);
 
   const callScreenOpen = status !== "idle"
     && status !== "ended"
@@ -368,33 +364,12 @@ export function VoiceCall({
     };
   }, [callScreenOpen]);
 
-  useEffect(() => {
-    if (!callScreenOpen) return;
-    const recorded = call?.status === "ended" ? null : callStartMilliseconds(call);
-    if (recorded !== null) callStartedAtRef.current = recorded;
-    if (callStartedAtRef.current === null) callStartedAtRef.current = Date.now();
-    const update = () => setElapsedSeconds(Math.max(
-      0,
-      Math.floor((Date.now() - (callStartedAtRef.current ?? Date.now())) / 1_000),
-    ));
-    update();
-    const timer = window.setInterval(update, 1_000);
-    return () => window.clearInterval(timer);
-  }, [call?.created_at, call?.id, call?.started_at, callScreenOpen]);
-
-  // A non-urgent freezone notice clears itself after the same quiet interval as
-  // the decided target. Approval notices are sticky because dismissing a card
-  // must never imply that the underlying request was answered.
+  // Only actionable approval notices enter the immersive surface. Reset a
+  // prior dismissal when the server reports a new event; connection lifecycle
+  // copy remains available to assistive technology through the call status.
   useEffect(() => {
     setDismissedNotice("");
-    if (!eventNotice || approvalCount > 0) return;
-    const pinVisualRecoveryNotice =
-      document.documentElement.dataset.visualPinRecoveredCallNotice === "true"
-      && eventNotice === RECOVERED_CALL_NOTICE;
-    if (pinVisualRecoveryNotice) return;
-    const timer = window.setTimeout(() => setDismissedNotice(eventNotice), 9_800);
-    return () => window.clearTimeout(timer);
-  }, [approvalCount, eventNotice]);
+  }, [eventNotice]);
 
   useEffect(() => () => {
     connectionAttemptRef.current += 1;
@@ -437,8 +412,8 @@ export function VoiceCall({
     setRecovered(false);
     mutedRef.current = false;
     setMuted(false);
-    callStartedAtRef.current = null;
-    setElapsedSeconds(0);
+    characterMutedRef.current = false;
+    setCharacterMuted(false);
     setFamiliarActivity({ ...QUIET_VOICE_FEATURES, bands: [...QUIET_VOICE_FEATURES.bands] });
     setLines([]);
     setUsage(null);
@@ -476,10 +451,10 @@ export function VoiceCall({
     endingRef.current = false;
     mutedRef.current = false;
     setMuted(false);
+    characterMutedRef.current = false;
+    setCharacterMuted(false);
     textDraftOwnerRef.current = null;
     setTextDraft("");
-    callStartedAtRef.current = Date.now();
-    setElapsedSeconds(0);
     setFamiliarActivity({ ...QUIET_VOICE_FEATURES, bands: [...QUIET_VOICE_FEATURES.bands] });
     setLines([]);
     setUsage(null);
@@ -558,7 +533,8 @@ export function VoiceCall({
     setRecovered(true);
     mutedRef.current = false;
     setMuted(false);
-    callStartedAtRef.current = callStartMilliseconds(selected) ?? Date.now();
+    characterMutedRef.current = false;
+    setCharacterMuted(false);
     if (selected.conversation_id !== conversationId) {
       onConversation(selected.conversation_id);
     }
@@ -597,12 +573,12 @@ export function VoiceCall({
     await restoreCallHistory(result.call.id, attempt);
     ensureConnectionAttempt(attempt);
     setStatus(pendingApprovalsRef.current.size > 0 ? "held" : "joining");
-
     let stream: MediaStream | null = null;
     let context: AudioContext | null = null;
     let source: MediaStreamAudioSourceNode | null = null;
     let processor: ScriptProcessorNode | null = null;
     let mute: GainNode | null = null;
+    let playbackGain: GainNode | null = null;
     let micAnalyser: AnalyserNode | null = null;
     let socket: WebSocket | null = null;
     let resources: MediaResources | null = null;
@@ -630,6 +606,7 @@ export function VoiceCall({
       processor.connect(mute);
       mute.connect(context.destination);
       micAnalyser = attachBargeInCapture(context, source, mute);
+      playbackGain = createCharacterPlaybackGain(context, characterMutedRef.current);
       socket = new WebSocket(websocketUrl(result.websocket_url));
       ensureConnectionAttempt(attempt);
       socket.binaryType = "arraybuffer";
@@ -640,7 +617,9 @@ export function VoiceCall({
         processor,
         source,
         mute,
+        playbackGain,
         playbackSources: new Set(),
+        utteranceGain: new UtteranceGain(),
         onPlayback: (speaking) => {
           const features = {
             ...QUIET_VOICE_FEATURES,
@@ -651,7 +630,7 @@ export function VoiceCall({
           setFamiliarActivity(features);
           onFamiliarActivityRef.current?.(features);
         },
-        analyser: createVoicePlaybackAnalyser(context),
+        analyser: createVoicePlaybackAnalyser(context, playbackGain),
         voiceTimer: null,
         prevSpectrum: null,
         onVoiceFeatures: (features) => {
@@ -666,7 +645,6 @@ export function VoiceCall({
       };
       mediaRef.current = resources;
       startBargeInGate(resources, () => mutedRef.current);
-
       processor.onaudioprocess = (event) => {
         if (
           mutedRef.current
@@ -677,7 +655,6 @@ export function VoiceCall({
         const pcm = resamplePcm16(input, context?.sampleRate ?? 24_000, 24_000);
         if (pcm.byteLength) socket.send(pcm);
       };
-
       await new Promise<void>((resolve, reject) => {
         let settled = false;
         const settle = (reason?: Error) => {
@@ -801,7 +778,7 @@ export function VoiceCall({
       if (resources && mediaRef.current === resources) {
         closeMedia(mediaRef, readyRef, playAtRef);
       } else if (!resources) {
-        closePartialMedia({ socket, context, stream, processor, source, mute, micAnalyser });
+        closePartialMedia({ socket, context, stream, processor, source, mute, playbackGain, micAnalyser });
         playAtRef.current = 0;
       }
       throw reason;
@@ -814,6 +791,10 @@ export function VoiceCall({
     endingRef.current = true;
     closeMedia(mediaRef, readyRef, playAtRef);
     if (!current) {
+      mutedRef.current = false;
+      setMuted(false);
+      characterMutedRef.current = false;
+      setCharacterMuted(false);
       setStatus("idle");
       return;
     }
@@ -825,6 +806,8 @@ export function VoiceCall({
       setStatus("ended");
       mutedRef.current = false;
       setMuted(false);
+      characterMutedRef.current = false;
+      setCharacterMuted(false);
       setEventNotice("Call ended.");
       await Promise.all([
         refreshUsage(current.id, attempt),
@@ -847,6 +830,22 @@ export function VoiceCall({
     const stream = mediaRef.current?.stream;
     if (!stream) return;
     for (const track of audioTracks(stream)) track.enabled = !next;
+  }
+
+  function toggleCharacterMute() {
+    const next = !characterMutedRef.current;
+    characterMutedRef.current = next;
+    setCharacterMuted(next);
+    const playbackGain = mediaRef.current?.playbackGain;
+    if (playbackGain) playbackGain.gain.value = next ? 0 : 1;
+  }
+
+  function updateTextDraft(value: string) {
+    textDraftOwnerRef.current = value ? {
+      conversationId,
+      callId: callRef.current?.id ?? null,
+    } : null;
+    setTextDraft(value);
   }
 
   function sendTextMessage() {
@@ -1086,30 +1085,18 @@ export function VoiceCall({
     (participant) => participant.kind === "agent",
   ) ?? [];
   const primaryAgent = agentParticipants[0];
-  const focusedAgent = agentParticipants.find(
-    (participant) => participant.id === focusedParticipantId,
-  ) ?? primaryAgent;
-  const otherAgents = agentParticipants
-    .filter((participant) => participant.id !== focusedAgent?.id)
-    .slice(0, 3);
   const profileGenotype = agentProfiles.find(
     (profile) => profile.name === call?.agent_profile_id,
   )?.familiar_genotype;
-  const focusedGenotype = focusedAgent?.familiar_genotype
-    ?? (focusedAgent?.id === primaryAgent?.id ? profileGenotype : null);
-  const latestAssistantLine = [...lines].reverse().find(
-    (line) => line.speaker === "Boltrig",
-  );
-  const latestTypedLine = [...lines].reverse().find((line) => line.typed);
-  const focusedOnPrimary = focusedAgent?.id === primaryAgent?.id;
+  const stageGenotype = primaryAgent?.familiar_genotype ?? profileGenotype ?? null;
   const stageState = {
-    working: focusedOnPrimary && !familiarActivity.speaking && (
+    working: !familiarActivity.speaking && (
       status === "creating" || status === "joining" || status === "reconnecting"
     ),
-    speaking: focusedOnPrimary && familiarActivity.speaking,
-    level: focusedOnPrimary ? familiarActivity.level : 0,
-    bands: focusedOnPrimary ? familiarActivity.bands : QUIET_VOICE_FEATURES.bands,
-    onset: focusedOnPrimary ? familiarActivity.onset : 0,
+    speaking: familiarActivity.speaking,
+    level: familiarActivity.level,
+    bands: familiarActivity.bands,
+    onset: familiarActivity.onset,
   };
   const stageInput: StageTurnInput = {
     loading: false,
@@ -1121,152 +1108,39 @@ export function VoiceCall({
     voiceOnset: stageState.onset,
     micActive: !muted,
   };
-  const noticeVisible = Boolean(eventNotice && eventNotice !== dismissedNotice);
-  const primaryAgentPhrase = callParticipantPhrase(primaryAgent?.label ?? "Boltrig");
-  const callScreen = (
-    <section
-      aria-label="Voice call"
-      aria-modal="true"
-      className="voice-call-screen"
-      data-screen-label="Call"
-      ref={callScreenRef}
-      role="dialog"
-      tabIndex={-1}
-    >
-      <header className="voice-call-screen-header">
-        <div className="voice-call-title">
-          {conversationTitle
-            ? `${conversationTitle} · you and ${primaryAgentPhrase}`
-            : `Voice call · you and ${primaryAgentPhrase}`}
-        </div>
-        <time className="voice-call-elapsed" dateTime={`PT${elapsedSeconds}S`}>
-          {formatElapsed(elapsedSeconds)}
-        </time>
-        <button className="voice-call-leave" onClick={() => void end()} type="button">
-          Leave
-        </button>
-      </header>
-
-      <div className="voice-call-freezone">
-        {noticeVisible && (
-          <article
-            className="voice-call-notice"
-            data-urgent={approvalCount > 0 ? "true" : "false"}
-            role="status"
-          >
-            <div className="voice-call-notice-header">
-              <span>{approvalCount > 0 ? "Waiting for you" : "Voice connection"}</span>
-              <button
-                aria-label="Dismiss call notice"
-                onClick={() => setDismissedNotice(eventNotice)}
-                type="button"
-              >
-                ×
-              </button>
-            </div>
-            <p>{eventNotice}</p>
-          </article>
-        )}
-
-        <div className="voice-call-presence">
-          <div className="voice-call-primary-familiar">
-            <StageBody
-              genotype={focusedGenotype}
-              input={stageInput}
-              label={focusedAgent?.label ?? "Boltrig"}
-              mode="voice"
-              phenotype={stagePhenotype}
-            />
-          </div>
-          <strong>{focusedAgent?.label ?? "Boltrig"}</strong>
-          {latestAssistantLine && focusedOnPrimary && (
-            <p className="voice-call-saying">{latestAssistantLine.text}</p>
-          )}
-          {latestTypedLine && (
-            <p className="voice-call-typed">You typed: {latestTypedLine.text}</p>
-          )}
-          {!focusedOnPrimary && (
-            <span className="sr-only" role="status">
-              Viewing {focusedAgent?.label}. Call audio and routing are unchanged.
-            </span>
-          )}
-          <p className="voice-call-state" aria-live="polite">{voiceStatus(status)}</p>
-        </div>
-
-        <div className="voice-call-transcript-sr">
-          <VoiceTranscript
-            lines={latestAssistantLine && focusedOnPrimary
-              ? lines.filter((line) => line.id !== latestAssistantLine.id)
-              : lines}
-          />
-        </div>
-      </div>
-
-      <footer className="voice-call-screen-footer">
-        <div className="voice-call-participants" aria-label="Other agents in this call">
-          {otherAgents.map((participant) => (
-            <button
-              aria-label={`Show ${participant.label} in the call centre`}
-              className="voice-call-participant"
-              key={participant.id}
-              onClick={() => setFocusedParticipantId(participant.id)}
-              type="button"
-            >
-              <FamiliarBadge
-                genotype={participant.familiar_genotype}
-                label={participant.label}
-                size={30}
-                state="ready"
-              />
-              <span>{participant.label}</span>
-            </button>
-          ))}
-        </div>
-        <div className="voice-call-controls">
-          {(status === "active" || status === "held") && (
-            <form
-              className="voice-call-text"
-              onSubmit={(event) => {
-                event.preventDefault();
-                sendTextMessage();
-              }}
-            >
-              <input
-                aria-label="Type a message to the call"
-                onChange={(event) => {
-                  const value = event.target.value;
-                  textDraftOwnerRef.current = value ? {
-                    conversationId,
-                    callId: callRef.current?.id ?? null,
-                  } : null;
-                  setTextDraft(value);
-                }}
-                placeholder="Type a message…"
-                value={textDraft}
-              />
-              <button disabled={!textDraft.trim()} type="submit">Send</button>
-            </form>
-          )}
-          {(recovered || status === "reconnecting" || status === "failed") && (
-            <button onClick={() => void reconnect()} type="button">
-              {recovered ? "Resume call" : "Reconnect"}
-            </button>
-          )}
-          <button
-            aria-pressed={muted}
-            onClick={toggleMute}
-            type="button"
-          >
-            {muted ? "Unmute" : "Mute"}
-          </button>
-        </div>
-      </footer>
-    </section>
+  const noticeVisible = Boolean(
+    approvalCount > 0 && eventNotice && eventNotice !== dismissedNotice,
   );
-
-  return typeof document === "undefined"
-    ? callScreen
-    : createPortal(callScreen, document.body);
+  return <VoiceCallScreen
+    approvalCount={approvalCount}
+    characterMuted={characterMuted}
+    characterName={selectedCharacter.name}
+    conversationTitle={conversationTitle}
+    eventNotice={eventNotice}
+    lines={lines}
+    microphoneMuted={muted}
+    noticeVisible={noticeVisible}
+    onDismissNotice={() => setDismissedNotice(eventNotice)}
+    onLeave={() => void end()}
+    onReconnect={() => void reconnect()}
+    onSendText={sendTextMessage}
+    onTextChange={updateTextDraft}
+    onToggleCharacterMute={toggleCharacterMute}
+    onToggleMicrophoneMute={toggleMute}
+    reconnectLabel={recovered
+      ? "Resume call"
+      : status === "reconnecting" || status === "failed" ? "Reconnect" : null}
+    screenRef={callScreenRef}
+    stage={<StageBody
+      genotype={stageGenotype}
+      input={stageInput}
+      label={selectedCharacter.name}
+      mode="voice"
+      phenotype={stagePhenotype}
+    />}
+    status={status}
+    textDraft={textDraft}
+  />;
 }
 
 function RecentCalls({
@@ -1325,17 +1199,6 @@ function RecentCalls({
   );
 }
 
-function VoiceTranscript({ lines }: { lines: VoiceLine[] }) {
-  if (lines.length === 0) return null;
-  return (
-    <div className="voice-transcript" aria-label="Call transcript">
-      {lines.map((line) => (
-        <p key={line.id}><b>{line.speaker}:</b> {line.text}</p>
-      ))}
-    </div>
-  );
-}
-
 function CallReceipt({ usage }: { usage: CallUsage }) {
   const inputSeconds = usage.input_audio_bytes / 48_000;
   const outputSeconds = usage.output_audio_bytes / 48_000;
@@ -1386,25 +1249,6 @@ function formatDuration(seconds: number) {
   return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
 }
 
-function callStartMilliseconds(call: RealtimeCall | null): number | null {
-  const value = call?.started_at ?? call?.created_at;
-  if (!value) return null;
-  const milliseconds = new Date(value).getTime();
-  return Number.isFinite(milliseconds) ? milliseconds : null;
-}
-
-function formatElapsed(totalSeconds: number) {
-  const seconds = Math.max(0, Math.floor(totalSeconds));
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
-function callParticipantPhrase(label: string) {
-  const trimmed = label.trim() || "Boltrig";
-  return /^[a-z]/.test(trimmed) && !/^(?:a|an|the)\s/i.test(trimmed)
-    ? `the ${trimmed}`
-    : trimmed;
-}
-
 function modalFocusableElements(dialog: HTMLElement): HTMLElement[] {
   const selector = [
     "a[href]",
@@ -1444,6 +1288,13 @@ function formatMicros(value: number) {
   }).format(value / 1_000_000);
 }
 
+function createCharacterPlaybackGain(context: AudioContext, muted: boolean): GainNode {
+  const gain = context.createGain();
+  gain.gain.value = muted ? 0 : 1;
+  gain.connect(context.destination);
+  return gain;
+}
+
 function closeMedia(
   ref: MutableRefObject<MediaResources | null>,
   ready: MutableRefObject<boolean>,
@@ -1478,6 +1329,7 @@ function closeMedia(
   safeDisconnect(media.processor);
   safeDisconnect(media.source);
   safeDisconnect(media.mute);
+  safeDisconnect(media.playbackGain);
   for (const track of media.stream.getTracks()) {
     try {
       track.stop();
@@ -1512,6 +1364,7 @@ function closePartialMedia({
   processor,
   source,
   mute,
+  playbackGain,
   micAnalyser,
 }: {
   socket: WebSocket | null;
@@ -1520,6 +1373,7 @@ function closePartialMedia({
   processor: ScriptProcessorNode | null;
   source: MediaStreamAudioSourceNode | null;
   mute: GainNode | null;
+  playbackGain: GainNode | null;
   micAnalyser: AnalyserNode | null;
 }) {
   if (processor) {
@@ -1528,6 +1382,7 @@ function closePartialMedia({
   }
   if (source) safeDisconnect(source);
   if (mute) safeDisconnect(mute);
+  if (playbackGain) safeDisconnect(playbackGain);
   if (micAnalyser) safeDisconnect(micAnalyser);
   for (const track of stream?.getTracks() ?? []) {
     try {
@@ -1617,13 +1472,34 @@ function playPcm(
   }
   const source = context.createBufferSource();
   source.buffer = buffer;
-  source.connect(media.analyser ?? context.destination);
+
+  // ONE GAIN FOR THE WHOLE UTTERANCE, decided by its first speaking chunk.
+  //
+  // Normalising each chunk on its own is the classic auto-gain artefact:
+  // chunks of one sentence legitimately differ in level, so per-chunk gain
+  // flattens that into a pumping wobble that sounds markedly worse than the
+  // provider-to-provider inconsistency being corrected. Nothing ahead of this
+  // point knows the utterance's level -- the chunks ARE the stream -- so the
+  // first chunk with speech in it sets the gain and the rest inherit it.
+  //
+  // The boundary is "nothing is scheduled ahead of now": while an utterance is
+  // playing, playAt runs ahead of currentTime, and it only falls back to the
+  // clock once playback has drained.
+  if (playAt.current <= context.currentTime) media.utteranceGain.reset();
+  const gainValue = media.utteranceGain.forChunk(pcm16ToFloat(pcm));
+  const gain = context.createGain();
+  gain.gain.value = gainValue;
+  source.connect(gain);
+  gain.connect(media.analyser ?? context.destination);
   media.playbackSources.add(source);
   media.onPlayback?.(true);
   startVoiceSampler(media);
   source.onended = () => {
     media.playbackSources.delete(source);
     safeDisconnect(source);
+    // The gain node is per chunk and must go with it, or a long call
+    // accumulates one live node per 20-100 ms of speech.
+    safeDisconnect(gain);
     media.onPlayback?.(media.playbackSources.size > 0);
   };
   const startsAt = Math.max(context.currentTime, playAt.current);
@@ -1652,16 +1528,6 @@ function socketCloseError(event: CloseEvent): VoiceConnectionError {
     "The live voice connection closed. Reconnect to continue.",
     "reconnecting",
   );
-}
-
-function voiceStatus(status: CallStatus | "idle") {
-  if (status === "active") return "Live voice";
-  if (status === "held") return "Waiting for approval";
-  if (status === "joining") return "Joining…";
-  if (status === "reconnecting") return "Connection paused";
-  if (status === "failed") return "Call interrupted";
-  if (status === "ended") return "Call ended";
-  return "Preparing voice…";
 }
 
 function reasonText(reason: unknown) {

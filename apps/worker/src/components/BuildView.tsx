@@ -57,8 +57,8 @@ const TAB_COPY: Record<BuildTab, { title: string; lead: string }> = {
   },
   run: {
     title: "Run a capability",
-    lead: "Execute one governed verb with full receipts. High-consequence calls "
-      + "still pause for approval.",
+    lead: "Run one action with a full receipt. Actions that can change things "
+      + "may still ask for approval.",
   },
   registry: {
     title: "Registry",
@@ -236,7 +236,7 @@ export function BuildView() {
       )}
       {creating === "actions" && (
         <GovernedCreateModal
-          lead="A plugin teaches boltrig new things it can do. It never hands out permission."
+          lead="Choose how you want to add a plugin."
           methods={[
             {
               available: true,
@@ -251,7 +251,7 @@ export function BuildView() {
             },
             {
               available: true,
-              description: "For anything that speaks a standard boltrig understands. Its actions arrive checked like the rest.",
+              description: "Connect a compatible service using its address.",
               icon: <CreateMethodIcon kind="address" />,
               onSelect: () => {
                 setCreating(null);
@@ -261,7 +261,7 @@ export function BuildView() {
             },
             {
               available: true,
-              description: "If a tool you already run offers its own actions, they appear here, gated the same way.",
+              description: "Connect tools exposed by another app you already use.",
               icon: <CreateMethodIcon kind="tools" />,
               onSelect: () => {
                 setCreating(null);

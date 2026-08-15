@@ -5,18 +5,16 @@ import { client } from "../client";
 import type { SettingsSection } from "../settingsSections";
 import { hasDesktopRuntime } from "../desktop";
 import { ArchivedSection } from "./settings/ArchivedSection";
+import { BehaviourSection } from "./settings/BehaviourSection";
 import {
   CompactAdvancedSection,
-  CompactKnowledgeSection,
   CompactOrganisationSection,
   CompactYouSection,
 } from "./settings/CompactSections";
 import { HealthSection } from "./settings/HealthSection";
 import { ModelSettingsSection } from "./settings/ModelSettingsSection";
 import { OperationsSettingsSection } from "./settings/OperationsSettingsSection";
-import { OvernightSection } from "./settings/OvernightSection";
 import { SectionHead } from "./settings/SectionHead";
-import { SensingSection } from "./settings/SensingSection";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { SpendingSection } from "./settings/SpendingSection";
 import { SettingsGroup, SettingsRow } from "./settings/rowKit";
@@ -71,7 +69,7 @@ function AutonomySection({ head = true }: { head?: boolean }) {
         <SettingsRow
           title={localAgent ? "Boltrig credentials stay server-side" : "Credentials stay server-side"}
           desc={localAgent
-            ? "The local agent receives no Boltrig provider credentials. Local files remain governed by the posture above."
+            ? "The local agent never receives your provider keys. File access follows the setting above."
             : "Cloud tools can use credentials without exposing them to this device."}
         />
       </SettingsGroup>
@@ -94,13 +92,15 @@ const SETTINGS_PANES: Record<SettingsSection, SettingsPane> = {
   advanced: AdvancedSettingsPane,
   archived: ArchivedSection,
   autonomy: AutonomySection,
+  behaviour: BehaviourSettingsPane,
   health: HealthSection,
-  knowledge: KnowledgeSettingsPane,
+  knowledge: MemorySettingsPane,
   models: ModelSettingsSection,
   operations: OperationsSettingsSection,
   organisation: OrganisationSettingsPane,
-  overnight: OvernightSection,
-  sensing: SensingSection,
+  overnight: OvernightSettingsPane,
+  sensing: PresenceSettingsPane,
+  sight: SightSettingsPane,
   shortcuts: ShortcutsSection,
   spend: SpendingSection,
   you: YouSettingsPane,
@@ -119,8 +119,24 @@ function OrganisationSettingsPane({ head = true }: { head?: boolean }) {
   return <>{head && <SectionHead section="organisation" />}<CompactOrganisationSection /></>;
 }
 
-function KnowledgeSettingsPane({ head = true }: { head?: boolean }) {
-  return <>{head && <SectionHead section="knowledge" />}<CompactKnowledgeSection /></>;
+function BehaviourSettingsPane({ head = true }: { head?: boolean }) {
+  return <BehaviourSection head={head} />;
+}
+
+function PresenceSettingsPane({ head = true }: { head?: boolean }) {
+  return <BehaviourSection head={head} initialView="presence" />;
+}
+
+function SightSettingsPane({ head = true }: { head?: boolean }) {
+  return <BehaviourSection head={head} initialView="sight" />;
+}
+
+function OvernightSettingsPane({ head = true }: { head?: boolean }) {
+  return <BehaviourSection head={head} initialView="overnight" />;
+}
+
+function MemorySettingsPane({ head = true }: { head?: boolean }) {
+  return <BehaviourSection head={head} initialView="memory" />;
 }
 
 function AdvancedSettingsPane({ head = true }: { head?: boolean }) {

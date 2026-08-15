@@ -44,7 +44,7 @@ interface InlineApprovalProps {
   tech: boolean;
   /** The live turn has already ended: keep the card read-only instead of
       offering buttons against a request whose run has moved on. */
-  disabled?: boolean;
+  disabled?: boolean; onResolved?(): void;
 }
 
 /** The inline approval card: Approve / the other real options, straight from
@@ -54,7 +54,7 @@ interface InlineApprovalProps {
  * a request already settled elsewhere can never be double-answered into
  * success. "See exactly what runs" pulls the request's recorded inputs and
  * current approval state; nothing is paraphrased. */
-export function InlineApproval({ entry, tech, disabled = false }: InlineApprovalProps) {
+export function InlineApproval({ entry, tech, disabled = false, onResolved }: InlineApprovalProps) {
   const [phase, setPhase] = useState<"open" | "sending" | "settled" | "failed">("open");
   const [decision, setDecision] = useState("");
   const [note, setNote] = useState("");
@@ -93,7 +93,7 @@ export function InlineApproval({ entry, tech, disabled = false }: InlineApproval
       const result = await client.respondHitl(entry.hitlRequestId, choice);
       if (result.status === "ok" || result.status === "answered") {
         setPhase("settled");
-        setNote(`Your decision "${choice}" was recorded. The run continues.`);
+        setNote(`Your decision "${choice}" was recorded. The run continues.`); onResolved?.();
       } else {
         setPhase("failed");
         setNote(result.reason ?? `The response was not accepted (${result.status}).`);

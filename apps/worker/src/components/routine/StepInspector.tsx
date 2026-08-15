@@ -224,7 +224,7 @@ export function StepInspector(props: StepInspectorProps) {
             />
           </label>
           <label>
-            <span>Governed action</span>
+            <span>Action</span>
             <input
               className="field-control"
               disabled={locked}
@@ -309,7 +309,7 @@ export function StepInspector(props: StepInspectorProps) {
               <small>
                 Map an existing top-level parameter to <code>item</code> or
                 <code>index</code>. Values are replaced as typed JSON before the
-                governed action is schema-checked. Up to 32 bindings are allowed.
+                action is checked. Up to 32 bindings are allowed.
               </small>
             </label>
           )}
@@ -475,7 +475,7 @@ function TriggerFacts(
           <span className="rc-fact-dot" />
           <span>
             You start it here with Start it now, or use Queue run in the
-            scheduling and history disclosure. Those governed paths always
+            scheduling and history disclosure. Those paths always
             exist, whatever else is bound.
           </span>
         </p>
@@ -493,8 +493,8 @@ function TriggerFacts(
                 props.scheduleState
                   ? ` · scheduler ${props.scheduleState.observed.status.replace("_", " ")}`
                   : ""
-              }. Change it in the Cron schedule section below — schedule changes stay governed.`
-              : "No schedule is saved. Set one in the Cron schedule section below; saving a schedule is a governed change."}
+              }. Change it in the Cron schedule section below.`
+              : "No schedule is saved. Set one in the Cron schedule section below."}
           </span>
         </p>
       )}

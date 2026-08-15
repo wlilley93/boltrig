@@ -11,6 +11,7 @@ export interface ChipOption {
 interface BuildModelOptionsInput {
   choices: ChatModelChoice[];
   defaultModelName?: string | null;
+  defaultModelSource?: "personal" | "platform";
   defaultAvailable: boolean;
   defaultUnavailableReason?: string | null;
 }
@@ -18,6 +19,7 @@ interface BuildModelOptionsInput {
 export function buildModelOptions({
   choices,
   defaultModelName,
+  defaultModelSource = "platform",
   defaultAvailable,
   defaultUnavailableReason,
 }: BuildModelOptionsInput): ChipOption[] {
@@ -29,7 +31,9 @@ export function buildModelOptions({
   return [
     {
       id: "",
-      label: defaultModelName ? `Automatic · ${defaultModelName}` : "Automatic",
+      label: defaultModelName
+        ? (defaultModelSource === "personal" ? defaultModelName : `Automatic · ${defaultModelName}`)
+        : "Automatic",
       available: defaultAvailable,
       unavailableReason: defaultUnavailableReason,
     },

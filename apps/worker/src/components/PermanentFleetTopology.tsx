@@ -629,7 +629,7 @@ export function PermanentFleetTopology({
         {!loading && layout.nodes.length === 0 && (
           <div className="fleet-empty">
             <h2>No agent profiles visible</h2>
-            <span>No authored fleet entries are visible. Configure the permanent hierarchy or create a governed profile.</span>
+            <span>No authored fleet entries are visible. Configure the permanent hierarchy or create a profile.</span>
           </div>
         )}
         {!loading && layout.nodes.length > 0 && (
@@ -729,7 +729,7 @@ export function PermanentFleetTopology({
             </div>
             <div className="fleet-new-section">
               <span>What kind</span>
-              <div className="fleet-new-roles" aria-label="Agent kind is selected in the governed profile author">
+              <div className="fleet-new-roles" aria-label="Agent kind is selected in the profile editor">
                 {["researcher", "writer", "operator", "analyst", "engineer", "coordinator"].map((role) => (
                   <button disabled key={role} type="button">{role}</button>
                 ))}
@@ -741,7 +741,7 @@ export function PermanentFleetTopology({
                 {AUTHORITY_CHANNELS.map(([id, label], index) => (
                   <div key={id}>
                     <AuthorityIcon index={index} size={18} />
-                    <span><strong>{label}</strong><small>Set in the governed profile and hierarchy editors</small></span>
+                    <span><strong>{label}</strong><small>Set in the profile and hierarchy editors</small></span>
                     <em>not available here</em>
                   </div>
                 ))}
@@ -1017,7 +1017,7 @@ function FleetInspector({
               <span className="console-tech">{runtime}</span>
               <span className="fleet-state-pill" data-tone={profileTone(profile, askingActors, state)}>{status}</span>
             </div>
-            <p>{head?.purpose ?? "A governed capability profile. Profile state does not prove that a worker is live."}</p>
+            <p>{head?.purpose ?? "A capability profile. Profile state does not prove that a worker is live."}</p>
             <p className="fleet-chain">
               {parent ? `Authored parent: ${parent.name}` : node.kind === "profile"
                 ? "No permanent hierarchy edge is exposed"

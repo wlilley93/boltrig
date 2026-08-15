@@ -21,7 +21,6 @@ import {
   ModelRemovalDialog,
   ModelRouteInventory,
   ModelSettingsTabs,
-  VoiceAdapterInventory,
 } from "./ModelSettingsPanels";
 import { SectionHead } from "./SectionHead";
 import {
@@ -116,7 +115,6 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
   const [choiceProjectionAvailable, setChoiceProjectionAvailable] = useState(false);
   const [catalogueModels, setCatalogueModels] = useState<BifrostModelView[]>([]);
   const [catalogueStatus, setCatalogueStatus] = useState<"loading" | "ok" | "unavailable">("loading");
-  const [catalogueReason, setCatalogueReason] = useState<string | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<ModelEndpointAuthorView | null>(null);
   const [id, setId] = useState("");
   const [endpointKind, setEndpointKind] = useState("bifrost");
@@ -180,15 +178,15 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
       setMessage(input.kind === "upsert"
         ? "Model saved."
         : input.kind === "retire"
-          ? `${modelEndpointLabel(input.endpoint)} was retired from model routing.`
-          : `${modelEndpointLabel(input.endpoint)} was restored to model routing.`);
+          ? `${modelEndpointLabel(input.endpoint)} was removed.`
+          : `${modelEndpointLabel(input.endpoint)} was restored.`);
     },
     onRefused: (result) => {
       setMessage(governedResultReason(result, "The approved model change was refused."));
     },
     onUncertain: async () => {
       await refresh(false);
-      setMessage("Canonical model state was refreshed; no change is inferred.");
+      setMessage("Couldn’t confirm the change. The list has been refreshed.");
     },
   });
   const mutationBusy = busy || finalizer.busy;
@@ -209,11 +207,9 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
       if (catalogue?.status === "ok") {
         setCatalogueModels(catalogue.models);
         setCatalogueStatus("ok");
-        setCatalogueReason(null);
       } else {
         setCatalogueModels([]);
         setCatalogueStatus("unavailable");
-        setCatalogueReason(catalogue?.reason ?? "gateway_unavailable");
       }
       if (hydratedExisting) {
         const current = inventory.endpoints.find((endpoint) => endpoint.id === hydratedExisting);
@@ -243,7 +239,6 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
       setChoiceProjectionAvailable(false);
       setCatalogueModels([]);
       setCatalogueStatus("unavailable");
-      setCatalogueReason("gateway_unavailable");
       setMessage("Model inventory is unavailable.");
     } finally {
       setLoading(false);
@@ -266,7 +261,7 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
         detail.endpoint.data_class !== "standard"
         || !supportsEndpointView(detail.endpoint, activeView)
       ) {
-        setMessage("This route is not part of the selected model view.");
+        setMessage("This model belongs in another tab.");
         return;
       }
       const editableKind = activeView === "voice"
@@ -275,7 +270,7 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
         : detail.endpoint.kind === "bifrost";
       if (!editableKind) {
         setMessage(
-          "This route is managed by another provider topology and cannot be rewritten here.",
+          "This model is managed elsewhere.",
         );
         return;
       }
@@ -316,11 +311,11 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
     const cleanModel = model.trim();
     if (!cleanId || !cleanModel) return;
     if (loading || !inventoryAvailable) {
-      setMessage("Wait for the complete model inventory before adding a route.");
+      setMessage("Models are still loading.");
       return;
     }
     if (activeView !== "voice" && catalogueStatus !== "ok") {
-      setMessage("Bifrost model discovery is unavailable, so this model cannot be verified or changed.");
+      setMessage("Models are unavailable right now. Try again shortly.");
       return;
     }
     const discovered = catalogueModels.find((item) => item.id === cleanModel);
@@ -331,7 +326,7 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
         .filter((item) => item === "text" || item === "vision")
         .join(" + ");
       setMessage(
-        `Choose an exact Bifrost model that advertises every selected modality (${required}).`,
+        `Choose a model that supports ${required}.`,
       );
       return;
     }
@@ -374,10 +369,10 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
         || result.status === "error"
         || result.status === "unavailable"
       ) {
-        setMessage(`Not changed: ${result.reason ?? "the kernel refused the request"}.`);
+        setMessage(`Not changed: ${result.reason ?? "the change was refused"}.`);
       } else if (result.status === "degraded") {
         await refresh(false);
-        setMessage("Canonical model state was refreshed after a degraded response; no save is inferred.");
+        setMessage("Couldn’t confirm the change. The list has been refreshed.");
       } else {
         setMessage("Model saved.");
         await refresh(false);
@@ -410,8 +405,8 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
         setPendingRemoval(null);
       } else if (result.status === "ok") {
         setMessage(input.kind === "retire"
-          ? `${modelEndpointLabel(endpoint)} was retired from model routing.`
-          : `${modelEndpointLabel(endpoint)} was restored to model routing.`);
+          ? `${modelEndpointLabel(endpoint)} was removed.`
+          : `${modelEndpointLabel(endpoint)} was restored.`);
         setPendingRemoval(null);
         await refresh(false);
       } else setMessage(governedResultReason(result, `${modelEndpointLabel(endpoint)} was not changed.`));
@@ -429,12 +424,12 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
     try {
       const detail = await client.modelEndpoint(endpoint.id);
       if (!detail.endpoint.is_active) {
-        setMessage("This model route is already retired.");
+        setMessage("This model is already removed.");
         return;
       }
       setPendingRemoval(detail.endpoint);
     } catch {
-      setMessage("The route references could not be loaded, so the model was not removed.");
+      setMessage("Couldn’t check where this model is used, so nothing changed.");
     } finally {
       setBusy(false);
     }
@@ -459,10 +454,6 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
           setActiveView(view);
         }}
       />
-      <p className="model-settings-intro">
-        Routes are tenant-owned and credential-free here. Provider keys stay in the kernel;
-        agents may override a route without receiving the key itself.
-      </p>
       <ModelRouteInventory
         activeView={activeView}
         choiceProjectionAvailable={choiceProjectionAvailable}
@@ -485,13 +476,10 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
         />
       )}
 
-      {activeView === "voice" && <VoiceAdapterInventory />}
-
       {activeView !== "voice" && (
         <BifrostCataloguePanel
           activeView={activeView}
           models={catalogueModels}
-          reason={catalogueReason}
           status={catalogueStatus}
         />
       )}
@@ -501,7 +489,6 @@ export function ModelSettingsSection({ head = true }: { head?: boolean }) {
         busy={busy}
         catalogueModels={catalogueModels}
         catalogueStatus={catalogueStatus}
-        endpointKind={endpointKind}
         hydratedExisting={hydratedExisting}
         hydratedReferences={hydratedReferences}
         id={id}

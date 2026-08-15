@@ -6,6 +6,7 @@ export type WorkerRoute =
   | "agents"
   | "account"
   | "build"
+  | "browser"
   | "channels"
   | "evaluations"
   | "automations"
@@ -23,6 +24,7 @@ const routes = new Set<WorkerRoute>([
   "agents",
   "account",
   "build",
+  "browser",
   "channels",
   "evaluations",
   "automations",
