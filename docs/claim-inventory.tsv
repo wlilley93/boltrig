@@ -673,10 +673,11 @@ ORDINARY	NO-SUBJECT	comment	boltrig/config/settings.py:61		refuses under both.
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/spawn_rules.py:1		Strict, deterministic policy for ephemeral-agent spawn routing.
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/spawn_rules.py:255		Choose the unique highest-priority all-of match.
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/spawn_rules.py:34		A request cannot be resolved to one deterministic rule.
-ORDINARY	NO-SUBJECT	comment	boltrig/distill/adapter.py:251		the sidecar refuses a corpus whose header pin differs.
-ORDINARY	NO-SUBJECT	comment	boltrig/distill/adapter.py:252		never resume from a prior adapter because no request field exists to
+ORDINARY	NO-SUBJECT	comment	boltrig/distill/adapter.py:189		the sidecar refuses a corpus whose header pin differs.
+ORDINARY	NO-SUBJECT	comment	boltrig/distill/adapter.py:190		never resume from a prior adapter because no request field exists to
 ORDINARY	NO-SUBJECT	comment	boltrig/distill/adapter_gates.py:34		The entropy guard is deliberately STRICT: a sidecar that cannot
-ORDINARY	NO-SUBJECT	comment	boltrig/distill/adapter_specs.py:16		A model name is an adapter id or an HF-style repo path - never a filesystem
+ORDINARY	NO-SUBJECT	comment	boltrig/distill/adapter_specs.py:18		A model name is an adapter id or an HF-style repo path - never a filesystem
+ORDINARY	NO-SUBJECT	docstring	boltrig/distill/adapter_specs.py:93		The adapter's five verbs, as declared to the kernel.
 ORDINARY	NO-SUBJECT	comment	boltrig/distill/bootstrap.py:45		off, never toward a guessable default (the emotion-addon posture).
 ORDINARY	NO-SUBJECT	docstring	boltrig/distill/corpus.py:116		Deterministic ~10% split, pinned by record id (no randomness: the same corpus always splits the same way, so the digest also pins the split).
 ORDINARY	NO-SUBJECT	docstring	boltrig/distill/corpus.py:123		The register gate's scoring set.
@@ -1456,7 +1457,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/manifest.py:261	_parse_chat	Ba
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/manifest.py:611	dev_posture.posture_block	Parse ``development_posture`` into a ``dev_posture.DevelopmentPosture``.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/manifest_reconcile.py:88	BulkCapabilityDeactivationError	Compute the plan and enforce the mass-deactivation guard BEFORE any write.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/weak_secrets.py:52	is_weak_secret	True when ``value`` is absent, a known placeholder, or obviously unfilled.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/distill/adapter.py:170	allow_internal	JSON call to the fixed operator-configured sidecar.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/distill/adapter.py:108	allow_internal	JSON call to the fixed operator-configured sidecar.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:1	now	The pure affective engine: emotions, needs, mood and tension over time (EMO-3).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:197	now	Apply the ``kind`` appraisal's deltas, scaled by ``intensity``.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:220	now	The ten observable scalars (each 0..1), after decaying state to ``now``.
