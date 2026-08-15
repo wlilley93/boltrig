@@ -48,6 +48,7 @@ export {
   CHARACTER_BUNDLE_SCHEMA_VERSION,
   CharacterBundleError,
   bundleReadsPhenotype,
+  bundleTone,
   bundleVoiceId,
   bundleWantsBudgets,
   bundleWantsCamera,
@@ -65,6 +66,7 @@ export type {
   CharacterBundlePhenotype,
   CharacterBundlePrompts,
   CharacterBundleShaderVisual,
+  CharacterBundleToneFilter,
   CharacterBundleType,
   CharacterBundleVisual,
 } from "./characterBundle.js";

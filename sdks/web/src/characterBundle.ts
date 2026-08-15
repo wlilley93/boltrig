@@ -24,6 +24,19 @@ export const CHARACTER_BUNDLE_SCHEMA_VERSION = 1;
 /** What the character IS. A flag, never a fork in the architecture. */
 export type CharacterBundleType = "shader" | "companion";
 
+/**
+ * One filter a character declares. `reason` is REQUIRED, deliberately: it is
+ * the only thing standing between a considered correction and an undocumented
+ * fudge nobody dares remove later.
+ */
+export interface CharacterBundleToneFilter {
+  type: "peaking" | "highshelf" | "lowshelf";
+  frequency: number;
+  gainDb: number;
+  q?: number;
+  reason: string;
+}
+
 export interface CharacterBundleAssetRef {
   /** Relative to the bundle root. Never absolute, never escaping the root. */
   file: string;
@@ -109,6 +122,7 @@ export interface CharacterBundleManifest {
       lora?: CharacterBundleAssetRef;
     };
     fallbackVoiceIds?: Record<string, string>;
+    tone?: CharacterBundleToneFilter[];
   };
   capabilities?: CharacterBundleCapabilities;
   distillation?: { enabled: boolean; schedule?: string; corpus?: string[] };
@@ -321,6 +335,52 @@ export function bundleVoiceId(
   provider: string,
 ): string | undefined {
   return manifest.voice?.fallbackVoiceIds?.[provider];
+}
+
+/**
+ * Spectral shaping this character ASKS FOR, validated.
+ *
+ * Empty means none, and none is the correct answer for most characters: the
+ * automatic loudness and tilt stages run regardless, and a bundle that says
+ * nothing gets those alone. As with `bundleVoiceId`, absence is never a licence
+ * to substitute — there is no default tone and no other character's.
+ *
+ * Every field is re-checked here even though the schema already constrains
+ * them, because THE SCHEMA DOES NOT RUN IN THE PLAYER. A manifest is authored
+ * elsewhere and travels between installs; by the time it reaches this function
+ * nothing has validated it in this process. A malformed entry is DROPPED rather
+ * than thrown on, so one bad filter cannot silence a character — the same rule
+ * the voice-id map follows.
+ */
+export function bundleTone(
+  manifest: CharacterBundleManifest,
+): CharacterBundleToneFilter[] {
+  // Deliberately widened to `unknown` before inspection. The declared type says
+  // what a WELL-FORMED manifest holds; this function exists for the ones that
+  // are not, so trusting the annotation here would defeat its purpose.
+  const declared: unknown = manifest.voice?.tone;
+  if (!Array.isArray(declared)) return [];
+  const out: CharacterBundleToneFilter[] = [];
+  for (const raw of declared as unknown[]) {
+    if (!raw || typeof raw !== "object") continue;
+    const entry = raw as Record<string, unknown>;
+    const { type, frequency, gainDb, reason } = entry;
+    if (type !== "peaking" && type !== "highshelf" && type !== "lowshelf") continue;
+    if (typeof frequency !== "number" || !Number.isFinite(frequency)
+        || frequency < 20 || frequency > 20_000) continue;
+    // Bounded so a bundle cannot ship something that damages hearing or clips
+    // the output. The schema says the same; this is the half that runs.
+    if (typeof gainDb !== "number" || !Number.isFinite(gainDb)
+        || Math.abs(gainDb) > 12) continue;
+    // An unexplained filter is how a measured correction rots into an
+    // undocumented fudge, so a missing reason disqualifies the entry.
+    if (typeof reason !== "string" || !reason.trim()) continue;
+    const q = typeof entry.q === "number" && Number.isFinite(entry.q)
+      ? Math.min(10, Math.max(0.1, entry.q)) : undefined;
+    out.push({ type, frequency, gainDb, reason: reason.trim(),
+               ...(q === undefined ? {} : { q }) });
+  }
+  return out;
 }
 
 /** Does this bundle DECLARE that it would like the camera? A declaration only. */

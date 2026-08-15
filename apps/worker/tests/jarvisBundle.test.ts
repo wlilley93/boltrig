@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { bundleVoiceId, parseCharacterBundle } from "@wlilley93/boltrig-web-sdk";
+import { bundleTone, bundleVoiceId, parseCharacterBundle } from "@wlilley93/boltrig-web-sdk";
 import familiarBundle from "../src/bundles/familiar/character.json";
 import jarvisBundle from "../src/bundles/jarvis/character.json";
 import {
@@ -79,6 +79,56 @@ describe("Jarvis as a character bundle", () => {
   it("and the Familiar is refused by his, for the same reason in reverse", () => {
     expect(() => characterFromBundle(familiarBundle, [jarvisSource]))
       .toThrow(CharacterBundleUnsupported);
+  });
+});
+
+describe("Jarvis's declared tone", () => {
+  const manifest = parseCharacterBundle(jarvisBundle);
+
+  it("brings his own shaping, with a stated reason for each filter", () => {
+    // A character BRINGS this; nothing in the shared stack knows his name. The
+    // automatic loudness and tilt stages run for everyone regardless.
+    const tone = bundleTone(manifest);
+    expect(tone).toHaveLength(2);
+    expect(tone.map((t) => `${t.type}@${t.frequency}`))
+      .toEqual(["peaking@3000", "peaking@350"]);
+    for (const filter of tone) {
+      expect(filter.reason.trim().length).toBeGreaterThan(20);
+      expect(Math.abs(filter.gainDb)).toBeLessThanOrEqual(12);
+    }
+  });
+
+  it("asks for presence and cuts boxiness, which is what his pitch needs", () => {
+    const tone = bundleTone(manifest);
+    const presence = tone.find((t) => t.frequency === 3000)!;
+    const boxiness = tone.find((t) => t.frequency === 350)!;
+    expect(presence.gainDb).toBeGreaterThan(0);
+    expect(boxiness.gainDb).toBeLessThan(0);
+  });
+
+  it("gives a character that declares nothing exactly nothing", () => {
+    // Absence is never a licence to substitute -- the same rule bundleVoiceId
+    // follows. Familiar declares no tone and must get none, not Jarvis's.
+    expect(bundleTone(parseCharacterBundle(familiarBundle))).toEqual([]);
+  });
+
+  it("drops a malformed filter instead of silencing the character", () => {
+    const mangled = {
+      ...jarvisBundle,
+      voice: {
+        ...(jarvisBundle as { voice: Record<string, unknown> }).voice,
+        tone: [
+          { type: "peaking", frequency: 3000, gainDb: 5, reason: "kept" },
+          { type: "peaking", frequency: 3000, gainDb: 5 },          // no reason
+          { type: "peaking", frequency: 3000, gainDb: 40, reason: "too loud" },
+          { type: "notch", frequency: 3000, gainDb: 5, reason: "unknown type" },
+          null,
+        ],
+      },
+    };
+    const tone = bundleTone(parseCharacterBundle(mangled));
+    expect(tone).toHaveLength(1);
+    expect(tone[0]!.reason).toBe("kept");
   });
 });
 
