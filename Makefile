@@ -285,7 +285,7 @@ compose-validate: ## Validate base and secure Compose configurations
 		BOLTRIG_RELEASE_MODE=core \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
 		$(COMPOSE) --env-file $(COMPOSE_VALIDATE_ENV) \
-		--profile backup --profile local --profile legacy \
+		--profile backup --profile local \
 		--env-file $(RELEASE_VALIDATE_IMAGES_ENV) \
 		-f docker-compose.yml -f deploy/compose.release.yml config --format json \
 		| $(PY) scripts/validate_release_compose.py
@@ -293,7 +293,7 @@ compose-validate: ## Validate base and secure Compose configurations
 		BOLTRIG_RELEASE_MODE=core \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
 		$(COMPOSE) --env-file $(COMPOSE_VALIDATE_ENV) \
-		--profile backup --profile local --profile legacy \
+		--profile backup --profile local \
 		--env-file $(RELEASE_VALIDATE_IMAGES_ENV) \
 		-f docker-compose.yml -f deploy/compose.release.yml \
 		-f deploy/compose.secure.yml config --format json \
@@ -314,7 +314,7 @@ release-validate: ## Validate a downloaded, signed, attested release environment
 			| $(PY) scripts/validate_release_compose.py --secure
 	# Verify every digest before Docker may pull it, then execute tool probes and
 	# production doctor inside an ephemeral image made only from the signed kernel
-	# and fleet images. Host Herdr/OpenCode/Browser installs are never consulted.
+	# fleet image. Host Browser Use installs are never consulted.
 	$(PY) scripts/validate_release_runtime.py $(RELEASE_IMAGES_ENV) \
 		--env-file $(RELEASE_ENV) --manifest $(RELEASE_MANIFEST) \
 		$(if $(RELEASE_TAG),--release-tag $(RELEASE_TAG),)
@@ -399,11 +399,31 @@ LOCKFILE_POLICY_EXEMPT := services/channel_gateway/whatsapp_bridge/package-lock.
 # pins it exactly, then protobuf against its sibling. A lock is DERIVED. Change the
 # constraints, re-solve, commit the solution; never patch the solution.
 UPGRADE ?=
+# --python-platform linux on ALL THREE, not just the browser CLI. Both committed
+# pyproject locks were solved for Linux - the machines that consume them are Linux
+# (CI is ubuntu, and kernel/fleet.Dockerfile install requirements-lock.txt) - but
+# the flag was only ever written on the third command. `uv pip compile` defaults to
+# the HOST's markers, so running this target from an arm64 Mac re-solved
+# sqlalchemy's `greenlet` marker (platform_machine in x86_64/aarch64/... - macOS
+# reports arm64) and DROPPED greenlet==3.5.4 from both files. Measured 2026-08-14:
+# a bare no-op relock on the M4 produced exactly that one deletion and nothing
+# else, so it reads as a tidy-looking diff rather than as breakage, and the failure
+# would surface later as sqlalchemy asyncio missing its greenlet on the Linux boxes
+# that never asked for the change. With the flag, the same no-op relock reproduces
+# both committed files byte-for-byte apart from their recorded command line.
+#
+# The header uv writes into each file also records `--constraint
+# /tmp/relock-constraint.txt` (cryptography>=50, the floor that stops a re-solve
+# walking cognee back and reopening PYSEC-2026-3552 - see f3108cb). That path is
+# ad hoc and this target does not pass it; pass it by hand when re-solving, or the
+# floor is enforced only by whatever pins already sit in the output.
 relock: ## Recompile every Python lock from its source (UPGRADE=--upgrade to take upgrades)
-	uv pip compile pyproject.toml --extra durable --extra inference \
-		--extra sql-adapters --extra cognee --generate-hashes $(UPGRADE) -o requirements-lock.txt
-	uv pip compile pyproject.toml --extra durable --extra inference \
-		--extra sql-adapters --group dev --generate-hashes $(UPGRADE) -o requirements-dev-lock.txt
+	uv pip compile pyproject.toml --extra durable \
+		--extra sql-adapters --extra cognee --generate-hashes \
+		--python-platform linux $(UPGRADE) -o requirements-lock.txt
+	uv pip compile pyproject.toml --extra durable \
+		--extra sql-adapters --group dev --generate-hashes \
+		--python-platform linux $(UPGRADE) -o requirements-dev-lock.txt
 	uv pip compile deploy/browser-cli-requirements.in \
 		--overrides deploy/browser-cli-overrides.txt --generate-hashes \
 		--python-platform linux $(UPGRADE) -o deploy/browser-cli-requirements.txt

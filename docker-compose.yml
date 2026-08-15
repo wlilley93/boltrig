@@ -157,7 +157,7 @@ services:
     # file in a clean checkout.
     env_file: ${BOLTRIG_ENV_FILE:-.env}
     environment:
-      BOLTRIG_HERDR_HOME: ${BOLTRIG_HERDR_HOME:-/var/lib/boltrig/herdr}
+      BOLTRIG_BROWSER_EXECUTOR_SOCKET: /run/boltrig-browser/browser.sock
       BOLTRIG_KNOWLEDGE_VAULT: ${BOLTRIG_KNOWLEDGE_VAULT:-/var/lib/boltrig/knowledge}
       BOLTRIG_COGNEE_ROOT: ${BOLTRIG_COGNEE_ROOT:-/var/lib/boltrig/cognee}
       BOLTRIG_BACKUP_HEALTH_FILE: /run/boltrig-backup-health/last-success
@@ -173,17 +173,18 @@ services:
     volumes:
       - ./manifest.yaml:/app/manifest.yaml:ro
       - ./libraries:/app/libraries:ro
-      # Stack-owned Herdr state only; never bind a developer user's ~/.config/herdr.
-      - herdr_data:/var/lib/boltrig/herdr
       # Canonical originals and rebuildable Cognee state are persisted separately.
       - knowledge_data:/var/lib/boltrig/knowledge
       - cognee_data:/var/lib/boltrig/cognee
+      - browser_executor_socket:/run/boltrig-browser:ro
       # Safe epoch marker only. The kernel cannot read backup artifacts.
       - backup_health:/run/boltrig-backup-health:ro
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      browser-executor:
         condition: service_healthy
     # The container health signal consults READINESS, not liveness. It probed
     # /healthz until 2026-07-26, and /healthz knows nothing about the schema: on
@@ -246,12 +247,9 @@ services:
       - /var/lib/boltrig/codex-cells:mode=0711,uid=10001,gid=10001,noexec,nosuid,nodev
     env_file: ${BOLTRIG_ENV_FILE:-.env}
     environment:
-      BOLTRIG_OPENCODE_HOME: ${BOLTRIG_OPENCODE_HOME:-/var/lib/boltrig/opencode}
-      # fleet-worker and hatchet-worker run independent Chromium processes. A
-      # shared user-data-dir makes the second process remove/contend on the
-      # first process's Singleton* lock and crash-loop. Keep both profiles on
-      # the stack-owned volume, but give each execution lane its own root.
-      BOLTRIG_BROWSER_CLI_HOME: ${BOLTRIG_FLEET_BROWSER_CLI_HOME:-/var/lib/boltrig/browser-cli/fleet-worker}
+      BOLTRIG_BROWSER_EXECUTOR_SOCKET: /run/boltrig-browser/browser.sock
+      # Browser state and Chromium live only in browser-executor. This worker
+      # carries admitted requests over the private read-only socket mount.
       BOLTRIG_BROWSER_CLI_BIN: ${BOLTRIG_BROWSER_CLI_BIN:-/usr/local/bin/browser-use}
       # Reflection is the ONLY automatic memory writer in the stack: fleet/pump.py
       # calls memory.remember with a distilled lesson when a work item reaches a
@@ -284,14 +282,13 @@ services:
     volumes:
       - ./manifest.yaml:/app/manifest.yaml:ro
       - ./libraries:/app/libraries:ro
-      # Stack-owned OpenCode state only; never bind a developer user's ~/.config/opencode.
-      - opencode_data:/var/lib/boltrig/opencode
-      # Stack-owned Browser Use CLI state only; never bind a developer browser profile.
-      - browser_cli_data:/var/lib/boltrig/browser-cli
+      - browser_executor_socket:/run/boltrig-browser:ro
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      browser-executor:
         condition: service_healthy
     # The worker serves no HTTP, so this cannot be a URL probe - but it does
     # publish a signed, short-lived receipt naming which of its tools probed ok,
@@ -320,6 +317,41 @@ services:
       # for the whole of a normal boot.
       start_period: 90s
 
+  browser-executor:
+    build:
+      context: .
+      dockerfile: deploy/fleet.Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    image: boltrig/fleet:0.1.0
+    restart: unless-stopped
+    <<: *app-hardening
+    command: ["python", "-m", "boltrig.fleet.browser_executor"]
+    env_file: ${BOLTRIG_ENV_FILE:-.env}
+    environment:
+      BOLTRIG_BROWSER_CLI_HOME: /var/lib/boltrig/browser-cli/executor
+      BOLTRIG_BROWSER_CLI_BIN: /usr/local/bin/browser-use
+      BOLTRIG_BROWSER_EXECUTOR_SERVER: "1"
+      BOLTRIG_BROWSER_EXECUTOR_SOCKET: /run/boltrig-browser/browser.sock
+      BOLTRIG_BROWSER_PROXY_PORT: "9223"
+    networks:
+      - browser-egress
+    volumes:
+      - ./manifest.yaml:/app/manifest.yaml:ro
+      - ./libraries:/app/libraries:ro
+      - browser_cli_data:/var/lib/boltrig/browser-cli
+      - browser_executor_socket:/run/boltrig-browser
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -m boltrig.fleet.browser_executor --health
+      interval: 15s
+      timeout: 4s
+      retries: 5
+      start_period: 30s
+
   hatchet-worker:
     # Serves the Hatchet task bodies (boltrig-workflow-run, boltrig-work-item,
     # boltrig-invoke, ...). Without this service, every run enqueued through
@@ -347,11 +379,9 @@ services:
       - /var/lib/boltrig/codex-cells:mode=0711,uid=10001,gid=10001,noexec,nosuid,nodev
     env_file: ${BOLTRIG_ENV_FILE:-.env}
     environment:
-      BOLTRIG_OPENCODE_HOME: ${BOLTRIG_OPENCODE_HOME:-/var/lib/boltrig/opencode}
-      # This must not equal fleet-worker's browser root: both services start a
-      # long-lived Chromium and loopback CDP endpoint when browser automation is
-      # declared by the manifest.
-      BOLTRIG_BROWSER_CLI_HOME: ${BOLTRIG_HATCHET_BROWSER_CLI_HOME:-/var/lib/boltrig/browser-cli/hatchet-worker}
+      BOLTRIG_BROWSER_EXECUTOR_SOCKET: /run/boltrig-browser/browser.sock
+      # Durable tasks use the same isolated browser through the private socket;
+      # they neither start Chromium nor own browser profile state.
       BOLTRIG_BROWSER_CLI_BIN: ${BOLTRIG_BROWSER_CLI_BIN:-/usr/local/bin/browser-use}
       BOLTRIG_REFLECT: ${BOLTRIG_REFLECT:-}
       # The pinned Hatchet SDK serves this endpoint from the action-listener
@@ -364,8 +394,7 @@ services:
     volumes:
       - ./manifest.yaml:/app/manifest.yaml:ro
       - ./libraries:/app/libraries:ro
-      - opencode_data:/var/lib/boltrig/opencode
-      - browser_cli_data:/var/lib/boltrig/browser-cli
+      - browser_executor_socket:/run/boltrig-browser:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -373,6 +402,8 @@ services:
         condition: service_healthy
       hatchet-engine:
         condition: service_started
+      browser-executor:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD-SHELL
@@ -711,14 +742,18 @@ networks:
   # forces Pi to route model traffic through the sandbox peers (bifrost/local-model).
   sandbox:
     driver: bridge
+  # Browser content has internet access but no Compose service peers. Chromium
+  # is additionally forced through its pinned public-address proxy, which blocks
+  # direct/private/link-local destinations after redirects and page clicks.
+  browser-egress:
+    driver: bridge
 
 volumes:
   pgdata:
   redis_data:
   bifrost_data:
-  herdr_data:
-  opencode_data:
   browser_cli_data:
+  browser_executor_socket:
   knowledge_data:
   cognee_data:
   signal_cli_data:

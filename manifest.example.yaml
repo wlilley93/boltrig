@@ -17,8 +17,8 @@ timezone_default: UTC
 
 # --- Boltrig v2 chosen stack ------------------------------------------------
 # This is the accepted target architecture map. Codex is the agent runtime;
-# legacy Pi/Hermes/OpenCode entries below are staged-cutover fixtures only and
-# are not extension targets (decision 0012).
+# retired third-party agent runtimes are absent rather than held as rollback
+# dependencies (decision 0012 and the 2026-08-14 retirement addendum).
 stack:
   cockpit: boltrig_ui
   orchestration: boltrig
@@ -74,17 +74,6 @@ models:
       base_url: ${BOLTRIG_LOCAL_MODEL_URL:-http://local-model:8000/v1}
       model: ${BOLTRIG_LOCAL_MODEL:-}
       data_class: sensitive
-    - id: opencode
-      kind: opencode
-      # Optional warm `opencode serve` URL. Leave unset to let OpenCode start its
-      # own local server, or set to http://127.0.0.1:4096 for attach mode.
-      # In compose, OpenCode state/config is rooted at BOLTRIG_OPENCODE_HOME so
-      # the shipped stack never reads a developer user's ~/.config/opencode.
-      base_url: ${OPENCODE_ATTACH_URL:-}
-      # OpenCode is optional and operator-owned; the template does not invent a
-      # provider/model identity for it.
-      model: ${OPENCODE_MODEL:-}
-      data_class: standard
   default: standard
   # Sensitive-classified data is routed to the on-box endpoint (never egresses).
   sensitive_endpoint: local-sensitive
@@ -139,12 +128,8 @@ models:
 
 # --- hierarchy: durable agent org chart -------------------------------------
 # Every tier lane below is on the governed Codex runtime (`runtime: codex`,
-# decision 0012). The Hermes-compatible naming residue is GONE from this file.
-# Tier lanes are always REACHABLE, so do NOT reintroduce a retired runtime here
-# (pi, hermes, openai, claude-api, opencode, rivet_agentos): the runtime gate
-# returns UnavailableRuntime at dispatch and every run degrades while the stack
-# still reports healthy. Retired names are permitted ONLY on UNWIRED capabilities
-# ([2026] VJS-PC 20 cond.1), never on a default or reachable lane.
+# decision 0012). Retired runtime names are not valid rollback configuration;
+# stale stored names resolve to a typed unavailable result and execute nothing.
 hierarchy:
   tier1:
     name: chief-of-staff
@@ -179,11 +164,8 @@ hierarchy:
 
 # --- ephemeral runtimes: short-lived child agents the fleet spawns -----------
 # Every DEFAULT lane targets `codex`, the only wired governed leaf runtime
-# (decision 0012). `rivet-worker` / `opencode-worker` are retained UNWIRED so a
-# non-Codex leaf stays re-wirable as a quarantine fallback ([2026] VJS-PC 20
-# cond.1) - do not point a default at one. A default on a retired lane is not a
-# soft failure: the runtime gate returns UnavailableRuntime, so every run degrades
-# with "runtime_unavailable" while the stack reports healthy on every surface.
+# (decision 0012). A stale capability naming a retired lane receives a typed
+# unavailable result; no environment flag can bring third-party runtimes back.
 ephemeral_runtimes:
   - name: worker-cheap
     runtime: codex
@@ -194,21 +176,6 @@ ephemeral_runtimes:
   - name: worker-sensitive
     runtime: codex
     model_endpoint: local-sensitive
-    supported_skills: ["*"]
-    max_depth: 2
-    cost_tier: standard
-  # Boltrig v2: Rivet AgentOS as the sandboxed non-coding/tool-agent runtime.
-  - name: rivet-worker
-    runtime: rivet_agentos
-    model_endpoint: standard
-    supported_skills: ["analysis/*", "integration/*", "browser/*"]
-    max_depth: 2
-    cost_tier: standard
-  # Boltrig v2: OpenCode is an optional operator-owned coding-agent runtime. Its
-  # endpoint stays unconfigured until the operator supplies a model identity.
-  - name: opencode-worker
-    runtime: opencode
-    model_endpoint: opencode
     supported_skills: ["*"]
     max_depth: 2
     cost_tier: standard
@@ -285,12 +252,6 @@ adapters:
       kind: basic
   - id: memory-tickets
     runtime: script
-  # Boltrig v2 host-control seam: Herdr is governed through verbs, not a
-  # privileged console side door. Mutating verbs still need grants/HITL policy.
-  # In compose, Herdr state/config is rooted at BOLTRIG_HERDR_HOME rather than
-  # a developer user's ~/.config/herdr.
-  - id: herdr
-    runtime: script
   # Boltrig v2 GPU-control seam. The API key is a credential ref and is never
   # returned to agents or status endpoints.
   - id: runpod
@@ -303,16 +264,29 @@ adapters:
   # auth/session; Boltrig only exposes governed, narrow browser verbs.
   - id: browser-cli
     runtime: script
+  # Optional BYO speech providers. Credentials are connected through the
+  # write-only onboarding/integration setup path, never embedded here.
+  - id: deepgram-audio
+    runtime: http
+    module_ref: boltrig.adapters.builtin.cloud_audio:build_deepgram
+  - id: elevenlabs-audio
+    runtime: http
+    module_ref: boltrig.adapters.builtin.cloud_audio:build_elevenlabs
+  - id: openai-audio
+    runtime: http
+    module_ref: boltrig.adapters.builtin.cloud_audio:build_openai
+  - id: openai-compatible-audio
+    runtime: http
+    module_ref: boltrig.adapters.builtin.cloud_audio:build_openai_compatible
+  - id: fish-audio
+    runtime: http
+    module_ref: boltrig.adapters.builtin.fish_audio:build
   # xAI voice (TTS/STT) seam. Registered via module_ref (the extension
   # contract) so no core _BUILTIN_MODULES edit is needed. The API key is a
   # credential ref, resolved kernel-side only and never returned to agents.
   - id: xai-voice
     runtime: http
     module_ref: boltrig.adapters.builtin.xai_voice:build
-    credential:
-      id: XAI_API_KEY
-      store: env
-      kind: api_key
 
 # --- DEV-MODE EGRESS LOOPBACK ------------------------------------------------
 # Diverts governed outbound sends (channel.send) into the stack's OWN intake, so
@@ -361,6 +335,9 @@ network:
   allowed_domains:
     - graph.microsoft.com
     - api.x.ai
+    - api.deepgram.com
+    - api.elevenlabs.io
+    - api.openai.com
   blocked_domains: []
 
 # --- privacy: data-handling posture (US-PRIV-02, SEC-13) --------------------
@@ -374,13 +351,8 @@ privacy:
 
 # === Round Two compatibility additions (S9) =================================
 
-# --- runtime sidecars -------------------------------------------------------
+# --- model gateway ----------------------------------------------------------
 runtimes:
-  # RETIRED from the roster (decision 0012). Declared disabled rather than deleted
-  # so the multi-runtime routing seam stays live per [2026] VJS-PC 20 cond.(1).
-  pi:
-    enabled: false
-
   # --- model gateway (Round Six gap 3.2) - cost/cache routing for STANDARD data.
   # When base_url is set, standard (non-sensitive) conversation traffic is routed
   # through the gateway and pinned to one model per conversation so the gateway's
@@ -466,18 +438,9 @@ mastra:
   plan_contract: boltrig.mastra.v1
   compile_to: hatchet
 
-rivet_agentos:
-  enabled: true
-  role: sandbox_runtime
-  network_allow: [kernel_mcp, model_endpoint]
-  # NOT READ BY ANY CODE (measured 2026-07-30). It is offered in the admin console,
-  # so it can be toggled and nothing changes. Task #40.
-  native_tools: false
-
 browser_cli:
   enabled: true
   role: browser_automation
-  runtime: rivet_agentos
   cloud_policy: disabled
 
 langfuse:
@@ -514,24 +477,16 @@ personal_agents:
   default_skills: ["writing/*", "analysis/*"]
 
 # --- memory - governed interpretation, distinct from source documents --------
-# The Boltrig memory ledger and native engine are authoritative. These legacy
-# projection adapters remain off by default; Cognee's shipped role is configured
-# under `knowledge`, not as the authority for memory.
+# The Boltrig memory ledger and native engine are authoritative. No external
+# memory projection ships by default; Cognee's separate, rebuildable compiler
+# role is configured under `knowledge`.
 memory:
   enabled: true                        # opt-in per installation
   engine: local                        # executable kernel engine: local | vector | pgvector | cognee
   store: postgres                      # reuse the existing Postgres instance
   authority: kernel_ledger             # backends are projections, not authority
   primary_projection: null             # native engine is the ordinary recall path
-  projections:
-    - id: mem0
-      role: compatibility_memory
-      enabled: false                   # set true with mem0ai installed + MEM0_API_KEY
-      status: available_adapter
-    - id: cognee
-      role: legacy_memory_enrichment
-      enabled: false                   # Knowledge owns the shipped Cognee compiler
-      status: compatibility_projection
+  projections: []
   fanout:
     mode: ledger_then_projection       # commit once, then write projections
     execution: inline                  # inline | queued; queued uses Hatchet/local executor tasks
@@ -569,9 +524,8 @@ memory:
 
 # --- knowledge - canonical sources plus rebuildable provider projections -----
 # Originals and immutable revisions remain in ObjectVault + Postgres/pgvector.
-# Cognee ships on as the rebuildable compiler. Other providers appear in the
-# console catalogue and require one governed enable action after their external
-# connection/credential has been configured.
+# Cognee is the only shipped rebuildable knowledge compiler. The canonical
+# catalogue and originals remain in Postgres/pgvector and ObjectVault.
 knowledge:
   enabled: true
   vault:
@@ -581,13 +535,11 @@ knowledge:
   providers:
     - id: cognee
       enabled: true
-    - id: supermemory
-      enabled: false
-    - id: mem0
-      enabled: false
   cognee:
     # cognee_root defaults beside the per-user Knowledge data. Set
     # BOLTRIG_COGNEE_ROOT for a managed deployment.
+    # Enrichment reuses each caller's governed chat model connection through
+    # Bifrost; embeddings run locally and require no second API key.
 
 # --- sleep distillation (decision 0023) --------------------------------------
 # Nightly consolidation: derive a corpus from the governed record, train a
@@ -598,8 +550,4 @@ knowledge:
 distill:
   enabled: false
   sidecar_url: http://host.orb.internal:8930
-  # A chat-serving endpoint (mlx_lm.server) for CANDIDATE adapters. The
-  # trainer sidecar serves no chat completions; without this the craft gate
-  # refuses typed rather than routing eval traffic at a dead URL.
-  serve_url: http://host.orb.internal:8931/v1
   base_pin: mlx-community/Qwen2.5-7B-Instruct-4bit@main

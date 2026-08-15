@@ -13,8 +13,9 @@ doctrine: one dispatch chokepoint, stable nouns and verbs, everything-as-data).
 > production cutover and Codex-native collaboration admission are not yet green.
 > The executable blockers and closure order are recorded in
 > `docs/CODEX-PRODUCTION-ADMISSION.md`.
-> Pi, Hermes, OpenCode, and related paths remain staged rollback residue, not
-> alternate product runtimes.
+> Historical provider-native, OpenCode, Rivet, Pi, and Hermes agent runtimes
+> have been removed. Stale capability names fail as typed unavailable runs;
+> there is no environment flag or bundled binary that revives them.
 
 The kernel core is implemented and tested with the Python suite, opt-in Postgres
 and live-adapter legs, and a machine-checked binding-invariant gate at debt 0.
@@ -80,7 +81,7 @@ codebase of its own (the difference between installations is config, never a
 forked Boltrig, per P7). Breach of any condition routes Boltrig to consolidation.
 See `docs/decisions/0002-nankle-consolidation-ruling.md`.
 
-## Round Two: conversation, Pi, MCP
+## Conversation, trusted Codex, and MCP
 
 Three additions sit on the same thin core (the dispatch sequence is unchanged):
 
@@ -88,11 +89,10 @@ Three additions sit on the same thin core (the dispatch sequence is unchanged):
   advertised as MCP tools and adapter-declared resources over a run-scoped token;
   every call runs the full chokepoint. Any MCP-capable client can use the same
   governed surface without bespoke glue.
-- **Codex is the one target agent runtime.** The Pi sidecar lane that used to sit
-  here is RETIRED (`docs/decisions/0020-retire-the-pi-lane.md`, on the authority of
-  [2026] VJS-PC 20 L1). The multi-runtime routing seam stays live and five
-  non-Codex lanes remain re-wirable by configuration alone, which is the condition
-  that grant carries. Production readiness still fails closed until the pinned
+- **Codex is the sole model-backed agent runtime.** Alternative runtime clients,
+  plugins, binaries, state and deployment wiring are removed; stale capability
+  names return typed unavailable results and cannot be revived by configuration.
+  Production readiness still fails closed until the pinned
   Codex binary, identity/proxy, cancellation and acceptance gates pass; native
   Codex collaboration remains admission-disabled while its lifetime/depth/thread,
   effort, drain, bearer-revocation and durable-projection guarantees are completed.
