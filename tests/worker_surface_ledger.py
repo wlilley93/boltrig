@@ -150,7 +150,11 @@ GET /v1/privacy/policy privacyPolicy
 """,
 )
 _surface(
-    "apps/worker/src/components/onboarding/OnboardingGate.tsx",
+    # Was OnboardingGate.tsx until onboarding was split into steps and hooks.
+    # The gate now composes the steps and calls nothing; the profile write moved
+    # here with useOnboardingCompletion, beside the other onboarding hooks that
+    # already declare their own routes (see useProviderSetup.ts below).
+    "apps/worker/src/components/onboarding/useOnboardingCompletion.ts",
     """
 PATCH /v1/me/profile updateMeProfile
 """,
@@ -252,7 +256,10 @@ POST /v1/auth/2fa/disable twoFactorDisable
 """,
 )
 _surface(
-    "apps/worker/src/components/Views.tsx",
+    # Was Views.tsx, which no longer calls it. Sign out is a settings row now.
+    # Shell.tsx also calls client.logout on session teardown; this names the
+    # operator-facing control, which is the one a route ledger is about.
+    "apps/worker/src/components/settings/CompactSections.tsx",
     """
 POST /v1/auth/logout logout
 """,
@@ -335,7 +342,9 @@ GET /v1/memory/ingestions memoryIngestions
 """,
 )
 _surface(
-    "apps/worker/src/components/settings/CompactSections.tsx",
+    # The settings surface was split into one component per row; the knowledge
+    # provider reads and writes went with the toggle that renders them.
+    "apps/worker/src/components/settings/KnowledgeToggle.tsx",
     """
 GET /v1/knowledge/providers knowledgeProviders
 POST /v1/knowledge/providers/{provider_id} setKnowledgeProvider
