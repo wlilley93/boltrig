@@ -257,19 +257,34 @@ export function tiltCorrection(samples: Float32Array,
                        MIN_TILT_GAIN_DB, MAX_TILT_GAIN_DB);
   if (wanted <= 0.5) return null;
 
-  // Above the peak, never on it. A shelf cornered at the sibilance peak lifts
-  // the "sss" as much as the air over it, which is how a correction becomes a
-  // harshness.
+  // THE CORNER FOLLOWS WHICH DEFICIT FIRED, and getting this wrong made the
+  // correction incoherent in a way no unit test could see. An end-to-end run
+  // caught it: the level deficit is MEASURED in the sibilant band, but the
+  // corner was always placed above the sibilance peak -- so a dull voice was
+  // told it needed 10 dB in 5-8 kHz and then given a shelf starting at 8 kHz,
+  // which cannot lift that band at all. It measured a real problem and applied
+  // the fix somewhere else.
+  //
+  //   CLIFF   sibilance is fine, the air above it is missing. Corner goes
+  //           ABOVE the peak: cornering on it lifts the "sss" as much as the
+  //           air, which is how a correction becomes a harshness.
+  //   LEVEL   the whole top end is low, sibilant band included. Corner goes
+  //           BELOW that band, so the shelf lifts what was measured as short.
   const peak = sibilancePeakHz(samples, sampleRate);
-  const corner = Math.min(peak * 1.35, sampleRate / 2 - 500);
+  const corner = Math.min(
+    fromLevel > fromGap ? SIBILANT[0] * 0.8 : peak * 1.35,
+    sampleRate / 2 - 500,
+  );
   const because = fromLevel > fromGap
-    ? `top end ${(-level).toFixed(1)} dB under the body, ${fromLevel.toFixed(1)} short of target`
-    : `air ${gap.toFixed(1)} dB below sibilance`;
+    ? `top end ${(-level).toFixed(1)} dB under the body, ${fromLevel.toFixed(1)} short of `
+      + `target; corner below the sibilant band so the shelf lifts it`
+    : `air ${gap.toFixed(1)} dB below sibilance; corner above the `
+      + `${Math.round(peak)} Hz peak so the shelf lifts the air, not the sss`;
   return {
     type: "highshelf",
     frequency: Math.round(corner),
     gainDb: Number(wanted.toFixed(2)),
-    reason: `${because}; corner set above the ${Math.round(peak)} Hz peak`,
+    reason: because,
   };
 }
 
