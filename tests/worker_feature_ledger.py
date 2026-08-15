@@ -898,9 +898,14 @@ _governed_controls(
     "The chat surface renders HITL requests raised BY a turn: it shows the question and the options the kernel supplied, and replays the operator's decision through the same respondHitl method. Its explicitly opened tool disclosure reads only the caller-visible, server-redacted run snapshot and settles nothing. It composes no approval of its own, retains only bounded display state or the request id, and a decision that never reaches the kernel leaves the turn parked, which is the correct failure.",
 )
 _governed_controls(
-    "settings/CompactSections.tsx",
+    "settings/KnowledgeToggle.tsx",
     ("worker", "worker", "worker", "worker", "worker"),
-    "Settings rows that mutate governed configuration surface the kernel's pending_human receipt rather than reporting success: the row keeps its prior value until the change is approved, so a person cannot read a queued change as a made one. It retains no request body beyond the exact typed inputs it sent.",
+    "The knowledge provider rows mutate governed configuration and surface the kernel's pending_human receipt rather than reporting success: the row keeps its prior value until the change is approved, so a person cannot read a queued change as a made one. It retains no request body beyond the exact typed inputs it sent. This governed control was CompactSections.tsx until the settings surface was split into one component per row; the behaviour did not change, only the file that carries it, and CompactSections.tsx now composes rows and settles nothing.",
+)
+_governed_controls(
+    "browser/useBrowserWorkspace.tsx",
+    ("worker", "worker", "worker", "worker", "worker"),
+    "Every browser action is a governed mutation invoked through the exact-approval finalizer, never a local drive of the page: a result of pending_human is reported as waiting for approval rather than as a completed action, so a parked navigation cannot read as a taken one. It composes no approval of its own, holds only the workspace's visible tabs, nodes and cursor, and an approval that never arrives leaves the workspace where it was.",
 )
 _governed_controls(
     "settings/OvernightSection.tsx",
