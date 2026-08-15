@@ -1,0 +1,9 @@
+id: DECISION-0030
+at: 2026-08-15T12:04:28Z
+by: williamlilley
+decision: After setup is durably complete, the final onboarding screen offers the signed Boltrig Desktop app and explains that it enables approved local actions on the user's own computer while preserving a browser-only path.
+court_required: false
+why: The previous final screen repeated generic setup assurances but did not explain or surface the product boundary between hosted chat and the native local executor. A single optional download offer is enough; requiring installation would block browser-only users, while an unguarded or invented URL would violate the signed-distribution boundary.
+basis:
+- USER-DIRECTION-2026-08-15:ONBOARDING-DESKTOP-OFFER
+- DECISION-0027

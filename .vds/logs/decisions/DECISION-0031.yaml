@@ -1,0 +1,10 @@
+id: DECISION-0031
+at: 2026-08-15T12:19:26Z
+by: williamlilley
+decision: Retire Mem0 and Supermemory from the shipped Knowledge catalogue and state Cognee's missing-model degradation as needs a model; keep nightly LoRA as a separate optional subsystem.
+court_required: false
+why: The two external providers had no complete Knowledge adapter and could never be enabled, so visible controls promised capability that did not exist. Cognee is installed and its canonical-input failure is non-destructive, but the current dev deployment has no enrichment LLM configured. Distillation has different authority, erasure, and promotion semantics and must not be collapsed into Cognee.
+basis:
+- 'User direction 2026-08-15: remove Mem0 and Supermemory if they are not hooked up'
+- docs/decisions/0015-codex-native-knowledge-extension.md 2026-08-15 amendment
+- KNO-04

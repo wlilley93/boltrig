@@ -1,0 +1,11 @@
+id: DECISION-0028
+at: 2026-08-14T17:07:08Z
+by: williamlilley
+decision: External files, media and dragged text turn the active Chat composer into a visible window-wide drop target, and long pasted text is staged as a compact readable attachment instead of expanding the draft.
+court_required: false
+why: The Principal supplied the Codex attachment-composer treatment and asked for the same clear affordance while dragging content over the window. The same direction asks long pasted snippets to stay out of the instruction field.
+basis:
+- USER-DIRECTION-2026-08-14:WINDOW-DRAG-DROP-COMPOSER
+- USER-REFERENCE-2026-08-14:CODEX-ATTACHMENT-COMPOSER
+- BOLTRIG-CONTRACT:BOUNDED-CHAT-ATTACHMENTS
+- BOLTRIG-CONTRACT:CONVERSATION-OWNED-DRAFTS

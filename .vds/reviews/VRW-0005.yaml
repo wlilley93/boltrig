@@ -3,10 +3,10 @@ routes:
 - apps/worker/src/components/VoiceCall.tsx
 fileKey: iVQBKFc3NpRH3zdOOxfPqr
 nodeId: 17:2
-shippedScreenshotDigest: sha256:309d79e3fafe1711574cec5af4ab9bc0cc6cb5a0391acdc61d778c35a88f77a3
+shippedScreenshotDigest: sha256:89dd4292982780f6ce538dc017f5f9d1e5e33e81d3bb4a24b3a80529c4e71d48
 screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png
-servedBuild: "feat/console-target@c939143914257af9f3f6fa59f5f7fc2a1ee3a9c4; dirty; capture-source sha256:926f1e6d356f96bdd028e33c00db087b6dcba0b03ec8bb2d7aa9df6976bba474; capture-manifest sha256:602b9093a36b6bb725125266d112cdf8d77975d5d999bf5d812fda8a585a1b8e"
-shippedSourceDigest: sha256:b927a87c0a07dec7a8806208c268b7d768531a89f738ec9a48e7cf501aff80a2
+servedBuild: "feat/console-target@2afac092e0043ed1bb765488e2bfe63f85f2cdb7; dirty; capture-source sha256:a70a4863ceaf37b74f8830b6a1007937707c37412de80740039ad3bbe96b2970; capture-manifest sha256:5272de423442854669a409c377a555f91316265d16515d43c3c65fba726e590c"
+shippedSourceDigest: sha256:2c2a4ccb94ddc9325770e2f79cb347bd480a1405e90ba0ed1127bf5847035bad
 frameImageDigest: sha256:31b55e68eadb7f0a1d8767c9b7435d668b531f2ae38c915ea976bc893d67f45e
 frameDigest: sha256:f45d0e0271e5fef8f5ecc12b799cf023b7693d5cd75e78ffacdfced135038830
 verdict: no_authority
@@ -19,13 +19,13 @@ regions:
   finding: This screen declares no facet band.
 - region: body_rows
   examined: true
-  finding: The central familiar matches the target geometry and now uses the verified dark navy material with a warm core; transcript, connection status and notification copy remain backend-derived.
+  finding: The selected Familiar occupies the full available stage at bounded retina resolution; transcript, connection status and notification copy remain backend-derived. Jarvis uses the same full-window contract and has independent component coverage.
 - region: rail
   examined: false
   finding: This full-window call declares no independent rail band.
 - region: footer
   examined: true
-  finding: Participant controls occupy the intended footer locus, while the recovered-call action set differs from the active-call frame.
+  finding: The typed call bar stays visible above the bottom edge through the recovered state, followed by Resume call and independent Mute me and Mute Familiar controls; this latest directed action set differs from the illustrative frame.
 - region: empty_state
   examined: false
   finding: The compared call is populated, not empty.
@@ -41,15 +41,20 @@ deltas:
 - describes: The notification occupies the measured target locus, while its recovery copy and action follow the real connection state instead of the frame's illustrative message.
   disposition: forbidden_by_policy
   owedBy: DIR-0005
-reviewedBy: Codex deterministic current-capture evidence rebind v28
-reviewedAt: 2026-08-14T11:57:38Z
+- describes: The latest Principal direction expands the selected character to the full-window stage, keeps typed chat present and separates microphone from character playback mute; those controls intentionally override the earlier illustrative footer.
+  disposition: belongs_to_app_chrome
+  owedBy: SCR-0004
+reviewedBy: Codex deterministic current-capture evidence rebind v31
+reviewedAt: 2026-08-15T08:57:44Z
 basis:
 - DIR-0005
 - DIR-0010
 - DIR-0015
 - DIR-0016
+- DIR-0032
 - SCR-0004
 - apps/worker/tests/visual/states.json
 - docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json
 - docs/design/evidence/2026-08-11-console-parity/current/metrics.json
-notes: The unchanged frame digest is retained from the existing depth-limited ledger only and is not eligible for sign-off. The recovered-call screenshot is byte-identical to the prior current capture, while its source-bound capture receipt is new. This no_authority row binds only the deterministic current screenshot and current route source.
+notes: >-
+  The unchanged frame digest is retained from the existing depth-limited ledger only and is not eligible for sign-off. The current recovered-call screenshot was visually inspected at 1440x900: the selected Familiar fills the stage, the Shell rail is absent, the typed bar remains visible and the two mute controls are distinct. A live 1024x768 browser measurement also found no page overflow and a zero-width hidden Shell rail. Jarvis full-resolution selection and its named playback mute are regression-tested because the deterministic fixture is Familiar. This no_authority row binds only the deterministic current screenshot and current route source; it creates no sign-off, parity or conformity verdict.

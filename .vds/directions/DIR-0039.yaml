@@ -1,0 +1,9 @@
+id: DIR-0039
+logId: DECISION-0028
+decisionDigest: sha256:53dac1618ef2169a077c46c31b53a91908c915a77a39138cc6703eec479688cc
+surface: !route
+  route: apps/worker/src/components/chat/Composer.tsx
+direction: Make the active Chat composer a clear attachment target for content dragged over the window, and compact long pasted text into a readable attachment card.
+magnitude: While an external file, media item or text payload is dragged over the window, light the composer frame and present an accessible Drop to attach overlay. Accept the drop anywhere in that active window and stage it through the existing bounded attachment path. Convert plain-text clipboard payloads of at least 2000 characters into named text attachments without changing the current instruction draft. Show a small safe text preview in the attachment card. Preserve exact bytes, attachment count and size ceilings, conversation ownership, explicit removal, no automatic submission and the server's model-readable classification. Keep attachments disabled for local tasks whose bridge accepts text only, and never treat internal queued-message reordering as an external attachment drag.
+directedAt: 2026-08-14T17:07:08Z
+notes: This additive Principal direction is grounded in the supplied Codex attachment-composer crop. It makes no signed Figma parity, conformity or frameDigest claim.

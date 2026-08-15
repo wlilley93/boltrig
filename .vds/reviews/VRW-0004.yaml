@@ -3,9 +3,9 @@ routes:
 - apps/worker/src/components/CommandPalette.tsx
 fileKey: iVQBKFc3NpRH3zdOOxfPqr
 nodeId: 16:2
-shippedScreenshotDigest: sha256:f2ef2e5405e63a582e1eefd1910be90e2ec57434faf3a4b9392fba99ac4cf6c7
+shippedScreenshotDigest: sha256:810d205f7d1a2938c263cdc2d3a25bc4f900b5610d037f17b678bb6165ee298d
 screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png
-servedBuild: "feat/console-target@c939143914257af9f3f6fa59f5f7fc2a1ee3a9c4; dirty; capture-source sha256:926f1e6d356f96bdd028e33c00db087b6dcba0b03ec8bb2d7aa9df6976bba474; capture-manifest sha256:602b9093a36b6bb725125266d112cdf8d77975d5d999bf5d812fda8a585a1b8e"
+servedBuild: "feat/console-target@3f96081c34a08ea0042ec2ce998f60711ce2717b; dirty; capture-source sha256:2d74c933d31a87a2ab6cd99b8747be242663f385f08da0345ca0c5d5ab99bc95; capture-manifest sha256:ed3f7421c58d6fa7e8ac9c56787b48912076e803451cdab97aed7220fbf7fbb9"
 shippedSourceDigest: sha256:3044e646b0c9c5d5ec1eb9831a86de5d8ae0fbcc96aa6fed1639b51709e8ce45
 frameImageDigest: sha256:d6db445fc5f144ce7e69fb413e54a520e5b1a7a7c3453825543661634fa387d4
 frameDigest: sha256:9ae8fb405f8f4bdec541d73acd9ffbe43f866a228398948d37faab61ccd37f86
@@ -36,8 +36,8 @@ deltas:
 - describes: The palette is now mounted over the truthful completed Chat-run fixture; the Figma sample's live HITL, computer-use and spend details remain absent because the fixture has no corresponding receipts.
   disposition: belongs_to_app_chrome
   owedBy: SCR-0001
-reviewedBy: Codex deterministic current-capture evidence rebind v28
-reviewedAt: 2026-08-14T11:57:38Z
+reviewedBy: Codex deterministic current-capture evidence rebind v30
+reviewedAt: 2026-08-14T16:39:01Z
 basis:
 - DIR-0006
 - DIR-0010
@@ -47,6 +47,15 @@ basis:
 - DIR-0016
 - DIR-0017
 - DIR-0018
+- DIR-0020
+- DIR-0021
+- DIR-0022
+- DIR-0028
+- DIR-0029
+- DIR-0030
+- DIR-0033
+- DIR-0035
+- DIR-0036
 - SCR-0005
 - apps/worker/tests/visual/states.json
 - docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json

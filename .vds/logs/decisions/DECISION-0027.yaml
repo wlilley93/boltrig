@@ -1,0 +1,10 @@
+id: DECISION-0027
+at: 2026-08-14T16:53:38Z
+by: williamlilley
+decision: Composer toolbar glyphs use the heavier Codex-weight stroke family, and unavailable dictation remains semantically disabled without being visually washed out.
+court_required: false
+why: The Principal supplied a direct Codex-versus-Boltrig microphone comparison and identified the thinner Boltrig glyph. The correction is scoped to the stroke-based composer actions rather than changing unrelated iconography throughout the product.
+basis:
+- USER-DIRECTION-2026-08-14:THICKER-COMPOSER-ICONS
+- USER-REFERENCE-2026-08-14:CODEX-COMPOSER-MICROPHONE
+- BOLTRIG-CONTRACT:DICTATION-UNAVAILABLE-REMAINS-DISABLED

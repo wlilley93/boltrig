@@ -1,0 +1,9 @@
+id: DIR-0032
+logId: DECISION-0024
+decisionDigest: sha256:1fafecf5df1eade0544ddbd03bbe32e9aefdc0da8d587ecde1269de9103b7c92
+surface: !route
+  route: apps/worker/src/components/VoiceCall.tsx
+direction: Open the selected installed character, Familiar or Jarvis, as the full-window voice-call surface while keeping the typed call composer visible.
+magnitude: Animate the shared Shell rail completely away for the call and restore it on exit. Give the selected character a bounded retina backing store and the available desktop stage, preserve the bottom typed-chat bar through connecting, active, held and reconnecting states, and expose independent Mute me and Mute <character> controls. Microphone mute may affect only outgoing capture; character mute may affect only playback. Preserve participant focus, transcript accessibility, approval notices, reduced-motion behavior, media cleanup, responsive overflow safety and the caller's selected installed character. Do not add an unregistered companion, infer a voice, silence the visual speaking state when output alone is muted, or bypass the realtime call authority.
+directedAt: 2026-08-14T16:22:25Z
+notes: This additive Principal direction governs the real call surface and source-bound call fixture. It makes no Figma parity, signed review, conformity or frameDigest claim.

@@ -1,0 +1,9 @@
+id: DIR-0036
+logId: DECISION-0025
+decisionDigest: sha256:885b9f9206cb5b32fba17552010ba17b122c05511b3e304df3381823dbaa0497
+surface: !route
+  route: apps/worker/src/components/shell/TaskList.tsx
+direction: Place Projects between the primary Shell navigation and Recents with more vertical separation from the primary menu.
+magnitude: Preserve Pinned when it has real presentation state, then present a Projects group immediately before Recents. Until conversation summaries carry canonical project membership, show only the truthful inert No projects state. Increase the navigation-to-history and group rhythm without changing the task-row density requirement, conversation ordering, working rings, pin/archive behavior, the top command search or the absence of a Recents search field. Do not invent project rows, project membership, a project picker or a workspace label.
+directedAt: 2026-08-14T16:33:25Z
+notes: This additive Principal direction establishes the Shell hierarchy while retaining the existing no-invented-project-data boundary. It makes no signed Figma parity, conformity or frameDigest claim.

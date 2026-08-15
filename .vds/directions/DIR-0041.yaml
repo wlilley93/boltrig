@@ -1,0 +1,9 @@
+id: DIR-0041
+logId: DECISION-0030
+decisionDigest: sha256:73822ae2f31b4cd3d50bc0db73ad0d7b5fc7cba81f5b661b5cbcfceead44a853
+surface: !route
+  route: apps/worker/src/components/onboarding/ReadyStep.tsx
+direction: Make the final completed-setup slide an optional Boltrig Desktop handoff.
+magnitude: Show the configured signed desktop download only through the existing HTTPS/no-credentials URL authority. Explain in plain language that the app lets the selected companion run and take approved actions locally on the user's personal computer, limited to files, folders and apps the user chooses. Persist onboarding before this slide appears, provide Continue in browser, do not require installation, and show a truthful unavailable state when no reviewed download is configured.
+directedAt: 2026-08-15T12:04:33Z
+notes: Additive Principal direction. No Figma parity, signoff, conformity or frameDigest is claimed.

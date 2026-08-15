@@ -1,0 +1,9 @@
+id: DECISION-0029
+at: 2026-08-15T11:45:27Z
+by: williamlilley
+decision: 'Voice mode is a single immersive character stage: both side panels animate away and ordinary call chrome collapses to the typed input plus independent microphone mute and character silence controls.'
+court_required: false
+why: The existing full-window surface still exposes call metadata, participant chips, status copy and a recovery card, which competes with the selected character and contradicts the Principal's explicit minimal voice-stage direction. The safety boundary can remain intact by retaining a quiet Leave control, screen-reader transcript/status, reconnect inside the composer and visible urgent approval exceptions.
+basis:
+- USER-DIRECTION-2026-08-15:MINIMAL-IMMERSIVE-VOICE-STAGE
+- DECISION-0024

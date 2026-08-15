@@ -1,0 +1,11 @@
+id: DECISION-0026
+at: 2026-08-14T16:45:46Z
+by: williamlilley
+decision: The New-chat prompt stack follows the supplied Codex reference scale with a roomier voice invitation and text composer, and the composer reads as a layered glass surface; the four suggested opener cards remain intentionally absent.
+court_required: false
+why: The Principal supplied same-resolution Codex and Boltrig screenshots and identified the voice invitation and text bar as undersized and the Boltrig input as visually flatter. This direction refines only the backed prompt controls and explicitly preserves the prior decision to omit suggested openers.
+basis:
+- USER-DIRECTION-2026-08-14:NEW-CHAT-PROMPT-SCALE-AND-GLASS
+- USER-REFERENCE-2026-08-14:CODEX-NEW-CHAT-1910X1074
+- BOLTRIG-DIRECTION:REMOVE-SUGGESTED-OPENERS
+- BOLTRIG-CONTRACT:VOICE-INVITATION-ABOVE-COMPOSER
