@@ -135,7 +135,7 @@ function ProviderKeyForm({
               label="Model"
               onChange={setup.setModel}
               options={modelOptions}
-              placeholder={setup.keyPresent ? "Choose a model" : "Enter your API key first"}
+              placeholder={setup.keyPresent || providerKeyOptional(provider.id) ? "Choose a model" : "Enter your API key first"}
               searchLabel="Search models"
               value={setup.model}
             />
