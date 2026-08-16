@@ -66,6 +66,12 @@ from boltrig.models.registry import RateLimit
 _LOGIN_RL_IDENTITY = RateLimit(per="minute", max=5, scope="verb")
 _LOGIN_RL_IP = RateLimit(per="minute", max=30, scope="verb")
 
+# Accept-invite: unauthenticated, and the ONLY public auth endpoint that pays
+# argon2 (64 MiB) BEFORE the single-use bearer is claimed - unthrottled it is a
+# cheap memory-exhaustion lever. Per-IP only: the invite token is single-use and
+# 256-bit, so a per-identity bound has nothing to protect.
+_ACCEPT_RL_IP = RateLimit(per="minute", max=10, scope="verb")
+
 # The one generic login failure. It is byte-identical for a wrong password, an
 # unknown email, and a deactivated user, so the response body never enumerates
 # which emails exist (D5).
@@ -80,6 +86,28 @@ _TFA_RL_IP = RateLimit(per="minute", max=30, scope="verb")
 # The one generic second-factor failure (byte-identical for a wrong code, an unknown
 # or expired challenge, and a used/absent recovery code) so nothing enumerates state.
 _GENERIC_2FA_FAILURE = {"status": "error", "reason": "invalid or expired code"}
+
+
+async def _throttle_accept_invite(k, tenant: str, request: Request):
+    """Per-IP bound ahead of the argon2 spend (see _ACCEPT_RL_IP). Returns the
+    429 response, or None when the request may proceed. Kept beside the route
+    group's other helpers so accept_invite itself stays inside the function
+    size ratchet rather than buying an exemption for a throttle."""
+    try:
+        ip = _client_ip(request) or "unknown"
+        await k.rate_limiter.enforce(tenant, f"auth.accept.ip:{ip}", _ACCEPT_RL_IP)
+        return None
+    except RateLimited:
+        await k.security.record(
+            tenant, SecurityEventType.RATE_LIMIT_TRIP, "accept_invite_rate_limited",
+            actor="unknown", actor_tier="human",
+            ip_address=_client_ip(request) or "unknown",
+            user_agent=request.headers.get("user-agent") or None,
+            resource="auth.accept_invite",
+        )
+        return JSONResponse(
+            {"status": "error", "reason": "too many attempts"}, status_code=429
+        )
 
 
 def _console_tenant() -> str:
@@ -316,12 +344,18 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
     desktop_session_auth.register_auth_support_routes(app, principal_dep, get_kernel)
 
     @app.post("/v1/auth/accept-invite")
-    async def accept_invite(body: dict, k=K) -> JSONResponse:
+    async def accept_invite(body: dict, request: Request, k=K) -> JSONResponse:
         # D1: consume a single-use, HASHED, EXPIRING invite token and set the
-        # password. No open self-signup - the token must match a pending admin
-        # invitation. Public (no principal): the token IS the bearer of authority.
+        # password; no open self-signup. Public (no principal): the token IS the
+        # bearer of authority.
         from boltrig.store.postgres import set_current_tenant
 
+        tenant = _console_tenant()
+        set_current_tenant(tenant)
+        # Throttled ahead of the argon2 spend (see _throttle_accept_invite).
+        throttled = await _throttle_accept_invite(k, tenant, request)
+        if throttled is not None:
+            return throttled
         token = body.get("token")
         password = body.get("password")
         if not isinstance(token, str) or not token:
