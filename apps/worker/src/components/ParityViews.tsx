@@ -4,8 +4,10 @@ import {
   type AgentCapabilityAuthorInfo,
   type AuditNode,
   type CapabilityLifecycleResponse,
+  type MemoryCandidateView,
   type MemoryFactView,
   type MemoryIngestionRow,
+  type MemoryTimelineResponse,
   type RunRow,
   type RunTopologyNode,
   type WorkDetailResponse,
@@ -1090,7 +1092,7 @@ type MemoryApprovalResult =
   | Awaited<ReturnType<typeof client.memoryIngest>>;
 
 export function MemoryView() {
-  const [tab, setTab] = useState<"browse" | "recall" | "remember" | "ingest">("browse");
+  const [tab, setTab] = useState<"browse" | "recall" | "remember" | "ingest" | "review">("browse");
   const [facts, setFacts] = useState<MemoryFactView[]>([]);
   const [surfaceState, setSurfaceState] = useState<SurfaceState>("loading");
   const loadedMemory = useRef(false);
@@ -1109,6 +1111,8 @@ export function MemoryView() {
   const [sourceKind, setSourceKind] = useState("conversation");
   const [sourceRef, setSourceRef] = useState("");
   const [ingestItems, setIngestItems] = useState("");
+  const [candidates, setCandidates] = useState<MemoryCandidateView[]>([]);
+  const [timeline, setTimeline] = useState<MemoryTimelineResponse | null>(null);
   const approval = useExactApprovalFinalizer<
     MemoryApprovalInput,
     MemoryApprovalResult
@@ -1279,6 +1283,11 @@ export function MemoryView() {
       .catch(() => setMessage("Memory ingestion history is unavailable."));
   }, [tab]);
 
+  useEffect(() => {
+    if (tab !== "review") return;
+    refreshCandidates();
+  }, [tab]);
+
   async function recall() {
     if (!query.trim()) return;
     const result = await client.memoryRecall({
@@ -1310,6 +1319,55 @@ export function MemoryView() {
       refresh(true);
       setTab("browse");
     }
+  }
+
+  function refreshCandidates() {
+    setTimeline(null);
+    void client.memoryCandidates({ limit: 60 })
+      .then((result) => setCandidates(result.candidates ?? []))
+      .catch(() => setMessage("The candidate queue is unavailable."));
+  }
+
+  async function review(candidate: MemoryCandidateView, decision: "approve" | "reject") {
+    const key = `${decision}:${candidate.id}`;
+    if (armed !== key) {
+      setArmed(key);
+      return;
+    }
+    setArmed(null);
+    // Review is high-consequence, so the first call may pend for an approval.
+    // The operator's confirming click IS that approval: answer the canonical
+    // HITL request as this principal, then replay the exact review with it.
+    const result = await client.memoryCandidateReview(candidate.id, { decision });
+    let final = result;
+    if (result.hitl_request_id) {
+      const approvalId = result.hitl_request_id;
+      try {
+        await client.respondHitl(approvalId, "approve");
+      } catch {
+        // The replay below pends again and surfaces the waiting message.
+      }
+      final = await client.memoryCandidateReview(candidate.id, { decision }, approvalId);
+    }
+    if (final.status === "ok") {
+      setMessage(decision === "approve"
+        ? "Candidate approved and active."
+        : "Candidate rejected.");
+      refreshCandidates();
+    } else {
+      setMessage(final.reason ?? "The review is waiting for approval in the originating chat.");
+    }
+  }
+
+  function showTimeline(candidate: MemoryCandidateView) {
+    if (!candidate.memory_key) return;
+    if (timeline?.memory_key === candidate.memory_key) {
+      setTimeline(null);
+      return;
+    }
+    void client.memoryTimeline({ memory_key: candidate.memory_key })
+      .then(setTimeline)
+      .catch(() => setMessage("The slot history is unavailable."));
   }
 
   async function forgetSource(sourceRefValue: string) {
@@ -1414,8 +1472,9 @@ export function MemoryView() {
       <Topbar title="Memory" status={`${facts.length} in view`} />
       <div className="page-content">
         <div className="page-intro"><div><h2>Revisable memory</h2><p>Recall, inspect and explicitly change what the assistant remembers, with provenance attached to every fact.</p></div></div>
-        {surfaceState === "ready" && <Tabs value={tab} options={[["browse", "Browse"], ["recall", "Recall"], ["remember", "Remember"], ["ingest", "Ingest"]]} onChange={(value) => {
+        {surfaceState === "ready" && <Tabs value={tab} options={[["browse", "Browse"], ["recall", "Recall"], ["remember", "Remember"], ["ingest", "Ingest"], ["review", `Review${candidates.length ? ` (${candidates.length})` : ""}`]]} onChange={(value) => {
           approval.invalidate();
+          setArmed(null);
           setTab(value as typeof tab);
         }} />}
         {message && <p className="notice" role="status">{message}</p>}
@@ -1518,6 +1577,57 @@ export function MemoryView() {
               ))}
             </section>
           </div>
+        )}
+        {surfaceState === "ready" && tab === "review" && (
+          <>
+            {candidates.length === 0 ? (
+              <Unavailable title="No candidates">Nothing is waiting for review. Conflicted facts and proposed procedures appear here for a decision.</Unavailable>
+            ) : (
+              <div className="memory-grid">{candidates.map((candidate) => (
+                <article className="memory-card" key={candidate.id}>
+                  <div className="memory-card-head">
+                    <span>{candidate.kind}</span>
+                    <span>{candidate.confidence != null ? `confidence ${candidate.confidence.toFixed(2)}` : "review"}</span>
+                  </div>
+                  <p>{contentText(candidate.content)}</p>
+                  {candidate.memory_key && <small>slot {candidate.memory_key}</small>}
+                  <small>{candidate.owner_scope} · {candidate.provenance.source_kind || "direct"}{candidate.provenance.source_ref ? ` · ${candidate.provenance.source_ref}` : ""}</small>
+                  <div className="memory-feedback" aria-label="Candidate review">
+                    <button
+                      className={armed === `approve:${candidate.id}` ? "primary-button armed" : "primary-button"}
+                      onClick={() => void review(candidate, "approve")}
+                    >
+                      {armed === `approve:${candidate.id}` ? "Confirm approve" : "Approve"}
+                    </button>
+                    <button
+                      className={armed === `reject:${candidate.id}` ? "danger-button armed" : "danger-button"}
+                      onClick={() => void review(candidate, "reject")}
+                    >
+                      {armed === `reject:${candidate.id}` ? "Confirm reject" : "Reject"}
+                    </button>
+                    {candidate.memory_key && (
+                      <button className="secondary-button" onClick={() => showTimeline(candidate)}>
+                        {timeline?.memory_key === candidate.memory_key ? "Hide history" : "Slot history"}
+                      </button>
+                    )}
+                  </div>
+                  {timeline !== null && timeline.memory_key === candidate.memory_key && (
+                    <div aria-label="Slot version history">
+                      {timeline.versions.map((version) => (
+                        <div className="compact-row" key={version.id}>
+                          <span className={`activity-dot ${version.status === "active" ? "status-ok" : "status-held"}`} />
+                          <span>
+                            <strong>v{version.version} · {String(version.value ?? contentText(version.content))}</strong>
+                            <small>{version.status}{version.valid_from ? ` · from ${version.valid_from.slice(0, 10)}` : ""}</small>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </article>
+              ))}</div>
+            )}
+          </>
         )}
         {surfaceState === "ready" && (tab === "browse" || tab === "recall") && (
           facts.length === 0 ? <Unavailable title="No memory facts in view">Recall something specific, or remember the first fact.</Unavailable> :

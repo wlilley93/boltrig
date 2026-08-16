@@ -35,6 +35,52 @@ def reflection_lesson(item: WorkItem, terminal_status: str, outcome: dict) -> st
     )
 
 
+# Terminal work-item statuses mapped onto the episode outcome vocabulary the
+# typed write gate accepts (decision 0029). Anything unmapped is recorded as a
+# partial outcome rather than guessed at.
+_EPISODE_OUTCOMES = {
+    "completed": "succeeded",
+    "done": "succeeded",
+    "failed": "failed",
+    "error": "failed",
+    "cancelled": "abandoned",
+    "canceled": "abandoned",
+}
+
+
+def episode_proposal(item: WorkItem, terminal_status: str, outcome: dict) -> dict:
+    """The typed EPISODE a terminal run proposes (decision 0029), as
+    ``memory.propose`` params.
+
+    Same philosophy as ``reflection_lesson``: a deterministic template, not a
+    model call. The retrieval text embeds the PROBLEM representation (intent +
+    source + how it ended) so a future run hitting similar work recognises it -
+    never the resolution alone. The runtime itself attests the terminal state
+    (``is_terminal``, ``source_kind=reflection``), which is the outcome
+    evidence. The gate still applies its own screens; nothing here is trusted
+    because it is system-originated."""
+
+    return {
+        "plane": "episodic",
+        "title": f"Run {item.intent}"[:200],
+        "retrieval_text": (
+            f"A '{item.source}' task '{item.intent}' ended as {terminal_status}"
+            f" (degraded={bool(item.degraded)})"
+        ),
+        "outcome": _EPISODE_OUTCOMES.get(terminal_status, "partially_succeeded"),
+        "is_terminal": True,
+        "attempted": [],
+        "failed_attempts": [],
+        "resolution": (
+            f"Reached {terminal_status} with outcome score {outcome.get('score')}"
+        ),
+        "task_family": str(item.source or "general"),
+        "confidence": 0.8,
+        "source_kind": "reflection",
+        "source_ref": item.id,
+    }
+
+
 async def reflect_terminal_item(
     pump: Any, item: WorkItem, run_id: str, terminal_status: str
 ) -> None:
@@ -61,6 +107,13 @@ async def reflect_terminal_item(
                 "source_ref": run_id,
             },
             ctx,
+        )
+        # The typed episode proposal rides the same best-effort window: a
+        # rejection from the write gate (duplicate, below floor) is an
+        # ACCEPTED outcome here - the gate deciding "no" IS the system working.
+        # Only a dispatch failure counts against the window.
+        await pump._kernel.invoke(
+            "memory", "memory.propose", episode_proposal(item, terminal_status, outcome), ctx
         )
     except asyncio.CancelledError:
         raise
