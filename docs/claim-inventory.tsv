@@ -1355,15 +1355,15 @@ ORDINARY	NO-SUBJECT	compose	docker-compose.yml:234		read_only, so it cannot crea
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:254		Reflection is the ONLY automatic memory writer in the stack: fleet/pump.py
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:260		subsystem that never records anything looks identical to one switched off.
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:267		BOLTRIG_REFLECT=1 in .env alone would always have worked.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:293		The worker serves no HTTP, so this cannot be a URL probe - but it does
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:431		hatchet-lite required auth/session config (it refuses to boot without a
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:469		The Worker is the only first-party browser surface.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:498		never routed through it (residency) - that goes to local-model.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:543		Mount a local model cache so air-gapped boxes never reach the internet.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:588		Development compatibility only;
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:621		Worker-authored channel provider config - it is never written here.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:640		THIS image, never the kernel's or the Python gateway's).
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:740		a local gateway.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:304		The worker serves no HTTP, so this cannot be a URL probe - but it does
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:442		hatchet-lite required auth/session config (it refuses to boot without a
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:480		The Worker is the only first-party browser surface.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:509		never routed through it (residency) - that goes to local-model.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:554		Mount a local model cache so air-gapped boxes never reach the internet.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:599		Development compatibility only;
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:632		Worker-authored channel provider config - it is never written here.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:651		THIS image, never the kernel's or the Python gateway's).
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:751		a local gateway.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/adapters/base.py:100	disabled	``disabled`` is for one-time/bearer-secret results that must never be
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/channel_send.py:133	approval_notice	What the approver must be told before they approve (C3).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/channel_send.py:47	diversion	Kernel-side outbound delivery.
