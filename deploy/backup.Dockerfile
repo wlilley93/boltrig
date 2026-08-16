@@ -32,7 +32,7 @@ FROM postgres:16.14-bookworm@sha256:64154d0babcb1741988719e703419af0382b19953706
 #
 # When upstream ships an image built on Go >= 1.26.6, prefer reverting to the
 # COPY-from-official-image form: it is less build surface than compiling here.
-FROM golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 AS rclone-src
+FROM golang:1.27rc2-bookworm@sha256:a2f9daa5dbd9f7a68eb3c32cf91e4f9fc50a11a07f8b9cd9ffa542d2298d9f82 AS rclone-src
 
 # NOT named RCLONE_VERSION. rclone binds every RCLONE_* environment variable to
 # the matching flag, so an ARG by that name is visible to the smoke test below
