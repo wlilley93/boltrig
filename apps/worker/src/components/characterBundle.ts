@@ -29,6 +29,7 @@ import type {
 } from "@wlilley93/boltrig-web-sdk";
 import {
   bundleReadsPhenotype,
+  bundleSkins,
   bundleWantsBudgets,
   bundleWantsCamera,
   bundleWantsPresence,
@@ -51,6 +52,15 @@ export interface CharacterCanvasSource {
   supplies?: readonly string[];
   /** Emotion models this source implements. A bundle may name no other. */
   emotionModels?: readonly string[];
+  /**
+   * Skin ids this source knows how to draw. A bundle may name no other.
+   *
+   * Absent means the source draws one look, so a bundle declaring skins against
+   * it is refused rather than silently rendering the same body under two names
+   * -- which would be the worst outcome available here, because it looks like
+   * it worked.
+   */
+  skins?: readonly string[];
   render(props: BundledRenderProps, manifest: CharacterBundleManifest): ReactNode;
 }
 
@@ -127,6 +137,29 @@ function assertEmotionModel(
 }
 
 /**
+ * A skin the canvas cannot draw must be REFUSED, not quietly collapsed to the
+ * default. Offering "Ultron" in a picker and then drawing the ordinary body is
+ * indistinguishable, from the outside, from the skin having no visible effect
+ * -- and a user would reasonably conclude the feature is broken rather than
+ * absent. Same rule, same wording, as assertUniforms and assertEmotionModel.
+ */
+function assertSkins(
+  manifest: CharacterBundleManifest,
+  source: CharacterCanvasSource,
+): void {
+  const declared = manifest.skins;
+  if (!declared || declared.length === 0) return;
+  const drawable = new Set(source.skins ?? []);
+  const missing = declared.map((skin) => skin.id).filter((id) => !drawable.has(id));
+  if (missing.length > 0) {
+    throw new CharacterBundleUnsupported(
+      manifest.id,
+      `canvas source "${source.id}" cannot draw skin ${missing.join(", ")}`,
+    );
+  }
+}
+
+/**
  * Validates a manifest, binds it to a canvas source, and returns something the
  * registry accepts. Every field the registry reads comes from the manifest:
  * change the JSON and the settings surface changes with it.
@@ -142,6 +175,7 @@ export function characterFromBundle(
   const source = sourceFor(manifest, sources);
   assertUniforms(manifest, source);
   assertEmotionModel(manifest, source);
+  assertSkins(manifest, source);
 
   const character: BundledCharacter = {
     id: manifest.id,
@@ -154,6 +188,12 @@ export function characterFromBundle(
   };
   if (manifest.voice?.fallbackVoiceIds) {
     character.voiceIds = Object.freeze({ ...manifest.voice.fallbackVoiceIds });
+  }
+  // Set only when the bundle DECLARED skins: bundleSkins() synthesises a
+  // single default for a character with none, and putting that on the registry
+  // entry would make every character look like it offers a choice.
+  if (manifest.skins && manifest.skins.length > 0) {
+    character.skins = Object.freeze(bundleSkins(manifest).map((skin) => ({ ...skin })));
   }
   if (bundleWantsBudgets(manifest)) character.wantsBudgets = true;
   // DECLARED, never installed. The bundle says which sensing capabilities it

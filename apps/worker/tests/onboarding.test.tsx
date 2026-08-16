@@ -123,15 +123,23 @@ describe("first-run onboarding", () => {
     expect(screen.getByText("Choose your companion")).toBeTruthy();
     const back = screen.getByRole("button", { name: "← Back" });
     expect(back.closest("footer")?.classList.contains("onboarding-actions")).toBe(true);
+    // One card at a time: Familiar is slot one, Jarvis is not rendered yet.
     expect(screen.getByTestId("familiar-preview")).toBeTruthy();
-    expect(screen.getByTestId("jarvis-preview")).toBeTruthy();
-    expect(document.querySelectorAll(".companion-check")).toHaveLength(1);
-    const familiar = screen.getByRole("radio", { name: /Familiar/ });
+    expect(screen.queryByTestId("jarvis-preview")).toBeNull();
+    // The dots are the keyboard control, so arrowing along them is the
+    // behaviour worth protecting -- it is the only way to walk the rail
+    // without a pointer.
+    const familiar = screen.getByRole("radio", { name: "Familiar" });
     familiar.focus();
     fireEvent.keyDown(familiar, { key: "ArrowRight" });
-    expect(screen.getByRole("radio", { name: /Jarvis/ }).getAttribute("aria-checked"))
+    expect(screen.getByRole("radio", { name: "Jarvis" }).getAttribute("aria-checked"))
       .toBe("true");
-    expect(document.querySelectorAll(".companion-check")).toHaveLength(1);
+    expect(screen.getByTestId("jarvis-preview")).toBeTruthy();
+    // Arrowing past the end must not wrap: this is a list, not a carousel.
+    const jarvis = screen.getByRole("radio", { name: "Jarvis" });
+    fireEvent.keyDown(jarvis, { key: "ArrowRight" });
+    expect(screen.getByRole("radio", { name: "Jarvis" }).getAttribute("aria-checked"))
+      .toBe("true");
   });
 
   it("uses Enter to continue without stealing Enter from an open picker", async () => {
@@ -222,11 +230,21 @@ describe("first-run onboarding", () => {
       target: { value: "William" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    // ONE CARD AT A TIME. Familiar is slot one, so she is what the step opens
+    // on and Jarvis is not rendered at all until the rail is walked.
     expect(screen.getByTestId("familiar-preview")).toBeTruthy();
+    expect(screen.queryByTestId("jarvis-preview")).toBeNull();
+    // No left chevron on the first companion: it is ABSENT, not disabled.
+    expect(screen.queryByRole("button", { name: /Show Familiar/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show Jarvis" }));
     expect(screen.getByTestId("jarvis-preview")).toBeTruthy();
-    fireEvent.click(screen.getByRole("radio", { name: /Jarvis/ }));
-    expect(screen.getByTestId("jarvis-preview")).toBeTruthy();
-    expect(document.querySelectorAll(".companion-check")).toHaveLength(1);
+    expect(screen.queryByTestId("familiar-preview")).toBeNull();
+    // ...and none on the last, so the rail cannot be walked into a cycle.
+    expect(screen.queryByRole("button", { name: "Show Familiar" })).toBeTruthy();
+    expect(document.querySelectorAll(".companion-chevron.right")).toHaveLength(0);
+    // The dots carry the choice for anyone not using the picture.
+    expect(screen.getByRole("radio", { name: "Jarvis" }).getAttribute("aria-checked"))
+      .toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();

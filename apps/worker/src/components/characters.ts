@@ -38,7 +38,12 @@ import {
   subscribeCharacters as sdkSubscribeCharacters,
 } from "@wlilley93/boltrig-web-sdk";
 import type { CharacterId } from "../character";
-import { DEFAULT_CHARACTER } from "../character";
+import {
+  CHARACTER_CHANGE_EVENT,
+  DEFAULT_CHARACTER,
+  DEFAULT_SKIN,
+  loadSkin,
+} from "../character";
 import familiarBundle from "../bundles/familiar/character.json";
 import jarvisBundle from "../bundles/jarvis/character.json";
 import {
@@ -86,6 +91,39 @@ function useCharacterRegistry(): void {
 export function useCharacter(id: CharacterId): Character {
   useCharacterRegistry();
   return characterFor(id);
+}
+
+/**
+ * The chosen skin, kept current with the change event.
+ *
+ * Returns the raw stored value; RESOLVING it against what the character
+ * actually offers is `skinFor`'s job, below, because only the character knows
+ * which looks exist.
+ */
+export function useSkin(): string {
+  return useSyncExternalStore(
+    (listener) => {
+      if (typeof document === "undefined") return () => undefined;
+      document.addEventListener(CHARACTER_CHANGE_EVENT, listener);
+      return () => document.removeEventListener(CHARACTER_CHANGE_EVENT, listener);
+    },
+    loadSkin,
+    () => DEFAULT_SKIN,
+  );
+}
+
+/**
+ * The skin this character will actually draw.
+ *
+ * A stored skin naming a look the character does not offer -- an uninstalled
+ * variant, or a build that never shipped it -- resolves to its FIRST skin
+ * rather than being drawn as nothing. Same rule as `characterFor`: a missing
+ * variant costs the Stage a look and nothing else.
+ */
+export function skinFor(character: Character, stored: string): string {
+  const offered = character.skins;
+  if (!offered || offered.length === 0) return DEFAULT_SKIN;
+  return offered.some((skin) => skin.id === stored) ? stored : offered[0].id;
 }
 
 export function useCharacterOptions(): {
@@ -188,11 +226,22 @@ const JARVIS_SOURCE: CharacterCanvasSource = {
   id: "boltrig.canvas.jarvis",
   type: "shader",
   supplies: [...JARVIS_UNIFORMS, "uGene"],
-  render: ({ input, mode, phenotype, budgets, turn }) =>
+  /**
+   * Two bodies, one character. "default" is the instrument dial; "ultron" is the
+   * neural field of components/jarvis/v2 -- the Age of Ultron hologram, which is
+   * Jarvis's own look in that film and NOT Ultron's. Animal Logic coded JARVIS
+   * orange and angular and ULTRON blue and organic, so an actual Ultron would be
+   * a different character with a different body, not a third skin here.
+   *
+   * Declared so characterFromBundle can refuse a manifest naming a third.
+   */
+  skins: ["default", "ultron"],
+  render: ({ input, mode, phenotype, budgets, turn, skin }) =>
     createElement(JarvisStage, {
       budgets: budgets as never,
       highResolution: mode === "voice",
       phenotype,
+      skin,
       state: jarvisStateFromTurn(input),
       suspended: mode === "minimised",
       turn,

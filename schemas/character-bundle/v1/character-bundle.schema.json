@@ -57,6 +57,36 @@
       "description": "OPTIONAL, and its ABSENCE is meaningful: a character with no phenotype omits this field entirely rather than carrying an empty one. Absence means readsPhenotype=false -- the appraisal engine is not this character's source of truth, so handing it one would attribute the machine's mood to a creature with no access to it."
     },
 
+    "skins": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Selectable LOOKS for this one character -- not separate characters. PRESENTATION ONLY: a skin never changes prompts, dispatch, capabilities or voice, so choosing one is a change of clothes and not a change of who you are talking to. The FIRST entry is the default, so adding skins to a shipped bundle cannot change what an existing install renders. ABSENT means the character has exactly one look, which is why an array of one is pointless rather than merely redundant. The host must REFUSE a skin its canvas source cannot draw, by name, the same way it refuses an unsupplied uniform.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$",
+            "description": "Stable id, persisted beside the character setting. Same grammar as a character id because it is stored the same way."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Shown in a picker. Absent falls back to the character's own name."
+          },
+          "blurb": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "description": "One line describing what this look is."
+          }
+        }
+      }
+    },
+
     "emotion": {
       "$ref": "#/$defs/emotion",
       "description": "The character's own affective model, if it has one. Named, not implemented, here: the model name must be one the bound canvas source declares it supports, so an unsupported model is refused at registration instead of silently rendering as stillness."

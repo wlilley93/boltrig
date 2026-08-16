@@ -1,13 +1,10 @@
 {
   "$schema": "../../../../../schemas/character-bundle/v1/character-bundle.schema.json",
   "schemaVersion": 1,
-
   "id": "jarvis",
   "name": "Jarvis",
   "blurb": "An instrument that displays the machine's measured state.",
-
   "type": "shader",
-
   "visual": {
     "type": "shader",
     "source": "boltrig.canvas.jarvis",
@@ -16,35 +13,79 @@
       "sha256": "461700cf7368026d4ac267c3aba5bc4cb06c051bb3f98bce170fb86fabe0f7ef"
     },
     "uniforms": [
-      "iResolution", "iTime", "uListening", "uThinking", "uWorking", "uSpeaking",
-      "uLevel", "uOnset", "uBands", "uWave", "uWaveHead", "uReadout", "uReduced",
-      "uAccent", "uScale", "uLabelTop", "uLabelBottom", "uLabelTopAmt",
-      "uLabelBottomAmt", "uSpin", "uPhenoFresh",
-      "uValence", "uArousal", "uIrritation", "uFatigue", "uAttention",
-      "uLuminosity", "uTension",
-      "uBudgetFill", "uBudgetKnown", "uBudgetHard", "uTokenFill", "uTokenKnown",
-      "uWorkLoad", "uWorkFail", "uHDR", "uSpinDelta", "uParallax",
+      "iResolution",
+      "iTime",
+      "uListening",
+      "uThinking",
+      "uWorking",
+      "uSpeaking",
+      "uLevel",
+      "uOnset",
+      "uBands",
+      "uWave",
+      "uWaveHead",
+      "uReadout",
+      "uReduced",
+      "uAccent",
+      "uScale",
+      "uLabelTop",
+      "uLabelBottom",
+      "uLabelTopAmt",
+      "uLabelBottomAmt",
+      "uSpin",
+      "uPhenoFresh",
+      "uValence",
+      "uArousal",
+      "uIrritation",
+      "uFatigue",
+      "uAttention",
+      "uLuminosity",
+      "uTension",
+      "uBudgetFill",
+      "uBudgetKnown",
+      "uBudgetHard",
+      "uTokenFill",
+      "uTokenKnown",
+      "uWorkLoad",
+      "uWorkFail",
+      "uHDR",
+      "uSpinDelta",
+      "uParallax",
       "uGene"
     ]
   },
-
   "phenotype": {
     "reads": true
   },
-
   "voice": {
     "fallbackVoiceIds": {
       "fish": "d2d43385f4a749389dda58ecff883bb5",
       "pocket-voice": "jarvis"
     }
   },
-
+  "skins": [
+    {
+      "id": "default",
+      "name": "Instrument",
+      "blurb": "A dial of rings, gauges and readouts."
+    },
+    {
+      "id": "ultron",
+      "name": "Age of Ultron",
+      "blurb": "A globe of orange filaments inside rings of data."
+    }
+  ],
   "capabilities": {
-    "camera": { "wanted": false },
-    "presence": { "wanted": false },
-    "budgets": { "wanted": true }
+    "camera": {
+      "wanted": false
+    },
+    "presence": {
+      "wanted": false
+    },
+    "budgets": {
+      "wanted": true
+    }
   },
-
   "provenance": {
     "ships": true,
     "upstream": "boltrig-stock:jarvis",

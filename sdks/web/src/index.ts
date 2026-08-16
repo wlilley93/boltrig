@@ -48,6 +48,7 @@ export {
   CHARACTER_BUNDLE_SCHEMA_VERSION,
   CharacterBundleError,
   bundleReadsPhenotype,
+  bundleSkins,
   bundleVoiceId,
   bundleWantsBudgets,
   bundleWantsCamera,
@@ -65,12 +66,14 @@ export type {
   CharacterBundlePhenotype,
   CharacterBundlePrompts,
   CharacterBundleShaderVisual,
+  CharacterBundleSkin,
   CharacterBundleType,
   CharacterBundleVisual,
 } from "./characterBundle.js";
 export type {
   Character,
   CharacterId,
+  CharacterSkin,
   CharacterPresentationMode,
   CharacterRenderProps,
   CharacterStageState,
