@@ -279,10 +279,21 @@ services:
       # tenant; that declaration ought to drive this rather than a separate env var
       # nobody sets, and that mismatch is filed rather than papered over here.
       BOLTRIG_REFLECT: ${BOLTRIG_REFLECT:-}
+      # The worker's manifest bootstrap seeds knowledge alongside the kernel's,
+      # and without this it falls back to the per-user default (~/.local/share/
+      # boltrig/knowledge) on a read_only rootfs and dies with
+      #   OSError: [Errno 30] Read-only file system: '/home/boltrig/.local'
+      # First hit on the 2026-08-16 roll, the first worker start on an image
+      # carrying register_knowledge in _seed_from_manifest - the same mode as
+      # the codex-cells tmpfs precedent above. Same env default AND the same
+      # named volume the kernel mounts, deliberately: both services bootstrap
+      # against one vault, and a divergent root would seed two.
+      BOLTRIG_KNOWLEDGE_VAULT: ${BOLTRIG_KNOWLEDGE_VAULT:-/var/lib/boltrig/knowledge}
     volumes:
       - ./manifest.yaml:/app/manifest.yaml:ro
       - ./libraries:/app/libraries:ro
       - browser_executor_socket:/run/boltrig-browser:ro
+      - knowledge_data:/var/lib/boltrig/knowledge
     depends_on:
       postgres:
         condition: service_healthy
