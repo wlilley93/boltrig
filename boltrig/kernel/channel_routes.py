@@ -16,6 +16,7 @@ Two kinds of route:
 from __future__ import annotations
 
 import hashlib
+import hmac
 import uuid
 
 from fastapi import Depends, HTTPException, Request
@@ -382,7 +383,7 @@ async def _consume_pairing(kernel, channel, external_user_id, code) -> bool:
         return False  # no pending pairing for this sender
     if pairing.expires_at is not None and pairing.expires_at <= utcnow():
         return False  # expired (TTL or lockout)
-    if _hash_code(code) != pairing.code_hash:
+    if not hmac.compare_digest(_hash_code(code), pairing.code_hash):
         # wrong code -> bump attempts; lockout flips status to 'expired' at the cap.
         await kernel.store.bump_channel_pairing_attempts(
             channel.tenant_id, pairing.id, cap=PAIR_MAX_ATTEMPTS

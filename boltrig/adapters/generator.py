@@ -46,6 +46,8 @@ _MUTATING = ("post", "put", "patch", "delete")
 _ITEMS_KEYS = ("value", "items", "results", "data", "records")
 _NEXT_KEYS = ("@odata.nextLink", "nextLink", "next", "next_cursor", "nextPageToken")
 _OFFSET_PARAMS = ("startat", "offset", "page", "cursor")
+# A fetched openapi spec larger than this is hostile or broken, not a spec.
+_MAX_SPEC_BYTES = 4 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -324,11 +326,22 @@ def _fetch(url: str) -> str:
     # guard as every other adapter - the target is vetted and the connection
     # pinned to the audited IP, and redirects are never followed into internal
     # space. A metadata/internal URL is refused BEFORE any network call.
+    # Bounded read (streamed): resp.text buffered a hostile multi-GB body into
+    # kernel memory before YAML ever parsed it; a spec is kilobytes.
     try:
         with pinned_sync_client(url, timeout=15.0) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            return resp.text
+            with client.stream("GET", url) as resp:
+                resp.raise_for_status()
+                chunks: list[bytes] = []
+                size = 0
+                for chunk in resp.iter_bytes(65536):
+                    size += len(chunk)
+                    if size > _MAX_SPEC_BYTES:
+                        raise ValueError(
+                            f"openapi spec url exceeded the {_MAX_SPEC_BYTES}-byte cap"
+                        )
+                    chunks.append(chunk)
+                return b"".join(chunks).decode("utf-8", errors="replace")
     except EgressBlocked as exc:
         raise ValueError(f"openapi spec url refused by the egress guard: {exc}") from exc
     except httpx.HTTPError as exc:
