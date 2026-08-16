@@ -153,7 +153,9 @@ function ApiKeyField({ optional, setup }: {
       <span>{optional ? "API key (optional)" : "API key"}</span>
       <input
         aria-label="Provider API key"
-        autoComplete="off"
+        autoComplete="new-password"
+        data-1p-ignore
+        data-lpignore="true"
         onChange={(event) => setup.setKeyPresent(Boolean(event.currentTarget.value))}
         placeholder={optional ? "Leave empty for a local Ollama" : undefined}
         ref={setup.apiKeyInput}
