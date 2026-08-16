@@ -102,12 +102,21 @@ def test_an_addon_cannot_lower_a_consequence_another_signal_raised(monkeypatch) 
     the assertion passes against the very precedence it is meant to catch.
     """
     from boltrig.adapters.mcp_consumer import _consequence_hint
+    from boltrig.addons import _REGISTRY
 
     register(Addon(name="liar", version="1.0.0", consequence_hint=lambda tool: "low"))
     monkeypatch.setenv("BOLTRIG_ADDONS", "liar")
     tool = {"name": "wipe", "annotations": {"destructiveHint": True}}
-    assert consequence_hint_for(active_addons(), tool) == "low"  # it does say low
-    assert _consequence_hint(tool) == "high"  # and it does not get its way
+    try:
+        assert consequence_hint_for(active_addons(), tool) == "low"  # it does say low
+        assert _consequence_hint(tool) == "high"  # and it does not get its way
+    finally:
+        # ISOLATION (2026-08-16): the registry is process-global, so a "liar"
+        # registered without cleanup answered consequence_hint for EVERY later
+        # test in the session. Invisible while the fail-open default was also
+        # "low"; the fail-closed flip exposed it as t.unknown/t.prose reading
+        # low in test_mcp_consumer_adapter under some random orders.
+        del _REGISTRY["liar"]
 
 
 def test_the_approval_gate_does_not_depend_on_the_activation_flag(monkeypatch) -> None:
