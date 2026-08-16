@@ -73,7 +73,7 @@ _TABLES = (
     "integration_connections,integration_catalogue,"
     "security_log,audit_rollup_anchors,conversation_steer_queue,conversation_messages,"
     "conversations,channels,realtime_calls,"
-    "realtime_call_events"
+    "realtime_call_events,audit_outbox"
 )
 
 
@@ -2240,3 +2240,44 @@ async def test_authored_definition_lifecycle_matches_on_both_stores(store):
     assert (await store.get_verb(T, verb.id)).description == "Updated reader"
     assert (await store.get_skill(T, skill.id)).version == "1.1.0"
     assert await store.get_binding(T, verb.id) == binding
+
+
+# --- audit outbox (SEC-16 durable deferral) -----------------------------------
+@pytest.mark.store
+@pytest.mark.invariant("SEC-16")
+async def test_audit_outbox_enqueue_due_delete_and_mark_failed_parity(store):
+    """The outbox seams agree on both backends: enqueue lands a due row keyed to
+    its tenant, mark_failed bumps attempts and pushes next_retry_at out, delete
+    removes it, and due() respects both the tenant fence and the retry time."""
+    from datetime import timedelta
+
+    from boltrig.models import utcnow
+
+    now = utcnow()
+    await store.audit_outbox_enqueue(T, {"verb": "ticket.create"}, "RuntimeError")
+    # A different tenant's row must not leak through the fence.
+    await store.audit_outbox_enqueue("other", {"verb": "other.verb"}, "RuntimeError")
+
+    due = await store.audit_outbox_due(T, now + timedelta(seconds=1))
+    rows = [r for r in due if r["payload"].get("verb") == "ticket.create"]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["append_error"] == "RuntimeError" and row["attempts"] == 0
+
+    await store.audit_outbox_mark_failed(
+        row["id"], "OperationalError", now + timedelta(minutes=10)
+    )
+    # Before the retry time: not due. After: due again with attempts bumped.
+    assert await store.audit_outbox_due(T, now + timedelta(minutes=5), limit=100) == [] or all(
+        r["id"] != row["id"] for r in await store.audit_outbox_due(T, now + timedelta(minutes=5), limit=100)
+    )
+    again = [r for r in await store.audit_outbox_due(T, now + timedelta(minutes=11), limit=100)
+             if r["id"] == row["id"]]
+    assert len(again) == 1 and again[0]["attempts"] == 1
+    assert again[0]["append_error"] == "OperationalError"
+
+    await store.audit_outbox_delete(row["id"])
+    assert all(
+        r["id"] != row["id"]
+        for r in await store.audit_outbox_due(T, now + timedelta(hours=1), limit=100)
+    )

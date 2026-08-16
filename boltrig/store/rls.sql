@@ -82,6 +82,10 @@ DECLARE
     -- anchors. Both carry a real tenant_id, so the generic tenant_id policy fences
     -- them (a null GUC -> zero rows, fail-closed) exactly like audit_log.
     'security_log','audit_rollup_anchors',
+    -- The audit outbox (SEC-16 durable deferral): tenant-scoped like audit_log
+    -- itself; its rows are DELETED by the drain, so unlike the append-only
+    -- chains it keeps the app role's full grant set.
+    'audit_outbox',
     'budgets','budget_usage','credential_refs','tenant_permissions','conversations',
     'config_revisions','permanent_fleet_observations','birth_profile_receipts',
     'background_job_receipts',

@@ -36,6 +36,10 @@ EXEMPT_READ_CALLERS = {
     "list_orgs": {
         "boltrig/fleet/anchor.py",
         "boltrig/kernel/hitl_expiry.py",
+        # The audit-outbox drain enumerates tenants the same way the expiry and
+        # anchor sweeps do: worker-side janitor, never request-scoped, and every
+        # row it then reads/deletes is inside the enumerated tenant own fence.
+        "boltrig/kernel/audit_outbox.py",
     },
 }
 

@@ -647,6 +647,42 @@ class PostgresStore(
             e.prev_hash, e.hash,
         )
 
+    async def audit_outbox_enqueue(self, tenant_id, payload, append_error):
+        # Rides the same tenant-scoped connection the faulted append was using
+        # (the dispatch path binds the tenant before invoke), so the deferred
+        # row lands inside the caller's own RLS fence.
+        await self._pool.execute(
+            """INSERT INTO audit_outbox (tenant_id, payload, append_error)
+               VALUES ($1, $2::jsonb, $3)""",
+            tenant_id, json.dumps(payload), append_error,
+        )
+
+    async def audit_outbox_due(self, tenant_id, now, limit=100):
+        rows = await self._pool.fetch(
+            """SELECT * FROM audit_outbox
+                WHERE tenant_id=$1 AND next_retry_at <= $2
+                ORDER BY id LIMIT $3""",
+            tenant_id, now, limit,
+        )
+        # JSONB arrives as a str through this pool: decode to the dict the
+        # memory twin returns, so the drain side is backend-agnostic.
+        return [
+            {**dict(row), "payload": json.loads(row["payload"])}
+            if isinstance(row["payload"], str) else dict(row)
+            for row in rows
+        ]
+
+    async def audit_outbox_delete(self, outbox_id):
+        await self._pool.execute("DELETE FROM audit_outbox WHERE id=$1", outbox_id)
+
+    async def audit_outbox_mark_failed(self, outbox_id, append_error, next_retry_at):
+        await self._pool.execute(
+            """UPDATE audit_outbox
+                  SET attempts = attempts + 1, append_error=$2, next_retry_at=$3
+                WHERE id=$1""",
+            outbox_id, append_error, next_retry_at,
+        )
+
     async def audit_query(self, tenant_id, run_id=None, limit=200):
         if run_id is None:
             rows = await self._pool.fetch(

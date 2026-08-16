@@ -396,6 +396,24 @@ CREATE INDEX IF NOT EXISTS audit_actor_idx ON audit_log (tenant_id, actor);
 CREATE INDEX IF NOT EXISTS audit_actor_page_idx ON audit_log (tenant_id, actor, seq DESC);
 CREATE INDEX IF NOT EXISTS audit_behalf_page_idx ON audit_log (tenant_id, on_behalf_of, seq DESC);
 
+-- The audit OUTBOX (SEC-16 audit-always, durable half): an AuditWriter whose
+-- append faulted (transient DB error, lock starvation) persists the canonical
+-- event PAYLOAD here instead, and the outbox janitor drains it into the chain
+-- once the fault clears. Chain fields (seq/prev_hash/hash) are deliberately NOT
+-- stored - they are re-derived at drain time against the then-current head, so
+-- the chain stays contiguous and verifiable; the event's own `ts` preserves the
+-- action time. Keys-only (K-20): the payload is the already-scrubbed event.
+CREATE TABLE IF NOT EXISTS audit_outbox (
+    id             BIGSERIAL PRIMARY KEY,
+    tenant_id      TEXT NOT NULL,
+    payload        JSONB NOT NULL,
+    append_error   TEXT,
+    attempts       INT NOT NULL DEFAULT 0,
+    next_retry_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS audit_outbox_due_idx ON audit_outbox (next_retry_at);
+
 -- The distinct SecurityEvent stream ([2026] VJS-COUNTY 9, D3): its OWN
 -- append-only, hash-chained table for security SIGNALS (login failures,
 -- rate-limit trips, permission denials, MCP auth failures). Same chaining as

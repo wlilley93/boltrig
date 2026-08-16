@@ -512,6 +512,41 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         last = chain[-1]
         return (last.seq or 0, last.hash)
 
+    async def audit_outbox_enqueue(self, tenant_id, payload, append_error):
+        if not hasattr(self, "_audit_outbox"):
+            self._audit_outbox: list[dict] = []
+        self._audit_outbox.append(
+            {
+                "id": len(self._audit_outbox) + 1,
+                "tenant_id": tenant_id,
+                "payload": payload,
+                "append_error": append_error,
+                "attempts": 0,
+                "next_retry_at": utcnow(),
+                "created_at": utcnow(),
+            }
+        )
+
+    async def audit_outbox_due(self, tenant_id, now, limit=100):
+        rows = [
+            r for r in getattr(self, "_audit_outbox", [])
+            if r["next_retry_at"] <= now and r["tenant_id"] == tenant_id
+        ]
+        return rows[:limit]
+
+    async def audit_outbox_delete(self, outbox_id):
+        self._audit_outbox = [
+            r for r in getattr(self, "_audit_outbox", []) if r["id"] != outbox_id
+        ]
+
+    async def audit_outbox_mark_failed(self, outbox_id, append_error, next_retry_at):
+        for r in getattr(self, "_audit_outbox", []):
+            if r["id"] == outbox_id:
+                r["attempts"] += 1
+                r["append_error"] = append_error
+                r["next_retry_at"] = next_retry_at
+                return
+
     async def audit_append(self, event):
         self._audit.setdefault(event.tenant_id, []).append(event)
 

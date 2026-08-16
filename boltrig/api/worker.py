@@ -122,6 +122,37 @@ def _start_anchor_janitor(store: Store, anchorer: Any) -> "asyncio.Task[None] | 
     )
 
 
+def _start_audit_outbox_janitor(
+    store: Store, process_instance_identity: str | None = None
+) -> "asyncio.Task[None] | None":
+    """Start the audit-outbox janitor (SEC-16), or None when disabled.
+
+    Drains the durable audit outbox: events whose append faulted were deferred
+    there by AuditWriter.write, and this re-chains them into the audit stream
+    once the fault clears (seq/hash re-derived at drain time, so the chain stays
+    contiguous). Same worker-side loop shape as the anchor janitor - never
+    crashes boot (P9). Off when BOLTRIG_AUDIT_OUTBOX_INTERVAL is <= 0;
+    one-minute default."""
+    from boltrig.kernel.audit_outbox import (
+        audit_outbox_interval_from_env,
+        run_audit_outbox_forever,
+    )
+
+    interval = audit_outbox_interval_from_env()
+    if interval <= 0:
+        log.info("audit-outbox janitor disabled (interval<=0)")
+        return None
+    log.info("audit-outbox janitor live (interval=%ss)", interval)
+    return asyncio.create_task(
+        run_audit_outbox_forever(
+            store,
+            interval=interval,
+            process_instance_identity=process_instance_identity,
+        ),
+        name="audit-outbox-janitor",
+    )
+
+
 def _start_retention_janitor(
     store: Store,
     tenant: str,
@@ -310,6 +341,7 @@ def _start_background_tasks(
     return (
         _start_anchor_janitor(kernel.store, kernel.anchorer),
         _start_hitl_expiry_janitor(kernel.store, process_identity, kernel=kernel),
+        _start_audit_outbox_janitor(kernel.store, process_identity),
         stack_health_task,
         _start_retention_janitor(kernel.store, tenant, manifest, process_identity),
         _start_workflow_scheduler(kernel, tenant, executor),
