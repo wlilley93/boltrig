@@ -63,6 +63,7 @@ from boltrig.models import (
     HITLResponse,
     HITLStatus,
     MemoryErasure,
+    MemoryEvent,
     MemoryFact,
     MemoryIngestion,
     MemoryProjectionStatus,
@@ -170,6 +171,8 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         self._mem_ingest: dict[tuple[str, str], MemoryIngestion] = {}
         self._mem_erase: list[MemoryErasure] = []
         self._mem_projection: dict[tuple[str, str], MemoryProjectionStatus] = {}
+        # Typed memory planes (decision 0029): the `MemoryEvent` twin.
+        self._mem_events: dict[tuple[str, str], MemoryEvent] = {}
         # Round Four: users, tokens, invitations, settings, sessions.
         self._users: dict[tuple[str, str], User] = {}
         self._pats: dict[tuple[str, str], PersonalAccessToken] = {}
@@ -805,6 +808,74 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
             if t == tenant_id and (fact_id is None or s.fact_id == fact_id)
         ]
         return sorted(out, key=lambda s: s.updated_at, reverse=True)[:limit]
+
+    # --- Typed memory planes (decision 0029) ---
+    async def get_active_memory_fact(self, tenant_id, memory_key):
+        # Newest non-expired active wins in the twin, mirroring the DB's
+        # one-active index plus the expiry filter (MEM-TYP-01: an expired
+        # value is history, not the current truth).
+        now = utcnow()
+        hits = [
+            f
+            for (t, _), f in self._mem_facts.items()
+            if t == tenant_id
+            and f.memory_key == memory_key
+            and f.status == "active"
+            and (f.valid_to is None or f.valid_to > now)
+        ]
+        return max(hits, key=lambda f: (f.version, f.created_at)) if hits else None
+
+    async def list_active_subject_facts(
+        self, tenant_id, owner_scopes, subject_type, subject_id, limit=64
+    ):
+        scopes = set(owner_scopes)
+        prefix = f"{subject_type}::{subject_id}::"
+        out = [
+            f
+            for (t, _), f in self._mem_facts.items()
+            if t == tenant_id
+            and f.owner_scope in scopes
+            and f.memory_key is not None
+            and f.memory_key.startswith(prefix)
+            and f.status == "active"
+            and (f.valid_to is None or f.valid_to > utcnow())
+        ]
+        return sorted(out, key=lambda f: f.created_at, reverse=True)[:limit]
+
+    async def list_memory_slot_history(self, tenant_id, memory_key, limit=50):
+        out = [
+            f
+            for (t, _), f in self._mem_facts.items()
+            if t == tenant_id and f.memory_key == memory_key
+        ]
+        return sorted(out, key=lambda f: f.version, reverse=True)[:limit]
+
+    async def list_memory_candidates(self, tenant_id, owner_scopes, limit=50):
+        scopes = set(owner_scopes)
+        out = [
+            f
+            for (t, _), f in self._mem_facts.items()
+            if t == tenant_id and f.owner_scope in scopes and f.status == "candidate"
+        ]
+        return sorted(out, key=lambda f: f.created_at, reverse=True)[:limit]
+
+    async def update_memory_fact(self, fact):
+        self._mem_facts[(fact.tenant_id, fact.id)] = fact
+
+    async def add_memory_event(self, event):
+        self._mem_events[(event.tenant_id, event.id)] = event
+
+    async def list_memory_events(
+        self, tenant_id, *, memory_id=None, memory_key=None, limit=100
+    ):
+        out = [
+            e
+            for (t, _), e in self._mem_events.items()
+            if t == tenant_id
+            and (memory_id is None or e.memory_id == memory_id)
+            and (memory_key is None or e.memory_key == memory_key)
+        ]
+        return sorted(out, key=lambda e: e.created_at, reverse=True)[:limit]
 
     # --- Round Four: users + provisioning (USR) ---
     async def upsert_user(self, user):

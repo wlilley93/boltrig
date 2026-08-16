@@ -1641,17 +1641,60 @@ CREATE TABLE IF NOT EXISTS memory_facts (
     tenant_id     TEXT NOT NULL,
     owner_scope   TEXT NOT NULL,            -- user:<id> | department:<name> | org
     engine_ref    TEXT NOT NULL,            -- the engine's node/record identifier
-    kind          TEXT NOT NULL,            -- entity | relationship | summary | document_chunk
+    kind          TEXT NOT NULL,            -- semantic|episodic|procedural|entity|relationship|summary|document_chunk
     source_kind   TEXT NOT NULL,            -- conversation | document | verb_result | feedback
     source_ref    TEXT,
     data_class    TEXT NOT NULL DEFAULT 'standard',
     content       TEXT NOT NULL DEFAULT '',
     redacted      BOOLEAN NOT NULL DEFAULT false,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (tenant_id, id)
+    -- Typed memory planes (decision 0029, migration 0076): stable slot keys,
+    -- monotonic versions and the write-gate state machine. One active row per
+    -- (tenant, memory_key) for semantic/procedural kinds (partial unique idx).
+    memory_key    TEXT,
+    status        TEXT NOT NULL DEFAULT 'active',
+    version       INTEGER NOT NULL DEFAULT 1,
+    confidence    REAL,
+    valid_from    TIMESTAMPTZ,
+    valid_to      TIMESTAMPTZ,
+    payload       JSONB NOT NULL DEFAULT '{}'::jsonb,
+    supersedes_id TEXT,
+    PRIMARY KEY (tenant_id, id),
+    CONSTRAINT memory_facts_status_check
+      CHECK (status IN ('candidate', 'active', 'superseded', 'rejected'))
 );
 CREATE INDEX IF NOT EXISTS memory_facts_scope_idx ON memory_facts (tenant_id, owner_scope, kind);
 CREATE INDEX IF NOT EXISTS memory_facts_source_idx ON memory_facts (tenant_id, source_kind, source_ref);
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_semantic_fact_per_slot
+    ON memory_facts (tenant_id, memory_key)
+    WHERE kind = 'semantic' AND status = 'active';
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_procedure_per_slot
+    ON memory_facts (tenant_id, memory_key)
+    WHERE kind = 'procedural' AND status = 'active';
+CREATE INDEX IF NOT EXISTS memory_facts_slot_idx
+    ON memory_facts (tenant_id, memory_key, kind, status);
+CREATE INDEX IF NOT EXISTS memory_facts_candidate_idx
+    ON memory_facts (tenant_id, status) WHERE status = 'candidate';
+
+-- The typed-memory write-gate audit trail (append-only, decision 0029).
+CREATE TABLE IF NOT EXISTS memory_events (
+    id             TEXT NOT NULL,
+    tenant_id      TEXT NOT NULL,
+    memory_id      TEXT,
+    memory_key     TEXT,
+    event          TEXT NOT NULL CHECK (event IN (
+                       'candidate_created', 'candidate_rejected', 'memory_approved',
+                       'memory_activated', 'memory_superseded', 'memory_confirmed')),
+    decision       TEXT,
+    policy_version TEXT NOT NULL DEFAULT 'typed-write-v1',
+    detail         JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS memory_events_memory_idx
+    ON memory_events (tenant_id, memory_id, created_at);
+CREATE INDEX IF NOT EXISTS memory_events_key_idx
+    ON memory_events (tenant_id, memory_key, created_at);
 
 CREATE TABLE IF NOT EXISTS memory_ingestions (
     id             TEXT NOT NULL,

@@ -96,7 +96,7 @@ DECLARE
     -- scoped credential_refs table, not here).
     'user_totp','user_recovery_codes','two_factor_challenges',
     'memory_ingestions','memory_erasures','memory_projection_statuses',
-    'memory_vectors','memory_vector_edges',
+    'memory_vectors','memory_vector_edges','memory_events',
     'channel_bindings','channel_pairings','channel_gateway_status',
     'channel_gateway_leases',
     'run_checkpoints','fanout_counters',

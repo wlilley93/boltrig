@@ -14,7 +14,7 @@ from boltrig.models import (
     AuditRollupAnchor, Budget, ConfigRevision, Consequence, Conversation,
     ConversationMessage, ConversationOrigin, ConversationStatus, ConversationSummary, EvalCase,
     EvalRun, HITLRequest, HITLResponse, HITLStatus, HITLType, IdempotencyMode,
-    MemoryErasure, MemoryFact, MemoryIngestion, MemoryItem,
+    MemoryErasure, MemoryEvent, MemoryFact, MemoryIngestion, MemoryItem,
     MessageRole, ModelEndpoint, NotificationPref, Noun,
     Organisation, OrgMember, PersonalAccessToken, PersonalAgent,
     RateLimit, SecurityEvent, SecurityEventType, Skill, TargetType,
@@ -262,6 +262,23 @@ def _mem_fact(r):
         engine_ref=r["engine_ref"], kind=r["kind"], source_kind=r["source_kind"],
         source_ref=r["source_ref"], data_class=r["data_class"], content=r["content"] or "",
         created_at=r["created_at"], redacted=r["redacted"],
+        # Typed planes (0076): `.get`-style reads so a store listing that
+        # predates the typed columns degrades to legacy defaults.
+        memory_key=r.get("memory_key"), status=r.get("status") or "active",
+        version=r.get("version") or 1, confidence=r.get("confidence"),
+        valid_from=r.get("valid_from"), valid_to=r.get("valid_to"),
+        payload=dict(r.get("payload") or {}), supersedes_id=r.get("supersedes_id"),
+    )
+
+
+def _mem_event(r):
+    if r is None:
+        return None
+    return MemoryEvent(
+        id=r["id"], tenant_id=r["tenant_id"], memory_id=r["memory_id"],
+        memory_key=r["memory_key"], event=r["event"], decision=r["decision"],
+        policy_version=r["policy_version"], detail=dict(r["detail"] or {}),
+        created_at=r["created_at"],
     )
 
 

@@ -44,7 +44,7 @@ from .conversation_queue import ConversationQueueStorePG
 from .rows import (
     _adapter, _ai_config, _anchor, _audit, _checkpoint,
     _conversation, _hitl_req, _hitl_resp,
-    _invitation, _mem_erasure, _mem_fact, _mem_ingestion, _mem_projection,
+    _invitation, _mem_erasure, _mem_event, _mem_fact, _mem_ingestion, _mem_projection,
     _memory, _message, _notif, _org, _org_member, _pat, _personal,
     _revision, _security, _session, _setting, _summary, _tfa_challenge,
     _user, _user_totp, _workflow, _workspace,
@@ -1070,15 +1070,23 @@ class PostgresStore(
     async def add_memory_fact(self, f: MemoryFact):
         await self._pool.execute(
             """INSERT INTO memory_facts (id, tenant_id, owner_scope, engine_ref, kind,
-                                         source_kind, source_ref, data_class, content, redacted)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+                                         source_kind, source_ref, data_class, content, redacted,
+                                         memory_key, status, version, confidence,
+                                         valid_from, valid_to, payload, supersedes_id)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  owner_scope=EXCLUDED.owner_scope, engine_ref=EXCLUDED.engine_ref,
                  kind=EXCLUDED.kind, source_kind=EXCLUDED.source_kind,
                  source_ref=EXCLUDED.source_ref, data_class=EXCLUDED.data_class,
-                 content=EXCLUDED.content, redacted=EXCLUDED.redacted""",
+                 content=EXCLUDED.content, redacted=EXCLUDED.redacted,
+                 memory_key=EXCLUDED.memory_key, status=EXCLUDED.status,
+                 version=EXCLUDED.version, confidence=EXCLUDED.confidence,
+                 valid_from=EXCLUDED.valid_from, valid_to=EXCLUDED.valid_to,
+                 payload=EXCLUDED.payload, supersedes_id=EXCLUDED.supersedes_id""",
             f.id, f.tenant_id, f.owner_scope, f.engine_ref, f.kind, f.source_kind,
             f.source_ref, f.data_class, f.content, f.redacted,
+            f.memory_key, f.status, f.version, f.confidence,
+            f.valid_from, f.valid_to, f.payload, f.supersedes_id,
         )
 
     async def get_memory_fact(self, tenant_id, fact_id):
@@ -1192,6 +1200,95 @@ class PostgresStore(
                 tenant_id, fact_id, limit,
             )
         return [_mem_projection(r) for r in rows]
+
+    # --- Typed memory planes (decision 0029) ---
+    async def get_active_memory_fact(self, tenant_id, memory_key):
+        row = await self._pool.fetchrow(
+            """SELECT * FROM memory_facts
+               WHERE tenant_id=$1 AND memory_key=$2 AND status='active'
+                 AND (valid_to IS NULL OR valid_to > now())
+               ORDER BY version DESC LIMIT 1""",
+            tenant_id, memory_key,
+        )
+        return _mem_fact(row)
+
+    async def list_active_subject_facts(
+        self, tenant_id, owner_scopes, subject_type, subject_id, limit=64
+    ):
+        prefix = f"{subject_type}::{subject_id}::%"
+        rows = await self._pool.fetch(
+            """SELECT * FROM memory_facts
+               WHERE tenant_id=$1 AND owner_scope = ANY($2::text[])
+                 AND memory_key LIKE $3 AND status='active'
+                 AND (valid_to IS NULL OR valid_to > now())
+               ORDER BY created_at DESC LIMIT $4""",
+            tenant_id, list(owner_scopes), prefix, limit,
+        )
+        return [_mem_fact(r) for r in rows]
+
+    async def list_memory_slot_history(self, tenant_id, memory_key, limit=50):
+        rows = await self._pool.fetch(
+            """SELECT * FROM memory_facts
+               WHERE tenant_id=$1 AND memory_key=$2
+               ORDER BY version DESC LIMIT $3""",
+            tenant_id, memory_key, limit,
+        )
+        return [_mem_fact(r) for r in rows]
+
+    async def list_memory_candidates(self, tenant_id, owner_scopes, limit=50):
+        rows = await self._pool.fetch(
+            """SELECT * FROM memory_facts
+               WHERE tenant_id=$1 AND owner_scope = ANY($2::text[])
+                 AND status='candidate'
+               ORDER BY created_at DESC LIMIT $3""",
+            tenant_id, list(owner_scopes), limit,
+        )
+        return [_mem_fact(r) for r in rows]
+
+    async def update_memory_fact(self, fact):
+        await self._pool.execute(
+            """UPDATE memory_facts SET
+                 owner_scope=$3, kind=$4, source_kind=$5, source_ref=$6,
+                 data_class=$7, content=$8, redacted=$9,
+                 memory_key=$10, status=$11, version=$12, confidence=$13,
+                 valid_from=$14, valid_to=$15, payload=$16, supersedes_id=$17
+               WHERE tenant_id=$1 AND id=$2""",
+            fact.tenant_id, fact.id, fact.owner_scope, fact.kind, fact.source_kind,
+            fact.source_ref, fact.data_class, fact.content, fact.redacted,
+            fact.memory_key, fact.status, fact.version, fact.confidence,
+            fact.valid_from, fact.valid_to, fact.payload, fact.supersedes_id,
+        )
+
+    async def add_memory_event(self, e):
+        await self._pool.execute(
+            """INSERT INTO memory_events (id, tenant_id, memory_id, memory_key,
+                                          event, decision, policy_version, detail, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+               ON CONFLICT (tenant_id, id) DO NOTHING""",
+            e.id, e.tenant_id, e.memory_id, e.memory_key, e.event, e.decision,
+            e.policy_version, e.detail, e.created_at,
+        )
+
+    async def list_memory_events(self, tenant_id, *, memory_id=None, memory_key=None, limit=100):
+        if memory_id is not None:
+            rows = await self._pool.fetch(
+                """SELECT * FROM memory_events WHERE tenant_id=$1 AND memory_id=$2
+                   ORDER BY created_at DESC LIMIT $3""",
+                tenant_id, memory_id, limit,
+            )
+        elif memory_key is not None:
+            rows = await self._pool.fetch(
+                """SELECT * FROM memory_events WHERE tenant_id=$1 AND memory_key=$2
+                   ORDER BY created_at DESC LIMIT $3""",
+                tenant_id, memory_key, limit,
+            )
+        else:
+            rows = await self._pool.fetch(
+                """SELECT * FROM memory_events WHERE tenant_id=$1
+                   ORDER BY created_at DESC LIMIT $2""",
+                tenant_id, limit,
+            )
+        return [_mem_event(r) for r in rows]
 
     # --- Round Four: users + provisioning (USR) ---
     async def upsert_user(self, u: User):

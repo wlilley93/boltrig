@@ -211,6 +211,7 @@ from .hitl import (
 from .identity import RoleMapping as RoleMapping, User as User
 from .memory import (
     MemoryErasure as MemoryErasure,
+    MemoryEvent as MemoryEvent,
     MemoryFact as MemoryFact,
     MemoryIngestion as MemoryIngestion,
     MemoryProjectionStatus as MemoryProjectionStatus,

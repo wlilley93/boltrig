@@ -13,6 +13,10 @@ def memory_verb_specs() -> list[VerbSpec]:
         _recall_spec(),
         _improve_spec(),
         _forget_spec(),
+        _propose_spec(),
+        _bundle_spec(),
+        _resolve_spec(),
+        _review_spec(),
     ]
 
 
@@ -117,6 +121,147 @@ def _forget_spec():
         output_schema=_OBJECT,
         consequence="low",
         description="Erase a fact/source and its derived edges (complete, ledgered)",
+    )
+
+
+def _propose_spec():
+    return VerbSpec(
+        verb_id="memory.propose",
+        noun_id="memory",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "plane": {
+                    "type": "string",
+                    "enum": ["semantic", "episodic", "procedural"],
+                },
+                "owner_scope": {"type": "string"},
+                # semantic
+                "subject_type": {"type": "string"},
+                "subject_id": {"type": "string"},
+                "predicate": {"type": "string"},
+                "value": {},
+                "statement": {"type": "string"},
+                "is_durable": {"type": "boolean"},
+                "source_authority": {
+                    "type": "string",
+                    "enum": [
+                        "authoritative_system",
+                        "verified_integration",
+                        "human_statement",
+                        "approved_agent_inference",
+                        "unverified_inference",
+                    ],
+                },
+                # episodic
+                "title": {"type": "string"},
+                "retrieval_text": {"type": "string"},
+                "situation": {"type": "string"},
+                "attempted": {"type": "array", "items": {"type": "string"}},
+                "failed_attempts": {"type": "array", "items": {"type": "string"}},
+                "root_cause": {"type": "string"},
+                "resolution": {"type": "string"},
+                "outcome": {"type": "string"},
+                "is_terminal": {"type": "boolean"},
+                "task_family": {"type": "string"},
+                "tools_used": {"type": "array", "items": {"type": "string"}},
+                "environment": {"type": "object"},
+                "outcome_evidence": {"type": "array", "items": {"type": "string"}},
+                # procedural
+                "procedure_key": {"type": "string"},
+                "summary": {"type": "string"},
+                "body_markdown": {"type": "string"},
+                "applies_to_roles": {"type": "array", "items": {"type": "string"}},
+                "applies_to_workflows": {"type": "array", "items": {"type": "string"}},
+                "invariants": {"type": "array", "items": {"type": "string"}},
+                "prohibited_actions": {"type": "array", "items": {"type": "string"}},
+                # shared
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                "source_kind": {"type": "string"},
+                "source_ref": {"type": "string"},
+            },
+            "required": ["plane"],
+        },
+        output_schema=_OBJECT,
+        consequence="low",
+        description=(
+            "Propose a typed memory candidate; the deterministic write gate "
+            "decides (accept/supersede/confirm/reject/request review)"
+        ),
+    )
+
+
+def _bundle_spec():
+    return VerbSpec(
+        verb_id="memory.bundle",
+        noun_id="memory",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "subjects": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {"type": "string"},
+                            "id": {"type": "string"},
+                        },
+                        "required": ["type", "id"],
+                    },
+                },
+                "agent_role": {"type": "string"},
+                "workflow": {"type": "string"},
+                "working_context": {"type": "array", "items": {"type": "string"}},
+                "owner_scope": {"type": "string"},
+                "config": {"type": "object"},
+            },
+        },
+        output_schema=_OBJECT,
+        consequence="low",
+        description=(
+            "Assemble the typed memory bundle (procedures/facts/sources/episodes/"
+            "working state) plus the authority-wrapped prompt"
+        ),
+    )
+
+
+def _resolve_spec():
+    return VerbSpec(
+        verb_id="memory.resolve",
+        noun_id="memory",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "subject_type": {"type": "string"},
+                "subject_id": {"type": "string"},
+                "predicates": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["subject_type", "subject_id"],
+        },
+        output_schema=_OBJECT,
+        consequence="low",
+        description="Deterministic current-value lookup: the active facts for a subject",
+    )
+
+
+def _review_spec():
+    # Activating governance (a procedure, a conflicted fact) is a high-
+    # consequence act: it changes what governs future agent runs.
+    return VerbSpec(
+        verb_id="memory.candidates.review",
+        noun_id="memory",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "candidate_id": {"type": "string"},
+                "decision": {"type": "string", "enum": ["approve", "reject"]},
+            },
+            "required": ["candidate_id", "decision"],
+        },
+        output_schema=_OBJECT,
+        consequence="high",
+        description="Approve or reject a memory candidate (the only activation path)",
     )
 
 

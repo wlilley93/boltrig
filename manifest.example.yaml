@@ -520,6 +520,22 @@ memory:
     default_mode: primary              # primary | similarity | graph_completion
     max_hops: 4
     max_results: 20
+  # Typed memory planes (decision 0029): semantic/episodic/procedural memory
+  # behind the write gate (memory.propose / memory.bundle / memory.resolve /
+  # memory.candidates.review). These keys shape only the BUNDLE defaults; a
+  # call may override per-plane toggles via memory.bundle's config param (the
+  # ablation matrix). Episodes are append-only; exactly one active value per
+  # semantic/procedural slot (DB-enforced, migration 0076).
+  typed:
+    semantic: true
+    episodic: true
+    procedural: true
+    source_knowledge: true
+    budget:                           # character budgets (~4 chars/token; no tokenizer dep)
+      semantic_chars: 4800
+      episodic_chars: 6000
+      procedural_chars: 10000
+      source_chars: 12000
   retention_days: 365
 
 # --- knowledge - canonical sources plus rebuildable provider projections -----

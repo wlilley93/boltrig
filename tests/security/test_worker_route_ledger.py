@@ -54,6 +54,7 @@ def test_every_http_route_has_an_exact_worker_or_non_ui_classification():
     assert set(NON_UI_ROUTES.values()) == {
         "advanced-compatibility",
         "external-ingress",
+        "governed-agent-surface",
         "internal-composition",
         "legacy-superseded",
         "operator-only",

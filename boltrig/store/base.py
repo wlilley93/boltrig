@@ -18,6 +18,7 @@ from boltrig.models import (
     ChannelOutboxMessage, ChannelPairing, ConfigRevision,
     HITLRequest,
     MemoryErasure,
+    MemoryEvent,
     MemoryFact,
     MemoryIngestion,
     MemoryItem,
@@ -469,6 +470,35 @@ class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStore
     async def list_memory_projection_statuses(
         self, tenant_id: str, fact_id: str | None = None, limit: int = 50
     ) -> list[MemoryProjectionStatus]: ...
+
+    # --- Typed memory planes (decision 0029): slots, versions, gate events ---
+    async def get_active_memory_fact(
+        self, tenant_id: str, memory_key: str
+    ) -> MemoryFact | None: ...
+    async def list_active_subject_facts(
+        self,
+        tenant_id: str,
+        owner_scopes: list[str],
+        subject_type: str,
+        subject_id: str,
+        limit: int = 64,
+    ) -> list[MemoryFact]: ...
+    async def list_memory_slot_history(
+        self, tenant_id: str, memory_key: str, limit: int = 50
+    ) -> list[MemoryFact]: ...
+    async def list_memory_candidates(
+        self, tenant_id: str, owner_scopes: list[str], limit: int = 50
+    ) -> list[MemoryFact]: ...
+    async def update_memory_fact(self, fact: MemoryFact) -> None: ...
+    async def add_memory_event(self, event: MemoryEvent) -> None: ...
+    async def list_memory_events(
+        self,
+        tenant_id: str,
+        *,
+        memory_id: str | None = None,
+        memory_key: str | None = None,
+        limit: int = 100,
+    ) -> list[MemoryEvent]: ...
 
     # --- Round Four: users + provisioning (USR), tokens (PAT), settings, sessions ---
     async def upsert_user(self, user: User) -> None: ...

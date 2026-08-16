@@ -43,11 +43,12 @@ from .adapter_writes import (
     permitted_scopes,
     screen_content,
 )
+from .typed_verbs import TypedVerbMixin
 
 
-class MemoryAdapter(MemoryWriteMixin):
+class MemoryAdapter(MemoryWriteMixin, TypedVerbMixin):
     id = "memory"
-    version = "1.0.0"
+    version = "1.1.0"
     runtime = "script"
     source = "builtin"
 
@@ -63,6 +64,7 @@ class MemoryAdapter(MemoryWriteMixin):
         max_hops: int = 4,
         max_results: int = 20,
         projections=None,
+        typed_config: dict | None = None,
     ) -> None:
         self._engine = engine
         self._store = store
@@ -73,6 +75,7 @@ class MemoryAdapter(MemoryWriteMixin):
         self._max_hops = max_hops
         self._max_results = max_results
         self._projections = projections
+        self._typed_config = typed_config or {}
 
     def describe(self) -> list[VerbSpec]:
         return memory_verb_specs()
@@ -99,6 +102,14 @@ class MemoryAdapter(MemoryWriteMixin):
                     )
                 )
             return await self._forget(params, context, scopes)
+        if verb == "memory.propose":
+            return await self._propose(params, context, scopes)
+        if verb == "memory.bundle":
+            return await self._bundle(params, context, scopes)
+        if verb == "memory.resolve":
+            return await self._resolve(params, context, scopes)
+        if verb == "memory.candidates.review":
+            return await self._review_candidate(params, context, scopes)
         return Result.failure(AdapterError(ErrorClass.INVALID, f"unknown verb {verb}"))
 
     async def approval_context(
@@ -301,6 +312,7 @@ def build_memory_adapter(
         max_hops=int(retrieval.get("max_hops", 4)),
         max_results=int(retrieval.get("max_results", 20)),
         projections=projections,
+        typed_config=cfg.get("typed") or None,
     )
 
 
