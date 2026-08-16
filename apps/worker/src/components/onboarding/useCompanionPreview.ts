@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { RESTING_STAGE_STATE, type FamiliarStageState } from "../familiar/FamiliarState";
 import { RESTING_JARVIS_STATE, type JarvisStageState } from "../jarvis/JarvisState";
 import { RESTING_ULTRON_STATE, type UltronStageState } from "../ultron/UltronState";
+import { currentPreviewAudio } from "./companionVoicePreview";
+import { readVoiceSignal } from "./previewAudioSignal";
 
 /** The behaviours Jarvis cycles through on the companion card.
  *
@@ -21,8 +23,9 @@ const MODE_MS = 2600;
 
 function bandsFor(t: number): number[] {
   // Eight log bands, each on its own slow beat so the fan never pulses as a
-  // block. Not audio-derived -- this is a preview, and pretending otherwise
-  // would mean holding a decoder open on the setup screen.
+  // block. THE FALLBACK, used when no preview clip is playing: while one is,
+  // the bands come from that clip through previewAudioSignal, so the body
+  // responds to its own voice rather than to a plausible-looking loop.
   return Array.from({ length: 8 }, (_, i) =>
     0.25 + 0.32 * Math.abs(Math.sin(t * (0.7 + i * 0.13) + i)));
 }
@@ -51,10 +54,18 @@ export function useCompanionPreview(): CompanionPreview {
 
     const tick = (now: number) => {
       const t = (now - started) / 1000;
-      const slot = JARVIS_CYCLE[Math.floor(t * 1000 / MODE_MS) % JARVIS_CYCLE.length];
+      // THE CLIP FIRST, the timer second. When a preview line is playing the
+      // bodies are driven by it -- the rings answer the words actually being
+      // said -- and the scripted cycle is what runs the rest of the time.
+      const voice = readVoiceSignal(currentPreviewAudio());
+      const slot = voice
+        ? { mode: "speaking" as const, level: voice.level }
+        : JARVIS_CYCLE[Math.floor(t * 1000 / MODE_MS) % JARVIS_CYCLE.length];
       // Two sines an irrational-ish ratio apart, so the swirl does not settle
       // into a visible loop while somebody reads the copy beside it.
-      const level = 0.3 + 0.16 * Math.sin(t * 0.9) + 0.07 * Math.sin(t * 0.37);
+      const level = voice
+        ? voice.level
+        : 0.3 + 0.16 * Math.sin(t * 0.9) + 0.07 * Math.sin(t * 0.37);
       setPreview({
         familiar: {
           ...RESTING_STAGE_STATE,
@@ -65,14 +76,16 @@ export function useCompanionPreview(): CompanionPreview {
         jarvis: {
           ...RESTING_JARVIS_STATE,
           ...slot,
-          bands: slot.mode === "speaking" ? bandsFor(t) : null,
+          onset: voice?.onset ?? 0,
+          bands: voice ? voice.bands : (slot.mode === "speaking" ? bandsFor(t) : null),
         },
         ultron: {
           ...RESTING_ULTRON_STATE,
           // The same cycle, minus the readout and micLevel he has no use for.
           mode: (slot.mode ?? "standby") as UltronStageState["mode"],
           level: Math.min(1, Math.max(0, level)),
-          bands: slot.mode === "speaking" ? bandsFor(t) : null,
+          onset: voice?.onset ?? 0,
+          bands: voice ? voice.bands : (slot.mode === "speaking" ? bandsFor(t) : null),
         },
       });
       frame = requestAnimationFrame(tick);
