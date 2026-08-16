@@ -35,6 +35,6 @@
 	# Everything else is the Worker presentation. This is deployment data, never
 	# a client-side redirect.
 	handle {
-		reverse_proxy {$BOLTRIG_FRONTEND_UPSTREAM:worker-ui:80}
+		reverse_proxy {$BOLTRIG_FRONTEND_UPSTREAM:worker-ui:8080}
 	}
 }

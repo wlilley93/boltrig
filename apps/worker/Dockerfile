@@ -33,7 +33,26 @@ FROM nginx:1.30.4-alpine@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a
 RUN apk add --no-cache c-ares=1.34.8-r0 expat=2.8.2-r0 libexpat=2.8.2-r0
 COPY apps/worker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=worker-build /workspace/apps/worker/dist /usr/share/nginx/html
-EXPOSE 80
+
+# Run as the unprivileged `nginx` user (DS-0002). A container running as root is
+# one escape away from root on the host, and this one serves the only
+# first-party browser surface.
+#
+# THE PORT MOVED WITH THE USER, and had to. Binding below 1024 needs
+# CAP_NET_BIND_SERVICE, so a non-root nginx cannot listen on 80 -- adding USER
+# without moving the port yields an image that builds, scans clean, and refuses
+# to start. The published HOST port is untouched; only the container side is
+# 8080 now.
+#
+# nginx writes three things as itself: the cache, the pid file and the logs. The
+# official image leaves all three root-owned, so they are handed over
+# explicitly rather than discovered at first boot.
+RUN chown -R nginx:nginx /usr/share/nginx/html /var/cache/nginx \
+    && touch /var/run/nginx.pid \
+    && chown nginx:nginx /var/run/nginx.pid
+USER nginx
+
+EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-  CMD wget -q --spider http://127.0.0.1/index.html || exit 1
+  CMD wget -q --spider http://127.0.0.1:8080/index.html || exit 1
 CMD ["nginx", "-g", "daemon off;"]

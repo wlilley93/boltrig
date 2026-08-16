@@ -115,4 +115,4 @@ services:
   # which is correct for the ordinary VM stack but unreachable by the tunnel.
   worker-ui:
     ports: !override
-      - "0.0.0.0:${VM_WORKER_PORT:-8080}:80"
+      - "0.0.0.0:${VM_WORKER_PORT:-8080}:8080"

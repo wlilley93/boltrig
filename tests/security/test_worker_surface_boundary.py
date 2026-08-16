@@ -391,7 +391,7 @@ def test_worker_image_is_the_only_first_party_browser_surface():
 @pytest.mark.invariant("WRK-02")
 def test_worker_is_the_default_edge_presentation():
     caddy = (ROOT / "deploy" / "Caddyfile.example").read_text(encoding="utf-8")
-    assert "{$BOLTRIG_FRONTEND_UPSTREAM:worker-ui:80}" in caddy
+    assert "{$BOLTRIG_FRONTEND_UPSTREAM:worker-ui:8080}" in caddy
     assert "{$BOLTRIG_FRONTEND_UPSTREAM:ui:80}" not in caddy
     assert not (ROOT / "deploy" / "compose.worker-primary.yml").exists()
 
