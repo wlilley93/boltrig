@@ -198,7 +198,7 @@ def test_authenticated_platform_projection_is_tenant_scoped_and_opaque():
         # authenticated payload's bound, which is a deliberate decision and not a
         # side effect - exactly what keeping this a literal is for.
         # len(BACKGROUND_JOB_NAMES) * 4; 28 since reflection joined (#29)
-        "max_returned_receipts": 28,
+        "max_returned_receipts": 32,
     }
     assert [row["process_instance_identity"] for row in body["background_jobs"]] == [
         PROCESS

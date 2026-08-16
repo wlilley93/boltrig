@@ -28,6 +28,16 @@ def upgrade() -> None:
         );
         CREATE INDEX IF NOT EXISTS audit_outbox_due_idx
           ON audit_outbox (next_retry_at);
+        -- The receipts CHECK is name-closed on both sides (schema.sql and the
+        -- BACKGROUND_JOB_NAMES tuple are kept equal by test): widen it for the
+        -- new job the same way the tuple was widened.
+        ALTER TABLE background_job_receipts DROP CONSTRAINT IF EXISTS
+          background_job_receipts_job_name_check;
+        ALTER TABLE background_job_receipts ADD CONSTRAINT
+          background_job_receipts_job_name_check
+          CHECK (job_name IN ('hitl_expiry','retention','distillation',
+                              'anchor','workflow_scheduler','pump', 'reflection',
+                              'audit_outbox'));
         """
     )
 
