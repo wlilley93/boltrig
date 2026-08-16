@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-16T09:51:21.535Z",
+  "capturedAt": "2026-08-16T17:53:15.211Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,12 +16,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "b01bfc71431a13c113d337b65224a612d0c347c284595b281045878fd98bb9b8",
-    "digestAfterCapture": "b01bfc71431a13c113d337b65224a612d0c347c284595b281045878fd98bb9b8",
+    "digestBeforeCapture": "8816a108dcb6c490118ac5532657998dfbf092e853802783ad46160a3e38b1bd",
+    "digestAfterCapture": "8816a108dcb6c490118ac5532657998dfbf092e853802783ad46160a3e38b1bd",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/console-target",
-    "head": "d2c270b37a8b8529144a7d23e80cb06ca7980207",
-    "dirty": false
+    "branch": "",
+    "head": "5becb31a3224700dfb610f7bb17c5740f6712051",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
@@ -195,7 +195,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -287,7 +287,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
