@@ -57,8 +57,19 @@ class IdempotencyReplay:
     result: dict[str, Any]
 
 
+def _normalize_sensitive_key(key: str) -> str:
+    # Camel-case to snake_case with ACRONYM handling: the previous
+    # split-before-every-capital turned "APIKey" into "a_p_i_key", which
+    # matched neither the exact set nor any _token/_api_key suffix, so an
+    # adapter output like {"APIKey": ...} skipped the uncacheable/redaction
+    # check entirely. "APIKey" -> "api_key", "apiKey" -> "api_key".
+    s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", key)
+    s = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s)
+    return s.lower().replace("-", "_")
+
+
 def sensitive_key(key: Any) -> bool:
-    normalized = re.sub(r"(?<!^)(?=[A-Z])", "_", str(key)).lower().replace("-", "_")
+    normalized = _normalize_sensitive_key(str(key))
     return (
         normalized in _SENSITIVE_KEYS
         or normalized.endswith("_password")

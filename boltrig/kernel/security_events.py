@@ -21,13 +21,27 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import logging
 import os
 import uuid
 
 from boltrig.models import AuditEvent, AuditRollupAnchor, SecurityEvent, utcnow
 from boltrig.store import Store
 
-from .audit import _HMAC_KEY, _scrub, key_in_force_at, verify_chain
+from .audit import _HMAC_KEY, _scrub, _scrub_free_text, key_in_force_at, verify_chain
+
+log = logging.getLogger("boltrig.security")
+
+# Dropped-signal counter (D3): a security_append failure must not break the
+# guarded path, but swallowing it with no trace let a failing append silently
+# disable the whole security stream - login-failure and permission-denial
+# signals vanished with no symptom. The counter is the operator's symptom.
+_dropped_signals = 0
+
+
+def dropped_signal_count() -> int:
+    """Security signals dropped by ``record()`` since process start."""
+    return _dropped_signals
 
 # Whether an external anchoring credential is configured. When absent (the
 # default), the anchorer writes a LOCAL dev-fallback anchor and leaves the
@@ -81,6 +95,7 @@ class SecurityWriter:
 
     async def write(self, event: SecurityEvent) -> SecurityEvent:
         event.detail = _scrub(event.detail or {})
+        event.user_agent = _scrub_free_text(event.user_agent, field="user_agent")
         async with self._lock(event.tenant_id):
             head_seq, prev_hash = await self._store.security_head(event.tenant_id)
             event.seq = head_seq + 1
@@ -140,7 +155,14 @@ class SecurityWriter:
                 )
             )
         except Exception:  # a security signal must never break the guarded path
-            pass
+            global _dropped_signals
+            _dropped_signals += 1
+            log.exception(
+                "security signal dropped (type=%s reason=%s tenant=%s)",
+                getattr(event_type, "value", event_type),
+                reason,
+                tenant_id,
+            )
 
 
 def segment_root_hash(events: list[AuditEvent], key: bytes | None = None) -> str:

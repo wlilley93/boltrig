@@ -143,6 +143,24 @@ def _canonical(event: AuditEvent) -> str:
     return json.dumps(body, sort_keys=True, separators=(",", ":"))
 
 
+def _scrub_free_text(value: str | None, *, field: str) -> str | None:
+    """Scrub a single free-text CHAIN FIELD, staying a string (K-20).
+
+    ``_scrub`` covers ``detail`` only; ``user_agent`` is the raw
+    attacker-controlled header and entered the chain verbatim, so a UA string
+    carrying a bearer token or PII defeated the keys-only rule in BOTH
+    append-only streams. A dict digest (as ``_scrub_value`` returns) would
+    change the column shape, so a tainted value collapses to the same stable
+    string marker ``_scrub_key`` uses."""
+    if value is None:
+        return None
+    if kind := pii.contains_secret(value):
+        return f"[scrubbed:{kind}]"
+    if pii.contains_identity(value):
+        value = pii.redact_identity(value)
+    return value[:_PREVIEW_LEN]
+
+
 def _scrub(detail: dict) -> dict:
     """Bounded-observability scrub (K-20). Any string value carrying a secret or
     identity pattern is replaced by a digest + size + bounded preview, so the
@@ -275,6 +293,7 @@ class AuditWriter:
         The chain step is serialised per tenant so concurrent writes do not collide
         on the seq (SEC-16)."""
         event.detail = _scrub(event.detail)
+        event.user_agent = _scrub_free_text(event.user_agent, field="user_agent")
         async with self._lock(event.tenant_id):
             head_seq, prev_hash = await self._store.audit_head(event.tenant_id)
             event.seq = head_seq + 1
