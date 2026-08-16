@@ -159,6 +159,18 @@ class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStore
     async def transition_work_item_status(
         self, tenant_id: str, item_id: str, *, expected: WorkStatus, new_status: WorkStatus
     ) -> bool: ...
+    # The status CAS with payload: also clears the lease and stamps ``result``
+    # in the SAME conditional write, so a sweeper settling an item can carry its
+    # cancel reason without the read-then-write window of update_work_item.
+    async def transition_work_item_settled(
+        self,
+        tenant_id: str,
+        item_id: str,
+        *,
+        expected: WorkStatus,
+        new_status: WorkStatus,
+        result: dict[str, object],
+    ) -> bool: ...
     async def list_work_items(
         self,
         tenant_id: str,
@@ -240,6 +252,7 @@ class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStore
     async def create_hitl_request(self, req: HITLRequest) -> None: ...
     async def get_hitl_request(self, tenant_id: str, req_id: str) -> HITLRequest | None: ...
     async def list_pending_hitl(self, tenant_id: str) -> list[HITLRequest]: ...
+    async def list_answered_hitl(self, tenant_id: str) -> list[HITLRequest]: ...
     async def list_hitl_requests_for_requester(
         self,
         tenant_id: str,
@@ -302,8 +315,7 @@ class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStore
     async def latest_audit_anchor(
         self, tenant_id: str, workspace_id: str | None = None
     ) -> AuditRollupAnchor | None: ...
-    async def list_audit_anchors(
-        self, tenant_id: str, workspace_id: str | None = None, limit: int = 200
+    async def list_audit_anchors(        self, tenant_id: str, workspace_id: str | None = None, limit: int = 200
     ) -> list[AuditRollupAnchor]: ...
 
     # --- budgets ---

@@ -354,6 +354,20 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         item.status = new_status
         return True
 
+    async def transition_work_item_settled(
+        self, tenant_id, item_id, *, expected, new_status, result
+    ):
+        # The payload-carrying twin: status CAS + lease clear + result stamp in
+        # one conditional write (same event-loop-atomicity argument as above).
+        item = self._work.get((tenant_id, item_id))
+        if item is None or item.status != expected:
+            return False
+        item.status = new_status
+        item.lease_owner = None
+        item.lease_expires_at = None
+        item.result = result
+        return True
+
     async def claim_work_item(self, tenant_id, worker_id, lease_seconds):
         # atomic pending -> in_flight claim with a lease (US-FLT-05): no await between
         # scan and write (mirrors consume_hitl); insertion order stands in for the
@@ -433,6 +447,10 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
     async def list_pending_hitl(self, tenant_id):
         pending = HITLStatus.PENDING
         return [r for (t, _), r in self._hitl.items() if t == tenant_id and r.status == pending]
+
+    async def list_answered_hitl(self, tenant_id):
+        answered = HITLStatus.ANSWERED
+        return [r for (t, _), r in self._hitl.items() if t == tenant_id and r.status == answered]
 
     async def list_hitl_requests_for_requester(
         self, tenant_id, requested_by, statuses, *, limit=20

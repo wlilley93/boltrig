@@ -81,7 +81,7 @@ async def test_worker_correlates_both_jobs_with_one_random_process_identity(
     monkeypatch.setenv("BOLTRIG_HITL_EXPIRY_INTERVAL", "60")
     monkeypatch.setenv("BOLTRIG_RETENTION_INTERVAL", "3600")
 
-    async def hitl_forever(store, *, interval, process_instance_identity):
+    async def hitl_forever(store, *, interval, process_instance_identity, kernel=None):
         seen["hitl_expiry"] = process_instance_identity
         await asyncio.Event().wait()
 
