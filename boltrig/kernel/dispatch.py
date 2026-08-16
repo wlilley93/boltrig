@@ -440,34 +440,48 @@ class Dispatcher:
             target_adapter = meta.get("target_adapter")
             resource, resource_id = _resource_ref(noun, params)
             detail.setdefault("params", _summarise_params(params))   # D1, schema-ledger order
-            await self._audit.write(
-                AuditEvent(
-                    tenant_id=context.tenant_id,
-                    ts=utcnow(),
-                    run_id=context.run_id,
-                    parent_run_id=context.parent_run_id,
-                    actor=context.actor,
-                    actor_tier=context.actor_tier,
-                    depth=context.depth,
-                    action_type=ActionType.TOOL_CALL,
-                    noun=noun,
-                    verb=verb,
-                    target_adapter=target_adapter,
-                    on_behalf_of=context.on_behalf_of,
-                    status=status,
-                    latency_ms=latency_ms,
-                    skills_loaded=list(context.skills_loaded),
-                    detail=detail,
-                    # Opbox-depth enrichment (D1). ip/ua ride on the context from the
-                    # door (None off the HTTP path); workspace_id from the active
-                    # workspace; resource/resource_id name the acted-on object.
-                    ip_address=context.ip_address,
-                    user_agent=context.user_agent,
-                    resource=resource,
-                    resource_id=resource_id,
-                    workspace_id=context.workspace_id,
+            try:
+                await self._audit.write(
+                    AuditEvent(
+                        tenant_id=context.tenant_id,
+                        ts=utcnow(),
+                        run_id=context.run_id,
+                        parent_run_id=context.parent_run_id,
+                        actor=context.actor,
+                        actor_tier=context.actor_tier,
+                        depth=context.depth,
+                        action_type=ActionType.TOOL_CALL,
+                        noun=noun,
+                        verb=verb,
+                        target_adapter=target_adapter,
+                        on_behalf_of=context.on_behalf_of,
+                        status=status,
+                        latency_ms=latency_ms,
+                        skills_loaded=list(context.skills_loaded),
+                        detail=detail,
+                        # Opbox-depth enrichment (D1). ip/ua ride on the context from the
+                        # door (None off the HTTP path); workspace_id from the active
+                        # workspace; resource/resource_id name the acted-on object.
+                        ip_address=context.ip_address,
+                        user_agent=context.user_agent,
+                        resource=resource,
+                        resource_id=resource_id,
+                        workspace_id=context.workspace_id,
+                    )
                 )
-            )
+            except Exception:
+                # SEC-16's audit-always, honestly stated: the action has already
+                # taken effect (or already failed), so an append fault cannot
+                # un-execute it - and re-raising from ``finally`` would MASK the
+                # caller's real exception with a bookkeeping one. Log loudly
+                # (an unaudited action is a governance incident), never void the
+                # original outcome. A durable outbox remains the full fix; this
+                # is the bounded half that stops the silent masquerade.
+                log.exception(
+                    "AUDIT APPEND FAILED after %s.%s (status=%s) - the action is "
+                    "effectful but UNAUDITED (SEC-16)",
+                    noun, verb, status,
+                )
 
     async def _invoke_inner(
         self,
