@@ -86,16 +86,19 @@
 /* The card is always the middle column, whether or not a chevron is present --
  * without this it slides sideways on the first and last companion, and walking
  * the rail makes the whole layout lurch. */
-.companion-card { grid-column: 2; position: relative; display: grid; grid-template-rows: minmax(240px, 1fr) auto; min-height: 400px; width: 100%; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 22px; color: inherit; text-align: left; background: color-mix(in srgb, var(--card-2) 58%, transparent); box-shadow: 0 1px 0 rgb(255 255 255 / 3%) inset, 0 24px 55px rgb(0 0 0 / 19%); }
+/* companion-card-surface: ONE surface. The art fills it and the copy floats
+ * over the bottom, so the entity is inside the card rather than framed on it. */
+.companion-card { grid-column: 2; position: relative; display: block; min-height: 430px; width: 100%; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 22px; color: inherit; text-align: left; background: color-mix(in srgb, var(--card-2) 58%, transparent); box-shadow: 0 1px 0 rgb(255 255 255 / 3%) inset, 0 24px 55px rgb(0 0 0 / 19%); }
 .companion-chevron { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--border-2); border-radius: 50%; color: var(--text-2); background: color-mix(in srgb, var(--card-2) 70%, transparent); cursor: pointer; transition: color 160ms ease, border-color 160ms ease, transform 160ms ease; }
 .companion-chevron:hover { color: var(--text); border-color: var(--accent); transform: scale(1.06); }
 .companion-chevron:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .companion-chevron.left { grid-column: 1; }
 .companion-chevron.right { grid-column: 3; }
-.companion-art { position: relative; display: grid; place-items: center; min-height: 240px; overflow: hidden; background: radial-gradient(circle at 50% 44%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 58%); }
-.companion-card[data-companion="familiar"] .familiar-stage { width: min(200px, 30vw, 25vh); }
-.companion-card[data-companion="jarvis"] .jarvis-stage { width: 100%; min-height: 250px; height: 250px; animation: none; }
-.companion-copy { display: grid; gap: 6px; padding: 18px 20px 20px; border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent); }
+.companion-art { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; background: transparent; }
+.companion-card[data-companion="familiar"] .familiar-stage { width: min(300px, 62%); margin-bottom: 84px; }
+.companion-card[data-companion="jarvis"] .jarvis-stage,
+.companion-card[data-companion="ultron"] .ultron-stage { position: absolute; inset: 0; width: 100%; height: 100%; animation: none; }
+.companion-copy { position: absolute; inset: auto 0 0 0; display: grid; gap: 6px; padding: 40px 20px 20px; border: 0; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--card-2) 88%, transparent) 46%); }
 .companion-copy strong { font-size: 18px; letter-spacing: -.025em; }
 .companion-copy > span { color: var(--text-2); line-height: 1.35; }
 .companion-copy small { color: var(--text-3); line-height: 1.4; }
@@ -118,8 +121,10 @@
  * bright white treatment of its own, which read as a different surface pasted
  * onto a dark step -- and made the orb fight a light halo it was never drawn
  * for. Only the art wash differs now, and only to separate stage from copy. */
-.companion-card[data-companion="familiar"] .companion-art {
-  background: radial-gradient(circle at 50% 44%, rgb(62 135 225 / 18%), transparent 62%);
+.companion-card[data-companion="familiar"] {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--card-2) 70%, transparent),
+    color-mix(in srgb, var(--card-2) 58%, transparent));
 }
 
 .companion-card[data-companion="jarvis"] {
@@ -127,11 +132,20 @@
   background: linear-gradient(180deg, #020205 0%, #07070a 100%);
   box-shadow: 0 1px 0 rgb(255 255 255 / 7%) inset, 0 20px 48px rgb(0 0 0 / 26%);
 }
-.companion-card[data-companion="jarvis"] .companion-art {
-  background: radial-gradient(circle at 50% 44%, rgb(121 98 226 / 10%), transparent 62%);
+/* The two instrument bodies draw on near-black, and the card IS that black:
+ * a lighter card behind a dark stage was the seam that made it look pasted on. */
+.companion-card[data-companion="ultron"] {
+  color: #f2f6ff;
+  background: linear-gradient(180deg, #01030a 0%, #05070f 100%);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 7%) inset, 0 20px 48px rgb(0 0 0 / 30%);
 }
+.companion-card[data-companion="ultron"] .companion-copy {
+  background: linear-gradient(180deg, transparent, rgb(1 3 10 / 92%) 46%);
+}
+.companion-card[data-companion="ultron"] .companion-copy > span { color: #b9c6da; }
+.companion-card[data-companion="ultron"] .companion-copy small { color: #7f8ea3; }
 .companion-card[data-companion="jarvis"] .companion-copy {
-  border-color: rgb(255 255 255 / 10%);
+  background: linear-gradient(180deg, transparent, rgb(2 2 5 / 92%) 46%);
 }
 .companion-card[data-companion="jarvis"] .companion-copy > span { color: #b8b8c1; }
 .companion-card[data-companion="jarvis"] .companion-copy small { color: #85858f; }
@@ -247,10 +261,8 @@
   .onboarding-heading { margin-bottom: 18px; }
   .onboarding-heading h1 { font-size: 36px; }
   .onboarding-name { height: auto; margin-bottom: 14px; }
-  .companion-card { grid-template-rows: minmax(170px, 1fr) auto; min-height: 310px; }
-  .companion-art { min-height: 170px; }
-  .companion-card[data-companion="familiar"] .familiar-stage { width: min(155px, 22vh); }
-  .companion-card[data-companion="jarvis"] .jarvis-stage { min-height: 176px; height: 176px; }
+  .companion-card { min-height: 340px; }
+  .companion-card[data-companion="familiar"] .familiar-stage { width: min(230px, 58%); margin-bottom: 72px; }
   .companion-copy { gap: 4px; padding: 13px 17px 15px; }
   .companion-rail { gap: 12px; }
   .onboarding-actions { padding-top: 14px; }
@@ -270,10 +282,8 @@
    * there is only one card now. */
   .companion-viewport { grid-template-columns: 34px minmax(0, 1fr) 34px; gap: 6px; }
   .companion-chevron { width: 34px; height: 34px; }
-  .companion-card { grid-template-rows: minmax(190px, 1fr) auto; min-height: 330px; }
-  .companion-art { min-height: 190px; }
-  .companion-card[data-companion="familiar"] .familiar-stage { width: min(160px, 42vw); }
-  .companion-card[data-companion="jarvis"] .jarvis-stage { min-height: 200px; height: 200px; }
+  .companion-card { min-height: 360px; }
+  .companion-card[data-companion="familiar"] .familiar-stage { width: min(210px, 56%); margin-bottom: 76px; }
   .onboarding-provider-stack, .onboarding-custom-fields, .voice-key-form, .voice-secret-fields { grid-template-columns: 1fr; }
   .onboarding-provider-stack > :nth-child(3), .onboarding-custom-fields { grid-column: auto; }
   .onboarding-picker-menu { min-width: 100%; }

@@ -70,8 +70,15 @@ export function useCompanionPreview(): CompanionPreview {
         familiar: {
           ...RESTING_STAGE_STATE,
           working: true,
+          // SPEAKING + BANDS, or her voice embodiment never runs. The renderer
+          // gates it on both: with bands the lows pressurise her nucleus, the
+          // mids move her interior and the highs light her surface. Without
+          // them she takes the working-pulse path and merely looks busy while
+          // her own voice plays over the top.
+          speaking: Boolean(voice),
+          bands: voice ? voice.bands : null,
           level: Math.min(1, Math.max(0, level)),
-          onset: Math.max(0, Math.sin(t * 0.55)) * 0.4,
+          onset: voice?.onset ?? Math.max(0, Math.sin(t * 0.55)) * 0.4,
         },
         jarvis: {
           ...RESTING_JARVIS_STATE,

@@ -29,6 +29,7 @@ uniform float uEnergy;    // 0..1, drives speed and lifetime
 uniform float uRadius;    // overall scale on every particle's home radius
 uniform float uWaveT;     // seconds since the last speech onset
 uniform float uWaveAmp;   // 0 when not speaking
+uniform float uPetal;     // 0 = plain shell (Jarvis); >0 = concentric petals
 ${FIELD_GLSL}
 
 // A seeded point at the particle's own home radius, so respawns land where that
@@ -57,7 +58,7 @@ void main() {
   // than reading as a drawn sphere.
   float d = length(p);
   vec3 outward = normalize(p + 1e-5);
-  v += outward * (homeRadius(vUV, uTime) * uRadius - d) * 5.0;
+  v += outward * (shapedRadius(vUV, p, uTime, uRadius, uPetal) - d) * 5.0;
 
   // THE SPEECH WAVE. An onset starts an impulse at the centre which travels
   // outward at a fixed speed, so a syllable visibly CROSSES the body instead of

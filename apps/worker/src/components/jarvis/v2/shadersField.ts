@@ -3,7 +3,7 @@
 // Ebb's JARVIS has "an internal network of connections within the spherical
 // centre". Streaks alone are smoke; the LINK pass is what makes it a network.
 
-import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL } from "../../canvas/glslCommon";
+import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../../canvas/glslCommon";
 
 // ------------------------------------------------------------ streaks (DRAW)
 //
@@ -24,6 +24,7 @@ out float vFade;
 out float vSpeed;
 ${FIELD_GLSL}
 ${PROJECT_GLSL}
+${PULSE_GLSL}
 
 void main() {
   int id = gl_VertexID >> 1;
@@ -38,6 +39,13 @@ void main() {
   // Fade in and out at the ends of life, so particles never pop.
   vFade = smoothstep(0.0, 0.18, st.w) * smoothstep(1.0, 0.72, st.w);
   vFade *= depthFade(p);
+  // The limb, so the field has a silhouette for the wheels to go around and a
+  // see-through middle. Without it the great circles floated in fur.
+  vFade *= 0.34 + 0.90 * limb(p);
+  // Embers: what has left the body glints. Everything still in it does not.
+  vFade *= 1.0 + 1.6 * ember(p, 0.98);
+  // The wavefront lights what it passes, and a held note keeps a low swell.
+  vFade *= 1.0 + 3.2 * pulse(p) + 0.55 * uSwell;
 
   p -= v * uStreak * float(tail);
   gl_Position = project(p, uAspect);
@@ -84,6 +92,7 @@ uniform float uLinkRange;
 
 out float vFade;
 ${PROJECT_GLSL}
+${PULSE_GLSL}
 
 void main() {
   int id = gl_VertexID >> 1;
@@ -101,6 +110,7 @@ void main() {
   vFade = smoothstep(uLinkRange, uLinkRange * 0.25, d);
   vFade *= min(smoothstep(0.0, 0.2, a.w), smoothstep(0.0, 0.2, b.w));
   vFade *= depthFade(p);
+  vFade *= 1.0 + 3.6 * pulse(p) + 0.5 * uSwell;
   gl_Position = project(p, uAspect);
 }`;
 

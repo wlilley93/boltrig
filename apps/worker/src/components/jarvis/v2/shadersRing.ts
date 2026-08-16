@@ -6,13 +6,18 @@
 // identity: "angular shapes mimicking computer circuitry", which is what
 // distinguishes Animal Logic's JARVIS from their deliberately organic Ultron.
 
-import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL } from "../../canvas/glslCommon";
+import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../../canvas/glslCommon";
 
 /** Great circles of data. Six intersecting axes read as a sphere of wheels;
  *  three read as a hoop skirt, and a dozen turns the surface into a mesh. */
 export const RINGS = 6;
-/** Segments per ring. Enough that the ticks read as striation, not as a dashed circle. */
-export const RING_SEGMENTS = 168;
+/** Elements per beam. Higher than the old tick count because each one is now a
+ *  scattered oblong inside a tube rather than a segment of a drawn circle: the
+ *  beam's body has to be filled, not just its outline stepped around. */
+export const RING_SEGMENTS = 420;
+/** Beam cross-section, as a fraction of the ring's own radius. Thick enough to
+ *  see the far wall through the near one, thin enough to stay a beam. */
+export const BEAM_THICKNESS = 0.085;
 
 // --------------------------------------------------------- data rings (RING)
 //
@@ -35,11 +40,13 @@ uniform float uEnergy;
 uniform float uRadius;
 uniform int uSegments;
 uniform int uRings;
+uniform float uBeam;
 uniform float uBands[8];
 
 out float vAmp;
 ${FIELD_GLSL}
 ${PROJECT_GLSL}
+${PULSE_GLSL}
 
 void main() {
   int v = gl_VertexID;
@@ -51,10 +58,13 @@ void main() {
 
   float tau = 6.28318530718;
   float span = tau / float(uSegments);
-  // 0.55 of each slot is drawn: the gaps are what make it read as ticks of data
-  // rather than as a solid circle.
   float spin = uTime * (0.16 + 0.09 * fring) * (mod(fring, 2.0) < 0.5 ? 1.0 : -1.0);
-  float a = float(seg) * span + spin + span * 0.55 * float(end);
+  // Each element is an OBLONG stretched along the tangent, not a tick: the beam
+  // flows round the circle instead of being beads threaded on it. Length varies
+  // per element so the wall never reads as a repeating pattern.
+  float seed = hash(vec3(float(seg) * 0.071, fring * 2.3, 0.0));
+  float lenScale = 0.55 + 1.9 * seed;
+  float a = float(seg) * span + spin + span * lenScale * float(end);
 
   // GREAT CIRCLES ON DIFFERENT AXES, not parallel platters.
   //
@@ -64,9 +74,10 @@ void main() {
   // here gets its own axis from a hash, so they intersect rather than nest,
   // which is what makes a sphere of rings read as a sphere at all.
   //
-  // Radius is ~1.0 for every ring: they circumscribe the same body rather than
-  // sitting at graded distances from it.
-  float radius = (0.99 + 0.06 * hash(vec3(fring * 5.1, 0.0, 0.0))) * uRadius;
+  // BETWEEN A THIRD AND TWO THIRDS of the body. Hooped outside everything the
+  // wheels read as an orb with rings parked around it; inside the halo and
+  // around the core they read as structure belonging to one being.
+  float radius = (0.34 + 0.32 * hash(vec3(fring * 5.1, 0.0, 0.0))) * uRadius;
 
   // A FIBONACCI SPHERE, not a hash, for the axes. Six hashed directions came
   // back visibly clustered -- all six wheels leaning the same way, which reads
@@ -83,7 +94,17 @@ void main() {
   vec3 seedv = abs(axis.z) > 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 0.0, 1.0);
   vec3 bu = normalize(cross(axis, seedv));
   vec3 bv = cross(axis, bu);
-  vec3 q = (cos(a) * bu + sin(a) * bv) * radius;
+  vec3 centre = cos(a) * bu + sin(a) * bv;
+  // THE TUBE. Scatter this element inside a disc perpendicular to the
+  // centreline, so the beam has a cross-section you can see through rather than
+  // an infinitely thin wall. Polar-disc sampling (sqrt on the radius) keeps the
+  // fill even instead of crowding the axis.
+  vec3 tangent = -sin(a) * bu + cos(a) * bv;
+  vec3 outward = normalize(centre + 1e-5);
+  vec3 side = normalize(cross(tangent, outward) + 1e-5);
+  float ta = hash(vec3(float(seg) * 0.19, fring, 1.0)) * tau;
+  float tr = sqrt(hash(vec3(float(seg) * 0.37, fring, 2.0))) * uBeam * radius;
+  vec3 q = centre * radius + (cos(ta) * outward + sin(ta) * side) * tr;
 
   // A slow precession, so the arrangement never settles into a fixed lattice.
   float pr = uTime * 0.05 * (0.6 + 0.3 * fring);
@@ -104,6 +125,9 @@ void main() {
   vAmp *= 0.72 + 0.28 * step(0.5, fract(float(seg) * 0.25));
   vAmp *= 0.62 + 0.38 * uEnergy;
   vAmp *= depthFade(q);
+  // The rings flare as the front reaches them, which is what makes the pulse
+  // read as leaving the body rather than happening inside it.
+  vAmp *= 1.0 + 4.5 * pulse(q) + 0.4 * uSwell;
 
   gl_Position = project(q, uAspect);
 }`;
@@ -161,6 +185,7 @@ out float vFade;
 out float vGlyph;
 ${FIELD_GLSL}
 ${PROJECT_GLSL}
+${PULSE_GLSL}
 
 const vec2 CORNER[6] = vec2[6](
   vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(1.0, 1.0),
@@ -186,16 +211,21 @@ void main() {
   vLocal = CORNER[corner];
   vGlyph = hash(vec3(uv * 31.7, 2.0));
 
-  // CONSTANT RE-ASSEMBLY. Each shard has its own phase, so fragments break away
-  // and re-form continuously rather than riding the flow passively -- the
-  // "constant motion and re-assembly" the sequence is built on.
+  // ANTI-MATTERING, not fading. A smooth envelope reads as dimming; circuitry
+  // is not there, then it IS, holds, and is gone. So this is a hard gate with a
+  // bright overshoot at each switch -- a flash as it condenses out of nothing
+  // and a flash as it annihilates, and flat brightness in between.
   float phase = fract(uTime * 0.35 + hash(vec3(uv * 19.3, 6.0)));
-  float alive = smoothstep(0.0, 0.12, phase) * smoothstep(1.0, 0.72, phase);
+  float on = step(0.10, phase) * step(phase, 0.74);
+  float birth = exp(-pow((phase - 0.10) * 42.0, 2.0));
+  float death = exp(-pow((phase - 0.74) * 42.0, 2.0));
+  float alive = on + 2.6 * (birth + death);
 
   vFade = alive * smoothstep(0.0, 0.2, st.w) * depthFade(p);
   // The data in transit gets the circuitry: migrating particles carry brighter
   // shards than the resident interior does.
   vFade *= isMigrating(uv) ? 1.0 : 0.45;
+  vFade *= 1.0 + 3.0 * pulse(p) + 0.5 * uSwell;
 
   float size = uSize * (0.6 + 0.8 * hash(vec3(uv * 11.1, 9.0)));
   vec2 offset = (dir * vLocal.x * 2.0 + perp * vLocal.y) * size;

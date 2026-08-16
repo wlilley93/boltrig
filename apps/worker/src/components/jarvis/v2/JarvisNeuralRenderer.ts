@@ -255,6 +255,9 @@ export class JarvisNeuralRenderer {
       waveAmp: this.waveAmp,
       // Tension tightens the whole field toward its centre.
       radius: 1.0 - this.pheno.tension * 0.14,
+      // Speaking breathes even between onsets. A body that only moved on a hard
+      // consonant reads as flinching rather than talking.
+      swell: mode === "speaking" ? Math.max(0.25, level) : 0,
     };
   }
 

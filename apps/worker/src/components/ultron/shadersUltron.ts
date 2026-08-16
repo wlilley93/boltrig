@@ -24,7 +24,26 @@
 // as aggression is instability -- things coming apart and re-forming faster
 // than they settle.
 
-import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL } from "../canvas/glslCommon";
+import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../canvas/glslCommon";
+
+/** The voice, as pressure on the membrane.
+ *
+ * Eight bands mapped over azimuth AND elevation, so the loud part of a syllable
+ * pushes a REGION of the shell rather than a ring around its equator -- a ring
+ * is Jarvis's shape and belongs to him. `uVoice` is the overall level, so a
+ * silent body still holds together instead of collapsing to nothing. */
+const VOICE_GLSL = `
+uniform float uBands[8];
+uniform float uVoice;
+
+float bandAt(vec3 p) {
+  vec3 n = normalize(p + 1e-5);
+  float a = atan(n.y, n.x) / 6.28318530718 + 0.5;   // 0..1 around
+  float e = n.z * 0.5 + 0.5;                        // 0..1 pole to pole
+  int idx = int(mod(floor(a * 5.0 + e * 3.0), 8.0));
+  return clamp(uBands[idx], 0.0, 1.0);
+}
+`;
 
 /** Jagged cracks: three segments per link, so each has two kinked interior points. */
 export const CRACK_SEGMENTS = 3;
@@ -54,6 +73,8 @@ out float vFade;
 out float vSpeed;
 ${FIELD_GLSL}
 ${PROJECT_GLSL}
+${PULSE_GLSL}
+${VOICE_GLSL}
 
 void main() {
   int id = gl_VertexID >> 1;
@@ -67,8 +88,20 @@ void main() {
 
   vFade = smoothstep(0.0, 0.18, st.w) * smoothstep(1.0, 0.72, st.w);
   vFade *= depthFade(p);
+  // The same lit-normal body: a shell coming apart still needs to read as a
+  // shell before it can read as coming apart.
+  vFade *= 0.30 + 0.95 * limb(p);
+  vFade *= 1.0 + 1.4 * ember(p, 0.98);
+  // The wavefront lights what it passes; a held note keeps a low swell under it.
+  vFade *= 1.0 + 3.4 * pulse(p) + 0.55 * uSwell;
 
-  p -= v * uStreak * float(tail);
+  // The voice, as pressure: this region of the shell swells and brightens on a
+  // loud band and settles when it passes.
+  float band = bandAt(p);
+  p *= 1.0 + band * 0.10 * uVoice;
+  vFade *= 0.72 + 0.55 * band * uVoice;
+
+  p -= v * uStreak * (1.0 + band * 0.6) * float(tail);
   gl_Position = project(p, uAspect);
 }`;
 
@@ -119,6 +152,8 @@ out float vFade;
 out float vFlare;
 ${FIELD_GLSL}
 ${PROJECT_GLSL}
+${PULSE_GLSL}
+${VOICE_GLSL}
 
 void main() {
   int vert = gl_VertexID;
@@ -138,11 +173,20 @@ void main() {
   // The kink. Interior points only -- the ends must stay welded to their
   // particles or the crack detaches and floats.
   float interior = sin(t * 3.14159265);
+  // A loud band kinks its cracks harder: the membrane is under more stress
+  // exactly where the voice is loudest.
+  float band = bandAt(p);
   p += curl(p * 2.1 + vec3(7.3), uTime * 1.6) * 0.045 * interior
-     * (1.0 + uAggression * 1.5);
+     * (1.0 + uAggression * 1.5 + band * uVoice * 1.2);
+  p *= 1.0 + band * 0.10 * uVoice;
 
   float d = length(a.xyz - b.xyz);
   vFade = smoothstep(uLinkRange, uLinkRange * 0.25, d);
+  vFade *= 0.70 + 0.60 * band * uVoice;
+  // Cracks brighten toward the silhouette too, so the fracture wraps a surface.
+  vFade *= 0.36 + 0.88 * limb(p);
+  // A crack lights up as the wave crosses it: the fracture transmits the voice.
+  vFade *= 1.0 + 4.2 * pulse(p) + 0.5 * uSwell;
   vFade *= min(smoothstep(0.0, 0.2, a.w), smoothstep(0.0, 0.2, b.w));
   vFade *= depthFade(p);
 
@@ -192,19 +236,19 @@ uniform float uAggression;
 out float vFade;
 ${FIELD_GLSL}
 ${PROJECT_GLSL}
+${PULSE_GLSL}
 
-// An equilateral triangle, walked as three EDGES: six vertices, drawn as lines.
-// Drawn rather than shaded, because approximating the distance to a triangle's
-// edge in the fragment shader produced rounded rectangles -- the corners are
-// exactly where the approximation is worst, and the corners are the whole read.
-const vec2 CORNER[6] = vec2[6](
-  vec2(0.0, 1.0), vec2(-0.866, -0.5),
-  vec2(-0.866, -0.5), vec2(0.866, -0.5),
-  vec2(0.866, -0.5), vec2(0.0, 1.0));
+// AN OPEN SLIVER: two segments meeting at a corner, four vertices, no closed
+// shape. Three edges made a triangle, and the eye recognises a closed polygon at
+// any size -- shrinking them only produced smaller triangles. Broken glass is a
+// bent edge catching light with the rest of the fracture lost in the dark.
+const vec2 CORNER[4] = vec2[4](
+  vec2(0.05, 1.0), vec2(-0.70, -0.35),
+  vec2(-0.70, -0.35), vec2(0.90, -0.12));
 
 void main() {
-  int facet = gl_VertexID / 6;
-  int corner = gl_VertexID % 6;
+  int facet = gl_VertexID / 4;
+  int corner = gl_VertexID % 4;
   int id = facet * uStride;
   ivec2 tc = ivec2(id % uGrid, id / uGrid);
   vec4 st = texelFetch(uState, tc, 0);
@@ -219,9 +263,17 @@ void main() {
   vec4 head = project(p, uAspect);
   float spin = uTime * (0.4 + hash(vec3(uv * 5.7, 1.0)) * 1.2);
   float c = cos(spin), sn = sin(spin);
+  // Each shard is squashed on its own axis, so no two are the same triangle and
+  // none of them is equilateral. Cheaper and more effective than more glyphs.
   vec2 local = CORNER[corner];
+  local.x *= 0.45 + 1.15 * hash(vec3(uv * 7.7, 4.0));
+  local.y *= 0.45 + 1.15 * hash(vec3(uv * 13.3, 8.0));
 
-  float size = uSize * (0.5 + 1.2 * hash(vec3(uv * 11.1, 9.0)));
+  // SIZE VARIES MUCH HARDER, and mostly downward. A uniform equilateral at one
+  // size reads as a triangle; a scatter of mostly-small irregular slivers reads
+  // as broken glass, which is the thing. The square makes small the common case.
+  float sv = hash(vec3(uv * 11.1, 9.0));
+  float size = uSize * (0.22 + 1.5 * sv * sv);
   vec2 offset = vec2(local.x * c - local.y * sn, local.x * sn + local.y * c) * size;
   offset.x /= max(uAspect, 0.001);
 
@@ -229,6 +281,9 @@ void main() {
   // rather than accumulating into a permanent halo.
   vFade = smoothstep(0.0, 0.1, phase) * smoothstep(1.0, 0.45, phase);
   vFade *= smoothstep(0.0, 0.2, st.w) * depthFade(p);
+  // Shards belong to the surface: bright at the limb, quiet through the middle.
+  vFade *= 0.28 + 0.95 * limb(p);
+  vFade *= 1.0 + 3.0 * pulse(p) + 0.5 * uSwell;
   gl_Position = vec4(head.xy + offset, 0.0, 1.0);
 }`;
 

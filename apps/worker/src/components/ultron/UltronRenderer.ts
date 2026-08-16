@@ -207,9 +207,16 @@ export class UltronRenderer {
       dt,
       energy,
       aggression,
+      bands: this.bands,
+      // Speaking is when the voice should move him. Idle drift stays idle drift
+      // -- a body that pulsed to silence would be pulsing to nothing.
+      voice: mode === "speaking" ? Math.max(0.35, level) : level * 0.35,
       waveT: this.waveT,
       waveAmp: this.waveAmp,
       radius: 1.0 - this.pheno.tension * 0.10,
+      // Speaking breathes between onsets; a body that only moved on a hard
+      // consonant reads as flinching rather than talking.
+      swell: mode === "speaking" ? Math.max(0.25, level) : 0,
     };
   }
 

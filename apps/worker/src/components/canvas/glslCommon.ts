@@ -92,6 +92,34 @@ float homeRadius(vec2 uv, float time) {
 bool isMigrating(vec2 uv) {
   return hash(vec3(uv * 57.3, 11.0)) > 0.92;
 }
+
+// THREE CONCENTRIC CLOUDS SPREAD INTO PETALS, when a character asks for it.
+//
+// petal 0 leaves homeRadius exactly as it was, which is what a plain shell
+// body passes. Above 0 the particle is assigned to one of three bands and each
+// band's radius is modulated BY DIRECTION, so it reaches far along a few axes
+// and pulls in between them: spindly arms with dark gaps rather than a lumpy
+// sphere. The high power on |cos| is what makes the arms narrow -- a low one
+// gives a bumpy ball, which is the failure this exists to avoid. The bands are
+// phase-offset from each other so the arms interleave instead of stacking.
+float shapedRadius(vec2 uv, vec3 p, float time, float scale, float petal) {
+  float base = homeRadius(uv, time) * scale;
+  if (petal <= 0.0) return base;
+
+  float band = floor(hash(vec3(uv * 33.7, 4.0)) * 3.0);      // 0, 1 or 2
+  float ring = (0.42 + 0.27 * band) * scale;
+
+  vec3 n = normalize(p + 1e-5);
+  float az = atan(n.y, n.x);
+  float arms = 3.0 + band;                                    // 3, 4, 5 per band
+  float phase = band * 1.1 + time * 0.05 * (band + 1.0);
+  float lobe = pow(abs(cos(az * arms * 0.5 + phase)), 6.0);
+  // Elevation narrows the arms toward the poles, so they read as petals round
+  // an iris rather than as spikes on a sea urchin.
+  lobe *= pow(1.0 - abs(n.z), 0.8);
+
+  return mix(base, ring * (1.0 + 1.15 * lobe), petal);
+}
 `;
 
 // Shared by every pass that puts a 3D point on screen. The reference is a
@@ -110,6 +138,26 @@ vec4 project(vec3 p, float aspect) {
 // far side of the sphere falls to 0.18 so the near side reads as in front of it.
 float depthFade(vec3 p) {
   return mix(0.18, 1.0, clamp(depthOf(p) * 1.35 - 0.28, 0.0, 1.0));
+}
+
+// THE BODY, after familiar.frag -- a lit normal and a fresnel rim, applied to
+// particles rather than to a drawn sphere. She builds an orb from a ray-sphere
+// gate, a lit normal and a fresnel term, with embers thrown off the rim; these
+// two are not orbs, so they take the LIGHTING and leave the geometry.
+//
+// 1 at the silhouette, 0 facing the viewer. The edge of the body is bright and
+// the middle is see-through, which is what gives a cloud of points a surface.
+float limb(vec3 p) {
+  vec3 n = normalize(p + 1e-5);
+  return pow(1.0 - abs(n.z), 2.2);
+}
+
+
+// How far outside its home shell a particle has drifted, 0..1. Familiar spawns
+// embers as their own pass; here they are DERIVED, so the things that glint are
+// exactly the things that have left the body.
+float ember(vec3 p, float home) {
+  return clamp((length(p) - home) * 3.2, 0.0, 1.0);
 }
 `;
 
@@ -151,5 +199,27 @@ vec3 fringeShade(float a, vec3 core) {
   float visible = step(outer, a);
   float lit = smoothstep(outer, inner, a);
   return mix(uFringe * uFringeGain, core, lit) * visible;
+}
+`;
+
+/** The voice, as a wavefront leaving the centre.
+ *
+ * Included by DRAW passes only -- SIM_FRAG declares these two itself, because it
+ * uses the same numbers as a force rather than as light. `uWaveT` is seconds
+ * since the last speech onset, so the front is at radius t*speed and the
+ * gaussian makes it a narrow shell rather than a filled sphere. */
+export const PULSE_GLSL = `
+uniform float uWaveT;
+uniform float uWaveAmp;
+uniform float uSwell;
+
+float pulse(vec3 p) {
+  float front = uWaveT * 1.35;
+  float d = length(p) - front;
+  // Narrow, and it fades as it travels: a front that stayed as bright at the
+  // rim as at the core reads as the whole body flashing, not as something
+  // crossing it.
+  float shell = exp(-d * d * 22.0) * exp(-uWaveT * 1.6);
+  return shell * uWaveAmp;
 }
 `;

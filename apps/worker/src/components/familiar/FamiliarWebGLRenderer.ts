@@ -91,7 +91,12 @@ export class FamiliarWebGLRenderer {
   private serverPhenotype:
     | { at: number; scalars: Partial<Record<MoodKey, number>> }
     | null = null;
-  private aperture = { value: 0, from: 0, to: 1, start: 0, dur: 1400 };
+  /** APERTURE HELD OPEN: Familiar does not arrive, she is there. She used to be
+   *  born out of a black-hole aperture over 1400ms, inherited from the porthole
+   *  path the summoned companions use. 1 is fully open and the shader's own hole
+   *  gate -- 4a(1-a) -- is zero there. Kept as a field because uAperture is still
+   *  uploaded and the companion path still means something by it. */
+  private aperture = { value: 1, from: 1, to: 1, start: 0, dur: 0 };
   private packedGenotype = packFamiliarGenotype(null);
 
   constructor(options?: { reducedMotion?: boolean; onFirstPaint?: () => void }) {
@@ -149,7 +154,6 @@ export class FamiliarWebGLRenderer {
     this.mood.lastT = now;
     this.gesture.nextAt = now + rand(30_000, 90_000);
     this.aperture.start = now;
-    if (this.reducedMotion) this.aperture.value = 1; // no entrance animation
     this.statusValue = { kind: "webgl2", state: "running" };
     this.raf = requestAnimationFrame(this.frame);
   }
@@ -297,15 +301,11 @@ export class FamiliarWebGLRenderer {
     g.amt = elapsed < rise ? elapsed / rise : 1 - (elapsed - rise) / (g.ttl - rise);
   }
 
-  private apertureNow(now: number): number {
-    // Reduced motion starts fully present and stays there. Replaying the
-    // aperture once per throttled frame made visual captures timing-dependent.
-    if (this.reducedMotion) return 1;
-    const a = this.aperture;
-    const t = Math.min(1, (now - a.start) / a.dur);
-    const e = t * t * (3 - 2 * t);
-    a.value = a.from + (a.to - a.from) * e;
-    return a.value;
+  private apertureNow(_now: number): number {
+    // Always fully open: there is no entrance to animate. This also removes the
+    // timing dependence that made visual captures replay the aperture once per
+    // throttled frame, which reduced motion used to dodge on its own.
+    return 1;
   }
 
   private resizeCanvas(): void {
@@ -391,7 +391,7 @@ export class FamiliarWebGLRenderer {
     gl.uniform2f(u.uOrigin ?? null, 0, 0);
 
     // Companion recipe from boltrig-familiar-web: the orb renders through the
-    // porthole path, born out of its black-hole aperture.
+    // porthole path, with the aperture pinned open (see apertureNow).
     f("uFill", 1);
     f("uCompanion", 1);
     f("uPresence", 0);

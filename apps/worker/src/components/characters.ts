@@ -281,7 +281,7 @@ const JARVIS: Character = characterFromBundle(jarvisBundle, [JARVIS_SOURCE]);
 const ULTRON_UNIFORMS: readonly string[] = [
   "uState", "uTime", "uDt", "uEnergy", "uRadius", "uWaveT", "uWaveAmp",
   "uAspect", "uStreak", "uGrid", "uSegments", "uStride", "uSize",
-  "uLinkRange", "uAggression",
+  "uLinkRange", "uAggression", "uBands", "uVoice", "uSwell", "uPetal",
   "uWarm", "uHot", "uFringe", "uInner", "uFringeScale", "uFringeGain", "uGain",
   "uSrc", "uDir", "uThreshold",
   "uScene", "uBloom", "uBloomGain", "uCore", "uStarburst",

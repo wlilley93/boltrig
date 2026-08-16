@@ -38,7 +38,11 @@
       "uBloom",
       "uBloomGain",
       "uCore",
-      "uStarburst"
+      "uStarburst",
+      "uBands",
+      "uVoice",
+      "uSwell",
+      "uPetal"
     ]
   },
   "phenotype": {

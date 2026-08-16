@@ -44,6 +44,10 @@ const BLOOM_DIV = 2;
 
 /** Everything a frame is driven by, derived once by the renderer and shared. */
 export interface UltronDrive {
+  /** Eight 0..1 voice bands. The membrane reads them as pressure per region. */
+  bands: Float32Array;
+  /** Overall speech level, so a silent body still holds its shape. */
+  voice: number;
   /** Animation seconds. NOT wall clock -- see UltronRenderer.animClock. */
   time: number;
   dt: number;
@@ -53,6 +57,8 @@ export interface UltronDrive {
   waveT: number;
   waveAmp: number;
   radius: number;
+  /** A low continuous breath while speaking, so a held note still moves. */
+  swell: number;
 }
 
 export class UltronPasses {
@@ -153,6 +159,9 @@ export class UltronPasses {
     setUniforms(gl, prog, {
       uTime: d.time, uDt: d.dt, uEnergy: d.energy, uRadius: d.radius,
       uWaveT: d.waveT, uWaveAmp: d.waveAmp,
+      // Three concentric clouds reaching out in arms. Jarvis leaves this at 0
+      // and keeps the plain shell.
+      uPetal: 1.0,
     }, { uState: 0 });
     this.fullscreen(prog);
     this.ping = 1 - this.ping;
@@ -164,7 +173,10 @@ export class UltronPasses {
     const aspect = w / Math.max(1, h);
     const shared: FloatUniforms = {
       ...palette, uTime: d.time, uAspect: aspect, uEnergy: d.energy,
-      uAggression: d.aggression,
+      uAggression: d.aggression, uBands: d.bands, uVoice: d.voice,
+      // The wavefront reaches the DRAW passes, not only SIM: there it is a
+      // force, here it is light, and only the second one is visible.
+      uWaveT: d.waveT, uWaveAmp: d.waveAmp, uSwell: d.swell,
     };
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFbo);
@@ -183,7 +195,7 @@ export class UltronPasses {
       ...shared,
       // Longer than Jarvis's streak: growth, not data in motion.
       uStreak: 0.052 + 0.040 * d.energy,
-      uGain: 0.06 + 0.08 * d.energy,
+      uGain: 0.11 + 0.13 * d.energy,
     }, { uState: 0, uGrid: GRID });
     gl.drawArrays(gl.LINES, 0, PARTICLES * 2);
 
@@ -194,15 +206,15 @@ export class UltronPasses {
       // Wider than LINK's range: a membrane wants a connected web, where a
       // neural interior wants sparse, flickering connections.
       uLinkRange: 0.26,
-      uGain: 0.52 + 0.38 * d.energy,
+      uGain: 0.72 + 0.50 * d.energy,
     }, { uState: 0, uGrid: GRID, uSegments: CRACK_SEGMENTS });
     gl.drawArrays(gl.LINES, 0, PARTICLES * CRACK_SEGMENTS * 2);
 
     const facet = this.progs.facet;
     gl.useProgram(facet);
-    setUniforms(gl, facet, { ...shared, uSize: 0.024, uGain: 0.55 + 0.40 * d.energy },
+    setUniforms(gl, facet, { ...shared, uSize: 0.030, uGain: 0.78 + 0.55 * d.energy },
       { uState: 0, uGrid: GRID, uStride: FACET_STRIDE });
-    gl.drawArrays(gl.LINES, 0, FACETS * 6);
+    gl.drawArrays(gl.LINES, 0, FACETS * 4);
   }
 
   private bloom(): void {

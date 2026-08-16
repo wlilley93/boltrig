@@ -28,6 +28,7 @@ import { BLOOM_FRAG, COMPOSITE_FRAG } from "../../canvas/shadersPost";
 import { DRAW_FRAG, DRAW_VERT, LINK_FRAG, LINK_VERT } from "./shadersField";
 import { QUAD_VERT, SIM_FRAG } from "../../canvas/shadersSim";
 import {
+  BEAM_THICKNESS,
   RING_FRAG,
   RING_SEGMENTS,
   RING_VERT,
@@ -65,6 +66,8 @@ export interface Drive {
   waveAmp: number;
   /** Overall scale on every radius; tension tightens it. */
   radius: number;
+  /** A low continuous breath while speaking, so a held note still moves. */
+  swell: number;
 }
 
 export class NeuralPasses {
@@ -183,6 +186,10 @@ export class NeuralPasses {
     const aspect = w / Math.max(1, h);
     const shared: FloatUniforms = {
       ...palette, uTime: d.time, uAspect: aspect, uEnergy: d.energy,
+      // The wavefront, to the DRAW passes. SIM already has these and uses them
+      // as a force; the draws use them as light, which is what makes the pulse
+      // visible rather than merely real.
+      uWaveT: d.waveT, uWaveAmp: d.waveAmp, uSwell: d.swell,
     };
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFbo);
@@ -198,7 +205,10 @@ export class NeuralPasses {
     const ring = this.progs.ring;
     gl.useProgram(ring);
     setUniforms(gl, ring, {
-      ...shared, uBands: d.bands, uRadius: d.radius, uGain: 2.4 + 1.1 * d.energy,
+      ...shared, uBands: d.bands, uRadius: d.radius, uBeam: BEAM_THICKNESS,
+      // Lower per-element gain than the old ticks: there are two and a half
+      // times as many of them and they overlap through the beam's depth.
+      uGain: 1.25 + 0.60 * d.energy,
     }, { uSegments: RING_SEGMENTS, uRings: RINGS });
     gl.drawArrays(gl.LINES, 0, RINGS * RING_SEGMENTS * 2);
 
