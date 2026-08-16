@@ -19,6 +19,7 @@ and audited at the end regardless of outcome:
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -75,6 +76,8 @@ from .run_event_projection import (
     _summarise_params,
 )
 from .ratelimit import RateLimiter
+
+log = logging.getLogger("boltrig.kernel")
 
 AdapterProvider = Callable[[str, str], Awaitable[Adapter | None]]
 AgentInvoker = Callable[[str, dict[str, Any], InvocationContext, str], Awaitable[Result]]
@@ -582,7 +585,19 @@ class Dispatcher:
         # 9. complete atomically; secret-shaped output becomes uncacheable.
         await self._idempotency.complete(run, output)
         if authors_before is not None:
-            await self._announce_author_crossing(verb, noun, context, authors_before)
+            # Observability, not correctness: the action ran and the key is
+            # COMPLETED, so a failure to write the 1<->2 crossing row must not
+            # mislabel a succeeded action as 'error' in the audit trail (a
+            # replay would then hand back the output this same row calls a
+            # failure).
+            try:
+                await self._announce_author_crossing(verb, noun, context, authors_before)
+            except Exception:
+                log.warning(
+                    "author-crossing announcement failed for %s (action completed)",
+                    verb,
+                    exc_info=True,
+                )
         return output
 
     async def _active_author_count(self, tenant_id: str) -> int:
