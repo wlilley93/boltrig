@@ -48,6 +48,12 @@
   border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
 }
 .onboarding-brand { font-size: 17px; }
+/* Mark and wordmark as ONE lockup, so they move together and stay optically
+   aligned. The mark is sized in em off the wordmark rather than in px: the
+   wordmark drops to 13px on narrow screens (see the media query below) and a
+   px mark would have stayed large and unbalanced there. */
+.onboarding-lockup { display: inline-flex; align-items: center; gap: 0.55em; }
+.onboarding-mark { width: 1.35em; height: 1.35em; flex: none; color: var(--text); }
 .onboarding-progress { display: flex; gap: 7px; }
 .onboarding-progress i { width: 22px; height: 3px; border-radius: 99px; background: var(--border-2); transition: background 280ms ease, transform 280ms ease; }
 .onboarding-progress i.active { background: var(--text); transform: scaleX(1.08); }

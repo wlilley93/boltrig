@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-16T09:51:13.081Z",
+  "capturedAt": "2026-08-16T10:43:22.324Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,19 +17,19 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "b01bfc71431a13c113d337b65224a612d0c347c284595b281045878fd98bb9b8",
-    "digestAfterCapture": "b01bfc71431a13c113d337b65224a612d0c347c284595b281045878fd98bb9b8",
+    "digestBeforeCapture": "b687431831ac2712ffae29f2fc79f60d41051f2da2cb9ad1ea96808d5a657bf2",
+    "digestAfterCapture": "b687431831ac2712ffae29f2fc79f60d41051f2da2cb9ad1ea96808d5a657bf2",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/console-target",
-    "head": "d2c270b37a8b8529144a7d23e80cb06ca7980207",
-    "dirty": false
+    "head": "b301dd8bfc6c289c32ed198505498fcd11d7ea73",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
-    "node": "v24.18.0",
+    "node": "v24.15.0",
     "browser": "chromium",
     "browserVersion": "151.0.7922.34",
-    "browserExecutable": "/Users/williamlilley/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
     "origin": "http://localhost:1420",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
@@ -40,7 +40,7 @@
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "975cc1b4b4fc37ca44fe03b4576a50a6f2d49cf3c32a3e9138d4671aa3443f71",
+      "sha256": "015ca5a23e11535f558c5014b656121778a3c430eee6b3f6c51dbc8ab9fe9e61",
       "width": 1440,
       "height": 900,
       "captureContract": {

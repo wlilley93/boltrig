@@ -21,7 +21,7 @@ export const ProviderStep = forwardRef<ProviderStepHandle, { profile: UserProfil
   function ProviderStep({ profile }, ref) {
     return (
       <ProviderStepBase
-        heading="Choose your AI"
+        heading="Choose your AI provider"
         modality="text"
         profile={profile}
         ref={ref}
