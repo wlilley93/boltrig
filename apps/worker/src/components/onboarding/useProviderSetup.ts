@@ -25,6 +25,7 @@ interface ProviderCompletionContext {
   baseUrl: string;
   keyPresent: boolean;
   level: AiKeyLevel;
+  modality: "text" | "vision";
   model: string;
   proposal: AiKeyProposalView | null;
   provider: string;
@@ -36,7 +37,10 @@ interface ProviderCompletionContext {
   setReadiness: Dispatch<SetStateAction<ProviderReadiness | null>>;
 }
 
-export function useProviderSetup(profile: UserProfile) {
+export function useProviderSetup(
+  profile: UserProfile,
+  modality: "text" | "vision" = "text",
+) {
   const [readiness, setReadiness] = useState<ProviderReadiness | null>(null);
   const [provider, setProvider] = useState("openai");
   const [model, setModel] = useState("");
@@ -52,14 +56,14 @@ export function useProviderSetup(profile: UserProfile) {
 
   useEffect(() => {
     let active = true;
-    void loadProviderReadiness(profile.id).then((result) => {
+    void loadProviderReadiness(profile.id, modality).then((result) => {
       if (active) setReadiness(result);
     });
     return () => { active = false; };
-  }, [profile.id]);
+  }, [profile.id, modality]);
 
   const completionContext: ProviderCompletionContext = {
-    apiKeyInput, baseUrl, keyPresent, level, model, proposal, provider, readiness,
+    apiKeyInput, baseUrl, keyPresent, level, modality, model, proposal, provider, readiness,
     setBusy, setKeyPresent, setMessage, setProposal, setReadiness,
   };
 
@@ -92,7 +96,7 @@ async function completeProvider(context: ProviderCompletionContext): Promise<boo
       level: context.level,
       provider: context.provider.trim(),
       model: context.model.trim(),
-      modality: "text",
+      modality: context.modality,
       base_url: context.baseUrl.trim() || undefined,
     });
     context.setKeyPresent(false);
@@ -189,7 +193,10 @@ async function activateExisting(
   }
 }
 
-async function loadProviderReadiness(userId: string): Promise<ProviderReadiness> {
+async function loadProviderReadiness(
+  userId: string,
+  modality: "text" | "vision",
+): Promise<ProviderReadiness> {
   const [models, keys] = await Promise.all([
     client.chatModelChoices().catch(() => null),
     client.aiKeys().catch(() => null),
@@ -201,7 +208,7 @@ async function loadProviderReadiness(userId: string): Promise<ProviderReadiness>
     existingKey: keys?.ai_keys?.find((key) => (
       key.level === "user"
       && key.scope_id === userId
-      && (key.modality ?? "text") === "text"
+      && (key.modality ?? "text") === modality
     )) ?? null,
   };
 }

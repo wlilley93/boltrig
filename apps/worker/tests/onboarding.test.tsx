@@ -159,6 +159,9 @@ describe("first-run onboarding", () => {
 
     fireEvent.keyDown(providerSearch, { key: "Escape" });
     fireEvent.keyDown(document.body, { key: "Enter" });
+    expect(await screen.findByText("Add vision")).toBeTruthy();
+    await waitFor(() => expect((screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.keyDown(document.body, { key: "Enter" });
     expect(await screen.findByText("Add voice")).toBeTruthy();
     await waitFor(() => expect((screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.keyDown(document.body, { key: "Enter" });
@@ -232,7 +235,8 @@ describe("first-run onboarding", () => {
     fireEvent.click(screen.getByRole("button", { name: "Choose a model" }));
     fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "GPT-5.4" } });
     fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
-    expect(screen.getByText("Text + images")).toBeTruthy();
+    expect(screen.getByText("Text and Vision")).toBeTruthy();
+    expect(screen.getByText("Your model handles text and vision — you can skip the vision step.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Save provider" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
@@ -244,8 +248,10 @@ describe("first-run onboarding", () => {
       api_key: "secret-provider-value",
     })));
     expect(secret.value).toBe("");
-    expect(await screen.findByText("Add voice")).toBeTruthy();
+    expect(await screen.findByText("Add vision")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    expect(await screen.findByText("Add voice")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Skip for now" }));
     expect(await screen.findByText("You’re ready, William. Meet Jarvis.")).toBeTruthy();
     expect(screen.getByText(/run and take approved actions locally on your personal computer/i)).toBeTruthy();
     const download = screen.getByRole("link", { name: /Download Boltrig Desktop/ });
@@ -346,10 +352,18 @@ describe("first-run onboarding", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText("Choose your AI")).toBeTruthy();
+    expect(screen.queryByRole("note")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
     fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "ollama" } });
     fireEvent.click(screen.getByRole("option", { name: /Ollama Self-hosted/ }));
+
+    // Selecting self-hosted Ollama recommends the desktop build, linked to
+    // the reviewed download page.
+    const banner = screen.getByRole("note");
+    expect(banner.textContent).toContain("You’d be better using Boltrig Desktop.");
+    const download = screen.getByRole("link", { name: "Click here to download" }) as HTMLAnchorElement;
+    expect(download.href).toBe("https://downloads.boltrig.test/desktop");
 
     // The key field is optional for this provider and the model field is
     // usable without one.
@@ -437,6 +451,8 @@ describe("first-run onboarding", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     await waitFor(() => expect(api.approveAiKeyProposal).toHaveBeenCalledWith("proposal-1"));
+    expect(await screen.findByText("Add vision")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
     expect(await screen.findByText("Add voice")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
@@ -475,6 +491,8 @@ describe("first-run onboarding", () => {
       scope_id: "owner",
       modality: "text",
     }));
+    expect(await screen.findByText("Add vision")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
     expect(await screen.findByText("Add voice")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
@@ -503,6 +521,8 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Add vision")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
     expect(await screen.findByText("Add voice")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
@@ -536,6 +556,8 @@ describe("first-run onboarding", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText("Your organisation manages your AI.")).toBeTruthy();
     expect(screen.queryByLabelText("Provider API key")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Add vision")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText("Your organisation manages voice services.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -583,6 +605,8 @@ describe("first-run onboarding", () => {
     await screen.findByText("Choose your AI");
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
+    expect(await screen.findByText("Add vision")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText("Add voice")).toBeTruthy();
     expect(await screen.findByText("Spoken replies")).toBeTruthy();
     expect(screen.getByText("Transcription")).toBeTruthy();
@@ -609,6 +633,7 @@ describe("first-run onboarding", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByText("Choose your AI");
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Skip for now" }));
     fireEvent.click(await screen.findByRole("button", { name: "Skip for now" }));
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
     expect(api.submitIntegrationSecret).not.toHaveBeenCalled();

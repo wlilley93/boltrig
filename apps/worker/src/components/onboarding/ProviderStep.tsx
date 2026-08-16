@@ -1,6 +1,7 @@
 import { forwardRef, useImperativeHandle } from "react";
 import type { UserProfile } from "@wlilley93/boltrig-web-sdk";
 
+import { configuredDesktopDownloadUrl } from "../../desktopDownload";
 import {
   AI_PROVIDERS,
   exactModelId,
@@ -14,27 +15,64 @@ export interface ProviderStepHandle {
   complete: () => Promise<boolean>;
 }
 
+type ProviderModality = "text" | "vision";
+
 export const ProviderStep = forwardRef<ProviderStepHandle, { profile: UserProfile }>(
-function ProviderStep({ profile }, ref) {
-  const setup = useProviderSetup(profile);
+  function ProviderStep({ profile }, ref) {
+    return (
+      <ProviderStepBase
+        heading="Choose your AI"
+        modality="text"
+        profile={profile}
+        ref={ref}
+      />
+    );
+  },
+);
+
+/**
+ * The shared provider-intake body. The text step is the primary AI choice; the
+ * vision step (modality "vision") is an optional specialist model reusing the
+ * exact same intake, sealed once and reconciled the same way server-side.
+ */
+export const ProviderStepBase = forwardRef<
+  ProviderStepHandle,
+  {
+    heading: string;
+    kicker?: string;
+    modality: ProviderModality;
+    profile: UserProfile;
+    skip?: { label: string; onSkip: () => void };
+    sub?: string;
+  }
+>(function ProviderStepBase({ heading, kicker, modality, profile, skip, sub }, ref) {
+  const setup = useProviderSetup(profile, modality);
   useImperativeHandle(ref, () => ({ complete: setup.complete }), [setup.complete]);
 
   return (
     <div className="onboarding-step provider-step">
       <div className="onboarding-heading onboarding-rise">
-        <h1>Choose your AI</h1>
+        {kicker ? <p className="onboarding-kicker">{kicker}</p> : null}
+        <h1>{heading}</h1>
+        {sub ? <p>{sub}</p> : null}
       </div>
       {!setup.readiness
         ? <ProviderLoading />
         : setup.canAddKey
-          ? <ProviderKeyForm setup={setup} />
+          ? <ProviderKeyForm setup={setup} skip={skip} />
           : <ManagedKeyNotice />}
       {setup.message && <p className="onboarding-status" role="status">{setup.message}</p>}
     </div>
   );
 });
 
-function ProviderKeyForm({ setup }: { setup: ReturnType<typeof useProviderSetup> }) {
+function ProviderKeyForm({
+  setup,
+  skip,
+}: {
+  setup: ReturnType<typeof useProviderSetup>;
+  skip?: { label: string; onSkip: () => void };
+}) {
   const provider = AI_PROVIDERS.find((entry) => entry.id === setup.provider)
     ?? AI_PROVIDERS[0];
   const selectedModel = provider?.models.find(
@@ -82,6 +120,7 @@ function ProviderKeyForm({ setup }: { setup: ReturnType<typeof useProviderSetup>
             type="password"
           />
         </label>
+        {provider?.id === "ollama" ? <DesktopBanner /> : null}
         {provider?.id === "custom" ? (
           <CustomModelFields setup={setup} />
         ) : provider?.requiresBaseUrl ? (
@@ -104,6 +143,11 @@ function ProviderKeyForm({ setup }: { setup: ReturnType<typeof useProviderSetup>
         )}
       </div>
       {selectedModel ? <CapabilityNotice vision={modelAcceptsVision(selectedModel)} /> : null}
+      {skip ? (
+        <button className="onboarding-secondary provider-skip" disabled={setup.busy} onClick={skip.onSkip} type="button">
+          {skip.label}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -175,12 +219,47 @@ function OllamaModelFields({
   );
 }
 
+function DesktopBanner() {
+  const downloadUrl = configuredDesktopDownloadUrl();
+  return (
+    <p className="onboarding-desktop-banner" role="note">
+      You’d be better using Boltrig Desktop.{" "}
+      {downloadUrl ? (
+        <a href={downloadUrl} rel="noreferrer" target="_blank">
+          Click here to download
+          <span aria-hidden="true"> ↗</span>
+        </a>
+      ) : null}
+    </p>
+  );
+}
+
 function CapabilityNotice({ vision }: { vision: boolean }) {
   return (
-    <p className={`onboarding-capability ${vision ? "vision" : "text"}`} role="status">
-      <span aria-hidden="true">{vision ? "◉" : "Aa"}</span>
-      <strong>{vision ? "Text + images" : "Text only"}</strong>
-    </p>
+    <div className="onboarding-capability-group">
+      {vision ? (
+        <p className="onboarding-capability vision" role="status">
+          <span aria-hidden="true">✓</span>
+          <strong>Text and Vision</strong>
+        </p>
+      ) : (
+        <>
+          <p className="onboarding-capability" role="status">
+            <span aria-hidden="true">✓</span>
+            <strong>Text</strong>
+          </p>
+          <p className="onboarding-capability no-vision" role="status">
+            <span aria-hidden="true">✗</span>
+            <strong>Vision</strong>
+          </p>
+        </>
+      )}
+      <p className="onboarding-key-note">
+        {vision
+          ? "Your model handles text and vision — you can skip the vision step."
+          : "You can add a vision model on the next step."}
+      </p>
+    </div>
   );
 }
 
