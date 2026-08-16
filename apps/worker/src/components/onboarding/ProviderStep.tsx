@@ -22,7 +22,7 @@ function ProviderStep({ profile }, ref) {
   return (
     <div className="onboarding-step provider-step">
       <div className="onboarding-heading onboarding-rise">
-        <h1>Choose your AI</h1>
+        <h1>Choose your AI provider</h1>
       </div>
       {!setup.readiness
         ? <ProviderLoading />

@@ -115,3 +115,46 @@ paths = [
 ]
 regexTarget = "line"
 regexes = ['''iVQBKFc3NpRH3zdOOxfPqr''']
+
+[[allowlists]]
+# HISTORY ONLY, and third-party. e7f56dfc committed the machine's whole pnpm
+# content-addressable cache -- 7695 files of downloaded npm package bodies. The
+# working tree no longer tracks it (see the untrack commit) and .gitignore now
+# refuses it, but `make secret-scan` reads the full history and these blobs are
+# in that commit for good.
+#
+# None of the matches are ours, and none are live. In order:
+#   * three are @tauri-apps/api bundle files -- an IPC token constant in
+#     Tauri's own published source, matched on shape and entropy
+#   * one is a babel-helpers sourcemap
+#   * one is the @types/node `node:https` declaration file
+#
+# Named as SEVEN EXACT PATHS rather than a `^\.pnpm-store/` prefix. A pnpm store
+# is content-addressed, so the path IS the sha512 of the content: this is
+# narrower than naming a literal would be, because any other bytes hash to a
+# different path and the scan still stops them. The header's promise that no
+# directory is globally suppressed survives intact.
+description = "pnpm store cache: vendored npm package bodies (untracked at HEAD, still in e7f56dfc)"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^\.pnpm-store/v11/files/18/5a900adb2329b63a140c5530031bc005261466a961a0dfbdad854020002b864f62150f0e6c296d4caf2f130d763126dba542da6e5fa2db6cd4afeb0fa44f62$''',
+  '''^\.pnpm-store/v11/files/7e/d24c9351880e3f6e72fc9818e7bed1c73ff1dd53ac8d471a06a2c6ac55b6c4569c5edc204a15c469f5ebc33dfad42bf1ef2fe51272de38cd78509cc31193f0$''',
+  '''^\.pnpm-store/v11/files/d8/d68a1a678353b2e33b8deb645159b5817f524c77d375ab2bf4998da7324451d9a945732d21d66883acfd858bc8ed5aaa4867c3365841def10e141cae8e6611$''',
+  '''^\.pnpm-store/v11/files/e1/d9b1d6de5c1eba900d99fd2e5a4e1196871a688ba1eb99dddf263a9510d12306e1b604a84f337408ff09e2fad34168d59896ec06c92b7e66a6b39cb5ac8503$''',
+  '''^\.pnpm-store/v11/files/fd/af6875937b78473f336aef343a8c65274b97efed1960d7c3177bae74c1e738c53c641e354c8fab35b2d2a16312efe4b1c621ceb3acb300613a848bcb49901a$''',
+]
+
+[[allowlists]]
+# Same commit, same reasoning. Both of these are happy-dom's `SSL certificate
+# generated for Happy DOM to be able to perform HTTPS requests` -- a self-signed
+# localhost cert and key that ship INSIDE the published npm package so its test
+# server can speak HTTPS. It is public on the registry, it is not ours, and it
+# authenticates nothing of ours.
+description = "pnpm store cache: happy-dom's published self-signed test cert (still in e7f56dfc)"
+condition = "AND"
+targetRules = ["private-key"]
+paths = [
+  '''^\.pnpm-store/v11/files/1c/4b4cba4b152166979ba0a80bfaa5021af1a3370a2ca808a62191ed025abadc3bdbfba25bb10cb0475acb9196155b0884b90afcb8c520d429e8d43ea6302815$''',
+  '''^\.pnpm-store/v11/files/a2/5328449d734287715498f1abf179a21980aec52e9021c85b837a0f70b75b0d20dfeb08e871878dee929f91995fdda07ba25365d4452d6addbc01d448541b9b$''',
+]
