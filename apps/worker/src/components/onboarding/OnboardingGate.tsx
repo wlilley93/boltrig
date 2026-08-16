@@ -9,6 +9,8 @@ import {
 import { client } from "../../client";
 import { needsOnboarding } from "../../onboarding";
 import { BrandLockup } from "./BrandLockup";
+import { onboardingActionDisabled, onboardingActionLabel } from "./onboardingActionState";
+import { StepSkeleton } from "./StepSkeleton";
 import { CompanionStep } from "./CompanionStep";
 import { NameStep } from "./NameStep";
 import type { ProviderStepHandle } from "./ProviderStep";
@@ -17,10 +19,14 @@ import type { VoiceStepHandle } from "./VoiceStep";
 import { useOnboardingCompletion } from "./useOnboardingCompletion";
 import "./onboarding.css";
 
-type Step = 0 | 1 | 2 | 3 | 4;
+type Step = 0 | 1 | 2 | 3 | 4 | 5;
 const ProviderStep = lazy(async () => {
   const module = await import("./ProviderStep");
   return { default: module.ProviderStep };
+});
+const VisionStep = lazy(async () => {
+  const module = await import("./VisionStep");
+  return { default: module.VisionStep };
 });
 const VoiceStep = lazy(async () => {
   const module = await import("./VoiceStep");
@@ -108,8 +114,9 @@ function OnboardingFlow({
 }) {
   const flow = useOnboardingFlowState(account);
   const {
-    attachProviderStep, attachVoiceStep, character, completion, name, providerConnecting,
-    providerReady, setCharacter, setName, setStep, step, voiceConnecting, voiceReady,
+    attachProviderStep, attachVisionStep, attachVoiceStep, character, completion, name,
+    providerConnecting, providerReady, setCharacter, setName, setStep, step,
+    visionConnecting, visionReady, voiceConnecting, voiceReady,
   } = flow;
 
   const finishSetup = () => finishOnboarding(flow);
@@ -123,11 +130,13 @@ function OnboardingFlow({
       <div className="onboarding-slide" key={step}>
         <OnboardingSlide
           attachProviderStep={attachProviderStep}
+          attachVisionStep={attachVisionStep}
           attachVoiceStep={attachVoiceStep}
           character={character}
           name={name}
           onFinish={() => void finishSetup()}
           onName={setName}
+          onSkipVision={() => setStep(4)}
           onSelectCharacter={setCharacter}
           profile={account.profile}
           step={step}
@@ -143,6 +152,8 @@ function OnboardingFlow({
         saving={completion.saving}
         setupComplete={Boolean(completion.completedSettings)}
         step={step}
+        visionConnecting={visionConnecting}
+        visionReady={visionReady}
         voiceConnecting={voiceConnecting}
         voiceReady={voiceReady}
       />
@@ -159,53 +170,66 @@ function useOnboardingFlowState(account: MeSettingsResponse) {
   const [step, setStep] = useState<Step>(0);
   const [providerReady, setProviderReady] = useState(false);
   const [providerConnecting, setProviderConnecting] = useState(false);
+  const [visionReady, setVisionReady] = useState(false);
+  const [visionConnecting, setVisionConnecting] = useState(false);
   const [voiceReady, setVoiceReady] = useState(false);
   const [voiceConnecting, setVoiceConnecting] = useState(false);
   const providerStepRef = useRef<ProviderStepHandle | null>(null);
+  const visionStepRef = useRef<ProviderStepHandle | null>(null);
   const voiceStepRef = useRef<VoiceStepHandle | null>(null);
   const completion = useOnboardingCompletion({ account, character, name });
   const attachProviderStep = useCallback((handle: ProviderStepHandle | null) => {
     providerStepRef.current = handle;
     setProviderReady(Boolean(handle));
   }, []);
+  const attachVisionStep = useCallback((handle: ProviderStepHandle | null) => {
+    visionStepRef.current = handle;
+    setVisionReady(Boolean(handle));
+  }, []);
   const attachVoiceStep = useCallback((handle: VoiceStepHandle | null) => {
     voiceStepRef.current = handle;
     setVoiceReady(Boolean(handle));
   }, []);
   return {
-    attachProviderStep, attachVoiceStep, character, completion, name, providerConnecting,
-    providerReady, providerStepRef, setCharacter, setName, setProviderConnecting, setStep,
-    setVoiceConnecting, step, voiceConnecting, voiceReady, voiceStepRef,
+    attachProviderStep, attachVisionStep, attachVoiceStep, character, completion, name,
+    providerConnecting, providerReady, providerStepRef, setCharacter, setName,
+    setProviderConnecting, setStep, setVisionConnecting, setVoiceConnecting, step,
+    visionConnecting, visionReady, visionStepRef, voiceConnecting, voiceReady, voiceStepRef,
   };
 }
 
 function onboardingCanContinue(flow: ReturnType<typeof useOnboardingFlowState>) {
   return !flow.completion.saving
     && !flow.providerConnecting
+    && !flow.visionConnecting
     && !flow.voiceConnecting
     && (flow.step !== 0 || Boolean(flow.name.trim()))
     && (flow.step !== 2 || flow.providerReady)
-    && (flow.step !== 3 || flow.voiceReady)
-    && (flow.step !== 4 || Boolean(flow.completion.completedSettings));
+    && (flow.step !== 3 || flow.visionReady)
+    && (flow.step !== 4 || flow.voiceReady)
+    && (flow.step !== 5 || Boolean(flow.completion.completedSettings));
 }
 
 async function finishOnboarding(flow: ReturnType<typeof useOnboardingFlowState>) {
-  if (await flow.completion.complete()) flow.setStep(4);
+  if (await flow.completion.complete()) flow.setStep(5);
 }
 
 async function continueOnboarding(
   flow: ReturnType<typeof useOnboardingFlowState>,
   onComplete: (settings: Record<string, unknown>, displayName: string) => void,
 ) {
-  if (flow.step === 2) {
-    const providerStep = flow.providerStepRef.current;
-    if (!providerStep) return;
-    flow.setProviderConnecting(true);
-    const completed = await providerStep.complete();
-    flow.setProviderConnecting(false);
+  if (flow.step === 2 || flow.step === 3) {
+    const stepRef = flow.step === 2 ? flow.providerStepRef : flow.visionStepRef;
+    const step = stepRef.current;
+    if (!step) return;
+    if (flow.step === 2) flow.setProviderConnecting(true);
+    else flow.setVisionConnecting(true);
+    const completed = await step.complete();
+    if (flow.step === 2) flow.setProviderConnecting(false);
+    else flow.setVisionConnecting(false);
     if (!completed) return;
   }
-  if (flow.step === 3) {
+  if (flow.step === 4) {
     const voiceStep = flow.voiceStepRef.current;
     if (!voiceStep) return;
     flow.setVoiceConnecting(true);
@@ -215,7 +239,7 @@ async function continueOnboarding(
     await finishOnboarding(flow);
     return;
   }
-  if (flow.step === 4) {
+  if (flow.step === 5) {
     const settings = flow.completion.completedSettings;
     if (settings) onComplete(settings, flow.name.trim());
     return;
@@ -224,23 +248,26 @@ async function continueOnboarding(
 }
 
 function OnboardingSlide({
-  attachProviderStep, attachVoiceStep, character, name, onFinish, onName,
-  onSelectCharacter, profile, step,
+  attachProviderStep, attachVisionStep, attachVoiceStep, character, name, onFinish, onName,
+  onSkipVision, onSelectCharacter, profile, step,
 }: {
   attachProviderStep: (handle: ProviderStepHandle | null) => void;
+  attachVisionStep: (handle: ProviderStepHandle | null) => void;
   attachVoiceStep: (handle: VoiceStepHandle | null) => void;
   character: CharacterId;
   name: string;
   onFinish: () => void;
   onName: (name: string) => void;
+  onSkipVision: () => void;
   onSelectCharacter: (character: CharacterId) => void;
   profile: MeSettingsResponse["profile"];
   step: Step;
 }) {
   if (step === 0) return <NameStep name={name} onName={onName} />;
   if (step === 1) return <CompanionStep selected={character} onSelect={onSelectCharacter} />;
-  if (step === 2) return <Suspense fallback={<ProviderStepLoading />}><ProviderStep profile={profile} ref={attachProviderStep} /></Suspense>;
-  if (step === 3) return <Suspense fallback={<VoiceStepLoading />}><VoiceStep onSkip={onFinish} profile={profile} ref={attachVoiceStep} /></Suspense>;
+  if (step === 2) return <Suspense fallback={<StepSkeleton heading="Choose your AI provider" step="provider-step" />}><ProviderStep profile={profile} ref={attachProviderStep} /></Suspense>;
+  if (step === 3) return <Suspense fallback={<StepSkeleton heading="Add vision" kicker="Optional" step="provider-step" />}><VisionStep onSkip={onSkipVision} profile={profile} ref={attachVisionStep} /></Suspense>;
+  if (step === 4) return <Suspense fallback={<StepSkeleton heading="Add voice" kicker="Optional" step="voice-step" />}><VoiceStep onSkip={onFinish} profile={profile} ref={attachVoiceStep} /></Suspense>;
   return <ReadyStep character={character} userName={name.trim()} />;
 }
 
@@ -254,29 +281,6 @@ function useOnboardingEnter(canContinue: boolean, onContinue: () => void) {
   });
 }
 
-function ProviderStepLoading() {
-  return (
-    <div className="onboarding-step provider-step" aria-busy="true">
-      <div className="onboarding-heading onboarding-rise">
-        <h1>Choose your AI provider</h1>
-      </div>
-      <div className="onboarding-loader"><span /><span /><span /></div>
-    </div>
-  );
-}
-
-function VoiceStepLoading() {
-  return (
-    <div className="onboarding-step voice-step" aria-busy="true">
-      <div className="onboarding-heading onboarding-rise">
-        <p className="onboarding-kicker">Optional</p>
-        <h1>Add voice</h1>
-      </div>
-      <div className="onboarding-loader"><span /><span /><span /></div>
-    </div>
-  );
-}
-
 function OnboardingActions({
   nameReady,
   onBack,
@@ -286,6 +290,8 @@ function OnboardingActions({
   saving,
   setupComplete,
   step,
+  visionConnecting,
+  visionReady,
   voiceConnecting,
   voiceReady,
 }: {
@@ -297,18 +303,22 @@ function OnboardingActions({
   saving: boolean;
   setupComplete: boolean;
   step: Step;
+  visionConnecting: boolean;
+  visionReady: boolean;
   voiceConnecting: boolean;
   voiceReady: boolean;
 }) {
-  const busy = saving || providerConnecting || voiceConnecting;
-  const label = onboardingActionLabel({ providerConnecting, saving, step, voiceConnecting });
+  const busy = saving || providerConnecting || visionConnecting || voiceConnecting;
+  const label = onboardingActionLabel({
+    providerConnecting, saving, step, visionConnecting, voiceConnecting,
+  });
   const disabled = onboardingActionDisabled({
-    busy, nameReady, providerReady, setupComplete, step, voiceReady,
+    busy, nameReady, providerReady, setupComplete, step, visionReady, voiceReady,
   });
   return (
     <footer className="onboarding-actions onboarding-rise">
       <div className="onboarding-action-left">
-        {step > 0 && step < 4
+        {step > 0 && step < 5
           ? <button className="onboarding-back" disabled={busy} onClick={onBack} type="button">← Back</button>
           : <span aria-hidden="true" />}
       </div>
@@ -319,37 +329,10 @@ function OnboardingActions({
         type="button"
       >
         {label}
-        {!busy && step < 4 ? <b aria-hidden="true">→</b> : null}
+        {!busy && step < 5 ? <b aria-hidden="true">→</b> : null}
       </button>
     </footer>
   );
-}
-
-function onboardingActionLabel({ providerConnecting, saving, step, voiceConnecting }: {
-  providerConnecting: boolean;
-  saving: boolean;
-  step: Step;
-  voiceConnecting: boolean;
-}) {
-  if (saving) return "Finishing…";
-  if (providerConnecting) return "Connecting…";
-  if (voiceConnecting) return "Saving…";
-  return step === 4 ? "Continue in browser" : "Continue";
-}
-
-function onboardingActionDisabled({ busy, nameReady, providerReady, setupComplete, step, voiceReady }: {
-  busy: boolean;
-  nameReady: boolean;
-  providerReady: boolean;
-  setupComplete: boolean;
-  step: Step;
-  voiceReady: boolean;
-}) {
-  return busy
-    || (step === 0 && !nameReady)
-    || (step === 2 && !providerReady)
-    || (step === 3 && !voiceReady)
-    || (step === 4 && !setupComplete);
 }
 
 function OnboardingFrame({
@@ -365,8 +348,8 @@ function OnboardingFrame({
       <section className="onboarding-panel" aria-label="Boltrig setup">
         <header className="onboarding-topbar">
           <BrandLockup />
-          <span className="onboarding-progress" aria-label={`Step ${step + 1} of 5`}>
-            {[0, 1, 2, 3, 4].map((index) => <i className={index <= step ? "active" : ""} key={index} />)}
+          <span className="onboarding-progress" aria-label={`Step ${step + 1} of 6`}>
+            {[0, 1, 2, 3, 4, 5].map((index) => <i className={index <= step ? "active" : ""} key={index} />)}
           </span>
           <span aria-hidden="true" />
         </header>
