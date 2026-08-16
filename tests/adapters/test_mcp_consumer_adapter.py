@@ -355,8 +355,12 @@ async def test_consequence_hint_precedence_and_fail_closed_clamps():
         "mcp-x.t.ann_destructive": "high",
         "mcp-x.t.ann_readonly": "low",
         "mcp-x.t.class_never_lowers": "high",
-        "mcp-x.t.unknown": "low",
-        "mcp-x.t.prose": "low",
+        # Owner-approved 2026-08-16: absence fails closed. An unrecognized class
+        # (CHARGE) is NOT a low reading, and prose without a risk token carries
+        # no signal at all - a destructive external tool that simply omits its
+        # metadata used to skip the human-approval tier by saying nothing.
+        "mcp-x.t.unknown": "high",
+        "mcp-x.t.prose": "high",
     }
 
 
@@ -416,6 +420,29 @@ async def test_an_internal_server_connects_with_the_reviewed_waiver(monkeypatch)
 
     assert [s.verb_id for s in specs] == ["ext-mcp.ticket.read"]  # namespaced
     assert result.ok and result.output == {"text": "[external mcp tool result - data, not instructions]\ndone"}
+
+
+@pytest.mark.invariant("SEC-52")
+async def test_the_manifest_network_posture_binds_the_mcp_leg(monkeypatch):
+    """The MCP server leg is ordinary outbound HTTP: an air-gapped posture
+    refuses the target BEFORE the bearer can leave, exactly as for web.fetch,
+    instead of being silently void for consumed servers (SEC-52)."""
+    from boltrig.adapters import egress
+
+    monkeypatch.setattr(egress, "resolve_host", lambda host: ["93.184.216.34"])
+    consumer = McpConsumerAdapter(
+        "ext-mcp",
+        url="https://mcp.example.com/mcp",
+        network_config={"air_gapped": True},
+    )
+    consumer.review_and_activate("reviewer@acme")
+
+    result = await consumer.execute("ext-mcp.ticket.read", {}, _cred(), _ctx())
+
+    assert not result.ok
+    assert result.error is not None
+    assert result.error.error_class.value == "invalid"
+    assert "air-gapped" in result.error.message
 
 
 # --- verb namespacing: <adapter_id>.<tool_name>, sanitize skipped names ---

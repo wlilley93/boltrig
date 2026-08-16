@@ -27,7 +27,15 @@ def _annotations_hint(tool: dict[str, Any]) -> str | None:
 
 
 def consequence_hint(tool: dict[str, Any]) -> str:
-    """Return the highest bounded risk signal, failing closed on unknown labels."""
+    """Return the highest bounded risk signal, failing closed on unknown labels.
+
+    Failing closed includes ABSENCE: a tool that carries no consequence
+    declaration, no addon risk-class reading and no annotations publishes no
+    evidence of safety, and absence is not evidence (owner-approved 2026-08-16;
+    previously a signal-less tool defaulted LOW, so a destructive external tool
+    that simply omitted its metadata skipped the human-approval tier). Only a
+    POSITIVE low signal - an explicit ``consequence: low``, a readOnlyHint
+    annotation, or an addon class the shipped vocabulary rates low - reads LOW."""
     if tool.get("consequence") is not None:
         hint = str(tool.get("consequence") or "").lower()
         return hint if hint in _CONSEQUENCE_HINTS else Consequence.HIGH.value
@@ -35,7 +43,9 @@ def consequence_hint(tool: dict[str, Any]) -> str:
     signals = (_addon_hint(tool), _annotations_hint(tool))
     if any(hint == Consequence.HIGH.value for hint in signals):
         return Consequence.HIGH.value
-    return Consequence.LOW.value
+    if any(hint == Consequence.LOW.value for hint in signals):
+        return Consequence.LOW.value
+    return Consequence.HIGH.value
 
 
 def external_description(description: str | None) -> str:

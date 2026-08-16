@@ -107,6 +107,7 @@ class McpConsumerAdapter:
         version: str = "1.0.0",
         source: str = "manual",
         allow_internal: bool = False,
+        network_config: dict[str, Any] | None = None,
     ) -> None:
         self.id = id
         self.version = version
@@ -122,8 +123,20 @@ class McpConsumerAdapter:
         # allow_internal is the registration-time, human-reviewed opt-in for an
         # operator-vetted INTERNAL server (SEC-22); it relaxes exactly one
         # egress check (see mcp_transport.StreamableHttp).
+        if network_config is None:
+            # The manifest NetworkConfig (SEC-52), snapshotted like every
+            # other adapter: bootstrap, runtime control-plane registration and
+            # boot rehydration all construct consumers with no manifest in
+            # hand, so the process-wide posture the composition root installed
+            # is the default; an explicit config always wins.
+            from boltrig.adapters.egress import default_network_config
+
+            network_config = default_network_config()
         self._transport = StreamableHttp(
-            url or "", client_version=version, allow_internal=allow_internal
+            url or "",
+            client_version=version,
+            allow_internal=allow_internal,
+            network_config=network_config,
         )
 
     async def connect(self, credential: Credential | None = None) -> list[VerbSpec]:
