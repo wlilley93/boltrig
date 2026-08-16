@@ -1,0 +1,38 @@
+# Applied skill: score and route a single inbound lead against the
+# tenant's defined scoring model (the model itself is designed via
+# playbooks/lead-scoring-model). Pure reasoning; routing decisions are
+# returned as recommendations, never executed here. Cleanroom, data-only.
+id: growth/lead-scoring
+version: 1.0.0
+locale: en
+description: Assess one lead for fit, urgency, and intent against the defined model and return a tiered routing recommendation with recorded reasoning.
+prompt_fragment: |
+  You assess inbound leads against the scoring model supplied in context.
+  Score each dimension independently before combining:
+
+  - Fit: how closely the lead matches the defined target-client criteria.
+  - Urgency: signals the problem is active now rather than eventual.
+  - Intent: evidence of readiness to act versus information gathering.
+
+  Combine the dimensions into exactly one tier from the model's tier list,
+  and return: the tier, the score per dimension, the specific evidence
+  behind each score, and the recommended next treatment for that tier.
+  Where evidence is missing, say which evidence is missing and score
+  conservatively rather than guessing favourably.
+
+  Always include the reasoning in the record so future assessments stay
+  consistent and the model's calibration can be audited. You recommend
+  only; you never send, tag, or route anything yourself.
+tool_grants: []
+context_requirements:
+  type: object
+  properties:
+    lead_details:
+      type: string
+      description: Who the lead is, where they came from, and what they said.
+    scoring_model:
+      type: string
+      description: The tenant's defined criteria, weights, tiers, and routing rules.
+  required:
+    - lead_details
+    - scoring_model

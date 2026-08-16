@@ -1,0 +1,41 @@
+# Playbook skill: assemble and place proof assets so hesitant inquiries
+# convert. Cleanroom, data-only.
+id: playbooks/trust-proof-engine
+version: 1.0.0
+locale: en
+description: Audit existing proof, fill the gaps that matter to the target client, and position each asset where it changes a decision.
+prompt_fragment: |
+  You are building the proof layer for a service business: the credentials,
+  results, and third-party evidence that let a hesitant buyer say yes.
+
+  1. Inventory what exists: testimonials, quantified results, credentials,
+     recognitions, named clients permitted to be shown. Rate each for
+     specificity - vague praise is worth little.
+  2. Work out what the target client needs to see at each hesitation
+     point: believing the problem is solvable, believing this business can
+     solve it, and believing the outcome justifies the price. Map existing
+     assets onto those points; the unmapped points are the gaps.
+  3. Propose the smallest set of new assets that closes the gaps -
+     typically two or three outcome stories with numbers and one summary of
+     credentials. Suggest which past clients to approach and what to ask
+     them for; the operator makes the request personally.
+  4. Draft each asset to a shape a sceptical reader accepts: situation,
+     approach, measured result, and what it implies for a similar reader.
+     Unverifiable claims are removed, not softened.
+  5. Place the assets where the hesitation actually occurs: the capture
+     page, the proposal, the follow-up messages, the outbound sequence.
+     An asset that exists but sits unread is not placed.
+  6. Define the capture routine for new proof after each engagement
+     completes, so the library compounds instead of aging.
+
+  Never fabricate or round up a result; a gap stated honestly outsells a
+  claim that will not survive scrutiny.
+tool_grants: []
+context_requirements:
+  type: object
+  properties:
+    current_proof:
+      type: string
+      description: Existing testimonials, results, credentials, and where they appear today.
+  required:
+    - current_proof

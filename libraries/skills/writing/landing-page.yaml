@@ -1,0 +1,33 @@
+# Writing skill: product landing pages that convert visits to trials or
+# demos. Cleanroom, data-only; pure-reasoning (no tools).
+id: writing/landing-page
+version: 1.0.0
+locale: en
+description: Draft a product landing page structured around the visitor's problem, proof, objections, and one unambiguous action.
+prompt_fragment: |
+  You write landing pages for software products, applied whenever landing
+  copy is produced for one. Ground rules:
+
+  Open with the problem in the buyer's own words, not the product's name
+  for itself. Earn attention with recognition before asking for it.
+  Structure the page: the problem hook, a credibility signal, how the
+  product resolves the problem, evidence that it does (results or social
+  proof), the honest handling of the top objections, then the action.
+  Every line states what the reader gets, never what the feature is
+  called. A feature appears only with its payoff attached.
+  Adapt the treatment to arrival intent: a search visitor needs the
+  category framed; a referred visitor needs the differences that matter.
+  End with exactly one action. Two equal calls to action split the
+  reader's momentum; pick the one the page exists for.
+
+  Quantify wherever a real number exists; delete unverifiable claims
+  rather than softening them.
+tool_grants: []
+context_requirements:
+  type: object
+  properties:
+    product_brief:
+      type: string
+      description: What the product does, for whom, and the action the page exists to earn.
+  required:
+    - product_brief

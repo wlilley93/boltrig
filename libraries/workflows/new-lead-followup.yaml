@@ -1,0 +1,62 @@
+# Precreated workflow library data. Multi-day lead follow-up, part 1 of 2:
+# the event-driven opener (this file) plus the cadence sweep
+# (lead-followup-cadence.yaml). Split because the interpreter has no sleep
+# control noun: a waiting sequence is modelled as state on the lead record
+# plus a daily scheduled re-entry, not as a long-running run.
+#
+# Doctrine notes: every send is channel.send (the governed egress verb,
+# decision 0003) through the kernel - the HITL gate applies on first
+# outbound touch of a new contact; the workflow only orchestrates, it never
+# holds channel credentials. The lead.* nouns are domain placeholders: no
+# adapter claims them yet, so this definition is data awaiting its CRM
+# adapter (the onboard-employee.yaml posture). The on: event key is
+# informational; live entry is a trigger binding or explicit id.
+id: new-lead-followup
+version: 1.0.0
+source: precreated
+intent_tags:
+  - lead
+  - follow-up
+  - sales
+  - inbound
+origin_task: null
+definition:
+  name: new-lead-followup
+  version: 1.0.0
+  on:
+    event: lead.created
+  inputs:
+    lead_id: required
+  steps:
+    - id: start
+      action: trigger.start
+    - id: dedupe
+      name: check-prior-contact
+      parents: [start]
+      action: lead.check-prior-contact
+      description: >
+        A returning contact must not get a cold first-touch script; an
+        existing open sequence is left alone rather than doubled.
+    - id: assess
+      name: score-lead
+      parents: [dedupe]
+      action: lead.assess
+      description: Score fit/urgency/intent against the tenant scoring model.
+    - id: open-touch
+      name: send-first-touch
+      parents: [assess]
+      action: message.send
+      description: >
+        Opening message on the contact's stated channel, referencing where
+        they came from. High-consequence first outbound to a new contact.
+    - id: arm-cadence
+      name: schedule-next-touch
+      parents: [open-touch]
+      action: lead.plan-touches
+      description: >
+        Write the planned touch dates and the current stage onto the lead
+        record so the cadence sweep can pick it up.
+    - id: log
+      name: record-outcome
+      parents: [arm-cadence]
+      action: lead.record-touch

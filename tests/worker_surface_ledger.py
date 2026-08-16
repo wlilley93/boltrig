@@ -671,6 +671,20 @@ GET /v1/model-profiles
 """,
 )
 _non_ui("advanced-compatibility", "POST /v1/spawn")
+# Typed memory planes (decision 0029): headless, governed agent/operator surface.
+# The Worker has no typed-memory UI yet (candidates queue + slot timeline are
+# future work per the decision's honesty section).
+_non_ui(
+    "governed-agent-surface",
+    """
+POST /v1/memory/propose
+POST /v1/memory/bundle
+GET /v1/memory/resolve
+GET /v1/memory/candidates
+GET /v1/memory/timeline
+POST /v1/memory/candidates/{candidate_id}/review
+""",
+)
 
 
 SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
@@ -709,4 +723,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 }
 
 
-EXPECTED_ROUTE_COUNT = 280
+EXPECTED_ROUTE_COUNT = 286

@@ -476,3 +476,61 @@ def test_existing_approved_key_can_be_reconciled_without_resubmitting_secret():
     assert response.json()["status"] == "ok"
     listed = client.get("/v1/ai-keys", headers=_hdr(role="superadmin")).json()
     assert listed["ai_keys"][0]["gateway_ready"] is True
+
+
+# --- FR-AIKEY-04: keyless self-hosted providers -------------------------------
+@pytest.mark.security
+@pytest.mark.invariant("FR-AIKEY-04")
+def test_keyless_self_hosted_provider_connects_without_an_api_key():
+    """A self-hosted server that authenticates nothing (provider "ollama")
+    must onboard without a key: the intake substitutes a fixed placeholder
+    that is sealed, digested and never echoed exactly like a real key, so the
+    sealed-proposal and Bifrost provisioning paths are unchanged. Every other
+    provider still demands one."""
+    k, app, store = _app()
+    c = TestClient(app)
+
+    # A keyed provider without a key is still refused.
+    refused = c.put(
+        "/v1/ai-keys",
+        headers=_hdr(),
+        json={"level": "org", "provider": "openai", "model": "gpt"},
+    )
+    assert refused.status_code == 400
+    assert "API key" in refused.json()["reason"]
+
+    # The keyless provider stages, approves and finalises with no api_key.
+    staged = c.put(
+        "/v1/ai-keys",
+        headers=_hdr(),
+        json={
+            "level": "org",
+            "provider": "ollama",
+            "model": "ollama/qwen3vl-abliterated",
+            "base_url": "http://mac-mini-m1:11434/v1",
+            "api_key": "",
+        },
+    )
+    assert staged.status_code == 202, staged.text
+    proposal_id = staged.json()["proposal"]["id"]
+
+    # The placeholder is sealed material, indistinguishable in storage shape.
+    raw_stage = store._creds[(T, f"staged_ai_key:{proposal_id}")]
+    assert is_sealed(raw_stage)
+    assert "keyless" not in staged.text
+
+    proposal = _run(store.get_ai_key_secret_proposal(T, proposal_id))
+    _run(k.hitl.answer(T, proposal.approval_id, "approve", "test-reviewer"))
+    applied = c.post(
+        f"/v1/ai-keys/proposals/{proposal_id}/finalize", headers=_hdr()
+    )
+    assert applied.status_code == 200, applied.text
+    body = applied.json()
+    assert body["status"] == "ok" and body["provider"] == "ollama"
+    assert body["model"] == "ollama/qwen3vl-abliterated"
+    assert body["base_url"] == "http://mac-mini-m1:11434/v1"
+    assert "keyless" not in applied.text
+
+    cfg = _run(store.get_ai_config(T, "org", T))
+    assert cfg is not None and cfg.credential_ref
+    assert "keyless" not in repr(cfg)

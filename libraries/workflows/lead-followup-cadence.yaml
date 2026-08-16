@@ -1,0 +1,70 @@
+# Precreated workflow library data. Multi-day lead follow-up, part 2 of 2:
+# the daily sweep that advances or closes every open sequence. Runs on a cron
+# schedule (control.workflow.schedule at deploy time); each run is idempotent
+# per lead via the interpreter's per-step idempotency keys.
+id: lead-followup-cadence
+version: 1.0.0
+source: precreated
+intent_tags:
+  - lead
+  - follow-up
+  - cadence
+origin_task: null
+definition:
+  name: lead-followup-cadence
+  version: 1.0.0
+  inputs: {}
+  steps:
+    - id: start
+      action: trigger.start
+    - id: due
+      name: find-due-leads
+      parents: [start]
+      action: lead.list-due-touches
+      description: Leads whose next planned touch is today and sequence is open.
+    - id: sweep
+      name: advance-each-lead
+      parents: [due]
+      action: flow.loop
+      params:
+        items_from: $due.output.leads
+      loop_bindings:
+        lead: item
+    - id: replied
+      name: check-replied
+      parents: [sweep]
+      action: lead.has-replied
+      params:
+        lead_id: $lead.id
+    - id: still-quiet
+      name: only-if-no-reply
+      parents: [replied]
+      branch: "false"
+      action: flow.branch
+      params:
+        left: $replied.output.replied
+        op: eq
+        right: false
+    - id: next-touch
+      name: send-next-touch
+      parents: [still-quiet]
+      action: message.send
+      description: >
+        Next touch in the plan, varied in angle from the previous one; the
+        final planned touch asks a low-effort question rather than pitching.
+    - id: arm-next
+      name: reschedule-or-close
+      parents: [next-touch]
+      action: lead.plan-touches
+    - id: exit-replied
+      name: stop-on-reply
+      parents: [replied]
+      branch: "true"
+      action: lead.close-sequence
+      description: >
+        Any reply, booking, or manual handling mark exits the sequence and
+        hands the conversation to the principal.
+    - id: log
+      name: record-sweep
+      parents: [arm-next, exit-replied]
+      action: lead.record-touch

@@ -1,0 +1,39 @@
+# Playbook skill: convert arriving traffic into contactable inquiries.
+# For businesses with visitors but no capture. Cleanroom, data-only.
+id: playbooks/inquiry-capture-funnel
+version: 1.0.0
+locale: en
+description: Build the capture point, immediate response, and next-step path that turn arriving visitors into inquiries.
+prompt_fragment: |
+  You are building an inquiry capture path for a business that receives
+  visitors from search, social, or referral but loses them before contact.
+  Sequence:
+
+  1. Map arrival. For each source the operator names, establish what page or
+     profile a visitor lands on and what they can currently do there.
+  2. Find the silent exits. Identify the points where an interested visitor
+     leaves with no way to raise a hand. Rank them by traffic.
+  3. Choose the single action you will ask for at the top exit point. One
+     action per page; anything competing is removed or demoted.
+  4. Specify the capture element (form fields kept to the minimum that lets
+     you reply usefully, a booking slot, or a message entry) and the promise
+     it makes. The promise and the element must match exactly.
+  5. Write the surrounding call-to-action copy: state the visitor's situation,
+     then the action, without pressure language.
+  6. Define the reply the person gets immediately after capturing, and the
+     path from that reply toward a booked conversation.
+  7. Specify what to measure at each step (arrivals, captures, replies,
+     conversations booked) so the funnel is observable before launch.
+
+  Deliver the funnel as a written specification the operator can wire as
+  workflow data. Flag anything that would collect data the business has no
+  stated use for - capture only what will be read.
+tool_grants: []
+context_requirements:
+  type: object
+  properties:
+    traffic_sources:
+      type: string
+      description: Where visitors come from and what they land on today.
+  required:
+    - traffic_sources

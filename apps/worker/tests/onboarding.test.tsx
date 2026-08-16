@@ -332,6 +332,46 @@ describe("first-run onboarding", () => {
     expect(document.body.textContent).not.toContain("11434");
   });
 
+  it("connects self-hosted Ollama without an API key", async () => {
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Choose your AI")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
+    fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "ollama" } });
+    fireEvent.click(screen.getByRole("option", { name: /Ollama Self-hosted/ }));
+
+    // The key field is optional for this provider and the model field is
+    // usable without one.
+    const keyInput = screen.getByLabelText("Provider API key") as HTMLInputElement;
+    expect(keyInput.required).toBe(false);
+    const modelInput = screen.getByLabelText("Exact model") as HTMLInputElement;
+    expect(modelInput.disabled).toBe(false);
+
+    fireEvent.change(screen.getByLabelText("Ollama API address"), {
+      target: { value: "http://mac-mini-m1:11434/v1" },
+    });
+    fireEvent.change(modelInput, { target: { value: "qwen3vl-abliterated" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(api.setAiKey).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "ollama",
+      model: "ollama/qwen3vl-abliterated",
+      base_url: "http://mac-mini-m1:11434/v1",
+      api_key: "",
+    })));
+  });
+
   it("keeps the AI step open when a started provider setup is incomplete", async () => {
     render(
       <OnboardingGate initialAccount={{

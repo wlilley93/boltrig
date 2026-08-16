@@ -37,6 +37,7 @@ from boltrig.models import (
     HITLStatus,
     HITLType,
     MemoryFact,
+    MemoryEvent,
     MessageRole,
     MemoryProjectionStatus,
     ModelEndpoint,
@@ -68,7 +69,7 @@ _TABLES = (
     "model_endpoints,eval_runs,eval_cases,work_items,hitl_requests,hitl_responses,"
     "audit_log,budget_usage,budgets,"
     "idempotency_keys,credential_refs,tenant_permissions,memory_facts,"
-    "memory_projection_statuses,"
+    "memory_projection_statuses,memory_events,"
     "integration_connections,integration_catalogue,"
     "security_log,audit_rollup_anchors,conversation_steer_queue,conversation_messages,"
     "conversations,channels,realtime_calls,"
@@ -1224,6 +1225,89 @@ async def test_memory_projection_status_upserts_and_filters_on_both_stores(store
     assert rows[0].failure_code == "projection_operation_failed"
     assert rows[0].created_at == base
     assert [r.fact_id for r in await store.list_memory_projection_statuses(T)] == ["f2", "f1"]
+
+
+# --- typed memory planes (decision 0029): slots, candidates, gate events -----
+@pytest.mark.store
+@pytest.mark.invariant("MEM-TYP-01")
+async def test_typed_memory_slot_lifecycle_is_identical_on_both_stores(store):
+    base = utcnow()
+    slot = "repository::repo19::package_manager::org"
+    expired_slot = "repository::repo19::deployment_target::org"
+
+    def _row(fid, *, status, version, value, key=slot, valid_to=None, created=base):
+        return MemoryFact(
+            id=fid, tenant_id=T, owner_scope="org", engine_ref=fid, kind="semantic",
+            source_kind="verb_result", source_ref="package.json", content=value,
+            created_at=created, memory_key=key, status=status, version=version,
+            confidence=0.9, payload={"predicate": "package_manager", "value": value},
+            supersedes_id=None, valid_from=base, valid_to=valid_to,
+        )
+
+    # Slot 1: the normal lifecycle - a superseded v1, the active v2 and a
+    # parked conflict candidate. One slot, exactly one current value (the DB
+    # partial unique index enforces it; migration 0076).
+    await store.add_memory_fact(_row("v1", status="superseded", version=1, value="npm",
+                                     valid_to=base, created=base + timedelta(seconds=1)))
+    await store.add_memory_fact(_row("v2", status="active", version=2, value="pnpm",
+                                     created=base + timedelta(seconds=2)))
+    await store.add_memory_fact(_row("c1", status="candidate", version=1, value="yarn",
+                                     created=base + timedelta(seconds=3)))
+    # Slot 2: an active-but-expired value - expiry is honoured on read even
+    # though nothing has superseded it yet.
+    await store.add_memory_fact(_row(
+        "x1", status="active", version=1, value="azure", key=expired_slot,
+        valid_to=base - timedelta(hours=1),
+    ))
+
+    active = await store.get_active_memory_fact(T, slot)
+    assert active is not None and active.id == "v2" and active.version == 2
+    assert await store.get_active_memory_fact(T, expired_slot) is None  # expired
+
+    subject_rows = await store.list_active_subject_facts(T, ["org"], "repository", "repo19")
+    assert [f.id for f in subject_rows] == ["v2"]  # expired x0 and candidate c1 excluded
+
+    candidates = await store.list_memory_candidates(T, ["org"])
+    assert [f.id for f in candidates] == ["c1"]
+
+    history = await store.list_memory_slot_history(T, slot)
+    assert {f.id for f in history} == {"v1", "v2", "c1"}  # full audit trail
+    assert [f.version for f in history] == sorted(
+        (f.version for f in history), reverse=True
+    )
+
+    # Status transitions ride the plain update path on both stores.
+    v2 = await store.get_active_memory_fact(T, slot)
+    v2.status = "superseded"
+    v2.valid_to = base + timedelta(hours=1)
+    await store.update_memory_fact(v2)
+    assert await store.get_active_memory_fact(T, slot) is None
+
+
+@pytest.mark.store
+@pytest.mark.invariant("MEM-TYP-06")
+async def test_memory_events_append_and_filter_identically_on_both_stores(store):
+    base = utcnow()
+
+    async def _evt(eid, kind, created, *, memory_id="m1", key="repository::r::p::org"):
+        await store.add_memory_event(MemoryEvent(
+            id=eid, tenant_id=T, event=kind, memory_id=memory_id, memory_key=key,
+            decision="ACCEPT_NEW", policy_version="typed-write-v1",
+            detail={"version": 1}, created_at=created,
+        ))
+
+    await _evt("e1", "candidate_created", base)
+    await _evt("e2", "memory_activated", base + timedelta(seconds=1))
+    await _evt("e3", "memory_superseded", base + timedelta(seconds=2),
+               memory_id="m2", key="repository::r::other::org")
+
+    by_memory = await store.list_memory_events(T, memory_id="m1")
+    assert [e.id for e in by_memory] == ["e2", "e1"]  # newest first
+    by_key = await store.list_memory_events(T, memory_key="repository::r::p::org")
+    assert [e.id for e in by_key] == ["e2", "e1"]
+    everyone = await store.list_memory_events(T)
+    assert [e.id for e in everyone] == ["e3", "e2", "e1"]
+    assert all(e.policy_version == "typed-write-v1" for e in everyone)
 
 
 # --- workflow workspace scope round-trip ([2026] VJS-COUNTY 8, D2) ----------

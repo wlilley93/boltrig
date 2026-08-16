@@ -24,7 +24,7 @@ def _fact_view(fact) -> dict:
     }
 
 
-def register_memory_read_routes(app, *, P, K, scopes) -> None:
+def _register_core_read_routes(app, *, P, K, scopes) -> None:
     @app.get("/v1/memory/facts")
     async def list_facts(
         kind: str | None = None, limit: int = 50, k=K, p=P
@@ -70,3 +70,72 @@ def register_memory_read_routes(app, *, P, K, scopes) -> None:
                 if p.role == "org-admin" or item.owner_scope in permitted
             ]
         }
+
+    @app.get("/v1/memory/candidates")
+    async def list_candidates(limit: int = 50, k=K, p=P) -> dict:
+        rows = await k.store.list_memory_candidates(
+            p.tenant_id, scopes(p), limit=clamp_memory_list(limit)
+        )
+        return {"candidates": [_fact_view(fact) for fact in rows]}
+
+    @app.get("/v1/memory/resolve")
+    async def resolve(
+        subject_type: str,
+        subject_id: str,
+        predicates: str | None = None,
+        k=K,
+        p=P,
+    ):
+        from boltrig.kernel.memory_mutation_routes import memory_context
+
+        params = {"subject_type": subject_type, "subject_id": subject_id}
+        if predicates:
+            params["predicates"] = [part for part in predicates.split(",") if part]
+        return dict(await k.invoke("memory", "memory.resolve", params, memory_context(p)))
+
+
+def _register_slot_timeline_route(app, *, P, K, scopes) -> None:
+    @app.get("/v1/memory/timeline")
+    async def slot_timeline(
+        subject_type: str,
+        subject_id: str,
+        predicate: str,
+        owner_scope: str | None = None,
+        limit: int = 50,
+        k=K,
+        p=P,
+    ):
+        from boltrig.memory.typology import semantic_memory_key
+
+        permitted = scopes(p)
+        # Default to the caller's own scope (the `memory_owner_scopes` head).
+        scope = owner_scope or permitted[0]
+        if scope not in set(permitted):
+            return JSONResponse({"error": "not_found"}, status_code=404)
+        key = semantic_memory_key(subject_type, subject_id, predicate, scope)
+        rows = await k.store.list_memory_slot_history(
+            p.tenant_id, key, limit=clamp_memory_list(limit)
+        )
+        allowed = set(permitted)
+        versions = [fact for fact in rows if fact.owner_scope in allowed]
+        return {
+            "memory_key": key,
+            "versions": [
+                {
+                    **_fact_view(fact),
+                    "status": fact.status,
+                    "version": fact.version,
+                    "value": (fact.payload or {}).get("value"),
+                    "confidence": fact.confidence,
+                    "valid_from": fact.valid_from.isoformat() if fact.valid_from else None,
+                    "valid_to": fact.valid_to.isoformat() if fact.valid_to else None,
+                    "supersedes_id": fact.supersedes_id,
+                }
+                for fact in versions
+            ],
+        }
+
+
+def register_memory_read_routes(app, *, P, K, scopes) -> None:
+    _register_core_read_routes(app, P=P, K=K, scopes=scopes)
+    _register_slot_timeline_route(app, P=P, K=K, scopes=scopes)

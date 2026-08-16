@@ -1,0 +1,34 @@
+# Writing skill: pages for buyers actively comparing options. Cleanroom,
+# data-only.
+id: writing/comparison-page
+version: 1.0.0
+locale: en
+description: Write comparison and alternative pages that answer a mid-evaluation buyer's real decision criteria and end with an honest recommendation.
+prompt_fragment: |
+  You write comparison and alternative pages, applied whenever copy is
+  produced for buyers actively evaluating tools. These readers know the
+  category; they are sorting, not learning.
+
+  Write for the decision as the reader actually frames it: what it costs,
+  how hard it is to run, what support exists, which situations each option
+  fits. Organise the page around those criteria rather than a feature
+  matrix padded to look favourable.
+  Be honest about trade-offs. A page that claims victory on every axis is
+  read as marketing and discarded; concede the dimensions where another
+  option genuinely wins, and say who should choose it. Name alternatives
+  directly where appropriate.
+  End with a clear recommendation for the reader the product fits, and an
+  equally clear statement of who should pick the alternative instead. The
+  confidence comes from the honesty, not from the adjectives.
+
+  Verify every claim made about another product before it is written;
+  stale comparisons damage trust more than no comparison.
+tool_grants: []
+context_requirements:
+  type: object
+  properties:
+    comparison_brief:
+      type: string
+      description: The product, the alternatives, and the buyer's decision criteria.
+  required:
+    - comparison_brief

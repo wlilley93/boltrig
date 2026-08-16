@@ -1,0 +1,51 @@
+# Precreated workflow library data. Immediate acknowledgement of a new
+# inbound inquiry, whatever hour it arrives, with hand-off into the follow-up
+# sequence. The acknowledgement itself is the first outbound touch to a new
+# contact and therefore rides the normal consequence gate.
+id: inquiry-autoacknowledge
+version: 1.0.0
+source: precreated
+intent_tags:
+  - inquiry
+  - acknowledgement
+  - inbound
+  - form
+origin_task: null
+definition:
+  name: inquiry-autoacknowledge
+  version: 1.0.0
+  on:
+    event: inquiry.received
+  inputs:
+    inquiry_id: required
+  steps:
+    - id: start
+      action: trigger.start
+    - id: dedupe
+      name: check-known-contact
+      parents: [start]
+      action: lead.check-prior-contact
+      description: >
+        Returning contacts get a continuation, not a first-contact greeting;
+        anything already answered this session is dropped entirely.
+    - id: ack
+      name: send-acknowledgement
+      parents: [dedupe]
+      action: message.send
+      description: >
+        Short reply on the channel the person used: confirm receipt, set the
+        expectation for what happens next, and optionally carry one link,
+        booking slot, or qualifying question. Nothing beyond that.
+    - id: handoff
+      name: enter-followup
+      parents: [ack]
+      action: workflow.enqueue
+      params:
+        workflow_id: new-lead-followup
+        inputs:
+          lead_id: $dedupe.output.lead_id
+      description: Hand the contact to the follow-up opener for scoring + cadence.
+    - id: log
+      name: record-ack
+      parents: [handoff]
+      action: lead.record-touch

@@ -24,13 +24,48 @@ class MemoryFact:
     tenant_id: TenantId
     owner_scope: str  # user:<id> | department:<name> | org  (the RBAC boundary)
     engine_ref: str  # the engine's node/record identifier
-    kind: str  # entity | relationship | summary | document_chunk
+    kind: str  # semantic | episodic | procedural | entity | relationship | summary | document_chunk
     source_kind: str  # conversation | document | verb_result | feedback
     source_ref: str | None = None  # conversation id / document id / run id
     data_class: str = "standard"  # standard | sensitive (sensitive -> local only)
     content: str = ""  # a short human-readable label (the engine holds the rest)
     created_at: datetime = field(default_factory=utcnow)
     redacted: bool = False
+    # --- typed memory planes (decision 0029): slots, versions, write-gate state
+    # ``memory_key`` is the stable logical slot for semantic/procedural memory
+    # (``{subject_type}::{subject_id}::{predicate}::{owner_scope}`` for facts,
+    # ``procedure::{procedure_key}::{owner_scope}`` for procedures); episodes
+    # are append-only and carry no key. ``status`` is the write-gate state
+    # machine; exactly one ``active`` row per (tenant, memory_key) may exist for
+    # semantic/procedural kinds - enforced by partial unique indexes (0076).
+    memory_key: str | None = None
+    status: str = "active"  # candidate | active | superseded | rejected
+    version: int = 1
+    confidence: float | None = None
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
+    supersedes_id: str | None = None
+
+
+# --- the typed-memory write-gate event trail (`add_memory_event`) -----------
+@dataclass
+class MemoryEvent:
+    """One machine-readable write-gate decision, for tuning and inspection.
+
+    Events record WHAT the gate decided and under which policy version - never
+    the memory content itself (the fact row already owns that, scope-fenced).
+    """
+
+    id: str
+    tenant_id: TenantId
+    event: str  # candidate_created | candidate_rejected | memory_approved | memory_activated | memory_superseded | memory_confirmed
+    memory_id: str | None = None
+    memory_key: str | None = None
+    decision: str | None = None  # the gate's decision code, when the event is one
+    policy_version: str = "typed-write-v1"
+    detail: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=utcnow)
 
 
 # --- a cognify ingestion run (the durable pipeline record) -------------------

@@ -87,6 +87,17 @@ and `FR*` ids are Boltrig-local (drawn from the SRS) and never restate a `K-*`.
 | **SEC-44** | Erasure is complete (node + derived edges/facts), engine-confirmed, ledgered and audited. | `tests/security/test_round_five.py::test_complete_audited_erasure` |
 | **SEC-45** | Recall is least-privilege and audited - query and count recorded, fact contents never. | `tests/security/test_round_five.py::test_recall_is_audited_without_leaking_contents` |
 
+### Typed memory planes (decision 0029)
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **MEM-TYP-01** | A semantic fact occupies a stable slot with exactly one active value: sufficient authority supersedes (history auditable, DB partial unique index arbitrates), lower authority is rejected, equal-authority conflicts park as candidates, expired values are never current. | `tests/security/test_typed_memory.py::test_semantic_supersession_returns_only_current_value`, `tests/store/test_store_parity.py::test_typed_memory_slot_lifecycle_is_identical_on_both_stores` |
+| **MEM-TYP-02** | Present-state wording never becomes durable semantic memory; an explicit `is_durable` assertion is the only override. | `tests/security/test_typed_memory.py::test_transient_statement_never_becomes_semantic` |
+| **MEM-TYP-03** | Unapproved procedure candidates never govern; active procedures are selected deterministically by role/workflow key, never by similarity. | `tests/security/test_typed_memory.py::test_unapproved_procedures_never_govern_and_selection_is_deterministic` |
+| **MEM-TYP-04** | Episodes are embedded by their problem representation, written only from terminal runs, and rendered as advisory precedent with failed attempts preserved. | `tests/security/test_typed_memory.py::test_episodes_are_retrieved_by_problem_not_resolution` |
+| **MEM-TYP-05** | The bundle respects per-plane budgets (clipping warns, never silent); working state is pass-through only and can never be recalled by a later run. | `tests/security/test_typed_memory.py::test_bundle_budgets_clip_and_working_state_never_persists` |
+| **MEM-TYP-06** | HITL-gated review is the only activation path; confidence never activates, rejected candidates stay rejected, every decision appends a policy-versioned event. | `tests/security/test_typed_memory.py::test_review_is_the_only_activation_path`, `tests/store/test_store_parity.py::test_memory_events_append_and_filter_identically_on_both_stores` |
+
 ### Round Six (continuity, model gateway, egress)
 
 | Invariant | Meaning | Bound test(s) |
