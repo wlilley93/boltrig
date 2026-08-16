@@ -359,8 +359,17 @@ async def test_kernel_uses_the_composition_manifest_snapshot_without_rereading(
         # right value on the merits: no posture declared is the fail-closed answer.
         development_posture=None,
         blocking_verbs=Mock(return_value={"sensitive.write"}),
+        # Same rule as development_posture above: the real FleetManifest has a
+        # `chat` field, so the double carries one. Bootstrap now composes a
+        # routine ChatService and reads manifest.chat on the way; a double
+        # without it raises AttributeError at the composition root.
+        chat=None,
     )
-    kernel = SimpleNamespace(set_agent_invoker=Mock())
+    # store and events for the same reason -- the routine ChatService is built
+    # from both, and the real kernel has them (kernel/__init__.py sets
+    # self.events). Opaque objects: this test asserts what is HANDED to the
+    # composition, never what it does with them.
+    kernel = SimpleNamespace(set_agent_invoker=Mock(), store=object(), events=object())
     seed_manifest = AsyncMock(return_value=None)
     invoker = object()
 
@@ -419,6 +428,10 @@ async def test_standalone_worker_shares_one_codex_provider_with_its_spawner(
         tenant_id="worker-tenant",
         models=SimpleNamespace(sensitive_endpoint="local-sensitive"),
         spawn_rules=(object(),),
+        # The real FleetManifest has a chat field and bootstrap now reads it to
+        # compose the routine ChatService; a double without it is an
+        # AttributeError at the composition root, not a default.
+        chat=None,
     )
     build_shared = Mock(return_value=codex_config)
     build_kernel = AsyncMock(return_value=kernel)
@@ -511,13 +524,19 @@ async def test_default_hatchet_bootstrap_shares_one_codex_provider_with_its_spaw
     from boltrig.fleet import spawn as spawn_module
 
     codex_config = {"trusted": True, "provider": object()}
-    kernel = SimpleNamespace(store=object())
+    # events alongside store: bootstrap composes a routine ChatService from
+    # both, and the real kernel has both (kernel/__init__.py sets self.events).
+    kernel = SimpleNamespace(store=object(), events=object())
     spawner = object()
     pump = object()
     manifest = SimpleNamespace(
         tenant_id="hatchet-tenant",
         models=SimpleNamespace(sensitive_endpoint="local-sensitive"),
         spawn_rules=(object(),),
+        # The real FleetManifest has a chat field and bootstrap now reads it to
+        # compose the routine ChatService; a double without it is an
+        # AttributeError at the composition root, not a default.
+        chat=None,
     )
     build_shared = Mock(return_value=codex_config)
     build_kernel = AsyncMock(return_value=kernel)
@@ -602,7 +621,18 @@ async def test_default_hatchet_bootstrap_shares_one_codex_provider_with_its_spaw
     )
     record_observation.assert_awaited_once()
     wire_hitl_resume.assert_called_once_with(kernel, pump=pump)
-    assert resources == {"kernel": kernel, "pump": pump, "spawner": spawner}
+    # STILL EXACT, deliberately. This is a security assertion about what the
+    # composition root hands out, so the key set is compared whole rather than
+    # spot-checked -- an extra resource appearing unannounced is the thing it
+    # exists to catch. Bootstrap now also composes a routine ChatService, which
+    # the test cannot hold a reference to, so that one is identified by type.
+    assert set(resources) == {"kernel", "pump", "spawner", "chat"}
+    assert resources["kernel"] is kernel
+    assert resources["pump"] is pump
+    assert resources["spawner"] is spawner
+    from boltrig.fleet.chat import ChatService
+
+    assert isinstance(resources["chat"], ChatService)
 
 
 @pytest.mark.asyncio
@@ -622,8 +652,16 @@ async def test_hatchet_failed_manifest_overlay_cannot_claim_startup_parity(
     from boltrig.fleet import spawn as spawn_module
 
     codex_config = {"trusted": True, "provider": object()}
-    kernel = SimpleNamespace(store=object())
-    source_manifest = SimpleNamespace(models=SimpleNamespace(sensitive_endpoint="local-sensitive"))
+    # `events` alongside `store`: bootstrap composes a routine ChatService from
+    # both, and the real kernel has both. A double missing one is an
+    # AttributeError at the composition root rather than a default.
+    kernel = SimpleNamespace(store=object(), events=object())
+    source_manifest = SimpleNamespace(
+        models=SimpleNamespace(sensitive_endpoint="local-sensitive"),
+        # The overlay fails and bootstrap falls back to this manifest, so it is
+        # still read: chat is what the routine ChatService is composed from.
+        chat=None,
+    )
     spawner = object()
     pump = object()
     build_spawner = Mock(return_value=spawner)
@@ -705,7 +743,18 @@ async def test_hatchet_failed_manifest_overlay_cannot_claim_startup_parity(
     )
     record_observation.assert_not_awaited()
     wire_hitl_resume.assert_called_once_with(kernel, pump=pump)
-    assert resources == {"kernel": kernel, "pump": pump, "spawner": spawner}
+    # STILL EXACT, deliberately. This is a security assertion about what the
+    # composition root hands out, so the key set is compared whole rather than
+    # spot-checked -- an extra resource appearing unannounced is the thing it
+    # exists to catch. Bootstrap now also composes a routine ChatService, which
+    # the test cannot hold a reference to, so that one is identified by type.
+    assert set(resources) == {"kernel", "pump", "spawner", "chat"}
+    assert resources["kernel"] is kernel
+    assert resources["pump"] is pump
+    assert resources["spawner"] is spawner
+    from boltrig.fleet.chat import ChatService
+
+    assert isinstance(resources["chat"], ChatService)
 
 
 @pytest.mark.asyncio
