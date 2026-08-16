@@ -21,6 +21,7 @@
 
 import {
   KernelApiError,
+  baseUrl,
   kernelGet,
   kernelPost,
   raiseForStatus,
@@ -73,7 +74,7 @@ export async function login(opts: {
   signal?: AbortSignal;
 }): Promise<{ cookie: string; user: Record<string, unknown> }> {
   const doFetch = opts.fetch ?? (fetch as unknown as FetchLike);
-  const resp = await doFetch(`${opts.server.replace(/\/+$/, "")}/v1/auth/login`, {
+  const resp = await doFetch(`${baseUrl(opts.server)}/v1/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email: opts.email, password: opts.password }),

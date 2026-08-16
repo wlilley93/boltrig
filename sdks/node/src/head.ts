@@ -8,7 +8,7 @@
  * CLI; the token is never logged or embedded in error messages.
  */
 
-import { KernelApiError, kernelPost, raiseForStatus, resolveToken, type FetchLike, type KernelRequestOptions } from "./http.js";
+import { KernelApiError, baseUrl, kernelPost, raiseForStatus, resolveToken, type FetchLike, type KernelRequestOptions } from "./http.js";
 
 export type ChatEvent = Record<string, unknown>;
 
@@ -176,7 +176,7 @@ export async function* streamTurn(opts: StreamTurnOptions): AsyncGenerator<ChatE
   if (opts.origin) body.origin = opts.origin;
   let resp: Awaited<ReturnType<FetchLike>>;
   try {
-    resp = await doFetch(`${opts.server.replace(/\/+$/, "")}/v1/chat`, {
+    resp = await doFetch(`${baseUrl(opts.server)}/v1/chat`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
