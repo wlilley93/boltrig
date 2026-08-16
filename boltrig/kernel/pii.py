@@ -1,15 +1,16 @@
 """PII detection and redaction at the kernel boundary (US-PRIV-02, SEC-13).
 
 STATUS (be precise, per the implemented-vs-scaffolded rule): the detector is
-WIRED to two consumers - audit/security scrubbing (K-20, via ``contains_secret``
-/ ``contains_identity`` in kernel/audit.py) and distill corpus ingest
-(``distill/corpus.py``). It is NOT yet wired to the model-egress path:
-``fleet/model_router.py`` enforces sensitive->local routing from a
-caller-supplied ``sensitive`` flag and nothing on that path runs this scanner,
-so PII reaches hosted endpoints unscanned whenever no caller classifies the
-payload. Closing that gap means classifying (and redacting or re-routing) at
-the model-gateway seam - a behaviour change that needs its own decision, not a
-docstring. The same scanner backs audit scrubbing (K-20).
+WIRED to three consumers - audit/security scrubbing (K-20, via ``contains_secret``
+/ ``contains_identity`` in kernel/audit.py), distill corpus ingest
+(``distill/corpus.py``), and model-egress ROUTING: at the model-gateway seam
+``fleet/model_router.outbound_text_classifies_sensitive`` consults
+``redact``/``contains_identity`` over the outbound prompt text and a detection
+classifies the request sensitive, forcing the local route even when no caller
+classified the payload (SEC-13). That wiring CLASSIFIES but never MUTATES: no
+egress path redacts or rewrites payload text (``manifest.privacy.pii_redaction``
+is parsed and stored but read by nothing), which remains its own decision. The
+same scanner backs audit scrubbing (K-20).
 """
 
 from __future__ import annotations
