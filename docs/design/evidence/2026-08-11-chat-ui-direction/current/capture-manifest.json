@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-16T16:12:09.301Z",
+  "capturedAt": "2026-08-16T20:03:48.230Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "4abd1ba19d8a1472d9792aec626c3239d4ab070aff810704edb7a419f6fa0e00",
-    "digestAfterCapture": "4abd1ba19d8a1472d9792aec626c3239d4ab070aff810704edb7a419f6fa0e00",
+    "digestBeforeCapture": "3a03fa1abf6b4744eb66d92c6e5a658822f89cac0fd7da28b10d825f5986cf7a",
+    "digestAfterCapture": "3a03fa1abf6b4744eb66d92c6e5a658822f89cac0fd7da28b10d825f5986cf7a",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/vision-and-memory-sdk",
-    "head": "97c7365551e071c335d7adbb06b7d75f01cf6f08",
+    "branch": "feat/onboarding-polish",
+    "head": "7722f07d9c53876e289c39fa66b9086ae3daeabb",
     "dirty": true
   },
   "runner": {

@@ -1,13 +1,13 @@
 {
   "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-  "captureManifestSha256": "316bd2690f2cdf6a285032378484746534bf9aed649055619cee1d5ea268bc6a",
+  "captureManifestSha256": "53fa9ea1ce4e4107dbc16ad77a9869aefd83df05fd3e8493469a594ed08e88c7",
   "captureSourceBinding": {
-    "branch": "feat/vision-and-memory-sdk",
-    "digestAfterCapture": "4abd1ba19d8a1472d9792aec626c3239d4ab070aff810704edb7a419f6fa0e00",
+    "branch": "feat/onboarding-polish",
+    "digestAfterCapture": "3a03fa1abf6b4744eb66d92c6e5a658822f89cac0fd7da28b10d825f5986cf7a",
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "4abd1ba19d8a1472d9792aec626c3239d4ab070aff810704edb7a419f6fa0e00",
+    "digestBeforeCapture": "3a03fa1abf6b4744eb66d92c6e5a658822f89cac0fd7da28b10d825f5986cf7a",
     "dirty": true,
-    "head": "97c7365551e071c335d7adbb06b7d75f01cf6f08",
+    "head": "7722f07d9c53876e289c39fa66b9086ae3daeabb",
     "scope": [
       "apps/worker/src",
       "apps/worker/tests/visual"
