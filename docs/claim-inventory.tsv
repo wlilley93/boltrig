@@ -45,7 +45,7 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/application/grant_leases.py:57		
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/application/model_proxy_grants.py:57		The bounded idempotent-startup cache cannot retain another bearer.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/application/model_proxy_store_projection.py:1		Fail-closed validation of model-proxy grant store return values.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/application/root_admission.py:17		The sole atomic, total path from trusted root facts to a persisted decision.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/authority.py:41		never the tenant ceiling (that is the escalation this module exists to close).
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/authority.py:44		principal at all), and never the tenant ceiling (that is the escalation this
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/chat_compaction.py:1		Append-only conversation compaction helpers.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/codex_runtime.py:228		caller, and carry only a cause tag - never token material.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/continuity.py:171		deterministic and append-only (prefix stable), so SEC-46 still holds.
@@ -221,7 +221,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/distill/corpus.py:200	target_ten
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/emotion/__init__.py:1	boltrig.observability.orb_presence	Boltrig's affective side-channel: a read-only emotion projection over run events.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:231	seen	Publish one cycle, and treat an empty tenant list as a fault of its own.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:98	sealed	What one sweep actually did, as three numbers the caller can judge.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/authority.py:125	item	Route ``item`` to its department head, or ``None`` if unroutable (SEC-165).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/authority.py:129	item	Route ``item`` to its department head, or ``None`` if unroutable (SEC-165).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat_authority.py:1	org_members	Say when a chat turn has no usable authority.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/codex_runtime.py:165	finally	The tool-enabled lane: the cell's only tools are the kernel's MCP face.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/held_write_outcome.py:177	max_closed	Persist the continuation as a new assistant message on the conversation.
@@ -329,8 +329,8 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/anchor.py:1	boltrig.kernel.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/anchor.py:116	store.list_orgs	Anchor every tenant's un-anchored tail once, reporting what was seen.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/anchor.py:145	run_forever	Loop :func:`run_anchor_sweep_detailed` forever; cancellable, idle-sleeping.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:1	GrantChecker	Whose authority a delegated run carries (SEC-164, SEC-165).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:47	effective_grants_for_request	The grants of the principal ``item`` is executed on behalf of (SEC-164).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:85	GrantChecker	The item's EXECUTION context, capped to the requesting principal (SEC-164).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:50	effective_grants_for_request	The grants of the principal ``item`` is executed on behalf of (SEC-164).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:88	GrantChecker	The item's EXECUTION context, capped to the requesting principal (SEC-164).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/bifrost_model_catalogue.py:1	BifrostModelCatalogue	Bounded, read-only discovery of the stack-owned Bifrost model catalogue.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/browser_runtime.py:1	needs_browser_cli	Whether this deployment runs the fleet image's Chromium at all.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/browser_runtime.py:47	needs_browser_cli	True iff the tenant's manifest declares browser automation, per ``needs_browser_cli``.
@@ -380,7 +380,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/lease_token.py:1	Store.upda
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/lease_token.py:118	_record_failure	Write a claimed row, fenced on the claim-time token.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/pump.py:557	handle_claimed_item	Durably record a cooperative cancel ([2026] VJS-COUNTY 6, D1/D4).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/pump_progress.py:1	run_once	Windowed throughput evidence for the work pump.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/reflection.py:38	kernel.invoke	Distil one lesson and store it via the memory verb, best-effort (US-WFL-07).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/reflection.py:84	kernel.invoke	Distil one lesson and store it via the memory verb, best-effort (US-WFL-07).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/result.py:86	degrade	The bounded degrade tag this result carries, or None.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/retention.py:1	run_retention_once	Retention purge: hard-erasure of closed conversations (M11, right-to-erasure).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:295	_publish_subagent_end_event	Retire the bearer this child inherited, at the child's run terminal.
@@ -703,11 +703,10 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/application/grant_lease_cleanup.py:1
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/application/grant_leases.py:312		Return metadata health using the server clock;
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/application/model_proxy_cancellations.py:25		Detect only cancellations overlapping a cell, with bounded fail-closed overflow.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/application/root_admission.py:56		a store that returned REPLAYED for a divergent decision fails closed.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:108		projection is edited later, intersecting here can never widen the
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:146		"workflow:<wf_id>" target never reaches here - the pump honors it upstream
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:36		(``user:chief-of-staff``), and the principal cannot steer it.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:38		principal's grants.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:39		principal's grants (a principal holding no memory verb must not stop the org
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:111		projection is edited later, intersecting here can never widen the
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:150		"workflow:<wf_id>" target never reaches here - the pump honors it upstream
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:39		(``user:chief-of-staff``), and the principal cannot steer them.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:42		never the principal's grants (a principal holding no memory verb must not
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/bifrost_model_catalogue.py:78		Return the one safe failure shape;
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat.py:159		user only), so a caller only ever sees their own conversations - never
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_authority.py:108		function's contract is that it must NEVER take down a spawn that would
@@ -968,7 +967,7 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/pump.py:595		Notify a channel-origin
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/pump.py:631		Re-save a succeeded, synthesised workflow as learned (US-WFL-03).
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:76		from (Phase 3, US-WFL-03).
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:87		a deterministic automation.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/reflection.py:70		failure must never fail the run - but a swallow at DEBUG made
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/reflection.py:123		failure must never fail the run - but a swallow at DEBUG made
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/result.py:51		never at zero.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/routine_run.py:159		so an engine retry never emits duplicate completion notices.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/routine_run.py:176		Notification delivery is a side channel, never the authority for
@@ -1134,6 +1133,8 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/invoke_finalization.py:12		Return o
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:212		(list_verbs, get_tenant_permissions, get_verb).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:214		would see a null GUC and fail closed on every tool list/call.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:63		The run that DELEGATED to this one.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/memory_mutation_routes.py:55		under its own key so a success always reads status="ok".
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/memory_mutation_routes.py:92		under its own key so a success always reads status="ok".
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/pii.py:122		may not be widened for one of them.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/admin.py:50		a bare ValueError never leaks internal text as the client reason.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/bifrost_models.py:41		Re-project even an injected provider so extra upstream fields cannot escape.
@@ -1506,6 +1507,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/model_gateway.py:113	endpoint	R
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/model_router.py:1	SensitiveDataMisrouted	The model-endpoint router guard (US-PRIV-01, SEC-12).
 ORDINARY	SUBJECT-REACHED	comment	boltrig/fleet/pump.py:77	_maybe_learn	defined here, read once below, and set only by tests, so `_maybe_learn` has never fired
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/pump_progress.py:93	WorkPump	The pump's serving loop, instrumented.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/reflection.py:51	reflection_lesson	The typed EPISODE a terminal run proposes (decision 0029), as ``memory.propose`` params.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/retention.py:108	run_retention_once	Loop :func:`run_retention_once` forever; cancellable, idle-sleeping.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:1	UnavailableRuntime	Agent-runtime selection for the Codex-owned fleet.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:76	RuntimeResolver	Build Codex or an explicit deterministic script runtime.

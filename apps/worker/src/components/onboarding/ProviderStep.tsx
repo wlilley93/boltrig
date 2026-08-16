@@ -7,6 +7,7 @@ import {
   modelAcceptsVision,
   providerKeyOptional,
 } from "./providerCatalogue";
+import { StepHeading } from "./StepHeading";
 import { SearchablePicker, type SearchableOption } from "./SearchablePicker";
 import { useProviderSetup } from "./useProviderSetup";
 
@@ -14,27 +15,60 @@ export interface ProviderStepHandle {
   complete: () => Promise<boolean>;
 }
 
+type ProviderModality = "text" | "vision";
+
 export const ProviderStep = forwardRef<ProviderStepHandle, { profile: UserProfile }>(
-function ProviderStep({ profile }, ref) {
-  const setup = useProviderSetup(profile);
+  function ProviderStep({ profile }, ref) {
+    return (
+      <ProviderStepBase
+        heading="Choose your AI provider"
+        modality="text"
+        profile={profile}
+        ref={ref}
+      />
+    );
+  },
+);
+
+/**
+ * The shared provider-intake body. The text step is the primary AI choice; the
+ * vision step (modality "vision") is an optional specialist model reusing the
+ * exact same intake, sealed once and reconciled the same way server-side.
+ */
+export const ProviderStepBase = forwardRef<
+  ProviderStepHandle,
+  {
+    heading: string;
+    kicker?: string;
+    modality: ProviderModality;
+    profile: UserProfile;
+    skip?: { label: string; onSkip: () => void };
+    sub?: string;
+  }
+>(function ProviderStepBase({ heading, kicker, modality, profile, skip, sub }, ref) {
+  const setup = useProviderSetup(profile, modality);
   useImperativeHandle(ref, () => ({ complete: setup.complete }), [setup.complete]);
 
   return (
     <div className="onboarding-step provider-step">
-      <div className="onboarding-heading onboarding-rise">
-        <h1>Choose your AI provider</h1>
-      </div>
+      <StepHeading heading={heading} kicker={kicker} sub={sub} />
       {!setup.readiness
         ? <ProviderLoading />
         : setup.canAddKey
-          ? <ProviderKeyForm setup={setup} />
+          ? <ProviderKeyForm setup={setup} skip={skip} />
           : <ManagedKeyNotice />}
       {setup.message && <p className="onboarding-status" role="status">{setup.message}</p>}
     </div>
   );
 });
 
-function ProviderKeyForm({ setup }: { setup: ReturnType<typeof useProviderSetup> }) {
+function ProviderKeyForm({
+  setup,
+  skip,
+}: {
+  setup: ReturnType<typeof useProviderSetup>;
+  skip?: { label: string; onSkip: () => void };
+}) {
   const provider = AI_PROVIDERS.find((entry) => entry.id === setup.provider)
     ?? AI_PROVIDERS[0];
   const selectedModel = provider?.models.find(
@@ -70,18 +104,7 @@ function ProviderKeyForm({ setup }: { setup: ReturnType<typeof useProviderSetup>
           searchLabel="Search providers"
           value={setup.provider}
         />
-        <label>
-          <span>{provider?.keyOptional ? "API key (optional)" : "API key"}</span>
-          <input
-            aria-label="Provider API key"
-            autoComplete="off"
-            onChange={(event) => setup.setKeyPresent(Boolean(event.currentTarget.value))}
-            placeholder={provider?.keyOptional ? "Leave empty for a local Ollama" : undefined}
-            ref={setup.apiKeyInput}
-            required={provider?.keyOptional !== true}
-            type="password"
-          />
-        </label>
+        <ApiKeyField optional={provider?.keyOptional === true} setup={setup} />
         {provider?.id === "custom" ? (
           <CustomModelFields setup={setup} />
         ) : provider?.requiresBaseUrl ? (
@@ -104,7 +127,40 @@ function ProviderKeyForm({ setup }: { setup: ReturnType<typeof useProviderSetup>
         )}
       </div>
       {selectedModel ? <CapabilityNotice vision={modelAcceptsVision(selectedModel)} /> : null}
+      {skip ? (
+        <button className="onboarding-secondary provider-skip" disabled={setup.busy} onClick={skip.onSkip} type="button">
+          {skip.label}
+        </button>
+      ) : null}
     </div>
+  );
+}
+
+/** The provider API key input, and the one rule that governs it.
+ *
+ * Whether a key is required is a property of the PROVIDER, not of the form: a
+ * self-hosted Ollama authenticates nothing, so demanding one made it
+ * impossible to finish setup against a local model (FR-AIKEY-04). Keeping the
+ * label, the placeholder and the `required` flag together means they cannot
+ * drift into saying three different things about the same field.
+ */
+function ApiKeyField({ optional, setup }: {
+  optional: boolean;
+  setup: ReturnType<typeof useProviderSetup>;
+}) {
+  return (
+    <label>
+      <span>{optional ? "API key (optional)" : "API key"}</span>
+      <input
+        aria-label="Provider API key"
+        autoComplete="off"
+        onChange={(event) => setup.setKeyPresent(Boolean(event.currentTarget.value))}
+        placeholder={optional ? "Leave empty for a local Ollama" : undefined}
+        ref={setup.apiKeyInput}
+        required={!optional}
+        type="password"
+      />
+    </label>
   );
 }
 
@@ -175,12 +231,33 @@ function OllamaModelFields({
   );
 }
 
+
 function CapabilityNotice({ vision }: { vision: boolean }) {
   return (
-    <p className={`onboarding-capability ${vision ? "vision" : "text"}`} role="status">
-      <span aria-hidden="true">{vision ? "◉" : "Aa"}</span>
-      <strong>{vision ? "Text + images" : "Text only"}</strong>
-    </p>
+    <div className="onboarding-capability-group">
+      {vision ? (
+        <p className="onboarding-capability vision" role="status">
+          <span aria-hidden="true">✓</span>
+          <strong>Text and Vision</strong>
+        </p>
+      ) : (
+        <>
+          <p className="onboarding-capability" role="status">
+            <span aria-hidden="true">✓</span>
+            <strong>Text</strong>
+          </p>
+          <p className="onboarding-capability no-vision" role="status">
+            <span aria-hidden="true">✗</span>
+            <strong>Vision</strong>
+          </p>
+        </>
+      )}
+      <p className="onboarding-key-note">
+        {vision
+          ? "Your model handles text and vision — you can skip the vision step."
+          : "You can add a vision model on the next step."}
+      </p>
+    </div>
   );
 }
 

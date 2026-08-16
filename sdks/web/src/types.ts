@@ -3738,6 +3738,56 @@ export interface MemoryIngestionRow {
   created_at?: string | null;
 }
 
+// Typed memory planes (decision 0029). Candidates await an explicit human
+// review; the timeline is one slot's version history (superseded values stay
+// auditable, only one version is ever active).
+export interface MemoryCandidateView extends MemoryFactView {
+  memory_key?: string | null;
+  status: string;
+  version?: number;
+  confidence?: number | null;
+}
+
+export interface MemoryCandidatesResponse {
+  candidates: MemoryCandidateView[];
+}
+
+export interface MemoryCandidateReviewRequest {
+  decision: "approve" | "reject";
+}
+
+export interface MemoryCandidateReviewResponse {
+  status: string;
+  hitl_request_id?: string;
+  decision?: string;
+  memory_id?: string;
+  candidate_status?: string;
+  version?: number;
+  superseded_id?: string | null;
+  reason?: string;
+}
+
+export interface MemoryTimelineVersion {
+  id: string;
+  owner_scope: string;
+  kind: string;
+  content: unknown;
+  data_class: MemoryDataClass;
+  provenance: MemoryProvenance;
+  status: string;
+  version: number;
+  value?: unknown;
+  confidence?: number | null;
+  valid_from?: string | null;
+  valid_to?: string | null;
+  supersedes_id?: string | null;
+}
+
+export interface MemoryTimelineResponse {
+  memory_key: string;
+  versions: MemoryTimelineVersion[];
+}
+
 export interface MemoryIngestionsResponse {
   ingestions: MemoryIngestionRow[];
 }

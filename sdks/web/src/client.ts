@@ -139,7 +139,11 @@ import type {
   MemoryImproveResponse,
   MemoryIngestRequest,
   MemoryIngestResponse,
+  MemoryCandidateReviewRequest,
+  MemoryCandidateReviewResponse,
+  MemoryCandidatesResponse,
   MemoryIngestionsResponse,
+  MemoryTimelineResponse,
   MemoryRecallRequest,
   MemoryRecallResponse,
   MemoryRememberRequest,
@@ -1671,6 +1675,48 @@ export class BoltrigClient {
 
   memoryIngestions(): Promise<MemoryIngestionsResponse> {
     return this.request("/v1/memory/ingestions", { tolerateStatus: true });
+  }
+
+  // Typed memory planes (decision 0029): the candidate queue and one slot's
+  // version history. Review is high-consequence: it may pend for an approval
+  // (hitl_request_id) which the caller then answers and replays with
+  // approvalId.
+  memoryCandidates(params: { limit?: number } = {}): Promise<MemoryCandidatesResponse> {
+    const query = new URLSearchParams();
+    if (params.limit !== undefined) query.set("limit", String(params.limit));
+    const suffix = query.size ? `?${query}` : "";
+    return this.request(`/v1/memory/candidates${suffix}`, { tolerateStatus: true });
+  }
+
+  memoryCandidateReview(
+    candidateId: string,
+    body: MemoryCandidateReviewRequest,
+    approvalId?: string,
+  ): Promise<MemoryCandidateReviewResponse> {
+    return this.governedJson(
+      `/v1/memory/candidates/${encodeURIComponent(candidateId)}/review`,
+      "POST",
+      body,
+      approvalId,
+    );
+  }
+
+  memoryTimeline(params: {
+    subject_type?: string;
+    subject_id?: string;
+    predicate?: string;
+    owner_scope?: string;
+    memory_key?: string;
+    limit?: number;
+  }): Promise<MemoryTimelineResponse> {
+    const query = new URLSearchParams();
+    if (params.memory_key) query.set("memory_key", params.memory_key);
+    if (params.subject_type) query.set("subject_type", params.subject_type);
+    if (params.subject_id) query.set("subject_id", params.subject_id);
+    if (params.predicate) query.set("predicate", params.predicate);
+    if (params.owner_scope) query.set("owner_scope", params.owner_scope);
+    if (params.limit !== undefined) query.set("limit", String(params.limit));
+    return this.request(`/v1/memory/timeline?${query}`, { tolerateStatus: true });
   }
 
   skills(): Promise<SkillsResponse> {
