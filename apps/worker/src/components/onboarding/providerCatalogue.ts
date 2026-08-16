@@ -13,6 +13,8 @@ export interface CatalogueProvider {
   detail?: string;
   info?: string;
   requiresBaseUrl?: true;
+  /** The server authenticates nothing, so the key field is optional. */
+  keyOptional?: true;
 }
 
 interface CatalogueSnapshot {
@@ -31,6 +33,7 @@ const SELF_HOSTED_OLLAMA: CatalogueProvider = {
   info: "Hosted Boltrig can use Ollama through a secured public HTTPS endpoint. Never expose an unauthenticated Ollama port. Use Boltrig Desktop to keep Ollama local to your computer.",
   models: [],
   requiresBaseUrl: true,
+  keyOptional: true,
 };
 
 export const AI_PROVIDERS = catalogue.providers.flatMap((provider) => (
@@ -52,5 +55,11 @@ export function modelAcceptsVision(model: CatalogueModel | null): boolean {
 export function providerNeedsBaseUrl(providerId: string): boolean {
   return AI_PROVIDERS.some((provider) => (
     provider.id === providerId && provider.requiresBaseUrl === true
+  ));
+}
+
+export function providerKeyOptional(providerId: string): boolean {
+  return AI_PROVIDERS.some((provider) => (
+    provider.id === providerId && provider.keyOptional === true
   ));
 }

@@ -986,6 +986,7 @@ invariants:
       - tests/security/test_round_five.py::test_kernel_is_the_isolation_boundary
       - tests/unit/test_vector_memory.py::test_vector_engine_recall_is_scope_bounded_multihop
       - tests/integration/test_pgvector_engine.py::test_pgvector_recall_is_scope_bounded_multihop
+      - tests/security/test_typed_memory.py::test_typed_recall_is_scope_fenced
   MEM-VEC-01:
     description: 'Native vector recall ranks by cosine similarity - a fact sharing the query''s terms outranks one that does not, an unrelated (cosine ~0) fact is not returned, and the in-process and pgvector engines agree.'
     tests:
@@ -1017,6 +1018,34 @@ invariants:
     description: 'Recall is least-privilege and audited - query and count are recorded, fact contents never are.'
     tests:
       - tests/security/test_round_five.py::test_recall_is_audited_without_leaking_contents
+
+  # --- Typed memory planes (decision 0029) ----------------------------------
+  MEM-TYP-01:
+    description: 'A semantic fact occupies a stable slot with exactly one active value. A change with sufficient source authority SUPERSEDES the previous version (history stays auditable, the DB partial unique index arbitrates concurrency); a lower-authority source is rejected, an equal-authority conflict is parked as a candidate, and an expired value is never the current truth. Backed on both stores.'
+    tests:
+      - tests/security/test_typed_memory.py::test_semantic_supersession_returns_only_current_value
+      - tests/store/test_store_parity.py::test_typed_memory_slot_lifecycle_is_identical_on_both_stores
+  MEM-TYP-02:
+    description: 'Present-state wording ("tests are failing this morning") never becomes durable semantic memory - the write gate rejects it as transient; an explicit is_durable assertion from the extractor is the only override.'
+    tests:
+      - tests/security/test_typed_memory.py::test_transient_statement_never_becomes_semantic
+  MEM-TYP-03:
+    description: 'Unapproved procedure candidates never govern a prompt, and active procedures are selected deterministically by role/workflow key (never by similarity); a role the procedure does not address never receives it.'
+    tests:
+      - tests/security/test_typed_memory.py::test_unapproved_procedures_never_govern_and_selection_is_deterministic
+  MEM-TYP-04:
+    description: 'Episodes are embedded by their PROBLEM representation (retrieval_text), are only written from terminal runs (REJECT_NOT_TERMINAL otherwise), and render in the bundle as advisory precedent with failed attempts preserved and distinct from the resolution.'
+    tests:
+      - tests/security/test_typed_memory.py::test_episodes_are_retrieved_by_problem_not_resolution
+  MEM-TYP-05:
+    description: 'The memory bundle respects per-plane character budgets (clipping is a warning, never silent) and working state is pass-through context only - it is never persisted to any memory plane and cannot be recalled by a later run. Plane toggles exist for the ablation harness.'
+    tests:
+      - tests/security/test_typed_memory.py::test_bundle_budgets_clip_and_working_state_never_persists
+  MEM-TYP-06:
+    description: 'Explicit review (an HITL-gated high-consequence verb) is the ONLY activation path for candidates; confidence alone never activates, a rejected candidate cannot be re-activated, and every gate decision appends a policy-versioned memory_events row.'
+    tests:
+      - tests/security/test_typed_memory.py::test_review_is_the_only_activation_path
+      - tests/store/test_store_parity.py::test_memory_events_append_and_filter_identically_on_both_stores
   MEM-ENG-03:
     description: 'The adopted Cognee engine isolates one dataset per (tenant, scope) with an injective mapping - recall/forget only ever address the given scopes'' datasets - and erasure is real (a recall after forget returns nothing, cognee side included).'
     tests:
@@ -1652,6 +1681,10 @@ invariants:
       - tests/security/test_bifrost_user_binding.py::test_openai_compatible_route_keeps_virtual_key_as_exact_scope
       - tests/unit/test_runtime_resolver_codex.py::test_personal_default_carries_only_the_scoped_virtual_key_to_codex
       - tests/unit/test_codex_model_proxy_server.py::test_scoped_virtual_key_is_injected_without_forwarding_the_cell_bearer
+  FR-AIKEY-04:
+    description: 'A keyless self-hosted provider ("ollama" behind a base_url that authenticates nothing) onboards through PUT /v1/ai-keys with an empty api_key: the intake substitutes a fixed non-empty placeholder BEFORE digest and sealing, so the sealed-proposal, approval and Bifrost provisioning paths see exactly the same shapes as a keyed provider and the placeholder is never echoed in any response or row; every provider outside the keyless set is still refused (400) when the key is absent.'
+    tests:
+      - tests/security/test_ai_keys.py::test_keyless_self_hosted_provider_connects_without_an_api_key
 
   # --- Workspace-scoped workflow resources ([2026] VJS-COUNTY 8, D2) ----------
   FR-WFL-11:

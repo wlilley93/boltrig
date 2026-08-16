@@ -48,6 +48,17 @@ async def _authorize_ai_key(
     return None
 
 
+# Self-hosted providers whose servers authenticate nothing. The intake still
+# requires secret material for the sealed-proposal path (digest + Bifrost
+# provisioning both need a non-empty key), so an absent key is substituted with
+# a fixed placeholder: it is the honest credential for a server that ignores
+# the Authorization header, and it rides the same `seal_ref` sealed-proposal
+# path as a real key (sealed, digested, unechoed; SEC-113 unchanged). Keyed
+# providers are unaffected.
+_KEYLESS_PROVIDERS = frozenset({"ollama"})
+_KEYLESS_PLACEHOLDER = "keyless"
+
+
 def _denied(reason):
     return JSONResponse({"status": "denied", "reason": reason}, status_code=403)
 
@@ -67,8 +78,12 @@ def _parse_ai_key_intake(body: dict, principal):
     base_url = str(body.get("base_url") or "").strip() or None
     if modality not in AI_CONFIG_MODALITIES:
         return None, _invalid("modality must be text or vision")
-    if not scope_id or not provider or not model or not api_key:
-        return None, _invalid("scope_id, provider, model and api_key are required")
+    if not scope_id or not provider or not model:
+        return None, _invalid("scope_id, provider and model are required")
+    if not api_key and provider not in _KEYLESS_PROVIDERS:
+        return None, _invalid("an API key is required for this provider")
+    if not api_key:
+        api_key = _KEYLESS_PLACEHOLDER
     return (level, scope_id, provider, model, modality, api_key, base_url), None
 
 

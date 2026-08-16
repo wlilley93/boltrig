@@ -9,7 +9,7 @@ import type {
 
 import { submitWriteOnlyAiKey } from "../../aiKeyIntake";
 import { client } from "../../client";
-import { providerNeedsBaseUrl } from "./providerCatalogue";
+import { providerKeyOptional, providerNeedsBaseUrl } from "./providerCatalogue";
 
 interface ProviderReadiness {
   models: ChatModelChoicesResponse | null;
@@ -81,7 +81,7 @@ async function completeProvider(context: ProviderCompletionContext): Promise<boo
     return false;
   }
   const input = context.apiKeyInput.current;
-  if (!input?.value) {
+  if (!input || (!input.value && !providerKeyOptional(context.provider))) {
     context.setMessage("Add your API key to continue.");
     return false;
   }
@@ -106,7 +106,8 @@ async function completeProvider(context: ProviderCompletionContext): Promise<boo
 }
 
 function providerInputIsComplete(context: ProviderCompletionContext): boolean {
-  return context.keyPresent
+  const keySatisfied = context.keyPresent || providerKeyOptional(context.provider);
+  return keySatisfied
     && Boolean(context.model.trim())
     && (
       (context.provider !== "custom" && !providerNeedsBaseUrl(context.provider))

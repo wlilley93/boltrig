@@ -5,6 +5,7 @@ import {
   AI_PROVIDERS,
   exactModelId,
   modelAcceptsVision,
+  providerKeyOptional,
 } from "./providerCatalogue";
 import { SearchablePicker, type SearchableOption } from "./SearchablePicker";
 import { useProviderSetup } from "./useProviderSetup";
@@ -70,13 +71,14 @@ function ProviderKeyForm({ setup }: { setup: ReturnType<typeof useProviderSetup>
           value={setup.provider}
         />
         <label>
-          <span>API key</span>
+          <span>{provider?.keyOptional ? "API key (optional)" : "API key"}</span>
           <input
             aria-label="Provider API key"
             autoComplete="off"
             onChange={(event) => setup.setKeyPresent(Boolean(event.currentTarget.value))}
+            placeholder={provider?.keyOptional ? "Leave empty for a local Ollama" : undefined}
             ref={setup.apiKeyInput}
-            required
+            required={provider?.keyOptional !== true}
             type="password"
           />
         </label>
@@ -164,7 +166,11 @@ function OllamaModelFields({
           value={setup.baseUrl}
         />
       </label>
-      <ExactModelField disabled={!setup.keyPresent} providerId={providerId} setup={setup} />
+      <ExactModelField
+        disabled={!setup.keyPresent && !providerKeyOptional(providerId)}
+        providerId={providerId}
+        setup={setup}
+      />
     </div>
   );
 }
