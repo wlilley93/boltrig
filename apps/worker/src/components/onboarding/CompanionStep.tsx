@@ -1,8 +1,9 @@
 import type { CharacterId } from "../../character";
 import { FamiliarStage } from "../familiar/FamiliarStage";
-import { RESTING_STAGE_STATE } from "../familiar/FamiliarState";
 import { JarvisStage } from "../jarvis/JarvisStage";
-import { RESTING_JARVIS_STATE } from "../jarvis/JarvisState";
+import { playFamiliarPreview } from "./familiarVoicePreview";
+import type { CompanionPreview } from "./useCompanionPreview";
+import { useCompanionPreview } from "./useCompanionPreview";
 
 interface CompanionChoice {
   id: CharacterId;
@@ -33,6 +34,7 @@ export function CompanionStep({
   selected: CharacterId;
   onSelect: (id: CharacterId) => void;
 }) {
+  const preview = useCompanionPreview();
   return (
     <div className="onboarding-step companion-step">
       <div className="onboarding-heading onboarding-rise">
@@ -51,14 +53,17 @@ export function CompanionStep({
               key={choice.id}
               data-companion={choice.id}
               onKeyDown={(event) => handleCompanionKey(event, onSelect)}
-              onClick={() => onSelect(choice.id)}
+              onClick={() => {
+                onSelect(choice.id);
+                if (choice.id === "familiar") playFamiliarPreview();
+              }}
               role="radio"
               style={{ "--onboarding-delay": `${150 + index * 90}ms` } as React.CSSProperties}
               tabIndex={active ? 0 : -1}
               type="button"
             >
               <span className={`companion-art ${choice.id}`} aria-hidden="true">
-                <CompanionArt id={choice.id} />
+                <CompanionArt id={choice.id} preview={preview} />
               </span>
               <span className="companion-copy">
                 <strong>{choice.name}</strong>
@@ -91,9 +96,9 @@ function handleCompanionKey(
   next?.focus();
 }
 
-function CompanionArt({ id }: { id: CharacterId }) {
+function CompanionArt({ id, preview }: { id: CharacterId; preview: CompanionPreview }) {
   if (id === "familiar") {
-    return <FamiliarStage mode="hero" state={RESTING_STAGE_STATE} label="Familiar preview" />;
+    return <FamiliarStage mode="hero" state={preview.familiar} label="Familiar preview" />;
   }
-  return <JarvisStage labels="shader" state={RESTING_JARVIS_STATE} suspended={false} />;
+  return <JarvisStage labels="shader" state={preview.jarvis} suspended={false} />;
 }

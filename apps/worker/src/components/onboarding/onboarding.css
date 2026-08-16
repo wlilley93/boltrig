@@ -92,23 +92,13 @@
 .companion-copy small { color: var(--text-3); line-height: 1.4; }
 .companion-check { position: absolute; top: 15px; right: 15px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: white; background: var(--accent); animation: onboarding-check-in 180ms ease both; }
 
-/* Each companion owns the complete card surface. Familiar stays bright and
- * organic; Jarvis keeps the renderer's near-black field through the copy. */
-.companion-card[data-companion="familiar"] {
-  color: #17202b;
-  background:
-    radial-gradient(circle at 50% 28%, rgb(255 255 255 / 96%), transparent 46%),
-    linear-gradient(155deg, #fbfaf6 0%, #eef1f4 58%, #e4e9ef 100%);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 90%) inset, 0 18px 42px rgb(9 20 34 / 10%);
-}
+/* Both companions share the card surface. Familiar used to override it with a
+ * bright white treatment of its own, which read as a different surface pasted
+ * onto a dark step -- and made the orb fight a light halo it was never drawn
+ * for. Only the art wash differs now, and only to separate stage from copy. */
 .companion-card[data-companion="familiar"] .companion-art {
-  background: radial-gradient(circle at 50% 44%, rgb(62 135 225 / 15%), transparent 60%);
+  background: radial-gradient(circle at 50% 44%, rgb(62 135 225 / 18%), transparent 62%);
 }
-.companion-card[data-companion="familiar"] .companion-copy {
-  border-color: rgb(23 32 43 / 11%);
-}
-.companion-card[data-companion="familiar"] .companion-copy > span { color: #485463; }
-.companion-card[data-companion="familiar"] .companion-copy small { color: #697482; }
 
 .companion-card[data-companion="jarvis"] {
   color: #f7f7fa;
