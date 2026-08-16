@@ -30,6 +30,7 @@ from boltrig.kernel.conversation_account_routes import (
 )
 from boltrig.kernel.control_routes import dispatch_control_route
 from boltrig.kernel.notification_routes import register_notification_routes
+from boltrig.kernel.trajectory_routes import register_trajectory_routes
 from boltrig.kernel.run_access import visible_work_item_by_run
 from boltrig.kernel.workspace_management_routes import (
     register_workspace_management_routes,
@@ -201,6 +202,7 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         _WORKSPACE_ADMIN_ROLES,
     )
     register_notification_routes(app, principal_dep, get_kernel)
+    register_trajectory_routes(app, principal_dep, get_kernel)
     _register_admin_directory_routes(app, principal_dep, get_kernel)
     _register_org_routes(app, principal_dep, get_kernel)
     register_workspace_management_routes(

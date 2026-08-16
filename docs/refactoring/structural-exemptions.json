@@ -205,22 +205,22 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/access_routes.py": {
-      "max_file_lines": 682,
+      "max_file_lines": 684,
       "max_function_lines": 120,
       "over_limit_functions": [
         {
           "name": "_register_context_routes",
-          "line": 408,
+          "line": 410,
           "lines": 103
         },
         {
           "name": "_register_admin_directory_routes",
-          "line": 513,
+          "line": 515,
           "lines": 120
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Decompose access, user, invitation, and notification route registrars behind the governed control chokepoint. 2026-07-29: focused notification, account profile, conversation account, AI-key, workspace-management, and model-endpoint route modules lower this facade from 1038 to 681 lines and its largest registrar from 148 to 120 while preserving the same governed dependencies and response contracts. 2026-08-11: the camera/modalities landing. This entry's measurements are re-pinned to the source as it now stands; the growth is the camera and per-model-modality work, and the debt is recorded here rather than hidden so its owner can retire it.",
+      "reason": "Decompose access, user, invitation, and notification route registrars behind the governed control chokepoint. 2026-07-29: focused notification, account profile, conversation account, AI-key, workspace-management, and model-endpoint route modules lower this facade from 1038 to 681 lines and its largest registrar from 148 to 120 while preserving the same governed dependencies and response contracts. 2026-08-11: the camera/modalities landing. This entry's measurements are re-pinned to the source as it now stands; the growth is the camera and per-model-modality work, and the debt is recorded here rather than hidden so its owner can retire it. Raised 682->684 on 2026-08-17 to mount the trajectory routes (Decision TRJ-01): two lines, an import and one registration call, in the file whose job is mounting HTTP surfaces. The two recorded functions did not change length (103 and 120); only their line numbers moved. The alternative was mounting a governed surface from an unrelated module, or rewriting the call as a loop purely to hold a line count -- worse code to satisfy a metric is the failure mode this ratchet is meant to prevent.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/app.py": {

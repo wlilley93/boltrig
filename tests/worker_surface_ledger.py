@@ -662,6 +662,15 @@ GET /v1/devices/{device_id}/camera-bindings
 GET /v1/devices/{device_id}/camera-leases
 """,
 )
+_non_ui(
+    "operator-only",
+    """
+GET /v1/trajectory
+GET /v1/trajectory/{run_id}
+DELETE /v1/trajectory/{run_id}
+GET /v1/trajectory/{run_id}/export
+""",
+)
 _non_ui("internal-composition", "POST /v1/knowledge/context")
 _non_ui(
     "legacy-superseded",
@@ -739,4 +748,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 }
 
 
-EXPECTED_ROUTE_COUNT = 286
+EXPECTED_ROUTE_COUNT = 290

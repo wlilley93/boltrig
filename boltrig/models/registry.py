@@ -100,3 +100,20 @@ class VerbBinding:
     target_type: TargetType
     target_ref: AdapterId | str  # adapter id or agent-capability name
     rate_limit: RateLimit | None = None
+
+    def owned_by(self, adapter_id: str) -> bool:
+        """Is this binding the named adapter's to change or remove?
+
+        THE ACTIVATION OWNERSHIP CONVENTION, stated once so the two sides cannot
+        drift. Deactivation has always used it -- `_unpublish_owned_verbs` only
+        removes bindings whose target_ref is the adapter's own id, so retiring
+        one adapter cannot delete another's work. Registration did not, and
+        upserted over anything in its way, which is why a verb deliberately
+        re-pointed at a reasoning agent reverted to the adapter on the next
+        startup.
+
+        A binding pointing at an AGENT is never an adapter's, whatever the
+        agent-capability name happens to be: the target_type settles it before
+        the ref is even compared.
+        """
+        return self.target_type is TargetType.ADAPTER and self.target_ref == adapter_id

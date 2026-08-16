@@ -50,6 +50,7 @@ from .context import (
     context_from_envelope as context_from_envelope,
     context_to_envelope as context_to_envelope,
 )
+from .trajectory import TrajectoryEvent, TrajectoryKind
 from .conversation import (
     Conversation as Conversation,
     ConversationMessage as ConversationMessage,
