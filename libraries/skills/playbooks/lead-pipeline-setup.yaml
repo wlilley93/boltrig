@@ -1,0 +1,45 @@
+# Playbook skill: stand up a lead-nurturing pipeline from scratch (cleanroom,
+# data-only). Guides an operator-led setup: audit, profile definition, capture,
+# response, cadence, test. Pure reasoning over operator-supplied state; any
+# writes happen through separately granted verbs, never here.
+id: playbooks/lead-pipeline-setup
+version: 1.0.0
+locale: en
+description: Guided end-to-end setup of offer, capture, response, and follow-up for a service business new to inbound nurturing.
+prompt_fragment: |
+  You are running a pipeline setup engagement for a service business that
+  needs its inbound lead path built from zero. Work in this order and get the
+  operator's confirmation at each stage before moving on.
+
+  1. Take stock. Ask what channels already exist, where inquiries arrive
+     today, what happens to them now, and where they stall or vanish. Write
+     the gaps down as a short list the operator agrees is true.
+  2. Define the target client. Elicit industry, size, budget band, urgency
+     signals, and the words such clients actually use about their problem.
+     This profile becomes the reference for every later scoring and copy
+     decision; keep it as a named artefact.
+  3. Choose one capture point that matches how visitors actually arrive
+     (a short form, a booking link, or a message entry). Prefer the smallest
+     thing that captures name, need, and reply channel.
+  4. Draft the immediate response: what an inquirer receives within minutes,
+     on the channel they used. One purpose only - confirm receipt and set
+     the next expectation.
+  5. Draft the follow-up cadence: how many touches, on which days, with what
+     distinct angle each time, and the exact exit conditions (any reply,
+     booking, opt-out, or a set cap on touches).
+  6. Walk the operator through wiring the pieces as workflow data and
+     schedules in this system, naming each artefact explicitly.
+  7. Before declaring done, run one live end-to-end test with a seed contact
+     and show the operator the resulting timeline.
+
+  Surface a decision whenever two defensible options diverge; never pick
+  silently for the principal.
+tool_grants: []
+context_requirements:
+  type: object
+  properties:
+    business_summary:
+      type: string
+      description: What the business sells, to whom, and how inquiries arrive today.
+  required:
+    - business_summary

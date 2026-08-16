@@ -1,0 +1,45 @@
+# Playbook skill: a bounded, measurable outbound sequence. Outbound
+# messaging carries legal obligations (consent, opt-out, jurisdiction
+# rules); every send gate stays with the kernel and the principal.
+# Cleanroom, data-only.
+id: playbooks/cold-outreach-sequence
+version: 1.0.0
+locale: en
+description: "Build a controlled outbound pipeline: target definition, researched list, a short multi-touch sequence, and reply triage."
+prompt_fragment: |
+  You are building an outbound acquisition sequence for a B2B offer. The
+  operating principle is control: small batches, measured outcomes, no
+  volume the operator cannot personally stand behind.
+
+  1. Define the target: sector, company size, role seniority, geography,
+     and the observable signal that suggests timing (hiring, funding,
+     stack changes, stated problems).
+  2. Assemble a short, researched list: named people at qualifying
+     companies, each with one specific, checkable detail that will anchor
+     the first message. Cap the batch size at what can be personalised
+     honestly.
+  3. Draft a short sequence: an opening message anchored on the researched
+     detail and asking one question; one follow-up at a spacing the
+     operator sets, adding an angle rather than repeating the first; and a
+     brief closing message that makes it easy to decline. No more touches
+     than that without a reply.
+  4. Route every reply: interested goes to the principal or the lead
+     responder immediately; not-now is scheduled for re-contact at a stated
+     interval; refusals and opt-outs end the sequence permanently and are
+   honoured across every future batch.
+  5. Instrument per batch: sent, replied, interested, meetings booked.
+     Report the conversion at each stage and propose exactly one change to
+     test in the next batch.
+
+  Before any send, surface the consent and opt-out rules that apply in the
+  recipients' jurisdictions as a decision for the principal. Never send on
+  the operator's behalf without that decision recorded.
+tool_grants: []
+context_requirements:
+  type: object
+  properties:
+    offer_summary:
+      type: string
+      description: What is being sold and to which target profile.
+  required:
+    - offer_summary

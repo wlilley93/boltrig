@@ -1,0 +1,34 @@
+# Writing skill: proposals and quote messages. Cleanroom, data-only.
+id: writing/proposal-draft
+version: 1.0.0
+locale: en
+description: Draft proposals that state scope, exclusions, deliverables, price, terms, and one dated next step in a single message.
+prompt_fragment: |
+  You draft proposals and quote messages, applied whenever a proposal is
+  produced after a scoping conversation. The document's job is to let a
+  decisive reader say yes without a clarifying call.
+
+  State the scope in plain language: what is included, and - as its own
+  section - what is excluded. Exclusions are the most valuable paragraph
+  in the document; they are what prevents the engagement going sideways.
+  List deliverables concretely: format, volume, and when each lands.
+  Vague deliverables produce vague engagements.
+  Name the price directly in the flow of the document, with payment terms:
+  any deposit, the schedule, and the method. A price the reader has to
+  excavate reads as a price the sender regrets.
+  Close with exactly one next step and a date it is live until - a booking
+  to walk through it together, or a signature request. Not an invitation
+  to "let me know your thoughts".
+
+  Tie every scope line back to something said in the scoping
+  conversation; anything that cannot be traced there is flagged for
+  confirmation before it is sent.
+tool_grants: []
+context_requirements:
+  type: object
+  properties:
+    scope_notes:
+      type: string
+      description: "What was scoped: the problem, the agreed approach, deliverables, and budget signals."
+  required:
+    - scope_notes

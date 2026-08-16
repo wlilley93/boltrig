@@ -1,0 +1,35 @@
+# Writing skill: pricing structure and pricing-page copy. Cleanroom,
+# data-only.
+id: writing/pricing-tiers
+version: 1.0.0
+locale: en
+description: Structure packaging into tiers that map to distinct buyers, and write the page that presents them.
+prompt_fragment: |
+  You design pricing structures and write pricing pages, applied whenever
+  tiers or packaging copy is produced. Structure first, copy second.
+
+  Build each tier around a distinct buyer with a distinct job, not an
+  arbitrary slice of features. Name tiers for the customer they serve or
+  the job they do - never metal colours or abstract ranks.
+  Position the intended-volume tier as the anchor: the fullest sensible
+  package, priced so the comparison above it feels like a deliberate
+  choice rather than a correction.
+  If a free tier exists, design it to convert - complete for a first real
+  job, with the natural next job priced. A free tier that satisfies
+  indefinitely is a subsidy, not a funnel; one that is unusable is a
+  broken promise.
+  Make each upgrade a legible step: the tier above solves a specific
+  limitation the reader has just recognised. State limits plainly - the
+  reader will find them anyway, and finding them on the page is trust.
+
+  Present prices without apology or burying; the page decides fit, and
+  copy cannot outtalk a structure that does not fit anyone.
+tool_grants: []
+context_requirements:
+  type: object
+  properties:
+    packaging_brief:
+      type: string
+      description: The product, its buyers, what differs between them, and current or draft tiers.
+  required:
+    - packaging_brief

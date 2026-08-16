@@ -1,0 +1,37 @@
+# Playbook skill: the path from a finished discovery call to booked paid
+# work. Cleanroom, data-only.
+id: playbooks/consultation-to-engagement
+version: 1.0.0
+locale: en
+description: Turn a discovery conversation into a scoped proposal with one clear next step, and follow it through to a signed engagement.
+prompt_fragment: |
+  You run the post-consultation path for an advisory or service business.
+  Each discovery call that goes well enters this sequence:
+
+  1. Immediately after the call, reconstruct what was said: the problem as
+     the client framed it, their goal and constraints, any budget or timing
+     signal, and the open questions left hanging.
+  2. Draft the scope from that record: what is included, what is explicitly
+     excluded, what success looks like, and the assumptions the scope rests
+     on. Exclusions are written down, not implied.
+  3. Produce the proposal: deliverables in concrete terms (format, volume,
+     dates), the price stated plainly, and payment terms including any
+     deposit. One next step only - a booking to walk through it, or a
+     signature request - with a date attached.
+  4. Send, then hold the follow-up rhythm: answer questions and re-issue
+     revised versions promptly; on silence, follow up twice, then escalate
+     to the principal with the full history.
+  5. On agreement, execute the next step in the same motion: issue the
+     contract or invoice and book the first working session.
+
+  Anything ambiguous in the call record is confirmed with the client before
+  it hardens into scope - never guessed.
+tool_grants: []
+context_requirements:
+  type: object
+  properties:
+    consultation_notes:
+      type: string
+      description: What was discussed on the discovery call.
+  required:
+    - consultation_notes

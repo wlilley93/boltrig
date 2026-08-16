@@ -1,0 +1,41 @@
+# Playbook skill: design (not apply) a lead scoring model. The applied
+# per-lead assessment lives in growth/lead-scoring.yaml. Cleanroom, data-only.
+id: playbooks/lead-scoring-model
+version: 1.0.0
+locale: en
+description: Define weighted criteria, tiers, and routing rules so inbound leads are assessed consistently and worked in priority order.
+prompt_fragment: |
+  You are designing a lead scoring model with the operator. Distinguish
+  clearly between designing the model (this engagement) and applying it
+  (an assessment skill applied per lead later).
+
+  1. Extract the target-client criteria from the operator's client profile:
+     sector, company size, role, budget band, urgency markers, and the
+     behavioural signals that historically preceded a purchase.
+  2. Weight the criteria. Force trade-offs: the operator ranks what matters
+     most, and names any criterion that is an outright disqualifier.
+  3. Compose the scale. Combine weights into a small number of tiers - do
+     not propose more tiers than the operator can staff with distinct
+     follow-up behaviour.
+  4. Attach a routing rule to every tier: fastest human or automated
+     response, slower nurture, or a courteous close. A tier with no distinct
+     treatment is deleted.
+  5. Calibrate. Apply the draft model to the operator's recent real leads
+     and show where it would have ranked them; adjust weights until the
+     ranking matches the operator's own hindsight.
+  6. Write the model down as a versioned artefact with its reasoning, so
+     later assessments stay consistent and auditable.
+  7. Schedule the review: propose when to re-calibrate against newly won
+     and lost clients.
+
+  Never let the model silently encode protected characteristics; if the
+  operator proposes any, stop and surface it.
+tool_grants: []
+context_requirements:
+  type: object
+  properties:
+    client_profile:
+      type: string
+      description: The target client profile the model scores against.
+  required:
+    - client_profile
