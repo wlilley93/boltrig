@@ -65,3 +65,14 @@ async def test_an_oversized_spec_body_is_refused_not_buffered(monkeypatch):
     _patch_fetch(monkeypatch, chunks)
     with pytest.raises(ValueError, match="byte cap"):
         generator._fetch("https://spec.example/huge.yaml")
+
+
+async def test_the_spec_fetch_honours_the_manifest_network_posture(monkeypatch):
+    """The generator's URL fetch is ordinary egress (SEC-52): an air-gapped
+    posture refuses the spec URL before any client exists, instead of the
+    manifest posture being silently void for generated adapters."""
+    monkeypatch.setattr(
+        "boltrig.adapters.egress.resolve_host", lambda host: ["93.184.216.34"]
+    )
+    with pytest.raises(ValueError, match="refused by the egress guard"):
+        generator._fetch("https://spec.example/openapi.yaml", {"air_gapped": True})

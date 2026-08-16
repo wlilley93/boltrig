@@ -2616,9 +2616,10 @@ export interface NetworkPolicyCoverageItem {
   surface: string;
   status:
     | "separate_policy"
+    | "shared_policy"
     | "partial_shared_controls"
     | "provider_transport_only";
-  manifest_network_policy: "not_applied";
+  manifest_network_policy: "not_applied" | "applied";
   controls: string[];
   limitation: string;
 }

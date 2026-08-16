@@ -105,8 +105,14 @@ class GeneratedAdapter(HttpAdapter):
         verbspecs: list[VerbSpec],
         rate_limit: RateLimitConfig,
         spec_title: str = "",
+        network_config: dict[str, Any] | None = None,
     ) -> None:
-        super().__init__(base_url=base_url, rate_limit=rate_limit, retry=RetryPolicy())
+        super().__init__(
+            base_url=base_url,
+            rate_limit=rate_limit,
+            retry=RetryPolicy(),
+            network_config=network_config,
+        )
         self.id = adapter_id
         self._operations = operations
         self._verbspecs = verbspecs
@@ -247,7 +253,11 @@ class GeneratedAdapter(HttpAdapter):
 
 # --- the generator entrypoint -------------------------------------------------
 def generate_adapter_from_spec(
-    spec: dict[str, Any] | str, *, adapter_id: str, allow_local_paths: bool = False
+    spec: dict[str, Any] | str,
+    *,
+    adapter_id: str,
+    allow_local_paths: bool = False,
+    network_config: dict[str, Any] | None = None,
 ) -> GeneratedAdapter:
     """Build a working (but inert) :class:`GeneratedAdapter` from an OpenAPI doc.
 
@@ -256,8 +266,12 @@ def generate_adapter_from_spec(
     (US-ADP-01, SEC-22). The returned adapter is inert until reviewed. A URL is
     fetched through the egress guard (pinned, no redirects - INJ-02/SEC-61); a
     local file path requires the explicit ``allow_local_paths`` opt-in.
+    ``network_config`` (the manifest NetworkConfig, SEC-52) binds BOTH the spec
+    fetch and the generated adapter's own egress calls.
     """
-    doc = _load_spec(spec, allow_local_paths=allow_local_paths)
+    doc = _load_spec(
+        spec, allow_local_paths=allow_local_paths, network_config=network_config
+    )
     if not isinstance(doc, dict):
         raise ValueError("openapi spec did not parse to a mapping")
 
@@ -289,17 +303,23 @@ def generate_adapter_from_spec(
         verbspecs=verbspecs,
         rate_limit=default_rl,
         spec_title=str(title),
+        network_config=network_config,
     )
 
 
 # --- spec loading -------------------------------------------------------------
-def _load_spec(spec: dict[str, Any] | str, *, allow_local_paths: bool = False) -> Any:
+def _load_spec(
+    spec: dict[str, Any] | str,
+    *,
+    allow_local_paths: bool = False,
+    network_config: dict[str, Any] | None = None,
+) -> Any:
     if isinstance(spec, dict):
         return spec
     if not isinstance(spec, str):
         raise TypeError("spec must be a dict or a str (url / path / raw document)")
     if spec.startswith("http://") or spec.startswith("https://"):
-        text = _fetch(spec)
+        text = _fetch(spec, network_config)
     elif "\n" not in spec and len(spec) < 4096 and os.path.exists(spec):
         if not allow_local_paths:
             # Reading an arbitrary local path is an explicit opt-in: a spec
@@ -317,7 +337,7 @@ def _load_spec(spec: dict[str, Any] | str, *, allow_local_paths: bool = False) -
     return yaml.safe_load(text)
 
 
-def _fetch(url: str) -> str:
+def _fetch(url: str, network_config: dict[str, Any] | None = None) -> str:
     import httpx  # lazy
 
     from boltrig.adapters.egress import EgressBlocked, pinned_sync_client
@@ -325,12 +345,18 @@ def _fetch(url: str) -> str:
     # SSRF (INJ-02, CLOUD-03, SEC-61): the fetch goes through the same egress
     # guard as every other adapter - the target is vetted and the connection
     # pinned to the audited IP, and redirects are never followed into internal
-    # space. A metadata/internal URL is refused BEFORE any network call.
-    # Bounded read (streamed): resp.text buffered a hostile multi-GB body into
-    # kernel memory before YAML ever parsed it; a spec is kilobytes.
+    # space. A metadata/internal URL is refused BEFORE any network call. The
+    # manifest NetworkConfig rides the same call (SEC-52): an air-gap /
+    # allow-list posture binds the spec fetch, not just web.fetch. Bounded read
+    # (streamed): resp.text buffered a hostile multi-GB body into kernel memory
+    # before YAML ever parsed it; a spec is kilobytes.
     try:
-        with pinned_sync_client(url, timeout=15.0) as client:
-            with client.stream("GET", url) as resp:
+        if network_config:
+            client = pinned_sync_client(url, network_config, timeout=15.0)
+        else:  # plain signature: an injected seam sees exactly what it sees today
+            client = pinned_sync_client(url, timeout=15.0)
+        with client as http_client:
+            with http_client.stream("GET", url) as resp:
                 resp.raise_for_status()
                 chunks: list[bytes] = []
                 size = 0

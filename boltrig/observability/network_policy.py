@@ -18,21 +18,25 @@ _SEPARATE_SURFACES: tuple[dict[str, Any], ...] = (
     },
     {
         "surface": "external_mcp",
-        "status": "separate_policy",
-        "manifest_network_policy": "not_applied",
+        "status": "shared_policy",
+        "manifest_network_policy": "applied",
         "controls": (
             "governed_server_registration",
             "shared_ssrf_and_dns_pinning",
+            "manifest_airgap_and_domain_lists",
             "reviewed_internal_server_waiver",
         ),
-        "limitation": "manifest_proxy_ca_and_domain_rules_not_applied",
+        "limitation": "manifest_proxy_and_ca_rules_remain_web_fetch_only",
     },
     {
         "surface": "http_adapters",
-        "status": "partial_shared_controls",
-        "manifest_network_policy": "not_applied",
-        "controls": ("adapter_specific_shared_ssrf_or_dns_pinning",),
-        "limitation": "coverage_varies_and_manifest_rules_are_not_applied",
+        "status": "shared_policy",
+        "manifest_network_policy": "applied",
+        "controls": (
+            "adapter_specific_shared_ssrf_or_dns_pinning",
+            "manifest_airgap_and_domain_lists",
+        ),
+        "limitation": "coverage_varies_and_manifest_proxy_ca_rules_remain_web_fetch_only",
     },
     {
         "surface": "model_providers_and_embeddings",

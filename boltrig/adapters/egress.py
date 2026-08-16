@@ -49,6 +49,30 @@ from urllib.parse import urlparse
 
 _egress_log = logging.getLogger("boltrig.egress")
 
+# The process-wide default NetworkConfig (SEC-52): the composition root
+# installs the manifest's ``network`` section once at boot, because the
+# module-ref factories the loader calls as plain ``build()`` have no
+# construction seam to receive it - without this, an operator's air-gap /
+# allow-list policy is silently void for every adapter built that way. Global
+# mutable state, bounded: written at composition (last projected manifest
+# wins), read at adapter construction, and ALWAYS superseded by an explicit
+# config passed to a constructor - never by an agent-influenced value.
+_default_network_config: dict[str, Any] | None = None
+
+
+def set_default_network_config(config: dict[str, Any] | None) -> None:
+    """Install the process-wide egress posture (the manifest ``network``
+    section). Call only from the composition root; pass None to withdraw."""
+    global _default_network_config
+    _default_network_config = dict(config) if config else None
+
+
+def default_network_config() -> dict[str, Any] | None:
+    """The process-wide egress posture, or None when no manifest installed
+    one (bare boots and tests: egress then behaves exactly as pre-manifest).
+    A copy: a reader must not be able to amend the operator's posture."""
+    return dict(_default_network_config) if _default_network_config else None
+
 
 def is_blocked_ip(ip: str) -> bool:
     """True if an address must be refused regardless of any domain list: private,

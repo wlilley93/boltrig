@@ -103,7 +103,15 @@ class PocketVoiceAdapter(HttpAdapter):
         default_format: str = "wav",
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        super().__init__(base_url=base_url, timeout=timeout)
+        super().__init__(
+            base_url=base_url,
+            timeout=timeout,
+            # Loopback by design (see _BASE_URL): the pinned-client
+            # construction carries the same one-flag waiver the per-request
+            # assert below already holds, so fail-closed construction
+            # (SEC-61) refuses everything EXCEPT this vetted local endpoint.
+            network_config={"allow_internal": True},
+        )
         # Left None on purpose. "Absent voice means a silent character, never a
         # substituted one" — a default here would quietly lend one character's
         # voice to another that named none.

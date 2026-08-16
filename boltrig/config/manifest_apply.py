@@ -164,6 +164,18 @@ async def apply_manifest(
     from .permanent_fleet import permanent_fleet_generation
 
     export_runtime_environment(manifest)
+    # The manifest network posture becomes the PROCESS-WIDE egress default
+    # (SEC-52) BEFORE any adapter is built: the module-ref factories below are
+    # called as plain ``build()`` and have no construction seam to receive it,
+    # so without this an operator's air-gap / allow-list policy is silently
+    # void for them. Explicit constructor configs always supersede it. Only a
+    # typed NetworkConfig installs (a composition-root stub stays inert).
+    from boltrig.adapters.egress import set_default_network_config
+    from .manifest import NetworkConfig
+
+    network = getattr(manifest, "network", None)
+    if isinstance(network, NetworkConfig):
+        set_default_network_config(network.as_egress_config())
     store = kernel.store
     manifest, initial_hierarchy = await _permanent_state(store, manifest)
     plan = await plan_capability_reconciliation(

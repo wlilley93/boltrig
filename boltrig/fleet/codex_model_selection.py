@@ -16,7 +16,11 @@ from boltrig.models import (
 )
 from boltrig.models.model_id_policy import exact_model_id
 
-from .model_router import endpoint_id_for_modality, select_model_endpoint
+from .model_router import (
+    endpoint_id_for_modality,
+    outbound_text_classifies_sensitive,
+    select_model_endpoint,
+)
 
 
 def requested_model_choice_id(context: InvocationContext | None) -> str | None:
@@ -52,10 +56,21 @@ async def resolve_base_model(
     context: InvocationContext | None,
     pinned_policy: bool,
     sensitive_endpoint_id: str | None,
+    outbound_text: str | None = None,
 ) -> tuple[bool, str, str | None, str | None, ModelEndpoint | None]:
-    """Resolve request classification and the capability default endpoint."""
+    """Resolve request classification and the capability default endpoint.
+
+    ``outbound_text`` is the egress payload text (the composed prompt handed to
+    the runtime). The deterministic PII scanner runs over it at this seam, so a
+    detection classifies the request sensitive BEFORE the routing decision
+    (SEC-13) - classification only, the text is never mutated."""
 
     sensitive = bool(context is not None and context.extra.get("data_class") == "sensitive")
+    # The caller-supplied classification is not trusted alone here (SEC-13):
+    # scanner detection overrides a missing/false classification so existing
+    # sensitive policy (local endpoint, or the audited misroute refusal when
+    # none is configured - SEC-12) applies unchanged. Fail closed, never open.
+    sensitive = sensitive or outbound_text_classifies_sensitive(outbound_text)
     modality = str((context.extra if context is not None else {}).get("input_modality") or "text")
     choice_id = requested_model_choice_id(context)
     validate_model_choice_scope(

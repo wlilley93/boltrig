@@ -159,6 +159,7 @@ async def generate_adapter_record(
     *,
     actor: str,
 ) -> Any:
+    from boltrig.adapters.egress import default_network_config
     from boltrig.adapters.generator import generate_adapter_from_spec
     from .control_generated_adapter import (
         generated_adapter_from_record,
@@ -167,7 +168,14 @@ async def generate_adapter_record(
     )
 
     await ensure_adapter_id_available(store, loader, tenant_id, params["adapter_id"])
-    adapter = generate_adapter_from_spec(params["spec"], adapter_id=params["adapter_id"])
+    # The manifest NetworkConfig (SEC-52) binds the spec fetch and the
+    # generated adapter's egress: the control plane runs in the kernel process,
+    # so the posture the composition root installed is the operator's policy.
+    adapter = generate_adapter_from_spec(
+        params["spec"],
+        adapter_id=params["adapter_id"],
+        network_config=default_network_config(),
+    )
     spec_ref = generated_adapter_projection(adapter)
     await record_inert_adapter(
         store,

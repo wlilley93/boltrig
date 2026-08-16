@@ -110,7 +110,16 @@ class LocalWhisperAdapter(HttpAdapter):
         timeout: float = 60.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        super().__init__(base_url=base_url, timeout=timeout)
+        super().__init__(
+            base_url=base_url,
+            timeout=timeout,
+            # The base host is internal by design (the module docstring's
+            # operator-vetted opt-in), so the PINNED client construction needs
+            # the same one-flag waiver the per-request assert below already
+            # carries - without it, fail-closed client construction (SEC-61)
+            # would refuse the fixed local endpoint this adapter exists for.
+            network_config={"allow_internal": True},
+        )
         self._transport = transport
 
     def describe(self) -> list[VerbSpec]:

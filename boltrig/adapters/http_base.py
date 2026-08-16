@@ -76,6 +76,7 @@ class HttpAdapter:
         retry: RetryPolicy | None = None,
         rate_limit: RateLimitConfig | None = None,
         default_headers: dict[str, str] | None = None,
+        network_config: dict[str, Any] | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -83,6 +84,17 @@ class HttpAdapter:
         self.rate_limit = rate_limit or RateLimitConfig()
         self._limiter = RateLimiter(self.rate_limit)
         self._default_headers = dict(default_headers or {})
+        # The manifest NetworkConfig (air-gap / allow/block lists, SEC-52),
+        # snapshotted at construction like web_fetch's policy_snapshot. An
+        # explicit config always wins; absent one, the process-wide default
+        # the composition root installed covers factories with no
+        # construction seam. None + no default = today's behaviour exactly.
+        from boltrig.adapters.egress import default_network_config
+
+        self._network_config = (
+            dict(network_config) if network_config is not None
+            else default_network_config()
+        )
 
     # --- contract surface ----------------------------------------------------
     def describe(self) -> list[VerbSpec]:
@@ -163,15 +175,18 @@ class HttpAdapter:
             headers.update(extra)
         # SSRF/rebinding (H2/SEC-61): pin the client's TCP target to the vetted IP
         # of the base host so httpx cannot re-resolve to internal space at connect
-        # time. If the base host is internal (or empty), leave the client unpinned
-        # and let the per-request egress guard in request() refuse it with INVALID.
+        # time. An unpinning refusal (empty base, internal host, air-gap/allow-list
+        # policy, SEC-52) FAILS the construction: shipping an unpinned client
+        # instead would hand httpx a second, unaudited DNS lookup at connect time -
+        # the exact rebinding TOCTOU pinning exists to close.
         from boltrig.adapters.egress import EgressBlocked, pinned_transport
 
-        transport: httpx.AsyncBaseTransport | None = None
         try:
-            transport = pinned_transport(base)
-        except EgressBlocked:
-            transport = None
+            transport = pinned_transport(base, self._network_config)
+        except EgressBlocked as exc:
+            raise _HttpFailure(
+                AdapterError(ErrorClass.INVALID, str(exc), retryable=False)
+            ) from exc
         return httpx.AsyncClient(
             base_url=base,
             headers=headers,
@@ -242,7 +257,9 @@ class HttpAdapter:
         from boltrig.adapters.egress import EgressBlocked, assert_egress_allowed
 
         try:
-            assert_egress_allowed(str(client.base_url.join(url)))
+            assert_egress_allowed(
+                str(client.base_url.join(url)), self._network_config
+            )
         except EgressBlocked as exc:
             raise _HttpFailure(
                 AdapterError(ErrorClass.INVALID, str(exc), retryable=False)
