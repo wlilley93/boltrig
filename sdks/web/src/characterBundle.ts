@@ -40,7 +40,7 @@ export interface CharacterBundleShaderVisual {
   type: "shader";
   /** Id of the canvas source that draws this character. */
   source: string;
-  fragment: CharacterBundleAssetRef;
+  fragment?: CharacterBundleAssetRef;
   /** Uniform names the shader NEEDS; checked against what the source supplies. */
   uniforms?: string[];
 }
@@ -212,7 +212,15 @@ function shaderVisual(visual: Record<string, unknown>): CharacterBundleShaderVis
   return {
     type: "shader",
     source: label(visual.source, "visual.source", 128),
-    fragment: assetRef(visual.fragment, "visual.fragment"),
+    // ABSENT means the character ships no fragment of its own and is drawn
+    // entirely by the named canvas source. Pin what you ship: a bundle carrying
+    // a .frag must digest it so a file moving under the manifest fails here
+    // rather than at first paint, but a character whose renderer is host
+    // machinery has nothing to pin, and a digest of an invented file would be a
+    // pin that lies.
+    fragment: visual.fragment === undefined
+      ? undefined
+      : assetRef(visual.fragment, "visual.fragment"),
     uniforms: uniforms(visual.uniforms, "visual.uniforms"),
   };
 }

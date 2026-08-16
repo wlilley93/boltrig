@@ -74,6 +74,12 @@ describe("Jarvis as a character bundle", () => {
     const visual = parseCharacterBundle(jarvisBundle).visual;
     expect(visual.type).toBe("shader");
     if (visual.type !== "shader") return;
+    // PRESENT, not merely correct. `fragment` became optional so a character
+    // drawn by host machinery could ship no shader file; this one DOES ship
+    // one, and asserting its presence is what stops "optional" turning into
+    // "absent everywhere" and the digest check covering nothing.
+    expect(visual.fragment).toBeDefined();
+    if (!visual.fragment) return;
     expect(visual.fragment.file).toBe("jarvis.frag");
     expect(visual.fragment.sha256).toBe(digest);
   });

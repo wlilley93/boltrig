@@ -5,6 +5,7 @@ import { saveSkinLocal } from "../../character";
 import { skinFor, useCharacter, useSkin } from "../characters";
 import { FamiliarStage } from "../familiar/FamiliarStage";
 import { JarvisStage } from "../jarvis/JarvisStage";
+import { UltronStage } from "../ultron/UltronStage";
 import { CompanionCarousel } from "./CompanionCarousel";
 import { COMPANIONS, companionIndex } from "./companionCatalogue";
 import { playCompanionPreview } from "./companionVoicePreview";
@@ -70,6 +71,9 @@ function CompanionArt({
 }) {
   if (id === "familiar") {
     return <FamiliarStage mode="hero" state={preview.familiar} label="Familiar preview" />;
+  }
+  if (id === "ultron") {
+    return <UltronStage state={preview.ultron} suspended={false} />;
   }
   // `labels="shader"` keeps the DOM overlay off the preview: the onboarding card
   // is a portrait, and a HUD's legends over it read as chrome rather than as the

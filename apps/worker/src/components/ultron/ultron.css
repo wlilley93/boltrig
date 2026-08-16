@@ -1,0 +1,22 @@
+/* Ultron's stage. Sized by its container like Jarvis's, and NOT square: the
+ * membrane wants the whole viewport rather than a portrait box. */
+.ultron-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 160px;
+}
+
+/* The renderer sizes the backing store itself from the host's client box and
+ * the device pixel ratio, so this must NOT set a width in pixels. */
+.ultron-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* WebGL2 or the float extension missing. Say so with a surface rather than
+ * leaving a hole -- a blank area reads as a layout bug, not as a refusal. */
+.ultron-stage.fallback {
+  background: radial-gradient(circle at 50% 45%, rgb(20 60 150 / 28%), transparent 62%);
+}

@@ -33,6 +33,12 @@ export const COMPANIONS: readonly CompanionChoice[] = [
     blurb: "An instrument for the machine's measured state.",
     note: "Precise, technical and visibly connected to the work.",
   },
+  {
+    id: "ultron",
+    name: "Ultron",
+    blurb: "An intelligence that has finished evaluating the situation.",
+    note: "Cold, certain, and unimpressed by effort.",
+  },
 ];
 
 /** Rail position of a companion, or 0 for one that is not offered here. */

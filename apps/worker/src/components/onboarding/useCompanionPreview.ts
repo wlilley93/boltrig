@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { RESTING_STAGE_STATE, type FamiliarStageState } from "../familiar/FamiliarState";
 import { RESTING_JARVIS_STATE, type JarvisStageState } from "../jarvis/JarvisState";
+import { RESTING_ULTRON_STATE, type UltronStageState } from "../ultron/UltronState";
 
 /** The behaviours Jarvis cycles through on the companion card.
  *
@@ -29,12 +30,15 @@ function bandsFor(t: number): number[] {
 export interface CompanionPreview {
   familiar: FamiliarStageState;
   jarvis: JarvisStageState;
+  /** Ultron reads the same four signals; only the body differs. */
+  ultron: UltronStageState;
 }
 
 export function useCompanionPreview(): CompanionPreview {
   const [preview, setPreview] = useState<CompanionPreview>({
     familiar: { ...RESTING_STAGE_STATE, working: true, level: 0.32 },
     jarvis: { ...RESTING_JARVIS_STATE, ...JARVIS_CYCLE[0] },
+    ultron: { ...RESTING_ULTRON_STATE, mode: "thinking", level: 0.3 },
   });
 
   useEffect(() => {
@@ -61,6 +65,13 @@ export function useCompanionPreview(): CompanionPreview {
         jarvis: {
           ...RESTING_JARVIS_STATE,
           ...slot,
+          bands: slot.mode === "speaking" ? bandsFor(t) : null,
+        },
+        ultron: {
+          ...RESTING_ULTRON_STATE,
+          // The same cycle, minus the readout and micLevel he has no use for.
+          mode: (slot.mode ?? "standby") as UltronStageState["mode"],
+          level: Math.min(1, Math.max(0, level)),
           bands: slot.mode === "speaking" ? bandsFor(t) : null,
         },
       });

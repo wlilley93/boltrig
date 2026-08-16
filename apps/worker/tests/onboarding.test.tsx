@@ -138,7 +138,10 @@ describe("first-run onboarding", () => {
     // Arrowing past the end must not wrap: this is a list, not a carousel.
     const jarvis = screen.getByRole("radio", { name: "Jarvis" });
     fireEvent.keyDown(jarvis, { key: "ArrowRight" });
-    expect(screen.getByRole("radio", { name: "Jarvis" }).getAttribute("aria-checked"))
+    expect(screen.getByRole("radio", { name: "Ultron" }).getAttribute("aria-checked"))
+      .toBe("true");
+    fireEvent.keyDown(screen.getByRole("radio", { name: "Ultron" }), { key: "ArrowRight" });
+    expect(screen.getByRole("radio", { name: "Ultron" }).getAttribute("aria-checked"))
       .toBe("true");
   });
 
@@ -239,9 +242,15 @@ describe("first-run onboarding", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show Jarvis" }));
     expect(screen.getByTestId("jarvis-preview")).toBeTruthy();
     expect(screen.queryByTestId("familiar-preview")).toBeNull();
-    // ...and none on the last, so the rail cannot be walked into a cycle.
+    // Jarvis is in the MIDDLE now that Ultron exists, so he has both chevrons.
     expect(screen.queryByRole("button", { name: "Show Familiar" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show Ultron" })).toBeTruthy();
+    // The end of the rail is where the right chevron disappears -- that was
+    // always the assertion, and the end has simply moved along one.
+    fireEvent.click(screen.getByRole("button", { name: "Show Ultron" }));
     expect(document.querySelectorAll(".companion-chevron.right")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: /Show / })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show Jarvis" }));
     // The dots carry the choice for anyone not using the picture.
     expect(screen.getByRole("radio", { name: "Jarvis" }).getAttribute("aria-checked"))
       .toBe("true");

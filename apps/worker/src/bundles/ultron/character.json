@@ -1,0 +1,69 @@
+{
+  "$schema": "../../../../../schemas/character-bundle/v1/character-bundle.schema.json",
+  "schemaVersion": 1,
+  "id": "ultron",
+  "name": "Ultron",
+  "blurb": "An intelligence that has finished evaluating the situation.",
+  "type": "shader",
+  "visual": {
+    "type": "shader",
+    "source": "boltrig.canvas.ultron",
+    "uniforms": [
+      "uState",
+      "uTime",
+      "uDt",
+      "uEnergy",
+      "uRadius",
+      "uWaveT",
+      "uWaveAmp",
+      "uAspect",
+      "uStreak",
+      "uGrid",
+      "uSegments",
+      "uStride",
+      "uSize",
+      "uLinkRange",
+      "uAggression",
+      "uWarm",
+      "uHot",
+      "uFringe",
+      "uInner",
+      "uFringeScale",
+      "uFringeGain",
+      "uGain",
+      "uSrc",
+      "uDir",
+      "uThreshold",
+      "uScene",
+      "uBloom",
+      "uBloomGain",
+      "uCore",
+      "uStarburst"
+    ]
+  },
+  "phenotype": {
+    "reads": true
+  },
+  "voice": {
+    "fallbackVoiceIds": {
+      "fish": "c7c32b841f034744b57be035d6b0af4e",
+      "pocket-voice": "ultron"
+    }
+  },
+  "capabilities": {
+    "camera": {
+      "wanted": false
+    },
+    "presence": {
+      "wanted": false
+    },
+    "budgets": {
+      "wanted": false
+    }
+  },
+  "provenance": {
+    "ships": true,
+    "upstream": "boltrig-stock:ultron",
+    "note": "HE IS NOT A SKIN OF JARVIS, and the distinction is the reference's own. Animal Logic built both consciousnesses for the Birth of Ultron sequence and coded them as opposites: JARVIS an orange aura of angular shapes mimicking computer circuitry, ULTRON a blue aura, organically designed. The gold hologram in components/jarvis/v2 is therefore JARVIS's look in that film, which is why his second skin is called 'Age of Ultron' and why this is a separate character with its own id, voice and body. VISUAL: he carries no .frag because he is not one shader -- he is a simulation and four passes, which is machinery and lives in components/ultron beside the shared substrate in components/canvas, exactly as Jarvis's neural field does. VOICE: two providers, two jobs. `fish` is the GENERATION id -- it rendered the eight register references in pocket-voice/refs/ultron/ via make_registers.py, and is not used at runtime. `pocket-voice: ultron` IS the runtime voice: nine local clones (ultron plus ultron-<tag> for all eight registers), which cost nothing per call and keep the audio on the box. The eight picks were made on duration closest to 7.0s, the same measurable proxy Jarvis's were, and are PROVISIONAL: register fit is an ear judgement and re-choosing in me-lora's bench overwrites the same names. BUDGETS: not wanted, unlike Jarvis -- he has no gauge to put them in, and polling for a body that cannot display them is a request nobody reads."
+  }
+}

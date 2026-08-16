@@ -3,7 +3,7 @@
 // Ebb's JARVIS has "an internal network of connections within the spherical
 // centre". Streaks alone are smoke; the LINK pass is what makes it a network.
 
-import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL } from "./glslCommon";
+import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL } from "../../canvas/glslCommon";
 
 // ------------------------------------------------------------ streaks (DRAW)
 //

@@ -15,7 +15,7 @@
 //
 // So: an interior network (LINK), exterior data rings (RING), a heart
 // (COMPOSITE), and traffic between them (the migrating particles in
-// glslCommon). An undifferentiated ball of filaments is NOT this design, and
+// components/canvas/glslCommon). An undifferentiated ball of filaments is NOT this design, and
 // two rounds of colour tuning against one went nowhere -- worth recording,
 // because when this reads wrong the tempting next move is always another
 // colour tweak, and twice now that was the wrong move.
@@ -58,7 +58,7 @@
 //                    Additive lines alone are thin and mean.
 
 import type { JarvisStageState } from "../JarvisState";
-import type { FloatUniforms } from "./glResources";
+import type { FloatUniforms } from "../../canvas/glResources";
 import { NeuralPasses, type Drive } from "./neuralPasses";
 
 /** Eight zeroes, reused rather than reallocated every frame. */
