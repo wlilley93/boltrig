@@ -1,13 +1,13 @@
 {
   "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-  "captureManifestSha256": "ea367eda0d71882e0b3d63e14cd8e9fc10eb90567f151b58ef33c7f4c30c9354",
+  "captureManifestSha256": "bc1ceb3281a88e5ea0931b3dc4573763d29ddc796aba9804663b57f349e5823a",
   "captureSourceBinding": {
-    "branch": "",
-    "digestAfterCapture": "8816a108dcb6c490118ac5532657998dfbf092e853802783ad46160a3e38b1bd",
+    "branch": "feat/console-target",
+    "digestAfterCapture": "5a102b6114641ae8336ebf0dae4d8178a49c096f5da1e176a62f5e4f51eca102",
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "8816a108dcb6c490118ac5532657998dfbf092e853802783ad46160a3e38b1bd",
+    "digestBeforeCapture": "5a102b6114641ae8336ebf0dae4d8178a49c096f5da1e176a62f5e4f51eca102",
     "dirty": true,
-    "head": "5becb31a3224700dfb610f7bb17c5740f6712051",
+    "head": "5fd32d83140c2a08359a7ebeb779f0f9f3b76141",
     "scope": [
       "apps/worker/src",
       "apps/worker/tests/visual"
