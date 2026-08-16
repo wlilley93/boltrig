@@ -71,3 +71,7 @@ backups/
 deploy/wheelhouse/
 docker-compose.override.*.yml*
 _migration/
+
+# pnpm content-addressable cache. Never source; it was committed by
+# accident in e7f56dfc and carries third-party fixture keys.
+.pnpm-store/
