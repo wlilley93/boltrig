@@ -700,6 +700,22 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
         "superseded-read",
         "calls/currentCall already return the complete call projection.",
     ),
+    # Typed memory planes (decision 0029). The kernel routes and the web SDK
+    # both carry the candidate queue, the slot timeline and the review call; the
+    # Worker has no UI for any of them yet, which the decision's own honesty
+    # section states outright.
+    "memoryCandidateReview": (
+        "advanced-compatibility",
+        "Governed agent/operator surface; no typed-memory review UI in the Worker yet.",
+    ),
+    "memoryCandidates": (
+        "advanced-compatibility",
+        "Governed agent/operator surface; no typed-memory queue UI in the Worker yet.",
+    ),
+    "memoryTimeline": (
+        "advanced-compatibility",
+        "Governed agent/operator surface; no slot-timeline UI in the Worker yet.",
+    ),
     "refreshCallMedia": (
         "compatibility-helper",
         "Worker uses reopenCall for recovery and fresh media credentials.",
