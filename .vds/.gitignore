@@ -1,0 +1,4 @@
+# VDS S-3(9): the record is committed, not scratch. These two are the only
+# ignored paths, because a governance record that is gitignored is not a record.
+cache/
+private/

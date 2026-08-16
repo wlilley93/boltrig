@@ -64,6 +64,7 @@ from .codex_runtime_config_toml import CODEX_MCP_SERVER_NAME
 def _sha256(text: str) -> str:
     return f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()}"
 
+
 KERNEL_TOOLS_PROFILE_NAME = "codex-kernel-tools"
 
 # The base version of the birth instructions. 1.0.0 was four sentences that named
@@ -72,8 +73,11 @@ KERNEL_TOOLS_PROFILE_NAME = "codex-kernel-tools"
 # the ONLY lane that never sent the floor - including the sentence that explains
 # the <untrusted> envelope its own chat path wraps user input in. 1.2.0 adds the
 # memory rule that 1.1.0 left out on a premise which turned out to be false when
-# checked against the live tenant rather than asserted.
-KERNEL_TOOLS_BASE_VERSION = "1.2.0"
+# checked against the live tenant rather than asserted. 1.3.0 adds the stable
+# inspect/act/verify operating method and explicitly treats tool metadata as data,
+# not a second instruction channel. 1.4.0 adds clean-room capability guidance for
+# specialised tools, files/code, sourced research, and bounded delegation.
+KERNEL_TOOLS_BASE_VERSION = "1.4.0"
 
 # The lane's own wall statement. Everything else in the instructions is shared
 # with any other tool-calling lane; this sentence is what makes it THIS lane.
@@ -130,9 +134,7 @@ def _sanitize(value: str) -> str:
     """Replicate Codex 0.144.3's ``sanitize_responses_api_tool_name`` exactly."""
 
     return "".join(
-        character
-        if character.isascii() and (character.isalnum() or character == "_")
-        else "_"
+        character if character.isascii() and (character.isalnum() or character == "_") else "_"
         for character in value
     )
 
@@ -190,9 +192,7 @@ def kernel_tools_cell_root(stack_root: Path, assignment: PhaseAssignmentRef) -> 
     return read_only_cell_root(stack_root, assignment)
 
 
-def kernel_tools_thread_spec(
-    assignment: PhaseAssignmentRef, stack_root: Path
-) -> RuntimeThreadSpec:
+def kernel_tools_thread_spec(assignment: PhaseAssignmentRef, stack_root: Path) -> RuntimeThreadSpec:
     """The exact kernel-tools spec the adapter sends for ``assignment``.
 
     Matches the provisioned admission by construction: the fixed kernel-tools

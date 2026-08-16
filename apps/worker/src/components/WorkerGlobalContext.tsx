@@ -2,19 +2,19 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from "react";
 
 import { client } from "../client";
+import { characterFromSettings, saveCharacterLocal } from "../character";
+import { useIdentityRefreshLifecycle } from "./workerIdentityRefresh";
 
-const INBOX_POLL_MS = 15_000;
 const CONTEXT_CHANGED_EVENT = "boltrig:worker-context-changed";
 
 type LoadStatus = "loading" | "ready" | "unavailable";
 
-interface WorkerIdentity {
+export interface WorkerIdentity {
   user: string;
   role: string | null;
   organisation: string;
@@ -24,17 +24,11 @@ interface WorkerIdentity {
 interface WorkerGlobalContextValue {
   identity: WorkerIdentity | null;
   identityStatus: LoadStatus;
-  pendingCount: number | null;
-  pendingStatus: LoadStatus;
-  refreshPending(): Promise<void>;
 }
 
 const fallbackContext: WorkerGlobalContextValue = {
   identity: null,
   identityStatus: "loading",
-  pendingCount: null,
-  pendingStatus: "loading",
-  refreshPending: async () => undefined,
 };
 
 const WorkerGlobalContext = createContext<WorkerGlobalContextValue>(fallbackContext);
@@ -42,8 +36,6 @@ const WorkerGlobalContext = createContext<WorkerGlobalContextValue>(fallbackCont
 export function WorkerGlobalContextProvider({ children }: { children: React.ReactNode }) {
   const [identity, setIdentity] = useState<WorkerIdentity | null>(null);
   const [identityStatus, setIdentityStatus] = useState<LoadStatus>("loading");
-  const [pendingCount, setPendingCount] = useState<number | null>(null);
-  const [pendingStatus, setPendingStatus] = useState<LoadStatus>("loading");
 
   const refreshIdentity = useCallback(async () => {
     const [meResult, orgResult, workspaceResult, overviewResult] = await Promise.allSettled([
@@ -59,6 +51,10 @@ export function WorkerGlobalContextProvider({ children }: { children: React.Reac
       return;
     }
 
+    // Covers authentication transitions that enter the private tree without
+    // AuthGate's initial session probe. This consumes the existing identity
+    // read and does not add another settings request.
+    saveCharacterLocal(characterFromSettings(meResult.value.settings));
     const profile = meResult.value.profile;
     const organisation = orgResult.status === "fulfilled"
       ? orgResult.value.organisation.name
@@ -93,38 +89,12 @@ export function WorkerGlobalContextProvider({ children }: { children: React.Reac
     );
   }, []);
 
-  const refreshPending = useCallback(async () => {
-    try {
-      const result = await client.hitl();
-      setPendingCount(result.requests.length);
-      setPendingStatus("ready");
-    } catch {
-      setPendingStatus("unavailable");
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshIdentity();
-    void refreshPending();
-    const refresh = () => {
-      void refreshIdentity();
-      void refreshPending();
-    };
-    window.addEventListener(CONTEXT_CHANGED_EVENT, refresh);
-    const timer = window.setInterval(() => void refreshPending(), INBOX_POLL_MS);
-    return () => {
-      window.removeEventListener(CONTEXT_CHANGED_EVENT, refresh);
-      window.clearInterval(timer);
-    };
-  }, [refreshIdentity, refreshPending]);
+  useIdentityRefreshLifecycle(refreshIdentity, CONTEXT_CHANGED_EVENT);
 
   const value = useMemo<WorkerGlobalContextValue>(() => ({
     identity,
     identityStatus,
-    pendingCount,
-    pendingStatus,
-    refreshPending,
-  }), [identity, identityStatus, pendingCount, pendingStatus, refreshPending]);
+  }), [identity, identityStatus]);
 
   return (
     <WorkerGlobalContext.Provider value={value}>

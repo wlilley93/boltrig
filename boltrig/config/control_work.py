@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
+from boltrig.kernel.work_authority import stamp_creator_ceiling
 from boltrig.models import InvocationContext, WorkItem, WorkStatus
 from boltrig.store.work_mutations import (
     WorkMutationConflict,
@@ -56,9 +57,7 @@ def _fingerprint(item: WorkItem) -> dict[str, Any]:
         "workspace_id": item.workspace_id,
         "attempts": item.attempts,
         "lease_owner": item.lease_owner,
-        "lease_expires_at": (
-            item.lease_expires_at.isoformat() if item.lease_expires_at else None
-        ),
+        "lease_expires_at": (item.lease_expires_at.isoformat() if item.lease_expires_at else None),
         "active": work_item_active(item),
     }
 
@@ -90,9 +89,7 @@ async def approval_work_context(
     item = await _visible_item(store, str(params["item_id"]), context, departments)
     result = {"work_item": _fingerprint(item)}
     if verb == "control.work.reparent" and params.get("parent_id") is not None:
-        parent = await _visible_item(
-            store, str(params["parent_id"]), context, departments
-        )
+        parent = await _visible_item(store, str(params["parent_id"]), context, departments)
         result["parent_work_item"] = _fingerprint(parent)
     return result
 
@@ -136,6 +133,7 @@ async def execute_work_operation(
                 parent_id=params.get("parent_id"),
                 on_behalf_of=context.on_behalf_of or context.actor,
             )
+            stamp_creator_ceiling(item, context.grants)
             created = await governed_create_work(
                 store,
                 item,

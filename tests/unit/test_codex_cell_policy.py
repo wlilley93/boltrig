@@ -14,6 +14,12 @@ from scripts import check_codex_protocol
 from boltrig.fleet.infrastructure import codex_runtime_config_argv as argv
 from tests.unit.codex_process_fakes import make_layout
 
+# Every leg here needs a Linux kernel facility macOS does not have: yama
+# ptrace_scope, abstract AF_UNIX names, SO_PEERCRED, or bubblewrap. Marked so a
+# non-Linux box reports them as unverified instead of failing; on Linux the
+# marker is inert and they always run.
+pytestmark = pytest.mark.linux_only
+
 
 def test_runtime_pin_exactly_matches_checked_in_protocol_checker() -> None:
     assert policy.CODEX_CLI_VERSION == check_codex_protocol.PIN_VERSION == "0.144.3"
@@ -97,7 +103,11 @@ def test_binary_must_be_executable_regular_non_symlink_and_exact_digest(
     binary.write_bytes(b"reviewed binary")
     binary.chmod(0o700)
     expected = hashlib.sha256(binary.read_bytes()).hexdigest()
-    monkeypatch.setattr(policy, "CODEX_CLI_SHA256", expected)
+    monkeypatch.setattr(
+        policy,
+        "reviewed_codex_artifacts",
+        lambda: {expected: policy.CODEX_CLI_TARGET},
+    )
 
     verified = policy.verify_pinned_binary(binary)
 
@@ -115,6 +125,25 @@ def test_binary_must_be_executable_regular_non_symlink_and_exact_digest(
         policy.verify_pinned_binary(binary)
 
 
+def test_arm64_release_binary_is_an_independent_reviewed_artifact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    binary = tmp_path / "codex-arm64"
+    binary.write_bytes(b"reviewed arm64 binary")
+    binary.chmod(0o700)
+    expected = hashlib.sha256(binary.read_bytes()).hexdigest()
+    monkeypatch.setattr(
+        policy,
+        "reviewed_codex_artifacts",
+        lambda: {expected: policy.CODEX_CLI_TARGET_ARM64},
+    )
+
+    verified = policy.verify_pinned_binary(binary)
+
+    assert verified.sha256 == expected
+    assert verified.target == policy.CODEX_CLI_TARGET_ARM64
+
+
 @pytest.mark.skipif(not Path("/proc/self/fd").is_dir(), reason="Linux executable fd seam")
 def test_verified_descriptor_keeps_reviewed_bytes_after_path_replacement(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -123,7 +152,12 @@ def test_verified_descriptor_keeps_reviewed_bytes_after_path_replacement(
     reviewed = b"reviewed executable bytes"
     binary.write_bytes(reviewed)
     binary.chmod(0o700)
-    monkeypatch.setattr(policy, "CODEX_CLI_SHA256", hashlib.sha256(reviewed).hexdigest())
+    expected = hashlib.sha256(reviewed).hexdigest()
+    monkeypatch.setattr(
+        policy,
+        "reviewed_codex_artifacts",
+        lambda: {expected: policy.CODEX_CLI_TARGET},
+    )
     verified = policy.verify_pinned_binary(binary)
     descriptor = verified.fileno()
     old_inode = tmp_path / "old-inode"

@@ -21,6 +21,7 @@ def _spec(
     description: str,
     *,
     additional: bool = True,
+    consequence: str = "high",
 ) -> VerbSpec:
     input_schema: dict[str, Any] = {
         "type": "object",
@@ -35,10 +36,38 @@ def _spec(
         noun_id="control",
         input_schema=input_schema,
         output_schema=_OBJ,
-        consequence="high",
+        consequence=consequence,
         description=description,
         idempotency_mode="cacheable",
     )
+
+
+def _draft_lane_specs() -> list[VerbSpec]:
+    """Chat-first authoring: iterate a draft freely (LOW consequence, no HITL
+    hold), publish deliberately (HIGH). A draft is a non-runnable working copy
+    under a reserved id prefix - never on the runnable shelf, never triggerable
+    - so the approval-per-edit cost falls only on publish."""
+    return [
+        _spec(
+            "control.workflow.draft.upsert",
+            {
+                "id": _STRING,
+                "definition": WORKFLOW_DEFINITION_SCHEMA,
+                "intent_tags": _STRINGS,
+            },
+            ("id",),
+            "Save a non-runnable draft of a workflow definition (low-consequence iteration)",
+            additional=False,
+            consequence="low",
+        ),
+        _spec(
+            "control.workflow.publish",
+            {"id": _STRING, "version": _STRING},
+            ("id",),
+            "Promote a saved draft to a runnable workflow version (approval binds to the draft)",
+            additional=False,
+        ),
+    ]
 
 
 def workflow_specs() -> list[VerbSpec]:
@@ -94,6 +123,7 @@ def workflow_specs() -> list[VerbSpec]:
             "Execute a stored workflow through governed step dispatch",
         ),
     ]
+    specs.extend(_draft_lane_specs())
     specs.append(
         _spec(
             "control.workflow.trigger_binding.create",

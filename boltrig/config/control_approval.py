@@ -24,6 +24,10 @@ from .control_approval_registry import (
     verb_context,
     verb_upsert_context,
 )
+from .control_approval_model_endpoints import (
+    model_endpoint_context,
+    model_endpoint_upsert_context,
+)
 from .control_approval_workflows import (
     CAPABILITY_ACTIONS,
     EVAL_CASE_ACTIONS,
@@ -34,8 +38,6 @@ from .control_approval_workflows import (
     capability_context,
     eval_case_context,
     eval_case_upsert_context,
-    model_endpoint_context,
-    model_endpoint_upsert_context,
     workflow_context,
     workflow_trigger_binding_context,
 )
@@ -176,13 +178,14 @@ async def _ai_key_context(
         or proposal.provider != str(params.get("provider") or "")
         or proposal.model != str(params.get("model") or "")
         or proposal.base_url != (str(params.get("base_url") or "").strip() or None)
+        or proposal.modality != str(params.get("modality") or "text")
         or proposal.secret_digest != str(params.get("secret_digest") or "")
     ):
         raise PermissionError(
             "AI-key proposal is unavailable or does not match this caller"
         )
     current = await store.get_ai_config(
-        context.tenant_id, proposal.level, proposal.scope_id
+        context.tenant_id, proposal.level, proposal.scope_id, proposal.modality
     )
     return {
         "proposal": {
@@ -200,6 +203,7 @@ async def _ai_key_context(
                 "provider": current.provider,
                 "model": current.model,
                 "base_url": current.base_url,
+                "modality": current.modality,
                 "credential_ref": current.credential_ref,
                 "updated_at": current.updated_at.isoformat(),
             }

@@ -166,7 +166,7 @@ def _executor_capturing_task(store):
     captured: list[str] = []
 
     async def spawn(tenant_id, task, skills, prefer, context, *,
-                    partial_on_budget=True, grant_ceiling=None):
+                    partial_on_budget=True, grant_ceiling=None, announce_child=True):
         captured.append(task)
         return {"summary": "ok"}
 

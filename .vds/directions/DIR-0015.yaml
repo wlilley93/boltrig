@@ -1,0 +1,9 @@
+id: DIR-0015
+logId: DECISION-0009
+decisionDigest: sha256:c7917b3d2a9a1d9c033453b2d52335ab7c7d7b89b88a649843c12e4d9cfa2e8d
+surface: !route
+  route: apps/worker/src/components/Shell.tsx
+direction: Remove the Settings-rail footer 'Every setting is one search away. Nothing is hidden, only quiet.' Keep the duplicate Recents Search conversations field and the workspace/acme.production identity row absent, while retaining the top command-search control as the one global search entry point.
+magnitude: Apply the Settings-footer removal when the Shell renders Settings, and retain the DIR-0010 duplicate-search and workspace-row removals on the shared primary Shell. Preserve compact Recents rows and their actions, account and help controls, top command search, accessible navigation and truthful identity behavior; do not remove settings-section search or intentionally enabled developer details.
+directedAt: 2026-08-12T13:37:50Z
+notes: This additive direction confirms DIR-0010 and records the later exact Settings copy removal without changing the archived reference images. It creates no frameDigest, signed review, Code Connect linkage, token linkage, conformity or sign-off.

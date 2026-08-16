@@ -1,12 +1,12 @@
 """RuntimeResolver codex-lane gating ([2026] VJS-CC-VJS 2).
 
-``_codex_config`` returns the injected trusted-Codex config ONLY for a capability
-whose ``runtime == "codex"``, and NEVER on a ``runtime_override`` (Codex is a
-trusted, hard-walled lane, not a provider-routing target). Off by default (no
-config injected) it returns None so ``build_runtime`` degrades to ScriptRuntime.
+``_codex_config`` returns the injected trusted-Codex config only for a capability
+whose ``runtime == "codex"``. There is no runtime-override parameter or second
+routing authority. Off by default (no config injected) it returns None so the
+Codex builder returns a typed unavailable runtime.
 
 The kernel-tools lane marker: a ``runtime: codex`` capability with
-``supported_skills: ['*']`` gets the run-scoped-token seams (the pi idiom), the
+``supported_skills: ['*']`` gets the kernel's run-scoped-token seams, the
 kernel MCP endpoint, and the tool-ceiling compiler; a narrower capability keeps
 the read-only lane (``kernel_tools`` False) with the same seams present but
 unused.
@@ -55,13 +55,13 @@ def _resolver(codex_config: dict[str, object] | None) -> RuntimeResolver:
 
 def test_codex_config_none_for_non_codex_capability() -> None:
     resolver = _resolver({"trusted": True})
-    assert resolver._codex_config(_capability("pi"), None) is None
+    assert resolver._codex_config(_capability("retired-runtime")) is None
 
 
 def test_codex_config_returns_injected_for_codex_capability() -> None:
     injected = {"trusted": True, "provider": object()}
     resolver = _resolver(injected)
-    resolved = resolver._codex_config(_capability("codex", ["analysis/*"]), None)
+    resolved = resolver._codex_config(_capability("codex", ["analysis/*"]))
     assert resolved is not None
     assert resolved["trusted"] is True
     assert resolved["provider"] is injected["provider"]
@@ -71,10 +71,10 @@ def test_codex_config_returns_injected_for_codex_capability() -> None:
 
 def test_codex_config_marks_the_kernel_tools_lane_for_star_skills() -> None:
     resolver = _resolver({"trusted": True})
-    resolved = resolver._codex_config(_capability("codex", ["*"]), None)
+    resolved = resolver._codex_config(_capability("codex", ["*"]))
     assert resolved is not None
     assert resolved["kernel_tools"] is True
-    # The pi idiom: the kernel's own run-scoped token seam, never a credential.
+    # The kernel's own run-scoped token seam, never a credential.
     assert resolved["issue_token"] == resolver._kernel.mcp.issue_run_token
     assert resolved["revoke_token"] == resolver._kernel.mcp.revoke
     assert resolved["mcp_url"] == "http://kernel:8000/v1/mcp"
@@ -85,24 +85,15 @@ def test_explicit_read_only_resolution_suppresses_star_kernel_tools() -> None:
     resolver = _resolver({"trusted": True})
     resolved = resolver._codex_config(
         _capability("codex", ["*"]),
-        None,
         allow_kernel_tools=False,
     )
     assert resolved is not None
     assert resolved["kernel_tools"] is False
 
 
-def test_codex_config_never_triggers_on_runtime_override() -> None:
-    injected = {"trusted": True}
-    resolver = _resolver(injected)
-    # A non-codex capability with runtime_override == "codex" must NOT select the
-    # trusted lane: gating is on capability.runtime only.
-    assert resolver._codex_config(_capability("pi"), "codex") is None
-
-
 def test_codex_config_none_when_no_config_injected() -> None:
     resolver = _resolver(None)
-    assert resolver._codex_config(_capability("codex"), None) is None
+    assert resolver._codex_config(_capability("codex")) is None
 
 
 class _FakeStore:
@@ -150,8 +141,11 @@ from boltrig.models import ModelEndpoint  # noqa: E402
 
 def _endpoint(**kw) -> ModelEndpoint:
     base = dict(
-        id="cerebras", tenant_id="tenant-1", kind="openai",
-        model="gpt-oss-120b", data_class="standard",
+        id="cerebras",
+        tenant_id="tenant-1",
+        kind="openai",
+        model="gpt-oss-120b",
+        data_class="standard",
     )
     base.update(kw)
     return ModelEndpoint(**base)
@@ -187,6 +181,7 @@ def test_the_route_never_carries_a_base_url():
 # served_model_route being correct proves nothing if resolve never calls it. That
 # is the same unwired-claim shape this fix exists to close, so it gets its own
 # test rather than an exemption.
+
 
 class _StoreWithEndpoint:
     def __init__(self, endpoint: ModelEndpoint | None) -> None:
@@ -269,9 +264,7 @@ async def test_pinned_policy_ignores_caller_provider_and_model_profile_overrides
         extra={"model_profile": "caller-profile"},
     )
 
-    runtime = await resolver.runtime_for(
-        "tenant-1", capability, context, pinned_policy=True
-    )
+    runtime = await resolver.runtime_for("tenant-1", capability, context, pinned_policy=True)
 
     assert isinstance(runtime, ScriptRuntime)
     assert runtime.model_route == {
@@ -280,6 +273,7 @@ async def test_pinned_policy_ignores_caller_provider_and_model_profile_overrides
     }
 
 
+@pytest.mark.invariant("FR-AGENT-MODEL-OVERRIDE-01")
 async def test_pinned_codex_profile_refuses_a_different_composed_model():
     resolver = RuntimeResolver(
         _KernelWithStore(_endpoint()),
@@ -303,6 +297,314 @@ async def test_pinned_codex_profile_refuses_a_different_composed_model():
             capability,
             InvocationContext(tenant_id="tenant-1", actor="head"),
             pinned_policy=True,
+        )
+
+
+class _ChoiceStore:
+    def __init__(self, *endpoints: ModelEndpoint) -> None:
+        self._endpoints = {(endpoint.tenant_id, endpoint.id): endpoint for endpoint in endpoints}
+
+    async def get_model_endpoint(
+        self, tenant_id: str, endpoint_id: str | None
+    ) -> ModelEndpoint | None:
+        return self._endpoints.get((tenant_id, endpoint_id))
+
+
+class _ChoiceKernel(_FakeKernel):
+    def __init__(self, *endpoints: ModelEndpoint) -> None:
+        super().__init__()
+        self.store = _ChoiceStore(*endpoints)
+        self.audit = None
+
+
+class _ChoiceCatalogue:
+    def __init__(self, models: tuple[str, ...], *, available: bool = True) -> None:
+        self._models = models
+        self._available = available
+
+    async def list_models(self) -> dict[str, object]:
+        if not self._available:
+            return {"status": "unavailable", "models": [], "reason": "gateway_timeout"}
+        return {
+            "status": "ok",
+            "reason": None,
+            "models": [
+                {"id": model, "name": model, "input_modalities": ["text"]} for model in self._models
+            ],
+        }
+
+
+def _choice_resolver(*endpoints: ModelEndpoint) -> RuntimeResolver:
+    base_model = "provider/base-model-20260812"
+    resolver = RuntimeResolver(
+        _ChoiceKernel(*endpoints),
+        codex_config={
+            "trusted": True,
+            "provider": object(),
+            "stack_root": object(),
+            "model_id": base_model,
+        },
+        model_catalogue=_ChoiceCatalogue((base_model, *(endpoint.model for endpoint in endpoints))),
+    )
+    resolver._gateway = {"base_url": "http://bifrost:8080/v1", "ttl_seconds": 900}
+    resolver._resolve_ai_key = lambda *args, **kwargs: _none_key()  # type: ignore[method-assign]
+    return resolver
+
+
+def _chat_context(choice: str | None = None, *, tenant_id: str = "tenant-1"):
+    return InvocationContext(
+        tenant_id=tenant_id,
+        actor="chat",
+        extra={
+            "conversation_id": "same-conversation",
+            **({"model_endpoint_id": choice} if choice else {}),
+        },
+    )
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_default_codex_route_uses_composed_model_not_capability_endpoint() -> None:
+    manifest_default = _endpoint(
+        id="manifest-default",
+        kind="bifrost",
+        model="provider/manifest-model",
+    )
+    resolver = _choice_resolver(manifest_default)
+    capability = replace_capability(
+        _capability("codex", ["analysis/*"]),
+        model_endpoint="manifest-default",
+    )
+
+    endpoint, route, _virtual_key = await resolver._resolve_runtime_policy_with_binding(
+        "tenant-1", capability, _chat_context(), pinned_policy=False
+    )
+
+    assert endpoint is not None
+    assert endpoint.model == "provider/base-model-20260812"
+    assert route == {
+        "model": "provider/base-model-20260812",
+        "provider": "bifrost",
+        "runtime": "codex",
+    }
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+@pytest.mark.invariant("SEC-AIKEY-01")
+async def test_personal_default_carries_only_the_scoped_virtual_key_to_codex(
+    monkeypatch,
+) -> None:
+    from boltrig.identity import AiKeyResolution
+    from boltrig.identity.bifrost_user_binding import (
+        BifrostUserBinding,
+        BifrostUserGateway,
+    )
+
+    resolution = AiKeyResolution(
+        level="user",
+        scope_id="alice",
+        modality="text",
+        credential_ref="sealed-provider-key",
+        provider="openai",
+        model="openai/gpt-5.4",
+    )
+
+    async def configured_key(*_args, **_kwargs):
+        return "provider-secret-never-carried", resolution
+
+    async def ensure_binding(self, store, tenant_id, selected, provider_key):
+        assert tenant_id == "tenant-1"
+        assert selected == resolution
+        assert provider_key == "provider-secret-never-carried"
+        return BifrostUserBinding(
+            provider="openai",
+            model_id="openai/gpt-5.4",
+            provider_key_id="provider-key-id",
+            virtual_key_id="virtual-key-id",
+            virtual_key="vk-scoped-only",
+            credential_ref="bifrost-binding-ref",
+        )
+
+    monkeypatch.setenv("BOLTRIG_MODEL_GATEWAY_URL", "http://bifrost:8080/v1")
+    monkeypatch.setattr(BifrostUserGateway, "ensure", ensure_binding)
+    resolver = _choice_resolver()
+    resolver._resolve_ai_key = configured_key  # type: ignore[method-assign]
+
+    endpoint, route, virtual_key = await resolver._resolve_runtime_policy_with_binding(
+        "tenant-1",
+        _capability("codex", ["analysis/*"]),
+        InvocationContext(
+            tenant_id="tenant-1",
+            actor="chat",
+            on_behalf_of="alice",
+            extra={"conversation_id": "personal-default"},
+        ),
+        pinned_policy=False,
+    )
+
+    assert endpoint is not None
+    assert endpoint.model == "openai/gpt-5.4"
+    assert endpoint.kind == "bifrost"
+    assert route == {
+        "model": "openai/gpt-5.4",
+        "provider": "bifrost",
+        "runtime": "codex",
+    }
+    assert virtual_key == "vk-scoped-only"
+    assert "provider-secret-never-carried" not in repr((endpoint, route, virtual_key))
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_unavailable_codex_runtime_carries_no_speculative_model_route() -> None:
+    resolver = _choice_resolver()
+    resolver._codex = {
+        "trusted": False,
+        "model_id": "provider/base-model-20260812",
+    }
+
+    runtime = await resolver.runtime_for(
+        "tenant-1",
+        _capability("codex", ["analysis/*"]),
+        _chat_context(),
+    )
+
+    assert getattr(runtime, "model_route", None) is None
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_explicit_choice_rebinds_same_conversation_a_to_b() -> None:
+    endpoint_a = _endpoint(id="choice-a", kind="openai", model="provider/model-a")
+    endpoint_b = _endpoint(id="choice-b", kind="anthropic", model="provider/model-b")
+    resolver = _choice_resolver(endpoint_a, endpoint_b)
+    capability = _capability("codex", ["analysis/*"])
+
+    first, first_route, _first_key = await resolver._resolve_runtime_policy_with_binding(
+        "tenant-1", capability, _chat_context("choice-a"), pinned_policy=False
+    )
+    second, second_route, _second_key = await resolver._resolve_runtime_policy_with_binding(
+        "tenant-1", capability, _chat_context("choice-b"), pinned_policy=False
+    )
+
+    assert first is not None and first.model == "provider/model-a"
+    assert second is not None and second.model == "provider/model-b"
+    assert first_route == {
+        "model": "provider/model-a",
+        "provider": "bifrost",
+        "runtime": "codex",
+        "choice_id": "choice-a",
+    }
+    assert second_route == {
+        "model": "provider/model-b",
+        "provider": "bifrost",
+        "runtime": "codex",
+        "choice_id": "choice-b",
+    }
+    assert resolver._bindings.resolve("tenant-1", "same-conversation") == ("provider/model-b")
+
+    automatic, automatic_route, _automatic_key = (
+        await resolver._resolve_runtime_policy_with_binding(
+            "tenant-1", capability, _chat_context(), pinned_policy=False
+        )
+    )
+    assert automatic is not None
+    assert automatic.model == "provider/base-model-20260812"
+    assert automatic_route == {
+        "model": "provider/base-model-20260812",
+        "provider": "bifrost",
+        "runtime": "codex",
+    }
+    assert resolver._bindings.resolve("tenant-1", "same-conversation") == (
+        "provider/base-model-20260812"
+    )
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_choice_is_resolved_only_inside_the_callers_tenant() -> None:
+    endpoint = _endpoint(
+        id="choice-a",
+        tenant_id="another-tenant",
+        kind="bifrost",
+        model="provider/model-a",
+    )
+    resolver = _choice_resolver(endpoint)
+
+    with pytest.raises(Exception, match="missing"):
+        await resolver._resolve_runtime_policy_with_binding(
+            "tenant-1",
+            _capability("codex", ["analysis/*"]),
+            _chat_context("choice-a"),
+            pinned_policy=False,
+        )
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_runtime_refuses_unadvertised_or_unavailable_catalogue_choice() -> None:
+    from boltrig.models import ModelCatalogueUnavailable, ModelEndpointUnavailable
+
+    endpoint = _endpoint(id="choice-a", kind="bifrost", model="provider/model-a")
+    missing = _choice_resolver(endpoint)
+    missing._model_catalogue = _ChoiceCatalogue(("provider/base-model-20260812",))
+    with pytest.raises(ModelEndpointUnavailable):
+        await missing._resolve_runtime_policy_with_binding(
+            "tenant-1",
+            _capability("codex", ["analysis/*"]),
+            _chat_context("choice-a"),
+            pinned_policy=False,
+        )
+
+    unavailable = _choice_resolver(endpoint)
+    unavailable._model_catalogue = _ChoiceCatalogue((), available=False)
+    with pytest.raises(ModelCatalogueUnavailable):
+        await unavailable._resolve_runtime_policy_with_binding(
+            "tenant-1",
+            _capability("codex", ["analysis/*"]),
+            _chat_context("choice-a"),
+            pinned_policy=False,
+        )
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_runtime_refuses_a_vision_choice_without_catalogue_image_support() -> None:
+    from boltrig.models import ModelEndpointUnavailable
+
+    endpoint = _endpoint(
+        id="choice-vision",
+        kind="bifrost",
+        model="provider/model-vision",
+        modalities=("text", "vision"),
+    )
+    resolver = _choice_resolver(endpoint)
+    context = InvocationContext(
+        tenant_id="tenant-1",
+        actor="chat",
+        extra={
+            "conversation_id": "vision-conversation",
+            "input_modality": "vision",
+            "model_endpoint_id": endpoint.id,
+        },
+    )
+
+    with pytest.raises(ModelEndpointUnavailable, match="requested input"):
+        await resolver._resolve_runtime_policy_with_binding(
+            "tenant-1",
+            _capability("codex", ["analysis/*"]),
+            context,
+            pinned_policy=False,
+        )
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_automatic_codex_route_refuses_without_the_bifrost_gateway() -> None:
+    from boltrig.models import ModelEndpointUnavailable
+
+    resolver = _choice_resolver()
+    resolver._gateway = {"base_url": None, "ttl_seconds": 900}
+
+    with pytest.raises(ModelEndpointUnavailable, match="requires the Bifrost gateway"):
+        await resolver._resolve_runtime_policy_with_binding(
+            "tenant-1",
+            _capability("codex", ["analysis/*"]),
+            _chat_context(),
+            pinned_policy=False,
         )
 
 

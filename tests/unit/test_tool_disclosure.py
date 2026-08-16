@@ -22,7 +22,11 @@ from __future__ import annotations
 
 import pytest
 
-from boltrig.kernel.tool_disclosure import ToolDisclosureError, compute_tool_offer
+from boltrig.kernel.tool_disclosure import (
+    ToolDisclosureError,
+    compute_tool_offer,
+    offer_payload,
+)
 from boltrig.models import Consequence, GrantSet, Verb
 
 TENANT = "acme"
@@ -178,6 +182,25 @@ def test_the_offer_carries_the_verb_rows_themselves_so_a_caller_can_render_them(
 
     assert offer[0] is verb
     assert offer[0].input_schema == {"type": "object"}
+
+
+@pytest.mark.unit
+def test_model_description_names_high_consequence_without_inventing_other_hints() -> None:
+    high = _verb("doc.publish", consequence=Consequence.HIGH)
+    low = _verb("doc.read")
+
+    payload = {
+        item["name"]: item
+        for item in offer_payload([high, low], GrantSet.of(["doc.*"]), ("ops/doc",))
+    }
+
+    assert "high-consequence" in payload["doc.publish"]["description"]
+    assert "human approval" in payload["doc.publish"]["description"]
+    assert "has not executed" in payload["doc.publish"]["description"]
+    assert payload["doc.read"]["description"] == low.description
+    for item in payload.values():
+        assert "destructive" not in item["description"].lower()
+        assert "idempotent" not in item["description"].lower()
 
 
 @pytest.mark.unit

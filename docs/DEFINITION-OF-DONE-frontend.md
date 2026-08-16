@@ -141,7 +141,7 @@ provided:
 - a real OIDC IdP and production login/session/2FA/de-provisioning policy;
 - live model gateway/provider credentials and an on-box sensitive-model route;
 - third-party adapter/MCP services with server-held credentials;
-- live Mem0/Cognee/pgvector projections selected by the deployment;
+- live Cognee/pgvector knowledge projections selected by the deployment;
 - the sandboxed Pi runtime and stack-owned tool receipts, including reasoning/event
   streaming where enabled;
 - Cloudflare/Azure/TLS/network/monitoring configuration and off-box backup credentials;

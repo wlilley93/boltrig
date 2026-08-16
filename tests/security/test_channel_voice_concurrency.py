@@ -44,6 +44,9 @@ class _Adapter(sidecar_app.PlatformAdapter):
     def __init__(self, config: dict[str, Any]) -> None:
         self.config = config
         self.activations: list[tuple[str, str, object]] = []
+        self.texts: list[str] = []
+        self.inject_started = asyncio.Event()
+        self.inject_release: asyncio.Event | None = None
         self.started = False
         self.stopped = False
 
@@ -63,6 +66,13 @@ class _Adapter(sidecar_app.PlatformAdapter):
 
     async def deliver(self, payload: dict[str, Any]) -> None:
         return None
+
+    async def inject_user_text(self, text: str) -> bool:
+        self.inject_started.set()
+        if self.inject_release is not None:
+            await self.inject_release.wait()
+        self.texts.append(text)
+        return True
 
 
 async def _until_static_adapter(daemon: sidecar_app.ChannelSidecarDaemon) -> None:
@@ -159,5 +169,97 @@ async def test_browser_voice_calls_are_isolated_bounded_and_released_exactly() -
         await daemon.release_browser_media("call-b", replacement_b)
         assert "call-b" not in daemon._browser_sessions
         assert current_b.adapter.stopped  # type: ignore[attr-defined]
+    finally:
+        await daemon.stop()
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-03")
+async def test_browser_user_text_reaches_only_its_own_call_session() -> None:
+    kernel = _Kernel()
+    adapters: list[_Adapter] = []
+
+    def factory(platform: str, config: dict[str, Any]) -> _Adapter:
+        adapter = _Adapter(config)
+        adapters.append(adapter)
+        return adapter
+
+    daemon = sidecar_app.ChannelSidecarDaemon(
+        kernel,  # type: ignore[arg-type]
+        [
+            sidecar_app.ChannelSpec(
+                channel_id="voice-1",
+                platform="voice",
+                secret="not-logged",
+                config={"api_key": "also-not-logged"},
+            )
+        ],
+        poll_seconds=60,
+        adapter_factory=factory,
+    )
+    await daemon.start()
+    try:
+        await _until_static_adapter(daemon)
+        static = adapters[0]
+        audio_a, _ = await daemon.claim_browser_media("call-a", "media-a")
+        audio_b, _ = await daemon.claim_browser_media("call-b", "media-b")
+        assert audio_a is not None and audio_b is not None
+
+        assert await daemon.inject_browser_text(
+            "call-b", audio_b, "typed mid-call"
+        ) is True
+        session_a = daemon._browser_sessions["call-a"]
+        session_b = daemon._browser_sessions["call-b"]
+        assert session_b.adapter.texts == ["typed mid-call"]  # type: ignore[attr-defined]
+        assert session_a.adapter.texts == []  # type: ignore[attr-defined]
+        assert static.texts == []
+
+        # An unknown or already-released call id has nowhere to land.
+        assert await daemon.inject_browser_text(
+            "call-gone", audio_b, "nobody home"
+        ) is False
+
+        # Replacement cannot race an already-authorized provider write between
+        # its generation check and use: claim waits for the exact injection.
+        stale_b = audio_b
+        old_adapter = session_b.adapter
+        old_adapter.inject_started.clear()  # type: ignore[attr-defined]
+        old_adapter.inject_release = asyncio.Event()  # type: ignore[attr-defined]
+        in_flight = asyncio.create_task(daemon.inject_browser_text(
+            "call-b", stale_b, "authorized before reconnect"
+        ))
+        await old_adapter.inject_started.wait()  # type: ignore[attr-defined]
+        replacement_task = asyncio.create_task(daemon.claim_browser_media(
+            "call-b", "media-b-rotated"
+        ))
+        await asyncio.sleep(0)
+        assert not replacement_task.done()
+        assert await asyncio.wait_for(
+            daemon.inject_browser_text("call-a", audio_a, "parallel call"),
+            timeout=1,
+        ) is True
+        assert session_a.adapter.texts == ["parallel call"]  # type: ignore[attr-defined]
+        old_adapter.inject_release.set()  # type: ignore[attr-defined]
+        assert await in_flight is True
+        current_b, _ = await replacement_task
+        assert current_b is not None and current_b is not stale_b
+
+        # Once replaced, a queued frame from the old authenticated WebSocket
+        # must not reach the current provider, even though its call id is equal.
+        assert old_adapter.texts == [  # type: ignore[attr-defined]
+            "typed mid-call",
+            "authorized before reconnect",
+        ]
+        replacement = daemon._browser_sessions["call-b"]
+        assert await daemon.inject_browser_text(
+            "call-b", stale_b, "stale generation"
+        ) is False
+        assert replacement.adapter.texts == []  # type: ignore[attr-defined]
+        assert await daemon.inject_browser_text(
+            "call-b", current_b, "current generation"
+        ) is True
+        assert replacement.adapter.texts == [  # type: ignore[attr-defined]
+            "current generation"
+        ]
     finally:
         await daemon.stop()

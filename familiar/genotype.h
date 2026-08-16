@@ -24,7 +24,7 @@
  * upload. One definition cannot disagree with itself. */
 #define GENOTYPE_VEC4S (GENOTYPE_SLOTS / 4)
 
-/* 30 of 32 slots claimed. The first sixteen carry the silhouette and the identity tint (hue
+/* 31 of 32 slots claimed. The first sixteen carry the silhouette and the identity tint (hue
  * and saturation took the last two of those on 2026-07-27: identity had shape but no colour,
  * so every familiar in the fleet was the same blue and the strongest distinguishing channel a
  * screen has was going unused). The rest tune the interior, the surface, the light and the
@@ -46,7 +46,12 @@ static const char *const GENOTYPE_KEYS[GENOTYPE_SLOTS] = {
     "tempoBase",   "bodyScale",   "haloGain", "irritationGain",
     /* Light and surface frequency. lightAzimuth is the one ADDITIVE gene in this block: it is
      * an angle in radians and its identity value is 0, not 1. The rest stay multipliers. */
-    "lightAzimuth", "bumpScale",  NULL,       NULL,
+    /* paletteLightness claimed slot 30 on 2026-08-14, when the shader began reading uGene[7].z as
+     * material exposure. It is a MULTIPLIER-shaped 0..1 authored lightness, not a mood: it is what
+     * keeps a navy identity navy instead of letting the electric-blue ramp lift it. Naming it here
+     * is what makes it reachable from genotype.json at all - the shader read the slot either way,
+     * and an unnamed slot is the "gene wired to a constant" defect familiar.frag names twice. */
+    "lightAzimuth", "bumpScale",  "paletteLightness", NULL,
 };
 
 static const float GENOTYPE_DEFAULTS[GENOTYPE_SLOTS] = {
@@ -58,7 +63,7 @@ static const float GENOTYPE_DEFAULTS[GENOTYPE_SLOTS] = {
     1.0f, 1.0f, 1.0f, 1.0f,   /* warmth, breathDepth, bumpAmp, silkChurn               */
     1.0f, 1.0f, 1.0f, 1.0f,   /* specSharp, haloReach, specGain, fresnelGain          */
     1.0f, 1.0f, 1.0f, 1.0f,   /* tempoBase, bodyScale, haloGain, irritationGain       */
-    0.0f, 1.0f, 1.0f, 1.0f,   /* lightAzimuth (RADIANS, so 0), bumpScale, 2 reserved  */
+    0.0f, 1.0f, 1.0f, 1.0f,   /* lightAzimuth (RADIANS, so 0), bumpScale, paletteLightness, resvd */
 };
 
 #endif /* FAMILIAR_GENOTYPE_H */

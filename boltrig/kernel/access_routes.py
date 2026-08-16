@@ -108,6 +108,7 @@ def _ai_config_view(c) -> dict:
         "scope_id": c.scope_id,
         "provider": c.provider,
         "model": c.model,
+        "modality": c.modality,
         "base_url": c.base_url,
         "has_key": bool(c.credential_ref),
         "updated_at": c.updated_at.isoformat() if c.updated_at else None,

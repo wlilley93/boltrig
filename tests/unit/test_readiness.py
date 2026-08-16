@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -16,8 +17,15 @@ from boltrig.api.readiness import (
     REQUIRED_CONTROL_VERBS,
     ReadinessService,
 )
+from boltrig.api.codex_readiness import codex_runtime_check, manifest_requests_codex
 from boltrig.config.control_plane import ControlPlaneAdapter
 from boltrig.config.admin import AdminConfig
+from boltrig.config.manifest import (
+    AdapterConfig,
+    EphemeralRuntime,
+    FleetManifest,
+    load_manifest,
+)
 from boltrig.kernel import Kernel
 from boltrig.kernel.redis_event_relay import RedisEventRelay
 from boltrig.kernel.app import create_app
@@ -26,6 +34,24 @@ from boltrig.store import InMemoryStore
 from boltrig.workflows import WorkflowLibrary
 
 pytestmark = pytest.mark.unit
+
+_REPO = Path(__file__).resolve().parents[2]
+
+# The SHIPPED manifest, and the only one a test may read. `manifest.yaml` is
+# gitignored (.gitignore, under "secrets / local config"), so it exists only on a
+# box where an operator has made one: the legs below passed on this laptop and
+# raised FileNotFoundError in CI, which is a test asserting over a file that is
+# not in the repository. manifest.example.yaml is what the project actually
+# ships, it requests Codex, and that is the precondition these legs need - the
+# claim is "core release mode closes Codex down even though the shipped manifest
+# asks for it." Asserting that over an operator's private file proved nothing
+# about the product; skipping when the file is absent would prove less.
+_SHIPPED_MANIFEST = _REPO / "manifest.example.yaml"
+_BROWSER_MANIFEST = FleetManifest(
+    organisation="Acme",
+    tenant_id="acme",
+    adapters=(AdapterConfig(id="browser-cli", runtime="script"),),
+)
 
 
 class _StatusProvider:
@@ -37,7 +63,7 @@ class _StatusProvider:
         del tenant_id, workspace_id
         components = [
             {"id": name, "status": self.tool_status, "metadata": {}}
-            for name in ("herdr", "opencode", "browser-cli")
+            for name in ("browser-cli",)
         ]
         components.append(
             {
@@ -95,10 +121,6 @@ async def _redis_ok(_url: str, _timeout: float) -> bool:
     return True
 
 
-async def _herdr_ok(_env: Mapping[str, str], _timeout: float) -> bool:
-    return True
-
-
 async def _fleet_receipt_ok(
     _url: str,
     _tenant: str,
@@ -127,10 +149,238 @@ async def test_readyz_keeps_optional_dependencies_disabled_in_development() -> N
         "migration",
         "hatchet",
         "model_gateway",
+        "codex_runtime",
         "password_reset_delivery",
     ):
         assert report["checks"][name]["status"] == "disabled"
         assert report["checks"][name]["required"] is False
+
+
+@pytest.mark.invariant("FR-OPS-03")
+async def test_readyz_does_not_treat_baked_codex_paths_as_runtime_enablement() -> None:
+    report = await ReadinessService(
+        await _kernel(),
+        tenant_id="acme",
+        env={
+            "BOLTRIG_CODEX_TRUSTED": "0",
+            "BOLTRIG_CODEX_BINARY": "/opt/boltrig/codex/codex",
+            "BOLTRIG_CODEX_STACK_ROOT": "/var/lib/boltrig/codex-cells",
+        },
+        status_provider=_StatusProvider(),
+    ).check()
+
+    assert report["checks"]["codex_runtime"] == {
+        "status": "disabled",
+        "required": False,
+        "reason": "not_configured",
+    }
+
+
+@pytest.mark.invariant("FR-OPS-03")
+async def test_readyz_names_configured_codex_as_test_only_in_development() -> None:
+    report = await ReadinessService(
+        await _kernel(),
+        tenant_id="acme",
+        env={
+            "BOLTRIG_CODEX_TRUSTED": "1",
+            "BOLTRIG_CODEX_BINARY": "/opt/boltrig/codex/codex",
+            "BOLTRIG_CODEX_STACK_ROOT": "/var/lib/boltrig/codex-cells",
+        },
+        status_provider=_StatusProvider(),
+    ).check()
+
+    assert report["status"] == "ready"
+    assert report["checks"]["codex_runtime"] == {
+        "status": "test_only",
+        "required": False,
+        "reason": "production_gate_closed",
+        "blocker_count": 7,
+    }
+
+
+@pytest.mark.invariant("FR-OPS-03")
+async def test_readyz_refuses_configured_codex_under_a_production_signal() -> None:
+    report = await ReadinessService(
+        await _kernel(),
+        tenant_id="acme",
+        env={
+            "BOLTRIG_ENV": "production",
+            "BOLTRIG_CODEX_TRUSTED": "1",
+            "BOLTRIG_AUDIT_HMAC_KEY": "test-readiness-key",
+        },
+        status_provider=_StatusProvider(),
+        fleet_receipt_probe=_fleet_receipt_ok,
+    ).check()
+
+    assert report["status"] == "not_ready"
+    assert report["checks"]["codex_runtime"] == {
+        "status": "failed",
+        "required": True,
+        "reason": "production_gate_closed",
+        "blocker_count": 7,
+    }
+
+
+@pytest.mark.security
+@pytest.mark.invariant("FR-OPS-03")
+def test_readyz_route_refuses_manifest_codex_intent_without_the_trusted_flag() -> None:
+    manifest = FleetManifest(
+        organisation="Acme",
+        tenant_id="acme",
+        ephemeral_runtimes=(EphemeralRuntime(name="codex-worker"),),
+    )
+    env = {
+        "BOLTRIG_ENV": "production",
+        "DATABASE_URL": "postgresql://redacted",
+        "REDIS_URL": "redis://redacted",
+        "BOLTRIG_HATCHET_HEALTH": "1",
+        "BOLTRIG_MODEL_GATEWAY_HEALTH": "1",
+        "BOLTRIG_MODEL_GATEWAY_URL": "http://bifrost:8080/v1",
+        "BOLTRIG_AUDIT_HMAC_KEY": "test-readiness-key",
+    }
+    assert "BOLTRIG_CODEX_TRUSTED" not in env
+    kernel = asyncio.run(_kernel(shared_relay=True))
+    readiness = ReadinessService(
+        kernel,
+        tenant_id="acme",
+        executor=_DurableExecutor(),
+        status_provider=_StatusProvider(),
+        manifest=manifest,
+        env=env,
+        postgres_probe=_postgres_ok,
+        redis_probe=_redis_ok,
+        fleet_receipt_probe=_fleet_receipt_ok,
+    )
+
+    response = TestClient(
+        create_app(kernel, platform={"readiness": readiness})
+    ).get("/readyz")
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["status"] == "not_ready"
+    assert body["checks"]["codex_runtime"]["status"] == "failed"
+    assert body["checks"]["codex_runtime"]["required"] is True
+    assert body["checks"]["codex_runtime"]["reason"] == "production_gate_closed"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+def test_the_shipped_manifest_still_requests_codex() -> None:
+    """The precondition every "...requested by the shipped manifest" leg rests on.
+
+    Those legs claim the release gate closes Codex down *even though the shipped
+    manifest asks for it*. If manifest.example.yaml ever stopped asking, some of
+    them would keep passing and stop meaning anything. Measured, by flipping
+    every `runtime: codex` in the shipped manifest to a removed runtime: exactly two of
+    the ten legs notice (readiness `full` and doctor `full`, which fall through
+    to `not_configured` where they assert `production_gate_closed`). The other
+    eight are pinned by release mode alone and would stay green over a manifest
+    that asks for no Codex at all. This leg is what makes that visible.
+
+    It asserts through `manifest_requests_codex`, the predicate the product
+    itself keys on, and NOT over a capability name. The first version of this
+    test checked `runtime.name == "codex-worker"`, which is a label: the same
+    mutation above - six `runtime: codex` entries flipped, `manifest_requests_
+    codex` returning False - left that assertion passing. A precondition test
+    that survives the mutation it exists to catch is the vacuous green wearing
+    the costume of the fix.
+    """
+    manifest = load_manifest(str(_SHIPPED_MANIFEST), env={})
+
+    assert manifest_requests_codex(manifest), (
+        "manifest.example.yaml must keep declaring a Codex-backed runtime for the "
+        "release-gate legs above to mean anything"
+    )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+async def test_core_release_readiness_disables_codex_requested_by_the_shipped_manifest() -> None:
+    manifest = load_manifest(str(_SHIPPED_MANIFEST), env={})
+    env = {
+        "BOLTRIG_ENV": "production",
+        "BOLTRIG_RELEASE_MODE": "core",
+        "DATABASE_URL": "postgresql://redacted",
+        "REDIS_URL": "redis://redacted",
+        "BOLTRIG_HATCHET_HEALTH": "1",
+        "BOLTRIG_MODEL_GATEWAY_HEALTH": "1",
+        "BOLTRIG_MODEL_GATEWAY_URL": "http://bifrost:8080/v1",
+        "BOLTRIG_AUDIT_HMAC_KEY": "test-readiness-key",
+    }
+    report = await ReadinessService(
+        await _kernel(shared_relay=True),
+        tenant_id="acme",
+        executor=_DurableExecutor(),
+        status_provider=_StatusProvider(),
+        manifest=manifest,
+        env=env,
+        postgres_probe=_postgres_ok,
+        redis_probe=_redis_ok,
+        fleet_receipt_probe=_fleet_receipt_ok,
+    ).check()
+
+    assert report["status"] == "ready"
+    assert report["checks"]["codex_runtime"] == {
+        "status": "disabled",
+        "required": False,
+        "reason": "core_release_mode",
+        "release_mode": "core",
+    }
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+@pytest.mark.parametrize(
+    ("env", "reason"),
+    [
+        ({"BOLTRIG_RELEASE_MODE": "full"}, "production_gate_closed"),
+        ({"BOLTRIG_RELEASE_MODE": "CORE"}, "invalid_release_mode"),
+        ({"BOLTRIG_RELEASE_MODE": "core "}, "invalid_release_mode"),
+        (
+            {"BOLTRIG_RELEASE_MODE": "core", "BOLTRIG_CODEX_TRUSTED": "1"},
+            "release_mode_conflict",
+        ),
+    ],
+)
+def test_shipped_manifest_readiness_keeps_non_core_and_conflicting_postures_closed(
+    env: dict[str, str],
+    reason: str,
+) -> None:
+    manifest = load_manifest(str(_SHIPPED_MANIFEST), env={})
+
+    check = codex_runtime_check(env, True, manifest=manifest)
+
+    assert check["status"] == "failed"
+    assert check["required"] is True
+    assert check["reason"] == reason
+
+
+@pytest.mark.security
+@pytest.mark.invariant("CODEX-COMPOSITION-1")
+def test_platform_composition_threads_the_manifest_into_readiness() -> None:
+    from boltrig.api.platform_bootstrap import _build_platform_services
+
+    manifest = FleetManifest(
+        organisation="Acme",
+        tenant_id="acme",
+        ephemeral_runtimes=(EphemeralRuntime(name="codex-worker"),),
+    )
+    platform = _build_platform_services(
+        Kernel(InMemoryStore()),
+        manifest=manifest,
+        manifest_path=None,
+        codex_config=None,
+        model_catalogue=None,
+        sensitive_endpoint_id=None,
+        spawn_rules=(),
+        default_tenant="default",
+        resume_held_write=lambda *_args, **_kwargs: None,
+        wire_hitl_resume=lambda *_args, **_kwargs: None,
+        wire_memory_projection_executor=lambda *_args, **_kwargs: None,
+    )
+
+    assert platform["readiness"]._manifest is manifest
 
 
 @pytest.mark.invariant("FR-OPS-03")
@@ -195,7 +445,6 @@ async def test_readyz_requires_postgres_redis_and_migration_head_in_production()
             "BOLTRIG_AUDIT_HMAC_KEY": "test-readiness-key",
         },
         status_provider=_StatusProvider(),
-        herdr_probe=_herdr_ok,
         fleet_receipt_probe=_fleet_receipt_ok,
     ).check()
 
@@ -217,7 +466,6 @@ async def test_readyz_rejects_a_process_local_relay_in_production() -> None:
         },
         status_provider=_StatusProvider(),
         redis_probe=_redis_ok,
-        herdr_probe=_herdr_ok,
         fleet_receipt_probe=_fleet_receipt_ok,
     ).check()
 
@@ -248,7 +496,6 @@ async def test_readyz_requires_redis_stream_and_transaction_capabilities(
         },
         status_provider=_StatusProvider(),
         redis_probe=_redis_ok,
-        herdr_probe=_herdr_ok,
         fleet_receipt_probe=_fleet_receipt_ok,
     ).check()
 
@@ -272,9 +519,9 @@ async def test_readyz_probes_every_enabled_dependency() -> None:
         executor=_DurableExecutor(),
         env=env,
         status_provider=_StatusProvider(),
+        manifest=_BROWSER_MANIFEST,
         postgres_probe=_postgres_ok,
         redis_probe=_redis_ok,
-        herdr_probe=_herdr_ok,
         fleet_receipt_probe=_fleet_receipt_ok,
     ).check()
 
@@ -367,9 +614,9 @@ async def test_readyz_rejects_untrustworthy_fleet_tool_receipts_in_production(
             "BOLTRIG_AUDIT_HMAC_KEY": "test-readiness-key",
         },
         status_provider=_StatusProvider(),
+        manifest=_BROWSER_MANIFEST,
         postgres_probe=_postgres_ok,
         redis_probe=_redis_ok,
-        herdr_probe=_herdr_ok,
         fleet_receipt_probe=rejected_receipt,
     ).check()
 
@@ -382,9 +629,15 @@ async def test_readyz_rejects_untrustworthy_fleet_tool_receipts_in_production(
 
 
 @pytest.mark.invariant("FR-OPS-03")
-async def test_readyz_explicit_stack_tool_health_requires_kernel_owned_herdr() -> None:
-    async def missing_herdr(_env: Mapping[str, str], _timeout: float) -> bool:
-        return False
+async def test_readyz_explicit_stack_tool_health_requires_fleet_browser_receipt() -> None:
+    async def missing_receipt(
+        _url: str,
+        _tenant: str,
+        _timeout: float,
+        _max_age: float,
+        _signing_key: bytes,
+    ) -> tuple[bool, str]:
+        return False, "missing"
 
     report = await ReadinessService(
         await _kernel(),
@@ -395,25 +648,18 @@ async def test_readyz_explicit_stack_tool_health_requires_kernel_owned_herdr() -
             "BOLTRIG_AUDIT_HMAC_KEY": "test-readiness-key",
         },
         status_provider=_StatusProvider(),
+        manifest=_BROWSER_MANIFEST,
         redis_probe=_redis_ok,
-        herdr_probe=missing_herdr,
-        fleet_receipt_probe=_fleet_receipt_ok,
+        fleet_receipt_probe=missing_receipt,
     ).check()
 
     assert report["status"] == "not_ready"
-    assert report["checks"]["stack_tools"]["reason"] == "herdr_probe_failed"
+    assert report["checks"]["stack_tools"]["reason"] == "fleet_receipt_missing"
 
 
 @pytest.mark.invariant("FR-OPS-03")
 async def test_readyz_coalesces_concurrent_unauthenticated_probes() -> None:
-    herdr_calls = 0
     receipt_calls = 0
-
-    async def counted_herdr(_env: Mapping[str, str], _timeout: float) -> bool:
-        nonlocal herdr_calls
-        herdr_calls += 1
-        await asyncio.sleep(0.03)
-        return True
 
     async def counted_receipt(
         _url: str,
@@ -424,6 +670,7 @@ async def test_readyz_coalesces_concurrent_unauthenticated_probes() -> None:
     ) -> tuple[bool, str]:
         nonlocal receipt_calls
         receipt_calls += 1
+        await asyncio.sleep(0.03)
         return True, "ok"
 
     readiness = ReadinessService(
@@ -436,8 +683,8 @@ async def test_readyz_coalesces_concurrent_unauthenticated_probes() -> None:
             "REDIS_URL": "redis://redacted",
         },
         status_provider=_StatusProvider(),
+        manifest=_BROWSER_MANIFEST,
         redis_probe=_redis_ok,
-        herdr_probe=counted_herdr,
         fleet_receipt_probe=counted_receipt,
     )
 
@@ -446,7 +693,6 @@ async def test_readyz_coalesces_concurrent_unauthenticated_probes() -> None:
 
     assert {report["status"] for report in reports} == {"ready"}
     assert cached["status"] == "ready"
-    assert herdr_calls == 1
     assert receipt_calls == 1
 
 
@@ -503,7 +749,6 @@ def test_readyz_route_returns_503_with_redacted_component_failures() -> None:
         status_provider=_StatusProvider(gateway_status="down"),
         postgres_probe=old_database,
         redis_probe=dead_redis,
-        herdr_probe=_herdr_ok,
         fleet_receipt_probe=_fleet_receipt_ok,
     )
     response = TestClient(create_app(kernel, platform={"readiness": readiness})).get("/readyz")

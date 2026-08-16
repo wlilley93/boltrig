@@ -10,13 +10,22 @@ dict means the core stays offline-safe and engine-agnostic (P4, P9).
 from __future__ import annotations
 
 import uuid
+from hashlib import sha256
 from dataclasses import replace
 from typing import Any, cast
 
-from boltrig.models import InvocationContext, WorkflowDefinition, utcnow
+from boltrig.models import (
+    Conversation,
+    ConversationOrigin,
+    ConversationStatus,
+    InvocationContext,
+    WorkflowDefinition,
+    utcnow,
+)
 
 from .interpreter import run_workflow_definition
 from .snapshot import build_workflow_snapshot
+from .routine_contract import RoutineSpec, routine_spec
 
 
 def _visible_in_workspace(wf: WorkflowDefinition, active_workspace_id: str | None) -> bool:
@@ -37,6 +46,17 @@ def _archived(wf: WorkflowDefinition) -> bool:
     return isinstance(lifecycle, dict) and lifecycle.get("status") == "archived"
 
 
+# Draft rows (chat-first authoring) live under this reserved id prefix and are
+# working copies, never runnable: excluded from get/match/trigger/execute so a
+# draft can never be selected, matched, or run. Kept as a string literal here
+# to avoid importing config into the workflows package (layering).
+_DRAFT_ID_PREFIX = "__draft__:"
+
+
+def _is_draft(wf: WorkflowDefinition) -> bool:
+    return wf.id.startswith(_DRAFT_ID_PREFIX)
+
+
 def _run_id(executor: Any | None, requested: str | None) -> str:
     if requested:
         return requested
@@ -48,6 +68,57 @@ def _snapshot(wf: WorkflowDefinition, expected_sha256: str | None) -> dict[str, 
     if expected_sha256 is not None and snapshot["sha256"] != expected_sha256:
         raise RuntimeError("workflow_snapshot_changed")
     return snapshot
+
+
+def _routine_conversation_id(run_id: str) -> str:
+    """Stable across at-least-once queue submission without exposing engine ids."""
+    return f"routine-{sha256(run_id.encode('utf-8')).hexdigest()[:32]}"
+
+
+def _routine_owner(context: InvocationContext) -> str:
+    owner = context.on_behalf_of
+    if not owner and context.actor_tier == "human":
+        owner = context.actor
+    if not owner:
+        raise PermissionError("routine_requires_authenticated_owner")
+    return owner
+
+
+async def _prepare_routine_conversation(
+    store: Any,
+    tenant: str,
+    workflow_id: str,
+    run_id: str,
+    spec: RoutineSpec,
+    context: InvocationContext,
+) -> str:
+    conversation_id = _routine_conversation_id(run_id)
+    owner = _routine_owner(context)
+    await store.create_conversation(
+        Conversation(
+            id=conversation_id,
+            tenant_id=tenant,
+            user_id=owner,
+            title=f"Routine · {spec.name}",
+            status=ConversationStatus.ACTIVE,
+            origin=ConversationOrigin.ROUTINE,
+            source_ref=workflow_id,
+            source_run_id=run_id,
+            companion_id=spec.companion_id,
+        )
+    )
+    stored = await store.get_conversation(tenant, conversation_id)
+    if not (
+        stored is not None
+        and stored.user_id == owner
+        and stored.status == ConversationStatus.ACTIVE
+        and stored.origin == ConversationOrigin.ROUTINE
+        and stored.source_ref == workflow_id
+        and stored.source_run_id == run_id
+        and stored.companion_id == spec.companion_id
+    ):
+        raise PermissionError("routine_conversation_binding_mismatch")
+    return conversation_id
 
 
 class WorkflowLibrary:
@@ -88,7 +159,7 @@ class WorkflowLibrary:
         compat).
         """
         for wf in await self._store.list_workflows(tenant):
-            if wf.id == id and _visible_in_workspace(wf, active_workspace_id):
+            if wf.id == id and not _is_draft(wf) and _visible_in_workspace(wf, active_workspace_id):
                 return cast(WorkflowDefinition, wf)
         return None
 
@@ -132,6 +203,7 @@ class WorkflowLibrary:
             for wf in await self._store.list_workflows(tenant)
             if (
                 wanted & set(wf.intent_tags)
+                and not _is_draft(wf)
                 and _visible_in_workspace(wf, active_workspace_id)
                 and not _archived(wf)
             )
@@ -159,14 +231,9 @@ class WorkflowLibrary:
         run_id: str | None = None,
         expected_workflow_sha256: str | None = None,
     ) -> dict[str, Any]:
-        """Start a workflow and return a run descriptor (Hatchet seam).
+        """Queue a visible workflow and return its immutable run descriptor.
 
-        The actual durable execution is owned by Hatchet; here we resolve the
-        definition, mint a run id and hand back a descriptor the caller (or a
-        Hatchet bridge) acts on. Raises ``LookupError`` if the workflow is
-        unknown for the tenant (fail-closed, K-13). Workspace-scoped ([2026]
-        VJS-COUNTY 8, D2): a workflow scoped to a DIFFERENT workspace is unknown to
-        this caller (LookupError), so it can never be triggered cross-workspace.
+        Unknown, archived, or cross-workspace workflows fail closed.
         """
         wf = await self.get(tenant, wf_id, active_workspace_id=active_workspace_id)
         if wf is None:
@@ -176,6 +243,14 @@ class WorkflowLibrary:
         durable = bool(self._executor and getattr(self._executor, "durable", False))
         run_id = _run_id(self._executor, run_id)
         snapshot = _snapshot(wf, expected_workflow_sha256)
+        routine = routine_spec(wf.definition)
+        conversation_id = None
+        if routine is not None:
+            if context is None:
+                raise PermissionError("routine_requires_authenticated_context")
+            conversation_id = await _prepare_routine_conversation(
+                self._store, tenant, wf.id, run_id, routine, context
+            )
         descriptor = {
             "run_id": run_id,
             "tenant_id": tenant,
@@ -188,19 +263,11 @@ class WorkflowLibrary:
             "status": "queued",
             "inputs": dict(inputs or {}),
             "queued_at": utcnow().isoformat(),
+            **({"conversation_id": conversation_id} if conversation_id else {}),
         }
         if self._executor is not None and context is not None:
-            # The route/control path carries the authenticated context envelope
-            # into the registered workflow task. The engine (Hatchet, or the
-            # local executor inline) owns the run as ONE durable task, and the
-            # task body wires BOTH durability seams: each step dispatches
-            # inside an executor.run_step boundary AND checkpoint-resume is
-            # active (with per-step idempotency keys closing the
-            # completed-but-uncheckpointed crash window). What the boundary
-            # itself guarantees depends on the executor - see
-            # HatchetExecutor.run_step's honest docstring. A bare library
-            # caller without a context retains the legacy descriptor-only seam
-            # below rather than inventing authority.
+            # Carry the authenticated envelope into the one durable task. Its
+            # body owns step boundaries, checkpoints, and exact idempotency.
             from boltrig.fleet.hatchet_app import (
                 TASK_WORKFLOW_RUN,
                 context_to_envelope,
@@ -216,6 +283,7 @@ class WorkflowLibrary:
                     "inputs": dict(inputs or {}),
                     "ctx_envelope": context_to_envelope(queued_context),
                     "run_id": run_id,
+                    **({"conversation_id": conversation_id} if conversation_id else {}),
                 },
             )
             descriptor["engine_run_id"] = engine_run_id

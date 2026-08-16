@@ -1,0 +1,126 @@
+.governed-create-scrim {
+  position: fixed;
+  z-index: 70;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 11vh;
+  background: rgb(0 0 0 / 45%);
+}
+
+.governed-create-card {
+  width: min(600px, 92vw);
+  max-height: 74vh;
+  overflow-y: auto;
+  border: 1px solid var(--border-2);
+  border-radius: 14px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+.governed-create-card > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.governed-create-card > header > div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.governed-create-card h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -.2px;
+}
+
+.governed-create-card p {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.governed-create-card > header > button {
+  display: flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-4);
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.governed-create-card > header > button:hover { background: var(--hover); color: var(--text); }
+.governed-create-methods { padding: 8px; }
+
+.governed-create-method {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 14px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.governed-create-method:hover { background: var(--hover); }
+.governed-create-method:disabled { cursor: default; opacity: .46; }
+.governed-create-method:disabled:hover { background: transparent; }
+
+.governed-create-method-icon {
+  display: flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--card-2);
+  color: var(--text-2);
+}
+
+.governed-create-method-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.governed-create-method-copy > span { display: flex; align-items: center; gap: 9px; }
+.governed-create-method-copy strong { color: var(--text); font-size: 14px; font-weight: 400; }
+.governed-create-method-copy em {
+  padding: 1px 7px;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  color: var(--accent);
+  font-size: 11px;
+  font-style: normal;
+}
+.governed-create-method-copy em[data-tone="quiet"] { border-color: var(--border-2); color: var(--text-4); }
+.governed-create-method-copy small { color: var(--text-3); font-size: 12.5px; line-height: 1.5; }
+.governed-create-chevron { align-self: center; color: var(--text-4); font-size: 22px; }
+
+@media (max-width: 680px) {
+  .governed-create-scrim { padding-top: 8vh; }
+  .governed-create-card { max-height: 84vh; }
+}

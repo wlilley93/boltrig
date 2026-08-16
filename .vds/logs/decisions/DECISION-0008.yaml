@@ -1,0 +1,9 @@
+id: DECISION-0008
+at: 2026-08-12T13:36:16Z
+by: williamlilley
+decision: For Chat model selection, the Principal requires exact Bifrost model names in the switcher and a Settings Models surface for governed add, change, recoverable remove and restore; credentials remain server-side and the server-selected exact model binds to the trusted runtime.
+court_required: false
+why: Friendly aliases or browser-selected raw provider configuration would obscure which model actually runs and could cross the credential boundary. A route-scoped additive decision preserves the earlier visual authority while making exact model identity and governed lifecycle controls explicit, without asserting that a Bifrost deployment is currently reachable.
+basis:
+- USER-DIRECTION-2026-08-12:ACTUAL-MODEL-NAMES-AND-BIFROST-MODEL-LIFECYCLE
+- BOLTRIG-DOCTRINE:CREDENTIALS-RESOLVE-INSIDE-KERNEL

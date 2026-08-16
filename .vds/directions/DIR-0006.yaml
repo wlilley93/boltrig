@@ -1,0 +1,10 @@
+id: DIR-0006
+logId: DECISION-0003
+decisionDigest: sha256:1aad3c3951e3905434dc406f0d461bc5a8701523c1d102592b05a73f0666e049
+surface: !frame
+  file_key: iVQBKFc3NpRH3zdOOxfPqr
+  node_id: 16:2
+direction: Use the latest Boltrig console designs from Claude Design in Downloads as the visual authority.
+magnitude: Achieve absolute parity in Boltrig dev across this complete screen state, subject only to the recorded accessibility and runtime-truth exception.
+directedAt: 2026-08-11T04:02:10Z
+notes: Recorded from the user's explicit 2026-08-11 direction after verifying this CURRENT SOURCE frame.

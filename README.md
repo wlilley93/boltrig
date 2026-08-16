@@ -11,8 +11,11 @@ doctrine: one dispatch chokepoint, stable nouns and verbs, everything-as-data).
 > **Runtime direction (2026-07-21):** Codex is the only target agent runtime
 > under decision 0012. Its supervised proxy/event contract is wired, but the
 > production cutover and Codex-native collaboration admission are not yet green.
-> Pi, Hermes, OpenCode, and related paths remain staged rollback residue, not
-> alternate product runtimes.
+> The executable blockers and closure order are recorded in
+> `docs/CODEX-PRODUCTION-ADMISSION.md`.
+> Historical provider-native, OpenCode, Rivet, Pi, and Hermes agent runtimes
+> have been removed. Stale capability names fail as typed unavailable runs;
+> there is no environment flag or bundled binary that revives them.
 
 The kernel core is implemented and tested with the Python suite, opt-in Postgres
 and live-adapter legs, and a machine-checked binding-invariant gate at debt 0.
@@ -78,7 +81,7 @@ codebase of its own (the difference between installations is config, never a
 forked Boltrig, per P7). Breach of any condition routes Boltrig to consolidation.
 See `docs/decisions/0002-nankle-consolidation-ruling.md`.
 
-## Round Two: conversation, Pi, MCP
+## Conversation, trusted Codex, and MCP
 
 Three additions sit on the same thin core (the dispatch sequence is unchanged):
 
@@ -86,11 +89,10 @@ Three additions sit on the same thin core (the dispatch sequence is unchanged):
   advertised as MCP tools and adapter-declared resources over a run-scoped token;
   every call runs the full chokepoint. Any MCP-capable client can use the same
   governed surface without bespoke glue.
-- **Codex is the one target agent runtime.** The Pi sidecar lane that used to sit
-  here is RETIRED (`docs/decisions/0020-retire-the-pi-lane.md`, on the authority of
-  [2026] VJS-PC 20 L1). The multi-runtime routing seam stays live and five
-  non-Codex lanes remain re-wirable by configuration alone, which is the condition
-  that grant carries. Production readiness still fails closed until the pinned
+- **Codex is the sole model-backed agent runtime.** Alternative runtime clients,
+  plugins, binaries, state and deployment wiring are removed; stale capability
+  names return typed unavailable results and cannot be revived by configuration.
+  Production readiness still fails closed until the pinned
   Codex binary, identity/proxy, cancellation and acceptance gates pass; native
   Codex collaboration remains admission-disabled while its lifetime/depth/thread,
   effort, drain, bearer-revocation and durable-projection guarantees are completed.
@@ -134,6 +136,24 @@ make up ARGS="--profile local"
 
 The kernel API comes up on `:8000`, the console UI on `:8080`. The same images
 run in every environment; only `.env` and `manifest.yaml` differ (P7).
+
+### Bring your own model gateway
+
+The published template contains no personal provider, model identity, API key,
+webhook, or tenant data. Run/configure your own Bifrost instance, keep its
+provider keys in Bifrost's secret/admin surface, then choose one of its
+advertised text models in Worker **Settings → Models**. That supported
+Codex→Bifrost path gives Boltrig only an opaque governed route and exact model
+name; the Models editor never receives a Bifrost provider key and
+`.env.example` contains none.
+
+**Account → Access** has a separate one-shot, write-only intake for the
+legacy provider-native credential hierarchy. The browser clears the entered
+value before awaiting the response and the kernel envelope-seals it; reads and
+audit expose metadata only. This is not a Bifrost administration proxy and does
+not make an empty Bifrost catalogue runnable. Do not describe it as Bifrost
+onboarding. The stock Stage ships with Familiar and Jarvis only; additional
+companions are not part of the production bundle.
 
 ## Architecture
 
@@ -263,8 +283,7 @@ service or credentials to exercise):
 ```
 boltrig/        kernel, models, store, adapters, fleet, skills, workflows,
                knowledge, work, identity, config, observability
-ui/            React console (Router, Kanban, Approvals)
-apps/worker/   task-first React/Tauri client (primary-surface candidate)
+apps/worker/   task-first React/Tauri client (the first-party browser surface)
 site/          Next.js site + lightweight console overview
 libraries/     skills + workflows + prompts (data, not code)
 deploy/        kernel.Dockerfile, fleet.Dockerfile

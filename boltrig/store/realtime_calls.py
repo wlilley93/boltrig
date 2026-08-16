@@ -8,6 +8,8 @@ from dataclasses import replace
 from boltrig.models import RealtimeCallEvent, RealtimeCallSession, utcnow
 from .device_memory import DeviceStoreMem
 from .device_pg import DeviceStorePG
+from .camera_memory import CameraStoreMem
+from .camera_pg import CameraStorePG
 from .artifacts import ArtifactStoreMem, ArtifactStorePG
 from .integrations import IntegrationStoreMem, IntegrationStorePG
 from .realtime_call_usage import USAGE_COUNTERS, nonnegative_int, usage_summary
@@ -53,7 +55,7 @@ def _call_event(row):
     )
 
 
-class RealtimeCallStorePG(ArtifactStorePG, IntegrationStorePG, DeviceStorePG):
+class RealtimeCallStorePG(ArtifactStorePG, IntegrationStorePG, DeviceStorePG, CameraStorePG):
     """Postgres implementation. Every lookup is tenant-keyed."""
 
     async def create_realtime_call(self, call):
@@ -234,7 +236,7 @@ class RealtimeCallStorePG(ArtifactStorePG, IntegrationStorePG, DeviceStorePG):
         return usage_summary(row)
 
 
-class RealtimeCallStoreMem(ArtifactStoreMem, IntegrationStoreMem, DeviceStoreMem):
+class RealtimeCallStoreMem(ArtifactStoreMem, IntegrationStoreMem, DeviceStoreMem, CameraStoreMem):
     """In-memory reference implementation with the same tenant and token fences."""
 
     async def create_realtime_call(self, call):

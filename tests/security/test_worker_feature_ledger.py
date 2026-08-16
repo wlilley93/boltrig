@@ -151,6 +151,10 @@ def _governed_worker_control_sources() -> set[str]:
             "pending_human" in source
             or "hitl_request_id" in source
             or "useExactApprovalFinalizer" in source
+            or (
+                path.name == "ChatView.tsx"
+                and "respondHitl" in source
+            )
         ):
             sources.add(path.relative_to(root).as_posix())
     return sources
@@ -200,4 +204,3 @@ def test_non_http_feature_rows_are_closed_and_missing_states_explain_the_gap():
         assert set(states) <= LIFECYCLE_OWNERS, feature_id
         if "missing" in states:
             assert len(coverage.note) >= 40, feature_id
-

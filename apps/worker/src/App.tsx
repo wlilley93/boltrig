@@ -1,275 +1,30 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import type { ConversationSummary } from "@wlilley93/boltrig-web-sdk";
-
-import { client } from "./client";
-import { ChatView } from "./components/ChatView";
-import { CommandPalette } from "./components/CommandPalette";
-import { Sidebar } from "./components/Shell";
-import { notifyWorkerContextChanged } from "./components/WorkerGlobalContext";
-import {
-  conversationFromHash,
-  navigate,
-  routeFromHash,
-  type WorkerRoute,
-} from "./routes";
-
-const AccountView = lazyNamed(() => import("./components/AccountView"), "AccountView");
-const AgentsView = lazyNamed(() => import("./components/ParityViews"), "AgentsView");
-const AutomationsView = lazyNamed(() => import("./components/AutomationView"), "AutomationsView");
-const BuildView = lazyNamed(() => import("./components/BuildView"), "BuildView");
-const ChannelsView = lazyNamed(() => import("./components/ChannelsView"), "ChannelsView");
-const EvaluationsView = lazyNamed(() => import("./components/EvaluationsView"), "EvaluationsView");
-const HomeView = lazyNamed(() => import("./components/OperationsView"), "HomeView");
-const InboxView = lazyNamed(() => import("./components/Views"), "InboxView");
-const IntegrationsView = lazyNamed(() => import("./components/IntegrationsView"), "IntegrationsView");
-const KnowledgeView = lazyNamed(() => import("./components/ParityViews"), "KnowledgeView");
-const MemoryView = lazyNamed(() => import("./components/ParityViews"), "MemoryView");
-const OperateView = lazyNamed(() => import("./components/OperationsView"), "OperateView");
-const OrganisationView = lazyNamed(() => import("./components/OrganisationView"), "OrganisationView");
-const RunsView = lazyNamed(() => import("./components/ParityViews"), "RunsView");
-const SettingsView = lazyNamed(() => import("./components/Views"), "SettingsView");
-const WorkView = lazyNamed(() => import("./components/ParityViews"), "WorkView");
+import { useMediaQuery } from "./useMediaQuery";
+import { useWorkerGlobalContext } from "./components/WorkerGlobalContext";
+import { AppFrame } from "./components/shell/AppFrame";
+import { useAppNavigation, useCommandPalette } from "./components/shell/useAppNavigation";
+import { useCompactNavigation } from "./components/shell/useCompactNavigation";
+import { useConversationDirectory } from "./components/shell/useConversationDirectory";
 
 export function App() {
-  const [route, setRoute] = useState<WorkerRoute>(() => routeFromHash(window.location.hash));
-  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [conversationOffset, setConversationOffset] = useState<number | null>(0);
-  const [selectedConversation, setSelectedConversation] = useState<string | null>(
-    () => conversationFromHash(window.location.hash),
-  );
-  const [conversationStatus, setConversationStatus] = useState<
-    "loading" | "ready" | "unavailable"
-  >("loading");
-  const [railOpen, setRailOpen] = useState(false);
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const mobileMenuRef = useRef<HTMLButtonElement>(null);
-  const sidebarWrapRef = useRef<HTMLDivElement>(null);
-  const surfaceRef = useRef<HTMLElement>(null);
-
-  const refreshConversations = useCallback(() => {
-    setConversationStatus("loading");
-    void client.conversationsPage(25, 0)
-      .then((result) => {
-        setConversations(result.conversations);
-        setConversationOffset(result.next_offset);
-        setConversationStatus("ready");
-      })
-      .catch(() => {
-        setConversationStatus("unavailable");
-      });
-  }, []);
-
-  const loadMoreConversations = useCallback(() => {
-    if (conversationOffset === null) return;
-    setConversationStatus("loading");
-    void client.conversationsPage(25, conversationOffset)
-      .then((result) => {
-        setConversations((current) => [
-          ...current,
-          ...result.conversations.filter(
-            (conversation) => !current.some((item) => item.id === conversation.id),
-          ),
-        ]);
-        setConversationOffset(result.next_offset);
-        setConversationStatus("ready");
-      })
-      .catch(() => setConversationStatus("unavailable"));
-  }, [conversationOffset]);
-
-  useEffect(() => {
-    refreshConversations();
-    const onHash = () => {
-      const next = routeFromHash(window.location.hash);
-      setRoute(next);
-      setSelectedConversation(
-        next === "chat" ? conversationFromHash(window.location.hash) : null,
-      );
-    };
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, [refreshConversations]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setCommandPaletteOpen((current) => !current);
-      }
-      // Best effort: browsers may reserve Cmd/Ctrl-N for a new window, but
-      // the desktop shell and permissive browsers land on a fresh chat.
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n") {
-        event.preventDefault();
-        chooseDestination("chat", null);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
-  useEffect(() => {
-    const surface = surfaceRef.current;
-    if (!railOpen) {
-      if (surface) {
-        surface.inert = false;
-        surface.removeAttribute("aria-hidden");
-      }
-      return;
-    }
-
-    if (surface) {
-      surface.inert = true;
-      surface.setAttribute("aria-hidden", "true");
-    }
-    const navigation = sidebarWrapRef.current?.querySelector<HTMLElement>(".sidebar");
-    const initial = navigation ? focusableElements(navigation)[0] : null;
-    initial?.focus();
-
-    const onNavigationKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setRailOpen(false);
-        return;
-      }
-      if (event.key !== "Tab" || !sidebarWrapRef.current) return;
-      const focusable = focusableElements(sidebarWrapRef.current);
-      if (focusable.length === 0) {
-        event.preventDefault();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && (
-        document.activeElement === first
-        || !sidebarWrapRef.current.contains(document.activeElement)
-      )) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (
-        document.activeElement === last
-        || !sidebarWrapRef.current.contains(document.activeElement)
-      )) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", onNavigationKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onNavigationKeyDown);
-      if (surface) {
-        surface.inert = false;
-        surface.removeAttribute("aria-hidden");
-      }
-      mobileMenuRef.current?.focus();
-    };
-  }, [railOpen]);
-
-  function chooseRoute(next: WorkerRoute) {
-    chooseDestination(next, null);
-  }
-
-  function chooseDestination(next: WorkerRoute, routeId: string | null) {
-    const boundedId = routeId && routeId.length <= 256 ? routeId : null;
-    navigate(next, boundedId);
-    setRoute(next);
-    setRailOpen(false);
-    setSelectedConversation(next === "chat" ? boundedId : null);
-  }
-
-  function chooseConversation(id: string) {
-    setSelectedConversation(id);
-    navigate("chat", id);
-    setRoute("chat");
-    setRailOpen(false);
-  }
-
-  function contextChanged() {
-    refreshConversations();
-    notifyWorkerContextChanged();
-  }
+  const phone = useMediaQuery("(max-width: 640px)");
+  const compactNavigation = useMediaQuery("(max-width: 760px)");
+  const { identity } = useWorkerGlobalContext();
+  const directory = useConversationDirectory();
+  const rail = useCompactNavigation(compactNavigation);
+  const navigation = useAppNavigation({
+    closeNavigation: rail.closeNavigation,
+    refreshConversations: directory.refresh,
+  });
+  const palette = useCommandPalette(rail.closeNavigation, navigation.chooseDestination);
 
   return (
-    <div className="worker-shell">
-      <button
-        aria-controls="worker-navigation"
-        aria-expanded={railOpen}
-        aria-label="Open navigation"
-        className="mobile-menu"
-        onClick={() => setRailOpen(true)}
-        ref={mobileMenuRef}
-        type="button"
-      >
-        ☰
-      </button>
-      <div
-        className={railOpen ? "sidebar-wrap open" : "sidebar-wrap"}
-        id="worker-navigation"
-        ref={sidebarWrapRef}
-      >
-        <button
-          className="sidebar-scrim"
-          aria-label="Close navigation"
-          onClick={() => setRailOpen(false)}
-          type="button"
-        />
-        <Sidebar
-          route={route}
-          conversations={conversations}
-          conversationStatus={conversationStatus}
-          selectedConversation={selectedConversation}
-          onRoute={chooseRoute}
-          onConversation={chooseConversation}
-          onConversationRestored={() => refreshConversations()}
-          onLoadMore={loadMoreConversations}
-          onRetryConversations={refreshConversations}
-          hasMoreConversations={conversationOffset !== null}
-          onCommandPalette={() => setCommandPaletteOpen(true)}
-        />
-      </div>
-      <section className="surface" ref={surfaceRef}>
-        <Suspense fallback={<div className="route-loading" role="status">Loading Worker surface…</div>}>
-        {route === "home" && <HomeView onRoute={chooseRoute} />}
-        {route === "chat" && (
-          <ChatView
-            conversationId={selectedConversation}
-            onConversation={chooseConversation}
-            onChanged={refreshConversations}
-          />
-        )}
-        {route === "inbox" && <InboxView />}
-        {route === "automations" && <AutomationsView />}
-        {route === "channels" && <ChannelsView />}
-        {route === "build" && <BuildView />}
-        {route === "evaluations" && <EvaluationsView />}
-        {route === "integrations" && <IntegrationsView />}
-        {route === "operate" && <OperateView />}
-        {route === "organisation" && <OrganisationView />}
-        {route === "settings" && <SettingsView />}
-        {route === "account" && <AccountView onContextChanged={contextChanged} />}
-        {route === "runs" && <RunsView />}
-        {route === "work" && <WorkView />}
-        {route === "agents" && <AgentsView />}
-        {route === "knowledge" && <KnowledgeView />}
-        {route === "memory" && <MemoryView />}
-        </Suspense>
-      </section>
-      <CommandPalette
-        open={commandPaletteOpen}
-        onClose={() => setCommandPaletteOpen(false)}
-        onNavigate={chooseDestination}
-      />
-    </div>
+    <AppFrame
+      directory={directory}
+      identity={identity}
+      navigation={navigation}
+      palette={palette}
+      phone={phone}
+      rail={rail}
+    />
   );
-}
-
-function focusableElements(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>(
-    'input, button:not([disabled]), a[href], select, textarea, [tabindex]:not([tabindex="-1"])',
-  )).filter((element) => !element.hasAttribute("hidden"));
-}
-
-function lazyNamed<
-  Module extends Record<Key, React.ComponentType<any>>,
-  Key extends keyof Module,
->(loader: () => Promise<Module>, key: Key) {
-  return lazy(async () => ({ default: (await loader())[key] }));
 }

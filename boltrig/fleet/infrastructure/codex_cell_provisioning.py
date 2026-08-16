@@ -21,7 +21,7 @@ import os
 from pathlib import Path
 
 from boltrig.fleet.application.birth_policies import compile_birth_policy
-from boltrig.fleet.domain import PhaseAssignmentRef
+from boltrig.fleet.domain import ExactModelPolicy, PhaseAssignmentRef, ReasoningEffort
 from boltrig.fleet.domain.profile_policy import BirthPolicyRequest, StaticRoleProfile
 from boltrig.fleet.domain.profile_policy_values import NativeSubagentLimits
 from boltrig.fleet.domain.skill_attestation import SkillAttestationPlan
@@ -79,29 +79,52 @@ class ProvisioningCodexPhaseAdmissionSource:
 
     def __init__(self, *, stack_root: Path | str, model_id: str) -> None:
         self._stack_root = normalized_absolute_path("codex stack root", Path(stack_root))
-        if type(model_id) is not str or not model_id.strip():
-            raise ValueError("codex model id must be a non-empty string")
-        self._model_id = model_id
+        self._model_id = ExactModelPolicy(
+            model_id, ReasoningEffort.HIGH
+        ).model_id
 
     async def admit(
         self,
         assignment: PhaseAssignmentRef,
         slot: CellSlot | None = None,
         kernel_tools: tuple[str, ...] = (),
+        *,
+        model_id: str | None = None,
     ) -> CodexPhaseAdmission:
         if type(assignment) is not PhaseAssignmentRef:
             raise TypeError("assignment must be an exact PhaseAssignmentRef")
         tools = validated_kernel_tool_names(kernel_tools)
-        return await asyncio.to_thread(self._provision, assignment, slot, tools)
+        selected_model = ExactModelPolicy(
+            self._model_id if model_id is None else model_id,
+            ReasoningEffort.HIGH,
+        ).model_id
+        return await asyncio.to_thread(
+            self._provision,
+            assignment,
+            slot,
+            tools,
+            model_id=selected_model,
+        )
 
     def _provision(
         self,
         assignment: PhaseAssignmentRef,
         slot: CellSlot | None = None,
         kernel_tools: tuple[str, ...] = (),
+        *,
+        model_id: str | None = None,
     ) -> CodexPhaseAdmission:
+        selected_model = ExactModelPolicy(
+            self._model_id if model_id is None else model_id,
+            ReasoningEffort.HIGH,
+        ).model_id
         if slot is not None:
-            return self._provision_per_cell(assignment, slot, kernel_tools)
+            return self._provision_per_cell(
+                assignment,
+                slot,
+                kernel_tools,
+                model_id=selected_model,
+            )
         cell_id = read_only_cell_id(assignment)
         cell_root = read_only_cell_root(self._stack_root, assignment)
         workspace = cell_root / "workspace"
@@ -131,7 +154,7 @@ class ProvisioningCodexPhaseAdmissionSource:
             accounting.file_count,
             accounting.total_bytes,
         )
-        profile, instructions = _lane_profile(self._model_id, kernel_tools)
+        profile, instructions = _lane_profile(selected_model, kernel_tools)
         compilation = compile_birth_policy(
             BirthPolicyRequest(
                 profile.pin,
@@ -170,6 +193,8 @@ class ProvisioningCodexPhaseAdmissionSource:
         assignment: PhaseAssignmentRef,
         slot: CellSlot,
         kernel_tools: tuple[str, ...] = (),
+        *,
+        model_id: str,
     ) -> CodexPhaseAdmission:
         """Assemble a slot-rooted admission WITHOUT touching the filesystem.
 
@@ -196,7 +221,7 @@ class ProvisioningCodexPhaseAdmissionSource:
             EMPTY_WORKSPACE_FILE_COUNT,
             EMPTY_WORKSPACE_TOTAL_BYTES,
         )
-        profile, instructions = _lane_profile(self._model_id, kernel_tools)
+        profile, instructions = _lane_profile(model_id, kernel_tools)
         compilation = compile_birth_policy(
             BirthPolicyRequest(
                 profile.pin,

@@ -1,0 +1,10 @@
+id: DECISION-0022
+at: 2026-08-14T12:36:52Z
+by: williamlilley
+decision: Shared Shell primary rows keep their named compact desktop height when keyboard-focused; the focus indicator is drawn inside the row instead of adding an outer halo.
+court_required: false
+why: The Principal explicitly compared the compact Codex New chat row with Boltrig's visually taller focused row. Boltrig already met the compact-row requirement, but the global outline and offset enlarged its focused footprint.
+basis:
+- USER-DIRECTION-2026-08-14:SHELL-NAV-ROW-HEIGHT
+- CODEX-REFERENCE-2026-08-14:COMPACT-FOCUSED-NAV-ROW
+- BOLTRIG-CONTRACT:VISIBLE-KEYBOARD-FOCUS-WITHOUT-LAYOUT-GROWTH

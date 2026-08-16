@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import asyncio
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,12 +13,12 @@ from boltrig.knowledge.filesystem_vault import FilesystemObjectVault
 from boltrig.knowledge.memory_repository import InMemoryKnowledgeRepository
 from boltrig.knowledge.models import MAX_UPLOAD_BYTES, Provider
 from boltrig.knowledge.projections import (
-    UNAVAILABLE_PROVIDER_REASON,
     KnowledgeProjectionCoordinator,
     provider_defaults,
-    reconcile_unavailable_providers,
+    retire_legacy_providers,
 )
 from boltrig.knowledge.service import KnowledgeService
+from boltrig.memory.cognee import CogneeRuntimeModel
 from boltrig.adapters.base import ErrorClass
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
@@ -31,10 +32,10 @@ class NoopProjections:
     async def compile(self, tenant_id, asset, segments, context):
         return []
 
-    async def erase(self, tenant_id, asset_id, segment_ids):
+    async def erase(self, tenant_id, asset_id, segment_ids, context=None):
         return []
 
-    async def refresh_health(self, tenant_id):
+    async def refresh_health(self, tenant_id, context=None):
         return None
 
 
@@ -108,8 +109,7 @@ def pdf_bytes(text: str) -> bytes:
     for offset in offsets[1:]:
         document.extend(f"{offset:010d} 00000 n \n".encode())
     document.extend(
-        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
-        f"startxref\n{xref}\n%%EOF\n".encode()
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
     )
     return bytes(document)
 
@@ -134,9 +134,10 @@ async def test_original_revision_search_and_context_keep_stable_citations(tmp_pa
     package = await svc.build_context({"query": "anchor shackle"}, ctx)
     assert package["items"][0]["trust"] == "untrusted_source_content"
     assert package["items"][0]["citation"] == hit["citation"]
-    assert package["context_hash"] == (
-        await svc.build_context({"query": "anchor shackle"}, ctx)
-    )["context_hash"]
+    assert (
+        package["context_hash"]
+        == (await svc.build_context({"query": "anchor shackle"}, ctx))["context_hash"]
+    )
 
     asset = await svc.get_asset(committed["asset_id"], ctx)
     assert asset["provenance"]["occurrences"][0]["external_path"] == "rig.md"
@@ -224,34 +225,77 @@ async def test_erasure_preserves_deduplicated_blob_until_last_reference(tmp_path
 
 
 @pytest.mark.invariant("KNO-04")
-async def test_cognee_is_default_and_unimplemented_addons_refuse_enablement(
+async def test_cognee_is_the_only_shipped_knowledge_provider(
     tmp_path: Path,
 ) -> None:
     svc = await service(tmp_path)
     ctx = context("will")
     providers = {row["id"]: row for row in (await svc.list_providers(ctx))["providers"]}
+    assert set(providers) == {"cognee"}
     assert providers["cognee"]["enabled"] is True
     assert providers["cognee"]["bundled"] is True
-    assert providers["supermemory"]["enabled"] is False
-    assert providers["mem0"]["enabled"] is False
-    assert providers["supermemory"]["status"] == "unavailable"
-    assert providers["mem0"]["health"] == "unavailable"
-    assert providers["supermemory"]["last_error"] == UNAVAILABLE_PROVIDER_REASON
 
-    with pytest.raises(ValueError, match="projection adapter is not implemented"):
+    with pytest.raises(LookupError, match="provider not found"):
         await svc.set_provider("supermemory", True, ctx)
 
 
-async def test_unavailable_provider_config_and_persisted_state_are_reconciled() -> None:
-    configured = {
-        row.id: row
+@pytest.mark.invariant("KNO-05")
+async def test_cognee_health_and_compile_use_the_callers_chat_route(
+    tmp_path: Path,
+) -> None:
+    repository = InMemoryKnowledgeRepository()
+    await repository.ensure_providers(TENANT, provider_defaults(TENANT))
+    route = CogneeRuntimeModel(
+        model_id="openai/gpt-5.4",
+        endpoint="http://bifrost:8080/v1",
+        api_key="gateway-secret",
+        extra_headers=(("x-bf-vk", "vk-scoped"),),
+    )
+
+    class Resolver:
+        def __init__(self) -> None:
+            self.contexts = []
+
+        async def resolve(self, tenant_id, invocation):
+            assert tenant_id == TENANT
+            self.contexts.append(invocation)
+            return route
+
+    resolver = Resolver()
+    coordinator = KnowledgeProjectionCoordinator(
+        repository,
+        model_resolver=resolver,
+    )
+    coordinator._cognee.health = AsyncMock(return_value="ok")
+    coordinator._cognee.remember = AsyncMock(return_value=["segment"])
+    svc = KnowledgeService(
+        repository,
+        FilesystemObjectVault(tmp_path / "vault"),
+        coordinator,
+    )
+    ctx = context("will")
+
+    listed = await svc.list_providers(ctx)
+    committed = await ingest(svc, ctx, "one governed source")
+    await svc.set_provider("cognee", False, ctx)
+    enabled = await svc.set_provider("cognee", True, ctx)
+
+    assert listed["providers"][0]["health"] == "ok"
+    assert committed["projections"][0]["status"] == "written"
+    assert enabled["provider"]["health"] == "ok"
+    assert resolver.contexts == [ctx, ctx, ctx]
+    assert coordinator._cognee.remember.await_args.kwargs["runtime_model"] is route
+
+
+@pytest.mark.invariant("KNO-04")
+async def test_retired_provider_rows_are_disabled_and_hidden() -> None:
+    assert [
+        row.id
         for row in provider_defaults(
             TENANT,
             {"providers": [{"id": "mem0", "enabled": True}]},
         )
-    }
-    assert configured["mem0"].enabled is False
-    assert configured["mem0"].status == "unavailable"
+    ] == ["cognee"]
 
     repository = InMemoryKnowledgeRepository()
     await repository.ensure_providers(
@@ -269,12 +313,14 @@ async def test_unavailable_provider_config_and_persisted_state_are_reconciled() 
             )
         ],
     )
-    await reconcile_unavailable_providers(repository, TENANT)
+    await retire_legacy_providers(repository, TENANT)
     repaired = await repository.get_provider(TENANT, "mem0")
     assert repaired is not None
     assert repaired.enabled is False
-    assert repaired.health == repaired.status == "unavailable"
-    assert repaired.last_error == UNAVAILABLE_PROVIDER_REASON
+    assert repaired.health == repaired.status == "retired"
+
+    svc = KnowledgeService(repository, object(), NoopProjections())
+    assert (await svc.list_providers(context("will")))["providers"] == []
 
 
 @pytest.mark.invariant("KNO-01")
@@ -314,9 +360,7 @@ async def test_mcp_resource_list_and_read_reuse_governed_asset_verbs(tmp_path: P
         workspace_id="workspace-a",
     )
 
-    listed = await kernel.mcp.handle(
-        token, {"jsonrpc": "2.0", "id": 1, "method": "resources/list"}
-    )
+    listed = await kernel.mcp.handle(token, {"jsonrpc": "2.0", "id": 1, "method": "resources/list"})
     resource = listed["result"]["resources"][0]
     assert resource["uri"].endswith(committed["asset_id"])
     read = await kernel.mcp.handle(
@@ -372,14 +416,15 @@ def test_http_upload_and_search_are_thin_wrappers_over_governed_verbs(tmp_path: 
     )
     assert begin.status_code == 200
     upload_id = begin.json()["upload_id"]
-    assert client.put(
-        f"/v1/knowledge/uploads/{upload_id}",
-        content=b"HTTP citation survives the transport",
-        headers=headers,
-    ).status_code == 200
-    committed = client.post(
-        f"/v1/knowledge/uploads/{upload_id}/commit", headers=headers
+    assert (
+        client.put(
+            f"/v1/knowledge/uploads/{upload_id}",
+            content=b"HTTP citation survives the transport",
+            headers=headers,
+        ).status_code
+        == 200
     )
+    committed = client.post(f"/v1/knowledge/uploads/{upload_id}/commit", headers=headers)
     assert committed.status_code == 200
     found = client.post(
         "/v1/knowledge/search", json={"query": "citation transport"}, headers=headers
@@ -396,9 +441,7 @@ async def test_caller_supplied_extra_scopes_are_not_authority(tmp_path: Path) ->
 
     # A forged extra key claiming someone else's scopes must be ignored: the
     # service derives permitted scopes from the stamped principal fields only.
-    forged = context(
-        "mallory", workspace=None, extra={"knowledge_scopes": ["user:will", "org"]}
-    )
+    forged = context("mallory", workspace=None, extra={"knowledge_scopes": ["user:will", "org"]})
     assert (await svc.search({"query": "albatross"}, forged))["hits"] == []
     with pytest.raises(LookupError, match="asset not found"):
         await svc.get_asset(committed["asset_id"], forged)
@@ -443,9 +486,7 @@ async def test_org_scope_is_limited_to_the_admin_tiers(tmp_path: Path) -> None:
         )
     assert (await svc.search({"query": "holiday policy"}, member))["hits"] == []
 
-    superadmin = context(
-        "other-admin", workspace=None, extra={"principal_role": "superadmin"}
-    )
+    superadmin = context("other-admin", workspace=None, extra={"principal_role": "superadmin"})
     hits = (await svc.search({"query": "holiday policy"}, superadmin))["hits"]
     assert hits[0]["asset_id"] == committed["asset_id"]
 
@@ -512,21 +553,21 @@ async def test_internal_adapter_failure_is_redacted_to_the_type_name(tmp_path: P
 
 def test_provider_public_filters_sensitive_config_keys() -> None:
     provider = Provider(
-        id="mem0",
+        id="external-test",
         tenant_id=TENANT,
-        display_name="Mem0",
-        role="memory_compatibility",
+        display_name="External test",
+        role="test_projection",
         enabled=False,
         bundled=False,
         config={
-            "base_url": "https://mem0.internal",
+            "base_url": "https://projection.internal",
             "api_key": "k",
             "password": "p",
             "clientSecret": "s",
         },
     )
 
-    assert provider.public()["config"] == {"base_url": "https://mem0.internal"}
+    assert provider.public()["config"] == {"base_url": "https://projection.internal"}
 
 
 def _http_client(tmp_path: Path) -> TestClient:

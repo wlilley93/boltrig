@@ -1,0 +1,9 @@
+id: DIR-0022
+logId: DECISION-0014
+decisionDigest: sha256:f4b8b5673b2750a8e7e403c8f09b91e30c5c0f54fa25da8377c3350953e390b5
+surface: !route
+  route: apps/worker/src/components/chat/WorkDisclosure.tsx
+direction: Make a Chat tool receipt expand from its calm summary into a useful, exact and securely sourced execution trail.
+magnitude: Keep the resting transcript compact. On explicit expansion, load only the existing visibility-fenced run-event snapshot; correlate details by call id; show individual friendly actions, exact verb ids, bounded redacted input/result evidence, command output and truthful status. Fall back to the keys-only chat receipt when the run snapshot is absent or denied. Do not put raw values onto the chat stream, fetch detail before expansion, reveal credentials, or invent unavailable history.
+directedAt: 2026-08-14T09:52:40Z
+notes: This additive direction changes the expanded Chat receipt only. The governed default captures continue to require disclosures closed, so no open execution payload becomes part of static evidence or a design-authority claim.

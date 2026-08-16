@@ -5,6 +5,16 @@
 - Bound by: DIS-1..DIS-8 (`tests/invariants.yaml`)
 - Companion: `docs/proposals/sleep-distillation.md` (the build plan + runbook)
 
+## 2026-08-14 runtime-retirement amendment
+
+The craft gate is fail-closed. Its former model-profile context override was a
+second provider-routing authority and is no longer consumed by the Codex-only
+runtime. Leaving it in place could score the composed default twice while
+claiming to compare incumbent and candidate. The register/log-likelihood gate
+remains available. Craft evaluation may return only after inactive candidates
+have a typed, governed Codex/Bifrost admission contract; arbitrary provider
+URLs are not an acceptable replacement.
+
 ## Amendments at acceptance (2026-08-09)
 
 - **Register trains from day one** (owner's decision, reversing the
@@ -20,7 +30,8 @@
   audit writer and cost accountant, so it registers via
   `boltrig/distill/bootstrap.py` from the manifest's `distill:` section - the
   `memory`/`knowledge` composition pattern - rather than the `adapters:` list.
-- **Candidate evaluation routes via the model-profile context seam**
+- **Superseded by the 2026-08-14 amendment:** candidate evaluation originally
+  routed via the model-profile context seam
   (`fleet/model_profiles.py`), which deliberately bypasses the store
   `is_active` check - correct, because the candidate is inactive BY DESIGN
   until promoted; production serving still resolves through the store, which
@@ -39,10 +50,9 @@ Corrections:
 - **The corpus digest now hashes record CONTENT, not record ids.** Ids alone
   made the "pins exactly what the adapter saw" claim false the moment the PII
   scrubber evolved (same ids, different text, same digest).
-- **The craft gate refuses typed without `distill.serve_url`.** It previously
-  routed eval traffic at the trainer sidecar, which serves no chat
-  completions - a silent dead end. Candidates are served by `mlx_lm.server`
-  at `serve_url`.
+- **Superseded by the 2026-08-14 amendment:** the intermediate implementation
+  required `distill.serve_url`; that provider-native routing seam is now
+  removed and the craft gate always refuses typed.
 - **The sidecar binds loopback by default** (`BOLTRIG_DISTILL_BIND` to widen):
   an unauthenticated trainer must not face the LAN.
 - **An empty day is a quiet night**: `distill.night` returns `empty_corpus`
@@ -81,7 +91,8 @@ your own output is the collapse recipe):
 
 ## Context
 
-Half of this already exists and nobody wrote it down. `boltrig/fleet/runtime.py:46`
+Historical context at decision time (superseded by the Codex-only runtime):
+`boltrig/fleet/runtime.py:46`
 maps the `vllm` and `ollama` endpoint kinds onto the OpenAI runtime, and
 `runtime.py:249` / `runtime.py:314` pass `self.endpoint.model` **verbatim** as the
 request's `model` field. Every OpenAI-shaped server that serves a LoRA does so by
@@ -126,7 +137,7 @@ rewrites the system, and an unerasable copy of tenant data.
   ruling everything else follows from. Decision 0011 §6 says erasure fans out to
   every projection and reports any backend that failed; `MemoryErasure`
   (`models/memory.py:54`) even carries `transcript_handled` for exactly this.
-  Mem0 and Cognee can honour a delete. **Weights cannot.** Therefore an adapter is
+  Cognee can honour a delete. **Weights cannot.** Therefore an adapter is
   ALWAYS trained from the pinned base model over a rebuildable corpus, and NEVER
   incrementally from last night's adapter. Erasure is satisfied by exclusion at
   the next rebuild; every adapter records its corpus digest and the erasure

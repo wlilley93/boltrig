@@ -1,0 +1,10 @@
+id: DECISION-0009
+at: 2026-08-12T13:37:37Z
+by: williamlilley
+decision: For Settings and the shared Shell, the Principal removes the two named editorial implementation-comment paragraphs, retains the top command search, and confirms that the duplicate Recents search field and workspace/acme.production identity row remain absent.
+court_required: false
+why: The removed paragraphs explain design-versus-build reasoning instead of helping someone operate a setting, while the Recents field duplicates the top search control and the workspace row contributes irrelevant fixture identity. Recording a later additive copy override keeps operational facts and intentional developer-detail controls available without turning internal rationale into product chrome or rewriting DECISION-0006.
+basis:
+- USER-DIRECTION-2026-08-12:REMOVE-SETTINGS-EDITORIAL-AND-DEVELOPER-COMMENTS
+- DECISION-0006
+- DIR-0010

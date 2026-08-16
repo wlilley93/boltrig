@@ -1,0 +1,9 @@
+id: DECISION-0006
+at: 2026-08-12T10:52:28Z
+by: williamlilley
+decision: For the shared primary Shell, the Principal's 2026-08-12 follow-up removes the acme.production workspace label; for desktop Chat and New-chat it also removes the duplicate Recents search field, while leaving the earlier Codex rail direction otherwise intact.
+court_required: false
+why: The top search icon already supplies conversation search on desktop Chat, so its Recents input duplicates that affordance, while the Principal separately identified the workspace line as irrelevant wherever the shared primary Shell rendered it. An additive override preserves the earlier screenshot and direction provenance rather than pretending the positive reference image itself changed, and does not broaden either correction to Settings or mobile surfaces that never used this exact Shell chrome.
+basis:
+- USER-DIRECTION-2026-08-12:REMOVE-DUPLICATE-CHAT-SEARCH-AND-WORKSPACE-LABEL
+- DIR-0009

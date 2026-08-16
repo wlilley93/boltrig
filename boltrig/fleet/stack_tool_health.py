@@ -1,10 +1,8 @@
-"""Owner-local liveness evidence for first-party stack tools.
+"""Owner-local liveness evidence for first-party browser automation.
 
-The kernel image owns Herdr, while the fleet image owns OpenCode, Browser Use,
-and the loopback Chromium instance Browser Use drives.  The kernel therefore
-must not pretend it can execute fleet binaries.  Fleet publishes a short-lived,
-redacted Redis receipt after probing its own tools; ``/readyz`` combines that
-receipt with a kernel-local Herdr probe.
+The fleet image owns Browser Use; the isolated executor owns Chromium. Fleet
+publishes a short-lived, redacted Redis receipt after probing the binary and its
+private Unix-socket executor; ``/readyz`` verifies that receipt.
 
 Receipts deliberately contain no command output, paths, versions, environment
 values, or connection details.  Subprocess probes always use an argv vector and
@@ -138,20 +136,6 @@ async def _probe_version(
             await _stop_process(process)
 
 
-async def probe_herdr(env: Mapping[str, str], timeout_s: float) -> bool:
-    """Prove the kernel-owned Herdr executable can actually start."""
-    executable = (env.get("HERDR_BIN") or "herdr").strip()
-    if not executable:
-        return False
-    state_root = (env.get("BOLTRIG_HERDR_HOME") or "/var/lib/boltrig/herdr").strip()
-    return bool(state_root) and await _probe_version(
-        executable,
-        timeout_s,
-        env,
-        state_root=state_root,
-    )
-
-
 async def _probe_browser_cdp(
     timeout_s: float, *, host: str = "127.0.0.1", port: int = 9222
 ) -> bool:
@@ -209,12 +193,53 @@ async def _probe_browser_cdp(
                 pass
 
 
+async def _probe_browser_executor(socket_path: str, timeout_s: float) -> bool:
+    """Probe the non-networked executor through its exact private UDS route."""
+    writer: asyncio.StreamWriter | None = None
+    if not socket_path.startswith("/") or len(socket_path) > 240:
+        return False
+    try:
+        reader, connected_writer = await asyncio.wait_for(
+            asyncio.open_unix_connection(socket_path), timeout=timeout_s
+        )
+        writer = connected_writer
+        connected_writer.write(
+            b"GET /health HTTP/1.1\r\nHost: browser-executor\r\nConnection: close\r\n\r\n"
+        )
+        await asyncio.wait_for(connected_writer.drain(), timeout=timeout_s)
+        head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=timeout_s)
+        lines = head[:-4].split(b"\r\n")
+        if not lines or b" 200 " not in lines[0]:
+            return False
+        length = next(
+            (line.partition(b":")[2].strip() for line in lines[1:]
+             if line.lower().startswith(b"content-length:")),
+            b"",
+        )
+        size = int(length)
+        if size < 2 or size > 1024:
+            return False
+        payload = json.loads(await asyncio.wait_for(reader.readexactly(size), timeout=timeout_s))
+        return isinstance(payload, Mapping) and payload.get("status") == "ok"
+    except (
+        OSError,
+        ValueError,
+        asyncio.IncompleteReadError,
+        asyncio.LimitOverrunError,
+        asyncio.TimeoutError,
+    ):
+        return False
+    finally:
+        if writer is not None:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except OSError:
+                pass
+
+
 async def probe_fleet_tools(env: Mapping[str, str], timeout_s: float) -> dict[str, bool]:
     """Probe only tools that execute in the fleet worker container.
-
-    The probe pair matches the readiness required set (decision 0012): OpenCode
-    is staged-cutover residue and is no longer probed - a missing/unhealthy
-    residue binary must never trip the heartbeat warning.
 
     A tenant that ``browser_automation_wanted`` answers False for gets NO
     browser-cli key at all, rather than a False one. False is a claim that the
@@ -232,8 +257,15 @@ async def probe_fleet_tools(env: Mapping[str, str], timeout_s: float) -> dict[st
     browser_root = (env.get("BOLTRIG_BROWSER_CLI_HOME") or "/var/lib/boltrig/browser-cli").strip()
     if not browser or not browser_root:
         return {"browser-cli": False}
+    executor_socket = str(env.get("BOLTRIG_BROWSER_EXECUTOR_SOCKET") or "").strip()
+    if executor_socket:
+        # The executor runs from the exact same signed fleet image and its
+        # health route proves both the packaged CLI and live Chromium. Probing
+        # another copy of the binary here would require a second writable CLI
+        # home in every worker while adding no independent evidence.
+        return {"browser-cli": await _probe_browser_executor(executor_socket, timeout_s)}
     try:
-        browser_ok, cdp_ok = await asyncio.wait_for(
+        browser_ok, executor_ok = await asyncio.wait_for(
             asyncio.gather(
                 _probe_version(browser, timeout_s, env, state_root=browser_root),
                 _probe_browser_cdp(timeout_s),
@@ -242,7 +274,7 @@ async def probe_fleet_tools(env: Mapping[str, str], timeout_s: float) -> dict[st
         )
     except asyncio.TimeoutError:
         return {"browser-cli": False}
-    return {"browser-cli": browser_ok and cdp_ok}
+    return {"browser-cli": browser_ok and executor_ok}
 
 
 async def run_fleet_tool_heartbeat(

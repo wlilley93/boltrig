@@ -16,10 +16,10 @@ or the session secret (D8, K-20).
 
 from __future__ import annotations
 
-
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 
+from boltrig.api import desktop_session_auth
 from boltrig.config import load_settings
 from boltrig.identity import (
     CSRF_COOKIE,
@@ -33,10 +33,8 @@ from boltrig.identity import (
     verify_dummy,
     verify_password,
 )
-from boltrig.api.auth_password_routes import register_password_routes
 from boltrig.identity.invites import hash_invite_token
 from boltrig.identity.passwords import WeakPassword
-from boltrig.identity.sessions import SESSION_TTL_HOURS
 from boltrig.kernel.web_security import client_ip as _client_ip
 from boltrig.identity.totp import (
     CHALLENGE_TTL,
@@ -183,6 +181,9 @@ async def _seat_invitee(k, inv, email: str) -> dict:
                 scope={"all": True}, status="active", source="invitation",
                 last_seen_at=utcnow(),
             ))
+            from boltrig.identity.onboarding import seed_user_onboarding
+
+            await seed_user_onboarding(k.store, new_tid, email)
             # add_org_member also records the email -> orgs index pointer (D1), so login
             # discovers the new org and the switch can re-authorize it against org_members.
             await k.store.add_org_member(OrgMember(
@@ -194,23 +195,22 @@ async def _seat_invitee(k, inv, email: str) -> dict:
     return summary
 
 
-def _set_session_cookies(resp: JSONResponse, secret: str, csrf: str) -> None:
+def _set_session_cookies(
+    resp: JSONResponse,
+    secret: str,
+    csrf: str,
+    *,
+    request: Request | None = None,
+) -> None:
     """Set the httpOnly+Secure+SameSite session cookie and the readable CSRF cookie.
 
     The session cookie is httpOnly (JS cannot read it), Secure (HTTPS only) and
-    SameSite=Strict (never sent on a cross-site request) - so it is not exposed to
-    XSS exfiltration or CSRF (D6). The CSRF cookie is deliberately readable by JS so
-    the SPA can echo it in the X-Boltrig-CSRF header (the double-submit half).
+    SameSite=Strict for the hosted web app. An explicitly CORS-allowlisted
+    packaged Tauri origin receives SameSite=None; CSRF remains mandatory.
     """
     secure = _cookie_secure()
-    max_age = SESSION_TTL_HOURS * 3600
-    resp.set_cookie(
-        SESSION_COOKIE, secret, max_age=max_age, httponly=True, secure=secure,
-        samesite="strict", path="/",
-    )
-    resp.set_cookie(
-        CSRF_COOKIE, csrf, max_age=max_age, httponly=False, secure=secure,
-        samesite="strict", path="/",
+    desktop_session_auth.set_session_cookies(
+        resp, secret, csrf, secure=secure, request=request,
     )
 
 
@@ -249,7 +249,8 @@ async def _mint_web_session(k, tenant: str, user: User):
     return session, secret, csrf
 
 
-def _session_response(secret: str, csrf: str, user: User, *, status: str = "ok",
+def _session_response(secret: str, csrf: str, user: User, *,
+                      request: Request | None = None, status: str = "ok",
                       extra: dict | None = None) -> JSONResponse:
     """The login/challenge success envelope + the session cookies. ``status`` is
     "ok" for a fully-authenticated session, "2fa_enrollment_required" for an org-
@@ -263,7 +264,7 @@ def _session_response(secret: str, csrf: str, user: User, *, status: str = "ok",
     if extra:
         body.update(extra)
     resp = JSONResponse(body)
-    _set_session_cookies(resp, secret, csrf)
+    _set_session_cookies(resp, secret, csrf, request=request)
     return resp
 
 
@@ -312,8 +313,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
     K = Depends(get_kernel)
     P = Depends(principal_dep)
 
-    # The rotation surface lives in its own module (see auth_password_routes).
-    register_password_routes(app, principal_dep=principal_dep, get_kernel=get_kernel)
+    desktop_session_auth.register_auth_support_routes(app, principal_dep, get_kernel)
 
     @app.post("/v1/auth/accept-invite")
     async def accept_invite(body: dict, k=K) -> JSONResponse:
@@ -331,18 +331,22 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
             validate_password_strength(password)
         except WeakPassword as exc:
             return JSONResponse({"status": "error", "reason": str(exc)}, status_code=400)
+        # Argon2 work is pure and may fail only before the one-time bearer is
+        # claimed.  Once claimed, no concurrent/replayed request may reach a
+        # password or provisioning write, even if later operational work fails.
+        password_hash = hash_password(password)
 
         tenant = _console_tenant()
         set_current_tenant(tenant)  # bind before any RLS-scoped read/write
-        inv = await k.store.find_invitation_by_token_hash(tenant, hash_invite_token(token))
         # One generic rejection for unknown / expired / already-used, so a probe
         # cannot distinguish them.
         invalid = JSONResponse(
             {"status": "error", "reason": "invalid or expired invite"}, status_code=400
         )
+        inv = await k.store.claim_invitation_by_token_hash(
+            tenant, hash_invite_token(token), utcnow()
+        )
         if inv is None:
-            return invalid
-        if inv.expires_at is not None and inv.expires_at <= utcnow():
             return invalid
 
         email = _norm_email(inv.email)
@@ -360,6 +364,10 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
             created_at=existing.created_at if existing else utcnow(),
         )
         await k.store.upsert_user(user)
+        if existing is None:
+            from boltrig.identity.onboarding import seed_user_onboarding
+
+            await seed_user_onboarding(k.store, inv.tenant_id, email)
         # Store ONLY the argon2id hash, apart from the identity row (D4). The SHARED
         # credential is held ONCE at the identity realm (``tenant`` == _console_tenant(),
         # the login realm), keyed by the normalised email - never duplicated per org
@@ -367,7 +375,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         # against this one credential; the invite's own tenant is the realm here
         # (invites are consumed at the login realm), so this is the identity home.
         await k.store.set_password_credential(
-            tenant, email, hash_password(password)
+            tenant, email, password_hash
         )
         # Org/workspace-scoped seating + provisioning ([2026] VJS-COUNTY 8, D6). Each
         # arm runs only when its intent is present on the invite (a legacy invite
@@ -376,13 +384,6 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         # could manage a targeted workspace and gated org provisioning to superadmin),
         # so accept just materialises what was authorised.
         seated = await _seat_invitee(k, inv, email)
-        # Atomic single-use, consumed LAST (D1): the invite is burned only once the
-        # account + credential + seating actually exist, so a store failure above
-        # never strands a single-use invite with no account. The CAS still prevents
-        # a double-spend; a lost race / already consumed token returns the same
-        # generic rejection.
-        if not await k.store.consume_invitation(inv.tenant_id, inv.id):
-            return invalid
         # Keys-only via `_audit`: invitation id + email, never the password (SEC-191).
         await _audit(k, inv.tenant_id, email, "auth.invite.accept",
                      {"invitation_id": inv.id, "email": email, **seated})
@@ -399,7 +400,6 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         password = password if isinstance(password, str) else ""
         tenant = _console_tenant()
         set_current_tenant(tenant)
-
         # Behind the Cloudflare tunnel the TCP peer is the tunnel/loopback, so a
         # per-IP bound keyed on it collapses to ONE global bucket (a login-DoS
         # lever and useless anti-spray). The shared helper honors CF's
@@ -473,7 +473,8 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
             _, secret, csrf = await _mint_web_session(k, tenant, user)
             await _audit(k, tenant, user.id, "auth.login",
                          {"outcome": "2fa_enrollment_required"})
-            return _session_response(secret, csrf, user, status="2fa_enrollment_required")
+            return _session_response(secret, csrf, user, request=request,
+                                     status="2fa_enrollment_required")
 
         # No second factor due: a plain session, exactly as before (backward-compat).
         session, secret, csrf = await _mint_web_session(k, tenant, user)
@@ -484,7 +485,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         # a console route straight to the rotation screen rather than discover the
         # clamp by being refused. Same shape as 2fa_enrollment_required above.
         clamped = "password_change_required" if user.must_change_password else "ok"
-        return _session_response(secret, csrf, user, status=clamped)
+        return _session_response(secret, csrf, user, request=request, status=clamped)
 
     @app.post("/v1/auth/logout")
     async def logout(request: Request, k=K, p=P) -> JSONResponse:
@@ -545,7 +546,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         await _audit(k, p.tenant_id, p.subject, "auth.session.rotate",
                      {"session_id": session.id})
         resp = JSONResponse({"status": "ok", "csrf_token": csrf})
-        _set_session_cookies(resp, secret, csrf)
+        _set_session_cookies(resp, secret, csrf, request=request)
         return resp
 
     # === TOTP two-factor ([2026] VJS-COUNTY 10) ==============================
@@ -760,7 +761,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
             remaining = await k.store.count_active_recovery_codes(tenant, user.id)
             await _audit(k, tenant, user.id, "auth.2fa.recovery_used",
                          {"outcome": "consumed", "recovery_codes_remaining": remaining})
-        return _session_response(secret_cookie, csrf, user)
+        return _session_response(secret_cookie, csrf, user, request=request)
 
     @app.post("/v1/auth/2fa/disable")
     async def two_factor_disable(body: dict, request: Request, k=K, p=P) -> JSONResponse:

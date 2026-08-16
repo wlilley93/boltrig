@@ -21,7 +21,7 @@ T = "acme"
 
 
 def _capability() -> AgentCapability:
-    return AgentCapability("opencode-worker", T, "opencode", ["*"], 2, True, "cheap")
+    return AgentCapability("codex-worker", T, "codex", ["*"], 2, True, "cheap")
 
 
 def _parent() -> InvocationContext:
@@ -52,7 +52,7 @@ def test_langfuse_payload_is_bounded_and_redacts_route_connection_data():
         model_route={
             "provider": "bifrost",
             "model": "ornith",
-            "runtime": "openai",
+            "runtime": "codex",
             "profile": "code",
             "base_url": "https://models.internal/v1",
             "api_key": "sk-secret",
@@ -63,7 +63,7 @@ def test_langfuse_payload_is_bounded_and_redacts_route_connection_data():
     assert payload["metadata"]["model_route"] == {
         "provider": "bifrost",
         "model": "ornith",
-        "runtime": "openai",
+        "runtime": "codex",
         "profile": "code",
     }
     assert payload["usage_details"] == {"total_tokens": 123, "cost_micros": 456}
@@ -109,7 +109,7 @@ async def test_langfuse_sink_emits_event_and_flushes():
     )
 
     assert client.events[0]["name"] == "boltrig.agent.spawn"
-    assert client.events[0]["metadata"]["capability"] == "opencode-worker"
+    assert client.events[0]["metadata"]["capability"] == "codex-worker"
     assert client.flushed is True
     assert sink.status_snapshot() == {
         "sink_state": "enabled",

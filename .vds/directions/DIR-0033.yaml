@@ -1,0 +1,9 @@
+id: DIR-0033
+logId: DECISION-0024
+decisionDigest: sha256:1fafecf5df1eade0544ddbd03bbe32e9aefdc0da8d587ecde1269de9103b7c92
+surface: !route
+  route: apps/worker/src/components/ChatView.tsx
+direction: When the caller enables Read out replies, speak each newly completed text-chat reply once in the selected installed character's configured voice.
+magnitude: Apply the opt-in to hosted Chat and desktop local Chat after a reply settles. Resolve only the caller-visible voice.speak adapter binding and the selected character's provider-specific voice id, submit through the governed invoke contract, and keep text delivery successful when speech is unavailable, refused or waiting for approval. Prime browser audio from the user's send gesture, stop playback on conversation changes and when a realtime call takes over, strip markup and omit code fences before speech, and never send tool payloads, credentials, local Codex prompts, partial text or a guessed fallback voice to the provider.
+directedAt: 2026-08-14T16:22:25Z
+notes: Runtime and component regressions carry the dynamic speech contract; static Chat captures keep the setting off. No design-authority claim is made.

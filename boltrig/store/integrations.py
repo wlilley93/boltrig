@@ -165,6 +165,21 @@ class IntegrationStorePG:
             connection.updated_at,
         )
 
+    async def update_integration_connection_health_if_active(
+        self, tenant_id, connection_id, health, checked_at
+    ):
+        row = await self._pool.fetchrow(
+            """UPDATE integration_connections
+                  SET health=$3, last_checked_at=$4, updated_at=$4
+                WHERE tenant_id=$1 AND id=$2 AND health<>'revoked'
+                RETURNING *""",
+            tenant_id,
+            connection_id,
+            health,
+            checked_at,
+        )
+        return _connection(row)
+
     async def create_integration_connection(self, connection):
         row = await self._pool.fetchrow(
             """INSERT INTO integration_connections
@@ -247,6 +262,23 @@ class IntegrationStoreMem:
     async def upsert_integration_connection(self, connection):
         _, connections = _memory_tables(self)
         connections[(connection.tenant_id, connection.id)] = _copy_connection(connection)
+
+    async def update_integration_connection_health_if_active(
+        self, tenant_id, connection_id, health, checked_at
+    ):
+        _, connections = _memory_tables(self)
+        key = (tenant_id, connection_id)
+        connection = connections.get(key)
+        if connection is None or connection.health == "revoked":
+            return None
+        updated = replace(
+            connection,
+            health=health,
+            last_checked_at=checked_at,
+            updated_at=checked_at,
+        )
+        connections[key] = updated
+        return _copy_connection(updated)
 
     async def create_integration_connection(self, connection):
         _, connections = _memory_tables(self)

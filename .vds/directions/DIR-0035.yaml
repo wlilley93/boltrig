@@ -1,0 +1,9 @@
+id: DIR-0035
+logId: DECISION-0025
+decisionDigest: sha256:885b9f9206cb5b32fba17552010ba17b122c05511b3e304df3381823dbaa0497
+surface: !route
+  route: apps/worker/src/components/shell/CompanionSwitcher.tsx
+direction: Keep the Familiar and Jarvis switcher and its menu wholly above New chat and the remaining primary navigation.
+magnitude: Give the Shell header an explicit stacking layer, keep overflow visible, render the companion menu on an opaque higher layer and keep primary navigation beneath it. Preserve the compact trigger, installed-character-only choices, selected check, keyboard traversal, outside click, persistence rollback and command-search focus order. Do not move New chat, duplicate the switcher, expose an uninstalled companion or let underlying navigation text bleed through the menu.
+directedAt: 2026-08-14T16:33:25Z
+notes: This additive Principal direction corrects a real overlap in the shared Shell. It makes no signed Figma parity, conformity or frameDigest claim.

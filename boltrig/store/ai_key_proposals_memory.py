@@ -132,6 +132,7 @@ class AiKeyProposalStoreMem:
         base_url,
         secret_digest,
         now,
+        modality="text",
     ):
         key = (tenant_id, proposal_id)
         proposal = self._ai_key_proposals.get(key)
@@ -145,6 +146,7 @@ class AiKeyProposalStoreMem:
             provider=provider,
             model=model,
             base_url=base_url,
+            modality=modality,
             secret_digest=secret_digest,
         ):
             return None
@@ -155,8 +157,8 @@ class AiKeyProposalStoreMem:
                 )
             return None
         config = _ai_config_from_proposal(proposal, now)
-        previous = self._ai_configs.get((tenant_id, level, scope_id))
-        self._ai_configs[(tenant_id, level, scope_id)] = config
+        previous = self._ai_configs.get((tenant_id, level, scope_id, modality))
+        self._ai_configs[(tenant_id, level, scope_id, modality)] = config
         self._ai_key_proposals[key] = replace(
             proposal,
             status="consumed",
@@ -186,6 +188,7 @@ def _ai_config_from_proposal(proposal, now):
         model=proposal.model,
         credential_ref=proposal.secret_ref,
         base_url=proposal.base_url,
+        modality=proposal.modality,
         created_at=now,
         updated_at=now,
     )

@@ -18,6 +18,7 @@ from __future__ import annotations
 import time
 
 import logging
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -110,6 +111,48 @@ def test_wildcard_hosts_refused_in_production():
     # A production signal with wildcard hosts is a fatal boot error.
     with pytest.raises(RuntimeError):
         install_security(app, env={"BOLTRIG_PRODUCTION": "1", "BOLTRIG_ALLOWED_HOSTS": "*"})
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-58")
+def test_desktop_cors_preflight_allows_only_the_required_session_headers():
+    app = FastAPI()
+
+    @app.post("/v1/action")
+    def action():
+        return {"ok": True}
+
+    install_security(
+        app,
+        env={
+            "BOLTRIG_ALLOWED_HOSTS": "testserver",
+            "BOLTRIG_CORS_ORIGINS": "tauri://localhost",
+        },
+    )
+    response = TestClient(app).options(
+        "/v1/action",
+        headers={
+            "origin": "tauri://localhost",
+            "access-control-request-method": "POST",
+            "access-control-request-headers": (
+                "content-type,x-boltrig-csrf,x-boltrig-approval-id"
+            ),
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "tauri://localhost"
+    allowed = response.headers["access-control-allow-headers"].lower()
+    assert "x-boltrig-csrf" in allowed
+    assert "x-boltrig-approval-id" in allowed
+
+    refused = TestClient(app).options(
+        "/v1/action",
+        headers={
+            "origin": "https://unlisted.example",
+            "access-control-request-method": "POST",
+        },
+    )
+    assert refused.status_code == 400
 
 
 # --------------------------------------------------------------------------- #
@@ -207,7 +250,11 @@ async def test_worker_boot_refuses_default_audit_key_under_prod_signal(monkeypat
     monkeypatch.setenv("BOLTRIG_PRODUCTION", "1")
     monkeypatch.delenv("BOLTRIG_AUDIT_HMAC_KEY", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)  # stay offline (in-memory store)
-    monkeypatch.delenv("BOLTRIG_MANIFEST", raising=False)
+    # This is an audit-key boundary test, not a project-extension import test.
+    # Use the shipped self-contained example instead of whichever deployment's
+    # optional adapter modules happen to be named by the working-tree manifest.
+    manifest = Path(__file__).resolve().parents[2] / "manifest.example.yaml"
+    monkeypatch.setenv("BOLTRIG_MANIFEST", str(manifest))
     with pytest.raises(RuntimeError):
         await build_kernel_async()
 

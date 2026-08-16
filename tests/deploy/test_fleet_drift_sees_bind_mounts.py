@@ -135,7 +135,7 @@ def test_only_our_own_immutable_tags_are_failed_on() -> None:
     assert decide("TAG MOVED", "pgvector/pgvector", ours) is False
     # our own immutable release tags: both states are defects
     assert decide("TAG MOVED", "ghcr.io/wlilley93/boltrig-kernel", ours) is True
-    assert decide("TAG MISSING", "ghcr.io/wlilley93/boltrig-ui", ours) is True
+    assert decide("TAG MISSING", "ghcr.io/wlilley93/boltrig-worker-ui", ours) is True
     # a resolved tag is never a defect, whoever published it
     assert decide("ok", "ghcr.io/wlilley93/boltrig-kernel", ours) is False
     # and with no remote we cannot tell them apart, so nothing is failed on
@@ -150,7 +150,7 @@ def test_only_our_own_immutable_tags_are_failed_on() -> None:
 
 @pytest.mark.invariant("FR-OPS-06")
 def test_a_private_package_is_actually_reachable_by_the_check() -> None:
-    """Anonymous auth returns 403 on boltrig-kernel, -fleet and -ui.
+    """Anonymous auth returns 403 on the first-party kernel, fleet and Worker images.
 
     Assuming an anonymous token was enough would have made this whole check inert
     on exactly the three images that matter, while the one public package reported

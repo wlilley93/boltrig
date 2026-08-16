@@ -118,13 +118,13 @@ def owner_lease_view(lease) -> dict:
             lease.settled_at.isoformat() if lease.settled_at else None
         ),
         "receipt": _owner_receipt_summary(
-            lease.verb, lease.status, lease.receipt
+            lease.verb, lease.status, lease.action, lease.receipt
         ),
     }
 
 
 def _owner_receipt_summary(
-    verb: str, status: str, receipt: dict | None
+    verb: str, status: str, action: dict, receipt: dict | None
 ) -> dict | None:
     if status not in {"completed", "failed"} or not isinstance(receipt, dict):
         return None
@@ -158,6 +158,25 @@ def _owner_receipt_summary(
         elif isinstance(receipt.get("overwrite"), bool):
             summary["overwrite"] = receipt["overwrite"]
         return summary
+    if verb == "device.file.list":
+        relative_path = _safe_relative_path(
+            action.get("relative_path"), optional=True
+        )
+        max_entries = action.get("max_entries")
+        entries = _file_list_entries(
+            receipt.get("entries"), relative_path, max_entries
+        )
+        if (
+            entries is None
+            or relative_path is _INVALID
+            or not isinstance(receipt.get("truncated"), bool)
+        ):
+            return None
+        return {
+            "relative_path": relative_path,
+            "entries": entries,
+            "truncated": receipt["truncated"],
+        }
     if verb == "device.command.run":
         duration = receipt.get("duration_ms")
         exit_code = receipt.get("exit_code")
@@ -181,6 +200,83 @@ def _owner_receipt_summary(
             "output_captured": False,
         }
     return None
+
+
+_INVALID = object()
+
+
+def _safe_relative_path(value: object, *, optional: bool = False):
+    if value is None and optional:
+        return None
+    if (
+        not isinstance(value, str)
+        or not value
+        or not _bounded_utf8(value, 1024)
+        or value.startswith("/")
+        or "\\" in value
+        or "\x00" in value
+        or any(ord(ch) < 32 or ord(ch) == 127 for ch in value)
+        or any(part in {"", ".", ".."} for part in value.split("/"))
+    ):
+        return _INVALID
+    return value
+
+
+def _bounded_utf8(value: str, limit: int) -> bool:
+    try:
+        return len(value.encode("utf-8")) <= limit
+    except UnicodeEncodeError:
+        return False
+
+
+def _file_list_entries(
+    value: object, relative_path: object, max_entries: object
+) -> list[dict] | None:
+    if (
+        relative_path is _INVALID
+        or not isinstance(max_entries, int)
+        or isinstance(max_entries, bool)
+        or not 1 <= max_entries <= 100
+        or not isinstance(value, list)
+        or len(value) > max_entries
+    ):
+        return None
+    entries: list[dict] = []
+    for raw in value:
+        if not isinstance(raw, dict):
+            return None
+        name = raw.get("name")
+        path = _safe_relative_path(raw.get("path"))
+        kind = raw.get("kind")
+        byte_size = raw.get("byte_size")
+        if (
+            not isinstance(name, str)
+            or not name
+            or not _bounded_utf8(name, 255)
+            or "/" in name
+            or "\\" in name
+            or any(ord(ch) < 32 or ord(ch) == 127 for ch in name)
+            or path is _INVALID
+            or kind not in {"file", "directory", "symlink"}
+            or (
+                byte_size is not None
+                and (
+                    not isinstance(byte_size, int)
+                    or isinstance(byte_size, bool)
+                    or not 0 <= byte_size <= 9_007_199_254_740_991
+                )
+            )
+            or (kind == "file" and byte_size is None)
+            or (kind != "file" and byte_size is not None)
+            or path != (
+                f"{relative_path}/{name}" if relative_path is not None else name
+            )
+        ):
+            return None
+        entries.append(
+            {"name": name, "path": path, "kind": kind, "byte_size": byte_size}
+        )
+    return entries
 
 
 async def audit_device(kernel, tenant_id: str, actor: str, verb: str, device_id: str, detail: dict):

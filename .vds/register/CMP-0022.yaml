@@ -1,0 +1,37 @@
+id: CMP-0022
+name: Topbar
+status: proposed
+contractVersion: 1
+figma: null
+code:
+  importPath: ./Shell
+  sourceFile: apps/worker/src/components/Shell.tsx
+  exportName: Topbar
+props:
+- name: status
+  type: string
+  required: false
+  figmaProperty: null
+- name: title
+  type: string
+  required: true
+  figmaProperty: null
+states:
+  required: []
+  drawn: []
+  built: []
+a11y:
+  role: null
+  accessibleNameSource: children
+  keyboard: []
+  contrastFloors: []
+demand:
+  routes: 8
+  measuredAt: 2026-08-10T14:23:03Z
+  measuredBy: vds register measure-demand
+supersedes: []
+supersededBy: null
+amendments: []
+basis:
+- ACT-VDS-001:s5
+notes: 'Imported by `vds register import` from apps/worker/src/components/Shell.tsx:572. A CANDIDATE, not a contract: it carries what the code says and nothing the code cannot say. Its required states, contrast floors, role and keyboard contract are decisions nobody has made yet.'

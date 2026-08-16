@@ -46,6 +46,26 @@ def test_an_armed_probe_is_enabled_and_carries_no_excuse(env):
 
 
 @pytest.mark.unit
+@pytest.mark.invariant("FR-OPS-03")
+@pytest.mark.parametrize("disabled", ["0", "false", "off", "no"])
+def test_an_explicit_false_health_flag_does_not_arm_a_probe(disabled):
+    """Manifest export writes ``0`` for disabled; it is not configuration truth.
+
+    The live failure was a split-brain readiness result: ``gateway_posture``
+    treated the non-empty string as enabled while ``ModelGatewayStatusProvider``
+    correctly declined to poll it.  Readiness then required an ``ok`` live probe
+    which, by configuration, could never exist.
+    """
+
+    assert gateway_posture(
+        {
+            "BOLTRIG_MODEL_GATEWAY_URL": "http://bifrost:8080/v1",
+            "BOLTRIG_MODEL_GATEWAY_HEALTH": disabled,
+        }
+    ) == ("unchecked", "configured_but_health_check_disabled")
+
+
+@pytest.mark.unit
 def test_whitespace_is_not_configuration():
     # Fail-safe direction: a blank-but-present var must not be read as "a gateway is configured",
     # which would report `unchecked` about a stack that genuinely has none.

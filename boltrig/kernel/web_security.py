@@ -89,9 +89,9 @@ _SCOPED_COOKIES = frozenset({"boltrig_session", "boltrig_csrf"})
 # Up to four conservative path segments. Anything else is IGNORED rather than
 # sanitised: a prefix we do not recognise is a prefix we do not honour.
 #
-# It was ONE segment, and that was wrong in a way worth recording. Decision 0021
-# nests the operator console under /operator/ inside the worker image, so a
-# tenant mount of it is `/boltrig/operator` - which a single-segment pattern
+# It was ONE segment, and that was wrong in a way worth recording. A legacy
+# nested console mount such as `/boltrig/legacy` is a real shape - which a
+# single-segment pattern
 # rejects, and `forwarded_prefix` returning "" drops the cookie back to Path=/,
 # silently reinstating the whole-host widening `scope_set_cookie` exists to
 # close. The conservative choice failed OPEN, because the fallback for an
@@ -309,6 +309,12 @@ def install_security(app: FastAPI, *, env: dict | None = None) -> None:
             allow_origins=origins,
             allow_credentials=True,
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-            allow_headers=["authorization", "content-type", "x-boltrig-mcp-token"],
+            allow_headers=[
+                "authorization",
+                "content-type",
+                "x-boltrig-approval-id",
+                "x-boltrig-csrf",
+                "x-boltrig-mcp-token",
+            ],
         )
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)

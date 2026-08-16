@@ -36,7 +36,7 @@ function sameRouteInput(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-export function SkillsBuild() {
+export function SkillsBuild({ initialSkillId }: { initialSkillId?: string | null } = {}) {
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [id, setId] = useState("");
   const [version, setVersion] = useState("1");
@@ -144,7 +144,11 @@ export function SkillsBuild() {
     }
   }
   useEffect(() => {
-    void refresh(false);
+    // When the read-first Skills table opens a row it passes the skill id so
+    // the complete authoring record is hydrated before any replacement.
+    void refresh(false).then(() => {
+      if (initialSkillId) void edit(initialSkillId);
+    });
   }, []);
 
   async function save(event: React.FormEvent) {
@@ -159,7 +163,7 @@ export function SkillsBuild() {
       };
       const result = await client.upsertSkill(input.body);
       if (finalizer.begin(input, result, "Skill definition change")) {
-        setMessage("Skill change is waiting for human approval in Inbox.");
+        setMessage("Skill change is waiting for human approval in the originating chat.");
         return;
       }
       setMessage(resultMessage(result, `Skill ${id.trim()} saved.`));
@@ -171,13 +175,13 @@ export function SkillsBuild() {
     }
   }
 
-  async function edit(skill: SkillSummary) {
+  async function edit(skillId: string) {
     finalizer.invalidate();
     setMessage("");
     setHydratedExisting(null);
-    setSpawnSkill(skill.id);
+    setSpawnSkill(skillId);
     try {
-      const result = await client.skill(skill.id);
+      const result = await client.skill(skillId);
       setId(result.skill.id);
       setVersion(result.skill.version);
       setPrompt(result.skill.prompt_fragment);
@@ -216,7 +220,7 @@ export function SkillsBuild() {
         ? await client.archiveSkill(input.selected.id)
         : await client.restoreSkill(input.selected.id);
       if (finalizer.begin(input, result, `Skill ${action}`)) {
-        setMessage(`Skill ${action} is waiting for human approval in Inbox.`);
+        setMessage(`Skill ${action} is waiting for human approval in the originating chat.`);
         return;
       }
       if (result.status === "ok") {
@@ -227,7 +231,7 @@ export function SkillsBuild() {
         );
         await refresh(false);
       } else if (result.status === "pending_human") {
-        setMessage(`Skill ${action} is waiting for human approval in Inbox.`);
+        setMessage(`Skill ${action} is waiting for human approval in the originating chat.`);
       } else {
         setMessage(result.reason ?? `Skill ${action} was refused.`);
       }
@@ -262,7 +266,7 @@ export function SkillsBuild() {
         <div className="section-heading"><div><p className="eyebrow">Skill library</p><h2>Approved instruction sets</h2></div><div className="inline-actions"><button className="secondary-button" onClick={newSkill}>New</button><button className="secondary-button" onClick={() => void refresh()}>Refresh</button></div></div>
         {skills.length === 0 ? <Unavailable title="No skills visible">Create a skill if your role has authoring access.</Unavailable> : (
           <div className="data-list compact-list" role="region" aria-label="Visible skills" tabIndex={0}>{skills.map((skill) => (
-            <button className="data-row" key={`${skill.id}@${skill.version}`} onClick={() => void edit(skill)}>
+            <button className="data-row" key={`${skill.id}@${skill.version}`} onClick={() => void edit(skill.id)}>
               <span className="data-row-copy"><strong>{skill.id}</strong><small>{skill.tool_grants.length} bounded grants · {skill.locale}</small></span>
               <span className="row-meta">{skill.status} · v{skill.version}</span>
             </button>

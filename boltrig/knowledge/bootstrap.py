@@ -9,6 +9,7 @@ import platform
 from typing import Any
 
 from boltrig.config.environment import is_truthy
+from boltrig.memory.cognee_model_binding import CogneeModelBindingResolver
 
 from .adapter import KnowledgeAdapter
 from .filesystem_vault import FilesystemObjectVault
@@ -16,7 +17,7 @@ from .memory_repository import InMemoryKnowledgeRepository
 from .projections import (
     KnowledgeProjectionCoordinator,
     provider_defaults,
-    reconcile_unavailable_providers,
+    retire_legacy_providers,
 )
 from .service import KnowledgeService
 
@@ -86,11 +87,15 @@ async def register_knowledge(
         return None
     repository = _repository(kernel.store)
     await repository.ensure_providers(tenant_id, provider_defaults(tenant_id, cfg))
-    await reconcile_unavailable_providers(repository, tenant_id)
+    await retire_legacy_providers(repository, tenant_id)
     cognee_config = dict(cfg.get("cognee") or {})
     cognee_config.setdefault("cognee_root", str(_default_cognee_root()))
     cfg["cognee"] = cognee_config
-    projections = KnowledgeProjectionCoordinator(repository, cfg)
+    projections = KnowledgeProjectionCoordinator(
+        repository,
+        cfg,
+        model_resolver=CogneeModelBindingResolver(kernel.store),
+    )
     service = KnowledgeService(repository, _vault(cfg), projections)
     await kernel.register_adapter(tenant_id, KnowledgeAdapter(service))
     log.info("Knowledge enabled (Cognee default compiler; canonical vault + catalogue)")

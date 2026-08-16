@@ -1,0 +1,31 @@
+id: PROOF-20260814-190557
+kind: ledger_staleness
+status: failed
+warrant_id: null
+command: vds proof ledger_staleness
+script: crates/vds-proof/src/ledger_staleness.rs
+exit_code: 1
+rows_considered: 4
+rows_enforced: 4
+rows_skipped_reasons: {}
+violations:
+- location: .vds/ledgers/frames.yaml
+  rule: 'VDS S-4(2) ledger_staleness R4: the frame ledger is self-consistent, agrees with the file the screen register names, and is not older than the screen records that read it'
+  expected: a frame ledger generated no earlier than every screen record that reads it, so every record has a row in it. This one was generated at 2026-08-11T04:36:42Z
+  actual: '1 screen record(s) name a frame captured after it: SCR-0007 at 2026-08-11T05:14:18Z. The ledger has never seen them, so screen_parity would report them as frames the capture does not reach. Regenerate with: vds figma frames --from <capture.json>'
+  severity: fatal
+  drift: undetermined
+notes:
+- the screens ledger's staleness test REGENERATES the ledger from its sources and compares the content, rather than comparing the source digest the ledger records. A source-digest comparison answers only whether the screens moved, so it certifies a hand-edited ledger clean, and a proof reading that ledger can then be flipped from failing to passing without touching a screen (VDS S-2(5)(4)).
+- 'what this run does NOT reach: this build holds one REGENERATING staleness test, the screens ledger''s. The figma ledger (R3), the frame ledger (R4) and the CI run ledger (R6) have self-consistency tests instead, because their source is behind a network call and there is no generator here to re-run against it. For every other file in the ledgers directory it establishes only that no staleness test exists, never that the file is current. It reaches nothing outside the configured ledgers directory. And where the declared screens ledger is absent the run is a precondition failure at exit 2, so the other files in that directory go unexamined rather than passing.'
+- '[figma-ledger] the figma ledger''s staleness test settles three things and cannot settle the fourth. It settles that the ledger is SELF-CONSISTENT (its content digest matches its contents, so it was not hand-edited), that it agrees with the decided-target file the register names (two files is two opinions about what is decided), and that it is not OLDER than the register records that read it (a record pointed at a node after the pull is a record the ledger has never seen). It cannot settle whether the decided-target file has changed since the pull, because that is a network read VDS S-7(2)(1) forbids inside a proof. Its `generated_at` is reported so a reader can weigh how old the reading is, and a warrant citing anything downstream of it is bounded by that instant.'
+- '[figma-ledger-age] this ledger was generated at 2026-08-10T11:55:16Z, from file iVQBKFc3NpRH3zdOOxfPqr version 2386064713862372315. Nothing          offline can establish whether that file has changed since.'
+- '[frame-ledger] the frame ledger''s staleness test settles three things and cannot settle the fourth. It settles that the ledger is SELF-CONSISTENT (its content digest matches its contents, so it was not hand-edited), that it agrees with the decided-target file the SCREEN register names, and that it is not OLDER than the screen records that read it. It cannot settle whether the decided-target file has changed since the capture, because that is a network read VDS S-7(2)(1) forbids inside a proof. It also cannot settle whether the capture went DEEP ENOUGH: the ledger records the depth it derived and marks every reading taken at the boundary, and `screen_parity` refuses to enforce those rows, which is the furthest an offline test can go.'
+- '[new-ledgers] the geometry authority snapshot, the burndown reading and the route manifest are settled here for SELF-CONSISTENCY only: each witnesses its own content, so a hand edit is caught. CURRENCY is settled elsewhere and per ledger - the snapshot by geometry R12 and R14 against its three input hashes, the reading by burndown R10 against the run''s freshest independent input, and the manifest by visual_review''s three populations. This arm exists because all three default inside the ledgers directory and would otherwise fall to R2 ([2026] VJS-CA-VDS 1 order 39).'
+inputs_digest: sha256:f633cd0c2cfdf5ed97bbf0c7d42ac2a2077977df95a9131822dafedf88f4fc34
+digest: sha256:f61ab4b1d7e0260bd09743269e3dd6f50177041a5afaff3425f8a29223bd1f2b
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-14T19:05:51Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 1000

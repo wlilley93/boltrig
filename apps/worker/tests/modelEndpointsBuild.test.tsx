@@ -91,8 +91,12 @@ describe("Worker model endpoint lifecycle", () => {
   it("distinguishes process policy from stored endpoint inventory", async () => {
     render(<ModelEndpointsBuild />);
 
-    expect(await screen.findByText("Effective model policy")).toBeTruthy();
-    expect(screen.getByText("private-local · active")).toBeTruthy();
+    // The section heading exists before either independent request settles, so
+    // it is not an async readiness marker. Wait for one fact from each mocked
+    // contract before asserting the complete inventory/policy projection.
+    expect(await screen.findByText("1/2 active")).toBeTruthy();
+    expect(await screen.findByText("private-local · active")).toBeTruthy();
+    expect(screen.getByText("Effective model policy")).toBeTruthy();
     expect(screen.getByText("inactive · no serving consumer")).toBeTruthy();
     expect(screen.getByText("gpt-governed")).toBeTruthy();
     expect(screen.getByText("in 0.25 · out 1.5")).toBeTruthy();

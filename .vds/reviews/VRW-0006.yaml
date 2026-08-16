@@ -1,0 +1,53 @@
+id: VRW-0006
+routes:
+- apps/worker/src/components/SettingsSurface.tsx
+fileKey: iVQBKFc3NpRH3zdOOxfPqr
+nodeId: 22:2
+shippedScreenshotDigest: sha256:8bce0fbd0d22b2a968159c66f28da55e329d08789838115c8404b60790afb292
+screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png
+servedBuild: "feat/console-target@3f96081c34a08ea0042ec2ce998f60711ce2717b; dirty; capture-source sha256:2d74c933d31a87a2ab6cd99b8747be242663f385f08da0345ca0c5d5ab99bc95; capture-manifest sha256:ed3f7421c58d6fa7e8ac9c56787b48912076e803451cdab97aed7220fbf7fbb9"
+shippedSourceDigest: sha256:36e8f4ba1b1aeeb8dd94ece91283887fe247e0f5ebe63335298dfee06af98624
+frameImageDigest: sha256:b1d04f772b8f54a22ad02fa3e7917262f7ffecffeb65106c187bb0f5b0758213
+frameDigest: sha256:e9aca9ab0c191069ecb2a0e78d157287d9a9dbac94f4bf2ea3235bb0279db909
+verdict: no_authority
+regions:
+- region: header
+  examined: true
+  finding: Heading, explanatory copy, section labels and measured main-pane stack align closely.
+- region: facets
+  examined: true
+  finding: Search and settings navigation align broadly; the named editorial footer is absent as directed, and Camera and presence plus Models are available without adding a second global search field.
+- region: body_rows
+  examined: true
+  finding: Appearance, notification and call-preference row geometry aligns closely while backend-derived values and availability states differ.
+- region: rail
+  examined: false
+  finding: The settings screen declares no independent rail band.
+- region: footer
+  examined: false
+  finding: The settings screen declares no main-content footer band.
+- region: empty_state
+  examined: false
+  finding: The compared settings section is populated, not empty.
+- region: keyboard
+  examined: false
+  finding: The static pair exposes no focused search or keyboard-navigation state.
+deltas:
+- describes: Notification-route detail, quiet-hours availability and voice-preference states follow captured contracts rather than the frame's illustrative values.
+  disposition: forbidden_by_policy
+  owedBy: DIR-0007
+- describes: Later product direction removes the editorial Settings-rail footer and adds governed Models plus Camera and presence navigation without changing the frame; these are app-chrome and runtime-truth overrides.
+  disposition: belongs_to_app_chrome
+  owedBy: SCR-0006
+reviewedBy: Codex deterministic current-capture evidence rebind v30
+reviewedAt: 2026-08-14T16:39:01Z
+basis:
+- DIR-0007
+- DIR-0015
+- DIR-0019
+- DIR-0034
+- SCR-0006
+- apps/worker/tests/visual/states.json
+- docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json
+- docs/design/evidence/2026-08-11-console-parity/current/metrics.json
+notes: The unchanged frame digest is retained from the existing depth-limited ledger only and is not eligible for sign-off. The current capture measures the main pane at the governing geometry, while real values and unsupported states still differ. This no_authority row binds only the deterministic current screenshot and current route source.

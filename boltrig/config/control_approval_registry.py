@@ -6,7 +6,11 @@ from typing import Any
 
 from boltrig.models import AdapterFailure, InvocationContext
 
-from .control_approval_workflows import model_endpoint_view
+from .capability_model_routes import (
+    CapabilityRouteValidationError,
+    validated_capability_routes,
+)
+from .control_approval_model_endpoints import model_endpoint_view
 
 AUTHORED_DEFINITION_ACTIONS = frozenset(
     {
@@ -262,18 +266,17 @@ async def capability_upsert_context(
         ),
         None,
     )
-    endpoint_id = str(params.get("model_endpoint") or "").strip() or None
-    endpoint = (
-        await store.get_model_endpoint(context.tenant_id, endpoint_id)
-        if endpoint_id
-        else None
-    )
-    if endpoint_id and (endpoint is None or not endpoint.is_active):
-        raise AdapterFailure(
-            "model endpoint binding is missing or retired",
-            status_code=409,
-            reason="model_endpoint_binding_unavailable",
+    try:
+        _, _, _, selected_endpoints = await validated_capability_routes(
+            store, context.tenant_id, params
         )
+    except CapabilityRouteValidationError as error:
+        raise AdapterFailure(
+            str(error),
+            status_code=409,
+            reason=error.reason,
+        ) from None
+    endpoint = selected_endpoints.get("text")
     return {
         "capability": (
             None
@@ -286,9 +289,15 @@ async def capability_upsert_context(
                 "is_ephemeral": current.is_ephemeral,
                 "cost_tier": current.cost_tier,
                 "model_endpoint": current.model_endpoint,
+                "vision_model_endpoint": current.vision_model_endpoint,
+                "model_routes": current.model_routes,
                 "source": current.source,
                 "is_active": current.is_active,
             }
         ),
         "model_endpoint": model_endpoint_view(endpoint),
+        "model_endpoints": {
+            modality: model_endpoint_view(selected_endpoints[modality])
+            for modality in sorted(selected_endpoints)
+        },
     }

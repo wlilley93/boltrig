@@ -1,0 +1,209 @@
+{
+  "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
+  "captureManifestSha256": "598d6b7a031d78a358f7c4a0cc656e1df5d8304b171212bf2a7fd69df1489fa7",
+  "captureSourceBinding": {
+    "branch": "feat/console-target",
+    "digestAfterCapture": "d032d589cce5cc48697dec123aa84402ea915c5242137ff41f7e8ed3db1e6bd4",
+    "digestAlgorithm": "sha256-path-type-content-v1",
+    "digestBeforeCapture": "d032d589cce5cc48697dec123aa84402ea915c5242137ff41f7e8ed3db1e6bd4",
+    "dirty": true,
+    "head": "e7c9d33e2851e478c8045bb603f33110b8bc9a1b",
+    "scope": [
+      "apps/worker/src",
+      "apps/worker/tests/visual"
+    ],
+    "sourceUnchangedDuringCapture": true,
+    "status": "current_at_capture"
+  },
+  "metrics": [
+    {
+      "changedPixelRatioGt16": 0.04718827160493827,
+      "changedPixelRatioGt32": 0.023916666666666666,
+      "changedPixelRatioGt8": 0.2676743827160494,
+      "currentPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
+      "currentSha256": "55def6fad2357d90eebab569d76e751e1b92c4cefede61aed603733963d2ec02",
+      "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/new-chat.png",
+      "diffSha256": "0bb61f9007183b49ca2e1d2caa7d0afed2d0ba498643ffbd69ae5e3d9693e509",
+      "exactChangedPixelRatio": 0.9999413580246913,
+      "figmaNodeId": "13:2",
+      "meanAbsoluteChannelDelta": 7.864180812757201,
+      "psnrDb": 21.592378001385036,
+      "rootMeanSquareChannelDelta": 21.228596404339925,
+      "state": "new-chat",
+      "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/new-chat__13-2.png",
+      "targetSha256": "8c51c188fa0e2e42c00487baa65db70dfdba88b8bd931c344f9040c3778979fb",
+      "triptychPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/new-chat__triptych.png",
+      "triptychSha256": "4ec0a6cd9b1d96e70332c98778a074e0f5ba8dadb9e8769edf1e88390a34b754",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "changedPixelRatioGt16": 0.07561728395061729,
+      "changedPixelRatioGt32": 0.0497391975308642,
+      "changedPixelRatioGt8": 0.3544868827160494,
+      "currentPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
+      "currentSha256": "2f13be79117e73cfcb0c0d05bae2bbb57510138041c1fe76b4f14a9434025386",
+      "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/chat-run.png",
+      "diffSha256": "751fd7f7b2e39e326ce7efbc4e96d68a32e94d19c9c5b8db1f0a5d47f9cdddef",
+      "exactChangedPixelRatio": 0.9687006172839506,
+      "figmaNodeId": "5:2",
+      "meanAbsoluteChannelDelta": 10.59921913580247,
+      "psnrDb": 19.530425408993803,
+      "rootMeanSquareChannelDelta": 26.91652000877372,
+      "state": "chat-run",
+      "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/chat-run__5-2.png",
+      "targetSha256": "f6a92ec2b856bf772cd95bafb65d8fa2b137ae4eb906339555d18e6425c667be",
+      "triptychPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/chat-run__triptych.png",
+      "triptychSha256": "b381acc500de528c8af25ae67cff4f1ab935dfc030790cb0980861c45ab48ec4",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "changedPixelRatioGt16": 0.04741743827160494,
+      "changedPixelRatioGt32": 0.026890432098765432,
+      "changedPixelRatioGt8": 0.21999074074074074,
+      "currentPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/agents.png",
+      "currentSha256": "3e0b0d5ea13f11c55bfdffab68e75eaa92b0ed36aa5560dc35efa0eeb642a04c",
+      "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/agents.png",
+      "diffSha256": "6efeb637a227bd42564361577c78983b7c356b51e83c15f9eaa731d97ba89596",
+      "exactChangedPixelRatio": 0.46582407407407406,
+      "figmaNodeId": "15:2",
+      "meanAbsoluteChannelDelta": 5.598829732510288,
+      "psnrDb": 23.507920959669924,
+      "rootMeanSquareChannelDelta": 17.027235097992406,
+      "state": "agents",
+      "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/agents__15-2.png",
+      "targetSha256": "d1f626cb5451162f4ec46f3d0eac063c9b920447b530e46834e4a201f924a70e",
+      "triptychPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/agents__triptych.png",
+      "triptychSha256": "e1d57fd3903d60313b62cc3aefd57af22f0cb147406ce4aa819adf28d739c28d",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "changedPixelRatioGt16": 0.05627237654320988,
+      "changedPixelRatioGt32": 0.039795524691358025,
+      "changedPixelRatioGt8": 0.26324305555555555,
+      "currentPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
+      "currentSha256": "64747643311a2b21ca7a29e05d3ac110a652022f503c8735740fca3de11f681d",
+      "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/plugins.png",
+      "diffSha256": "410699afcc7cd8f5e45e2e18153d1ac8877909ca31c70c66c5e27924014e1675",
+      "exactChangedPixelRatio": 0.3704799382716049,
+      "figmaNodeId": "14:2",
+      "meanAbsoluteChannelDelta": 6.830721193415638,
+      "psnrDb": 20.6632801929194,
+      "rootMeanSquareChannelDelta": 23.625236831177336,
+      "state": "plugins",
+      "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/plugins__14-2.png",
+      "targetSha256": "97c4dcd61311526d8ddfddfce01936bad6804ffd5da9d756fb93db2d8e549344",
+      "triptychPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/plugins__triptych.png",
+      "triptychSha256": "acebd489c31fd123855229091055a9d247126ec16ed3ee559127a40ba2a09d6b",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "changedPixelRatioGt16": 0.049492283950617284,
+      "changedPixelRatioGt32": 0.037293981481481484,
+      "changedPixelRatioGt8": 0.10894753086419753,
+      "currentPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png",
+      "currentSha256": "e6773c28a37a2ddd70d34b7b2b0087bd32f72cca31192204fd03fbd356e4f016",
+      "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/command-palette.png",
+      "diffSha256": "6b199067ac86797996fb8b63887920f1eaca0a1f555ffe050e764a10ffb1e129",
+      "exactChangedPixelRatio": 0.846483024691358,
+      "figmaNodeId": "16:2",
+      "meanAbsoluteChannelDelta": 6.057801697530865,
+      "psnrDb": 24.037273347469768,
+      "rootMeanSquareChannelDelta": 16.02051648051551,
+      "state": "command-palette",
+      "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/command-palette__16-2.png",
+      "targetSha256": "d6db445fc5f144ce7e69fb413e54a520e5b1a7a7c3453825543661634fa387d4",
+      "triptychPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/command-palette__triptych.png",
+      "triptychSha256": "f36f4dc0f7b808200cf16ac7a9193e72a4cb5fb22ffb98a6a96555374c570bd3",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "changedPixelRatioGt16": 0.24099922839506172,
+      "changedPixelRatioGt32": 0.16931095679012345,
+      "changedPixelRatioGt8": 0.26166280864197533,
+      "currentPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
+      "currentSha256": "dae78dcfce8e4bd616c4eaf95301eca35cefdb2d90d2470ba01a9824d4fbac91",
+      "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/call.png",
+      "diffSha256": "222527f5f396d635c0249729f39ec0962aee26318df16c17b7840e93b176378a",
+      "exactChangedPixelRatio": 0.34749614197530865,
+      "figmaNodeId": "17:2",
+      "meanAbsoluteChannelDelta": 10.022714763374486,
+      "psnrDb": 18.671915018141696,
+      "rootMeanSquareChannelDelta": 29.712858143288905,
+      "state": "call",
+      "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/call__17-2.png",
+      "targetSha256": "31b55e68eadb7f0a1d8767c9b7435d668b531f2ae38c915ea976bc893d67f45e",
+      "triptychPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/call__triptych.png",
+      "triptychSha256": "221f00aad3d026b5a8c3298816c9b438e2b9bfc19e7b6abea83ba4c7cf36ad37",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "changedPixelRatioGt16": 0.026443672839506174,
+      "changedPixelRatioGt32": 0.021809413580246913,
+      "changedPixelRatioGt8": 0.03364274691358025,
+      "currentPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png",
+      "currentSha256": "19eee5322acaab17d86e1b36e9df748aac1444f0b5d6306c59d53b95c0b14c15",
+      "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/settings-you.png",
+      "diffSha256": "21517a97d1917c0af22e428f6dbdf83748a22a71a433ec958b7e6c54aa14a97d",
+      "exactChangedPixelRatio": 0.051236882716049384,
+      "figmaNodeId": "22:2",
+      "meanAbsoluteChannelDelta": 2.1777685185185187,
+      "psnrDb": 24.935847048735475,
+      "rootMeanSquareChannelDelta": 14.446007233834544,
+      "state": "settings-you",
+      "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/settings-you__22-2.png",
+      "targetSha256": "b1d04f772b8f54a22ad02fa3e7917262f7ffecffeb65106c187bb0f5b0758213",
+      "triptychPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/settings-you__triptych.png",
+      "triptychSha256": "dcc25d72fba979ec3c3f1c0a407b7b668c4d70c85f422e2ac27f5d9988c9f987",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    }
+  ],
+  "reviewPolicy": {
+    "instruction": "These are deterministic measurements, not an authority verdict. Update VDS only through a separate signed review.",
+    "pixelsClaimed": false
+  },
+  "schema": "boltrig-console-current-visual-diff.v1",
+  "statesCompared": [
+    "new-chat",
+    "chat-run",
+    "agents",
+    "plugins",
+    "command-palette",
+    "call",
+    "settings-you"
+  ],
+  "statesExpected": [
+    "new-chat",
+    "chat-run",
+    "agents",
+    "plugins",
+    "command-palette",
+    "call",
+    "settings-you"
+  ],
+  "statesMissing": [],
+  "status": "measured_unreviewed",
+  "vdsReviewsUpdated": false,
+  "viewport": "1440x900@1x",
+  "visualVerdict": "not_assessed"
+}

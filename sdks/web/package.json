@@ -1,9 +1,9 @@
 {
   "name": "@wlilley93/boltrig-web-sdk",
   "private": false,
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Framework-agnostic UI SDK core for Boltrig frontends: the ChatEvent frame union + the shared normalizeEvents turn reducer, so opbox and the boltrig console render identical chat/run data. Extracted from the console (ui/src/api + panels).",
+  "description": "Framework-agnostic UI SDK core for Boltrig frontends: the ChatEvent frame union + the shared normalizeEvents turn reducer, so opbox and the Worker render identical chat/run data.",
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
@@ -47,6 +47,10 @@
     "./integrationCatalogue": {
       "types": "./dist/src/integrationCatalogue.d.ts",
       "import": "./dist/src/integrationCatalogue.js"
+    },
+    "./characters": {
+      "types": "./dist/src/characters.d.ts",
+      "import": "./dist/src/characters.js"
     }
   },
   "files": [

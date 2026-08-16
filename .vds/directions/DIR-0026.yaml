@@ -1,0 +1,9 @@
+id: DIR-0026
+logId: DECISION-0018
+decisionDigest: sha256:d6c697fc080f9292dbcbfa289847654e1183a14bff221ddf10e2d3a5cec6f9cb
+surface: !route
+  route: apps/worker/src/components/ChatView.tsx
+direction: Present real live workflow steps and durable queued turns as compact controls immediately above the Chat composer.
+magnitude: Show one centred progress pill derived only from published workflow steps, with an expandable ordered checklist. Render each queued turn as one thin, truncated row with its truthful attachment preview and a Steer action that loads the instruction into the composer. Do not fabricate changed-file totals, line counts, plan text, queue deletion or overflow actions that have no public kernel contract. Remove both surfaces as soon as their live state is empty.
+directedAt: 2026-08-14T11:15:28Z
+notes: The live component state was visually inspected at a compact desktop viewport. Governed Chat fixtures are completed persisted turns, so their contracts require these live-only controls to remain absent rather than fabricating active workflow or queued state.

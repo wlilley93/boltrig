@@ -1,0 +1,9 @@
+id: DIR-0011
+logId: DECISION-0007
+decisionDigest: sha256:3ba76eabf0d374ff7db6fd89e7876df7884a29d973cd97c7da8515be83beff9d
+surface: !route
+  route: apps/worker/src/components/ChatView.tsx
+direction: On every Chat composer state that offers voice, expose exactly one visible voice action. When the draft is empty, the primary waveform action owns that visible affordance; keep the real VoiceCall controller mounted but visually hidden so it continues to own the call lifecycle without rendering a duplicate adjacent control.
+magnitude: Apply this correction to ChatView composer presentation across New chat, populated Chat and the additive Chat-direction state. Preserve typed-draft send behavior, call capability gating, accessible naming, keyboard behavior, responsive layout and the real VoiceCall controller. Do not alter the standalone VoiceCall screen or infer any change to the earlier Figma or Codex reference images.
+directedAt: 2026-08-12T11:18:52Z
+notes: This is an additive Principal direction over DIR-0008. The governed and additive captures taken at source digest 00374b7760c2d46e3d57b6ddfdf0bd65be416ed410ffaece8b33a6d8c6983a9c bind the resulting state. Their visual-contract direction_records predate this VDS row and are not rewritten because doing so would stale those captures; the rebind evidence names DIR-0011 directly. No frameDigest, signed review, Code Connect linkage, token linkage, conformity or sign-off is asserted.

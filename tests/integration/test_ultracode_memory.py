@@ -32,7 +32,7 @@ async def _kernel() -> Kernel:
     store = InMemoryStore()
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     await store.upsert_capability(
-        AgentCapability("opencode-worker", T, "python-script", ["*"], 2, True, "expensive")
+        AgentCapability("codex-worker", T, "python-script", ["*"], 2, True, "expensive")
     )
     return Kernel(store)
 
@@ -61,7 +61,7 @@ def _payload(run_id: str, *, context: InvocationContext) -> dict:
         "tenant": T,
         "workflow": {
             "workflow_name": "remembered",
-            "defaults": {"capability": "opencode-worker", "memory": {"limit": 4}},
+            "defaults": {"capability": "codex-worker", "memory": {"limit": 4}},
             "phases": [{"id": "phase-01", "agents": [{"id": "a", "prompt": "x"}]}],
         },
         "ctx_envelope": context_to_envelope(context),
@@ -88,8 +88,8 @@ def _fact(
     )
 
 
-class _Mem0Projection:
-    id = "mem0"
+class _TestProjection:
+    id = "cognee"
 
     def __init__(self):
         self.recall_calls = []
@@ -97,7 +97,7 @@ class _Mem0Projection:
     async def remember(
         self, tenant_id: str, fact: EngineFact, context: InvocationContext
     ) -> ProjectionResult:
-        return ProjectionResult.written(f"mem0:{fact.id}")
+        return ProjectionResult.written(f"cognee:{fact.id}")
 
     async def recall(self, tenant_id, query, *, scopes, mode, limit, max_hops, context):
         self.recall_calls.append(
@@ -113,8 +113,8 @@ class _Mem0Projection:
             ProjectionRecallHit(
                 fact_id="semantic-memory",
                 score=0.92,
-                content="Mem0 semantic recall says use the stack-owned runtime profile.",
-                projection_ref="mem0:semantic-memory",
+                content="The configured projection says use the stack-owned runtime profile.",
+                projection_ref="cognee:semantic-memory",
             )
         ]
 
@@ -153,12 +153,15 @@ async def test_ultracode_injects_only_scoped_memory_into_agent_prompt():
 
 
 @pytest.mark.invariant("FR-WFL-16")
-async def test_ultracode_recall_uses_mem0_projection_when_configured():
+async def test_ultracode_recall_uses_the_configured_projection():
     kernel = await _kernel()
     await kernel.store.add_memory_fact(
-        _fact("semantic-memory", "Raw ledger fallback should not be injected when Mem0 answers.")
+        _fact(
+            "semantic-memory",
+            "Raw ledger fallback should not be injected when the projection answers.",
+        )
     )
-    projection = _Mem0Projection()
+    projection = _TestProjection()
     await kernel.register_adapter(
         T,
         build_memory_adapter(
@@ -167,19 +170,19 @@ async def test_ultracode_recall_uses_mem0_projection_when_configured():
             audit=kernel.audit,
             config={},
             projections=MemoryProjectionFanout(
-                kernel.store, [projection], primary_projection_id="mem0"
+                kernel.store, [projection], primary_projection_id="cognee"
             ),
         ),
     )
 
     record = await run_ultracode_body(
         kernel,
-        _payload("uc-mem0", context=_ctx("uc-mem0")),
+        _payload("uc-projection", context=_ctx("uc-projection")),
         spawner=build_spawner(kernel, codex_config=None),
     )
 
     task = record["phases"][0]["agents"][0]["result"]["output"]["task"]
-    assert "Mem0 semantic recall says" in task
+    assert "configured projection says" in task
     assert "Raw ledger fallback" not in task
     assert projection.recall_calls[0]["scopes"] == ["user:will", "org"]
     rows = await kernel.store.audit_query(T)
@@ -210,7 +213,7 @@ async def test_ultracode_stores_run_summary_through_memory_adapter():
         T, build_memory_adapter(LocalMemoryEngine(), kernel.store, audit=kernel.audit, config={})
     )
     payload = _payload("uc-summary", context=_ctx("uc-summary"))
-    payload["workflow"]["defaults"] = {"capability": "opencode-worker"}
+    payload["workflow"]["defaults"] = {"capability": "codex-worker"}
 
     await run_ultracode_body(
         kernel,

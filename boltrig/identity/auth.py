@@ -68,7 +68,6 @@ class OidcVerifier:
     Signature is checked against the issuer JWKS; ``iss``/``aud``/``exp``/``nbf``
     are validated. The JWKS is fetched once over httpx and cached.
     """
-
     # Explicit asymmetric signature allowlist (IAM-02). alg=none and any symmetric
     # (HS*) algorithm are rejected outright - never inferred from the JWKS - so an
     # RS256->HS256 / alg=none confusion cannot forge a token.
@@ -293,7 +292,6 @@ def build_principal_resolver(
                 scope=user.scope,
                 credential_kind="federated",
             )
-
         role, scope = resolve_role(groups, mappings)
         return Principal(
             tenant_id=tenant_id,
@@ -303,6 +301,7 @@ def build_principal_resolver(
             actor_tier="human",
             on_behalf_of=_on_behalf_of(claims),
             scope=scope,  # row-level department isolation in prod (US-IAM-02)
+            credential_kind="federated",
         )
 
     return resolver
@@ -349,7 +348,6 @@ def build_cf_access_resolver(
     defence in depth.
     """
     role_map = {k.strip().lower(): v for k, v in (role_map or {}).items()}
-
     async def resolver(request: Request) -> Principal:
         token = _cf_access_assertion(request)
         try:
@@ -379,6 +377,7 @@ def build_cf_access_resolver(
             role=role,
             actor_tier="human",
             scope=scope,
+            credential_kind="federated",
         )
 
     return resolver
@@ -402,4 +401,5 @@ async def dev_principal_resolver(request: Request) -> Principal:
         role=h.get("x-boltrig-role", "org-admin"),
         actor_tier=h.get("x-boltrig-tier", "human"),
         on_behalf_of=h.get("x-boltrig-obo"),
+        credential_kind="dev-header",
     )

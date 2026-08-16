@@ -21,12 +21,29 @@ from boltrig.models import (
 )
 
 
+def endpoint_id_for_modality(capability: Any, modality: str) -> str | None:
+    """Choose an agent's governed endpoint for one input modality.
+
+    A missing vision override deliberately falls back to the primary endpoint;
+    control-plane validation guarantees that explicit single-model bindings are
+    multimodal.
+    """
+    requested = str(modality).strip().lower()
+    explicit = capability.endpoint_for(requested)
+    if explicit:
+        return explicit
+    if requested == "vision":
+        return capability.vision_model_endpoint or capability.model_endpoint
+    return capability.model_endpoint
+
+
 async def select_model_endpoint(
     store: Any,
     tenant_id: str,
     endpoint_id: str | None,
     *,
     sensitive: bool,
+    modality: str | None = None,
     sensitive_endpoint_id: str | None = None,
     audit: Any | None = None,
     actor: str = "model-router",
@@ -41,6 +58,26 @@ async def select_model_endpoint(
     ep = await _active_endpoint(
         store, tenant_id, endpoint_id, audit=audit, actor=actor
     )
+    requested_modality = str(modality or "").strip().lower()
+    if ep is not None and requested_modality and not ep.supports(requested_modality):
+        if audit is not None:
+            await audit.write(
+                AuditEvent(
+                    tenant_id=tenant_id,
+                    ts=utcnow(),
+                    actor=actor,
+                    action_type=ActionType.MODEL_CALL,
+                    status="model_endpoint_modality_unavailable",
+                    detail={
+                        "endpoint": endpoint_id or "",
+                        "modality": requested_modality,
+                    },
+                )
+            )
+        raise ModelEndpointUnavailable(
+            f"model endpoint '{endpoint_id}' does not advertise "
+            f"{requested_modality} modality"
+        )
     if not sensitive:
         return ep
     if ep is not None and ep.data_class == "sensitive":

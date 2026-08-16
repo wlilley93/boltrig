@@ -28,6 +28,7 @@ from typing import Protocol, runtime_checkable
 # hnsw index limit (2000). A deployment may raise this; the engine and the schema
 # read the dimension from one place.
 DEFAULT_DIM = 256
+_MAX_EMBEDDING_RESPONSE_BYTES = 1024 * 1024
 
 
 def _tokens(text: str) -> list[str]:
@@ -109,6 +110,8 @@ class ModelEmbedder:
         dim: int = DEFAULT_DIM,
         timeout: float = 30.0,
     ) -> None:
+        if dim <= 0:
+            raise ValueError("embedding dim must be positive")
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.dim = dim
@@ -130,14 +133,38 @@ class ModelEmbedder:
 
         url = self.base_url + "/embeddings"
         payload = json.dumps({"model": self.model, "input": text}).encode("utf-8")
-        headers = {"content-type": "application/json"}
+        headers = {
+            "accept-encoding": "identity",
+            "content-type": "application/json",
+        }
         if self._api_key:
             headers["authorization"] = f"Bearer {self._api_key}"
         req = urllib.request.Request(url, data=payload, headers=headers)
         opener = urllib.request.build_opener(_NoRedirect())
         with opener.open(req, timeout=self._timeout) as resp:  # noqa: S310 - configured base_url
-            data = json.loads(resp.read())
-        vec = [float(x) for x in data["data"][0]["embedding"]]
+            encoding = (resp.headers.get("content-encoding") or "").strip().lower()
+            if encoding not in {"", "identity"}:
+                raise ValueError("embedding endpoint returned an unsupported encoding")
+            raw_length = resp.headers.get("content-length")
+            if raw_length is not None:
+                try:
+                    declared_length = int(raw_length)
+                except ValueError as exc:
+                    raise ValueError(
+                        "embedding endpoint returned an invalid content length"
+                    ) from exc
+                if declared_length < 0 or declared_length > _MAX_EMBEDDING_RESPONSE_BYTES:
+                    raise ValueError("embedding response exceeded its safety boundary")
+            raw = resp.read(_MAX_EMBEDDING_RESPONSE_BYTES + 1)
+            if len(raw) > _MAX_EMBEDDING_RESPONSE_BYTES:
+                raise ValueError("embedding response exceeded its safety boundary")
+            data = json.loads(raw)
+        raw_vec = data["data"][0]["embedding"]
+        if not isinstance(raw_vec, list) or len(raw_vec) != self.dim:
+            raise ValueError("embedding endpoint returned an unexpected vector dimension")
+        vec = [float(x) for x in raw_vec]
+        if not all(math.isfinite(x) for x in vec):
+            raise ValueError("embedding endpoint returned a non-finite vector")
         norm = math.sqrt(sum(x * x for x in vec))
         return [x / norm for x in vec] if norm else vec
 

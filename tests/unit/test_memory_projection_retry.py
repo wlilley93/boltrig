@@ -26,7 +26,7 @@ TENANT = "acme"
 class _FlakyProjection:
     """Fails the first ``failures`` calls, then succeeds - the retry shape."""
 
-    id = "mem0"
+    id = "cognee"
 
     def __init__(self, *, failures: int) -> None:
         self.failures = failures
@@ -105,7 +105,7 @@ def test_the_builder_reads_the_knob_for_the_queued_mode() -> None:
     same fact the inline path records, expressed in the queued path's own
     mechanism (max_operation_attempts)."""
     cfg = {
-        "projections": [{"id": "mem0", "enabled": True}],
+        "projections": [{"id": "cognee", "enabled": True}],
         "fanout": {"execution": "queued", "retry_failed": False},
     }
     fanout = build_memory_projection_fanout(InMemoryStore(), cfg)
@@ -118,11 +118,11 @@ def test_the_builder_defaults_to_retry_in_both_modes() -> None:
     example says true, so absence keeps the promise."""
     queued = build_memory_projection_fanout(
         InMemoryStore(),
-        {"projections": [{"id": "mem0", "enabled": True}], "fanout": {"execution": "queued"}},
+        {"projections": [{"id": "cognee", "enabled": True}], "fanout": {"execution": "queued"}},
     )
     assert queued.projection_delivery_posture()["max_operation_attempts"] == 3
     inline = build_memory_projection_fanout(
         InMemoryStore(),
-        {"projections": [{"id": "mem0", "enabled": True}], "fanout": {}},
+        {"projections": [{"id": "cognee", "enabled": True}], "fanout": {}},
     )
     assert inline is not None and inline._retry_failed is True

@@ -142,17 +142,12 @@ def order_keys(order: dict) -> set[str]:
 def test_sources() -> dict[Path, str]:
     """Every test file that could bind a directive, in either language.
 
-    The UI half is not optional: UI-TEST-HARNESS-001's directives are about the
-    console's own test harness and CANNOT be bound by a pytest file. Scanning
-    only tests/*.py would have reported five directives unbound and pushed the
-    honest answer towards a waiver, when the enforcement lives in ui/ and in the
-    Playwright config that names the order.
+    The Worker quality gate is bound by repository tests and CI; no separate
+    browser harness tree is part of this product surface.
     """
     out: dict[Path, str] = {}
     roots = [
         (TESTS, ("*.py",)),
-        (ROOT / "ui", ("*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx",
-                       "playwright.config.ts", "vitest.config.ts")),
     ]
     for base, patterns in roots:
         if not base.is_dir():

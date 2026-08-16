@@ -1,0 +1,21 @@
+id: PROOF-20260810-115104
+kind: ledger_staleness
+status: passed
+warrant_id: null
+command: vds proof ledger_staleness
+script: crates/vds-proof/src/ledger_staleness.rs
+exit_code: 0
+rows_considered: 1
+rows_enforced: 1
+rows_skipped_reasons: {}
+violations: []
+notes:
+- the screens ledger's staleness test REGENERATES the ledger from its sources and compares the content, rather than comparing the source digest the ledger records. A source-digest comparison answers only whether the screens moved, so it certifies a hand-edited ledger clean, and a proof reading that ledger can then be flipped from failing to passing without touching a screen (VDS S-2(5)(4)).
+- 'what this run does NOT reach: this build holds one REGENERATING staleness test, the screens ledger''s. The figma ledger (R3), the frame ledger (R4) and the CI run ledger (R6) have self-consistency tests instead, because their source is behind a network call and there is no generator here to re-run against it. For every other file in the ledgers directory it establishes only that no staleness test exists, never that the file is current. It reaches nothing outside the configured ledgers directory. And where the declared screens ledger is absent the run is a precondition failure at exit 2, so the other files in that directory go unexamined rather than passing.'
+inputs_digest: sha256:798db8c9265877a5f75401cd9915139f1555ccd1a3acfda373841d6530bf95c9
+digest: sha256:b07fddce77c9921f6f7a017538a658f7dbf5d7c67d8f0be6d1226eb61a4de0aa
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-10T11:50:57Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

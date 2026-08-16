@@ -1,30 +1,34 @@
 import { useEffect, useState } from "react";
 import {
   BoltrigApiError,
-  type DeviceEnrollmentStart,
   type DeviceRootResponse,
   type EnrolledDevice,
 } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../client";
-import { copySensitiveText } from "../clipboard";
+import { configuredDesktopDownloadUrl } from "../desktopDownload";
 import {
   type DesktopDeviceStatus,
   bindDesktopRoot,
   clearDesktopSession,
-  completeDesktopEnrollment,
   desktopDeviceStatus,
   hasDesktopRuntime,
   listenDesktopDeviceStatus,
-  parseDesktopEnrollment,
-  serializeDesktopEnrollment,
   unbindDesktopRoot,
 } from "../desktop";
+import {
+  DEFAULT_DESKTOP_LABEL,
+  connectAuthenticatedDesktop,
+} from "../desktopTrust";
 import {
   LocalDeviceActions,
   clearLocalDeviceActionSession,
 } from "./LocalDeviceActions";
-
+import {
+  desktopConnectionVisible,
+  needsLocalEnrollmentCleanup,
+  trustedComputersVisible,
+} from "./deviceSettingsVisibility";
 export function DeviceSettings() {
   const desktop = hasDesktopRuntime();
   const [devices, setDevices] = useState<EnrolledDevice[]>([]);
@@ -33,9 +37,7 @@ export function DeviceSettings() {
   const [available, setAvailable] = useState(true);
   const [devicesError, setDevicesError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [label, setLabel] = useState("");
-  const [enrollment, setEnrollment] = useState<DeviceEnrollmentStart | null>(null);
-  const [handoffBundle, setHandoffBundle] = useState("");
+  const [label, setLabel] = useState(DEFAULT_DESKTOP_LABEL);
   const [selected, setSelected] = useState<string | null>(null);
   const [rootLabel, setRootLabel] = useState("");
   const [rootScope, setRootScope] = useState<"read" | "read_write">("read");
@@ -57,7 +59,7 @@ export function DeviceSettings() {
         ));
       })
       .catch((reason) => {
-        // Only a kernel refusal proves enrollment is not enabled; a transport
+        // Only a kernel refusal proves trusted computers are not enabled; a transport
         // failure says nothing about the deployment and must stay retryable.
         if (
           reason instanceof BoltrigApiError
@@ -107,76 +109,23 @@ export function DeviceSettings() {
     };
   }, [desktop]);
 
-  async function startEnrollment() {
-    if (busy) return;
+  async function connectDesktop() {
+    if (!desktop || busy) return;
     setBusy(true);
     setMessage("");
     try {
-      const result = await client.startDeviceEnrollment(label.trim());
-      if (typeof result.authorization_code !== "string") {
-        setMessage(
-          "reason" in result && typeof result.reason === "string"
-            ? result.reason
-            : "Enrollment is unavailable; no authorization code was issued.",
-        );
-        return;
-      }
-      const started = result as DeviceEnrollmentStart;
-      setLabel("");
-      if (!desktop) {
-        setEnrollment(started);
-        setMessage("Use this one-time code in the signed Worker desktop app before it expires.");
-        return;
-      }
-      try {
-        const completed = await completeDesktopEnrollment(started);
-        setEnrollment(null);
-        setSelected(completed.device_id);
-        setMessage(`This desktop enrolled as ${completed.label}. Its session and verifier are held in the OS keychain.`);
-        refreshNative();
-        refresh();
-      } catch {
-        setEnrollment(started);
-        setMessage(
-          "Native enrollment did not finish locally. The code may already be consumed; create a fresh enrollment before retrying.",
-        );
-      }
-    } catch {
-      setMessage("Enrollment is unavailable. No device was added.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function completeHandoff() {
-    if (!desktop || busy || !handoffBundle.trim()) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      const parsed = parseDesktopEnrollment(handoffBundle.trim());
-      if (new Date(parsed.expires_at).getTime() <= Date.now()) {
-        setMessage("This enrollment handoff has expired. Create a fresh bundle in the browser.");
-        return;
-      }
-      const completed = await completeDesktopEnrollment(parsed);
-      setHandoffBundle("");
-      setEnrollment(null);
+      const completed = await connectAuthenticatedDesktop(label.trim());
       setSelected(completed.device_id);
-      setMessage(`This desktop enrolled as ${completed.label}. Its session and verifier are held in the OS keychain.`);
+      setMessage(
+        `${completed.label} is connected to this account. Its private key stays in the OS keychain.`,
+      );
       refreshNative();
       refresh();
     } catch {
-      setMessage("The handoff bundle is invalid, expired, already consumed, or belongs to another Boltrig deployment.");
+      setMessage("This computer could not be connected. No local trust key was changed.");
     } finally {
       setBusy(false);
     }
-  }
-
-  async function copyEnrollmentBundle() {
-    if (!enrollment) return;
-    setMessage(await copySensitiveText(serializeDesktopEnrollment(enrollment))
-      ? "Desktop enrollment bundle copied to the clipboard. Treat it like a password until it expires."
-      : "The desktop enrollment bundle could not be copied. Select and copy it manually before dismissing it.");
   }
 
   async function createRoot() {
@@ -296,7 +245,7 @@ export function DeviceSettings() {
       }
       setMessage(
         localCleared
-          ? "Device, active roots, and matching local enrollment were revoked."
+          ? "Computer trust, active roots, and matching local credentials were revoked."
           : "Device authority was revoked on the server. Local keychain cleanup will retry when the agent observes revocation.",
       );
       setSelected(null);
@@ -350,12 +299,12 @@ export function DeviceSettings() {
         clearLocalDeviceActionSession(nativeStatus.device_id);
       }
       setMessage(
-        "The unreadable or orphaned local enrollment was removed. No server device was revoked.",
+        "The unreadable or orphaned local credentials were removed. No trusted computer was revoked.",
       );
       refreshNative();
     } catch {
       setMessage(
-        "The local enrollment could not be removed from the OS keychain. It is safe to retry.",
+        "The local credentials could not be removed from the OS keychain. It is safe to retry.",
       );
     } finally {
       setArmed("");
@@ -373,80 +322,46 @@ export function DeviceSettings() {
       (rootId) => !localServerDevice.roots.some((root) => root.id === rootId),
     ) ?? []
     : [];
-  const localEnrollmentNeedsCleanup = desktop && (
-    nativeStatus?.state === "reenrollment_required"
-    || Boolean(
-      nativeStatus?.device_id
-      && devicesLoaded
-      && available
-      && !localServerDevice,
-    )
-  );
+  const localEnrollmentNeedsCleanup = needsLocalEnrollmentCleanup({
+    available, desktop, devicesLoaded, localServerDevice, nativeStatus,
+  });
+  const desktopDownloadUrl = configuredDesktopDownloadUrl();
+  const localConnectionReady = Boolean(localServerDevice) && !localEnrollmentNeedsCleanup;
+  const showDesktopConnection = desktopConnectionVisible(desktop, desktopDownloadUrl);
+  const showTrustedComputers = trustedComputersVisible(available, devicesError);
   return (
     <>
-      <section className="settings-card author-form">
+      {showDesktopConnection && (
+        <DesktopConnectionCard
+          available={available}
+          busy={busy}
+          connected={localConnectionReady}
+          desktop={desktop}
+          downloadUrl={desktopDownloadUrl}
+          label={label}
+          needsCleanup={localEnrollmentNeedsCleanup}
+          onConnect={() => void connectDesktop()}
+          onLabel={setLabel}
+        />
+      )}
+      {desktop && <section className="settings-card">
         <div className="section-heading">
-          <div><p className="eyebrow">Enrollment</p><h2>Add a trusted device</h2></div>
-          <span className="row-meta">{desktop ? "desktop runtime" : "browser handoff"}</span>
-        </div>
-        <p>
-          {desktop
-            ? "The one-time code is consumed directly by this signed desktop. Its private key, session, and pinned lease verifier stay in the OS keychain."
-            : "This browser can issue a short-lived handoff code, but cannot become or control a local device agent."}
-        </p>
-        <label><span>Device label</span><input className="field-control" value={label} disabled={busy} onChange={(event) => setLabel(event.target.value)} placeholder="Office Mac" /></label>
-        <button className="primary-button" disabled={!label.trim() || !available || busy} onClick={() => void startEnrollment()}>
-          {busy ? "Working…" : desktop ? "Enroll this desktop" : "Create desktop handoff code"}
-        </button>
-        {desktop && (
-          <>
-            <label>
-              <span>Browser handoff bundle</span>
-              <textarea
-                className="field-control"
-                value={handoffBundle}
-                disabled={busy}
-                onChange={(event) => setHandoffBundle(event.target.value)}
-                placeholder="Paste the one-time enrollment bundle from your Boltrig browser session"
-              />
-            </label>
-            <button className="secondary-button" disabled={!handoffBundle.trim() || busy} onClick={() => void completeHandoff()}>
-              Enroll from browser handoff
-            </button>
-          </>
-        )}
-        {enrollment && (
-          <div className="secret-once" role="status">
-            <strong>One-time enrollment code</strong>
-            <code>{enrollment.authorization_code}</code>
-            <small>Expires {formatDate(enrollment.expires_at)} · verifier {enrollment.lease_verifier.key_id}. Treat the bundle like a password until it expires.</small>
-            <div className="button-row">
-              <button className="secondary-button" onClick={() => void copyEnrollmentBundle()}>Copy desktop bundle</button>
-              <button className="secondary-button" onClick={() => setEnrollment(null)}>Dismiss</button>
-            </div>
-          </div>
-        )}
-      </section>
-      <section className="settings-card">
-        <div className="section-heading">
-          <div><p className="eyebrow">Native agent</p><h2>Local enrollment status</h2></div>
+          <div><p className="eyebrow">Native agent</p><h2>This computer’s connection</h2></div>
           <span className="row-meta">{nativeStatus?.state ?? (desktop ? "checking" : "not available")}</span>
         </div>
-        {!desktop ? (
-          <p className="muted">No native device session or local root is available in a browser tab.</p>
-        ) : nativeStatus?.device_id ? (
+        {nativeStatus?.device_id ? (
           <p>
             Device <code>{nativeStatus.device_id}</code> · {nativeStatus.root_ids.length} locally bound root{nativeStatus.root_ids.length === 1 ? "" : "s"}.
             {nativeStatus.reason ? ` ${nativeStatus.reason}.` : ""}
           </p>
         ) : nativeStatus?.state === "reenrollment_required" ? (
           <p className="notice">
-            The local enrollment cannot be read
-            {nativeStatus.reason ? ` (${nativeStatus.reason})` : ""}. Browser
-            sign-in remains independent.
+            The local trust key cannot be read
+            {nativeStatus.reason ? ` (${nativeStatus.reason})` : ""}. Account
+            sign-in remains active.
           </p>
         ) : (
-          <p className="muted">This desktop is not enrolled. Remote devices remain visible but cannot be operated locally.</p>
+          <p className="muted">This computer is not connected. Other trusted computers remain view-only here.</p>
         )}
         {orphanedRootIds.map((rootId) => (
           <div className="data-row static" key={rootId}>
@@ -478,15 +393,15 @@ export function DeviceSettings() {
               onClick={() => void clearOrphanedLocalEnrollment()}
             >
               {armed === "local-enrollment"
-                ? "Confirm local enrollment removal"
-                : "Remove orphaned local enrollment"}
+                ? "Confirm local credential removal"
+                : "Remove stale local credentials"}
             </button>
           </div>
         )}
-      </section>
-      <section className="settings-card">
-        <p className="eyebrow">Enrolled devices</p>
-        {devicesError ? <p className="muted">{devicesError} <button className="secondary-button" type="button" onClick={refresh}>Retry</button></p> : !available ? <p className="muted">Device enrollment is not enabled on this deployment.</p> : devices.length === 0 ? <p className="muted">No devices enrolled.</p> : devices.map((item) => {
+      </section>}
+      {showTrustedComputers && <section className="settings-card">
+        <p className="eyebrow">Trusted computers</p>
+        {devicesError ? <p className="muted">{devicesError} <button className="secondary-button" type="button" onClick={refresh}>Retry</button></p> : !available ? <p className="muted">Trusted computers are not enabled on this deployment.</p> : devices.length === 0 ? <p className="muted">No trusted computers.</p> : devices.map((item) => {
           const local = desktop && nativeStatus?.device_id === item.id;
           return (
             <button className={selected === item.id ? "device-row selected" : "device-row"} key={item.id} onClick={() => setSelected(item.id)}>
@@ -498,11 +413,11 @@ export function DeviceSettings() {
             </button>
           );
         })}
-      </section>
+      </section>}
       {device && (
         <section className="settings-card author-form">
-          <div className="section-heading"><div><p className="eyebrow">Device roots</p><h2>{device.label}</h2></div><span className="row-meta">{selectedIsLocal ? "local" : "remote · view only"}</span></div>
-          <p>Roots are opaque handles. Local paths stay on the enrolled device; every file or command action requires a separately consumed exact-action approval.</p>
+          <div className="section-heading"><div><p className="eyebrow">Computer folders</p><h2>{device.label}</h2></div><span className="row-meta">{selectedIsLocal ? "local" : "remote · view only"}</span></div>
+          <p>Folders use opaque handles. Native paths stay on the trusted computer; every remote file or command action requires a separately consumed exact-action approval.</p>
           {device.roots.map((root) => {
             const locallyBound = selectedIsLocal && nativeStatus?.root_ids.includes(root.id);
             return (
@@ -518,13 +433,13 @@ export function DeviceSettings() {
           })}
           {!selectedIsLocal && (
             <p className="notice">
-              Root registration is disabled here because this is not the locally enrolled device.
+              Folder access is disabled here because this is not the connected local computer.
             </p>
           )}
           <div className="author-grid">
             <label><span>Opaque root label</span><input className="field-control" value={rootLabel} disabled={!selectedIsLocal || busy} onChange={(event) => setRootLabel(event.target.value)} /></label>
             <label><span>Scope</span><select className="field-control" value={rootScope} disabled={!selectedIsLocal || busy} onChange={(event) => setRootScope(event.target.value as typeof rootScope)}><option value="read">Read</option><option value="read_write">Read and write</option></select></label>
-            <label className="check-label"><input type="checkbox" checked={commands} disabled={!selectedIsLocal || busy} onChange={(event) => setCommands(event.target.checked)} />Allow command leases on this root</label>
+            <label className="check-label"><input type="checkbox" checked={commands} disabled={!selectedIsLocal || busy} onChange={(event) => setCommands(event.target.checked)} />Allow the local agent and signed command leases on this root</label>
           </div>
           <button className="primary-button" disabled={!rootLabel.trim() || !selectedIsLocal || busy} onClick={() => void createRoot()}>Register and choose local folder…</button>
           <button className={armed === `device:${device.id}` ? "danger-button armed" : "danger-button"} disabled={busy} onClick={() => void revokeDevice(device.id)}>{armed === `device:${device.id}` ? "Confirm revoke device" : "Revoke device"}</button>
@@ -536,9 +451,59 @@ export function DeviceSettings() {
   );
 }
 
-function formatDate(value: string) {
-  const date = new Date(value);
-  return Number.isFinite(date.getTime()) ? date.toLocaleString() : value;
+function DesktopConnectionCard({
+  available,
+  busy,
+  connected,
+  desktop,
+  downloadUrl,
+  label,
+  needsCleanup,
+  onConnect,
+  onLabel,
+}: {
+  available: boolean;
+  busy: boolean;
+  connected: boolean;
+  desktop: boolean;
+  downloadUrl: string | null;
+  label: string;
+  needsCleanup: boolean;
+  onConnect(): void;
+  onLabel(value: string): void;
+}) {
+  const disabled = !label.trim() || !available || busy || connected || needsCleanup;
+  return (
+    <section className="settings-card author-form">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Boltrig Desktop</p>
+          <h2>{desktop ? "This computer" : "Work locally on your computer"}</h2>
+        </div>
+        <span className="row-meta">{desktop ? "signed app" : "download"}</span>
+      </div>
+      {desktop ? (
+        <>
+          <p>Account sign-in is the front door. A revocable computer key stays in the OS keychain.</p>
+          <label>
+            <span>Computer name</span>
+            <input className="field-control" disabled={busy || connected || needsCleanup} onChange={(event) => onLabel(event.target.value)} placeholder={DEFAULT_DESKTOP_LABEL} value={label} />
+          </label>
+          <button className="primary-button" disabled={disabled} onClick={onConnect}>
+            {busy ? "Connecting…" : connected ? "Connected to this account" : "Connect this computer"}
+          </button>
+          <small>Folders, Bash and background actions stay off until you enable them separately below.</small>
+        </>
+      ) : (
+        <>
+          <p>Sign in to the desktop app with this account to run local tasks. No handoff code is required.</p>
+          {downloadUrl
+            ? <a className="primary-button" href={downloadUrl} rel="noreferrer" target="_blank">Download Boltrig Desktop</a>
+            : <p className="notice">A signed desktop download has not been published for this deployment.</p>}
+        </>
+      )}
+    </section>
+  );
 }
 
 function isDeviceRootResponse(value: unknown): value is DeviceRootResponse {

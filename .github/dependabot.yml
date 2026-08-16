@@ -1,35 +1,7 @@
 version: 2
 
-# GitHub Packages, for the first-party @wlilley93/boltrig-web-sdk that ui/.npmrc
-# scopes there. WITHOUT THIS the /ui npm ecosystem fails 100% of its runs:
-#
-#   Error while accessing npm.pkg.github.com ... {"error":"authentication token
-#   not provided"}
-#   Handled error whilst updating vite: private_source_authentication_failure
-#
-# and the failure is per-DEPENDENCY, so NOTHING in /ui gets updated - nine errors
-# in one run, none of them about the SDK. It failed silently for as long as it has
-# existed, because a failed Dependabot job is not a failed CI check and nothing
-# read its verdict (see #134, which also found `docker in /.` dead the same way).
-#
-# GITHUB_TOKEN is NOT available to Dependabot the way it is to Actions, so this
-# needs a Dependabot secret. It wants ONE scope, `read:packages`, and nothing else:
-#
-#   gh secret set GH_PACKAGES_READ_TOKEN --app dependabot --repo wlilley93/boltrig
-#
-# Until that secret exists the ecosystem keeps failing. It may now name the missing
-# secret rather than the missing token - which would be an improvement, since the
-# current error blames npm.pkg.github.com and reads like an upstream outage. Either
-# way it was failing before and fails after, so this block risks nothing and leaves
-# a paste rather than an investigation. NOT verified, because verifying it means
-# pushing and watching a scheduled run; if it turns out to fail more loudly, that is
-# the intended direction.
-registries:
-  npm-github:
-    type: npm-registry
-    url: https://npm.pkg.github.com
-    token: ${{secrets.GH_PACKAGES_READ_TOKEN}}
-
+# The Worker resolves the shared SDK from the local workspace. Its dependency
+# updates do not require a GitHub Packages registry credential.
 updates:
   - package-ecosystem: pip
     directory: /
@@ -188,11 +160,7 @@ updates:
       - python
 
   - package-ecosystem: npm
-    directory: /ui
-    # ui/.npmrc scopes @wlilley93 at npm.pkg.github.com; without the registry
-    # below Dependabot cannot install and updates NOTHING here.
-    registries:
-      - npm-github
+    directory: /apps/worker
     schedule:
       interval: weekly
       day: monday
@@ -200,13 +168,13 @@ updates:
       timezone: Europe/London
     open-pull-requests-limit: 5
     groups:
-      ui-minor-patch:
+      worker-minor-patch:
         update-types:
           - minor
           - patch
     labels:
       - dependencies
-      - ui
+      - worker
 
   - package-ecosystem: npm
     directory: /site
@@ -360,7 +328,7 @@ updates:
       - containers
 
   - package-ecosystem: docker
-    directory: /ui
+    directory: /apps/worker
     schedule:
       interval: weekly
       day: monday
@@ -378,7 +346,7 @@ updates:
         update-types:
           - version-update:semver-major
           - version-update:semver-minor
-      # node MAJOR is pinned to the Node this project actually runs. ui/Dockerfile
+      # node MAJOR is pinned to the Node this project actually runs. apps/worker/Dockerfile
       # builds on node:22.23.1-alpine3.24 and .github/workflows/ci.yml sets
       # node-version "22" at FIVE sites, so #223's jump to 26.5.1 would have built
       # the image on a runtime no gate has ever exercised. This is the same fork the
@@ -386,7 +354,7 @@ updates:
       # types ahead of the runtime make tsc accept a `node:` API that throws; here,
       # the runtime itself moves ahead of every check that could catch it.
       #
-      # One decision, three files. It moves when ui/Dockerfile and the five
+      # One decision, three files. It moves when apps/worker/Dockerfile and the five
       # node-version lines move together, deliberately, in a change that says so.
       # Patches within 22.x still arrive, which is where the base-image CVEs land.
       - dependency-name: node
@@ -395,4 +363,3 @@ updates:
     labels:
       - dependencies
       - containers
-

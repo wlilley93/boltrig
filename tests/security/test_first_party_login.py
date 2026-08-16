@@ -11,14 +11,23 @@ gate is tested exactly as it faces the internet.
 
 import asyncio
 import json
+from datetime import timedelta
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from boltrig.identity import build_session_resolver, hash_password, verify_password
+from boltrig.identity.invites import hash_invite_token
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
-from boltrig.models import GrantSet, TenantPermissions, User, utcnow
+from boltrig.models import (
+    GrantSet,
+    TenantPermissions,
+    User,
+    UserInvitation,
+    utcnow,
+)
 from boltrig.store import InMemoryStore
 from tests.approval import approved_request
 
@@ -48,8 +57,12 @@ async def _seat_owner(store):
     await store.set_password_credential(T, OWNER, hash_password(OWNER_PW))
 
 
-def _login(client, email, password):
-    return client.post("/v1/auth/login", json={"email": email, "password": password})
+def _login(client, email, password, *, headers=None):
+    return client.post(
+        "/v1/auth/login",
+        json={"email": email, "password": password},
+        headers=headers,
+    )
 
 
 def _set_cookies_insecure(monkeypatch):
@@ -93,12 +106,90 @@ def test_invite_only_no_self_signup_and_single_use(monkeypatch):
     ac = invitee_c.post("/v1/auth/accept-invite",
                         json={"token": token, "password": "newbie-password-123"})
     assert ac.status_code == 200
+    settings = _run(store.list_user_settings(T, "newbie@example.io"))
+    assert {row.key: row.value for row in settings}["setup.onboarding_version"] == 0
     assert _login(invitee_c, "newbie@example.io", "newbie-password-123").status_code == 200
 
     # The SAME token cannot be reused (single-use consume).
     replay = invitee_c.post("/v1/auth/accept-invite",
                             json={"token": token, "password": "different-password-1"})
     assert replay.status_code == 400
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-97")
+async def test_concurrent_invite_redemption_cannot_apply_the_rejected_password(
+    monkeypatch,
+):
+    """The single-use claim linearises acceptance before any account write.
+
+    Delaying the legacy id-based consume makes this test deterministically expose
+    the old ordering: both requests wrote their password, then the first CAS
+    winner returned 200 while the rejected request's password remained stored.
+    The current route never reaches that late consume seam; only the exact token
+    claimant can write.
+    """
+    monkeypatch.delenv("BOLTRIG_SESSION_TENANT", raising=False)
+    _, app, store = _app()
+    token = "boltrig_invite_concurrent-redemption"
+    email = "concurrent@example.io"
+    await store.add_invitation(
+        UserInvitation(
+            id="concurrent-invite",
+            tenant_id=T,
+            email=email,
+            intended_role="member",
+            intended_scope={},
+            invited_by=OWNER,
+            expires_at=utcnow() + timedelta(hours=1),
+            token_hash=hash_invite_token(token),
+        )
+    )
+
+    original_consume = store.consume_invitation
+    both_at_legacy_consume = asyncio.Event()
+    first_finished = asyncio.Event()
+    arrivals = 0
+
+    async def delayed_legacy_consume(tenant_id, invitation_id):
+        nonlocal arrivals
+        order = arrivals
+        arrivals += 1
+        if order == 1:
+            both_at_legacy_consume.set()
+        await asyncio.wait_for(both_at_legacy_consume.wait(), timeout=5)
+        if order == 0:
+            won = await original_consume(tenant_id, invitation_id)
+            first_finished.set()
+            return won
+        await asyncio.wait_for(first_finished.wait(), timeout=5)
+        return await original_consume(tenant_id, invitation_id)
+
+    # This hook is intentionally unused by the fixed route. It makes the same
+    # regression fail deterministically if the old mutate-then-consume ordering
+    # is restored.
+    store.consume_invitation = delayed_legacy_consume
+    passwords = ("first-winner-password-123", "second-loser-password-456")
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        responses = await asyncio.gather(
+            *(
+                client.post(
+                    "/v1/auth/accept-invite",
+                    json={"token": token, "password": password},
+                )
+                for password in passwords
+            )
+        )
+
+    assert sorted(response.status_code for response in responses) == [200, 400]
+    winner = next(index for index, response in enumerate(responses) if response.status_code == 200)
+    rejected = 1 - winner
+    credential = await store.get_password_credential(T, email)
+    assert credential is not None
+    assert verify_password(credential, passwords[winner])
+    assert not verify_password(credential, passwords[rejected])
+    assert arrivals == 0
 
 
 # --- SEC-98 / [2026] VJS-COUNTY 7 D4: argon2id, non-reversible, never logged --------
@@ -187,18 +278,45 @@ def test_session_cookie_is_httponly_secure_bounded_and_revocable(monkeypatch):
     assert "samesite=strict" in low
     assert "max-age=" in low  # bounded lifetime
 
+    # A packaged desktop is cross-site by construction. Only a built-in Tauri
+    # origin that the deployment also placed in its explicit CORS allowlist gets
+    # SameSite=None; the ordinary hosted-browser assertion above stays Strict.
+    monkeypatch.setenv(
+        "BOLTRIG_CORS_ORIGINS",
+        "https://app.example.test,tauri://localhost",
+    )
+    _, desktop_app, desktop_store = _app()
+    _run(_seat_owner(desktop_store))
+    desktop_login = _login(
+        TestClient(desktop_app),
+        OWNER,
+        OWNER_PW,
+        headers={"origin": "tauri://localhost"},
+    )
+    desktop_cookies = [
+        value
+        for key, value in desktop_login.headers.multi_items()
+        if key.lower() == "set-cookie"
+    ]
+    assert desktop_cookies
+    assert all("samesite=none" in value.lower() for value in desktop_cookies)
+
     # The stored session is bounded (expires_at in the future) and revocable.
     monkeypatch.setenv("BOLTRIG_SESSION_COOKIE_SECURE", "0")
     _, app2, store2 = _app()
     _run(_seat_owner(store2))
     c = TestClient(app2)
-    assert _login(c, OWNER, OWNER_PW).status_code == 200
+    login = _login(c, OWNER, OWNER_PW)
+    assert login.status_code == 200
+    csrf = login.json()["csrf_token"]
     sessions = _run(store2.list_sessions(T, OWNER))
     assert len(sessions) == 1 and sessions[0].expires_at is not None
     assert sessions[0].expires_at > utcnow()
     # Authenticated before logout, denied after (the session is revoked in-store).
     assert c.get("/v1/me/sessions").status_code == 200
-    csrf = _login(c, OWNER, OWNER_PW).json()["csrf_token"]
+    csrf_recovery = c.get("/v1/auth/csrf")
+    assert csrf_recovery.status_code == 200
+    assert csrf_recovery.json() == {"status": "ok", "csrf_token": csrf}
     assert c.post("/v1/auth/logout", headers={"x-boltrig-csrf": csrf}).status_code == 200
     assert c.get("/v1/me/sessions").status_code == 401
 
@@ -258,6 +376,8 @@ def test_initiate_is_idempotent_and_refuses_twice(monkeypatch):
     assert rc1 == 0
     seated = _run(shared.get_user(T, "founder@example.io"))
     assert seated is not None and seated.role == "superadmin"
+    settings = _run(shared.list_user_settings(T, "founder@example.io"))
+    assert {row.key: row.value for row in settings}["setup.onboarding_version"] == 0
     # A second run against the same store refuses (an owner already exists).
     rc2 = _run(initiate_mod._run("founder@example.io", "founder-password-123", T))
     assert rc2 != 0

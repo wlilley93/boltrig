@@ -1,0 +1,9 @@
+id: DIR-0034
+logId: DECISION-0024
+decisionDigest: sha256:1fafecf5df1eade0544ddbd03bbe32e9aefdc0da8d587ecde1269de9103b7c92
+surface: !route
+  route: apps/worker/src/components/settings/ReadRepliesSetting.tsx
+direction: Expose Read out replies as a caller-scoped opt-in under Settings, Talking to it.
+magnitude: Read and persist the existing me-settings record, default the control off, disable it until canonical state loads, roll back on refusal and explain that completed replies use the selected companion's configured voice. Preserve browser-to-kernel credential separation, accessibility and truthful unavailable states; do not place provider keys in the Worker, enable calls implicitly or claim that every installed character has every provider voice.
+directedAt: 2026-08-14T16:22:25Z
+notes: This direction adds one real persisted setting without enabling the neighbouring placeholder voice controls. No Figma parity, signed review, conformity or frameDigest claim is made.

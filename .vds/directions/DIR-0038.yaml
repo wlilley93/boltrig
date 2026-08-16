@@ -1,0 +1,9 @@
+id: DIR-0038
+logId: DECISION-0027
+decisionDigest: sha256:f6baf84abf336fd008bd5c495c6741733b484eeab92fef8b87194c200d49e0b0
+surface: !route
+  route: apps/worker/src/components/chat/Composer.tsx
+direction: Give the stroke-based composer actions the heavier Codex icon weight shown in the supplied comparison.
+magnitude: Apply the named composer-action round stroke-weight requirement to the Add and microphone glyphs. Raise the unavailable microphone from tertiary to secondary text contrast while preserving its aria-disabled state, explanatory title and non-actionable cursor. Do not thicken unrelated product iconography or imply that dictation is available.
+directedAt: 2026-08-14T16:53:38Z
+notes: This additive Principal direction is grounded in the supplied composer microphone crop. It makes no signed Figma parity, conformity or frameDigest claim.

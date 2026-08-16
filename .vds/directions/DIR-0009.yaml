@@ -1,0 +1,9 @@
+id: DIR-0009
+logId: DECISION-0005
+decisionDigest: sha256:8d464f5b0b321820d9fee3ae3e40e239a270598a0831d15f2e2156721118fb73
+surface: !route
+  route: apps/worker/src/components/Shell.tsx
+direction: For the desktop Chat and New-chat shell only, use codex-left-rail.png as the positive visual authority and old-left-status.png only as negative evidence for the persistent readiness/status row. The Shell-owned rail must use glass treatment and compact conversation rows, keep Search conversations, timestamps, and the selected row actions visibly available as shown, omit the persistent readiness/status row, and preserve the account and help controls.
+magnitude: Apply this override only while Shell renders the desktop chat route, including both a selected conversation and the New-chat state. Preserve accessible search, pin, archive, account and help behavior, retain truthful per-conversation working indicators, and do not transfer this chat-only override to Settings, mobile, or non-chat routes without independent authority.
+directedAt: 2026-08-11T11:02:49Z
+notes: 'Evidence is byte-preserved under docs/design/evidence/2026-08-11-chat-ui-direction/references and rehashable through references.sha256: codex-left-rail sha256:a5ee736315f45c9f6c50f2c80e7e11808b6f5ff3f632950ab2365981c7d39ad6; old-left-status sha256:236f32d39e8d5c4d8609b4702d7a914276543a6e00580856e6f51e3289011055. The old-left-status image is negative only for its readiness/status row; its account/help controls remain required. VDS route scope cannot encode the desktop breakpoint or Shell route predicate, so those limits are explicit here. No frameDigest, signed review, Code Connect, token linkage, visual verdict, sign-off, or conformity is asserted.'

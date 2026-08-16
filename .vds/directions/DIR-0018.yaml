@@ -1,0 +1,9 @@
+id: DIR-0018
+logId: DECISION-0011
+decisionDigest: sha256:a66133fb6ff6439b87e66f4071b731d9880995697e57aef7a7aeffb51534e695
+surface: !route
+  route: apps/worker/src/components/chat/Composer.tsx
+direction: Expose the caller's effective kernel approval posture beside the Chat composer as Ask for approval, Approve for me, or Full access, with the selected state and its limits stated plainly.
+magnitude: Apply this control to every Chat composer state that can delegate agent tools. Read and write the dedicated caller-scoped kernel contract; never emulate the setting in browser storage. Ask for approval adds consent prompts to delegated adapter calls, Approve for me retains risk-based consequence prompts, and Full access removes those prompts only for already-granted external adapters. Preserve deployment blocking verbs, control and reasoning-agent consequence gates, direct-human consequence gates, grants, credentials, rate limits, audit, accessibility, responsive behavior, model selection and the single voice action.
+directedAt: 2026-08-13T13:46:29Z
+notes: This direction supersedes only the obsolete no-posture-API deviation in the affected Chat states. It makes no Figma parity, sign-off, frameDigest or conformity claim.

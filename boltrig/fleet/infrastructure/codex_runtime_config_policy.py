@@ -8,10 +8,11 @@ import tomllib
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from boltrig.models.model_id_policy import exact_model_id
+
 from .skill_config import MAX_SKILL_CONFIG_BYTES, REVIEWED_SYSTEM_SKILLS_0_144_3
 
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
-_MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}\Z")
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}\Z")
 # The abstract ingress name, in the "@name" argv convention. Printable ASCII by
 # construction, so it survives TOML rendering and execve unchanged.
@@ -33,7 +34,10 @@ def validate_cell_id(value: object) -> str:
 
 
 def validate_model_id(value: object) -> str:
-    return _ascii_identifier("model id", value, _MODEL_ID)
+    try:
+        return exact_model_id(value)
+    except ValueError as error:
+        raise CodexRuntimeConfigError("model id is invalid") from error
 
 
 def _ascii_identifier(label: str, value: object, pattern: re.Pattern[str]) -> str:

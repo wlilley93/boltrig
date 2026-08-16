@@ -150,7 +150,7 @@ def test_the_org_view_carries_the_policy_flags_and_nothing_nested_in_settings() 
         ),
         (
             _ai_config_view(_ai_config()),
-            {"level", "scope_id", "provider", "model", "base_url", "has_key", "updated_at"},
+                {"level", "scope_id", "provider", "model", "modality", "base_url", "has_key", "updated_at"},
         ),
         (
             _org_view(_org()),

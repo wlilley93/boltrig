@@ -1,0 +1,9 @@
+id: DIR-0042
+logId: DECISION-0031
+decisionDigest: sha256:5c1b7570bef81a0b71e9461847be9ed27edd6d60ae138837ab1a7392c515542a
+surface: !route
+  route: apps/worker/src/components/settings/CompactSections.tsx
+direction: Show only the shipped Cognee compiler in Knowledge settings, and replace its vague struggling state with the truthful needs a model state when enrichment model configuration is absent.
+magnitude: Apply this to the complete Knowledge provider group. Keep canonical Knowledge usable when Cognee is degraded, explain the missing model in plain language, retain the governed Cognee enable switch, and omit retired Mem0 and Supermemory rows entirely. Do not claim Cognee is canonical, that it performs nightly LoRA distillation, or that a user model key is automatically bound to its process-wide compiler configuration.
+directedAt: 2026-08-15T12:19:46Z
+notes: This applies at /settings/knowledge. Retired provider rows remain inert only as upgrade history and are filtered from public reads. No Knowledge-specific governed visual fixture currently exercises this route, so the direction is honestly unreviewed until such a state exists.

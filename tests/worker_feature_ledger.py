@@ -196,7 +196,7 @@ _nested(
     "role_mappings",
     "boltrig/config/manifest.py",
     ("operator", "operator", "worker", "worker", "operator"),
-    "Mappings govern grants, while raw trust-policy authoring and rollback stay in Operator.",
+    "Mappings govern grants, while raw trust-policy authoring and rollback remain server-owned and unavailable in the Worker.",
 )
 _nested(
     "ModelsConfig",
@@ -328,7 +328,7 @@ _nested(
 )
 _nested(
     "ChatConfig",
-    "skills_by_role default_skills max_attachments max_attachment_bytes max_total_attachment_bytes compaction_threshold compaction_keep_recent",
+    "default_capability skills_by_role default_skills max_attachments max_attachment_bytes max_total_attachment_bytes compaction_threshold compaction_keep_recent",
     "boltrig/config/manifest.py",
     ("worker", "deployment", "worker", "worker", "deployment"),
     "The live chat admission and continuity paths consume these bounded policies.",
@@ -372,6 +372,24 @@ _nested(
 )
 _nested(
     "ModelEndpoint",
+    "modalities",
+    "boltrig/models/libraries.py",
+    ("worker", "worker", "worker", "worker", "worker"),
+    "Which modalities an endpoint serves; authored alongside the other endpoint "
+    "fields in the Worker's model-endpoint surface and read by runtime resolution "
+    "when routing a turn that needs vision.",
+)
+_nested(
+    "ModelEndpoint",
+    "revision",
+    "boltrig/models/libraries.py",
+    ("worker", "worker", "worker", "worker", "worker"),
+    "The server-owned monotonic generation binds an approved edit or lifecycle action "
+    "to the exact endpoint state; Worker receives conflicts and refreshes rather than "
+    "authoring or guessing the generation.",
+)
+_nested(
+    "ModelEndpoint",
     "tenant_id",
     "boltrig/models/libraries.py",
     ("worker", "deployment", "worker", "worker", "deployment"),
@@ -389,7 +407,7 @@ _nested(
     "name priority intent_tags capability skills max_depth",
     "boltrig/config/spawn_rules.py",
     ("worker", "missing", "worker", "worker", "operator"),
-    "Worker inventories every closed field and previews exact matching without executing; authoring remains Operator-owned pending a trusted classification source.",
+    "Worker inventories every closed field and previews exact matching without executing; authoring remains unavailable pending a trusted classification source.",
 )
 
 
@@ -444,11 +462,6 @@ MANIFEST_EXTRA_FEATURES: dict[str, FeatureCoverage] = {
         ("not_product", "not_product", "not_product", "not_product", "not_product"),
         "Internal legacy compiler input with no governed production entry; do not advertise it in Worker.",
     ),
-    "rivet_agentos": _coverage(
-        "manifest extra:rivet_agentos",
-        ("not_product", "not_product", "not_product", "not_product", "not_product"),
-        "Legacy runtime residue behind an explicit disabled gate; Codex is the target runtime.",
-    ),
     "browser_cli": _coverage(
         "manifest extra:browser_cli",
         ("worker", "deployment", "worker", "worker", "deployment"),
@@ -479,7 +492,7 @@ BACKGROUND_FEATURES: dict[str, FeatureCoverage] = {
     "delegation-pump": _coverage(
         "boltrig/fleet/pump.py:WorkPump.run_forever",
         ("worker", "worker", "worker", "worker", "worker"),
-        "Work and Runs expose the ordinary lifecycle; low-level leases stay Operator evidence.",
+        "Work and Runs expose the ordinary lifecycle; low-level leases remain deployment evidence.",
     ),
     "audit-anchor-janitor": _coverage(
         "boltrig/fleet/anchor.py:run_anchor_forever",
@@ -565,6 +578,31 @@ BACKGROUND_FEATURES: dict[str, FeatureCoverage] = {
 
 
 NATIVE_COMMANDS: dict[str, FeatureCoverage] = {
+    "desktop_account_login": _coverage(
+        "apps/worker/src-tauri/src/desktop_account.rs",
+        ("worker", "deployment", "worker", "worker", "worker"),
+        "Authenticates only against the HTTPS API origin compiled into the signed app and installs bounded server-issued session cookies directly into the main webview.",
+    ),
+    "desktop_account_challenge": _coverage(
+        "apps/worker/src-tauri/src/desktop_account.rs",
+        ("worker", "deployment", "worker", "worker", "worker"),
+        "Completes the server-issued second-factor challenge at the compiled HTTPS API origin without returning session secrets to JavaScript.",
+    ),
+    "desktop_account_refresh": _coverage(
+        "apps/worker/src-tauri/src/desktop_account.rs",
+        ("worker", "deployment", "worker", "worker", "worker"),
+        "Refreshes the current server account session through native HttpOnly cookie custody and the compiled HTTPS API origin.",
+    ),
+    "desktop_account_logout": _coverage(
+        "apps/worker/src-tauri/src/desktop_account.rs",
+        ("worker", "deployment", "worker", "worker", "worker"),
+        "Ends the current server account session and removes the native webview session cookies as the desktop recovery path.",
+    ),
+    "desktop_api_request": _coverage(
+        "apps/worker/src-tauri/src/desktop_account.rs",
+        ("worker", "deployment", "worker", "worker", "worker"),
+        "Proxies bounded v1 requests only to the compiled HTTPS API origin with native cookie custody, exact CSRF handling and a versioned response envelope.",
+    ),
     "complete_device_enrollment": _coverage(
         "apps/worker/src-tauri/src/lib.rs",
         ("worker", "worker", "worker", "worker", "worker"),
@@ -574,6 +612,36 @@ NATIVE_COMMANDS: dict[str, FeatureCoverage] = {
         "apps/worker/src-tauri/src/lib.rs",
         ("worker", "worker", "worker", "worker", "worker"),
         "Native device sign-out/recovery.",
+    ),
+    "local_agent_status": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("worker", "deployment", "worker", "worker", "worker"),
+        "Projects whether the packaged desktop-local Codex runtime is available without exposing a binary path or host credentials.",
+    ),
+    "local_agent_roots": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("worker", "worker", "worker", "worker", "worker"),
+        "Projects only the user-bound local workspace roots that may be selected for a desktop-local turn.",
+    ),
+    "local_agent_posture": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("worker", "worker", "worker", "worker", "worker"),
+        "Reads the desktop-only approval posture from the OS credential store; it is deliberately independent of cloud Chat policy.",
+    ),
+    "put_local_agent_posture": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("worker", "worker", "worker", "worker", "worker"),
+        "Changes only the desktop-local approval posture, with a second native confirmation before unrestricted host access.",
+    ),
+    "run_local_agent_turn": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("worker", "worker", "worker", "worker", "worker"),
+        "Runs the bundled Codex App Server in one selected local workspace with native policy enforcement and bounded event projection.",
+    ),
+    "stop_local_agent_turn": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("worker", "worker", "worker", "worker", "worker"),
+        "Stops the owned desktop-local child and is also used for conversation switches and unmount recovery.",
     ),
     "device_agent_status": _coverage(
         "apps/worker/src-tauri/src/lib.rs",
@@ -654,6 +722,42 @@ NATIVE_COMMANDS: dict[str, FeatureCoverage] = {
         "apps/worker/src-tauri/src/lib.rs",
         ("missing", "missing", "missing", "missing", "missing"),
         "A bounded cancellation primitive exists, but it is unreachable from production Worker until the OAuth lifecycle contract exists.",
+    ),
+    "camera_discover": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("missing", "missing", "missing", "missing", "missing"),
+        "The read-only USB/AVFoundation probe whose bounded JSON result "
+        "boltrig/camera/discovery.py turns into a capability map. It never "
+        "captures, writes controls, opens HID or loads vendor code. No production "
+        "Worker callsite yet.",
+    ),
+    "camera_status": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("missing", "missing", "missing", "missing", "missing"),
+        "Reports whether the native layer can see the camera at all, separately "
+        "from what the descriptors claim. No production Worker callsite yet.",
+    ),
+    "camera_validate_lease": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("missing", "missing", "missing", "missing", "missing"),
+        "Checks a kernel-issued camera lease before any operation that touches "
+        "hardware, so exclusive UVC access cannot be taken on the device agent's "
+        "say-so. No production Worker callsite yet.",
+    ),
+    "camera_verify_snapshot": _coverage(
+        "apps/worker/src-tauri/src/camera_protocol.rs",
+        ("missing", "missing", "missing", "missing", "missing"),
+        "A read-only native capture probe: it takes one frame, proves decode, and "
+        "discards it, which is what promotes snapshot from ADVERTISED to PROVEN. "
+        "No production Worker callsite yet - CameraDiscoverySettings reads the "
+        "discovery result rather than driving the probe.",
+    ),
+    "camera_verify_ptz": _coverage(
+        "apps/worker/src-tauri/src/camera_protocol.rs",
+        ("missing", "missing", "missing", "missing", "missing"),
+        "The physical pan/tilt proof behind the PROVEN state for those axes. Native "
+        "primitive only; no production Worker callsite yet, and it stays lease-gated "
+        "because it moves hardware.",
     ),
 }
 
@@ -743,16 +847,6 @@ CLI_COMMAND_FEATURES: dict[str, FeatureCoverage] = {
         ("worker", "worker", "worker", "worker", "worker"),
         "Terminal Chat is a thin alternate client of the same kernel and gateway contracts.",
     ),
-    "opencode-plugin": _coverage(
-        "boltrig/api/cli.py:opencode-plugin",
-        ("not_product", "not_product", "not_product", "not_product", "not_product"),
-        "Retained external-client compatibility must not be presented as a target agent runtime.",
-    ),
-    "install": _coverage(
-        "boltrig/api/cli.py:opencode-plugin install",
-        ("not_product", "not_product", "not_product", "not_product", "not_product"),
-        "Nested OpenCode installation is retained compatibility, not a Worker lifecycle.",
-    ),
     "doctor": _coverage(
         "boltrig/api/cli.py:doctor",
         ("worker", "deployment", "deployment", "worker", "deployment"),
@@ -791,10 +885,32 @@ _governed_controls(
         "OrganisationDirectorySections.tsx OrganisationWorkspaceSections.tsx "
         "OperationsView.tsx AgentProfileEditor.tsx PermanentFleetTopology.tsx "
         "build/ModelEndpointsBuild.tsx build/RegistryBuild.tsx "
-        "build/SkillsBuild.tsx ParityViews.tsx"
+        "build/SkillsBuild.tsx ParityViews.tsx "
+        "knowledge/KnowledgeView.tsx knowledge/RemembersTab.tsx "
+        "settings/ModelSettingsSection.tsx"
     ),
     ("worker", "worker", "worker", "worker", "worker"),
     "These non-secret controls retain only exact typed route inputs plus an internal approval id, query caller-owned state, replay the same SDK method and invalidate edits, selection changes and refreshes.",
+)
+_governed_controls(
+    "ChatView.tsx chat/WorkDisclosure.tsx chat/ToolReceiptDetails.tsx",
+    ("worker", "worker", "worker", "worker", "worker"),
+    "The chat surface renders HITL requests raised BY a turn: it shows the question and the options the kernel supplied, and replays the operator's decision through the same respondHitl method. Its explicitly opened tool disclosure reads only the caller-visible, server-redacted run snapshot and settles nothing. It composes no approval of its own, retains only bounded display state or the request id, and a decision that never reaches the kernel leaves the turn parked, which is the correct failure.",
+)
+_governed_controls(
+    "settings/KnowledgeToggle.tsx",
+    ("worker", "worker", "worker", "worker", "worker"),
+    "The knowledge provider rows mutate governed configuration and surface the kernel's pending_human receipt rather than reporting success: the row keeps its prior value until the change is approved, so a person cannot read a queued change as a made one. It retains no request body beyond the exact typed inputs it sent. This governed control was CompactSections.tsx until the settings surface was split into one component per row; the behaviour did not change, only the file that carries it, and CompactSections.tsx now composes rows and settles nothing.",
+)
+_governed_controls(
+    "browser/useBrowserWorkspace.tsx",
+    ("worker", "worker", "worker", "worker", "worker"),
+    "Every browser action is a governed mutation invoked through the exact-approval finalizer, never a local drive of the page: a result of pending_human is reported as waiting for approval rather than as a completed action, so a parked navigation cannot read as a taken one. It composes no approval of its own, holds only the workspace's visible tabs, nodes and cursor, and an approval that never arrives leaves the workspace where it was.",
+)
+_governed_controls(
+    "settings/OvernightSection.tsx",
+    ("worker", "worker", "worker", "worker", "worker"),
+    "Read-only. The screen reports that a night is parked awaiting a person by finding a pending distill request, and names the Inbox as where that decision is taken; it issues no approval, retains no request body and can settle nothing itself.",
 )
 _governed_controls(
     "LocalDeviceActions.tsx",
@@ -880,11 +996,12 @@ STRATEGIC_PRODUCT_FEATURES: dict[str, FeatureCoverage] = {
     ),
     "approval-policy-delegation-and-dry-run": _coverage(
         "docs/proposals/approval-policies-and-dry-run.md",
-        ("missing", "missing", "missing", "missing", "missing"),
-        "Exact per-action HITL works, but Boltrig has no first-class versioned "
-        "approval/delegation policy, decision-basis projection or authoritative "
-        "no-side-effect execution plan. Worker must not invent these from a "
-        "blocking-verb list or a client-side preview.",
+        ("worker", "worker", "missing", "worker", "missing"),
+        "Exact per-action HITL and a caller-owned coarse delegated-agent posture "
+        "now share the kernel chokepoint. Boltrig still has no first-class "
+        "versioned per-verb delegation policy, decision-basis projection or "
+        "authoritative no-side-effect execution plan; the Worker must not invent "
+        "those broader capabilities from posture or the blocking-verb list.",
     ),
     "provider-reconciled-cost-history": _coverage(
         "boltrig/kernel/cost.py",
@@ -926,14 +1043,6 @@ STRATEGIC_PRODUCT_FEATURES: dict[str, FeatureCoverage] = {
         "installed built-in adapter implementation. The repair script is an "
         "operator action; no durable drift projection, exact-snapshot reconciliation "
         "or recovery receipt exists.",
-    ),
-    "credential-backed-external-knowledge-projections": _coverage(
-        "boltrig/knowledge/projections.py",
-        ("worker", "missing", "missing", "worker", "missing"),
-        "Supermemory and Mem0 remain visible but explicitly unavailable, and older "
-        "enabled rows are repaired to that honest state. Credential binding, provider "
-        "health, compile/erase and recovery adapters do not exist, so Worker cannot "
-        "enable them or claim an external projection lifecycle.",
     ),
 }
 
@@ -984,7 +1093,7 @@ INTERNAL_OR_LEGACY_FEATURES: dict[str, FeatureCoverage] = {
     "legacy-agent-runtimes": _coverage(
         "boltrig/fleet/runtime.py",
         ("not_product", "not_product", "not_product", "not_product", "not_product"),
-        "Pi/Hermes/OpenCode/Rivet paths are disabled rollback residue; Codex is the target runtime.",
+        "Retired runtime names fail closed and cannot be revived; Codex is the only model-backed runtime.",
     ),
     "message-queue-and-ocr-seams": _coverage(
         "boltrig/adapters/builtin/mq_file.py",
@@ -1010,6 +1119,9 @@ ALL_NON_HTTP_FEATURES = {
     **{f"governed-control:{key}": value for key, value in GOVERNED_WORKER_CONTROL_FEATURES.items()},
     **{f"strategic-runtime:{key}": value for key, value in STRATEGIC_RUNTIME_FEATURES.items()},
     **{f"strategic-product:{key}": value for key, value in STRATEGIC_PRODUCT_FEATURES.items()},
-    **{f"surface-experience:{key}": value for key, value in PRIMARY_SURFACE_EXPERIENCE_FEATURES.items()},
+    **{
+        f"surface-experience:{key}": value
+        for key, value in PRIMARY_SURFACE_EXPERIENCE_FEATURES.items()
+    },
     **{f"internal:{key}": value for key, value in INTERNAL_OR_LEGACY_FEATURES.items()},
 }

@@ -34,6 +34,7 @@ function endpointParams(fields: {
   baseUrl: string;
   fallback: string;
   dataClass: string;
+  modalities: Array<"text" | "vision">;
 }): Record<string, unknown> {
   return {
     id: fields.id.trim(),
@@ -42,6 +43,7 @@ function endpointParams(fields: {
     base_url: fields.baseUrl.trim() || undefined,
     fallback: fields.fallback.trim() || undefined,
     data_class: fields.dataClass.trim() || "standard",
+    modalities: fields.modalities,
   };
 }
 
@@ -52,11 +54,12 @@ function sameRouteInput(left: unknown, right: unknown): boolean {
 export function ModelEndpointsBuild() {
   const [endpoints, setEndpoints] = useState<ModelEndpointInfo[]>([]);
   const [id, setId] = useState("");
-  const [kind, setKind] = useState("openai");
+  const [kind, setKind] = useState("bifrost");
   const [model, setModel] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [fallback, setFallback] = useState("");
   const [dataClass, setDataClass] = useState("standard");
+  const [modalities, setModalities] = useState<Array<"text" | "vision">>(["text"]);
   const [message, setMessage] = useState("");
   const [hydratedExisting, setHydratedExisting] = useState<string | null>(null);
   const [references, setReferences] = useState<{
@@ -83,6 +86,7 @@ export function ModelEndpointsBuild() {
             baseUrl,
             fallback,
             dataClass,
+            modalities,
           }));
       }
       const current = endpoints.find(
@@ -137,6 +141,9 @@ export function ModelEndpointsBuild() {
           setBaseUrl(detail.endpoint.base_url ?? "");
           setFallback(detail.endpoint.fallback ?? "");
           setDataClass(detail.endpoint.data_class);
+          setModalities((detail.endpoint.modalities ?? ["text"]).filter(
+            (item): item is "text" | "vision" => item === "text" || item === "vision",
+          ));
           setHydratedExisting(detail.endpoint.id);
           setReferences(
             detail.endpoint.references ?? { capabilities: [], fallbacks: [] },
@@ -186,6 +193,7 @@ export function ModelEndpointsBuild() {
       baseUrl,
       fallback,
       dataClass,
+      modalities,
     });
     const input: ModelEndpointMutation = {
       kind: "upsert",
@@ -203,7 +211,7 @@ export function ModelEndpointsBuild() {
     try {
       const result = await client.invoke(input.request);
       if (finalizer.begin(input, result, "Model endpoint change")) {
-        setMessage("Model endpoint change is waiting for approval in Inbox.");
+        setMessage("Model endpoint change is waiting for approval in the originating chat.");
         return;
       }
       if (
@@ -237,6 +245,9 @@ export function ModelEndpointsBuild() {
       setBaseUrl(result.endpoint.base_url ?? "");
       setFallback(result.endpoint.fallback ?? "");
       setDataClass(result.endpoint.data_class);
+      setModalities((result.endpoint.modalities ?? ["text"]).filter(
+        (item): item is "text" | "vision" => item === "text" || item === "vision",
+      ));
       setHydratedExisting(result.endpoint.id);
       setReferences(result.endpoint.references ?? { capabilities: [], fallbacks: [] });
     } catch {
@@ -247,11 +258,12 @@ export function ModelEndpointsBuild() {
   function clearForm() {
     finalizer.invalidate();
     setId("");
-    setKind("openai");
+    setKind("bifrost");
     setModel("");
     setBaseUrl("");
     setFallback("");
     setDataClass("standard");
+    setModalities(["text"]);
     setHydratedExisting(null);
     setReferences({ capabilities: [], fallbacks: [] });
   }
@@ -269,7 +281,7 @@ export function ModelEndpointsBuild() {
         ? await client.retireModelEndpoint(input.endpoint.id)
         : await client.restoreModelEndpoint(endpoint.id);
       if (finalizer.begin(input, result, `Model endpoint ${action.toLowerCase()}`)) {
-        setMessage(`${action} is waiting for approval in Inbox.`);
+        setMessage(`${action} is waiting for approval in the originating chat.`);
       } else if (result.status === "ok") {
         setMessage(`${endpoint.id} ${input.kind === "retire" ? "retired" : "restored"}.`);
         await refresh(false);
@@ -292,11 +304,11 @@ export function ModelEndpointsBuild() {
     <div className="build-layout">
       <section className="settings-card build-inventory">
         <div className="section-heading"><div><p className="eyebrow">{activeCount}/{endpoints.length} active</p><h2>Model endpoints</h2></div><div className="inline-actions"><button className="secondary-button" onClick={clearForm}>New</button><button className="secondary-button" onClick={() => void refresh()}>Refresh</button></div></div>
-        {endpoints.length === 0 ? <Unavailable title="No endpoints visible">Add the first governed endpoint, or configure it through a tenant manifest.</Unavailable> : (
+        {endpoints.length === 0 ? <Unavailable title="No endpoints visible">Add the first model connection, or configure one for this workspace.</Unavailable> : (
           <div className="data-list">{endpoints.map((endpoint) => (
             <button className="data-row" key={endpoint.id} onClick={() => void edit(endpoint)}>
               <span className={`activity-dot ${endpoint.is_active ? "ok" : "paused"}`} />
-              <span className="data-row-copy"><strong>{endpoint.id}</strong><small>{endpoint.kind} · {endpoint.model}</small></span>
+              <span className="data-row-copy"><strong>{endpoint.id}</strong><small>{endpoint.kind} · {endpoint.model} · {(endpoint.modalities ?? ["text"]).join(" + ")}</small></span>
               <span className="row-meta">{endpoint.status} · {endpoint.data_class}</span>
             </button>
           ))}</div>
@@ -372,11 +384,12 @@ export function ModelEndpointsBuild() {
         <p>Sensitive data still routes only to endpoints declared local by server policy. Retiring an endpoint preserves its configuration and references, but every new route or binding to it fails closed until restore.</p>
         <div className="author-grid">
           <label><span>Identifier</span><input className="field-control" required disabled={Boolean(hydratedExisting)} value={id} onChange={(event) => { finalizer.invalidate(); setId(event.target.value); }} /></label>
-          <label><span>Kind</span><select className="field-control" value={kind} onChange={(event) => { finalizer.invalidate(); setKind(event.target.value); }}><option value="openai">OpenAI-compatible</option><option value="local">Local</option></select></label>
+          <label><span>Kind</span><select className="field-control" value={kind} onChange={(event) => { finalizer.invalidate(); setKind(event.target.value); }}><option value="bifrost">Provider gateway</option><option value="openai">OpenAI-compatible</option><option value="local">Local</option></select></label>
           <label><span>Model</span><input className="field-control" required value={model} onChange={(event) => { finalizer.invalidate(); setModel(event.target.value); }} /></label>
           <label><span>Base URL (optional)</span><input className="field-control" type="url" value={baseUrl} onChange={(event) => { finalizer.invalidate(); setBaseUrl(event.target.value); }} /></label>
           <label><span>Fallback endpoint id</span><input className="field-control" value={fallback} onChange={(event) => { finalizer.invalidate(); setFallback(event.target.value); }} /><small>Stored for explicit health-based failover; it never bypasses retirement.</small></label>
           <label><span>Data class</span><select className="field-control" value={dataClass} onChange={(event) => { finalizer.invalidate(); setDataClass(event.target.value); }}><option value="standard">Standard</option><option value="sensitive">Sensitive</option></select></label>
+          <fieldset className="agent-model-routing"><legend>Advertised modalities</legend><label className="check-label"><input type="checkbox" disabled={modalities.length === 1} checked={modalities.includes("text")} onChange={(event) => { finalizer.invalidate(); setModalities(event.target.checked ? Array.from(new Set<"text" | "vision">([...modalities, "text"])) : modalities.filter((item) => item !== "text")); }} />Text</label><label className="check-label"><input type="checkbox" disabled={modalities.length === 1} checked={modalities.includes("vision")} onChange={(event) => { finalizer.invalidate(); setModalities(event.target.checked ? Array.from(new Set<"text" | "vision">([...modalities, "vision"])) : modalities.filter((item) => item !== "vision")); }} />Vision</label><small>These are declarations used by the Agents tab; they are not a live provider-health claim.</small></fieldset>
         </div>
         {hydratedExisting && (
           <p className="muted small">

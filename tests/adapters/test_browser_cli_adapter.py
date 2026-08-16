@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import json
+import re
+from pathlib import Path
 
 import pytest
 
 from boltrig.adapters.base import Credential
-from boltrig.adapters.builtin.browser_cli import BrowserCliAdapter, _process_env
+from boltrig.adapters.builtin.browser_cli import BrowserCliAdapter
+from boltrig.adapters.builtin.browser_commands import process_env
 from boltrig.models import GrantSet, InvocationContext
 
 T = "acme"
@@ -35,6 +41,12 @@ def _hermetic_dns(monkeypatch):
 
 def _ctx():
     return InvocationContext(tenant_id=T, grants=GrantSet.of(["*"]), actor="tester")
+
+
+def _frame_path(script: str) -> Path:
+    match = re.search(r"_boltrig_save_frame\((\"(?:\\.|[^\"])*\")\)", script)
+    assert match is not None
+    return Path(json.loads(match.group(1)))
 
 
 class _HungProcess:
@@ -67,7 +79,13 @@ def test_browser_cli_adapter_declares_narrow_browser_verbs():
     assert verbs["browser.page.info"].consequence == "low"
     assert verbs["browser.tab.open"].consequence == "high"
     assert verbs["browser.remote.start"].consequence == "high"
+    assert verbs["browser.snapshot"].consequence == "low"
+    assert verbs["browser.click"].consequence == "high"
+    assert verbs["browser.type"].consequence == "high"
+    assert verbs["browser.scroll"].idempotency_mode == "disabled"
+    assert verbs["browser.frame.read"].idempotency_mode == "disabled"
     assert "browser.script.run" not in verbs
+    assert "browser.cdp.call" not in verbs
 
 
 async def test_browser_tab_open_runs_browser_use_python_over_stdin():
@@ -154,6 +172,106 @@ async def test_browser_cli_unavailable_maps_to_retryable_failure():
     assert result.error.retryable
 
 
+@pytest.mark.invariant("SEC-BRW-01")
+async def test_browser_snapshot_is_bounded_ephemeral_and_owner_scoped():
+    jpeg = b"\xff\xd8bounded-frame\xff\xd9"
+
+    async def runner(argv, stdin, env):
+        assert argv == ["browser-use"]
+        assert env == {"BU_NAME": "shared"}
+        assert stdin is not None
+        _frame_path(stdin).write_bytes(jpeg)
+        return 0, json.dumps({
+            "status": "ok",
+            "page": {"url": "https://example.com", "title": "Example", "w": 1200, "h": 800},
+        }), ""
+
+    adapter = BrowserCliAdapter(command_runner=runner)
+    captured = await adapter.execute("browser.snapshot", {"name": "shared"}, None, _ctx())
+
+    assert captured.ok
+    frame = captured.output["frame"]
+    assert frame["url"] == "https://example.com"
+    assert "data" not in frame
+
+    read = await adapter.execute("browser.frame.read", {"id": frame["id"]}, None, _ctx())
+    assert read.ok
+    assert read.output["data"] == base64.b64encode(jpeg).decode("ascii")
+
+    other = InvocationContext(tenant_id=T, grants=GrantSet.of(["*"]), actor="other")
+    denied = await adapter.execute("browser.frame.read", {"id": frame["id"]}, None, other)
+    assert not denied.ok
+    assert denied.error is not None
+    assert denied.error.error_class.value == "not_found"
+
+
+@pytest.mark.invariant("SEC-BRW-01")
+async def test_browser_click_is_fixed_script_and_bound_to_displayed_frame():
+    jpeg = b"\xff\xd8same-frame\xff\xd9"
+    scripts: list[str] = []
+    replies = ["ok", "stale_frame"]
+
+    async def runner(_argv, stdin, _env):
+        assert stdin is not None
+        scripts.append(stdin)
+        _frame_path(stdin).write_bytes(jpeg)
+        status = replies.pop(0)
+        payload = {
+            "status": status,
+            "page": {"url": "https://example.com", "title": "Example", "w": 1000, "h": 700},
+        }
+        if status == "ok" and len(scripts) > 1:
+            payload["cursor"] = {"x": 12, "y": 34, "kind": "click"}
+        return 0, json.dumps(payload), ""
+
+    adapter = BrowserCliAdapter(command_runner=runner)
+    first = await adapter.execute("browser.snapshot", {}, None, _ctx())
+    assert first.ok
+    clicked = await adapter.execute(
+        "browser.click",
+        {"expected_frame_id": first.output["frame"]["id"], "x": 12, "y": 34},
+        None,
+        _ctx(),
+    )
+
+    assert clicked.ok
+    assert clicked.output["status"] == "stale_frame"
+    action_script = scripts[1]
+    assert f"actual != {json.dumps(hashlib.sha256(jpeg).hexdigest())}" in action_script
+    assert "click_at_xy(12, 34, button=\"left\")" in action_script
+    assert "exec(" not in action_script
+    assert "eval(" not in action_script
+
+
+@pytest.mark.invariant("SEC-BRW-01")
+async def test_browser_type_quotes_text_and_rejects_unknown_frames_without_running():
+    calls: list[str] = []
+
+    async def runner(_argv, stdin, _env):
+        calls.append(str(stdin))
+        return 0, "{}", ""
+
+    adapter = BrowserCliAdapter(command_runner=runner)
+    result = await adapter.execute(
+        "browser.type",
+        {"expected_frame_id": "frame_missing", "text": "'); cdp('Runtime.evaluate') #"},
+        None,
+        _ctx(),
+    )
+
+    assert not result.ok
+    assert calls == []
+
+
+def test_browser_frames_are_mcp_resources_without_raw_browser_protocol():
+    resources = BrowserCliAdapter().mcp_resources()
+
+    assert len(resources) == 1
+    assert resources[0].uri_prefix == "browser-frame://"
+    assert resources[0].list_verb == "browser.frames.list"
+    assert resources[0].read_verb == "browser.frame.read"
+
+
 @pytest.mark.invariant("FR-HOST-11")
 async def test_browser_cli_timeout_terminates_child(monkeypatch):
     proc = _HungProcess()
@@ -182,7 +300,7 @@ def test_browser_cli_uses_stack_owned_home_when_configured(monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", "/home/will/.config")
     monkeypatch.setenv("BOLTRIG_BROWSER_CLI_HOME", "/var/lib/boltrig/browser-cli")
 
-    env = _process_env({"BU_NAME": "work"})
+    env = process_env({"BU_NAME": "work"})
 
     assert env["HOME"] == "/var/lib/boltrig/browser-cli/home"
     assert env["XDG_CONFIG_HOME"] == "/var/lib/boltrig/browser-cli/config"
@@ -203,7 +321,7 @@ def test_browser_cli_child_env_does_not_inherit_user_or_provider_secrets(monkeyp
     monkeypatch.setenv("BOLTRIG_BROWSER_CLI_HOME", "/var/lib/boltrig/browser-cli")
     monkeypatch.delenv("BOLTRIG_BROWSER_CLOUD_POLICY", raising=False)
 
-    env = _process_env({"BU_NAME": "work"})
+    env = process_env({"BU_NAME": "work"})
 
     assert env["PATH"] == "/usr/local/bin:/usr/bin"
     assert env["HOME"] == "/var/lib/boltrig/browser-cli/home"
@@ -224,7 +342,7 @@ def test_browser_cli_cloud_profile_uses_only_stack_prefixed_handoff(monkeypatch)
     monkeypatch.setenv("BROWSER_USE_API_KEY", "personal-key")
     monkeypatch.setenv("BROWSER_USE_PROFILE_ID", "personal-profile")
 
-    env = _process_env({})
+    env = process_env({})
 
     assert env["BROWSER_USE_CLOUD"] == "true"
     assert env["BROWSER_USE_API_KEY"] == "stack-key"

@@ -18,7 +18,7 @@ def client(monkeypatch):
 
 
 def _admin(grants="*"):
-    return {"x-boltrig-tenant": "acme", "x-boltrig-grants": grants, "x-boltrig-subject": "u1"}
+    return {"x-boltrig-tenant": "default", "x-boltrig-grants": grants, "x-boltrig-subject": "u1"}
 
 
 def test_healthz_green(client):

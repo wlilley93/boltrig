@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "pnpm run dev",
-    "beforeBuildCommand": "pnpm run build"
+    "beforeDevCommand": "pnpm run dev:desktop",
+    "beforeBuildCommand": "pnpm run build:desktop"
   },
   "app": {
     "withGlobalTauri": false,
@@ -20,6 +20,7 @@
         "minWidth": 760,
         "minHeight": 600,
         "center": true,
+        "useHttpsScheme": true,
         "dragDropEnabled": false
       }
     ],
@@ -37,6 +38,7 @@
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
+      "icons/icon.icns",
       "icons/icon.ico"
     ],
     "macOS": {
@@ -52,6 +54,9 @@
     }
   },
   "plugins": {
+    "updater": {
+      "pubkey": ""
+    },
     "deep-link": {
       "desktop": {
         "schemes": ["boltrig-worker"]

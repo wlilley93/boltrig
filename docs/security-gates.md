@@ -64,25 +64,34 @@ images it then:
 2. rebuilds locally and blocks fixable high/critical findings;
 3. pushes only a run-scoped candidate tag and records its immutable digest;
 4. signs that digest with Sigstore/Cosign and the workflow's GitHub OIDC identity;
-5. attaches a signed CycloneDX SBOM attestation and verifies both the signature
-   and attestation; and
-6. retains the SBOM and digest as Actions evidence and draft-release assets.
+5. attaches a signed CycloneDX SBOM attestation and pinned `actions/attest` SLSA
+   provenance bound to the exact repository workflow, tag, and source commit;
+6. verifies the signature, SBOM attestation, and provenance; and
+7. retains the SBOM, provenance bundle, and digest as Actions evidence and
+   draft-release assets.
 
-Only after all five candidates verify does the workflow reverify every digest,
+Only after all four candidates verify does the workflow reverify every digest,
 refuse to move any existing release or commit tag, promote those exact digests to
 their public tags, and publish the GitHub release. A failed run therefore never
 publishes an incomplete GitHub release or an unsigned official image. Evidence
 is never overwritten; if a run leaves a draft behind, investigate it and delete
 the draft explicitly before creating a replacement release.
 
-The published release also contains `boltrig-images.env`: exactly five
+The published release also contains `boltrig-images.env`: exactly four
 `BOLTRIG_*_IMAGE` variables whose values are the verified `image@sha256` refs.
 `deploy/compose.release.yml` removes every first-party `build` key and requires
-those values, while `scripts/validate_release_images.py` rejects missing, extra,
-or mutable image references. Download the environment beside a production
-`.env`, run `make release-validate`, then `make release-up`; the latter layers the
-release overlay under the secure overlay, enables the backup profile, pulls the
-five signed images, and starts with `--no-build`.
+those values; both fleet-worker entry points, including the durable Hatchet task
+server, use the same signed fleet digest. `scripts/validate_release_images.py`
+rejects missing, extra, or mutable image references. Download the environment
+beside a production `.env`, run `make release-validate`, then `make release-up`;
+the latter layers the release overlay under the secure overlay, enables the
+backup profile, pulls the four signed images, and starts with `--no-build`.
+`release-validate` is deliberately online and fail-closed: with Cosign and a
+GitHub CLI that supports `gh attestation verify` installed, it verifies every
+registry digest's release-workflow certificate, CycloneDX attestation, and OCI
+SLSA provenance against `wlilley93/boltrig`, `release.yml`, the exact semantic
+tag on the checkout, and that checkout's commit. Missing tools, evidence, tags,
+or network access are blockers; digest syntax alone never admits production.
 
 Configure the GitHub `release` environment with required reviewers, restrict who
 may create `vMAJOR.MINOR.PATCH` tags, and require the `ci / quality` and

@@ -87,7 +87,7 @@ DECLARE
     'background_job_receipts',
     'eval_cases','eval_runs','notification_prefs',
     'personal_agents','memory_items','mcp_servers','mcp_probe_receipts',
-    'conversation_messages',
+    'conversation_messages','conversation_steer_queue',
     'conversation_summaries',
     'user_invitations','user_credentials','password_reset_tokens',
     'user_settings','user_sessions','memory_facts',
@@ -109,6 +109,7 @@ DECLARE
     'workflow_schedules','workflow_schedule_occurrences',
     'realtime_calls','realtime_call_events',
     'device_enrollments','devices','device_roots','device_leases',
+    'camera_bindings','camera_leases',
     'integration_catalogue','integration_connections',
     -- Org -> workspace tenancy ([2026] VJS-COUNTY 8). These three carry a real
     -- tenant_id column, so the generic tenant_id policy binds them. organisations

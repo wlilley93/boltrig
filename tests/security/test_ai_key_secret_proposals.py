@@ -11,6 +11,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from boltrig.identity.bifrost_user_binding import (
+    BifrostUserBinding,
+    BifrostUserGateway,
+    binding_credential_ref,
+)
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.kernel.hitl_expiry import expire_tenant_once
@@ -27,6 +32,43 @@ from boltrig.store.sealing import is_sealed
 T = "ai-proposal-tenant"
 SECRET = "sk-proposal-secret-material-0123456789"
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(autouse=True)
+def _bounded_bifrost(monkeypatch):
+    """Proposal tests exercise governance, with a runnable gateway boundary."""
+
+    monkeypatch.setenv("BOLTRIG_MODEL_GATEWAY_URL", "http://bifrost:8080/v1")
+
+    async def ensure(self, store, tenant_id, resolution, provider_key):
+        assert provider_key
+        ref = binding_credential_ref(tenant_id, resolution)
+        provider = str(resolution.provider)
+        model = str(resolution.model)
+        model_id = model if "/" in model else f"{provider}/{model}"
+        binding = BifrostUserBinding(
+            provider=provider,
+            model_id=model_id,
+            provider_key_id="provider-key",
+            virtual_key_id="virtual-key",
+            virtual_key="vk-test-only",
+            credential_ref=ref,
+        )
+        await store.set_credential_ref(
+            tenant_id,
+            ref,
+            {
+                "secret": binding.virtual_key,
+                "provider": binding.provider,
+                "model_id": binding.model_id,
+                "source_credential_ref": resolution.credential_ref,
+                "provider_key_id": binding.provider_key_id,
+                "virtual_key_id": binding.virtual_key_id,
+            },
+        )
+        return binding
+
+    monkeypatch.setattr(BifrostUserGateway, "ensure", ensure)
 
 
 def _run(coro):
@@ -59,20 +101,40 @@ def _app():
     return store, kernel, TestClient(create_app(kernel, platform={}))
 
 
-def _stage(client, *, secret=SECRET, headers=None):
+def _stage(client, *, secret=SECRET, headers=None, modality=None):
+    body = {
+        "level": "org",
+        "provider": "openai",
+        "model": "gpt-5",
+        "base_url": "https://api.openai.example/v1",
+        "api_key": secret,
+    }
+    if modality is not None:
+        body["modality"] = modality
     response = client.put(
         "/v1/ai-keys",
         headers=headers or _headers(),
-        json={
-            "level": "org",
-            "provider": "openai",
-            "model": "gpt-5",
-            "base_url": "https://api.openai.example/v1",
-            "api_key": secret,
-        },
+        json=body,
     )
     assert response.status_code == 202, response.text
     return response
+
+
+@pytest.mark.security
+def test_vision_key_proposal_is_sealed_and_stored_as_a_separate_route() -> None:
+    store, kernel, client = _app()
+    staged = _stage(client, modality="vision")
+    proposal_id = staged.json()["proposal"]["id"]
+    assert staged.json()["proposal"]["modality"] == "vision"
+    proposal = _run(store.get_ai_key_secret_proposal(T, proposal_id))
+    _run(kernel.hitl.answer(T, proposal.approval_id, "approve", "reviewer"))
+    applied = client.post(
+        f"/v1/ai-keys/proposals/{proposal_id}/finalize", headers=_headers()
+    )
+    assert applied.status_code == 200
+    config = _run(store.get_ai_config(T, "org", T, "vision"))
+    assert config is not None and config.modality == "vision"
+    assert _run(store.get_ai_config(T, "org", T)) is None
 
 
 @pytest.mark.security
@@ -273,6 +335,18 @@ def test_worker_retains_only_the_opaque_proposal_after_secret_intake() -> None:
     assert worker.index('input.value = "";') < worker.index("await submission")
     assert "client.finalizeAiKeyProposal(proposal.id)" in worker
     assert "hitl_request_id" not in worker
+
+    onboarding_form = (
+        ROOT / "apps/worker/src/components/onboarding/ProviderStep.tsx"
+    ).read_text(encoding="utf-8")
+    onboarding_state = (
+        ROOT / "apps/worker/src/components/onboarding/useProviderSetup.ts"
+    ).read_text(encoding="utf-8")
+    intake = (ROOT / "apps/worker/src/aiKeyIntake.ts").read_text(encoding="utf-8")
+    assert 'ref={setup.apiKeyInput}' in onboarding_form
+    assert "submitWriteOnlyAiKey(input" in onboarding_state
+    assert "const [apiKey" not in onboarding_state
+    assert intake.index('input.value = "";') < intake.index("return submission")
 
     spec = (
         ROOT / "boltrig/config/control_compat_specs.py"

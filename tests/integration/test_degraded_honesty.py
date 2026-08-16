@@ -19,17 +19,16 @@ from boltrig.store import InMemoryStore
 T = "acme"
 
 
-def _kernel_legacy_only() -> Kernel:
-    """A kernel whose only capability is a legacy lane with no endpoint, so
-    every spawn degrades (no_endpoint) rather than reasoning (P9)."""
+def _kernel_with_retired_runtime() -> Kernel:
+    """A kernel whose only capability names a removed runtime."""
     store = InMemoryStore()
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     return Kernel(store)
 
 
-async def _add_legacy_cap(kernel: Kernel) -> None:
+async def _add_retired_capability(kernel: Kernel, *, runtime: str = "removed-runtime") -> None:
     await kernel.store.upsert_capability(
-        AgentCapability("openai-worker", T, "openai", ["*"], 2, True, "standard")
+        AgentCapability("retired-worker", T, runtime, ["*"], 2, True, "standard")
     )
 
 
@@ -37,23 +36,15 @@ def _ctx() -> InvocationContext:
     return InvocationContext(tenant_id=T, grants=GrantSet.of(["*"]), actor="head")
 
 
-@pytest.fixture(autouse=True)
-def _legacy_runtimes(monkeypatch):
-    # This file exercises a LEGACY lane specifically (openai; it read hermes until
-    # 2026-08-06, when that lane was removed). Legacy lanes are decision-0012
-    # rollback residue, reachable only behind the explicit opt-in flag.
-    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
-
-
 @pytest.mark.invariant("US-FLT-07")
 async def test_spawn_without_runtime_is_marked_degraded_and_audited():
-    kernel = _kernel_legacy_only()
-    await _add_legacy_cap(kernel)
+    kernel = _kernel_with_retired_runtime()
+    await _add_retired_capability(kernel)
     spawner = build_spawner(kernel)
     res = await spawner.spawn(T, "summarise the quarter", [], {}, _ctx())
     # the spawn result carries the first-class flag, not just the payload marker
     assert res["degraded"] is True
-    assert res["output"]["_degraded"]["reason"] == "no_endpoint"
+    assert res["output"]["_degraded"]["reason"] == "runtime_unavailable"
     # the AGENT_SPAWN audit row says "degraded", never "ok"
     rows = await kernel.store.audit_query(T)
     spawn_rows = [r for r in rows if r.action_type == ActionType.AGENT_SPAWN]
@@ -62,8 +53,8 @@ async def test_spawn_without_runtime_is_marked_degraded_and_audited():
 
 @pytest.mark.invariant("US-FLT-07")
 async def test_chat_turn_surfaces_a_degraded_spawn():
-    kernel = _kernel_legacy_only()
-    await _add_legacy_cap(kernel)
+    kernel = _kernel_with_retired_runtime()
+    await _add_retired_capability(kernel)
     spawner = build_spawner(kernel)
     relay = EventRelay()
     chat = ChatService(
@@ -102,11 +93,11 @@ async def test_agent_invoker_runtime_failure_is_marked_degraded_not_echoed(monke
     # A resolved runtime that RAISES must not be papered over with a plain
     # ScriptRuntime echo (ok=True / degraded=False); the invoker must surface a
     # degrade-marked result with an audit-visible reason (US-FLT-07).
-    kernel = _kernel_legacy_only()
-    await _add_legacy_cap(kernel)
+    kernel = _kernel_with_retired_runtime()
+    await _add_retired_capability(kernel, runtime="codex")
 
     class _Boom:
-        runtime = "openai"
+        runtime = "codex"
         cost_tier = "standard"
 
         async def run(self, prompt, context, *, tools):
@@ -118,11 +109,11 @@ async def test_agent_invoker_runtime_failure_is_marked_degraded_not_echoed(monke
     monkeypatch.setattr(Spawner, "_runtime_for", _boom_runtime_for)
 
     invoker = make_agent_invoker(kernel)
-    result = await invoker("demo.verb", {"x": 1}, _ctx(), "openai-worker")
+    result = await invoker("demo.verb", {"x": 1}, _ctx(), "retired-worker")
     # ok stays True so the tree keeps running (P9), but the crash is NEVER an
     # unmarked success: the _degraded marker with an audit-visible reason is set.
     assert result.ok is True
     assert "_degraded" in result.output
     assert result.output["_degraded"]["reason"] == "RuntimeError"
     # regression guard: the old echo left no marker and no runtime kind.
-    assert result.output["_degraded"]["runtime"] == "openai"
+    assert result.output["_degraded"]["runtime"] == "codex"

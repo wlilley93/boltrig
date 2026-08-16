@@ -25,6 +25,54 @@
 #
 # Measured cost: python-quality 324s (3615 tests, 86.89% coverage), the other two ~2s.
 #
+# WHAT IT DOES NOT RUN, and why the old label was dangerous. Until 2026-08-14 the line below
+# announced `python-quality (the target CI runs)`. Singular "the". CI runs EIGHT jobs; this runs
+# one of them, and one of the four steps inside that one. PR #266 pushed on a green print from
+# this hook and arrived with eight red checks. A hook that is trusted and wrong is worse than no
+# hook, so the label now names its own scope and the footer prints the uncovered jobs.
+#
+# And a bigger hook would NOT have caught that push. Measured, per failure:
+#
+#   worker-build       merge conflict with main. `make worker-quality` on the branch TIP passes;
+#                      the failing test file existed only on main. Different COMMIT.
+#   test-and-gate      ten tests read the gitignored manifest.yaml. This hook already runs that
+#                      exact target and it passed - the VM mounts the host tree, so an untracked
+#                      file participated. Different FILESYSTEM.
+#   compose-validate   `PY ?= .venv/bin/python` here, `PY=python` on a runner with no install.
+#                      The venv had the package. Different INTERPRETER.
+#   desktop windows    a POSIX path literal in a Rust fixture. No machine here runs windows-2025.
+#                      Different PLATFORM.
+#
+# Four failures, four axes, none of them "a missing make target". Adding every CI target to this
+# hook and changing nothing else still prints green on that same push. The axes are what to fix -
+# see docs/CI-RED-2026-08-14.md - and until they are, this hook is a fast first filter and NOT a
+# prediction of CI.
+#
+# TWO OF THE FOUR AXES ARE NOW COVERED, for 1.8s between them, and each was verified against the
+# commit that actually failed rather than argued for:
+#
+#   COMMIT       fetch the base and warn when it is not an ancestor of HEAD. Run at 22b508b - the
+#                commit pushed as PR #266 - it prints "origin/main is 3 commit(s) ahead". 0.5s.
+#   INTERPRETER  `make compose-validate PY=python3`. Verified by re-running that target at
+#                ee2bc43^, the last commit before the fix: on `python3` it reproduces CI's
+#                ModuleNotFoundError verbatim, and on `.venv/bin/python` the same tree passes.
+#                Cause C was that one variable, and 1.3s of docker-free config parsing sees it.
+#
+# FILESYSTEM and PLATFORM stay uncovered. The footer says so, and names the files in THIS tree that
+# the filesystem gap currently applies to.
+#
+# REJECTED, by measurement rather than by taste - both look like coverage and neither is:
+#
+#   make worker-quality   would NOT have caught worker-build. `git ls-tree 22b508b --
+#                         apps/worker/tests/familiarShaderParity.test.ts` is empty: the failing
+#                         test did not exist in the tree this hook would have built. Adding a
+#                         multi-minute build that provably could not see the failure is precisely
+#                         the overclaim the rest of this file now exists to prevent.
+#   git merge-tree        would NOT have caught it either. `git merge-tree --write-tree 2be23960
+#                         22b508b` exits 0 and names no conflicted path, because the conflict is
+#                         semantic - main pinned a path this branch had moved. A clean merge-tree
+#                         would have been read as reassurance, which is worse than no check.
+#
 # Skips, each deliberate and each leaving a trace in the command you typed:
 #   SKIP_PUSH_GATES=1     everything
 #   SKIP_QUALITY_GATE=1   just the slow python-quality run
@@ -56,11 +104,12 @@ case "$hooks_path" in
     ;;
 esac
 
-run_gate() { # run_gate "<name>" <make target>
+run_gate() { # run_gate "<name>" <make target> [make args...]
   local name="$1" target="$2" start
+  shift 2
   printf '\n[pre-push] === %s ===\n' "$name"
   start=$(date +%s)
-  if ! make "$target"; then
+  if ! make "$target" "$@"; then
     echo ""
     echo "  $name FAILED — push blocked."
     echo "  Fix it, or in a real hurry: git push --no-verify"
@@ -72,8 +121,75 @@ run_gate() { # run_gate "<name>" <make target>
 run_gate "codex pin health" codex-pin-health
 run_gate "continuity projection" continuity-projection
 
+# Visual evidence freshness. 1.8s measured, and it closes a gap this hook already
+# names: the vitest that asserts it lives in worker-quality, which this hook does
+# NOT run, so nothing local refused a source change that left its capture behind.
+# That is the gap 1b18dd4 wrote up as "a source change and its evidence capture
+# are two commits that must move together, and nothing refuses the first without
+# the second until some gate reads them side by side."
+#
+# It runs the EXISTING test rather than recomputing the digest here. A second
+# implementation of the hashing scheme would be free to drift from the one that
+# produces the receipt, and then this gate would go green about a rule nobody
+# enforces - the `make check` failure mode documented at the top of this file.
+#
+# SCOPE, so this does not become another hook that is trusted and wrong: it reads
+# the WORKING TREE, because that is what the capture is generated from. Untracked
+# files under apps/worker/src therefore count. That is not stricter than the
+# existing contract - the vitest fails on exactly the same condition - but it does
+# mean unrelated work-in-progress under src blocks the push until re-captured.
+run_gate "visual evidence freshness" visual-evidence
+
+# The one CI job outside test-and-gate that is worth running here, and it is worth running for the
+# INTERPRETER rather than for the compose files. `PY ?= .venv/bin/python`, so every local run of
+# this target has the project installed; CI passes `PY=python` to a runner that ran setup-python
+# and nothing else. The job's own comment in ci.yml promises the validators are "stdlib-only, so an
+# interpreter is enough" - and when a first-party import was added to one of them, the venv here
+# kept saying yes for as long as it took CI to say no.
+#
+# `python3` and not `python`: macOS has no bare `python`. Verified both interpreters on PATH here
+# (/usr/bin and /opt/homebrew) fail `import boltrig` from outside the checkout, which is the whole
+# property being tested. If you ever `pip install -e .` into your system python, this gate goes
+# quietly blind - that is the one way to break it.
+run_gate "compose-validate on a BARE interpreter (the axis CI's PY=python tests)" \
+  compose-validate PY=python3
+
+# CI checks out refs/pull/N/merge - main merged INTO the branch - and this hook checks out the
+# branch tip. When main has moved, those are different trees, and a change that is correct on
+# each side alone can fail only on the merge. That is exactly how PR #266's worker-build broke:
+# main added a test pinning a path this branch had moved. Nothing local can see it while the two
+# are unmerged, so say so before the push rather than after the red.
+#
+# A warning, not a block. Blocking would refuse every push from a branch that main has merely
+# moved past, including the ones that are fine, and several sessions share this tree. Promoting
+# it to a block is an operator call, not this hook's.
+#
+# FETCH FIRST. `origin/main` is a local cache of what the remote said the last time somebody asked.
+# Comparing against a stale one is how this check would report "you are up to date" about a main
+# that moved three days ago - a false all-clear, which is the failure mode this whole file is
+# about. 0.45s measured, three runs. If the fetch fails, say the silence means nothing rather than
+# letting it read as a pass.
+base_ref="${BOLTRIG_BASE_REF:-origin/main}"
+if ! GIT_TERMINAL_PROMPT=0 git fetch --quiet "${base_ref%%/*}" "${base_ref#*/}" 2>/dev/null; then
+  echo ""
+  echo "[pre-push] NOTE: could not fetch $base_ref. The merge-drift check below is reading a"
+  echo "[pre-push]   possibly stale ref, so its silence is not evidence of anything."
+fi
+
+if ! git rev-parse --verify --quiet "$base_ref" >/dev/null 2>&1; then
+  echo ""
+  echo "[pre-push] NOTE: $base_ref does not resolve here — skipping the merge-drift check."
+elif ! git merge-base --is-ancestor "$base_ref" HEAD 2>/dev/null; then
+  behind="$(git rev-list --count "HEAD..$base_ref" 2>/dev/null || echo '?')"
+  echo ""
+  echo "[pre-push] NOTE: $base_ref is $behind commit(s) ahead and NOT merged into this branch."
+  echo "[pre-push]   CI tests refs/pull/N/merge. These gates test the branch tip. Different trees."
+  echo "[pre-push]   A semantic merge conflict is invisible here and red there. Merge $base_ref"
+  echo "[pre-push]   and re-run if CI matters to you more than this print does."
+fi
+
 if [[ "${SKIP_QUALITY_GATE:-}" == "1" ]]; then
-  echo "[pre-push] SKIP_QUALITY_GATE=1 set — skipping python-quality (the gate CI enforces)."
+  echo "[pre-push] SKIP_QUALITY_GATE=1 set — skipping python-quality (one of CI's eight jobs)."
 else
   # `quality-gate`, not `python-quality` directly. On Linux the two are identical -
   # it execs the same target. On macOS it runs that target inside a Linux VM,
@@ -84,8 +200,42 @@ else
   # This is not the "second list" this file's own preamble warns about. It is one
   # line of dispatch around the SAME make target CI runs, so there is still nothing
   # to drift.
-  run_gate "python-quality (the target CI runs)" quality-gate
+  run_gate "python-quality (1 of CI's 8 jobs, 1 of its 4 steps)" quality-gate
 fi
 
-echo "[pre-push] all gates green."
+# "all gates green" was the other half of the false promise: it is true of the gates this hook
+# runs and reads as true of CI. Name what was not looked at. A written gap is arguable; a silent
+# one is what let PR #266 push on a green print.
+echo ""
+echo "[pre-push] the gates ABOVE are green. NOT run here, and NOT predicted by this:"
+echo "[pre-push]   worker-build            make worker-quality (EXCEPT the one visual-evidence"
+echo "[pre-push]                           test run above — audit, typecheck, the other 819 tests"
+echo "[pre-push]                           and the build are still unlooked-at)"
+echo "[pre-push]   worker-desktop-package  cargo test + tauri build, x3 incl. windows-2025"
+echo "[pre-push]   site-build-test-lint    make site-quality"
+echo "[pre-push]   source-security         python-audit, sast, iac-scan, secret-scan, actionlint"
+echo "[pre-push]   codeql / containers     GitHub-hosted; unreachable from any local gate"
+echo "[pre-push]   and, in test-and-gate:  public-product-validate, migration-parity, doctor-fixture"
+
+# The FILESYSTEM axis, made specific instead of abstract. python-quality above ran inside a VM that
+# mounts this working tree, so gitignored files were on disk for it and will be absent from CI's
+# clean checkout. Rather than restate that as a general caution, name the files it is true of right
+# now: every root-level ignored file that a tracked test mentions by name. `manifest.yaml` is on
+# this list, and ten tests reading `manifest.yaml` are what turned test-and-gate red while this
+# hook was green. 0.25s to compute.
+#
+# A hint and not a gate: it matches a NAME in a test file, which is weaker than proving the test
+# opens it, so it will list things that are fine. Blocking a push on it would be wrong. Printing it
+# under a green is exactly right.
+ignored_named_by_tests=""
+for ignored in $(git ls-files --others --ignored --exclude-standard --directory 2>/dev/null | grep -Ev '/'); do
+  if git grep -q -F -- "$ignored" -- tests apps/worker/tests 2>/dev/null; then
+    ignored_named_by_tests="$ignored_named_by_tests $ignored"
+  fi
+done
+if [[ -n "${ignored_named_by_tests// /}" ]]; then
+  echo "[pre-push]"
+  echo "[pre-push]   filesystem gap: tracked tests name these GITIGNORED files, which exist here"
+  echo "[pre-push]   and will NOT exist on CI's clean checkout —$ignored_named_by_tests"
+fi
 exit 0

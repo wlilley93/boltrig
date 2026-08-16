@@ -22,10 +22,14 @@ afterEach(() => {
 });
 
 describe("Worker HTTP authentication boundary", () => {
-  it("uses the cookie session without consulting the device keychain", async () => {
+  it("uses the browser cookie session without an access-token path", async () => {
     await import("../src/client");
 
-    expect(sdk.options).toEqual({ baseUrl: "" });
+    expect(sdk.options).toEqual({
+      baseUrl: "",
+      csrfToken: expect.any(Function),
+      fetch: undefined,
+    });
     expect(sdk.options).not.toHaveProperty("accessToken");
   });
 
@@ -33,6 +37,10 @@ describe("Worker HTTP authentication boundary", () => {
     vi.stubEnv("VITE_API_BASE", "https://kernel.boltrig.test/");
     await import("../src/client");
 
-    expect(sdk.options).toEqual({ baseUrl: "https://kernel.boltrig.test" });
+    expect(sdk.options).toEqual({
+      baseUrl: "https://kernel.boltrig.test",
+      csrfToken: expect.any(Function),
+      fetch: undefined,
+    });
   });
 });

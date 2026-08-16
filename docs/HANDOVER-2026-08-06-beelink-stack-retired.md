@@ -45,9 +45,9 @@ There are **three** stacks, not the two the previous note implied.
 |---|---|---|
 | `boltrig-*` | beelink | **stopped 2026-08-06**, volumes kept |
 | `boltrig-*` | M4, inside OrbStack VM `boltrig-vm` | running, healthy, authoritative for dev |
-| `boltrig-*` and `cv-boltrig-*` | `jellytot-prod` | running, untouched, production |
+| `boltrig-*` and `cv-boltrig-*` | production host | running, untouched, production |
 
-`Opbox-Frontend` on `jellytot-prod` reads
+`Opbox-Frontend` on the production host reads
 `BOLTRIG_KERNEL_URL=http://cv-boltrig-kernel-1:8000`, so production is served by
 the `cv-` stack on that box and never depended on the beelink.
 
@@ -68,8 +68,8 @@ which one you mean:
 
 ```
 docker context ls
-  colima      unix:///Users/williamlilley/.colima/default/docker.sock
-  orbstack *  unix:///Users/williamlilley/.orbstack/run/docker.sock
+  colima      unix:///var/run/docker.sock
+  orbstack *  unix:///var/run/docker.sock
 ```
 
 The boltrig stack is not in either of those directly. It runs inside an OrbStack

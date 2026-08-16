@@ -197,6 +197,29 @@ def offer_payload(
     rows = list(candidates)
     ranked = compute_tool_offer(rows, grants, skills, len(rows))
     return [
-        {"name": v.id, "description": v.description or v.id, "inputSchema": v.input_schema}
-        for v in ranked
+        {
+            "name": verb.id,
+            "description": _model_description(verb),
+            "inputSchema": verb.input_schema,
+        }
+        for verb in ranked
     ]
+
+
+def _model_description(verb: Verb) -> str:
+    """Render useful model guidance without inventing execution semantics.
+
+    Consequence is kernel-owned registry data, so it is safe to disclose to an
+    already-authorised caller. We do not infer read-only, destructive, or
+    idempotent MCP annotations: those are different properties and the registry
+    does not yet carry them.
+    """
+
+    description = (verb.description or verb.id).strip()
+    if verb.consequence is Consequence.HIGH:
+        return (
+            f"{description}\n\nBoltrig governance: this is a high-consequence "
+            "tool. The kernel may hold the exact call for human approval; a held "
+            "call has not executed."
+        )
+    return description

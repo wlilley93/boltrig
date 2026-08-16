@@ -10,7 +10,14 @@ from boltrig.models import AgentCapability, GrantSet, InvocationContext
 from .artifact_production import produce_spawn_artifacts, spawn_result_envelope
 from .result import AgentResult
 
-_PUBLIC_ROUTE_KEYS = {"profile", "provider", "model", "runtime", "tier"}
+_PUBLIC_ROUTE_KEYS = {
+    "choice_id",
+    "profile",
+    "provider",
+    "model",
+    "runtime",
+    "tier",
+}
 
 
 def public_model_route(route: dict[str, Any] | None) -> dict[str, str]:

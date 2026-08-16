@@ -52,8 +52,6 @@ rebuildable projection rather than an authority:
 - Cognee is bundled and enabled for knowledge compilation and relationship
   enrichment. If its model configuration is unavailable, canonical ingest stays
   healthy and its projection reports a visible degraded state.
-- Supermemory is a one-click managed connector or retrieval projection.
-- Mem0 is a one-click compatibility memory projection.
 - specialist search, vector, graph, and lake stores are added only after a
   measured scale or query requirement.
 
@@ -82,17 +80,15 @@ layer silently.
   customer-hosted deployments.
 - There is one API/MCP/permission/provenance surface without pretending one
   physical database is ideal for large bytes and transactional metadata.
-- Original documents remain portable if Cognee, Supermemory, Mem0, or a vector
-  model is replaced.
+- Original documents remain portable if Cognee or a vector model is replaced.
 - Search begins with PostgreSQL exact, structured, full-text, and pgvector
   retrieval. More infrastructure requires benchmark evidence.
 - Memory remains distinct from documents and structured facts.
 - Source-system ACLs must filter retrieval candidates before ranking.
 - The first implementation needs ordered migrations, object-vault contracts,
   stable citation locators, and new security/correctness invariants.
-- Decision 0011 is superseded. Existing Mem0/Cognee adapter code is not deleted;
-  Cognee becomes the shipped compiler and Mem0 moves behind the governed add-on
-  catalogue.
+- Decision 0011 is superseded. Cognee becomes the shipped compiler; the native
+  governed memory ledger remains the ordinary memory path.
 
 ## Acceptance record
 
@@ -105,6 +101,28 @@ Accepted with agreement on these points:
    claim of immediate support for every datatype and connector.
 4. Filesystem and S3-compatible vaults implement the same digest, revision,
    traversal, erasure, and audit contract.
-5. Mem0, Supermemory, and future projections use a one-click governed provider
-   catalogue; no specialist database or second policy engine is mandatory in
-   the first slice.
+5. Future projections require a complete governed adapter before they may enter
+   the provider catalogue; no placeholder provider is shown to users.
+
+## 2026-08-15 amendment: retire unimplemented providers
+
+Mem0 and Supermemory are removed from the shipped catalogue. Neither had a
+complete Knowledge compile, erase, health, credential, and recovery lifecycle,
+so presenting them as choices created UI without capability. Upgrades disable
+old persisted rows and public reads hide them. The optional Mem0 package and
+compatibility adapter are also removed.
+
+This does not make Cognee canonical and does not make it the nightly trainer.
+Postgres/pgvector plus ObjectVault remain authoritative; Cognee is a rebuildable
+knowledge compiler. Nightly LoRA distillation remains a separate, optional,
+disabled-by-default sidecar governed by decision 0023.
+
+## 2026-08-15 amendment: reuse the ordinary AI connection
+
+Cognee must not introduce a second provider-key setup. Knowledge operations
+resolve the caller's normal tenant/workspace/user chat connection, ensure its
+server-side Bifrost binding, and give Cognee only the exact model route plus a
+scoped virtual key. Provider plaintext remains sealed in the kernel. Embeddings
+run locally through bundled FastEmbed and require no credential. Per-operation
+Cognee configs are request-local so concurrent tenants cannot overwrite a
+process-global model or key.

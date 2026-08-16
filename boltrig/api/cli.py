@@ -68,15 +68,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
     _add_chat_parser(sub)
 
-    p_opencode = sub.add_parser(
-        "opencode-plugin", help="install OpenCode project-local integration files"
-    )
-    opencode_sub = p_opencode.add_subparsers(dest="opencode_cmd", required=True)
-    p_oc_install = opencode_sub.add_parser(
-        "install", help="write the Boltrig MCP plugin into an OpenCode config dir"
-    )
-    p_oc_install.add_argument("--dir", default=".opencode", help="OpenCode config directory")
-
     p_doctor = sub.add_parser("doctor", help="static production-readiness checks")
     p_doctor.add_argument(
         "--env-file",
@@ -288,12 +279,6 @@ def _dispatch(args: argparse.Namespace) -> int:
         from .chat_cli import run as chat_run
 
         return chat_run(args)
-    if args.cmd == "opencode-plugin":
-        from boltrig.fleet.opencode_plugin import install_opencode_plugin
-
-        path = install_opencode_plugin(args.dir)
-        print(path)
-        return 0
     if args.cmd == "doctor":
         from .doctor import format_report, load_env_file, run_doctor
 

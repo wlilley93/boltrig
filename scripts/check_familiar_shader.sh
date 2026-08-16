@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Are the vendored familiar.frag and genotype.h the ones they were copied from?
+# Is the vendored Worker familiar.frag the one copied from its source?
 #
-# ui/src/familiar/familiar.frag is a COPY. Its source lives in another repo entirely
+# apps/worker/src/bundles/familiar/familiar.frag is a COPY. Its source lives in another repo entirely
 # (wlilley93/beelink-desktop, familiar/familiar.frag), so no compiler, linter or CI job in this
 # repository can tell you when the two have diverged - CI has no checkout of it.
 #
@@ -18,17 +18,11 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UPSTREAM_DIR="${FAMILIAR_UPSTREAM_DIR:-$HOME/Projects/beelink-desktop/familiar}"
 
-# TWO vendored files, not one. genotype.h was added on 2026-07-27 because the shader alone was
-# never the whole copy: the shader reads uGene POSITIONALLY, and the header is the only thing
-# that says which slot is which gene. The console's own slot table drifted from it, uploaded
-# bodyScale into a slot the shader does not read, and left the slot the shader DOES read as
-# bodyScale at zero - which multiplies every familiar's radius by nothing. Checking the shader
-# and not the table checked the half that could not go wrong on its own.
-FILES="familiar.frag genotype.h"
+FILES="familiar.frag"
 
 status=0
 for f in $FILES; do
-  vendored="$HERE/ui/src/familiar/$f"
+  vendored="$HERE/apps/worker/src/bundles/familiar/$f"
   upstream="$UPSTREAM_DIR/$f"
 
   if [ ! -f "$vendored" ]; then
@@ -62,9 +56,7 @@ done
 
 [ "$status" -eq 0 ] || exit 1
 
-frag_sha="$(sha256sum "$HERE/ui/src/familiar/familiar.frag" | cut -d' ' -f1)"
+frag_sha="$(sha256sum "$HERE/apps/worker/src/bundles/familiar/familiar.frag" | cut -d' ' -f1)"
 echo "RESULT: PASS - every vendored file is byte-identical to its upstream."
-echo "        Remember the digest in ui/tests/__characterization__/familiar/shader-provenance.test.ts"
+echo "        Remember the digest in the Worker familiar provenance test"
 echo "        must also name this hash: $frag_sha"
-echo "        genotype.h needs no recorded digest: slot-table.test.ts PARSES it and compares it"
-echo "        to the console's own table, which is a stronger check than a hash of either."

@@ -151,7 +151,7 @@ citation: null
 assent_source: standing_bounded_assent
 implementation_status: PARTIAL
 implementation_note: |
-  D1 DONE 2026-07-29 on jellytot-prod: the `development_posture` block was removed from
+  D1 DONE 2026-07-29 on the production host: the `development_posture` block was removed from
   boltrig-tenants/cv/manifest.yaml (previous kept as manifest.yaml.bak-posture-withdraw-*) and
   the kernel restarted. Verified against the RUNNING container, not the file: posture object
   None, enabled False, `posture_block(...)` returns "no development posture is declared for this

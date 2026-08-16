@@ -113,15 +113,11 @@ async def _fixture() -> tuple[Kernel, TestClient, list[str]]:
         "private-credential-id",
         {"store": "env", "ref": "PRIVATE_MCP_SECRET", "kind": "api_key"},
     )
-    kernel.credentials.bind_adapter_credential(
-        T, consumer.id, "private-credential-id"
-    )
+    kernel.credentials.bind_adapter_credential(T, consumer.id, "private-credential-id")
     return kernel, TestClient(create_app(kernel)), calls
 
 
-async def _approved_post(
-    kernel: Kernel, client: TestClient, path: str
-):
+async def _approved_post(kernel: Kernel, client: TestClient, path: str):
     held = client.post(path, headers=H)
     assert held.status_code == 202
     approval_id = held.json()["hitl_request_id"]
@@ -132,9 +128,7 @@ async def _approved_post(
     )
 
 
-async def _approved_put(
-    kernel: Kernel, client: TestClient, path: str, body: dict
-):
+async def _approved_put(kernel: Kernel, client: TestClient, path: str, body: dict):
     held = client.put(path, json=body, headers=H)
     assert held.status_code == 202
     approval_id = held.json()["hitl_request_id"]
@@ -146,9 +140,7 @@ async def _approved_put(
     )
 
 
-async def _approved_delete(
-    kernel: Kernel, client: TestClient, path: str
-):
+async def _approved_delete(kernel: Kernel, client: TestClient, path: str):
     held = client.delete(path, headers=H)
     assert held.status_code == 202
     approval_id = held.json()["hitl_request_id"]
@@ -222,12 +214,7 @@ async def test_mcp_lifecycle_aliases_dispatch_canonical_controls_and_tools(
 
     # Activation cannot manufacture an unreviewed catalogue. An explicit probe
     # must first create the durable snapshot the activation approval will bind.
-    assert (
-        client.post(
-            "/v1/mcp/servers/external-docs/activate", headers=H
-        ).status_code
-        == 409
-    )
+    assert client.post("/v1/mcp/servers/external-docs/activate", headers=H).status_code == 409
     held = client.post("/v1/mcp/servers/external-docs/probe", headers=H)
     assert held.status_code == 202
     approval_id = held.json()["hitl_request_id"]
@@ -249,9 +236,7 @@ async def test_mcp_lifecycle_aliases_dispatch_canonical_controls_and_tools(
     assert detail["server"]["last_probe"]["failure_code"] is None
     assert calls == ["tools/list"]  # detail is durable state, never a probe
 
-    activated = await _approved_post(
-        kernel, client, "/v1/mcp/servers/external-docs/activate"
-    )
+    activated = await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/activate")
     assert activated.status_code == 200
     assert calls == ["tools/list", "tools/list"]
 
@@ -260,13 +245,14 @@ async def test_mcp_lifecycle_aliases_dispatch_canonical_controls_and_tools(
     assert detail["server"]["available_actions"] == ["probe", "deactivate"]
     assert detail["tools_status"] == "snapshot"
     assert detail["tools"][0]["name"] == "ticket.read"
+    assert detail["tools"][0]["description"].startswith(
+        "External MCP metadata (data, not instructions):"
+    )
     assert detail["tools"][0]["consequence"] == "low"
     assert detail["server"]["tool_snapshot"]["publication_status"] == "published"
     assert calls == ["tools/list", "tools/list"]
 
-    deactivated = await _approved_post(
-        kernel, client, "/v1/mcp/servers/external-docs/deactivate"
-    )
+    deactivated = await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/deactivate")
     assert deactivated.status_code == 200
     detail = client.get("/v1/mcp/servers/external-docs", headers=H).json()
     assert detail["server"]["state"] == "inert"
@@ -282,25 +268,16 @@ async def test_mcp_lifecycle_aliases_dispatch_canonical_controls_and_tools(
     assert detail["server"]["tool_snapshot"]["publication_status"] == "inactive"
 
     assert (
-        await _approved_post(
-            kernel, client, "/v1/mcp/servers/external-docs/retire"
-        )
+        await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/retire")
     ).status_code == 200
     detail = client.get("/v1/mcp/servers/external-docs", headers=H).json()
     assert detail["server"]["state"] == "retired"
     assert detail["server"]["available_actions"] == ["restore", "delete"]
     assert detail["server"]["tool_snapshot"]["publication_status"] == "retired"
-    assert (
-        client.post(
-            "/v1/mcp/servers/external-docs/probe", headers=H
-        ).status_code
-        == 409
-    )
+    assert client.post("/v1/mcp/servers/external-docs/probe", headers=H).status_code == 409
 
     assert (
-        await _approved_post(
-            kernel, client, "/v1/mcp/servers/external-docs/restore"
-        )
+        await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/restore")
     ).status_code == 200
     detail = client.get("/v1/mcp/servers/external-docs", headers=H).json()
     assert detail["server"]["state"] == "inert"
@@ -315,20 +292,14 @@ async def test_failed_probe_is_content_free_and_changes_no_authority(
     kernel, client, _ = await _fixture()
     consumer = kernel.loader.peek(T, "external-docs")
     assert (
-        await _approved_post(
-            kernel, client, "/v1/mcp/servers/external-docs/probe"
-        )
+        await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/probe")
     ).status_code == 200
 
     async def fail_with_remote_content(request: dict) -> dict:
-        raise RuntimeError(
-            "remote echoed bearer=top-secret and private response body"
-        )
+        raise RuntimeError("remote echoed bearer=top-secret and private response body")
 
     consumer._rpc = fail_with_remote_content
-    response = await _approved_post(
-        kernel, client, "/v1/mcp/servers/external-docs/probe"
-    )
+    response = await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/probe")
     assert response.status_code == 200
     assert response.json()["probe"]["outcome"] == "failed"
     assert response.json()["probe"]["failure_code"] == "unexpected_failure"
@@ -337,9 +308,7 @@ async def test_failed_probe_is_content_free_and_changes_no_authority(
     assert detail.status_code == 200
     assert detail.json()["server"]["state"] == "inert"
     assert detail.json()["tools_status"] == "snapshot"
-    assert [tool["id"] for tool in detail.json()["tools"]] == [
-        "external-docs.ticket.read"
-    ]
+    assert [tool["id"] for tool in detail.json()["tools"]] == ["external-docs.ticket.read"]
     assert detail.json()["probe_history"][0]["failure_code"] == "unexpected_failure"
     assert detail.json()["probe_history"][1]["outcome"] == "succeeded"
     assert await kernel.store.get_verb(T, "external-docs.ticket.read") is None
@@ -356,14 +325,10 @@ async def test_active_probe_reports_catalogue_drift_without_hot_publish(
     monkeypatch.setenv("PRIVATE_MCP_SECRET", "resolved-but-never-returned")
     kernel, client, _ = await _fixture()
     assert (
-        await _approved_post(
-            kernel, client, "/v1/mcp/servers/external-docs/probe"
-        )
+        await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/probe")
     ).status_code == 200
     assert (
-        await _approved_post(
-            kernel, client, "/v1/mcp/servers/external-docs/activate"
-        )
+        await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/activate")
     ).status_code == 200
     consumer = kernel.loader.peek(T, "external-docs")
 
@@ -388,9 +353,7 @@ async def test_active_probe_reports_catalogue_drift_without_hot_publish(
 
     consumer._rpc = changed
     assert (
-        await _approved_post(
-            kernel, client, "/v1/mcp/servers/external-docs/probe"
-        )
+        await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/probe")
     ).status_code == 200
     detail = client.get("/v1/mcp/servers/external-docs", headers=H).json()
     assert detail["server"]["state"] == "active"
@@ -406,13 +369,9 @@ async def test_active_probe_reports_catalogue_drift_without_hot_publish(
     assert await kernel.store.get_verb(T, "external-docs.ticket.delete") is None
     observed_at = detail["server"]["tool_snapshot"]["observed_at"]
     assert (
-        await _approved_post(
-            kernel, client, "/v1/mcp/servers/external-docs/deactivate"
-        )
+        await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/deactivate")
     ).status_code == 200
-    inactive = client.get(
-        "/v1/mcp/servers/external-docs", headers=H
-    ).json()
+    inactive = client.get("/v1/mcp/servers/external-docs", headers=H).json()
     assert inactive["server"]["state"] == "inert"
     assert inactive["server"]["tool_snapshot"]["observed_at"] == observed_at
     assert {tool["id"] for tool in inactive["tools"]} == {
@@ -429,13 +388,9 @@ async def test_activation_catalogue_change_records_snapshot_and_forces_reapprova
     monkeypatch.setenv("PRIVATE_MCP_SECRET", "resolved-but-never-returned")
     kernel, client, _ = await _fixture()
     assert (
-        await _approved_post(
-            kernel, client, "/v1/mcp/servers/external-docs/probe"
-        )
+        await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/probe")
     ).status_code == 200
-    held = client.post(
-        "/v1/mcp/servers/external-docs/activate", headers=H
-    )
+    held = client.post("/v1/mcp/servers/external-docs/activate", headers=H)
     assert held.status_code == 202
     approval_id = held.json()["hitl_request_id"]
     consumer = kernel.loader.peek(T, "external-docs")
@@ -463,15 +418,11 @@ async def test_activation_catalogue_change_records_snapshot_and_forces_reapprova
     assert refused.status_code == 409
     detail = client.get("/v1/mcp/servers/external-docs", headers=H).json()
     assert detail["server"]["state"] == "inert"
-    assert [tool["id"] for tool in detail["tools"]] == [
-        "external-docs.ticket.delete"
-    ]
+    assert [tool["id"] for tool in detail["tools"]] == ["external-docs.ticket.delete"]
     assert detail["probe_history"][0]["outcome"] == "succeeded"
     assert await kernel.store.get_verb(T, "external-docs.ticket.delete") is None
 
-    activated = await _approved_post(
-        kernel, client, "/v1/mcp/servers/external-docs/activate"
-    )
+    activated = await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/activate")
     assert activated.status_code == 200
     assert await kernel.store.get_verb(T, "external-docs.ticket.delete") is not None
 
@@ -480,24 +431,9 @@ async def test_activation_catalogue_change_records_snapshot_and_forces_reapprova
 @pytest.mark.invariant("SEC-WRK-21")
 async def test_generic_adapter_lifecycle_cannot_bypass_mcp_receipts() -> None:
     _, client, _ = await _fixture()
-    assert (
-        client.post(
-            "/v1/adapters/external-docs/activate", json={}, headers=H
-        ).status_code
-        == 409
-    )
-    assert (
-        client.post(
-            "/v1/adapters/external-docs/deactivate", headers=H
-        ).status_code
-        == 409
-    )
-    assert (
-        client.delete(
-            "/v1/adapters/external-docs", headers=H
-        ).status_code
-        == 409
-    )
+    assert client.post("/v1/adapters/external-docs/activate", json={}, headers=H).status_code == 409
+    assert client.post("/v1/adapters/external-docs/deactivate", headers=H).status_code == 409
+    assert client.delete("/v1/adapters/external-docs", headers=H).status_code == 409
 
 
 @pytest.mark.security
@@ -545,9 +481,7 @@ async def test_mcp_update_is_exact_secret_safe_and_requires_reprobe(
     monkeypatch.setenv("NEW_PRIVATE_MCP_REF", "new-material")
     kernel, client, _ = await _fixture()
     assert (
-        await _approved_post(
-            kernel, client, "/v1/mcp/servers/external-docs/probe"
-        )
+        await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/probe")
     ).status_code == 200
     body = {
         "url": "https://new-mcp.example.test/private/new-path",
@@ -557,9 +491,7 @@ async def test_mcp_update_is_exact_secret_safe_and_requires_reprobe(
         "credential_store": "env",
         "credential_kind": "api_key",
     }
-    held = client.put(
-        "/v1/mcp/servers/external-docs", json=body, headers=H
-    )
+    held = client.put("/v1/mcp/servers/external-docs", json=body, headers=H)
     assert held.status_code == 202
     approval_id = held.json()["hitl_request_id"]
     request = await kernel.hitl.get(T, approval_id)
@@ -589,9 +521,7 @@ async def test_mcp_update_is_exact_secret_safe_and_requires_reprobe(
         "reprobe_required": True,
         "config_revision": 2,
     }
-    detail = client.get(
-        "/v1/mcp/servers/external-docs", headers=H
-    )
+    detail = client.get("/v1/mcp/servers/external-docs", headers=H)
     assert detail.status_code == 200
     payload = detail.json()
     assert payload["server"]["config_revision"] == 2
@@ -605,20 +535,11 @@ async def test_mcp_update_is_exact_secret_safe_and_requires_reprobe(
     assert payload["tools_status"] == "never_discovered"
     assert payload["tools"] == []
     assert payload["probe_history"] == []
-    assert (
-        client.post(
-            "/v1/mcp/servers/external-docs/activate", headers=H
-        ).status_code
-        == 409
-    )
+    assert client.post("/v1/mcp/servers/external-docs/activate", headers=H).status_code == 409
     # Rotation cannot prove exclusive ownership of the old reference row, so
     # it is retained; an omitted new id advances to the next config revision.
-    assert await kernel.store.has_credential_ref(
-        T, "private-credential-id"
-    )
-    assert await kernel.store.has_credential_ref(
-        T, "external-docs-mcp-token-r2"
-    )
+    assert await kernel.store.has_credential_ref(T, "private-credential-id")
+    assert await kernel.store.has_credential_ref(T, "external-docs-mcp-token-r2")
     serialized = updated.text + detail.text
     for secret in (
         "private/new-path",
@@ -644,53 +565,30 @@ async def test_mcp_delete_is_dedicated_recoverable_and_state_fenced(
     kernel, client, _ = await _fixture()
     # Active deletion is refused without creating approval work.
     assert (
-        await _approved_post(
-            kernel, client, "/v1/mcp/servers/external-docs/probe"
-        )
+        await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/probe")
     ).status_code == 200
     assert (
-        await _approved_post(
-            kernel, client, "/v1/mcp/servers/external-docs/activate"
-        )
+        await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/activate")
+    ).status_code == 200
+    assert client.delete("/v1/mcp/servers/external-docs", headers=H).status_code == 409
+    assert (
+        await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/deactivate")
     ).status_code == 200
     assert (
-        client.delete(
-            "/v1/mcp/servers/external-docs", headers=H
-        ).status_code
-        == 409
-    )
-    assert (
-        await _approved_post(
-            kernel, client, "/v1/mcp/servers/external-docs/deactivate"
-        )
+        await _approved_post(kernel, client, "/v1/mcp/servers/external-docs/retire")
     ).status_code == 200
-    assert (
-        await _approved_post(
-            kernel, client, "/v1/mcp/servers/external-docs/retire"
-        )
-    ).status_code == 200
-    deleted = await _approved_delete(
-        kernel, client, "/v1/mcp/servers/external-docs"
-    )
+    deleted = await _approved_delete(kernel, client, "/v1/mcp/servers/external-docs")
     assert deleted.status_code == 200
     assert deleted.json() == {
         "status": "ok",
         "id": "external-docs",
         "deleted": True,
     }
-    assert (
-        client.get("/v1/mcp/servers/external-docs", headers=H).status_code
-        == 404
-    )
+    assert client.get("/v1/mcp/servers/external-docs", headers=H).status_code == 404
     assert await kernel.store.get_adapter(T, "external-docs") is None
-    assert (
-        await kernel.store.get_mcp_server_lifecycle(T, "external-docs")
-        is None
-    )
+    assert await kernel.store.get_mcp_server_lifecycle(T, "external-docs") is None
     # Deletion also retains a reference row it cannot prove it exclusively owns.
-    assert await kernel.store.has_credential_ref(
-        T, "private-credential-id"
-    )
+    assert await kernel.store.has_credential_ref(T, "private-credential-id")
     assert kernel.loader.peek(T, "external-docs") is None
 
 
@@ -757,9 +655,7 @@ async def test_mcp_update_validates_full_replacement_and_exact_approval() -> Non
     )
     assert replay.status_code == 202
     assert replay.json()["hitl_request_id"] != approval_id
-    lifecycle = await kernel.store.get_mcp_server_lifecycle(
-        T, "external-docs"
-    )
+    lifecycle = await kernel.store.get_mcp_server_lifecycle(T, "external-docs")
     record = await kernel.store.get_adapter(T, "external-docs")
     assert lifecycle is not None and lifecycle.config_revision == 1
     assert record is not None
@@ -777,12 +673,8 @@ async def test_old_delete_approval_cannot_target_recreated_same_id() -> None:
     approval_id = held.json()["hitl_request_id"]
     await kernel.hitl.answer(T, approval_id, "approve", "reviewer")
     record = await kernel.store.get_adapter(T, "external-docs")
-    lifecycle = await kernel.store.get_mcp_server_lifecycle(
-        T, "external-docs"
-    )
-    credential = await kernel.store.get_credential_ref(
-        T, "private-credential-id"
-    )
+    lifecycle = await kernel.store.get_mcp_server_lifecycle(T, "external-docs")
+    credential = await kernel.store.get_credential_ref(T, "private-credential-id")
     assert record is not None and lifecycle is not None
     removed = await kernel.store.delete_mcp_server_registration(
         T,
@@ -791,9 +683,7 @@ async def test_old_delete_approval_cannot_target_recreated_same_id() -> None:
         expected_created_at=lifecycle.created_at,
         expected_updated_at=lifecycle.updated_at,
         expected_spec_digest=mcp_registration_spec_digest(record.spec_ref),
-        expected_credential_config_digest=mcp_credential_config_digest(
-            credential
-        ),
+        expected_credential_config_digest=mcp_credential_config_digest(credential),
         expected_config_revision=lifecycle.config_revision,
         changed_at=lifecycle.updated_at + timedelta(microseconds=1),
     )
@@ -817,7 +707,4 @@ async def test_old_delete_approval_cannot_target_recreated_same_id() -> None:
     assert replay.status_code == 202
     assert replay.json()["hitl_request_id"] != approval_id
     assert await kernel.store.get_adapter(T, "external-docs") is not None
-    assert (
-        await kernel.store.get_mcp_server_lifecycle(T, "external-docs")
-        is not None
-    )
+    assert await kernel.store.get_mcp_server_lifecycle(T, "external-docs") is not None

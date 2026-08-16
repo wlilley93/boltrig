@@ -1,0 +1,9 @@
+id: DIR-0029
+logId: DECISION-0021
+decisionDigest: sha256:94e9bc3272f7924991ad105c4d82c76b6019df9751e79266f81fbba81d73a1f3
+surface: !route
+  route: apps/worker/src/components/shell/ShellNav.tsx
+direction: "Render the four Shared Shell primary routes with compact Codex-style glyphs: compose for New chat, a branching path for Agents, a four-ring grid for Plugins and a clock for Routines."
+magnitude: Change only the glyph geometry and fill or stroke treatment. Preserve Boltrig's existing labels, routes, keyboard shortcut, accessible names, primary-nav icon-box and row-density requirements, selection styling and command-palette behavior.
+directedAt: 2026-08-14T12:32:16Z
+notes: This additive Principal direction refines the Shared Shell icon language without importing Codex product labels or adding routes. The glyph geometry is contract-tested and source-bound in every governed state that renders the Shared Shell. No frameDigest, signed review, conformity or sign-off is asserted.

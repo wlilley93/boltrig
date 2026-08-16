@@ -24,9 +24,6 @@ from __future__ import annotations
 import asyncio
 import datetime as _dt
 import email.utils
-import time
-from collections import deque
-from dataclasses import dataclass
 from typing import Any, AsyncIterator, Awaitable, Callable
 
 import httpx
@@ -38,6 +35,13 @@ from boltrig.adapters.base import (
     Result,
     VerbSpec,
 )
+from boltrig.adapters.http_response import (
+    MAX_JSON_RESPONSE_BYTES,
+    ResponseBoundaryError,
+    bounded_http_response,
+    bounded_response_error,
+)
+from boltrig.adapters.http_policy import RateLimitConfig, RateLimiter, RetryPolicy
 from boltrig.models import InvocationContext
 
 # A per-verb handler: (params, authenticated client, context) -> Result.
@@ -47,76 +51,12 @@ Handler = Callable[
 ]
 
 
-@dataclass(frozen=True)
-class RetryPolicy:
-    """Exponential-backoff retry policy. Only retryable error classes
-    (rate-limited / unavailable) and transport errors are retried (NFR-REL),
-    and only for idempotent verbs (GET/HEAD/OPTIONS) - a mutating call is
-    never re-issued automatically, so a dropped connection cannot duplicate
-    a side effect that actually landed."""
-
-    max_attempts: int = 3
-    base_delay: float = 0.5
-    max_delay: float = 30.0
-    backoff_factor: float = 2.0
-
-
-@dataclass(frozen=True)
-class RateLimitConfig:
-    """Cooperative client-side rate limit (FR-KER-05): ``max`` calls per window."""
-
-    max: int = 600
-    per: str = "minute"  # 'second' | 'minute' | 'hour'
-    scope: str = "tenant"
-
-    def window_seconds(self) -> float:
-        return {"second": 1.0, "minute": 60.0, "hour": 3600.0}.get(self.per, 60.0)
-
-    def as_spec(self) -> dict[str, Any]:
-        """Shape consumed by ``VerbSpec.rate_limit`` and the registry."""
-        return {"per": self.per, "max": self.max, "scope": self.scope}
-
-
 class _HttpFailure(Exception):
     """Internal carrier so handlers can let a mapped error bubble to ``execute``."""
 
     def __init__(self, error: AdapterError) -> None:
         super().__init__(error.message)
         self.error = error
-
-
-class _RateLimiter:
-    """A minimal in-process sliding-window limiter (one per adapter instance).
-
-    This is cooperation, not enforcement (the kernel owns hard limits). It keeps
-    a well-behaved adapter from tripping a backend's 429s in the first place.
-    """
-
-    def __init__(self, config: RateLimitConfig) -> None:
-        self._max = max(0, config.max)
-        self._window = config.window_seconds()
-        self._calls: deque[float] = deque()
-        self._lock = asyncio.Lock()
-
-    async def acquire(self) -> None:
-        if self._max <= 0:
-            return
-        while True:
-            async with self._lock:
-                now = time.monotonic()
-                self._evict(now)
-                if len(self._calls) < self._max:
-                    self._calls.append(now)
-                    return
-                sleep_for = self._window - (now - self._calls[0])
-            # Sleep OUTSIDE the lock (holding it would serialise every caller
-            # behind the slowest window), then re-check under the lock.
-            if sleep_for > 0:
-                await asyncio.sleep(sleep_for)
-
-    def _evict(self, now: float) -> None:
-        while self._calls and now - self._calls[0] > self._window:
-            self._calls.popleft()
 
 
 class HttpAdapter:
@@ -141,7 +81,7 @@ class HttpAdapter:
         self.timeout = timeout
         self.retry = retry or RetryPolicy()
         self.rate_limit = rate_limit or RateLimitConfig()
-        self._limiter = _RateLimiter(self.rate_limit)
+        self._limiter = RateLimiter(self.rate_limit)
         self._default_headers = dict(default_headers or {})
 
     # --- contract surface ----------------------------------------------------
@@ -186,10 +126,15 @@ class HttpAdapter:
             return "unknown"
         try:
             async with httpx.AsyncClient(timeout=min(self.timeout, 5.0)) as client:
-                resp = await client.get(
-                    self.base_url, headers={"User-Agent": self.user_agent}
-                )
-            return "ok" if resp.status_code < 500 else "degraded"
+                async with client.stream(
+                    "GET",
+                    self.base_url,
+                    headers={
+                        "Accept-Encoding": "identity",
+                        "User-Agent": self.user_agent,
+                    },
+                ) as resp:
+                    return "ok" if resp.status_code < 500 else "degraded"
         except httpx.TimeoutException:
             return "degraded"
         except httpx.HTTPError:
@@ -311,15 +256,22 @@ class HttpAdapter:
             attempt += 1
             await self._limiter.acquire()
             try:
-                resp = await client.request(
+                resp, _ = await bounded_http_response(
+                    client,
                     method,
                     url,
+                    max_bytes=MAX_JSON_RESPONSE_BYTES,
                     params=params,
                     json=json,
                     content=content,
                     data=data,
                     headers=headers,
                 )
+            except ResponseBoundaryError as exc:
+                # A size/encoding refusal is deterministic for this response.
+                # Retrying would spend the same bounded allocation again and can
+                # amplify an upstream resource-exhaustion attempt.
+                raise _HttpFailure(bounded_response_error()) from exc
             except httpx.HTTPError as exc:
                 error = self._map_transport_error(exc)
                 if idempotent and attempt < self.retry.max_attempts:

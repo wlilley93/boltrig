@@ -19,7 +19,8 @@ has not been stated.
 Run inside the cv kernel container (the host boundary), e.g.:
 
     docker exec cv-boltrig-kernel-1 python scripts/record_d7_relay.py \
-        --relay-date 2026-08-01 --channel-class in-person
+        --relay-date 2026-08-01 --channel-class in-person \
+        --subject respondent@example.com
 """
 
 from __future__ import annotations
@@ -35,7 +36,6 @@ from pathlib import Path
 # record the relay of a different document under this order's name.
 NOTICE_PATH = Path("docs/findings/2026-07-31-cv-client-notice-D7.md")
 AUDIT_SEQ_RANGE = "262-266"
-SUBJECT = "info@classicalvisas.com"
 REASON = "d7_notice_relayed"
 ORDER = "2026-VJS-CC-BOLTRIG-D7-DISCHARGE-001"
 
@@ -59,7 +59,7 @@ def relay_detail(
     }
 
 
-async def _run(relay_date: str, channel_class: str, root: Path) -> int:
+async def _run(relay_date: str, channel_class: str, subject: str, root: Path) -> int:
     from boltrig.api.bootstrap import build_store
     from boltrig.api.host_boundary import write_host_boundary_security_event
     from boltrig.store.postgres import set_current_tenant
@@ -71,7 +71,7 @@ async def _run(relay_date: str, channel_class: str, root: Path) -> int:
         await write_host_boundary_security_event(
             store,
             tenant="default",
-            subject=SUBJECT,
+            subject=subject,
             reason=REASON,
             detail=relay_detail(
                 digest=digest, relay_date=relay_date, channel_class=channel_class
@@ -99,12 +99,28 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="the channel class the Principal states was used (V1 fact; no default)",
     )
+    parser.add_argument(
+        "--subject",
+        default="",
+        help="the deployment tenant subject that received the relay (no default)",
+    )
     parser.add_argument("--root", default=".", help="repo root holding the notice file")
     args = parser.parse_args(argv)
-    if not (args.relay_date or "").strip() or not (args.channel_class or "").strip():
-        print("record_d7_relay: the V1 facts may not be blank", file=sys.stderr)
+    if (
+        not (args.relay_date or "").strip()
+        or not (args.channel_class or "").strip()
+        or not (args.subject or "").strip()
+    ):
+        print("record_d7_relay: relay facts may not be blank", file=sys.stderr)
         return 2
-    return asyncio.run(_run(args.relay_date.strip(), args.channel_class.strip(), Path(args.root)))
+    return asyncio.run(
+        _run(
+            args.relay_date.strip(),
+            args.channel_class.strip(),
+            args.subject.strip(),
+            Path(args.root),
+        )
+    )
 
 
 if __name__ == "__main__":

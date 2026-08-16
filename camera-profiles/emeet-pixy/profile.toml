@@ -1,0 +1,41 @@
+id = "emeet.pixy.v1"
+label = "EMEET PIXY"
+
+[match]
+vid = 0x328f
+pid = 0x00c0
+
+[standard]
+video = "uvc"
+audio = "uac"
+ptz = "uvc"
+
+[known]
+hid_present = true
+uvc_version = "0x0100"
+# Measured, not assumed: the HID interface (if#4) opens via IOHIDManager with no
+# Input Monitoring prompt, and carries a 31-byte in/out pipe on report id 9. The
+# device volunteers nothing -- a 12s listen produced zero input reports -- so the
+# vendor protocol cannot be learned by observation, only by writing to it. That is
+# why the capabilities below stay unproven.
+hid_report_id = 9
+hid_report_bytes = 31
+hid_unsolicited_reports = false
+ptz_unit = "arcsecond"
+ptz_step_arcseconds = 3600
+
+[unsupported_until_proven]
+tracking = true
+privacy = true
+gesture_control = true
+
+[quirks.pan_tilt]
+ignore_get_len = true
+fixed_length = 8
+
+[quirks.privacy]
+descriptor_invalid = true
+disable_write = true
+
+[capabilities.tracking]
+implementation = "pixy_tracking_v1"

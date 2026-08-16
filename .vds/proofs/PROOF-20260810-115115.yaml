@@ -1,0 +1,23 @@
+id: PROOF-20260810-115115
+kind: states
+status: vacuous
+warrant_id: null
+command: vds proof states
+script: crates/vds-proof/src/states.rs
+exit_code: 3
+rows_considered: 0
+rows_enforced: 0
+rows_skipped_reasons: {}
+violations: []
+notes:
+- '[reach] no figma ledger is present, so `states.drawn` is the register''s own claim and this run did not check it. A pass establishes that the contract is complete, never that a frame exists in the decided-target file. Generate a ledger with `vds figma pull` and re-run to have the claim measured instead: it is a network read, which is why it happens out of band and not inside this proof (VDS S-7(2)(1)).'
+- '[taste] whether a drawn state looks right is reserved to the Principal (VDS S-1(6)). This proof checks that a required state is drawn, never that it is good.'
+- '[parity] a required state that is drawn and not built is recorded here as an informational finding and never fails this gate; the `parity` proof is the gate for that gap (VDS S-7(5)). Informational findings are captured on the proof record and are not printed, so the record is where they are read.'
+- '[register] the register holds no record, so no row can be enforced and this run is vacuous. A states proof over an empty register establishes nothing about any component (VDS S-7(2)(4)).'
+inputs_digest: sha256:c9d4a6bef2e8652ea72d937b578104117b6d3f29ebbd3dd9ccabd614d0347e5b
+digest: sha256:f1b48ce551942240c6c0761dc6d4ee6c4602f550c91d9c96868bc5322317e742
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-10T11:51:12Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

@@ -1,0 +1,26 @@
+id: PROOF-20260810-142322
+kind: reconciliation
+status: passed
+warrant_id: null
+command: vds proof reconciliation
+script: crates/vds-proof/src/reconciliation.rs
+exit_code: 0
+rows_considered: 305
+rows_enforced: 110
+rows_skipped_reasons:
+  demand_currency_reported_not_enforced_vds_s5_7: 65
+  prop_and_state_parity_needs_typescript_analysis: 65
+  record_declares_no_figma_node_to_resolve: 65
+violations: []
+notes:
+- '[reach] limb (c) of VDS S-5(6) IS reached by this run: every register entry''s Figma node id was resolved against the figma ledger, which `vds figma pull` generated out of band because the resolution is a network call VDS S-7(2)(1) forbids inside a proof. A record naming a node that is not in the decided-target file is a finding here (R7). What this does NOT establish is that the ledger is current with the file as it stands NOW: it is current with the file as it was when it was pulled, and its own content digest is recorded on this run so a reader can tell which pull it was.'
+- '[reach] limb (d) of VDS S-5(6), whether prop and state contracts agree between the record and the code, is NOT checked by this run. Comparing them requires reading and analysing the component''s TypeScript source, which this build does not do, so every record with a declared code counterpart was counted and skipped rather than passed. A record whose props have drifted from its component''s signature passes this run.'
+- '[reach] this run establishes limbs (a), (b) and (c) of VDS S-5(6) over the declared surface, and not (d). Limb (c) is reached because a figma ledger was present and current; limb (d), whether prop and state contracts agree between the record and the code, is the `parity` proof''s and is not attempted here. A warrant citing this proof must not be described as covering the limb it did not reach.'
+- '[carve-out] a library file named index.*, *.test.*, *.spec.* or *.stories.* is counted and NOT enforced against the register under limb (b): a barrel re-exports components rather than defining one, and a test or a story is not a shipped component. A component defined inside a file with one of those names is therefore outside this proof, and the skip counts above are where that carve-out is visible rather than assumed.'
+inputs_digest: sha256:03207fd7c5f41ee137d6f8926d90022c939291334484b3a49c6271f19d9482cc
+digest: sha256:593d20faee0c3af365f3ded74b77311e499adda395d51d28cb60acd3d7fcd388
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-10T14:23:21Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

@@ -1,0 +1,9 @@
+id: DECISION-0011
+at: 2026-08-13T13:46:21Z
+by: williamlilley
+decision: Boltrig will expose Ask for approval, Approve for me, and Full access as caller-owned delegated-agent approval postures in Chat and Autonomy settings, enforced by the kernel without widening tool authority.
+court_required: false
+why: The Principal explicitly directed a three-way agentic-tool approval control using the supplied Codex reference. Boltrig already had grants, authored consequence, exact-request HITL and a deployment blocklist, but no caller-owned posture; a client-only selector would therefore have lied. The disposable implementation fork is to store one user-scoped posture and consult it only at the existing kernel HITL step for delegated adapter calls, while keeping grants, deployment blocks, control and reasoning-agent gates, direct-human gates, rate limits, credential isolation and audit unchanged.
+basis:
+- USER-DIRECTION-2026-08-13:AGENT-TOOL-APPROVAL-POSTURE
+- BOLTRIG-DOCTRINE:ONE-KERNEL-CHOKEPOINT-AND-POLICY-AS-DATA

@@ -1,12 +1,90 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { DeviceEnrollmentStart, DeviceRootScope } from "@wlilley93/boltrig-web-sdk";
+import {
+  BoltrigApiError,
+  type DeviceEnrollmentStart,
+  type DeviceRootScope,
+  type LoginResponse,
+  type TwoFactorChallengeResponse,
+} from "@wlilley93/boltrig-web-sdk";
 import workerPackage from "../package.json";
 
 import { configuredApiOrigin } from "./apiOrigin";
 
+export { desktopApiFetch } from "./desktopApiTransport";
+export {
+  desktopCameraDiscover,
+  desktopCameraStatus,
+  listenDesktopCameraDiscovery,
+  verifyDesktopCameraPtz,
+  verifyDesktopCameraSnapshot,
+} from "./desktopCamera";
+export type {
+  DesktopCamera,
+  DesktopCameraCapability,
+  DesktopCameraDiscoveryStatus,
+  DesktopCameraVerification,
+} from "./desktopCamera";
+
 export const isDesktop = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 export const workerVersion = workerPackage.version;
+
+interface DesktopAccountResponse {
+  http_status: number;
+  body: unknown;
+}
+
+function accountResponse<T>(response: DesktopAccountResponse, tolerateStatus: boolean): T {
+  if (!tolerateStatus && response.http_status >= 400) {
+    throw new BoltrigApiError(response.http_status, response.body);
+  }
+  return response.body as T;
+}
+
+export async function desktopAccountLogin(
+  email: string,
+  password: string,
+): Promise<LoginResponse> {
+  if (!isDesktop) throw new Error("desktop_runtime_required");
+  return accountResponse(await invoke<DesktopAccountResponse>("desktop_account_login", {
+    email,
+    password,
+  }), true);
+}
+
+export async function desktopAccountChallenge(
+  challengeToken: string,
+  code: string,
+): Promise<TwoFactorChallengeResponse> {
+  if (!isDesktop) throw new Error("desktop_runtime_required");
+  return accountResponse(await invoke<DesktopAccountResponse>("desktop_account_challenge", {
+    challengeToken,
+    code,
+  }), true);
+}
+
+export async function desktopAccountRefresh(): Promise<{
+  status: string;
+  csrf_token?: string;
+  reason?: string;
+}> {
+  if (!isDesktop) throw new Error("desktop_runtime_required");
+  return accountResponse(
+    await invoke<DesktopAccountResponse>("desktop_account_refresh"),
+    false,
+  );
+}
+
+export async function desktopAccountLogout(): Promise<{
+  status: string;
+  reason?: string;
+}> {
+  if (!isDesktop) throw new Error("desktop_runtime_required");
+  return accountResponse(
+    await invoke<DesktopAccountResponse>("desktop_account_logout"),
+    true,
+  );
+}
 
 export function hasDesktopRuntime(): boolean {
   return isDesktop;
@@ -178,66 +256,6 @@ export interface DesktopEnrollmentView {
   public_key_fingerprint: string;
   session_expires_at: string;
   lease_verifier_key_id: string;
-}
-
-export function serializeDesktopEnrollment(
-  enrollment: DeviceEnrollmentStart,
-): string {
-  return JSON.stringify({
-    version: 1,
-    authorization_code: enrollment.authorization_code,
-    expires_at: enrollment.expires_at,
-    verification_uri: enrollment.verification_uri,
-    lease_verifier: enrollment.lease_verifier,
-  });
-}
-
-export function parseDesktopEnrollment(value: string): DeviceEnrollmentStart {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    throw new Error("invalid_device_enrollment_bundle");
-  }
-  if (!parsed || typeof parsed !== "object") {
-    throw new Error("invalid_device_enrollment_bundle");
-  }
-  const candidate = parsed as Record<string, unknown>;
-  const verifier = candidate.lease_verifier;
-  if (
-    candidate.version !== 1
-    || typeof candidate.authorization_code !== "string"
-    || candidate.authorization_code.length === 0
-    || candidate.authorization_code.length > 4_096
-    || /\s/.test(candidate.authorization_code)
-    || typeof candidate.expires_at !== "string"
-    || typeof candidate.verification_uri !== "string"
-    || !verifier
-    || typeof verifier !== "object"
-  ) {
-    throw new Error("invalid_device_enrollment_bundle");
-  }
-  const verifierFields = verifier as Record<string, unknown>;
-  if (
-    typeof verifierFields.algorithm !== "string"
-    || typeof verifierFields.key_id !== "string"
-    || typeof verifierFields.public_key !== "string"
-    || !verifierFields.algorithm
-    || !verifierFields.key_id
-    || !verifierFields.public_key
-  ) {
-    throw new Error("invalid_device_enrollment_bundle");
-  }
-  return {
-    authorization_code: candidate.authorization_code,
-    expires_at: candidate.expires_at,
-    verification_uri: candidate.verification_uri,
-    lease_verifier: {
-      algorithm: verifierFields.algorithm,
-      key_id: verifierFields.key_id,
-      public_key: verifierFields.public_key,
-    },
-  };
 }
 
 export interface DesktopRootView {

@@ -45,6 +45,127 @@ afterEach(() => {
 });
 
 describe("narrow Worker desktop wrappers", () => {
+  it("uses fixed native account commands without exposing an API origin or session secret", async () => {
+    tauri.invoke
+      .mockResolvedValueOnce({
+        http_status: 200,
+        body: { status: "ok", csrf_token: "csrf-from-native" },
+      })
+      .mockResolvedValueOnce({
+        http_status: 200,
+        body: { status: "ok", csrf_token: "rotated-csrf" },
+      });
+    const desktop = await import("../src/desktop");
+
+    expect(await desktop.desktopAccountLogin(
+      "owner@example.test",
+      "account-password",
+    )).toMatchObject({ status: "ok", csrf_token: "csrf-from-native" });
+    expect(await desktop.desktopAccountRefresh())
+      .toMatchObject({ status: "ok", csrf_token: "rotated-csrf" });
+
+    expect(tauri.invoke).toHaveBeenNthCalledWith(1, "desktop_account_login", {
+      email: "owner@example.test",
+      password: "account-password",
+    });
+    expect(tauri.invoke).toHaveBeenNthCalledWith(2, "desktop_account_refresh");
+    const serialized = JSON.stringify(tauri.invoke.mock.calls);
+    expect(serialized).not.toContain("apiOrigin");
+    expect(serialized).not.toContain("session_token");
+  });
+
+  it("uses fixed challenge and logout commands and preserves typed HTTP failures", async () => {
+    tauri.invoke
+      .mockResolvedValueOnce({
+        http_status: 200,
+        body: { status: "ok", csrf_token: "challenge-csrf" },
+      })
+      .mockResolvedValueOnce({
+        http_status: 401,
+        body: { status: "error", reason: "session expired" },
+      })
+      .mockResolvedValueOnce({
+        http_status: 200,
+        body: { status: "ok" },
+      });
+    const desktop = await import("../src/desktop");
+
+    await expect(desktop.desktopAccountChallenge("opaque-challenge", "123456"))
+      .resolves.toMatchObject({ status: "ok", csrf_token: "challenge-csrf" });
+    await expect(desktop.desktopAccountRefresh()).rejects.toMatchObject({
+      status: 401,
+      body: { status: "error", reason: "session expired" },
+    });
+    await expect(desktop.desktopAccountLogout()).resolves.toEqual({ status: "ok" });
+
+    expect(tauri.invoke.mock.calls).toEqual([
+      ["desktop_account_challenge", {
+        challengeToken: "opaque-challenge",
+        code: "123456",
+      }],
+      ["desktop_account_refresh"],
+      ["desktop_account_logout"],
+    ]);
+  });
+
+  it("returns same-origin API responses through the bounded native session transport", async () => {
+    tauri.invoke.mockImplementation(async (command, args) => {
+      if (command !== "desktop_api_request") return undefined;
+      const metadata = new TextEncoder().encode(JSON.stringify({
+        status: 200,
+        status_text: "OK",
+        headers: [["content-type", "application/json"]],
+      }));
+      const body = new TextEncoder().encode('{"status":"ok"}');
+      const envelope = new Uint8Array(8 + metadata.byteLength + body.byteLength);
+      envelope.set([0x42, 0x41, 0x50, 0x49]);
+      new DataView(envelope.buffer).setUint32(4, metadata.byteLength, true);
+      envelope.set(metadata, 8);
+      envelope.set(body, 8 + metadata.byteLength);
+      return envelope;
+    });
+    const desktop = await import("../src/desktop");
+
+    const response = await desktop.desktopApiFetch(
+      "https://kernel.boltrig.test/v1/devices?limit=10",
+      { headers: { accept: "application/json" } },
+    );
+    await expect(response.json()).resolves.toEqual({ status: "ok" });
+    expect(response.url).toBe("https://kernel.boltrig.test/v1/devices?limit=10");
+    expect(tauri.invoke).toHaveBeenCalledWith("desktop_api_request", expect.objectContaining({
+      method: "GET",
+      path: "/v1/devices?limit=10",
+      headers: [["accept", "application/json"]],
+      body: [],
+    }));
+    expect(JSON.stringify(tauri.invoke.mock.calls)).not.toContain("boltrig_session");
+  });
+
+  it("refuses cross-origin and non-API native requests before invoking Rust", async () => {
+    const desktop = await import("../src/desktop");
+    await expect(desktop.desktopApiFetch("https://attacker.invalid/v1/devices"))
+      .rejects.toThrow("desktop_api_path_invalid");
+    await expect(desktop.desktopApiFetch("https://kernel.boltrig.test/healthz"))
+      .rejects.toThrow("desktop_api_path_invalid");
+    expect(tauri.invoke).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed native response envelopes and pre-aborted requests", async () => {
+    tauri.invoke.mockResolvedValue(new Uint8Array([0x42, 0x41, 0x44, 0x21]));
+    const desktop = await import("../src/desktop");
+    await expect(desktop.desktopApiFetch("https://kernel.boltrig.test/v1/devices"))
+      .rejects.toThrow("desktop_api_response_invalid");
+
+    tauri.invoke.mockClear();
+    const abort = new AbortController();
+    abort.abort();
+    await expect(desktop.desktopApiFetch(
+      "https://kernel.boltrig.test/v1/devices",
+      { signal: abort.signal },
+    )).rejects.toMatchObject({ name: "AbortError" });
+    expect(tauri.invoke).not.toHaveBeenCalled();
+  });
+
   it("passes the one-time code and exact verifier only to native enrollment", async () => {
     tauri.invoke.mockResolvedValue({
       device_id: "device_1",

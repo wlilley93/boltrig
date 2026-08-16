@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   AiKeyLevel,
+  AiKeyModality,
   AiKeyProposalStatus,
   AiKeyProposalView,
   AiKeyView,
@@ -17,6 +18,7 @@ import {
 interface DeleteAiKeyInput {
   level: AiKeyLevel;
   scopeId: string;
+  modality: AiKeyModality;
 }
 
 const ACTIVE_PROPOSAL_STATES = new Set<AiKeyProposalStatus>([
@@ -32,6 +34,7 @@ export function AiKeyManagement() {
   const [scopeId, setScopeId] = useState("");
   const [provider, setProvider] = useState("openai");
   const [model, setModel] = useState("");
+  const [modality, setModality] = useState<AiKeyModality>("text");
   const [baseUrl, setBaseUrl] = useState("");
   const [proposal, setProposal] = useState<AiKeyProposalView | null>(null);
   const [proposalBusy, setProposalBusy] = useState(false);
@@ -46,13 +49,13 @@ export function AiKeyManagement() {
     DeleteAiKeyResponse
   >({
     isCurrent: (input) => keys.some(
-      (item) => item.level === input.level && item.scope_id === input.scopeId,
+      (item) => item.level === input.level
+        && item.scope_id === input.scopeId
+        && (item.modality ?? "text") === input.modality,
     ),
-    replay: (input, approvalId) => client.deleteAiKey(
-      input.level,
-      input.scopeId,
-      approvalId,
-    ),
+    replay: (input, approvalId) => input.modality === "text"
+      ? client.deleteAiKey(input.level, input.scopeId, approvalId)
+      : client.deleteAiKey(input.level, input.scopeId, approvalId, input.modality),
     onApplied: async () => {
       setMessage("AI key reference removed.");
       await refresh(false);
@@ -118,6 +121,7 @@ export function AiKeyManagement() {
       scope_id: scopeId.trim() || undefined,
       provider: provider.trim(),
       model: model.trim(),
+      ...(modality === "vision" ? { modality } : {}),
       base_url: baseUrl.trim() || undefined,
       api_key: input.value,
     });
@@ -182,17 +186,23 @@ export function AiKeyManagement() {
   }
 
   async function remove(item: AiKeyView) {
-    const key = `${item.level}:${item.scope_id}`;
+    const key = `${item.level}:${item.scope_id}:${item.modality ?? "text"}`;
     if (armed !== key) {
       deleteFinalizer.invalidate();
       setArmed(key);
       return;
     }
-    const input = { level: item.level, scopeId: item.scope_id };
-    const result = await client.deleteAiKey(input.level, input.scopeId);
+    const input = {
+      level: item.level,
+      scopeId: item.scope_id,
+      modality: (item.modality ?? "text") as AiKeyModality,
+    };
+    const result = input.modality === "text"
+      ? await client.deleteAiKey(input.level, input.scopeId)
+      : await client.deleteAiKey(input.level, input.scopeId, undefined, input.modality);
     setArmed("");
     if (deleteFinalizer.begin(input, result, "AI key removal")) {
-      setMessage("Key removal is waiting for approval in Inbox.");
+      setMessage("Key removal is waiting for approval in the originating chat.");
       return;
     }
     setMessage(
@@ -207,7 +217,7 @@ export function AiKeyManagement() {
     <section className="settings-card author-form">
       <p className="eyebrow">AI provider keys</p>
       <h2>Sealed routing credentials</h2>
-      <p>Keys are envelope-sealed before approval. Worker, Inbox, audit and later reads receive only bounded metadata or configured state.</p>
+      <p>Keys are envelope-sealed before approval. Worker, audit and later reads receive only bounded metadata or configured state.</p>
       {!allowOwn && level !== "org" && <p className="notice">This organisation currently disables workspace and personal AI keys.</p>}
       <form className="author-form" onSubmit={(event) => void save(event)}>
         <div className="author-grid">
@@ -215,6 +225,7 @@ export function AiKeyManagement() {
           <label><span>Scope id {level === "workspace" ? "(required)" : "(defaults to current)"}</span><input className="field-control" required={level === "workspace"} value={scopeId} onChange={(event) => { invalidateProposalForEdit(); setScopeId(event.target.value); }} /></label>
           <label><span>Provider</span><input className="field-control" required value={provider} onChange={(event) => { invalidateProposalForEdit(); setProvider(event.target.value); }} /></label>
           <label><span>Model</span><input className="field-control" required value={model} onChange={(event) => { invalidateProposalForEdit(); setModel(event.target.value); }} /></label>
+          <label><span>Use for</span><select className="field-control" value={modality} onChange={(event) => { invalidateProposalForEdit(); setModality(event.target.value as AiKeyModality); }}><option value="text">Text · main API key</option><option value="vision">Vision · optional main vision key</option></select></label>
           <label><span>Base URL (optional)</span><input className="field-control" value={baseUrl} onChange={(event) => { invalidateProposalForEdit(); setBaseUrl(event.target.value); }} /></label>
           <label><span>API key (write only)</span><input ref={apiKeyInput} className="field-control" type="password" autoComplete="off" required onChange={invalidateProposalForEdit} /></label>
         </div>
@@ -229,10 +240,10 @@ export function AiKeyManagement() {
       )}
       <div className="data-list" aria-label="Configured AI keys">
         {keys.map((item) => (
-          <div className="data-row static" key={`${item.level}:${item.scope_id}`}>
+          <div className="data-row static" key={`${item.level}:${item.scope_id}:${item.modality ?? "text"}`}>
             <span className={`activity-dot ${item.has_key ? "ok" : "unknown"}`} />
-            <span className="data-row-copy"><strong>{item.provider} · {item.model}</strong><small>{item.level} · {item.scope_id} · secret {item.has_key ? "configured" : "absent"}</small></span>
-            <button className={armed === `${item.level}:${item.scope_id}` ? "danger-button armed" : "danger-button"} onClick={() => void remove(item)}>{armed === `${item.level}:${item.scope_id}` ? "Confirm remove" : "Remove"}</button>
+            <span className="data-row-copy"><strong>{item.provider} · {item.model}</strong><small>{item.level} · {item.scope_id} · {item.modality ?? "text"} · secret {item.has_key ? "configured" : "absent"}</small></span>
+            <button className={armed === `${item.level}:${item.scope_id}:${item.modality ?? "text"}` ? "danger-button armed" : "danger-button"} onClick={() => void remove(item)}>{armed === `${item.level}:${item.scope_id}:${item.modality ?? "text"}` ? "Confirm remove" : "Remove"}</button>
           </div>
         ))}
       </div>
@@ -266,7 +277,7 @@ function AiKeyProposalFinalizer({
   const copy: Record<AiKeyProposalStatus, [string, string]> = {
     pending: [
       "Sealed key proposal is waiting for approval",
-      "Only its provider, model, scope and opaque staged identity are available to Inbox.",
+      "Only its provider, model, scope and opaque staged identity are available to the approval flow.",
     ],
     approved: [
       "Sealed key proposal is approved",

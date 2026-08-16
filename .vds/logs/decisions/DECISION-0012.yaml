@@ -1,0 +1,9 @@
+id: DECISION-0012
+at: 2026-08-14T09:26:54Z
+by: williamlilley
+decision: The primary Boltrig shell will identify and switch the user's selected installed companion, replacing its static wordmark, with Familiar and Jarvis supplied by the real character registry.
+court_required: false
+why: The Principal supplied the Codex product-switcher crop directly against Boltrig's static wordmark. Copying ChatGPT and Codex labels would fabricate products, while Boltrig already has one server-backed agent.character preference and a registry whose two public companions are Familiar and Jarvis; exposing that state in the same compact interaction preserves the requested hierarchy and remains truthful.
+basis:
+- USER-DIRECTION-2026-08-14:PRIMARY-SHELL-SWITCHER
+- BOLTRIG-CONTRACT:AGENT-CHARACTER-SETTING-AND-REGISTRY

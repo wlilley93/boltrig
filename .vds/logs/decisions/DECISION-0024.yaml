@@ -1,0 +1,11 @@
+id: DECISION-0024
+at: 2026-08-14T16:22:07Z
+by: williamlilley
+decision: Voice mode gives Familiar or Jarvis the full available desktop stage, keeps typed chat present, separates microphone and character playback mute, and lets each user opt into reading completed text replies in the selected character's configured voice.
+court_required: false
+why: The Principal explicitly directed one coherent voice experience across live calls and ordinary chat. The implementation can reuse the installed character registry, caller-scoped settings, governed voice.speak binding and existing realtime media graph without inventing a second character, bypassing approval, exposing credentials or sending local Codex context to a voice provider.
+basis:
+- USER-DIRECTION-2026-08-14:FULL-SCREEN-CHARACTER-VOICE
+- BOLTRIG-CONTRACT:INSTALLED-FAMILIAR-AND-JARVIS
+- BOLTRIG-CONTRACT:CALLER-SCOPED-VOICE-SETTINGS
+- BOLTRIG-CONTRACT:GOVERNED-VOICE-SPEAK

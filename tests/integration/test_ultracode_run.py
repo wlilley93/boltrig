@@ -31,7 +31,7 @@ async def _kernel() -> Kernel:
         AgentCapability("script-worker", T, "python-script", ["*"], 2, True, "cheap")
     )
     await store.upsert_capability(
-        AgentCapability("opencode-worker", T, "python-script", ["*"], 2, True, "expensive")
+        AgentCapability("codex-worker", T, "python-script", ["*"], 2, True, "expensive")
     )
     return Kernel(store)
 
@@ -59,7 +59,7 @@ def _workflow() -> dict:
     return {
         "workflow_name": "demo",
         "goal": "Use phased agents to inspect and then plan.",
-        "defaults": {"capability": "opencode-worker", "max_total_agents": 4},
+        "defaults": {"capability": "codex-worker", "max_total_agents": 4},
         "phases": [
             {
                 "id": "phase-01-discovery",
@@ -120,7 +120,7 @@ async def test_ultracode_run_executes_phases_through_preferred_capability():
         "phase-02-plan",
     ]
     agents = [agent for phase in record["phases"] for agent in phase["agents"]]
-    assert {agent["result"]["agent_type"] for agent in agents} == {"opencode-worker"}
+    assert {agent["result"]["agent_type"] for agent in agents} == {"codex-worker"}
     checkpoints = {c.step: c.status for c in await kernel.store.list_checkpoints(T, "uc-run")}
     assert checkpoints == {
         "ultracode:phase-01-discovery": "completed",
@@ -154,7 +154,7 @@ async def test_mastra_plan_payload_compiles_and_runs_through_ultracode_spine():
         "mastra_plan": {
             "name": "mastra-demo",
             "goal": "Plan from a graph-shaped orchestration contract.",
-            "defaults": {"capability": "opencode-worker", "max_total_agents": 3},
+            "defaults": {"capability": "codex-worker", "max_total_agents": 3},
             "steps": [
                 {"id": "discover", "agents": [{"id": "map", "instructions": "Map the repo."}]},
                 {

@@ -759,9 +759,11 @@ test("Worker build, knowledge, memory, and run controls use canonical routes", a
     model: "approved",
     api_key: "write-only",
   });
+  await client.activateAiKey({ level: "user", scope_id: "user/a" });
   await client.aiKeyProposals();
   await client.aiKeyProposal("proposal/a");
   await client.finalizeAiKeyProposal("proposal/a");
+  await client.approveAiKeyProposal("proposal/a");
   await client.invalidateAiKeyProposal("proposal/a");
   await client.deleteAiKey("user", "user/a", "approval/a");
   await client.agentCapabilities();
@@ -866,9 +868,11 @@ test("Worker build, knowledge, memory, and run controls use canonical routes", a
     "/v1/capabilities/changelog",
     "/v1/ai-keys",
     "/v1/ai-keys",
+    "/v1/ai-keys/activate",
     "/v1/ai-keys/proposals",
     "/v1/ai-keys/proposals/proposal%2Fa",
     "/v1/ai-keys/proposals/proposal%2Fa/finalize",
+    "/v1/ai-keys/proposals/proposal%2Fa/approve",
     "/v1/ai-keys/proposals/proposal%2Fa",
     "/v1/ai-keys/user/user%2Fa",
     "/v1/agent-capabilities",

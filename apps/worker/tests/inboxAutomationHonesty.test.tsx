@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({
   answerQuestion: vi.fn(),
   capabilities: vi.fn(),
+  capabilityChangelog: vi.fn(),
   channels: vi.fn(),
   hitl: vi.fn(),
   hitlPolicy: vi.fn(),
@@ -58,6 +59,7 @@ beforeEach(() => {
     },
   }));
   api.capabilities.mockResolvedValue({ verbs: [] });
+  api.capabilityChangelog.mockResolvedValue({ changes: [] });
   api.channels.mockResolvedValue({ channels: [] });
   api.workflowRuns.mockImplementation(async (id: string) => ({
     workflow_id: id,
@@ -140,6 +142,10 @@ describe("Automation primary-surface honesty", () => {
 
     await act(async () => request.resolve({ workflows: [] }));
     expect(await screen.findByText("No saved workflows yet.")).toBeTruthy();
+    expect(screen.getByText(/Repeatable work boltrig can run the same way each time/))
+      .toBeTruthy();
+    expect(screen.queryByText(/reconciled on a loop|what it queued|held as data/i))
+      .toBeNull();
   });
 
   it.each([
@@ -154,26 +160,21 @@ describe("Automation primary-surface honesty", () => {
     expect(screen.queryByText("No saved workflows yet.")).toBeNull();
   });
 
-  it("keeps the last authorized workflow list on a temporary refresh failure", async () => {
-    api.workflows
-      .mockResolvedValueOnce({
-        workflows: [{
-          id: "retained-workflow",
-          version: "1.0.0",
-          source: "precreated",
-          status: "active",
-          schedule: null,
-        }],
-      })
-      .mockRejectedValueOnce(new BoltrigApiError(503, {}));
+  it("keeps the authorized workflow list without exposing a duplicate refresh bar", async () => {
+    api.workflows.mockResolvedValueOnce({
+      workflows: [{
+        id: "retained-workflow",
+        version: "1.0.0",
+        source: "precreated",
+        status: "active",
+        schedule: null,
+      }],
+    });
 
     render(<AutomationsView />);
     expect(await screen.findByText("retained-workflow")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Refresh workflows" }));
-
-    expect(await screen.findByText(/Showing the last loaded definitions/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Refresh workflows" })).toBeNull();
     expect(screen.getByText("retained-workflow")).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Automations unavailable" })).toBeNull();
   });
 
   it("never renders workflow A after workflow B is selected", async () => {
@@ -277,23 +278,32 @@ describe("Automation primary-surface honesty", () => {
     render(<AutomationsView />);
     fireEvent.click(await screen.findByRole("button", { name: /advanced/ }));
 
-    const codeStep = await screen.findByLabelText("Step script");
-    const loopStep = screen.getByLabelText("Step repeat");
-    const bodyStep = screen.getByLabelText("Step create");
-    expect((within(codeStep).getByLabelText("Governed action") as HTMLInputElement).disabled)
+    // The editor is now a canvas: each step is a node whose fields live in
+    // the inspector rail, one selection at a time. Selecting the preserved
+    // code step must show every field locked; selecting the loop must keep
+    // the bounded-loop contract visible and editable.
+    const rail = await screen.findByLabelText("Routine rail");
+
+    fireEvent.click(await screen.findByRole("button", { name: /^Step script/ }));
+    expect((within(rail).getByLabelText("Action") as HTMLInputElement).disabled)
       .toBe(true);
-    expect((within(codeStep).getByLabelText("Parameters (JSON object)") as HTMLTextAreaElement).disabled)
+    expect((within(rail).getByLabelText("Parameters (JSON object)") as HTMLTextAreaElement).disabled)
       .toBe(true);
-    expect((within(loopStep).getByLabelText("Governed action") as HTMLInputElement).disabled)
+    expect((within(rail).getByRole("button", { name: "Remove script" }) as HTMLButtonElement).disabled)
+      .toBe(true);
+    // The rail states the never-runs contract in both registers (the read-first
+    // fact and the locked fields), so more than one match is the honest shape.
+    expect(within(rail).getAllByText(/executed=false/).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Step repeat/ }));
+    expect((within(rail).getByLabelText("Action") as HTMLInputElement).disabled)
       .toBe(false);
-    expect((within(loopStep).getByLabelText("Parameters (JSON object)") as HTMLTextAreaElement).disabled)
+    expect((within(rail).getByLabelText("Parameters (JSON object)") as HTMLTextAreaElement).disabled)
       .toBe(false);
-    expect((within(codeStep).getByRole("button", { name: "Remove script" }) as HTMLButtonElement).disabled)
-      .toBe(true);
-    expect(within(codeStep).getByText(/executed=false/)).toBeTruthy();
-    expect(within(loopStep).getByText(/at most 100 items/))
-      .toBeTruthy();
-    const bindings = within(bodyStep).getByLabelText("Loop bindings for create");
+    expect(within(rail).getByText(/at most 100 items/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Step create/ }));
+    const bindings = within(rail).getByLabelText("Loop bindings for create");
     expect((bindings as HTMLTextAreaElement).disabled).toBe(false);
     expect((bindings as HTMLTextAreaElement).value).toContain("\"title\": \"item\"");
     expect((bindings as HTMLTextAreaElement).value).toContain("\"position\": \"index\"");

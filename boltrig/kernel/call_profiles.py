@@ -22,23 +22,30 @@ async def resolve_call_profiles(kernel, principal, body: dict):
         )
         if capability is None:
             return None, "agent_profile_not_found"
-        if capability.model_endpoint:
+        realtime_endpoint_id = capability.endpoint_for("realtime")
+        if realtime_endpoint_id:
             bound_endpoint = await kernel.store.get_model_endpoint(
-                principal.tenant_id, capability.model_endpoint
+                principal.tenant_id, realtime_endpoint_id
             )
-            if bound_endpoint is None or not bound_endpoint.is_active:
+            if (
+                bound_endpoint is None
+                or not bound_endpoint.is_active
+                or not bound_endpoint.supports("realtime")
+            ):
                 return None, "agent_model_endpoint_unavailable"
 
     route = resolve_realtime_model_profile(model_id) if model_id else None
     if model_id and route is None:
         return None, "model_profile_not_realtime_capable"
-    if route is None and capability is not None and capability.model_endpoint:
+    realtime_endpoint_id = capability.endpoint_for("realtime") if capability else None
+    if route is None and capability is not None and realtime_endpoint_id:
         endpoint = await kernel.store.get_model_endpoint(
-            principal.tenant_id, capability.model_endpoint
+            principal.tenant_id, realtime_endpoint_id
         )
         if (
             endpoint is not None
             and endpoint.is_active
+            and endpoint.supports("realtime")
             and endpoint.kind.lower() in {"xai", "x.ai", "grok"}
         ):
             route = {

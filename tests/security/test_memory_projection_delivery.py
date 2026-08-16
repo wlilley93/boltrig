@@ -20,7 +20,7 @@ TENANT = "acme"
 
 
 class _Projection:
-    id = "mem0-private-provider"
+    id = "private-test-projection"
 
     def __init__(self, *, failures: int) -> None:
         self.failures = failures

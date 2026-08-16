@@ -20,7 +20,7 @@ from boltrig.store import InMemoryStore
 from boltrig.workflows import WorkflowLibrary
 from boltrig.workflows.generator import generate_workflow
 
-T = "acme"
+T = "default"
 
 
 async def _kernel() -> Kernel:

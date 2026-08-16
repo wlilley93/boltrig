@@ -59,7 +59,7 @@ reduced.
 |---|---|
 | approval cleared with no independent reviewer | `audit_log` seq **265**, 2026-07-29 10:23:17 UTC, verb `hitl.development_posture_approval`, detail `development_posture: true` |
 | the action approved | `audit_log` seq **266**, verb `control.adapter.activate`, status `ok` |
-| the request and the approver were the same person | seq 263 (`requested_by`) and seq 265 (responder) both `will.lilley93@gmail.com` |
+| the request and the approver were the same deployment operator | seq 263 (`requested_by`) and seq 265 (responder) both carried the operator identity |
 | the posture is withdrawn | `boltrig-tenants/cv/manifest.yaml`, the block replacing the posture declaration, dated 2026-07-29, citing D1 |
 | 99 -> 443 | the finding recorded in D7 of the order |
 | current count 578 | `select count(*) from verbs` on `cvboltrig`, 2026-07-31 |

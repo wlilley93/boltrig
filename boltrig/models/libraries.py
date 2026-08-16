@@ -24,6 +24,13 @@ from .base import (
 # tiers must not quietly sort after "expensive" while billing as "standard".
 COST_TIERS: tuple[str, ...] = ("cheap", "standard", "expensive")
 
+# ``MODEL_MODALITIES`` keeps routes capability-shaped rather than provider-shaped.
+# ``stt`` and ``tts`` are separate so a transcription adapter can never be
+# selected for synthesis (or vice versa); ``realtime`` is reserved for a
+# duplex voice session. ``AgentCapability.model_routes`` stores endpoint ids,
+# never the kernel-owned credential material.
+MODEL_MODALITIES: tuple[str, ...] = ("text", "vision", "stt", "tts", "realtime")
+
 
 def validate_cost_tier(value: str) -> str:
     if value not in COST_TIERS:
@@ -84,6 +91,14 @@ class AgentCapability:
     is_ephemeral: bool
     cost_tier: str  # cheap | standard | expensive
     model_endpoint: str | None = None
+    # Optional vision override. When absent, ``model_endpoint`` must be a
+    # multimodal endpoint for vision work; this keeps old profiles valid while
+    # making split text/vision routing explicit and auditable.
+    vision_model_endpoint: str | None = None
+    # Generic per-agent overrides.  Legacy text/vision columns remain the
+    # compatibility projection; new modality routes live here so adding a
+    # modality does not require another column or a new approval shape.
+    model_routes: dict[str, str] = field(default_factory=dict)
     # Provenance for scoped-declarative reconciliation ([2026] LEXBY LOG-2026-07-17):
     # 'manifest' rows are authored by the fleet manifest and are reconciled
     # declaratively (a name dropped from a redeployed manifest is deactivated);
@@ -97,6 +112,23 @@ class AgentCapability:
 
     def __post_init__(self) -> None:
         validate_cost_tier(self.cost_tier)
+        routes = {
+            str(modality).strip().lower(): str(endpoint).strip()
+            for modality, endpoint in self.model_routes.items()
+            if str(modality).strip() and str(endpoint).strip()
+        }
+        invalid = set(routes) - set(MODEL_MODALITIES)
+        if invalid:
+            raise ValueError(f"unsupported model route modalities: {sorted(invalid)}")
+        if self.model_endpoint:
+            routes["text"] = self.model_endpoint
+        if self.vision_model_endpoint:
+            routes["vision"] = self.vision_model_endpoint
+        object.__setattr__(self, "model_routes", routes)
+
+    def endpoint_for(self, modality: str) -> str | None:
+        """Return the explicit route for a modality, if one is authored."""
+        return self.model_routes.get(str(modality).strip().lower())
 
 
 class WorkflowSource(str, Enum):
@@ -155,7 +187,7 @@ class WorkflowDefinition:
 class ModelEndpoint:
     id: str  # "anthropic-prod", "local-vllm"
     tenant_id: TenantId
-    kind: str  # 'anthropic' | 'openai' | 'ollama' | 'vllm'
+    kind: str  # 'bifrost' | 'anthropic' | 'openai' | 'ollama' | 'vllm'
     model: str  # pinned model/version
     base_url: str | None = None
     # Stored reference for an explicit, future health-based failover decision.
@@ -164,6 +196,29 @@ class ModelEndpoint:
     fallback: str | None = None
     data_class: str = "standard"  # standard | sensitive (sensitive => local only)
     is_active: bool = True
+    # Old rows default to text-only. An endpoint must explicitly advertise
+    # vision before an agent can use it for image-bearing work.
+    modalities: tuple[str, ...] = ("text",)
+    # Monotonic store generation used by approved compare-and-swap mutations.
+    revision: int = 1
+
+    def __post_init__(self) -> None:
+        if type(self.revision) is not int or self.revision < 1:
+            raise ValueError("model endpoint revision must be a positive integer")
+        values = tuple(
+            dict.fromkeys(
+                str(item).strip().lower()
+                for item in self.modalities
+                if str(item).strip()
+            )
+        )
+        invalid = set(values) - set(MODEL_MODALITIES)
+        if invalid:
+            raise ValueError(f"unsupported model modalities: {sorted(invalid)}")
+        object.__setattr__(self, "modalities", values or ("text",))
+
+    def supports(self, modality: str) -> bool:
+        return str(modality).strip().lower() in self.modalities
 
 
 @dataclass

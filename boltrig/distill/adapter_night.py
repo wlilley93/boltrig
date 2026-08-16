@@ -16,7 +16,7 @@ trust in the loop - it defaults off.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from boltrig.adapters.base import Result
 
@@ -28,8 +28,11 @@ async def run_night(
     kind = str(params["adapter_kind"])
     incumbent = str(params["incumbent_model"])
 
-    built = await adapter._corpus_build(
-        {"target_endpoint_id": endpoint_id}, client, context
+    built = cast(
+        Result,
+        await adapter._corpus_build(
+            {"target_endpoint_id": endpoint_id}, client, context
+        ),
     )
     if not built.ok:
         return built
@@ -45,38 +48,47 @@ async def run_night(
         })
     digest = str(built.output["digest"])
 
-    trained = await adapter._train(
-        {"corpus_digest": digest, "adapter_kind": kind}, client, context
+    trained = cast(
+        Result,
+        await adapter._train(
+            {"corpus_digest": digest, "adapter_kind": kind}, client, context
+        ),
     )
     if not trained.ok:
         return trained
     candidate = str(trained.output["adapter_id"])
 
-    gated = await adapter._gate(
-        {
-            "corpus_digest": digest,
-            "adapter_kind": kind,
-            "candidate_model": candidate,
-            "incumbent_model": incumbent,
-        },
-        client,
-        context,
+    gated = cast(
+        Result,
+        await adapter._gate(
+            {
+                "corpus_digest": digest,
+                "adapter_kind": kind,
+                "candidate_model": candidate,
+                "incumbent_model": incumbent,
+            },
+            client,
+            context,
+        ),
     )
     if not gated.ok:
         return gated
 
     promoted = False
     if bool(params.get("auto_promote")) and gated.output.get("promote"):
-        promotion = await adapter._promote(
-            {
-                "endpoint_id": endpoint_id,
-                "corpus_digest": digest,
-                "price_micros_per_token": float(
-                    params.get("price_micros_per_token") or 0.0
-                ),
-            },
-            client,
-            context,
+        promotion = cast(
+            Result,
+            await adapter._promote(
+                {
+                    "endpoint_id": endpoint_id,
+                    "corpus_digest": digest,
+                    "price_micros_per_token": float(
+                        params.get("price_micros_per_token") or 0.0
+                    ),
+                },
+                client,
+                context,
+            ),
         )
         if not promotion.ok:
             return promotion

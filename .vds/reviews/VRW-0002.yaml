@@ -1,0 +1,59 @@
+id: VRW-0002
+routes:
+- apps/worker/src/components/PermanentFleetTopology.tsx
+fileKey: iVQBKFc3NpRH3zdOOxfPqr
+nodeId: 15:2
+shippedScreenshotDigest: sha256:b1a7dfa9680701aca4482c7ded3c45ed270a66b0d64933375b6e9e629ca76043
+screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/agents.png
+servedBuild: "feat/console-target@3f96081c34a08ea0042ec2ce998f60711ce2717b; dirty; capture-source sha256:2d74c933d31a87a2ab6cd99b8747be242663f385f08da0345ca0c5d5ab99bc95; capture-manifest sha256:ed3f7421c58d6fa7e8ac9c56787b48912076e803451cdab97aed7220fbf7fbb9"
+shippedSourceDigest: sha256:38596c93fd33c20a52764c2a4d5edbca8f06a8529946440d9ea2ff35dda30c69
+frameImageDigest: sha256:d1f626cb5451162f4ec46f3d0eac063c9b920447b530e46834e4a201f924a70e
+frameDigest: sha256:12ff6ddde30da51188b6a11ebfd8a4d865203d5f31b3764b709cc06aee6dc93c
+verdict: no_authority
+regions:
+- region: header
+  examined: true
+  finding: Navigation and primary action align, while spend and fleet-status facts remain unavailable in the shipped contract.
+- region: facets
+  examined: true
+  finding: The tab and capability legend bands are present with minor copy and state-treatment differences.
+- region: body_rows
+  examined: true
+  finding: The topology uses the contract-shaped worker row and honest unknown liveness; unavailable department relationships leave the hierarchy flat, while the dotted canvas follows the executable surface rather than the Figma frame.
+- region: rail
+  examined: false
+  finding: This screen declares no rail band.
+- region: footer
+  examined: false
+  finding: This screen declares no footer band.
+- region: empty_state
+  examined: false
+  finding: The compared topology is populated, so its registered empty state is not exposed.
+- region: keyboard
+  examined: false
+  finding: The static pair exposes no focused or shortcut-driven topology state.
+deltas:
+- describes: The shipped topology cannot draw the frame's department hierarchy because the captured contract supplies no department relationships.
+  disposition: needs_absent_data
+- describes: The shipped surface cannot reproduce the frame's spend, liveness and authority facts because the captured contracts do not provide them.
+  disposition: forbidden_by_policy
+  owedBy: DIR-0003
+reviewedBy: Codex deterministic current-capture evidence rebind v30
+reviewedAt: 2026-08-14T16:39:01Z
+basis:
+- DIR-0003
+- DIR-0010
+- DIR-0015
+- DIR-0016
+- DIR-0020
+- DIR-0021
+- DIR-0028
+- DIR-0029
+- DIR-0030
+- DIR-0035
+- DIR-0036
+- SCR-0002
+- apps/worker/tests/visual/states.json
+- docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json
+- docs/design/evidence/2026-08-11-console-parity/current/metrics.json
+notes: The unchanged frame digest is retained from the existing depth-limited ledger only and is not eligible for sign-off. The dotted canvas remains a measured Figma/executable divergence; it cannot lawfully use frame_behind_product until a real RDW owner row exists. This no_authority row binds only the deterministic current screenshot and current route source.

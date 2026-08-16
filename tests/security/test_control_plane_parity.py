@@ -259,7 +259,6 @@ _LOW_VERBS = {
     "control.mcp_server.register",
     "control.integration.connect",
     "control.notification.test",
-    "control.work.create",
     "control.work.assign",
 }
 
@@ -1028,6 +1027,7 @@ async def test_bare_chat_turn_uses_manifest_skills_under_caller_ceiling():
     manifest = load_manifest(str(_EXAMPLE_MANIFEST))
     assert manifest.chat.skills_by_role["org-admin"] == ("authoring/control-plane",)
     assert manifest.chat.default_skills == ()
+    assert manifest.chat.default_capability == "worker-cheap"
 
     k = await _kernel()
     await k.store.upsert_skill(
@@ -1052,14 +1052,17 @@ async def test_bare_chat_turn_uses_manifest_skills_under_caller_ceiling():
             *,
             partial_on_budget=True,
             grant_ceiling=None,
+            announce_child=True,
         ):
             calls.append(
                 {
                     "tenant_id": tenant_id,
                     "skills": list(skills),
+                    "prefer": dict(prefer),
                     "context_grants": context.grants,
                     "grant_ceiling": grant_ceiling,
                     "partial_on_budget": partial_on_budget,
+                    "announce_child": announce_child,
                 }
             )
             return {"summary": "ok"}
@@ -1072,6 +1075,7 @@ async def test_bare_chat_turn_uses_manifest_skills_under_caller_ceiling():
             _SpySpawner(),
             continuity=False,
             chat_config=ChatConfig(
+                default_capability="worker-cheap",
                 skills_by_role={"org-admin": ("authoring/control-plane", "missing/skill")},
                 default_skills=("missing/default",),
             ),
@@ -1090,11 +1094,13 @@ async def test_bare_chat_turn_uses_manifest_skills_under_caller_ceiling():
     ]
     assert any(ev.get("type") == "text_delta" and ev.get("delta") == "ok" for ev in events)
     assert calls[0]["skills"] == ["authoring/control-plane"]
+    assert calls[0]["prefer"] == {"capability": "worker-cheap"}
     # SEC-174: the caller ceiling now lives in the context by construction, not in a
     # separate grant_ceiling argument (which is gone - None).
     assert calls[0]["context_grants"] == GrantSet.of(["ticket.*"])
     assert calls[0]["grant_ceiling"] is None
     assert calls[0]["partial_on_budget"] is True
+    assert calls[0]["announce_child"] is False
 
     async for _ in svc.handle_turn(
         tenant_id=T,

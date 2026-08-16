@@ -77,6 +77,40 @@ async def test_provisioned_admission_accepts_the_adapter_spec(tmp_path: Path) ->
     assert spec.working_directory == admission.layout.workspace.as_posix()
 
 
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_per_call_model_is_the_compiled_admission_model(tmp_path: Path) -> None:
+    stack = _stack(tmp_path)
+    source = ProvisioningCodexPhaseAdmissionSource(
+        stack_root=stack,
+        model_id="provider/model-base-20260812",
+    )
+
+    admission = await source.admit(
+        assignment("selected-model"),
+        model_id="provider/model-selected",
+    )
+
+    assert admission.compilation.policy.model.model_id == "provider/model-selected"
+
+
+async def test_invalid_per_call_model_fails_before_creating_cell_tree(
+    tmp_path: Path,
+) -> None:
+    stack = _stack(tmp_path)
+    source = ProvisioningCodexPhaseAdmissionSource(
+        stack_root=stack,
+        model_id="provider/model-base-20260812",
+    )
+
+    with pytest.raises(ValueError, match="mutable"):
+        await source.admit(
+            assignment("invalid-selected-model"),
+            model_id="provider/latest",
+        )
+
+    assert list(stack.iterdir()) == []
+
+
 async def test_second_acquire_of_the_same_assignment_is_rejected(tmp_path: Path) -> None:
     stack = _stack(tmp_path)
     source = ProvisioningCodexPhaseAdmissionSource(stack_root=stack, model_id="glm-4.6")

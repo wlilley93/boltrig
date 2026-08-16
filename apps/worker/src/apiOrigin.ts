@@ -5,7 +5,8 @@
 // shell has no such origin: it serves this bundle from tauri://localhost, where
 // no kernel and no voice gateway are reachable, so the desktop paths resolve
 // against this value instead of the document origin. A desktop device session
-// is already bound to exactly this origin at enrollment.
+// is already bound to exactly this origin when the authenticated desktop is
+// connected.
 export function configuredApiOrigin(): string {
   return (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 }

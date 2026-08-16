@@ -13,7 +13,7 @@ import httpx
 import pytest
 
 from boltrig.distill.adapter import DistillAdapter
-from boltrig.distill.gate import CaseScore, craft_verdict, register_verdict
+from boltrig.distill.gate import register_verdict
 from boltrig.kernel import Kernel
 from boltrig.models import (
     ActionType,
@@ -21,6 +21,7 @@ from boltrig.models import (
     GrantSet,
     InvocationContext,
     ModelEndpoint,
+    Organisation,
     SchemaValidationError,
     TenantPermissions,
     utcnow,
@@ -79,6 +80,14 @@ async def _kernel_with_adapter(
     sidecar: _Sidecar,
 ) -> tuple[Kernel, DistillAdapter, InMemoryStore]:
     store = InMemoryStore()
+    await store.create_org(
+        Organisation(
+            id=T,
+            name="Acme",
+            slug="acme",
+            settings={"behaviour.overnight.enabled": True},
+        )
+    )
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     kernel = Kernel(store)
     adapter = DistillAdapter(
@@ -87,7 +96,6 @@ async def _kernel_with_adapter(
         cost=kernel.cost,
         base_pin=PIN,
         base_url="http://127.0.0.1:8930",
-        serve_url="http://127.0.0.1:8931/v1",
         transport=httpx.MockTransport(sidecar.handler),
     )
     await kernel.register_adapter(T, adapter)
@@ -97,8 +105,12 @@ async def _kernel_with_adapter(
 async def _candidate_endpoint(store: InMemoryStore, *, active: bool = False) -> None:
     await store.upsert_model_endpoint(
         ModelEndpoint(
-            id="craft-acme-1", tenant_id=T, kind="openai", model="craft-acme-1",
-            base_url="http://127.0.0.1:8930/v1", data_class="sensitive",
+            id="craft-acme-1",
+            tenant_id=T,
+            kind="openai",
+            model="craft-acme-1",
+            base_url="http://127.0.0.1:8930/v1",
+            data_class="sensitive",
             is_active=active,
         )
     )
@@ -112,9 +124,9 @@ async def test_train_schema_has_no_field_to_name_another_base():
     kernel, _, _ = await _kernel_with_adapter(sidecar)
     with pytest.raises(SchemaValidationError):
         await kernel.invoke(
-            "distill", "distill.train",
-            {"corpus_digest": DIGEST, "adapter_kind": "craft",
-             "base": "yesterdays-adapter"},
+            "distill",
+            "distill.train",
+            {"corpus_digest": DIGEST, "adapter_kind": "craft", "base": "yesterdays-adapter"},
             _ctx(),
         )
     assert sidecar.requests == []  # refused before anything left the kernel
@@ -125,8 +137,10 @@ async def test_train_request_carries_the_composed_pin_and_refuses_drift():
     sidecar = _Sidecar()
     _, adapter, _ = await _kernel_with_adapter(sidecar)
     result = await adapter.execute(
-        "distill.train", {"corpus_digest": DIGEST, "adapter_kind": "craft"},
-        None, _ctx(),
+        "distill.train",
+        {"corpus_digest": DIGEST, "adapter_kind": "craft"},
+        None,
+        _ctx(),
     )
     assert result.ok
     (method, path, body) = sidecar.requests[0]
@@ -137,8 +151,10 @@ async def test_train_request_carries_the_composed_pin_and_refuses_drift():
     drifted = _Sidecar(base_pin="some-prior-adapter")
     _, adapter2, _ = await _kernel_with_adapter(drifted)
     result = await adapter2.execute(
-        "distill.train", {"corpus_digest": DIGEST, "adapter_kind": "craft"},
-        None, _ctx(),
+        "distill.train",
+        {"corpus_digest": DIGEST, "adapter_kind": "craft"},
+        None,
+        _ctx(),
     )
     assert not result.ok
     assert "base other than the composed pin" in result.error.message
@@ -151,9 +167,9 @@ async def test_promote_without_a_passing_gate_receipt_is_refused():
     await _candidate_endpoint(store)
     result = await adapter.execute(
         "distill.promote",
-        {"endpoint_id": "craft-acme-1", "corpus_digest": DIGEST,
-         "price_micros_per_token": 0.0},
-        None, _ctx(),
+        {"endpoint_id": "craft-acme-1", "corpus_digest": DIGEST, "price_micros_per_token": 0.0},
+        None,
+        _ctx(),
     )
     assert not result.ok
     endpoint = await store.get_model_endpoint(T, "craft-acme-1")
@@ -167,16 +183,21 @@ async def test_promote_flips_active_only_with_a_matching_receipt():
     await _candidate_endpoint(store)
     gate = await adapter.execute(
         "distill.gate",
-        {"corpus_digest": DIGEST, "adapter_kind": "register",
-         "candidate_model": "craft-acme-1", "incumbent_model": "incumbent"},
-        None, _ctx(),
+        {
+            "corpus_digest": DIGEST,
+            "adapter_kind": "register",
+            "candidate_model": "craft-acme-1",
+            "incumbent_model": "incumbent",
+        },
+        None,
+        _ctx(),
     )
     assert gate.ok and gate.output["promote"] is True
     result = await adapter.execute(
         "distill.promote",
-        {"endpoint_id": "craft-acme-1", "corpus_digest": DIGEST,
-         "price_micros_per_token": 0.05},
-        None, _ctx(),
+        {"endpoint_id": "craft-acme-1", "corpus_digest": DIGEST, "price_micros_per_token": 0.05},
+        None,
+        _ctx(),
     )
     assert result.ok
     endpoint = await store.get_model_endpoint(T, "craft-acme-1")
@@ -190,39 +211,25 @@ async def test_a_holding_gate_receipt_does_not_authorise_promotion():
     await _candidate_endpoint(store)
     gate = await adapter.execute(
         "distill.gate",
-        {"corpus_digest": DIGEST, "adapter_kind": "register",
-         "candidate_model": "craft-acme-1", "incumbent_model": "incumbent"},
-        None, _ctx(),
+        {
+            "corpus_digest": DIGEST,
+            "adapter_kind": "register",
+            "candidate_model": "craft-acme-1",
+            "incumbent_model": "incumbent",
+        },
+        None,
+        _ctx(),
     )
     assert gate.ok and gate.output["promote"] is False
     result = await adapter.execute(
         "distill.promote",
-        {"endpoint_id": "craft-acme-1", "corpus_digest": DIGEST,
-         "price_micros_per_token": 0.0},
-        None, _ctx(),
+        {"endpoint_id": "craft-acme-1", "corpus_digest": DIGEST, "price_micros_per_token": 0.0},
+        None,
+        _ctx(),
     )
     assert not result.ok
     endpoint = await store.get_model_endpoint(T, "craft-acme-1")
     assert endpoint.is_active is False
-
-
-@pytest.mark.invariant("DIS-6")
-def test_craft_verdict_holds_on_case_regression_even_with_higher_mean():
-    incumbent = [CaseScore("a", True, 0.5), CaseScore("b", True, 0.5)]
-    candidate = [CaseScore("a", True, 1.0), CaseScore("b", False, 0.9)]
-    verdict = craft_verdict(incumbent, candidate)
-    assert verdict.promote is False
-    assert verdict.reason == "case_regression"
-    assert verdict.regressed_cases == ("b",)
-
-
-@pytest.mark.invariant("DIS-6")
-def test_craft_verdict_promotes_on_equal_mean_without_regression():
-    incumbent = [CaseScore("a", True, 0.5), CaseScore("b", False, 0.5)]
-    candidate = [CaseScore("a", True, 0.5), CaseScore("b", False, 0.5)]
-    assert craft_verdict(incumbent, candidate).promote is True
-    below = [CaseScore("a", True, 0.4), CaseScore("b", False, 0.4)]
-    assert craft_verdict(incumbent, below).reason == "mean_below_incumbent"
 
 
 def test_register_verdict_holds_on_a_tie():
@@ -240,15 +247,17 @@ async def test_gate_writes_a_receipt_on_hold_and_on_promote():
         _, adapter, store = await _kernel_with_adapter(sidecar)
         result = await adapter.execute(
             "distill.gate",
-            {"corpus_digest": DIGEST, "adapter_kind": "register",
-             "candidate_model": "cand", "incumbent_model": "incumbent"},
-            None, _ctx(),
+            {
+                "corpus_digest": DIGEST,
+                "adapter_kind": "register",
+                "candidate_model": "cand",
+                "incumbent_model": "incumbent",
+            },
+            None,
+            _ctx(),
         )
         assert result.ok
-        rows = [
-            e for e in await store.audit_query(T, limit=50)
-            if e.verb == "distill.gate"
-        ]
+        rows = [e for e in await store.audit_query(T, limit=50) if e.verb == "distill.gate"]
         assert [e.status for e in rows] == [status]
         detail = rows[0].detail
         assert detail["corpus_digest"] == DIGEST
@@ -263,65 +272,65 @@ async def test_promotion_prices_the_model_in_the_same_act():
     await _candidate_endpoint(store)
     await adapter.execute(
         "distill.gate",
-        {"corpus_digest": DIGEST, "adapter_kind": "register",
-         "candidate_model": "craft-acme-1", "incumbent_model": "incumbent"},
-        None, _ctx(),
+        {
+            "corpus_digest": DIGEST,
+            "adapter_kind": "register",
+            "candidate_model": "craft-acme-1",
+            "incumbent_model": "incumbent",
+        },
+        None,
+        _ctx(),
     )
     # before promotion the model prices at the tier default ($5/M => 5_000_000
     # micros for a million tokens) - the trap DIS-8 exists to close
     assert kernel.cost.price(1_000_000, "standard", model="craft-acme-1") == 5_000_000
     result = await adapter.execute(
         "distill.promote",
-        {"endpoint_id": "craft-acme-1", "corpus_digest": DIGEST,
-         "price_micros_per_token": 0.05},
-        None, _ctx(),
+        {"endpoint_id": "craft-acme-1", "corpus_digest": DIGEST, "price_micros_per_token": 0.05},
+        None,
+        _ctx(),
     )
     assert result.ok
     assert kernel.cost.price(1_000_000, "standard", model="craft-acme-1") == 50_000
     promote_rows = [
-        e for e in await store.audit_query(T, limit=50)
-        if e.status == "distill_promote"
+        e for e in await store.audit_query(T, limit=50) if e.status == "distill_promote"
     ]
     assert len(promote_rows) == 1
     assert promote_rows[0].detail["price_micros_per_token"] == 0.05
 
 
-async def test_craft_gate_without_eval_runner_degrades_typed():
+@pytest.mark.invariant("DIS-6")
+async def test_craft_gate_refuses_the_retired_direct_provider_route():
     sidecar = _Sidecar()
     _, adapter, _ = await _kernel_with_adapter(sidecar)
     result = await adapter.execute(
         "distill.gate",
-        {"corpus_digest": DIGEST, "adapter_kind": "craft",
-         "candidate_model": "cand", "incumbent_model": "inc"},
-        None, _ctx(),
+        {
+            "corpus_digest": DIGEST,
+            "adapter_kind": "craft",
+            "candidate_model": "cand",
+            "incumbent_model": "inc",
+        },
+        None,
+        _ctx(),
     )
     assert not result.ok
-    assert "eval runner" in result.error.message
-
-
-async def test_craft_gate_refuses_a_tenant_with_no_eval_cases():
-    sidecar = _Sidecar()
-    _, adapter, _ = await _kernel_with_adapter(sidecar)
-    adapter.set_eval(object())  # bound, but there is nothing to score with
-    result = await adapter.execute(
-        "distill.gate",
-        {"corpus_digest": DIGEST, "adapter_kind": "craft",
-         "candidate_model": "cand", "incumbent_model": "inc"},
-        None, _ctx(),
-    )
-    assert not result.ok
-    assert "no active eval cases" in result.error.message
+    assert "governed Codex/Bifrost model admission" in result.error.message
 
 
 async def test_corpus_build_refuses_a_standard_classed_target():
     sidecar = _Sidecar()
     _, adapter, store = await _kernel_with_adapter(sidecar)
     await store.upsert_model_endpoint(
-        ModelEndpoint(id="remote", tenant_id=T, kind="anthropic",
-                      model="claude", data_class="standard")
+        ModelEndpoint(
+            id="remote", tenant_id=T, kind="anthropic", model="claude", data_class="standard"
+        )
     )
     result = await adapter.execute(
-        "distill.corpus.build", {"target_endpoint_id": "remote"}, None, _ctx(),
+        "distill.corpus.build",
+        {"target_endpoint_id": "remote"},
+        None,
+        _ctx(),
     )
     assert not result.ok
     assert "sensitive" in result.error.message
@@ -332,11 +341,20 @@ async def test_corpus_build_ships_jsonl_keyed_by_digest():
     sidecar = _Sidecar()
     _, adapter, store = await _kernel_with_adapter(sidecar)
     await store.upsert_model_endpoint(
-        ModelEndpoint(id="local", tenant_id=T, kind="openai", model="base",
-                      base_url="http://127.0.0.1:8930/v1", data_class="sensitive")
+        ModelEndpoint(
+            id="local",
+            tenant_id=T,
+            kind="openai",
+            model="base",
+            base_url="http://127.0.0.1:8930/v1",
+            data_class="sensitive",
+        )
     )
     result = await adapter.execute(
-        "distill.corpus.build", {"target_endpoint_id": "local"}, None, _ctx(),
+        "distill.corpus.build",
+        {"target_endpoint_id": "local"},
+        None,
+        _ctx(),
     )
     assert result.ok
     (method, path, body) = sidecar.requests[0]
@@ -354,17 +372,20 @@ async def test_gate_receipt_is_scoped_to_digest_and_model():
     # a passing receipt for a DIFFERENT digest
     await store.audit_append(
         AuditEvent(
-            tenant_id=T, ts=utcnow(), actor="operator",
-            action_type=ActionType.MODEL_CALL, status="distill_gate_promote",
+            tenant_id=T,
+            ts=utcnow(),
+            actor="operator",
+            action_type=ActionType.MODEL_CALL,
+            status="distill_gate_promote",
             verb="distill.gate",
             detail={"corpus_digest": "b" * 64, "candidate": "craft-acme-1"},
         )
     )
     result = await adapter.execute(
         "distill.promote",
-        {"endpoint_id": "craft-acme-1", "corpus_digest": DIGEST,
-         "price_micros_per_token": 0.0},
-        None, _ctx(),
+        {"endpoint_id": "craft-acme-1", "corpus_digest": DIGEST, "price_micros_per_token": 0.0},
+        None,
+        _ctx(),
     )
     assert not result.ok
     endpoint = await store.get_model_endpoint(T, "craft-acme-1")
@@ -376,16 +397,37 @@ async def _seed_clean_turn(store: InMemoryStore) -> None:
 
     await store.upsert_user(User(id="u1", tenant_id=T))
     await store.create_conversation(Conversation(id="c1", tenant_id=T, user_id="u1"))
-    await store.add_message(ConversationMessage(
-        id="m1", conversation_id="c1", tenant_id=T,
-        role=MessageRole.USER, content="draft the note"))
-    await store.add_message(ConversationMessage(
-        id="m2", conversation_id="c1", tenant_id=T,
-        role=MessageRole.ASSISTANT, content="here is the note", run_id="r-net"))
-    await store.audit_append(AuditEvent(
-        tenant_id=T, ts=utcnow(), actor="agent", actor_tier="ephemeral",
-        action_type=ActionType.TOOL_CALL, verb="ticket.create", status="ok",
-        run_id="r-net"))
+    await store.add_message(
+        ConversationMessage(
+            id="m1",
+            conversation_id="c1",
+            tenant_id=T,
+            role=MessageRole.USER,
+            content="draft the note",
+        )
+    )
+    await store.add_message(
+        ConversationMessage(
+            id="m2",
+            conversation_id="c1",
+            tenant_id=T,
+            role=MessageRole.ASSISTANT,
+            content="here is the note",
+            run_id="r-net",
+        )
+    )
+    await store.audit_append(
+        AuditEvent(
+            tenant_id=T,
+            ts=utcnow(),
+            actor="agent",
+            actor_tier="ephemeral",
+            action_type=ActionType.TOOL_CALL,
+            verb="ticket.create",
+            status="ok",
+            run_id="r-net",
+        )
+    )
 
 
 async def test_night_runs_the_chain_and_never_promotes_by_default():
@@ -395,18 +437,27 @@ async def test_night_runs_the_chain_and_never_promotes_by_default():
     _, adapter, store = await _kernel_with_adapter(sidecar)
     await _seed_clean_turn(store)
     await store.upsert_model_endpoint(
-        ModelEndpoint(id="craft-candidate", tenant_id=T, kind="openai",
-                      model="craft-acme-1", base_url="http://127.0.0.1:8930/v1",
-                      data_class="sensitive")
+        ModelEndpoint(
+            id="craft-candidate",
+            tenant_id=T,
+            kind="openai",
+            model="craft-acme-1",
+            base_url="http://127.0.0.1:8930/v1",
+            data_class="sensitive",
+        )
     )
     await store.set_model_endpoint_active(T, "craft-candidate", False)
     # the mock scores the trained candidate above the incumbent
     sidecar.logliks = {"incumbent": -2.0, "craft-acme-1": -1.0}
     result = await adapter.execute(
         "distill.night",
-        {"target_endpoint_id": "craft-candidate", "adapter_kind": "register",
-         "incumbent_model": "incumbent"},
-        None, _ctx(),
+        {
+            "target_endpoint_id": "craft-candidate",
+            "adapter_kind": "register",
+            "incumbent_model": "incumbent",
+        },
+        None,
+        _ctx(),
     )
     assert result.ok
     assert result.output["gate"]["promote"] is True
@@ -419,23 +470,59 @@ async def test_night_runs_the_chain_and_never_promotes_by_default():
     assert "/train" in paths and "/loglik" in paths
 
 
+@pytest.mark.invariant("DIS-10")
+async def test_night_refuses_before_sidecar_work_when_organisation_turns_it_off():
+    sidecar = _Sidecar()
+    _, adapter, store = await _kernel_with_adapter(sidecar)
+    organisation = await store.get_org(T)
+    assert organisation is not None
+    organisation.settings = {"behaviour.overnight.enabled": False}
+    await store.update_org(organisation)
+
+    result = await adapter.execute(
+        "distill.night",
+        {
+            "target_endpoint_id": "craft-candidate",
+            "adapter_kind": "register",
+            "incumbent_model": "incumbent",
+        },
+        None,
+        _ctx(),
+    )
+
+    assert not result.ok
+    assert result.error is not None
+    assert result.error.error_class.value == "unauthorised"
+    assert sidecar.requests == []
+
+
 async def test_night_with_auto_promote_flips_the_endpoint_on_a_pass():
     sidecar = _Sidecar()
     _, adapter, store = await _kernel_with_adapter(sidecar)
     await _seed_clean_turn(store)
     await store.upsert_model_endpoint(
-        ModelEndpoint(id="craft-candidate", tenant_id=T, kind="openai",
-                      model="craft-acme-1", base_url="http://127.0.0.1:8930/v1",
-                      data_class="sensitive")
+        ModelEndpoint(
+            id="craft-candidate",
+            tenant_id=T,
+            kind="openai",
+            model="craft-acme-1",
+            base_url="http://127.0.0.1:8930/v1",
+            data_class="sensitive",
+        )
     )
     await store.set_model_endpoint_active(T, "craft-candidate", False)
     sidecar.logliks = {"incumbent": -2.0, "craft-acme-1": -1.0}
     result = await adapter.execute(
         "distill.night",
-        {"target_endpoint_id": "craft-candidate", "adapter_kind": "register",
-         "incumbent_model": "incumbent", "auto_promote": True,
-         "price_micros_per_token": 0.0},
-        None, _ctx(),
+        {
+            "target_endpoint_id": "craft-candidate",
+            "adapter_kind": "register",
+            "incumbent_model": "incumbent",
+            "auto_promote": True,
+            "price_micros_per_token": 0.0,
+        },
+        None,
+        _ctx(),
     )
     assert result.ok and result.output["promoted"] is True
     endpoint = await store.get_model_endpoint(T, "craft-candidate")
@@ -448,15 +535,24 @@ async def test_night_on_an_empty_day_is_a_quiet_night():
     sidecar = _Sidecar()
     _, adapter, store = await _kernel_with_adapter(sidecar)
     await store.upsert_model_endpoint(
-        ModelEndpoint(id="craft-candidate", tenant_id=T, kind="openai",
-                      model="craft-acme-1", base_url="http://127.0.0.1:8930/v1",
-                      data_class="sensitive")
+        ModelEndpoint(
+            id="craft-candidate",
+            tenant_id=T,
+            kind="openai",
+            model="craft-acme-1",
+            base_url="http://127.0.0.1:8930/v1",
+            data_class="sensitive",
+        )
     )
     result = await adapter.execute(
         "distill.night",
-        {"target_endpoint_id": "craft-candidate", "adapter_kind": "register",
-         "incumbent_model": "incumbent"},
-        None, _ctx(),
+        {
+            "target_endpoint_id": "craft-candidate",
+            "adapter_kind": "register",
+            "incumbent_model": "incumbent",
+        },
+        None,
+        _ctx(),
     )
     assert result.ok
     assert result.output["reason"] == "empty_corpus"
@@ -464,59 +560,36 @@ async def test_night_on_an_empty_day_is_a_quiet_night():
     assert "/train" not in paths and "/loglik" not in paths
 
 
-async def test_craft_gate_without_serve_url_refuses_typed():
-    """The trainer sidecar serves no chat completions; a craft gate without a
-    distill.serve_url must refuse typed, not route eval traffic at a dead URL."""
-    sidecar = _Sidecar()
-    store = InMemoryStore()
-    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
-    kernel = Kernel(store)
-    adapter = DistillAdapter(
-        store, audit=kernel.audit, cost=kernel.cost, base_pin=PIN,
-        base_url="http://127.0.0.1:8930",  # serve_url deliberately unset
-        transport=httpx.MockTransport(sidecar.handler),
-    )
-    await kernel.register_adapter(T, adapter)
-    adapter.set_eval(object())
-    result = await adapter.execute(
-        "distill.gate",
-        {"corpus_digest": DIGEST, "adapter_kind": "craft",
-         "candidate_model": "cand", "incumbent_model": "inc"},
-        None, _ctx(),
-    )
-    assert not result.ok
-    assert "serve_url" in result.error.message
-
-
 @pytest.mark.invariant("DIS-9")
 def test_register_verdict_holds_on_entropy_collapse_despite_better_likelihood():
     """A likelihood win bought by collapsing onto a template is a hold: the
     candidate fits the accepted turns better AND generates with less than the
     diversity floor of the incumbent's distinct-2."""
-    verdict = register_verdict(
-        -3.0, -1.0, incumbent_diversity=0.60, candidate_diversity=0.40
-    )
+    verdict = register_verdict(-3.0, -1.0, incumbent_diversity=0.60, candidate_diversity=0.40)
     assert verdict.promote is False
     assert verdict.reason == "entropy_collapse"
     # at the floor exactly (0.8 x 0.60 = 0.48) the candidate survives
-    ok = register_verdict(
-        -3.0, -1.0, incumbent_diversity=0.60, candidate_diversity=0.48
-    )
+    ok = register_verdict(-3.0, -1.0, incumbent_diversity=0.60, candidate_diversity=0.48)
     assert ok.promote is True
 
 
 @pytest.mark.invariant("DIS-9")
 async def test_register_gate_fetches_diversity_and_holds_on_collapse():
     sidecar = _Sidecar(
-        logliks={"incumbent": -2.0, "cand": -1.0},        # candidate fits better...
-        diversities={"incumbent": 0.6, "cand": 0.3},      # ...by collapsing
+        logliks={"incumbent": -2.0, "cand": -1.0},  # candidate fits better...
+        diversities={"incumbent": 0.6, "cand": 0.3},  # ...by collapsing
     )
     _, adapter, store = await _kernel_with_adapter(sidecar)
     result = await adapter.execute(
         "distill.gate",
-        {"corpus_digest": DIGEST, "adapter_kind": "register",
-         "candidate_model": "cand", "incumbent_model": "incumbent"},
-        None, _ctx(),
+        {
+            "corpus_digest": DIGEST,
+            "adapter_kind": "register",
+            "candidate_model": "cand",
+            "incumbent_model": "incumbent",
+        },
+        None,
+        _ctx(),
     )
     assert result.ok
     assert result.output["promote"] is False
@@ -535,9 +608,14 @@ async def test_gate_schema_refuses_a_traversal_shaped_model_name():
     kernel, _, _ = await _kernel_with_adapter(sidecar)
     with pytest.raises(SchemaValidationError):
         await kernel.invoke(
-            "distill", "distill.gate",
-            {"corpus_digest": DIGEST, "adapter_kind": "register",
-             "candidate_model": "../../etc/passwd", "incumbent_model": "base"},
+            "distill",
+            "distill.gate",
+            {
+                "corpus_digest": DIGEST,
+                "adapter_kind": "register",
+                "candidate_model": "../../etc/passwd",
+                "incumbent_model": "base",
+            },
             _ctx(),
         )
     assert sidecar.requests == []

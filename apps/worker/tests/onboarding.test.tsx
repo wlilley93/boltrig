@@ -1,0 +1,576 @@
+// @vitest-environment happy-dom
+
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const api = vi.hoisted(() => ({
+  activateAiKey: vi.fn(),
+  aiKeys: vi.fn(),
+  approveAiKeyProposal: vi.fn(),
+  chatModelChoices: vi.fn(),
+  integrationCatalogue: vi.fn(),
+  integrationConnections: vi.fn(),
+  meSettings: vi.fn(),
+  putMeSettings: vi.fn(),
+  setAiKey: vi.fn(),
+  submitIntegrationSecret: vi.fn(),
+  updateMeProfile: vi.fn(),
+}));
+
+vi.mock("../src/client", () => ({ client: api }));
+vi.mock("../src/components/familiar/FamiliarStage", () => ({
+  FamiliarStage: () => <div data-testid="familiar-preview" />,
+}));
+vi.mock("../src/components/jarvis/JarvisStage", () => ({
+  JarvisStage: () => <div data-testid="jarvis-preview" />,
+}));
+
+import { OnboardingGate } from "../src/components/onboarding/OnboardingGate";
+
+const profile = { id: "owner", email: "owner@example.io", role: "superadmin" };
+
+beforeEach(() => {
+  localStorage.clear();
+  vi.stubEnv("VITE_DESKTOP_DOWNLOAD_URL", "https://downloads.boltrig.test/desktop");
+  api.activateAiKey.mockReset().mockResolvedValue({ status: "ok" });
+  api.aiKeys.mockReset().mockResolvedValue({ allow_own_ai_keys: true, ai_keys: [] });
+  api.approveAiKeyProposal.mockReset().mockResolvedValue({ status: "ok" });
+  api.chatModelChoices.mockReset().mockResolvedValue({
+    status: "ok",
+    reason: null,
+    choices: [],
+    default_model_name: "openai/gpt-5.4",
+    default_available: true,
+  });
+  api.integrationCatalogue.mockReset().mockResolvedValue({
+    integrations: [{
+      id: "xai-voice",
+      label: "xAI Voice",
+      category: "communications",
+      transport: "rest",
+      auth: ["manual_secret"],
+      description: "Speech",
+      certification: "certified",
+      available: true,
+      setup_supported: true,
+      setup_contract: {
+        kind: "manual_secret",
+        version: "xai_voice_v1",
+        fields: [{
+          name: "api_key",
+          label: "xAI API key",
+          input_kind: "api_key",
+          secret: true,
+          required: true,
+          min_length: 8,
+          max_length: 4096,
+        }],
+      },
+      enabled_tools: [],
+    }],
+  });
+  api.integrationConnections.mockReset().mockResolvedValue({ connections: [] });
+  api.meSettings.mockReset();
+  api.putMeSettings.mockReset().mockResolvedValue({ status: "ok" });
+  api.setAiKey.mockReset().mockResolvedValue({ status: "ok" });
+  api.submitIntegrationSecret.mockReset().mockResolvedValue({
+    status: "connected",
+    connection: {
+      id: "voice-connection",
+      integration_id: "xai-voice",
+      label: "xAI Voice",
+      health: "pending",
+      credential_ref_present: true,
+      accounts: [],
+      enabled_tools: [],
+      created_at: "2026-08-15T10:00:00Z",
+    },
+  });
+  api.updateMeProfile.mockReset().mockResolvedValue({ status: "ok" });
+});
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+  vi.unstubAllEnvs();
+  localStorage.clear();
+});
+
+describe("first-run onboarding", () => {
+  it("requires a name on the first page before showing both companion entities", () => {
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    const continueButton = screen.getByRole("button", { name: "Continue" });
+    expect((continueButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("What should Boltrig call you?")).toBeTruthy();
+    expect(screen.queryByRole("radiogroup", { name: "Companion" })).toBeNull();
+    const nameInput = screen.getByLabelText("Your name");
+    fireEvent.keyDown(nameInput, { key: "Enter" });
+    expect(screen.getByText("What should Boltrig call you?")).toBeTruthy();
+    fireEvent.change(nameInput, {
+      target: { value: "William" },
+    });
+    expect((continueButton as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.keyDown(nameInput, { key: "Enter" });
+
+    expect(screen.getByText("Choose your companion")).toBeTruthy();
+    const back = screen.getByRole("button", { name: "← Back" });
+    expect(back.closest("footer")?.classList.contains("onboarding-actions")).toBe(true);
+    expect(screen.getByTestId("familiar-preview")).toBeTruthy();
+    expect(screen.getByTestId("jarvis-preview")).toBeTruthy();
+    expect(document.querySelectorAll(".companion-check")).toHaveLength(1);
+    const familiar = screen.getByRole("radio", { name: /Familiar/ });
+    familiar.focus();
+    fireEvent.keyDown(familiar, { key: "ArrowRight" });
+    expect(screen.getByRole("radio", { name: /Jarvis/ }).getAttribute("aria-checked"))
+      .toBe("true");
+    expect(document.querySelectorAll(".companion-check")).toHaveLength(1);
+  });
+
+  it("uses Enter to continue without stealing Enter from an open picker", async () => {
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    const nameInput = screen.getByLabelText("Your name");
+    fireEvent.change(nameInput, { target: { value: "Alex" } });
+    fireEvent.keyDown(nameInput, { key: "Enter" });
+    expect(screen.getByText("Choose your companion")).toBeTruthy();
+
+    fireEvent.keyDown(document.body, { key: "Enter" });
+    expect(await screen.findByText("Choose your AI")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "OpenAI" }));
+    const providerSearch = screen.getByRole("searchbox", { name: "Search providers" });
+    fireEvent.change(providerSearch, { target: { value: "Llama" } });
+    fireEvent.keyDown(providerSearch, { key: "Enter" });
+    expect(screen.getByText("Choose your AI")).toBeTruthy();
+
+    fireEvent.keyDown(providerSearch, { key: "Escape" });
+    fireEvent.keyDown(document.body, { key: "Enter" });
+    expect(await screen.findByText("Add voice")).toBeTruthy();
+    await waitFor(() => expect((screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.keyDown(document.body, { key: "Enter" });
+    expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
+  });
+
+  it("keeps chat unavailable when the completion marker is missing", () => {
+    render(
+      <OnboardingGate initialAccount={{ profile, settings: {} }}>
+        <div>Existing workspace</div>
+      </OnboardingGate>,
+    );
+
+    expect(screen.getByText("What should Boltrig call you?")).toBeTruthy();
+    expect(screen.queryByText("Existing workspace")).toBeNull();
+  });
+
+  it("mounts chat only after the current onboarding version is persisted", () => {
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 1 },
+      }}>
+        <div>Completed workspace</div>
+      </OnboardingGate>,
+    );
+
+    expect(screen.getByText("Completed workspace")).toBeTruthy();
+    expect(screen.queryByText("What should Boltrig call you?")).toBeNull();
+    expect(api.chatModelChoices).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when setup state cannot be loaded", async () => {
+    api.meSettings.mockRejectedValue(new Error("settings unavailable"));
+    render(
+      <OnboardingGate>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    expect(await screen.findByText("Setup couldn’t load."))
+      .toBeTruthy();
+    expect(screen.queryByText("Private workspace")).toBeNull();
+  });
+
+  it("chooses Jarvis, connects the selected provider on Continue, and persists completion", async () => {
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    expect(screen.getByText("What should Boltrig call you?")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Your name"), {
+      target: { value: "William" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByTestId("familiar-preview")).toBeTruthy();
+    expect(screen.getByTestId("jarvis-preview")).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: /Jarvis/ }));
+    expect(screen.getByTestId("jarvis-preview")).toBeTruthy();
+    expect(document.querySelectorAll(".companion-check")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByText("Choose your AI")).toBeTruthy();
+    const secret = await screen.findByLabelText("Provider API key") as HTMLInputElement;
+    fireEvent.change(secret, { target: { value: "secret-provider-value" } });
+    fireEvent.click(screen.getByRole("button", { name: "Choose a model" }));
+    fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "GPT-5.4" } });
+    fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
+    expect(screen.getByText("Text + images")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save provider" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(api.setAiKey).toHaveBeenCalledWith(expect.objectContaining({
+      level: "user",
+      provider: "openai",
+      model: "openai/gpt-5.4",
+      modality: "text",
+      api_key: "secret-provider-value",
+    })));
+    expect(secret.value).toBe("");
+    expect(await screen.findByText("Add voice")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    expect(await screen.findByText("You’re ready, William. Meet Jarvis.")).toBeTruthy();
+    expect(screen.getByText(/run and take approved actions locally on your personal computer/i)).toBeTruthy();
+    const download = screen.getByRole("link", { name: /Download Boltrig Desktop/ });
+    expect(download.getAttribute("href")).toBe("https://downloads.boltrig.test/desktop");
+    fireEvent.click(screen.getByRole("button", { name: "Continue in browser" }));
+
+    await waitFor(() => expect(api.putMeSettings).toHaveBeenCalledWith({
+      settings: {
+        "agent.character": "jarvis",
+        "setup.onboarding_version": 1,
+      },
+    }));
+    expect(api.updateMeProfile).toHaveBeenCalledWith({ display_name: "William" });
+    expect(await screen.findByText("Private workspace")).toBeTruthy();
+    expect(localStorage.getItem("boltrig.character")).toBe("jarvis");
+  });
+
+  it("searches the full provider catalogue, includes Llama, and gates model choice on a key", async () => {
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Choose your AI")).toBeTruthy();
+    expect((await screen.findByRole("button", { name: "Enter your API key first" }) as HTMLButtonElement).disabled)
+      .toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
+    fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "llama" } });
+    fireEvent.click(screen.getByRole("option", { name: /Llama Meta’s Llama API/ }));
+    expect(screen.getByRole("button", { name: "Llama" })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Provider API key"), { target: { value: "llama-key" } });
+    fireEvent.click(screen.getByRole("button", { name: "Choose a model" }));
+    fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "Maverick" } });
+    expect(screen.getAllByRole("option").length).toBeGreaterThan(0);
+  });
+
+  it("offers Ollama Cloud and secured self-hosted Ollama without exposing localhost", async () => {
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Choose your AI")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
+    fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "ollama" } });
+    expect(screen.getByRole("option", { name: /Ollama Cloud ollama-cloud/ })).toBeTruthy();
+    const selfHosted = screen.getByRole("option", { name: /Ollama Self-hosted/ });
+    const guidance = "Hosted Boltrig can use Ollama through a secured public HTTPS endpoint. Never expose an unauthenticated Ollama port. Use Boltrig Desktop to keep Ollama local to your computer.";
+    expect(screen.getByTitle(guidance)).toBeTruthy();
+    fireEvent.click(selfHosted);
+
+    expect(screen.getByRole("button", { name: "Ollama" })).toBeTruthy();
+    expect(screen.getByTitle(guidance)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Provider API key"), { target: { value: "ollama-access-key" } });
+    fireEvent.change(screen.getByLabelText("Ollama API address"), {
+      target: { value: "https://models.example.com/v1" },
+    });
+    fireEvent.change(screen.getByLabelText("Exact model"), { target: { value: "qwen3:8b" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(api.setAiKey).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "ollama",
+      model: "ollama/qwen3:8b",
+      base_url: "https://models.example.com/v1",
+      api_key: "ollama-access-key",
+    })));
+    expect(document.body.textContent).not.toContain("11434");
+  });
+
+  it("keeps the AI step open when a started provider setup is incomplete", async () => {
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Choose your AI")).toBeTruthy();
+    fireEvent.change(await screen.findByLabelText("Provider API key"), { target: { value: "partial-key" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByText("Choose a provider, add its key and pick a model to continue."))
+      .toBeTruthy();
+    expect(screen.getByText("Choose your AI")).toBeTruthy();
+    expect(api.setAiKey).not.toHaveBeenCalled();
+  });
+
+  it("does not finish onboarding until a pending provider setup is explicitly approved", async () => {
+    api.setAiKey.mockResolvedValueOnce({
+      status: "pending_human",
+      proposal: {
+        id: "proposal-1",
+        level: "user",
+        scope_id: "owner",
+        provider: "openai",
+        model: "openai/gpt-5.4",
+        modality: "text",
+        status: "pending",
+        created_at: "2026-08-15T09:00:00Z",
+        expires_at: "2026-08-15T09:15:00Z",
+      },
+    });
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.change(await screen.findByLabelText("Provider API key"), {
+      target: { value: "provider-secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Choose a model" }));
+    fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "GPT-5.4" } });
+    fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByText("Select Continue again to approve this provider and model."))
+      .toBeTruthy();
+    expect(screen.getByText("Choose your AI")).toBeTruthy();
+    expect(api.approveAiKeyProposal).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(api.approveAiKeyProposal).toHaveBeenCalledWith("proposal-1"));
+    expect(await screen.findByText("Add voice")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
+  });
+
+  it("reconciles an approved saved model before allowing onboarding to finish", async () => {
+    api.aiKeys.mockResolvedValueOnce({
+      allow_own_ai_keys: true,
+      ai_keys: [{
+        level: "user",
+        scope_id: "owner",
+        provider: "openai",
+        model: "openai/gpt-5.4",
+        modality: "text",
+        has_key: true,
+        gateway_ready: false,
+      }],
+    });
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Choose your AI")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(api.activateAiKey).toHaveBeenCalledWith({
+      level: "user",
+      scope_id: "owner",
+      modality: "text",
+    }));
+    expect(await screen.findByText("Add voice")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
+  });
+
+  it("keeps onboarding copy focused on the user's choices", async () => {
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Choose your AI")).toBeTruthy();
+    await screen.findByLabelText("Provider API key");
+    expect(screen.queryByText("Connect a provider")).toBeNull();
+    expect(screen.queryByText("Add an AI provider")).toBeNull();
+    expect(screen.queryByText("Model not listed?")).toBeNull();
+    expect(document.body.textContent).not.toMatch(
+      /Bifrost|models\.dev|sealed|write-only|model route|key policy|safe configuration/i,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Add voice")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(
+      /Bifrost|models\.dev|sealed|write-only|model route|key policy|safe configuration/i,
+    );
+  });
+
+  it("lets a member finish when the organisation manages keys", async () => {
+    api.chatModelChoices.mockResolvedValue({
+      status: "unavailable",
+      reason: "not_configured",
+      choices: [],
+      default_available: false,
+    });
+    api.aiKeys.mockResolvedValue({ allow_own_ai_keys: false, ai_keys: [] });
+    render(
+      <OnboardingGate initialAccount={{
+        profile: { ...profile, role: "member" },
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Member workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), {
+      target: { value: "Alex" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByText("Choose your companion")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Your organisation manages your AI.")).toBeTruthy();
+    expect(screen.queryByLabelText("Provider API key")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Your organisation manages voice services.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue in browser" }));
+    expect(await screen.findByText("Member workspace")).toBeTruthy();
+  });
+
+  it("offers optional voice setup and clears the write-only key before awaiting", async () => {
+    api.integrationCatalogue.mockResolvedValueOnce({
+      integrations: [{
+        id: "deepgram-audio",
+        label: "Deepgram",
+        category: "communications",
+        transport: "rest",
+        auth: ["manual_secret"],
+        description: "Speech and transcription",
+        certification: "certified",
+        available: true,
+        setup_supported: true,
+        setup_contract: {
+          kind: "manual_secret",
+          version: "deepgram_audio_v1",
+          fields: [{
+            name: "api_key",
+            label: "Deepgram API key",
+            input_kind: "api_key",
+            secret: true,
+            required: true,
+            min_length: 8,
+            max_length: 4096,
+          }],
+        },
+        enabled_tools: [],
+      }],
+    });
+    render(
+      <OnboardingGate initialAccount={{ profile, settings: { "setup.onboarding_version": 0 } }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByText("Choose your AI");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByText("Add voice")).toBeTruthy();
+    expect(await screen.findByText("Spoken replies")).toBeTruthy();
+    expect(screen.getByText("Transcription")).toBeTruthy();
+    const voiceKey = screen.getByLabelText("Deepgram API key") as HTMLInputElement;
+    fireEvent.change(voiceKey, { target: { value: "deepgram-secret-value" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(api.submitIntegrationSecret).toHaveBeenCalledWith(
+      "deepgram-audio",
+      { fields: { api_key: "deepgram-secret-value" }, label: "Deepgram" },
+    ));
+    expect(voiceKey.value).toBe("");
+    expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
+  });
+
+  it("skips voice without submitting any credential", async () => {
+    render(
+      <OnboardingGate initialAccount={{ profile, settings: { "setup.onboarding_version": 0 } }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByText("Choose your AI");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Skip for now" }));
+    expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
+    expect(api.submitIntegrationSecret).not.toHaveBeenCalled();
+  });
+});

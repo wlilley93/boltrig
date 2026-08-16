@@ -20,7 +20,7 @@ overridden here.
 ## Project identity
 
 - **Name:** Boltrig
-- **Repo root:** `/home/jellytot/Projects/boltrig`
+- **Repo root:** `/path/to/boltrig`
 - **Stack:** Python 3.12 production/CI target (3.14 early-warning) / FastAPI /
   asyncpg (Postgres) / in-memory store / pluggable memory projections
 - **Refactor docs root:** `docs/refactoring/`
@@ -74,6 +74,16 @@ over an 80-line source span, and fails on new, grown, stale, malformed,
 missing-file, or expired exemptions. Every recorded metric must exactly match
 the current source, so an improvement lowers its ratchet in the same change;
 raising one requires an explicit governance review.
+
+The Worker has the same enforceable floor through `make worker-structure`, a
+required prerequisite of `worker-quality` and therefore of CI. The gate uses the
+already pinned TypeScript compiler to scan every `.ts`/`.tsx` file under
+`apps/worker/src`: 400 physical file lines, 80 function lines, five parameters,
+cyclomatic complexity 15, and nesting depth four. Existing debt lives in
+`docs/refactoring/worker-structural-debt.json` with exact per-file and
+per-function metrics, owner, reason and ISO expiry. New, grown, stale-high,
+missing, malformed, duplicate-key or expired debt fails the build; an empty or
+truncated scan fails rather than reporting green.
 
 ## Drift detection
 

@@ -446,3 +446,215 @@ async def test_voice_usage_meter_and_exact_hitl_provider_call():
         mic_task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await mic_task
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-03")
+async def test_typed_user_text_never_cancels_the_in_flight_response():
+    """Typed mid-call text is appended as a user input_text item, transcribed
+    like a spoken turn, and answered AFTER the current utterance finishes:
+    while audio is streaming no response.create is sent and response.cancel
+    is NEVER sent (that path belongs to speech barge-in only)."""
+
+    class FakeSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send(self, raw):
+            self.sent.append(json.loads(raw))
+
+    events = []
+
+    async def sink(event_type, payload, *, participant_id=None):
+        events.append((event_type, payload, participant_id))
+
+    adapter = xai_voice_adapter.XaiVoiceAdapter({
+        "api_key": "xai-test-key",
+        "egress_allow": ["api.x.ai"],
+        "audio": xai_voice_adapter.QueueAudio(),
+        "event_sink": sink,
+    })
+    socket = FakeSocket()
+    adapter._ws = socket
+    adapter._browser_call_active = True
+    adapter._browser_call_id = "call-browser"
+
+    # Idle session: the item is appended and answered immediately.
+    assert await adapter.inject_user_text("what was that again?") is True
+    item = next(e for e in socket.sent if e["type"] == "conversation.item.create")
+    assert item["item"] == {
+        "type": "message",
+        "role": "user",
+        "content": [{"type": "input_text", "text": "what was that again?"}],
+    }
+    assert any(e["type"] == "response.create" for e in socket.sent)
+    assert (
+        "transcript",
+        {"text": "what was that again?", "final": True, "kind": "input", "via": "text"},
+        "user",
+    ) in events
+
+    # Mid-utterance: the typed turn waits for response.done; nothing is
+    # cancelled and no competing response is requested.
+    socket.sent.clear()
+    await adapter._handle_event({
+        "type": "response.output_audio.delta",
+        "delta": base64.b64encode(b"o" * 10).decode("ascii"),
+    })
+    assert await adapter.inject_user_text("and one more thing") is True
+    sent_types = [e["type"] for e in socket.sent]
+    assert "conversation.item.create" in sent_types
+    assert "response.create" not in sent_types
+    assert "response.cancel" not in sent_types
+
+    # The utterance finishes: the deferred response is requested exactly once.
+    await adapter._handle_event({"type": "response.done"})
+    sent_types = [e["type"] for e in socket.sent]
+    assert sent_types.count("response.create") == 1
+    await adapter._handle_event({"type": "response.done"})
+    sent_types = [e["type"] for e in socket.sent]
+    assert sent_types.count("response.create") == 1
+
+    # Dead or caller-less sessions refuse the frame outright.
+    adapter._ws = None
+    assert await adapter.inject_user_text("still there?") is False
+    adapter._ws = socket
+    adapter._browser_call_active = False
+    assert await adapter.inject_user_text("still there?") is False
+    adapter._browser_call_active = True
+    assert await adapter.inject_user_text("   ") is False
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-03")
+async def test_ended_call_refusal_precedes_typed_text_provider_work():
+    class FakeSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send(self, raw):
+            self.sent.append(json.loads(raw))
+
+    events = []
+
+    async def ended_sink(event_type, payload, *, participant_id=None):
+        events.append((event_type, payload, participant_id))
+        return False
+
+    adapter = xai_voice_adapter.XaiVoiceAdapter({
+        "api_key": "xai-test-key",
+        "egress_allow": ["api.x.ai"],
+        "audio": xai_voice_adapter.QueueAudio(),
+        "event_sink": ended_sink,
+    })
+    socket = FakeSocket()
+    adapter._ws = socket
+    adapter._browser_call_active = True
+    adapter._browser_call_id = "call-ended"
+
+    assert await adapter.inject_user_text("must not reach provider") is False
+    assert socket.sent == []
+    assert len(events) == 1
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-03")
+async def test_typed_text_bursts_are_rate_bounded_response_bounded_and_isolated(
+    monkeypatch,
+):
+    class FakeSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send(self, raw):
+            self.sent.append(json.loads(raw))
+
+    async def sink(event_type, payload, *, participant_id=None):
+        return True
+
+    now = [100.0]
+    monkeypatch.setattr(xai_voice_adapter.time, "monotonic", lambda: now[0])
+
+    def build(call_id):
+        adapter = xai_voice_adapter.XaiVoiceAdapter({
+            "api_key": "xai-test-key",
+            "egress_allow": ["api.x.ai"],
+            "audio": xai_voice_adapter.QueueAudio(),
+            "event_sink": sink,
+        })
+        socket = FakeSocket()
+        adapter._ws = socket
+        adapter._browser_call_active = True
+        adapter._browser_call_id = call_id
+        return adapter, socket
+
+    adapter_a, socket_a = build("call-a")
+    for index in range(xai_voice_adapter._TYPED_TEXT_RATE_LIMIT):
+        assert await adapter_a.inject_user_text(f"burst {index}") is True
+    assert await adapter_a.inject_user_text("one too many") is False
+    types_a = [event["type"] for event in socket_a.sent]
+    assert types_a.count("conversation.item.create") == (
+        xai_voice_adapter._TYPED_TEXT_RATE_LIMIT
+    )
+    assert types_a.count("response.create") == 1
+
+    # Limits and response state belong to one call adapter, not the process.
+    adapter_b, socket_b = build("call-b")
+    assert await adapter_b.inject_user_text("independent") is True
+    assert [event["type"] for event in socket_b.sent].count("response.create") == 1
+
+    # Completing the current and one coalesced pending response resets the
+    # in-flight gate; expiry of the rate window admits a new request.
+    await adapter_a._handle_event({"type": "response.done"})
+    assert [event["type"] for event in socket_a.sent].count("response.create") == 2
+    await adapter_a._handle_event({"type": "response.done"})
+    now[0] += xai_voice_adapter._TYPED_TEXT_RATE_WINDOW_SECONDS + 0.1
+    assert await adapter_a.inject_user_text("after reset") is True
+    assert [event["type"] for event in socket_a.sent].count("response.create") == 3
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-03")
+async def test_typed_text_has_per_call_count_and_cumulative_character_limits(
+    monkeypatch,
+):
+    class FakeSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send(self, raw):
+            self.sent.append(json.loads(raw))
+
+    async def sink(event_type, payload, *, participant_id=None):
+        return True
+
+    now = [100.0]
+    monkeypatch.setattr(xai_voice_adapter.time, "monotonic", lambda: now[0])
+
+    def build(call_id):
+        adapter = xai_voice_adapter.XaiVoiceAdapter({
+            "api_key": "xai-test-key",
+            "egress_allow": ["api.x.ai"],
+            "audio": xai_voice_adapter.QueueAudio(),
+            "event_sink": sink,
+        })
+        adapter._ws = FakeSocket()
+        adapter._browser_call_active = True
+        adapter._browser_call_id = call_id
+        return adapter
+
+    count_limited = build("call-count")
+    for index in range(xai_voice_adapter._TYPED_TEXT_CALL_MESSAGE_LIMIT):
+        if index and index % xai_voice_adapter._TYPED_TEXT_RATE_LIMIT == 0:
+            now[0] += xai_voice_adapter._TYPED_TEXT_RATE_WINDOW_SECONDS + 0.1
+        assert await count_limited.inject_user_text("x") is True
+    now[0] += xai_voice_adapter._TYPED_TEXT_RATE_WINDOW_SECONDS + 0.1
+    assert await count_limited.inject_user_text("count overflow") is False
+
+    char_limited = build("call-chars")
+    admitted = xai_voice_adapter._TYPED_TEXT_CALL_CHAR_LIMIT // 8_000
+    for _ in range(admitted):
+        now[0] += xai_voice_adapter._TYPED_TEXT_RATE_WINDOW_SECONDS + 0.1
+        assert await char_limited.inject_user_text("x" * 8_000) is True
+    now[0] += xai_voice_adapter._TYPED_TEXT_RATE_WINDOW_SECONDS + 0.1
+    assert await char_limited.inject_user_text("x") is False

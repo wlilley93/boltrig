@@ -1,0 +1,57 @@
+.composer-add { position: relative; display: inline-flex; }
+.composer-add-trigger[aria-expanded="true"] { color: var(--text); background: var(--hover); }
+.composer-add-popover {
+  position: absolute;
+  z-index: 40;
+  left: -5px;
+  bottom: calc(100% + 10px);
+  width: min(318px, calc(100vw - 28px));
+  overflow: hidden;
+  border: 1px solid var(--border-2);
+  border-radius: 17px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  box-shadow: 0 22px 56px rgb(0 0 0 / 32%);
+  backdrop-filter: blur(26px) saturate(1.18);
+  animation: composer-add-open 160ms cubic-bezier(.2,.8,.2,1) both;
+}
+.composer-add-search {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  margin: 7px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-3);
+  background: var(--inset);
+}
+.composer-add-search input { width: 100%; height: 34px; padding: 0; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 13px; }
+.composer-add-search input::placeholder { color: var(--text-4); }
+.composer-add-scroll { max-height: min(282px, calc(100vh - 260px)); padding: 0 6px 7px; overflow-y: auto; overscroll-behavior: contain; }
+.composer-add-section + .composer-add-section { margin-top: 5px; padding-top: 5px; border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent); }
+.composer-add-section > p { margin: 0; padding: 5px 8px 4px; color: var(--text-3); font-size: 11px; }
+.composer-add-row { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; gap: 6px; width: 100%; min-height: 38px; padding: 5px 8px; border: 0; border-radius: 9px; color: var(--text-2); text-align: left; background: transparent; }
+.composer-add-row:hover:not(:disabled), .composer-add-row:focus-visible { color: var(--text); outline: 0; background: var(--hover); }
+.composer-add-row:disabled { opacity: .42; }
+.composer-add-row > span { display: flex; min-width: 0; align-items: baseline; gap: 7px; }
+.composer-add-row strong { flex: 0 0 auto; font-size: 13px; font-weight: 520; }
+.composer-add-row small { overflow: hidden; color: var(--text-3); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.composer-add-icon { width: 16px; height: 16px; justify-self: center; }
+.composer-add-empty { margin: 18px 8px; color: var(--text-3); font-size: 12px; text-align: center; }
+
+@keyframes composer-add-open { from { opacity: 0; transform: translateY(7px) scale(.985); } }
+
+@media (max-width: 560px) {
+  .composer-add-popover { position: fixed; left: 12px; right: 12px; bottom: 84px; width: auto; }
+  .composer-add-scroll { max-height: min(310px, calc(100vh - 180px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-add-popover { animation: none; }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .composer-add-popover { background: var(--card); }
+}

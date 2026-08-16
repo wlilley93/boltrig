@@ -206,13 +206,13 @@ export function EvaluationsView() {
       const result = await client.createEvalCase(mutation.body);
       if (result.status === "ok") {
         setEditing(false);
-        setNotice({ text: "Evaluation case saved through the governed authoring route." });
+        setNotice({ text: "Evaluation case saved." });
         await refreshCases(typeof result.id === "string" ? result.id : body.id ?? null);
       } else if (result.status === "pending_human") {
         exactApproval.begin(
           mutation, result, "Evaluation fixture save",
         );
-        setNotice({ text: "This evaluation case is waiting for human approval in Inbox." });
+        setNotice({ text: "This evaluation case is waiting for human approval in the originating chat." });
       } else {
         setNotice({ text: result.reason ?? "The evaluation case was refused.", error: true });
       }
@@ -281,7 +281,7 @@ export function EvaluationsView() {
             : "Evaluation fixture restore",
         );
         setNotice({
-          text: `This evaluation ${action} is waiting for human approval in Inbox.`,
+          text: `This evaluation ${action} is waiting for human approval in the originating chat.`,
         });
       } else {
         setNotice({
@@ -310,7 +310,7 @@ export function EvaluationsView() {
       <div className="page-content">
         <div className="page-intro">
           <div>
-            <h2>Test governed agent behavior</h2>
+            <h2>Test agent behaviour</h2>
             <p>Evaluation runs use the caller’s grant ceiling and record durable verdicts. A test never grants its target authority the author does not hold.</p>
           </div>
           {surfaceState === "ready" && (
@@ -319,7 +319,7 @@ export function EvaluationsView() {
         </div>
         {notice && <p className="notice eval-notice" role={notice.error ? "alert" : "status"}>{notice.text}</p>}
         <ExactApprovalFinalizer controller={exactApproval} />
-        {surfaceState === "loading" && <Unavailable title="Loading evaluations">Checking access to governed evaluation fixtures.</Unavailable>}
+        {surfaceState === "loading" && <Unavailable title="Loading evaluations">Loading evaluation cases.</Unavailable>}
         {surfaceState === "denied" && <Unavailable title="Evaluation access denied">Your current role cannot view sensitive fixtures or author evaluation cases.</Unavailable>}
         {surfaceState === "unavailable" && <Unavailable title="Evaluations unavailable">The evaluation service could not be reached.</Unavailable>}
         {surfaceState === "ready" && editing && (

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
+  chatModelChoices: vi.fn(),
   addWorkspaceMember: vi.fn(),
   aiKeyProposal: vi.fn(),
   aiKeyProposals: vi.fn(),
@@ -57,6 +58,7 @@ const api = vi.hoisted(() => ({
   finalizeAiKeyProposal: vi.fn(),
   invalidateAiKeyProposal: vi.fn(),
   updateCurrentOrg: vi.fn(),
+  updateMeProfile: vi.fn(),
   updateWorkspace: vi.fn(),
   workspaceMembers: vi.fn(),
   workspaces: vi.fn(),
@@ -99,6 +101,16 @@ const workspace = {
 };
 
 beforeEach(() => {
+  stubDesktopViewport();
+  api.updateMeProfile.mockResolvedValue({ status: "ok", profile });
+  api.chatModelChoices.mockResolvedValue({
+    status: "ok",
+    reason: null,
+    choices: [],
+    default_choice_id: "opaque-default-route",
+    default_model_name: "openai/gpt-5.4",
+    default_available: true,
+  });
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -268,8 +280,14 @@ describe("Worker account surface", () => {
     fireEvent.change(screen.getByLabelText("Timezone"), {
       target: { value: "Europe/Paris" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+    fireEvent.change(screen.getByLabelText("Display name"), {
+      target: { value: "Alice Rivers" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
 
+    await waitFor(() => expect(api.updateMeProfile).toHaveBeenCalledWith({
+      display_name: "Alice Rivers",
+    }));
     await waitFor(() => expect(api.putMeSettings).toHaveBeenCalledWith({
       settings: {
         theme: "system",
@@ -287,7 +305,7 @@ describe("Worker account surface", () => {
     render(<AccountView />);
     await screen.findByText("Alice");
     fireEvent.change(screen.getByLabelText("Theme"), { target: { value: "dark" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
     await waitFor(() => expect(api.putMeSettings).toHaveBeenCalled());
     expect(localStorage.getItem("boltrig-worker-theme")).toBe("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
@@ -410,7 +428,7 @@ describe("Worker account surface", () => {
     const addRoute = screen.getByRole("button", { name: "Add route" });
     await waitFor(() => expect((addRoute as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(addRoute);
-    await screen.findByText("Pending approval in your Inbox.");
+    await screen.findByText("Pending approval. Continue in the originating chat.");
     fireEvent.click(screen.getByRole("button", {
       name: "Check approval and apply exact change",
     }));
@@ -683,7 +701,7 @@ describe("Worker organisation surface", () => {
     fireEvent.click(within(inviteSection.closest("section")!).getByRole("button", {
       name: "Invite",
     }));
-    await screen.findByText("Pending approval in your Inbox.");
+    await screen.findByText("Pending approval. Continue in the originating chat.");
     fireEvent.click(screen.getByRole("button", {
       name: "Check approval and apply exact change",
     }));
@@ -946,7 +964,7 @@ describe("Worker conversation management", () => {
     expect((screen.getByRole("button", { name: "Restore conversation" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("opens compact task details as a dismissible focus-managed dialog", async () => {
+  it("opens compact desktop task details as a non-modal floating rail", async () => {
     stubCompactViewport();
     render(
       <ChatView
@@ -958,37 +976,29 @@ describe("Worker conversation management", () => {
 
     const trigger = await screen.findByRole("button", { name: "Task details" });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
-    const hiddenSheet = document.getElementById("worker-task-details");
-    expect(hiddenSheet?.hasAttribute("inert")).toBe(true);
-    expect(hiddenSheet?.querySelectorAll("button").length).toBeGreaterThan(0);
+    const hiddenOverlay = document.getElementById("worker-task-details");
+    expect(hiddenOverlay?.hasAttribute("inert")).toBe(true);
+    expect(hiddenOverlay?.querySelectorAll("button").length).toBeGreaterThan(0);
     fireEvent.click(trigger);
 
-    expect(screen.getByRole("dialog", { name: "Task details" })).toBeTruthy();
-    expect(hiddenSheet?.hasAttribute("inert")).toBe(false);
-    const close = screen.getByRole("button", { name: "Close task details" });
-    await waitFor(() => expect(document.activeElement).toBe(close));
-    expect(document.body.style.overflow).toBe("hidden");
-    const dialogButtons = screen.getByRole("dialog", { name: "Task details" })
-      .querySelectorAll<HTMLButtonElement>("button:not([disabled])");
-    const last = dialogButtons[dialogButtons.length - 1];
-    last.focus();
-    fireEvent.keyDown(window, { key: "Tab" });
-    expect(document.activeElement).toBe(close);
-    fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
-    expect(document.activeElement).toBe(last);
-
-    fireEvent.keyDown(window, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Task details" })).toBeNull());
-    await waitFor(() => expect(document.activeElement).toBe(trigger));
-    expect(hiddenSheet?.hasAttribute("inert")).toBe(true);
+    expect(screen.getByRole("complementary", { name: "Task details" })).toBeTruthy();
+    expect(hiddenOverlay?.hasAttribute("inert")).toBe(false);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Dismiss task details" })).toBeNull();
     expect(document.body.style.overflow).toBe("");
 
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("complementary", { name: "Task details" })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(hiddenOverlay?.hasAttribute("inert")).toBe(true);
+
     fireEvent.click(trigger);
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss task details" }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Task details" })).toBeNull());
+    await screen.findByRole("complementary", { name: "Task details" });
+    fireEvent.click(trigger);
+    await waitFor(() => expect(screen.queryByRole("complementary", { name: "Task details" })).toBeNull());
   });
 
-  it("keeps restore controls reachable in compact task details", async () => {
+  it("keeps compact task details limited to utility sections", async () => {
     stubCompactViewport();
     api.conversations.mockResolvedValue({
       conversations: [{
@@ -1007,42 +1017,10 @@ describe("Worker conversation management", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Task details" }));
-    expect(await screen.findByRole("button", { name: "Restore conversation" })).toBeTruthy();
-  });
-
-  it("refreshes a closed conversation in place without reloading the page", async () => {
-    api.deleteMyConversation.mockResolvedValue({ status: "ok", id: "conversation-a" });
-    api.conversations
-      .mockResolvedValueOnce({
-        conversations: [{
-          id: "conversation-a",
-          title: "Renewals",
-          status: "active",
-          updated_at: "2026-01-01T00:00:00Z",
-        }],
-      })
-      .mockResolvedValueOnce({
-        conversations: [{
-          id: "conversation-a",
-          title: "Renewals",
-          status: "closed",
-          updated_at: "2026-01-01T00:00:00Z",
-        }],
-      });
-    const onChanged = vi.fn();
-    render(
-      <ChatView
-        conversationId="conversation-a"
-        onConversation={vi.fn()}
-        onChanged={onChanged}
-      />,
-    );
-
-    fireEvent.click(await screen.findByRole("button", { name: "Close conversation" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm close conversation" }));
-    expect(await screen.findByRole("heading", { name: "Closed conversation" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Restore conversation" })).toBeTruthy();
-    expect(onChanged).toHaveBeenCalledOnce();
+    expect(screen.getByRole("complementary", { name: "Task details" })).toBeTruthy();
+    expect(screen.getByLabelText("Outputs")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Restore conversation" })).toBeNull();
+    expect(screen.queryByLabelText("Conversation title")).toBeNull();
   });
 
   it("does not submit the composer while an IME composition is active", async () => {
@@ -1088,7 +1066,7 @@ describe("Worker conversation management", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /brief\.md/i }));
     expect((await screen.findByRole("alert")).textContent).toBe(
-      "The artifact could not be downloaded. It is safe to retry.",
+      "The output could not be downloaded. It is safe to retry.",
     );
   });
 
@@ -1166,7 +1144,7 @@ describe("Worker conversation management", () => {
     expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
   });
 
-  it("is wired into the live chat rail for the last eligible assistant message", async () => {
+  it("keeps conversation mutation controls out of the floating desktop rail", async () => {
     render(
       <ChatView
         conversationId="conversation-a"
@@ -1174,10 +1152,10 @@ describe("Worker conversation management", () => {
         onChanged={vi.fn()}
       />,
     );
-    expect(await screen.findByRole("button", {
-      name: "Regenerate last response",
-    })).toBeTruthy();
-    expect(screen.getByLabelText("Conversation title")).toBeTruthy();
+    await waitFor(() => expect(document.querySelector(".right-rail .chat-rail-glass")).toBeTruthy());
+    expect(screen.queryByRole("button", { name: "Regenerate last response" })).toBeNull();
+    expect(screen.queryByLabelText("Conversation title")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close conversation" })).toBeNull();
   });
 
   it("loads further artifact pages without replacing the first page", async () => {
@@ -1211,7 +1189,7 @@ describe("Worker conversation management", () => {
     );
 
     expect(await screen.findByText("brief.md")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Load more artifacts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Load more outputs" }));
     expect(await screen.findByText("appendix.md")).toBeTruthy();
     expect(screen.getByText("brief.md")).toBeTruthy();
     expect(api.artifacts).toHaveBeenLastCalledWith({
@@ -1219,7 +1197,7 @@ describe("Worker conversation management", () => {
       limit: 25,
       cursor: "cursor/artifact-a",
     });
-    expect(screen.queryByRole("button", { name: "Load more artifacts" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Load more outputs" })).toBeNull();
   });
 
   it("uses emitted Familiar identity and leaves the root activity orb unbound", async () => {
@@ -1263,21 +1241,46 @@ describe("Worker conversation management", () => {
 
     // The newest turn's avatar slot now hosts the one presiding Familiar
     // Stage (console placement rule 2), which stays root-neutral; the emitted
-    // identity remains visible on the subagent marker, still derived only
-    // from the canonical genotype.
-    const profile = await screen.findByLabelText("local-worker profile Familiar");
-    expect(profile.dataset.genotypeSource).toBe("agent_capability.name.v1");
-    expect(profile.getAttribute("style")).toContain("#112233");
-    expect(screen.getByText(/policy research-route/)).toBeTruthy();
-    const root = screen.getByRole("img", { name: "Boltrig activity · ready" });
+    // identity remains visible on the compact subagent chip and rail stack;
+    // both are decorative inside already-labelled controls, so inspect their
+    // canonical genotype data rather than announcing a duplicate image.
+    await screen.findByText("local-worker");
+    const profile = document.querySelector<HTMLElement>(
+      '[data-genotype-source="agent_capability.name.v1"]',
+    );
+    expect(profile).not.toBeNull();
+    expect(profile?.getAttribute("style")).toContain("#112233");
+    // Spawn-rule provenance is the technical register: it renders only when
+    // the persisted developer-details flag is on, and this account has it off.
+    expect(screen.queryByText(/policy research-route/)).toBeNull();
+    // The header mark is decorative inside the title button, so it is
+    // intentionally excluded from the accessibility tree. Inspect the DOM
+    // contract directly instead of requiring aria-hidden chrome to be a
+    // second announced image.
+    const root = document.querySelector<HTMLElement>(
+      '[aria-label="Boltrig activity · ready"]',
+    );
+    expect(root).not.toBeNull();
+    if (!root) throw new Error("expected the decorative root Familiar mark");
     expect(root.dataset.genotypeSource).toBe("unbound");
-    expect(root.getAttribute("style")).toBeNull();
+    expect(root.dataset.familiarBody).toBe("neutral");
   });
 });
 
 function stubCompactViewport() {
   vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
-    matches: query === "(max-width: 1020px)",
+    matches: query === "(max-width: 1374px)",
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })));
+}
+
+function stubDesktopViewport() {
+  vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
+    matches: false,
     media: query,
     onchange: null,
     addEventListener: vi.fn(),

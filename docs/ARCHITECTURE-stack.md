@@ -29,7 +29,7 @@ one.
 | **kernel** (policy core) | `boltrig/kernel` + `boltrig/models` | `kernel` service | imports only the `Store` **Protocol**, never an implementation |
 | **database** (persistence) | `boltrig/store` + `schema.sql` + `migrations` | `postgres` + the store impls | **0** imports from kernel/fleet (inverted) |
 | **agent-runtime** (the fleet) | `boltrig/fleet` | `fleet-worker` | the Pi sidecar that sat here is retired (decision 0020); `services/channel_gateway` is the remaining severed sidecar, HTTP-only, SEC-28 tested |
-| **frontend** | `ui/` | `ui` service | separate npm app + build |
+| **frontend** | `apps/worker/` | `worker-ui` service | Worker web/Tauri client + build |
 
 Dependency direction is already correct and inverted at the contract: kernel
 depends on the `Store` Protocol (not the DB); the runtime depends on kernel
@@ -66,7 +66,7 @@ future split would cleave along. Split for real only when demonstrated-need arri
    to the runtime. Extend the severability test to assert the layer dependency
    rule explicitly: `models` depends on nothing; `store` depends only on `models`;
    `kernel` depends only on `models` + the `Store` Protocol; `fleet` may depend on
-   `kernel`; nothing depends on `ui`. A boundary breach fails the gate.
+   `kernel`; nothing depends on the frontend implementation. A boundary breach fails the gate.
 3. **Identify the shared-contract seam** (`boltrig/models` + the `Store`/`Adapter`
    Protocols + the event-shape definitions). This is the future `boltrig-contracts`
    package and the line a repo-split would cut along. Keep it cohesive and

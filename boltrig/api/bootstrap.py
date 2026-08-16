@@ -16,7 +16,9 @@ from typing import Any
 from boltrig.api.birth_profile_startup import (
     publish_birth_profile_startup as _publish_birth_profile_startup_impl,
 )
+from boltrig.api.agent_tool_bootstrap import register_agent_support
 from boltrig.api.device_bootstrap import register_device_actions
+from boltrig.api.camera_bootstrap import register_camera_actions
 from boltrig.api.hitl_resume_bridge import resume_held_write_route
 from boltrig.config import apply_manifest, load_manifest, load_settings, production_signal
 
@@ -37,7 +39,7 @@ from boltrig.knowledge import register_knowledge
 from boltrig.kernel import Kernel
 from boltrig.kernel.events import build_event_relay
 from boltrig.kernel.ratelimit import build_counter
-from boltrig.distill.bootstrap import register_distill as _register_distill
+from boltrig.distill.bootstrap import register_distill
 from boltrig.memory.bootstrap import register_memory as _register_memory
 from boltrig.store import InMemoryStore, Store
 
@@ -99,7 +101,7 @@ async def build_store() -> Store:
     return InMemoryStore()
 
 
-async def _seed_default(kernel: Kernel) -> None:
+async def _seed_default(kernel: Kernel, *, model_catalogue: Any = None) -> None:
     """Seed a minimal, offline-safe demo tenant when no manifest is present."""
     from boltrig.adapters.builtin.familiar import build as build_familiar
     from boltrig.adapters.builtin.memory_tickets import build as build_tickets
@@ -117,11 +119,12 @@ async def _seed_default(kernel: Kernel) -> None:
     await kernel.register_adapter(_DEFAULT_TENANT, build_familiar())  # familiar.express (WL-3)
     if _desktop_hands_enabled():
         await _register_desktop_hands(kernel, _DEFAULT_TENANT)
-    await _register_control_plane(kernel, _DEFAULT_TENANT)
+    await _register_control_plane(kernel, _DEFAULT_TENANT, model_catalogue=model_catalogue)
     await _register_web_fetch(kernel, _DEFAULT_TENANT, {})
-    await _register_skill_shelf(kernel, _DEFAULT_TENANT)
+    await register_agent_support(kernel, _DEFAULT_TENANT)
     await _register_channel_send(kernel, _DEFAULT_TENANT)
     await register_device_actions(kernel, _DEFAULT_TENANT)
+    await register_camera_actions(kernel, _DEFAULT_TENANT)
     # Keep knowledge opt-in while preserving the demo tenant's vault.
     await register_knowledge(kernel, _DEFAULT_TENANT, {"enabled": True})
 
@@ -143,7 +146,9 @@ async def _register_desktop_hands(kernel: Kernel, tenant_id: str) -> None:
     log.info("desktop hands verbs registered (governed host window control)")
 
 
-async def _register_control_plane(kernel: Kernel, tenant_id: str) -> None:
+async def _register_control_plane(
+    kernel: Kernel, tenant_id: str, *, model_catalogue: Any = None
+) -> None:
     """Register config amendment through the governed control-plane chokepoint.
 
     Loader and registry are injected here; runtime collaborators bind later.
@@ -157,6 +162,7 @@ async def _register_control_plane(kernel: Kernel, tenant_id: str) -> None:
             loader=kernel.loader,
             registry=kernel.registry,
             credentials=kernel.credentials,  # MCP bearers bind to the seam (SEC-04/05)
+            model_catalogue=model_catalogue,
         ),
     )
     log.info("control-plane verbs registered (governed config amendment)")
@@ -183,20 +189,8 @@ async def _register_channel_send(kernel: Kernel, tenant_id: str, manifest=None) 
     from boltrig.kernel.dev_egress_runtime import announced_diversion_fn
 
     diversion = announced_diversion_fn(manifest)
-    await kernel.register_adapter(
-        tenant_id, build_channel_send(kernel.store, diversion=diversion)
-    )
+    await kernel.register_adapter(tenant_id, build_channel_send(kernel.store, diversion=diversion))
     log.info("channel.send verb registered (governed outbound, HITL by default)")
-
-
-async def _register_skill_shelf(kernel: Kernel, tenant_id: str) -> None:
-    """Register the on-demand skill shelf so an agent can browse + load skills by
-    description through the chokepoint (Round Fifteen; FR-SKILL-01/02, SEC-57).
-    The engine owns the shelf mechanism; the project owns the skill content."""
-    from boltrig.skills.shelf import build_skill_shelf_adapter
-
-    await kernel.register_adapter(tenant_id, build_skill_shelf_adapter(kernel.store))
-    log.info("skill shelf registered (skill.search/describe/load)")
 
 
 async def _register_consumed_mcp(kernel: Kernel, tenant_id: str, mcp_cfg) -> None:
@@ -265,16 +259,17 @@ async def _rehydrate_store_adapters(kernel: Kernel, tenant_id: str) -> None:
             )
 
 
-async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
+async def _seed_from_manifest(kernel: Kernel, manifest, *, model_catalogue: Any = None) -> None:
     await apply_manifest(kernel, manifest)
     await provision_builtin_integration_catalogue(kernel.store, manifest.tenant_id)
     await _register_memory(kernel, manifest.tenant_id, manifest.section("memory"))
     await register_knowledge(kernel, manifest.tenant_id, manifest.section("knowledge"))
-    await _register_distill(kernel, manifest.tenant_id, manifest.section("distill"))
-    await _register_control_plane(kernel, manifest.tenant_id)
-    await _register_skill_shelf(kernel, manifest.tenant_id)
+    await register_distill(kernel, manifest.tenant_id, manifest.section("distill"))
+    await _register_control_plane(kernel, manifest.tenant_id, model_catalogue=model_catalogue)
+    await register_agent_support(kernel, manifest.tenant_id)
     await _register_channel_send(kernel, manifest.tenant_id, manifest)
     await register_device_actions(kernel, manifest.tenant_id)
+    await register_camera_actions(kernel, manifest.tenant_id)
     if os.environ.get("BOLTRIG_EMOTION", "").strip() == "1":
         # desktop-only: the same box that publishes the phenotype accepts voluntary gestures (WL-3).
         from boltrig.adapters.builtin.familiar import build as build_familiar
@@ -397,6 +392,7 @@ def _attach_hands_registry(kernel: Kernel) -> None:
 async def build_kernel_async(
     *,
     codex_config: dict[str, object] | None = None,
+    model_catalogue: Any = None,
     sensitive_endpoint_id: str | None = None,
     manifest_snapshot: Any = _MANIFEST_UNSET,
     manifest_path: str | None = None,
@@ -443,19 +439,20 @@ async def build_kernel_async(
         )
         if _desktop_hands_enabled():
             _attach_hands_registry(kernel)
-        await _seed_from_manifest(kernel, manifest)
+        await _seed_from_manifest(kernel, manifest, model_catalogue=model_catalogue)
         log.info("booted from manifest %s (tenant %s)", manifest_path, manifest.tenant_id)
     else:
         kernel = Kernel(store, counter=counter, event_relay=event_relay)
         if _desktop_hands_enabled():
             _attach_hands_registry(kernel)
-        await _seed_default(kernel)
+        await _seed_default(kernel, model_catalogue=model_catalogue)
         log.info("no manifest found; booted minimal demo tenant '%s'", _DEFAULT_TENANT)
 
     kernel.set_agent_invoker(
         make_agent_invoker(
             kernel,
             codex_config=codex_config,
+            model_catalogue=model_catalogue,
             sensitive_endpoint_id=sensitive_endpoint_id,
         )
     )  # US-KER-02
@@ -464,8 +461,21 @@ async def build_kernel_async(
 
 def build_kernel() -> Kernel:
     """Synchronous entrypoint for uvicorn/worker import-time construction."""
-    codex_config = _build_shared_codex_config()
-    return asyncio.run(build_kernel_async(codex_config=codex_config))
+    from boltrig.api.model_runtime_composition import compose_process_model_runtime
+
+    manifest_path, manifest, codex_config, model_catalogue = compose_process_model_runtime(
+        find_manifest=_find_manifest,
+        load_manifest=load_manifest,
+        build_codex_config=_build_shared_codex_config,
+    )
+    return asyncio.run(
+        build_kernel_async(
+            codex_config=codex_config,
+            model_catalogue=model_catalogue,
+            manifest_snapshot=manifest,
+            manifest_path=manifest_path,
+        )
+    )
 
 
 def _deny_all_resolver():
@@ -542,6 +552,7 @@ def _build_chat_wiring(
     codex_config,
     spawn_rules=(),
     sensitive_endpoint_id: str | None = None,
+    model_catalogue=None,
 ):
     """Return ``(chat_factory, resume_held_write)`` sharing ONE ChatService.
 
@@ -578,6 +589,7 @@ def _build_chat_wiring(
                 build_spawner(
                     kernel,
                     codex_config=codex_config,
+                    model_catalogue=model_catalogue,
                     sensitive_endpoint_id=sensitive_endpoint_id,
                     spawn_rules=spawn_rules,
                 ),

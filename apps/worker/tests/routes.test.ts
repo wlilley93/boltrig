@@ -11,13 +11,15 @@ describe("Worker routes", () => {
   it("keeps the task surface as the default", () => {
     expect(routeFromHash("")).toBe("chat");
     expect(routeFromHash("#/not-a-worker-route")).toBe("chat");
+    expect(routeFromHash("#/inbox")).toBe("chat");
+    expect(routeFromHash("#/operate")).toBe("chat");
   });
 
   it("recognises every first-party Worker section", () => {
     for (const route of [
-      "home", "chat", "inbox", "runs", "work", "agents", "automations",
+      "home", "chat", "runs", "work", "agents", "automations", "browser",
       "knowledge", "memory", "integrations", "channels", "build",
-      "evaluations", "operate", "account", "organisation", "settings",
+      "evaluations", "account", "organisation", "settings",
     ]) {
       expect(routeFromHash(`#/${route}`)).toBe(route);
     }

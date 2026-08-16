@@ -1,0 +1,169 @@
+/* Latest Boltrig Console command surface. Scoped under the backdrop so this
+ * component can track the decided 560px geometry without changing shared
+ * table, button, or modal primitives. The Figma CURRENT SOURCE frame clips a
+ * 1880px source viewport to 1440px, so its palette is 220px right of the
+ * clipped frame centre at the desktop comparison size. */
+
+.command-backdrop[data-command-surface] {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 15vh 5vw 0;
+  background: rgb(0 0 0 / 40%);
+  backdrop-filter: none;
+}
+
+.command-backdrop[data-command-surface] .command-palette {
+  width: min(560px, 90vw);
+  transform: translateX(220px);
+  overflow: hidden;
+  border: 1px solid var(--border-2);
+  border-radius: 14px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+.command-backdrop[data-command-surface] .command-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-3);
+}
+
+.command-backdrop[data-command-surface] .command-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  background: transparent;
+  font-size: 15px;
+}
+
+.command-backdrop[data-command-surface] .command-search kbd {
+  padding: 2px 6px;
+  border: 1px solid var(--border-2);
+  border-radius: 5px;
+  color: var(--text-4);
+  background: transparent;
+  font: 11px/1.2 inherit;
+}
+
+.command-backdrop[data-command-surface] .command-results {
+  display: block;
+  max-height: 340px;
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.command-backdrop[data-command-surface] .command-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.command-backdrop[data-command-surface] .command-source-group {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+}
+
+.command-backdrop[data-command-surface] .command-group-heading {
+  padding: 5px 11px;
+  color: var(--text-4);
+  font: 11px/1.35 inherit;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.command-backdrop[data-command-surface] .command-row {
+  display: flex;
+  align-items: center;
+  justify-content: initial;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.command-backdrop[data-command-surface] .command-row:hover,
+.command-backdrop[data-command-surface] .command-row.active {
+  background: var(--hover);
+}
+
+.command-backdrop[data-command-surface] .command-row-icon {
+  display: flex;
+  flex: 0 0 16px;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-3);
+}
+
+.command-backdrop[data-command-surface] .command-row-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-backdrop[data-command-surface] .command-row-hint,
+.command-backdrop[data-command-surface] .command-result-source {
+  flex: 0 0 auto;
+  color: var(--text-4);
+  font: 12px/1.35 inherit;
+  white-space: nowrap;
+}
+
+.command-backdrop[data-command-surface] .command-api-state {
+  margin: 6px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  color: var(--text-3);
+  background: var(--inset);
+  font-size: 12px;
+}
+
+.command-backdrop[data-command-surface] .command-empty {
+  padding: 28px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .command-backdrop[data-command-surface] {
+    padding:
+      max(72px, calc(12px + env(safe-area-inset-top, 0px)))
+      max(12px, env(safe-area-inset-right, 0px))
+      max(12px, env(safe-area-inset-bottom, 0px))
+      max(12px, env(safe-area-inset-left, 0px));
+  }
+
+  .command-backdrop[data-command-surface] .command-palette {
+    width: min(560px, calc(100vw - 24px));
+    transform: none;
+  }
+
+  .command-backdrop[data-command-surface] .command-row {
+    min-height: 44px;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 960px) {
+  .command-backdrop[data-command-surface] .command-palette {
+    transform: none;
+  }
+}

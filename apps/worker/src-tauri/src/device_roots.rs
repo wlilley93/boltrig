@@ -20,6 +20,8 @@ const ROOT_VERSION: u8 = 1;
 const MAX_PAYLOAD_BYTES: usize = 100 * 1024 * 1024;
 const MAX_BUFFERED_BYTES: usize = 200 * 1024 * 1024;
 const MAX_BUFFERED_ITEMS: usize = 4;
+const MAX_DIRECTORY_SCAN_ENTRIES: usize = 2_000;
+const MAX_DIRECTORY_METADATA_BYTES: usize = 10 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -226,6 +228,22 @@ pub(crate) fn load_root(
     }
 }
 
+/// Resolve the native workspace for the private desktop agent. This is not the
+/// remote lease executor: it merely reuses the user's enrolled, opaque root
+/// binding as the only lawful way to choose a local App Server cwd.
+pub(crate) fn local_agent_workspace(
+    origin: &str,
+    device_id: &str,
+    root_id: &str,
+) -> Result<PathBuf, String> {
+    let root = load_root(origin, device_id, root_id)?
+        .ok_or_else(|| "local_agent_root_unbound".to_string())?;
+    if root.scope != "read_write" || !root.command_enabled {
+        return Err("local_agent_root_not_enabled".to_string());
+    }
+    verified_root_path(&root)
+}
+
 pub(crate) fn delete_root(origin: &str, device_id: &str, root_id: &str) -> Result<(), String> {
     match root_entry(origin, device_id, root_id)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
@@ -286,6 +304,10 @@ pub(crate) async fn execute(
     action: ValidatedAction,
 ) -> ExecutionOutcome {
     let result = match action {
+        ValidatedAction::List {
+            relative_path,
+            max_entries,
+        } => execute_list(root, relative_path, max_entries).await,
         ValidatedAction::Read {
             relative_path,
             max_bytes,
@@ -322,6 +344,105 @@ pub(crate) async fn execute(
             receipt: json!({"code": code}),
         },
     }
+}
+
+async fn execute_list(
+    root: &NativeRoot,
+    relative_path: Option<String>,
+    max_entries: usize,
+) -> Result<Value, String> {
+    let root_path = verified_root_path(root)?;
+    tokio::task::spawn_blocking(move || {
+        let directory = match relative_path {
+            Some(relative) => resolve_existing(&root_path, &relative, true)?,
+            None => root_path.clone(),
+        };
+        let mut entries = Vec::new();
+        let mut scanned = 0_usize;
+        let mut truncated = false;
+        let reader =
+            std::fs::read_dir(directory).map_err(|_| "directory_list_failed".to_string())?;
+        for item in reader {
+            if scanned >= MAX_DIRECTORY_SCAN_ENTRIES {
+                truncated = true;
+                break;
+            }
+            scanned += 1;
+            let item = item.map_err(|_| "directory_list_failed".to_string())?;
+            let name = match item.file_name().into_string() {
+                Ok(name) if safe_leaf_name(&name) => name,
+                _ => {
+                    truncated = true;
+                    continue;
+                }
+            };
+            let item_path = item.path();
+            let metadata = std::fs::symlink_metadata(&item_path)
+                .map_err(|_| "directory_list_failed".to_string())?;
+            let (kind, byte_size) = if metadata.file_type().is_symlink() {
+                ("symlink", None)
+            } else if metadata.is_dir() {
+                ("directory", None)
+            } else if metadata.is_file() {
+                if metadata.len() > 9_007_199_254_740_991 {
+                    truncated = true;
+                    continue;
+                }
+                ("file", Some(metadata.len()))
+            } else {
+                truncated = true;
+                continue;
+            };
+            let relative = item_path
+                .strip_prefix(&root_path)
+                .map_err(|_| "root_relative_target_refused".to_string())?
+                .to_str()
+                .ok_or_else(|| "directory_entry_not_unicode".to_string())?
+                .replace(std::path::MAIN_SEPARATOR, "/");
+            reject_relative(&relative)?;
+            if relative.len() > 1024 {
+                truncated = true;
+                continue;
+            }
+            entries.push(json!({
+                "name": name,
+                "path": relative,
+                "kind": kind,
+                "byte_size": byte_size,
+            }));
+        }
+        entries.sort_by(|left, right| {
+            left.get("name")
+                .and_then(Value::as_str)
+                .cmp(&right.get("name").and_then(Value::as_str))
+        });
+        let mut bounded = Vec::new();
+        let mut metadata_bytes = 0_usize;
+        for entry in entries {
+            let name_bytes = entry
+                .get("name")
+                .and_then(Value::as_str)
+                .map(str::len)
+                .unwrap_or(0);
+            let path_bytes = entry
+                .get("path")
+                .and_then(Value::as_str)
+                .map(str::len)
+                .unwrap_or(0);
+            let entry_bytes = name_bytes.saturating_add(path_bytes).saturating_add(64);
+            if bounded.len() >= max_entries
+                || metadata_bytes.saturating_add(entry_bytes) > MAX_DIRECTORY_METADATA_BYTES
+            {
+                truncated = true;
+                break;
+            }
+            metadata_bytes = metadata_bytes.saturating_add(entry_bytes);
+            bounded.push(entry);
+        }
+        Ok(json!({"entries": bounded, "truncated": truncated}))
+    })
+    .await
+    .map_err(|_| "device_io_task_failed".to_string())?
 }
 
 async fn execute_read(
@@ -556,6 +677,14 @@ fn reject_relative(value: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn safe_leaf_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 255
+        && !name.contains('/')
+        && !name.contains('\\')
+        && !name.chars().any(char::is_control)
+}
+
 fn resolve_executable(program: &str) -> Result<PathBuf, String> {
     if program.is_empty() || program.contains('\0') {
         return Err("invalid_command_executable".to_string());
@@ -714,6 +843,54 @@ mod tests {
         assert!(is_shell_executable(Path::new("/bin/sh")));
         assert!(is_shell_executable(Path::new("cmd.exe")));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn directory_metadata_is_bounded_sorted_and_never_follows_symlinks() {
+        let path = temp_root();
+        std::fs::create_dir(path.join("folder")).unwrap();
+        std::fs::write(path.join("alpha.txt"), b"alpha").unwrap();
+        std::fs::write(path.join("zeta.txt"), b"zeta").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("/etc/passwd", path.join("escape")).unwrap();
+
+        let complete = execute_list(&native_root(&path, "read"), None, 100)
+            .await
+            .unwrap();
+        let entries = complete["entries"].as_array().unwrap();
+        let names = entries
+            .iter()
+            .map(|entry| entry["name"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert!(names.windows(2).all(|pair| pair[0] <= pair[1]));
+        let alpha = entries
+            .iter()
+            .find(|entry| entry["name"] == "alpha.txt")
+            .unwrap();
+        assert_eq!(alpha["kind"], "file");
+        assert_eq!(alpha["byte_size"], 5);
+        #[cfg(unix)]
+        {
+            let escape = entries
+                .iter()
+                .find(|entry| entry["name"] == "escape")
+                .unwrap();
+            assert_eq!(escape["kind"], "symlink");
+            assert!(escape["byte_size"].is_null());
+            assert_eq!(
+                execute_list(&native_root(&path, "read"), Some("escape".to_string()), 10,)
+                    .await
+                    .unwrap_err(),
+                "root_relative_symlink_refused"
+            );
+        }
+
+        let bounded = execute_list(&native_root(&path, "read"), None, 1)
+            .await
+            .unwrap();
+        assert_eq!(bounded["entries"].as_array().unwrap().len(), 1);
+        assert_eq!(bounded["truncated"], true);
+        std::fs::remove_dir_all(path).unwrap();
     }
 
     #[tokio::test]

@@ -25,6 +25,7 @@ from typing import Any
 
 from boltrig.identity.provisioning import effective_grants_for_request
 from boltrig.kernel.channel_policy import ceiling_from_item
+from boltrig.kernel.work_authority import creator_ceiling_from_item
 from boltrig.models import EMPTY_GRANTS, GrantSet, InvocationContext, WorkItem
 
 log = logging.getLogger("boltrig.fleet.authority")
@@ -76,9 +77,7 @@ def _context(item: WorkItem, run_id: str, grants: GrantSet) -> InvocationContext
         on_behalf_of=item.on_behalf_of,
         workspace_id=item.workspace_id,
         extra=(
-            {"principal_scope": {"departments": [item.owner_member]}}
-            if item.owner_member
-            else {}
+            {"principal_scope": {"departments": [item.owner_member]}} if item.owner_member else {}
         ),
     )
 
@@ -102,8 +101,9 @@ async def context_for(store: Any, item: WorkItem, run_id: str) -> InvocationCont
     ceiling. Keeping the axes separate keeps both exact.
     """
     grants = await principal_grants_for_item(store, item)
-    ceiling = ceiling_from_item(item)
-    if ceiling is not None:
+    for ceiling in (ceiling_from_item(item), creator_ceiling_from_item(item)):
+        if ceiling is None:
+            continue
         # Intake policy is a second, durable narrowing. Even if a work-item
         # projection is edited later, intersecting here can never widen the
         # principal authority resolved above.
@@ -123,7 +123,11 @@ def reflection_context(item: WorkItem, run_id: str) -> InvocationContext:
 
 
 async def route_to_head(
-    cos: Any, heads: dict[str, Any], store: Any, item: WorkItem, run_id: str,
+    cos: Any,
+    heads: dict[str, Any],
+    store: Any,
+    item: WorkItem,
+    run_id: str,
     ctx: InvocationContext,
 ) -> Any | None:
     """Route ``item`` to its department head, or ``None`` if unroutable (SEC-165).

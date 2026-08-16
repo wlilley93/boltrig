@@ -1,0 +1,224 @@
+/* Run section drawing: legend column + per-step "bore" columns. All colour
+   comes from the console tokens; the ONLY encoded signal is status, carried by
+   the data-tone attribute on a bore's top edge (see RunSectionFormat.ts). */
+
+.runsection {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.runsection-inner {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 40px 32px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.runsection-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.runsection-head > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.runsection-head h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.3px;
+}
+.runsection-sub { margin: 0; font-size: 13.5px; color: var(--text-3); }
+
+.runsection-back {
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--card-2);
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.runsection-back:hover { background: var(--hover); }
+
+.runsection-status { margin: 0; font-size: 13.5px; color: var(--text-3); }
+
+.runsection-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  padding: 26px 24px 20px;
+  overflow-x: auto;
+}
+.runsection-empty p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+  max-width: 60ch;
+}
+
+.runsection-scroll { display: flex; gap: 0; min-width: 660px; }
+
+.runsection-legend {
+  width: 168px;
+  flex: 0 0 168px;
+  display: flex;
+  flex-direction: column;
+}
+.runsection-legend-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 16px;
+  overflow: hidden;
+}
+.runsection-legend-zone span { font-size: 12px; color: var(--text-2); }
+.runsection-legend-zone small {
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-4);
+}
+/* Zone heights track the column rows beside them: head, bore, helper row. */
+.runsection-legend-head { height: 40px; }
+.runsection-legend-bore { height: 96px; }
+.runsection-legend-workers { margin-top: 10px; height: 72px; }
+
+.runsection-grid {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0;
+}
+
+.runsection-col { display: flex; flex-direction: column; }
+
+.runsection-col-head {
+  height: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 10px;
+  overflow: hidden;
+}
+.runsection-col-n { font-size: 10.5px; color: var(--text-4); }
+.runsection-col-name {
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.runsection-bore {
+  height: 96px;
+  margin: 0 12px;
+  border: 1px solid var(--border-2);
+  border-top: 3px solid var(--unknown);
+  border-radius: 0 0 5px 5px;
+  background: var(--inset);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  padding-top: 9px;
+  position: relative;
+  overflow: hidden;
+}
+.runsection-bore[data-tone="green"] { border-top-color: var(--green); }
+.runsection-bore[data-tone="amber"] { border-top-color: var(--amber); }
+.runsection-bore[data-tone="red"] { border-top-color: var(--red); }
+.runsection-bore[data-tone="accent"] { border-top-color: var(--accent); }
+
+.runsection-bore .familiar-orb { width: 18px; height: 18px; box-shadow: none; }
+.runsection-bore .familiar-orb i { width: 5px; height: 5px; }
+
+.runsection-caption {
+  writing-mode: vertical-rl;
+  font-size: 10.5px;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+  max-height: 46px;
+  overflow: hidden;
+}
+
+.runsection-gate {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5px;
+  background: var(--amber);
+}
+.runsection-gate-chip {
+  position: absolute;
+  left: 50%;
+  bottom: 11px;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--amber);
+  white-space: nowrap;
+}
+
+.runsection-workers {
+  display: flex;
+  gap: 4px;
+  margin: 0 12px;
+  padding-top: 10px;
+}
+.runsection-worker {
+  flex: 1;
+  height: 72px;
+  border: 1px solid var(--border-2);
+  border-top: 2px solid var(--unknown);
+  border-radius: 0 0 3px 3px;
+  background: var(--inset);
+}
+.runsection-worker[data-tone="green"] { border-top-color: var(--green); }
+.runsection-worker[data-tone="amber"] { border-top-color: var(--amber); }
+.runsection-worker[data-tone="red"] { border-top-color: var(--red); }
+.runsection-worker[data-tone="accent"] { border-top-color: var(--accent); }
+
+.runsection-worker-caption {
+  font-size: 10.5px;
+  color: var(--text-4);
+  text-align: center;
+  padding-top: 6px;
+}
+
+.runsection-col-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px 8px;
+  padding: 8px 10px 0;
+  font-size: 10.5px;
+  color: var(--text-4);
+  text-align: center;
+}
+.runsection-degraded { color: var(--amber); }
+
+.runsection-howto {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.runsection-howto span { font-size: 13px; color: var(--text-2); }
+.runsection-howto p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-3);
+  max-width: 60ch;
+  text-wrap: pretty;
+}

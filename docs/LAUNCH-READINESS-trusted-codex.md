@@ -62,7 +62,7 @@ The Principal's go is banked. The read-only first steps of the runbook were take
 they surfaced a hard precondition that must be resolved before the irreversible step, so the cutover
 is not a blind `alembic upgrade head`:
 
-**Observed on jellytot-prod-01, read-only (2026-07-20):** the `boltrig` database has 57 tables, one
+**Observed on a production host, read-only (2026-07-20):** the `boltrig` database has 57 tables, one
 real user, `organisations`, `workspaces` and `audit_log` — and **NO `alembic_version` table**. It
 was created directly from `schema.sql` (the first-boot load) and has NEVER been migrated through
 alembic. `boltrig-kernel-1` still runs `boltrig/kernel:0.1.0`.

@@ -20,33 +20,52 @@ cd ../../apps/worker && pnpm install --frozen-lockfile
 BOLTRIG_KERNEL_URL=http://localhost:8000 pnpm dev
 ```
 
-`pnpm tauri dev` opens the same build in the desktop shell. Desktop device
-sessions live in the OS keychain and are bound to the exact configured API
-origin; legacy unbound entries require re-enrollment rather than being returned
-to a different origin. They belong only to the background device agent:
-interactive browser and desktop requests use the httpOnly user-session cookie,
-and the sign-in screen can clear unreadable local enrollment without requiring
-that cookie. Artifact materialisation accepts only bytes already
+`pnpm tauri dev` opens the same build in the desktop shell. Desktop development
+requires the same canonical origin in both build environments so the webview
+and native transport cannot point at different servers:
+
+```sh
+VITE_API_BASE=https://dev.boltrig.io \
+BOLTRIG_DESKTOP_API_ORIGIN=https://dev.boltrig.io \
+pnpm tauri dev
+```
+
+The Tauri pre-build gate refuses a missing, non-canonical, insecure, or
+mismatched pair. Cargo also invalidates its native build whenever the native
+origin changes; otherwise an older origin can remain embedded in an apparently
+fresh frontend build. Account sign-in is the front door in both browser and
+desktop. After authenticated startup, a new
+desktop automatically bootstraps its revocable computer key; there is no code
+or handoff bundle to copy. Device sessions live in the OS keychain and are
+bound to the exact configured API origin. An unreadable key, or a key belonging
+to a different/revoked account, requires explicit replacement. The device key
+belongs only to the background/local-computer boundary: interactive browser and
+desktop requests continue to use the httpOnly user-session cookie. Artifact
+materialisation accepts only bytes already
 downloaded through the authorized artifact endpoint and always asks the user
 for a destination. Cancelling that dialog writes nothing and does not start a
 browser download. The main webview has no direct dialog permission, so the
 selected native path stays outside it. Follow-up open and reveal actions use a
 bounded, process-local opaque handle rather than a caller-supplied path.
 
-The profile-gated candidate deployment packages both maintained clients:
+The Worker is the only first-party browser surface:
 
 ```sh
-docker compose --profile worker up -d worker-ui
-# Worker:   http://localhost:8082/
-# Operator: http://localhost:8082/operator/
+docker compose up -d worker-ui
+# Worker: http://localhost:8082/
 ```
+
+Set `BOLTRIG_DESKTOP_DOWNLOAD_URL` to a reviewed HTTPS distribution page when
+building the web image if authenticated users should see **Download Boltrig
+Desktop**. An empty, invalid, credential-bearing, or HTTP value renders an
+honest unavailable state and never becomes a link.
 
 For live voice, configure one enabled `voice` channel in Channels, issue its
 show-once channel-scoped gateway token from the channel detail, place it in the
 gateway's read-only `CHANNEL_GATEWAY_TOKEN_FILE`, and start both profiles:
 
 ```sh
-docker compose --profile worker --profile channels up -d worker-ui channel-gateway
+docker compose --profile channels up -d worker-ui channel-gateway
 ```
 
 The kernel elects one durable gateway owner per channel before returning any
@@ -71,8 +90,7 @@ synthesized PCM. Call metadata, transcripts and normalized lifecycle/tool
 events are durable; microphone and synthesized audio are neither stored nor
 logged. Browser microphone access requires localhost or HTTPS.
 
-This does not replace the default `ui` service. Browser Worker probes the
-existing authenticated settings route, supports first-party login, second-factor
+Browser Worker probes the existing authenticated settings route, supports first-party login, second-factor
 challenge, first-time authenticator enrollment, invite acceptance and forced
 password rotation. Its forgot/reset-password views use the non-enumerating,
 single-use kernel recovery flow; delivery remains fail-closed until the
@@ -104,8 +122,9 @@ as certification. Adapter activate/deactivate/delete and integration revocation
 now retain secret-free exact requester-owned inputs, invalidate stale intent and
 replay only their original SDK method after approval; the backend remains
 authoritative and the UI never infers completion from an Inbox decision. The
-advanced raw run-event canvas, low-level configuration
-history/rollback and forensic diagnostics remain in Operator by decision.
+run inspection, configuration history and forensic diagnostics are part of the
+Worker surface; unavailable capabilities are shown as such rather than handed
+to a second client.
 
 The kernel defines device enrollment completion, Ed25519 verifier bootstrap,
 opaque root registration, canonical signed exact-action leases, atomic

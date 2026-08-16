@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useProgress } from "@react-three/drei";
 import { animated, easings, useSpring } from "@react-spring/web";
 
+import { BrandWordmark } from "@/components/common/brand-wordmark";
 import { useStory } from "./story/use-story";
 
 const MIN_VISIBLE_MS = 900; // never flash — hold a beat even on instant loads
@@ -108,8 +109,8 @@ export const BrainLoader = () => {
 
       {/* Terminal boot readout */}
       <div className="flex w-full max-w-xs flex-col items-center gap-5">
-        <p className="text-sm font-semibold uppercase tracking-[0.5em] text-brain-sky/85 md:text-base">
-          BOLTRIG
+        <p className="text-brain-sky/85">
+          <BrandWordmark className="text-base md:text-lg" />
         </p>
         <p className="flex items-center gap-2 text-[0.66rem] uppercase tracking-[0.24em] text-brain-sky/55">
           <span aria-hidden className="text-brain-sky/40">

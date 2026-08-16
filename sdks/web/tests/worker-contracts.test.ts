@@ -48,7 +48,7 @@ test("model routing and Familiar genotype survive the shared normalizer", () => 
   });
 });
 
-test("browser transport sends cookie credentials, CSRF, and selected model profile", async () => {
+test("browser transport sends cookie credentials, CSRF, and the opaque chat model choice", async () => {
   let request: RequestInit | undefined;
   const fetcher: typeof fetch = async (_input, init) => {
     request = init;
@@ -65,14 +65,155 @@ test("browser transport sends cookie credentials, CSRF, and selected model profi
     csrfToken: () => "csrf-value",
   });
   await client.streamChat(
-    { message: "hello", model_profile_id: "approved", origin: "worker" },
+    { message: "hello", model_choice_id: "approved-choice", origin: "worker" },
     (event) => events.push(event),
   );
   const headers = new Headers(request?.headers);
   assert.equal(request?.credentials, "include");
   assert.equal(headers.get("x-boltrig-csrf"), "csrf-value");
-  assert.equal(JSON.parse(String(request?.body)).model_profile_id, "approved");
+  assert.equal(JSON.parse(String(request?.body)).model_choice_id, "approved-choice");
   assert.deepEqual(events.map((event) => event.type), ["message_start", "message_end"]);
+});
+
+test("chat model choices expose exact names through the bounded Worker route", async () => {
+  let url = "";
+  const response = {
+    status: "ok" as const,
+    reason: null,
+    choices: [{
+      id: "approved-choice",
+      model_name: "anthropic/claude-sonnet-4-5",
+      available: true,
+      is_default: true,
+      modalities: ["text"],
+    }],
+    default_choice_id: "approved-choice",
+    default_model_name: "anthropic/claude-sonnet-4-5",
+    default_available: true,
+    default_unavailable_reason: null,
+  };
+  const client = new BoltrigClient({
+    fetch: async (input) => {
+      url = String(input);
+      return new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+
+  assert.deepEqual(await client.chatModelChoices(), response);
+  assert.equal(url, "/v1/chat/model-choices");
+});
+
+test("Bifrost model discovery uses the server-owned redacted catalogue route", async () => {
+  let url = "";
+  const response = {
+    status: "ok" as const,
+    models: [{
+      id: "anthropic/claude-sonnet-4-5",
+      name: "Claude Sonnet 4.5",
+      input_modalities: ["text", "image"],
+    }],
+    reason: null,
+  };
+  const client = new BoltrigClient({
+    fetch: async (input) => {
+      url = String(input);
+      return new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+
+  assert.deepEqual(await client.bifrostModels(), response);
+  assert.equal(url, "/v1/bifrost/models");
+});
+
+test("approval posture uses the dedicated self route and exact full-access confirmation", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const response = {
+    status: "ok" as const,
+    posture: "full_access" as const,
+    source: "user_override" as const,
+    enforcement: {
+      applies_to: "delegated_agent_adapter_calls" as const,
+      workspace_blocking_verbs_remain: true as const,
+      control_plane_approvals_remain: true as const,
+      direct_human_consequence_gate_remains: true as const,
+      authority_is_never_widened: true as const,
+    },
+  };
+  const client = new BoltrigClient({
+    csrfToken: () => "csrf-value",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      return new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+
+  assert.deepEqual(await client.approvalPosture(), response);
+  assert.deepEqual(
+    await client.putApprovalPosture({ posture: "full_access", confirm: "full_access" }),
+    response,
+  );
+  assert.equal(requests[0]?.url, "/v1/me/approval-posture");
+  assert.equal(requests[0]?.init?.method, "GET");
+  assert.equal(requests[1]?.url, "/v1/me/approval-posture");
+  assert.equal(requests[1]?.init?.method, "PUT");
+  assert.equal(new Headers(requests[1]?.init?.headers).get("x-boltrig-csrf"), "csrf-value");
+  assert.deepEqual(JSON.parse(String(requests[1]?.init?.body)), {
+    posture: "full_access",
+    confirm: "full_access",
+  });
+});
+
+test("device file listings use the governed invoke contract without a browser filesystem path", async () => {
+  let url = "";
+  let body: unknown;
+  const client = new BoltrigClient({
+    csrfToken: () => "csrf",
+    fetch: async (input, init) => {
+      url = String(input);
+      body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({
+        status: "pending_human",
+        hitl_request_id: "approval/list",
+      }), {
+        status: 202,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+
+  const result = await client.requestDeviceFileListLease(
+    "device_a",
+    "root_a",
+    { relative_path: "src", max_entries: 40 },
+    { idempotencyKey: "list/src", context: { run_id: "run/a" } },
+  );
+
+  assert.equal(url, "/v1/invoke");
+  assert.deepEqual(body, {
+    noun: "device",
+    verb: "device.file.list",
+    params: {
+      device_id: "device_a",
+      root_id: "root_a",
+      relative_path: "src",
+      max_entries: 40,
+    },
+    idempotency_key: "list/src",
+    context: { run_id: "run/a" },
+  });
+  assert.deepEqual(result, {
+    status: "pending_human",
+    hitl_request_id: "approval/list",
+  });
 });
 
 test("chat attachment preflight reads the server-owned limits contract", async () => {
@@ -103,6 +244,38 @@ test("chat attachment preflight reads the server-owned limits contract", async (
     },
   });
   assert.equal(url, "/v1/chat/config");
+});
+
+test("conversation queue reorder sends a complete optimistic order snapshot", async () => {
+  let url = "";
+  let request: RequestInit | undefined;
+  const client = new BoltrigClient({
+    fetch: async (input, init) => {
+      url = String(input);
+      request = init;
+      return new Response(JSON.stringify({
+        status: "ok",
+        message_ids: ["queued-b", "queued-a"],
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+
+  assert.deepEqual(await client.reorderConversationQueue("conversation-a", {
+    expected_message_ids: ["queued-a", "queued-b"],
+    message_ids: ["queued-b", "queued-a"],
+  }), {
+    status: "ok",
+    message_ids: ["queued-b", "queued-a"],
+  });
+  assert.equal(url, "/v1/conversations/conversation-a/queue");
+  assert.equal(request?.method, "PUT");
+  assert.deepEqual(JSON.parse(String(request?.body)), {
+    expected_message_ids: ["queued-a", "queued-b"],
+    message_ids: ["queued-b", "queued-a"],
+  });
 });
 
 test("effective model policy uses the redacted author projection", async () => {
@@ -314,6 +487,46 @@ test("conversation follow uses projected cursor frames and ignores heartbeats", 
   assert.deepEqual(result, { status: "ended", cursor: 6 });
 });
 
+test("run event snapshots preserve authorized redacted execution detail on demand", async () => {
+  let url = "";
+  let request: RequestInit | undefined;
+  const client = new BoltrigClient({
+    accessToken: () => "session",
+    fetch: async (input, init) => {
+      url = String(input);
+      request = init;
+      return new Response(
+        'data: {"type":"tool_call","run_id":"r1","tool":"exec_command","call_id":"x","input":{"cmd":"pnpm test","token":"[redacted]"}}\n\n' +
+        'data: {"type":"tool_result","run_id":"r1","call_id":"x","status":"ok","output":{"output":"3 passed","exit_code":0}}\n\n',
+        { status: 200, headers: { "content-type": "text/event-stream" } },
+      );
+    },
+  });
+
+  const events = await client.runEvents("run/a");
+
+  assert.equal(url, "/v1/runs/run%2Fa/events");
+  assert.equal(request?.method, "GET");
+  assert.equal(request?.credentials, "include");
+  assert.equal(new Headers(request?.headers).get("authorization"), "Bearer session");
+  assert.deepEqual(events, [
+    {
+      type: "tool_call",
+      run_id: "r1",
+      tool: "exec_command",
+      call_id: "x",
+      input: { cmd: "pnpm test", token: "[redacted]" },
+    },
+    {
+      type: "tool_result",
+      run_id: "r1",
+      call_id: "x",
+      status: "ok",
+      output: { output: "3 passed", exit_code: 0 },
+    },
+  ]);
+});
+
 test("conversation follow reports an idle active-run lookup without inventing a run", async () => {
   const client = new BoltrigClient({
     fetch: async () => new Response(
@@ -498,9 +711,11 @@ test("Worker parity methods stay on the canonical scoped kernel routes", async (
   });
 
   await client.meSettings();
+  await client.updateMeProfile({ display_name: "Alex Example" });
   await client.conversationsPage(25, 50);
   await client.searchConversations("renewal / terms", 25, 50);
   await client.login({ email: "worker@example.com", password: "not-a-real-secret" });
+  await client.sessionCsrf();
   await client.requestPasswordReset({ email: "worker@example.com" });
   await client.confirmPasswordReset({
     token: "reset-token",
@@ -576,9 +791,11 @@ test("Worker parity methods stay on the canonical scoped kernel routes", async (
 
   assert.deepEqual(requests.map((item) => item.url), [
     "/v1/me/settings",
+    "/v1/me/profile",
     "/v1/conversations?limit=25&offset=50",
     "/v1/conversations/search?q=renewal+%2F+terms&limit=25&offset=50",
     "/v1/auth/login",
+    "/v1/auth/csrf",
     "/v1/auth/password-reset/request",
     "/v1/auth/password-reset/confirm",
     "/v1/auth/2fa/challenge",
@@ -639,6 +856,12 @@ test("Worker parity methods stay on the canonical scoped kernel routes", async (
   for (const item of requests.filter((request) => request.init?.method === "POST")) {
     assert.equal(new Headers(item.init?.headers).get("x-boltrig-csrf"), "csrf-value");
   }
+  const profileRequest = requests.find((item) => item.url === "/v1/me/profile");
+  assert.equal(profileRequest?.init?.method, "PATCH");
+  assert.equal(new Headers(profileRequest?.init?.headers).get("x-boltrig-csrf"), "csrf-value");
+  assert.deepEqual(JSON.parse(String(profileRequest?.init?.body)), {
+    display_name: "Alex Example",
+  });
   assert.deepEqual(
     JSON.parse(String(requests.find((item) => item.url === "/v1/knowledge/search")?.init?.body)),
     { query: "renewal period", limit: 7 },

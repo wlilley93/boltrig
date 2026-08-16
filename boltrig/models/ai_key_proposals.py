@@ -40,6 +40,7 @@ class AiKeySecretProposal:
     expires_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)
     consumed_at: datetime | None = None
+    modality: str = "text"  # text = main API key; vision = optional vision key
 
 
 __all__ = ["AI_KEY_PROPOSAL_STATUSES", "AiKeySecretProposal"]

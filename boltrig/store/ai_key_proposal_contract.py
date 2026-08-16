@@ -6,7 +6,12 @@ import hmac
 from datetime import datetime, timedelta
 from typing import Any, Protocol
 
-from boltrig.models import AI_CONFIG_LEVELS, AiConfig, AiKeySecretProposal
+from boltrig.models import (
+    AI_CONFIG_LEVELS,
+    AI_CONFIG_MODALITIES,
+    AiConfig,
+    AiKeySecretProposal,
+)
 from boltrig.models.errors import SchemaValidationError
 
 AI_KEY_PROPOSAL_MAX_TTL = timedelta(minutes=15)
@@ -16,6 +21,7 @@ AI_KEY_PROPOSAL_PAGE_LIMIT = 20
 def validate_proposal(proposal: AiKeySecretProposal, secret: str) -> None:
     if (
         proposal.level not in AI_CONFIG_LEVELS
+        or proposal.modality not in AI_CONFIG_MODALITIES
         or proposal.status != "pending"
         or not proposal.id.startswith("akp_")
         or proposal.secret_ref is None
@@ -50,6 +56,7 @@ def proposal_from_row(row: Any) -> AiKeySecretProposal | None:
         provider=row["provider"],
         model=row["model"],
         base_url=row["base_url"],
+        modality=row["modality"] if "modality" in row else "text",
         secret_ref=row["secret_ref"],
         secret_digest=row["secret_digest"],
         status=row["status"],
@@ -72,6 +79,7 @@ def matches_exact(
     provider: str,
     model: str,
     base_url: str | None,
+    modality: str,
     secret_digest: str,
 ) -> bool:
     return (
@@ -83,6 +91,7 @@ def matches_exact(
         and proposal.provider == provider
         and proposal.model == model
         and proposal.base_url == base_url
+        and proposal.modality == modality
         and hmac.compare_digest(proposal.secret_digest, secret_digest)
     )
 
@@ -147,6 +156,7 @@ class AiKeyProposalStoreContract(Protocol):
         base_url: str | None,
         secret_digest: str,
         now: datetime,
+        modality: str = "text",
     ) -> AiConfig | None: ...
 
 

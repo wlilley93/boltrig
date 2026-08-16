@@ -39,9 +39,11 @@ from .eval_cases import EvalCaseStorePG
 from .credential_references import CredentialReferencePresencePG
 from .ai_key_proposals import AiKeyProposalStorePG
 from .mcp_lifecycle import McpLifecycleStorePG
+from .model_endpoints_postgres import ModelEndpointStorePG
+from .conversation_queue import ConversationQueueStorePG
 from .rows import (
     _adapter, _ai_config, _anchor, _audit, _checkpoint,
-    _conversation, _endpoint, _hitl_req, _hitl_resp,
+    _conversation, _hitl_req, _hitl_resp,
     _invitation, _mem_erasure, _mem_fact, _mem_ingestion, _mem_projection,
     _memory, _message, _notif, _org, _org_member, _pat, _personal,
     _revision, _security, _session, _setting, _summary, _tfa_challenge,
@@ -72,8 +74,8 @@ from boltrig.models import (
     HITLRequest,
     HITLResponse,
     HITLStatus,
-    ModelEndpoint,
     AI_CONFIG_LEVELS,
+    AI_CONFIG_MODALITIES,
     AiConfig,
     Organisation,
     OrgMember,
@@ -141,6 +143,7 @@ class PostgresStore(
     CredentialReferencePresencePG,
     AiKeyProposalStorePG,
     McpLifecycleStorePG,
+    ModelEndpointStorePG, ConversationQueueStorePG,
 ):
     """asyncpg-backed Store. Domain methods live in partial mixins
     (e.g. ``ChannelStorePG``) to keep this file under the structural floor;
@@ -339,38 +342,6 @@ class PostgresStore(
              "last_run_at": r["last_run_at"]}
             for r in rows
         ]
-
-    async def upsert_model_endpoint(self, e: ModelEndpoint):
-        await self._pool.execute(
-            """INSERT INTO model_endpoints
-                 (id, tenant_id, kind, base_url, model, fallback, data_class, is_active)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-               ON CONFLICT (tenant_id, id) DO UPDATE SET
-                 kind=EXCLUDED.kind, base_url=EXCLUDED.base_url, model=EXCLUDED.model,
-                 fallback=EXCLUDED.fallback, data_class=EXCLUDED.data_class, updated_at=now()""",
-            e.id, e.tenant_id, e.kind, e.base_url, e.model, e.fallback, e.data_class,
-            e.is_active,
-        )
-
-    async def get_model_endpoint(self, tenant_id, ep_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM model_endpoints WHERE tenant_id=$1 AND id=$2", tenant_id, ep_id
-        )
-        return _endpoint(row)
-
-    async def list_model_endpoints(self, tenant_id):
-        rows = await self._pool.fetch(
-            "SELECT * FROM model_endpoints WHERE tenant_id=$1 ORDER BY id", tenant_id
-        )
-        return [_endpoint(r) for r in rows]
-
-    async def set_model_endpoint_active(self, tenant_id, ep_id, active):
-        row = await self._pool.fetchrow(
-            """UPDATE model_endpoints SET is_active=$3, updated_at=now()
-               WHERE tenant_id=$1 AND id=$2 RETURNING *""",
-            tenant_id, ep_id, bool(active),
-        )
-        return _endpoint(row)
 
     # --- work items -------------------------------------------------------
     async def create_work_item(self, w: WorkItem):
@@ -793,10 +764,10 @@ class PostgresStore(
     # --- conversations ---
     async def create_conversation(self, c: Conversation):
         await self._pool.execute(
-            """INSERT INTO conversations (id, tenant_id, user_id, title, status, created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7)
+            """INSERT INTO conversations (id, tenant_id, user_id, title, status, origin, source_ref, source_run_id, companion_id, created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
                ON CONFLICT (tenant_id, id) DO NOTHING""",
-            c.id, c.tenant_id, c.user_id, c.title, c.status.value, c.created_at, c.updated_at,
+            c.id, c.tenant_id, c.user_id, c.title, c.status.value, c.origin.value, c.source_ref, c.source_run_id, c.companion_id, c.created_at, c.updated_at,
         )
 
     async def get_conversation(self, tenant_id, conv_id):
@@ -871,9 +842,9 @@ class PostgresStore(
 
     async def update_conversation(self, c: Conversation):
         await self._pool.execute(
-            """UPDATE conversations SET title=$3, status=$4, updated_at=$5
+            """UPDATE conversations SET title=$3, status=$4, origin=$5, source_ref=$6, source_run_id=$7, companion_id=$8, updated_at=$9
                WHERE tenant_id=$1 AND id=$2""",
-            c.tenant_id, c.id, c.title, c.status.value, c.updated_at,
+            c.tenant_id, c.id, c.title, c.status.value, c.origin.value, c.source_ref, c.source_run_id, c.companion_id, c.updated_at,
         )
 
     async def restore_closed_conversation(
@@ -1306,13 +1277,13 @@ class PostgresStore(
             inv.workspace_id, inv.provision_workspace_name, inv.provision_org_name,
         )
 
-    async def find_invitation_by_token_hash(self, tenant_id, token_hash):
-        # First-party invite ([2026] VJS-COUNTY 7, D1): tenant-scoped (RLS-safe)
-        # lookup of a still-pending invitation by its token hash.
+    async def claim_invitation_by_token_hash(self, tenant_id, token_hash, now):
         row = await self._pool.fetchrow(
-            """SELECT * FROM user_invitations
-               WHERE tenant_id=$1 AND status='pending' AND token_hash=$2""",
-            tenant_id, token_hash,
+            """UPDATE user_invitations SET status='accepted'
+               WHERE tenant_id=$1 AND token_hash=$2 AND status='pending'
+                 AND (expires_at IS NULL OR expires_at > $3)
+               RETURNING *""",
+            tenant_id, token_hash, now,
         )
         return _invitation(row)
 
@@ -1730,26 +1701,32 @@ class PostgresStore(
                 f"invalid ai-config level: {config.level!r}",
                 errors=[f"level must be one of {sorted(AI_CONFIG_LEVELS)}"],
             )
+        if config.modality not in AI_CONFIG_MODALITIES:
+            raise SchemaValidationError(
+                f"invalid ai-config modality: {config.modality!r}",
+                errors=[f"modality must be one of {sorted(AI_CONFIG_MODALITIES)}"],
+            )
         await self._pool.execute(
             """INSERT INTO ai_configs
                (tenant_id, level, scope_id, provider, model, credential_ref,
-                base_url, created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
-               ON CONFLICT (tenant_id, level, scope_id) DO UPDATE SET
+                base_url, modality, created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())
+               ON CONFLICT (tenant_id, level, scope_id, modality) DO UPDATE SET
                  provider=EXCLUDED.provider, model=EXCLUDED.model,
                  credential_ref=EXCLUDED.credential_ref,
                  base_url=EXCLUDED.base_url, updated_at=now()""",
             config.tenant_id, config.level, config.scope_id, config.provider,
-            config.model, config.credential_ref, config.base_url, config.created_at,
+            config.model, config.credential_ref, config.base_url, config.modality,
+            config.created_at,
         )
 
-    async def get_ai_config(self, tenant_id, level, scope_id):
+    async def get_ai_config(self, tenant_id, level, scope_id, modality="text"):
         # Tenant-scoped: the WHERE binds tenant_id, so it can never return another
         # tenant's AI-config row (None when absent, fail-closed).
         row = await self._pool.fetchrow(
             """SELECT * FROM ai_configs
-               WHERE tenant_id=$1 AND level=$2 AND scope_id=$3""",
-            tenant_id, level, scope_id,
+               WHERE tenant_id=$1 AND level=$2 AND scope_id=$3 AND modality=$4""",
+            tenant_id, level, scope_id, modality,
         )
         return _ai_config(row)
 
@@ -1760,12 +1737,11 @@ class PostgresStore(
         )
         return [_ai_config(r) for r in rows]
 
-    async def delete_ai_config(self, tenant_id, level, scope_id):
+    async def delete_ai_config(self, tenant_id, level, scope_id, modality="text"):
         await self._pool.execute(
-            "DELETE FROM ai_configs WHERE tenant_id=$1 AND level=$2 AND scope_id=$3",
-            tenant_id, level, scope_id,
+            "DELETE FROM ai_configs WHERE tenant_id=$1 AND level=$2 AND scope_id=$3 AND modality=$4",
+            tenant_id, level, scope_id, modality,
         )
-
 
 
 def _like_escape(value: str) -> str:

@@ -45,6 +45,12 @@ from boltrig.adapters.base import (
 )
 from boltrig.adapters.egress import EgressBlocked, assert_egress_allowed
 from boltrig.adapters.http_base import Handler, HttpAdapter
+from boltrig.adapters.http_response import (
+    MAX_BINARY_RESPONSE_BYTES,
+    ResponseBoundaryError,
+    bounded_http_response,
+    bounded_response_error,
+)
 from boltrig.models import InvocationContext
 
 _BASE_URL = "https://api.x.ai/v1"
@@ -106,6 +112,7 @@ class XaiVoiceAdapter(HttpAdapter):
     version = "0.1.0"
     source = "builtin"
     user_agent = "boltrig-xai-voice/1.0"
+    setup_without_probe = True
 
     def __init__(
         self,
@@ -180,7 +187,10 @@ class XaiVoiceAdapter(HttpAdapter):
         )
 
     async def health(self) -> str:
-        return "unknown"
+        # No credential is available to a background probe.  Loaded means the
+        # typed setup contract is usable; provider/key validity remains
+        # unverified until an authenticated invocation, so never report "ok".
+        return "degraded"
 
     # --- handlers ------------------------------------------------------------
     async def _speak(
@@ -270,7 +280,16 @@ class XaiVoiceAdapter(HttpAdapter):
         except EgressBlocked as exc:
             return AdapterError(ErrorClass.INVALID, str(exc), retryable=False)
         await self._limiter.acquire()
-        resp = await client.request(method, url, **kwargs)
+        try:
+            resp, _ = await bounded_http_response(
+                client,
+                method,
+                url,
+                max_bytes=MAX_BINARY_RESPONSE_BYTES,
+                **kwargs,
+            )
+        except ResponseBoundaryError:
+            return bounded_response_error()
         if 200 <= resp.status_code < 300:
             return resp
         return self._map_status(resp)

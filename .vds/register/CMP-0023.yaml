@@ -1,0 +1,37 @@
+id: CMP-0023
+name: Unavailable
+status: proposed
+contractVersion: 1
+figma: null
+code:
+  importPath: ./Shell
+  sourceFile: apps/worker/src/components/Shell.tsx
+  exportName: Unavailable
+props:
+- name: children
+  type: React.ReactNode
+  required: true
+  figmaProperty: null
+- name: title
+  type: string
+  required: true
+  figmaProperty: null
+states:
+  required: []
+  drawn: []
+  built: []
+a11y:
+  role: null
+  accessibleNameSource: children
+  keyboard: []
+  contrastFloors: []
+demand:
+  routes: 6
+  measuredAt: 2026-08-10T14:23:03Z
+  measuredBy: vds register measure-demand
+supersedes: []
+supersededBy: null
+amendments: []
+basis:
+- ACT-VDS-001:s5
+notes: 'Imported by `vds register import` from apps/worker/src/components/Shell.tsx:625. A CANDIDATE, not a contract: it carries what the code says and nothing the code cannot say. Its required states, contrast floors, role and keyboard contract are decisions nobody has made yet.'

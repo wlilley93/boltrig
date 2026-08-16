@@ -1,0 +1,12 @@
+id: LOG-2026-08-11-042545
+time: 2026-08-11T04:25:45.668752+00:00
+actor: lexby
+kind: decision
+issue: ROUTE-20260811-033756
+decision: implemented-latest-boltrig-console-parity
+basis:
+- PERMIT-1786419476
+risk: low
+reversibility: easy
+court_required: false
+why: Ported the 2026-08-11 Claude Design console target through Figma current-source frames, preserving accessibility and backend-truth constraints; full worker tests, typecheck, build, browser visual checks, VDS ledger and proofs were run.

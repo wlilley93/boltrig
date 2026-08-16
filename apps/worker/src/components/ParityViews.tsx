@@ -4,12 +4,6 @@ import {
   type AgentCapabilityAuthorInfo,
   type AuditNode,
   type CapabilityLifecycleResponse,
-  type FamiliarGenotype,
-  type KnowledgeAsset,
-  type KnowledgeAssetDetailResponse,
-  type KnowledgeMutationResponse,
-  type KnowledgeProvider,
-  type KnowledgeSearchHit,
   type MemoryFactView,
   type MemoryIngestionRow,
   type RunRow,
@@ -22,11 +16,13 @@ import {
 import { client } from "../client";
 import { useRouteSelection } from "../useRouteSelection";
 import { AgentProfileEditor } from "./AgentProfileEditor";
+import { AgentTabsStrip } from "./build/AgentTabsStrip";
 import {
   ExactApprovalFinalizer,
   useExactApprovalFinalizer,
 } from "./ExactApprovalFinalizer";
 import { PermanentFleetTopology } from "./PermanentFleetTopology";
+import { CreateMethodIcon, GovernedCreateModal } from "./GovernedCreateModal";
 import { Topbar, Unavailable } from "./Shell";
 
 type SurfaceState = "loading" | "ready" | "denied" | "not-found" | "unavailable";
@@ -175,7 +171,7 @@ export function RunsView() {
         <div className="page-intro">
           <div>
             <h2>Execution history</h2>
-            <p>Scope-filtered runs with their durable execution tree. Raw tool events remain available in Operator.</p>
+            <p>Scope-filtered runs with their durable execution tree and recorded execution events.</p>
           </div>
           <div className="inline-actions">
             <input className="search" aria-label="Search runs" placeholder="Search runs…" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -245,7 +241,6 @@ export function RunsView() {
                   {cancelArmed ? "Confirm cancel run" : "Cancel run"}
                 </button>
               )}
-              {selected.run_id && <a className="secondary-button" href={`/operator/#/runs/${encodeURIComponent(selected.run_id)}`}>Open full event stream</a>}
             </aside>
           )}
         </div>}
@@ -445,7 +440,7 @@ export function WorkView() {
         load();
         inspect(result.item);
       } else if (createFinalizer.begin(input, result, "Work creation")) {
-        setMutationMessage("Work creation is waiting for approval in Inbox.");
+        setMutationMessage("Work creation is waiting for approval in the originating chat.");
       } else {
         setMutationMessage(workMutationNotice(result, "Work creation"));
       }
@@ -712,7 +707,7 @@ function WorkDetail({ detail, onClose, onSelect, onChanged }: { detail: WorkDeta
             : `Parent updated to ${result.item.parent_id ?? "root"}.`;
         onChanged(result.item, message);
       } else if (finalizer.begin(input, result, "Work update")) {
-        setNotice("Work update is waiting for approval in Inbox.");
+        setNotice("Work update is waiting for approval in the originating chat.");
       } else {
         setNotice(workMutationNotice(result, "Work update"));
       }
@@ -744,7 +739,7 @@ function WorkDetail({ detail, onClose, onSelect, onChanged }: { detail: WorkDeta
         <Fact label="On behalf of" value={detail.item.on_behalf_of ?? "Self"} />
       </dl>
       <div className="detail-section">
-        <p className="eyebrow">Governed lifecycle</p>
+        <p className="eyebrow">Lifecycle</p>
         <div className="stack">
           <label className="field-label">Owner<input className="field-control" value={owner} onChange={(event) => {
             finalizer.invalidate();
@@ -801,7 +796,7 @@ const MANUAL_WORK_TRANSITIONS: Record<WorkStatus, WorkStatus[]> = {
 };
 
 function workMutationNotice(result: { status: string; reason?: string }, action: string): string {
-  if (result.status === "pending_human") return `${action} is waiting for approval in Inbox.`;
+  if (result.status === "pending_human") return `${action} is waiting for approval in the originating chat.`;
   if (result.status === "denied") return result.reason ?? `${action} was denied.`;
   if (result.status === "degraded") return `${action} could not complete because the control plane is degraded.`;
   return result.reason ?? `${action} failed.`;
@@ -856,10 +851,16 @@ export function AgentsView() {
   const [agents, setAgents] = useState<AgentCapabilityAuthorInfo[]>([]);
   const [surfaceState, setSurfaceState] = useState<SurfaceState>("loading");
   const loadedAgents = useRef(false);
+  // Names with a pending decision they raised (HITL requested_by /
+  // requested_on_behalf_of). This is the only real per-agent "asking" signal
+  // this client has; when the decision is not visible to this role the set
+  // stays empty and no waiting state is claimed.
+  const [askingActors, setAskingActors] = useState<ReadonlySet<string> | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState("");
   const [editing, setEditing] = useState<AgentCapabilityAuthorInfo | null | undefined>(undefined);
+  const [creatingAgent, setCreatingAgent] = useState(false);
   const lifecycleFinalizer = useExactApprovalFinalizer<
     { name: string; action: "retire" | "restore" },
     CapabilityLifecycleResponse
@@ -904,6 +905,14 @@ export function AgentsView() {
         setEditing(undefined);
         setSurfaceState(state);
       });
+    void client.hitl()
+      .then((result) => {
+        setAskingActors(new Set(result.requests.flatMap((request) => (
+          [request.requested_by, request.requested_on_behalf_of]
+            .filter((value): value is string => Boolean(value))
+        ))));
+      })
+      .catch(() => setAskingActors(null));
   }
   useEffect(refresh, []);
   useEffect(() => {
@@ -931,7 +940,7 @@ export function AgentsView() {
         result,
         action === "retire" ? "Profile retirement" : "Profile restore",
       )) {
-        setMessage(`${action === "retire" ? "Retirement" : "Restore"} is waiting for approval in Inbox.`);
+        setMessage(`${action === "retire" ? "Retirement" : "Restore"} is waiting for approval in the originating chat.`);
       } else if (result.status === "ok") {
         setMessage(`${agent.name} ${action === "retire" ? "retired" : "restored"}.`);
         refresh();
@@ -945,390 +954,116 @@ export function AgentsView() {
     }
   }
 
-  const skillCount = new Set(agents.flatMap((agent) => agent.supported_skills)).size;
-  const activeCount = agents.filter((agent) => agent.is_active).length;
   const unknownAgent = surfaceState === "ready"
     && Boolean(selectedAgentName)
     && !agents.some((agent) => agent.name === selectedAgentName);
   return (
-    <div className="page">
-      <Topbar title="Agents" status={`${activeCount}/${agents.length} active profiles`} />
-      <div className="page-content">
-        <div className="page-intro">
-          <div><h2>Agent profiles</h2><p>Profiles are selectable runtime configuration, not proof of a live permanent agent. The desired/observed org chart below is the authority for Chief of Staff and department heads.</p></div>
-          {surfaceState === "ready" && <div className="inline-actions"><span className="status-pill"><i />{skillCount} skills visible</span><button className="primary-button" onClick={() => { lifecycleFinalizer.invalidate(); setSelectedAgentName(null); setEditing(null); }}>New profile</button></div>}
+    <div className="page agents-fleet-shell">
+      <div className="agents-fleet-page">
+        <div className="agents-fleet-topbar">
+          <AgentTabsStrip active="agents" />
+          {surfaceState === "ready" && (
+            <button
+              className="console-primary"
+              onClick={() => {
+                lifecycleFinalizer.invalidate();
+                setMessage("");
+                setSelectedAgentName(null);
+                setEditing(undefined);
+                setCreatingAgent(true);
+              }}
+              type="button"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>New agent</span>
+            </button>
+          )}
         </div>
-        {error && <p className="notice">{error}</p>}
-        {message && <p className="notice" role="status">{message}</p>}
-        <ExactApprovalFinalizer controller={lifecycleFinalizer} />
+
+        {(error || message || lifecycleFinalizer.state !== null) && (
+          <div className="agents-fleet-alerts">
+            {error && <p className="notice">{error}</p>}
+            {message && <p className="notice" role="status">{message}</p>}
+            <ExactApprovalFinalizer controller={lifecycleFinalizer} />
+          </div>
+        )}
+
         {surfaceState === "loading" && <Unavailable title="Loading agent profiles">Checking the author-visible agent inventory.</Unavailable>}
         {surfaceState === "denied" && <Unavailable title="Agent access denied">Your current role cannot view or author agent profiles.</Unavailable>}
         {surfaceState === "not-found" && <Unavailable title="Agent inventory not found">This deployment does not expose the canonical agent inventory route.</Unavailable>}
-        {surfaceState === "unavailable" && <Unavailable title="Agents unavailable">The governed agent inventory could not be reached.</Unavailable>}
+        {surfaceState === "unavailable" && <Unavailable title="Agents unavailable">The agent inventory could not be reached.</Unavailable>}
         {surfaceState === "ready" && unknownAgent && <Unavailable title="Agent profile not found">No visible agent profile matches “{selectedAgentName}”.</Unavailable>}
-        {surfaceState === "ready" && <PermanentFleetTopology />}
-        {surfaceState === "ready" && !unknownAgent && editing !== undefined && <AgentProfileEditor initial={editing} onCancel={() => { setEditing(undefined); setSelectedAgentName(null); }} onSaved={refresh} />}
-        {surfaceState === "ready" && !unknownAgent && (agents.length === 0 ? <Unavailable title="No agent profiles visible">Your workspace has not approved a durable or ephemeral agent profile for this role.</Unavailable> : (
-          <div className="agent-grid">{agents.map((agent) => <AgentCard agent={agent} busy={busy === agent.name} onEdit={() => setSelectedAgentName(agent.name)} onLifecycle={() => void changeLifecycle(agent)} key={agent.name} />)}</div>
-        ))}
+        {surfaceState === "ready" && !unknownAgent && (
+          <PermanentFleetTopology
+            askingActors={askingActors}
+            lifecycleBusy={busy}
+            onCreateProfile={(parentName) => {
+              lifecycleFinalizer.invalidate();
+              setSelectedAgentName(null);
+              setEditing(null);
+              setMessage(parentName
+                ? `Profile author opened from ${parentName}. This profile API does not persist a parent edge.`
+                : "");
+            }}
+            onEditProfile={(agent) => setSelectedAgentName(agent.name)}
+            onLifecycle={(agent) => void changeLifecycle(agent)}
+            profiles={agents}
+          />
+        )}
+        {surfaceState === "ready" && !unknownAgent && editing !== undefined && (
+          <div className="agents-profile-editor-scrim" role="presentation">
+            <AgentProfileEditor
+              initial={editing}
+              onCancel={() => { setEditing(undefined); setSelectedAgentName(null); }}
+              onSaved={refresh}
+            />
+          </div>
+        )}
+        {surfaceState === "ready" && !unknownAgent && creatingAgent && (
+          <GovernedCreateModal
+            lead="An agent is someone to hand work to. It can only ever do what you can."
+            methods={[
+              {
+                available: false,
+                description: "Start from an agent already doing the job well, then narrow it. Nothing is widened by copying.",
+                icon: <CreateMethodIcon kind="copy" />,
+                tag: "Recommended",
+                title: "Copy one that works",
+                unavailableReason: "The capability API does not expose profile cloning.",
+              },
+              {
+                available: false,
+                description: "Say what it should look after, then review a proposed capability profile.",
+                icon: <CreateMethodIcon kind="describe" />,
+                title: "Describe the job",
+                unavailableReason: "No proposal-from-description route is exposed.",
+              },
+              {
+                available: true,
+                description: "An empty agent with no permissions at all. Add each capability deliberately.",
+                icon: <CreateMethodIcon kind="empty" />,
+                onSelect: () => {
+                  setCreatingAgent(false);
+                  setEditing(null);
+                },
+                title: "Start from nothing",
+              },
+            ]}
+            onClose={() => setCreatingAgent(false)}
+            title="New agent"
+          />
+        )}
       </div>
     </div>
   );
 }
 
-function AgentCard({ agent, busy, onEdit, onLifecycle }: {
-  agent: AgentCapabilityAuthorInfo;
-  busy: boolean;
-  onEdit(): void;
-  onLifecycle(): void;
-}) {
-  const genotype = agent.familiar_genotype;
-  const hasIdentity = genotype?.source === "agent_capability.name.v1";
-  return (
-    <article className="agent-card">
-      <div
-        aria-label={hasIdentity
-          ? `${agent.name} profile Familiar`
-          : `${agent.name} profile identity unavailable`}
-        className="profile-familiar"
-        data-genotype-source={hasIdentity ? genotype.source : "unavailable"}
-        role="img"
-        style={hasIdentity ? familiarStyle(genotype) : undefined}
-      ><i /></div>
-      <div className="agent-card-heading"><div><p className="eyebrow">{agent.is_ephemeral ? "Ephemeral worker profile" : "Persistent profile"}</p><h3>{agent.name}</h3></div><span className="row-meta">{agent.status} · {agent.cost_tier}</span></div>
-      <dl className="fact-grid">
-        <Fact label="Runtime" value={agent.runtime} />
-        <Fact label="Max depth" value={String(agent.max_depth)} />
-      </dl>
-      <div className="skill-list">
-        {agent.supported_skills.length === 0 ? <span className="muted small">No named skills</span> : agent.supported_skills.slice(0, 8).map((skill) => <span key={skill}>{skill}</span>)}
-        {agent.supported_skills.length > 8 && <span>+{agent.supported_skills.length - 8}</span>}
-      </div>
-      <div className="inline-actions">
-        <button className="secondary-button" onClick={onEdit}>Configure profile</button>
-        <button className="secondary-button" disabled={busy} onClick={onLifecycle}>
-          {busy ? "Requesting…" : agent.is_active ? "Retire profile" : "Restore profile"}
-        </button>
-      </div>
-    </article>
-  );
-}
-
-function familiarStyle(genotype: FamiliarGenotype): React.CSSProperties {
-  const colors = (genotype.palette ?? [])
-    .filter((value) => /^#[0-9a-f]{6}$/i.test(value))
-    .slice(0, 3);
-  if (colors.length !== 3) return {};
-  return {
-    background: `radial-gradient(circle at 35% 30%, ${colors.join(", ")})`,
-  };
-}
-
-export function KnowledgeView() {
-  const [selectedAssetId, setSelectedAssetId] = useRouteSelection("knowledge");
-  const [tab, setTab] = useState<"library" | "search" | "providers">("library");
-  const [assets, setAssets] = useState<KnowledgeAsset[]>([]);
-  const [surfaceState, setSurfaceState] = useState<SurfaceState>("loading");
-  const loadedKnowledge = useRef(false);
-  const [assetOffset, setAssetOffset] = useState<number | null>(0);
-  const [assetDetail, setAssetDetail] = useState<KnowledgeAssetDetailResponse | null>(null);
-  const [assetDetailState, setAssetDetailState] = useState<DetailState>("idle");
-  const selectedAssetIdRef = useRef(selectedAssetId);
-  const assetDetailSequence = useRef(0);
-  const [providers, setProviders] = useState<KnowledgeProvider[]>([]);
-  const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<KnowledgeSearchHit[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [upload, setUpload] = useState<File | null>(null);
-  const [uploadTitle, setUploadTitle] = useState("");
-  const [eraseArmed, setEraseArmed] = useState<string | null>(null);
-  const mutationFinalizer = useExactApprovalFinalizer<
-    | { kind: "erase"; assetId: string }
-    | { kind: "provider"; providerId: string; enabled: boolean },
-    KnowledgeMutationResponse
-  >({
-    isCurrent: (input) => (
-      input.kind === "erase"
-        ? assets.some((asset) => asset.id === input.assetId)
-        : providers.some((provider) => (
-          provider.id === input.providerId
-          && provider.enabled !== input.enabled
-        ))
-    ),
-    replay: (input, approvalId) => (
-      input.kind === "erase"
-        ? client.eraseKnowledgeAsset(input.assetId, approvalId)
-        : client.setKnowledgeProvider(input.providerId, input.enabled, approvalId)
-    ),
-    onApplied: async (_result, input) => {
-      setMessage(
-        input.kind === "erase"
-          ? "The source was erased."
-          : `Provider ${input.enabled ? "enabled" : "disabled"}.`,
-      );
-      refresh();
-    },
-    onRefused: (result) => {
-      setMessage(result.reason ?? "The approved Knowledge change was not applied.");
-    },
-  });
-  selectedAssetIdRef.current = selectedAssetId;
-
-  function refresh() {
-    mutationFinalizer.invalidate();
-    void client.knowledgeAssets(25, 0).then((result) => {
-      setAssets(result.assets);
-      setAssetOffset(result.next_offset ?? null);
-      loadedKnowledge.current = true;
-      setSurfaceState("ready");
-      setError("");
-    }).catch((reason) => {
-      const state = failureState(reason);
-      if (state === "unavailable" && loadedKnowledge.current) {
-        setError("Knowledge could not be refreshed. Showing the last loaded sources.");
-        return;
-      }
-      loadedKnowledge.current = false;
-      setError("");
-      setAssets([]);
-      setAssetOffset(null);
-      setProviders([]);
-      setSurfaceState(state);
-    });
-    void client.knowledgeProviders().then((result) => setProviders(result.providers)).catch(() => {});
-  }
-
-  async function loadMoreAssets() {
-    if (assetOffset === null) return;
-    const result = await client.knowledgeAssets(25, assetOffset);
-    setAssets((current) => [
-      ...current,
-      ...result.assets.filter(
-        (asset) => !current.some((item) => item.id === asset.id),
-      ),
-    ]);
-    setAssetOffset(result.next_offset ?? null);
-  }
-
-  useEffect(refresh, []);
-  useEffect(() => {
-    mutationFinalizer.invalidate();
-    if (!selectedAssetId) {
-      assetDetailSequence.current += 1;
-      setAssetDetail(null);
-      setAssetDetailState("idle");
-      return;
-    }
-    if (surfaceState !== "ready") {
-      assetDetailSequence.current += 1;
-      setAssetDetail(null);
-      setAssetDetailState("idle");
-      return;
-    }
-    const sequence = ++assetDetailSequence.current;
-    setTab("library");
-    setAssetDetail(null);
-    setAssetDetailState("loading");
-    void client.knowledgeAsset(selectedAssetId)
-      .then((result) => {
-        if (
-          assetDetailSequence.current === sequence
-          && selectedAssetIdRef.current === selectedAssetId
-        ) {
-          setAssetDetail(result);
-          setAssetDetailState("ready");
-        }
-      })
-      .catch((reason) => {
-        if (
-          assetDetailSequence.current === sequence
-          && selectedAssetIdRef.current === selectedAssetId
-        ) setAssetDetailState(failureState(reason));
-      });
-    return () => {
-      if (assetDetailSequence.current === sequence) assetDetailSequence.current += 1;
-    };
-  }, [selectedAssetId, surfaceState]);
-
-  async function search() {
-    if (!query.trim()) return;
-    setBusy(true);
-    setError("");
-    try {
-      setHits((await client.knowledgeSearch(query.trim())).hits);
-    } catch {
-      setError("Knowledge search is unavailable.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function uploadAsset(event: React.FormEvent) {
-    event.preventDefault();
-    if (!upload) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      const result = await client.uploadKnowledge(upload, uploadTitle);
-      setMessage(result.status === "ok"
-        ? `Uploaded and indexed ${result.segment_count} passages.`
-        : `Upload finished with status ${result.status}.`);
-      setUpload(null);
-      setUploadTitle("");
-      refresh();
-    } catch {
-      setMessage("The source was not uploaded. No partial asset is shown as complete.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function downloadAsset(asset: KnowledgeAsset) {
-    try {
-      const blob = await client.knowledgeOriginal(asset.id);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = asset.filename;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      setMessage("The original source could not be downloaded.");
-    }
-  }
-
-  async function eraseAsset(asset: KnowledgeAsset) {
-    if (eraseArmed !== asset.id) {
-      setEraseArmed(asset.id);
-      return;
-    }
-    const input = { kind: "erase", assetId: asset.id } as const;
-    const result = await client.eraseKnowledgeAsset(asset.id);
-    setEraseArmed(null);
-    if (mutationFinalizer.begin(input, result, "Knowledge source erasure")) {
-      setMessage("Erasure is waiting for approval in Inbox.");
-      return;
-    }
-    setMessage(
-      result.reason ?? (
-        result.status === "ok"
-          ? "The source was erased."
-          : `Erasure status: ${result.status ?? "unknown"}.`
-      ),
-    );
-    if (result.status === "ok") refresh();
-  }
-
-  async function setProvider(provider: KnowledgeProvider) {
-    if (provider.status === "unavailable") {
-      setMessage(
-        provider.last_error
-          ? `${provider.display_name} is unavailable: ${provider.last_error}`
-          : `${provider.display_name} is unavailable in this build.`,
-      );
-      return;
-    }
-    const input = {
-      kind: "provider",
-      providerId: provider.id,
-      enabled: !provider.enabled,
-    } as const;
-    const result = await client.setKnowledgeProvider(
-      input.providerId,
-      input.enabled,
-    );
-    if (mutationFinalizer.begin(input, result, "Knowledge provider change")) {
-      setMessage("Provider change is waiting for approval in Inbox.");
-      return;
-    }
-    setMessage(
-      result.reason ?? `Provider ${provider.enabled ? "disabled" : "enabled"}.`,
-    );
-    if (result.status === "ok") refresh();
-  }
-
-  return (
-    <div className="page">
-      <Topbar title="Knowledge" status={`${assets.length} sources`} />
-      <div className="page-content">
-        <div className="page-intro"><div><h2>Governed source library</h2><p>Canonical documents, cited search results and rebuildable provider projections.</p></div></div>
-        {surfaceState === "ready" && <Tabs value={tab} options={[["library", "Library"], ["search", "Search"], ["providers", "Providers"]]} onChange={(value) => setTab(value as typeof tab)} />}
-        {error && <p className="notice">{error}</p>}
-        {message && <p className="notice" role="status">{message}</p>}
-        <ExactApprovalFinalizer controller={mutationFinalizer} />
-        {surfaceState === "loading" && <Unavailable title="Loading knowledge">Loading governed sources and provider state.</Unavailable>}
-        {surfaceState === "denied" && <Unavailable title="Knowledge access denied">Your current role cannot view this governed source library.</Unavailable>}
-        {surfaceState === "not-found" && <Unavailable title="Knowledge not found">This deployment does not expose the canonical knowledge library route.</Unavailable>}
-        {surfaceState === "unavailable" && <Unavailable title="Knowledge unavailable">The governed knowledge service could not be reached.</Unavailable>}
-        {surfaceState === "ready" && tab === "library" && (
-          <div className="stack-view">
-            <form className="knowledge-upload" onSubmit={(event) => void uploadAsset(event)}>
-              <label><span>Source file</span><input className="field-control" type="file" onChange={(event) => setUpload(event.target.files?.[0] ?? null)} /></label>
-              <label><span>Title (optional)</span><input className="field-control" value={uploadTitle} onChange={(event) => setUploadTitle(event.target.value)} /></label>
-              <button className="primary-button" disabled={!upload || busy}>{busy ? "Uploading…" : "Upload and index"}</button>
-            </form>
-            {assets.length === 0 && !error ? <Unavailable title="No source documents">Upload the first governed source above.</Unavailable> :
-            <div className="source-grid">{assets.map((asset) => (
-              <article className="source-card" key={asset.id}>
-                <span className="artifact-icon">▧</span>
-                <div><h3>{asset.title}</h3><p>{asset.filename}</p><small>{asset.segment_count} passages · revision {asset.revision_id.slice(-8)}</small></div>
-                <div className="source-actions">
-                  <button className="secondary-button" onClick={() => setSelectedAssetId(asset.id)}>Inspect</button>
-                  <button className="secondary-button" onClick={() => void downloadAsset(asset)}>Download</button>
-                  <button className={eraseArmed === asset.id ? "danger-button armed" : "danger-button"} onClick={() => void eraseAsset(asset)}>{eraseArmed === asset.id ? "Confirm erase" : "Erase"}</button>
-                </div>
-              </article>
-            ))}</div>}
-            {assetOffset !== null && (
-              <button className="secondary-button" onClick={() => void loadMoreAssets()}>
-                Load more sources
-              </button>
-            )}
-            {assetDetailState === "loading" && <Unavailable title="Loading source detail">Loading exact source provenance.</Unavailable>}
-            {assetDetailState === "denied" && <Unavailable title="Source access denied">Your current role cannot inspect this source.</Unavailable>}
-            {assetDetailState === "not-found" && <Unavailable title="Source not found">That source is outside the active library or no longer exists.</Unavailable>}
-            {assetDetailState === "unavailable" && <Unavailable title="Source unavailable">Exact source provenance could not be reached.</Unavailable>}
-            {assetDetailState === "ready" && assetDetail && (
-              <section className="settings-card">
-                <div className="editable-row">
-                  <div><p className="eyebrow">Source detail</p><h2>{assetDetail.asset.title}</h2></div>
-                  <button className="icon-button" aria-label="Close source detail" onClick={() => setSelectedAssetId(null)}>×</button>
-                </div>
-                <dl className="fact-grid">
-                  <Fact label="Source" value={assetDetail.asset.source_ref ?? assetDetail.asset.source_kind} />
-                  <Fact label="Revision" value={assetDetail.asset.revision_id} />
-                  <Fact label="Segments" value={String(assetDetail.segments.length)} />
-                  <Fact label="Projections" value={String(assetDetail.projections.length)} />
-                </dl>
-                <details>
-                  <summary>Provenance</summary>
-                  <pre className="json-block">{JSON.stringify(assetDetail.provenance, null, 2)}</pre>
-                </details>
-              </section>
-            )}
-          </div>
-        )}
-        {surfaceState === "ready" && tab === "search" && (
-          <div className="stack-view">
-            <form className="search-form" onSubmit={(event) => { event.preventDefault(); void search(); }}>
-              <input className="field-control" aria-label="Search Knowledge" placeholder="Search sources, decisions, people…" value={query} onChange={(event) => setQuery(event.target.value)} />
-              <button className="primary-button" disabled={busy || !query.trim()}>{busy ? "Searching…" : "Search"}</button>
-            </form>
-            {hits.map((hit) => <article className="search-hit" key={hit.segment_id}><div><h3>{hit.title}</h3><span className="score">{hit.score.toFixed(2)}</span></div><p>{hit.text}</p><small>{hit.filename} · revision {hit.revision_id.slice(-8)} · {locatorText(hit.citation.locator)}</small></article>)}
-            {!busy && query && hits.length === 0 && <p className="muted small">No cited passages matched.</p>}
-          </div>
-        )}
-        {surfaceState === "ready" && tab === "providers" && (
-          <div className="data-list">{providers.map((provider) => (
-            <div className="data-row static" key={provider.id}><span className={`activity-dot ${provider.health === "ok" ? "ok" : provider.health}`} /><span className="data-row-copy"><strong>{provider.display_name}</strong><small>{provider.role.replaceAll("_", " ")}{provider.last_error ? ` · ${provider.last_error}` : ""}</small></span><span className="row-meta">{provider.status}</span><button className="secondary-button" disabled={provider.status === "unavailable"} title={provider.status === "unavailable" ? provider.last_error ?? "Unavailable in this build" : undefined} onClick={() => void setProvider(provider)}>{provider.status === "unavailable" ? "Unavailable" : provider.enabled ? "Disable" : "Enable"}</button></div>
-          ))}</div>
-        )}
-      </div>
-    </div>
-  );
-}
+// The Knowledge surface was recast to the decided target's file-table +
+// detail-rail layout and now lives in its own module; the export stays here
+// so App.tsx and Views.tsx keep their import path.
+export { KnowledgeView } from "./knowledge/KnowledgeView";
 
 type MemoryApprovalInput =
   | {
@@ -1622,7 +1357,7 @@ export function MemoryView() {
       result.status === "ok"
         ? "The selected fact was forgotten."
         : result.status === "pending_human"
-          ? "Forgetting this fact is waiting for approval in Inbox."
+          ? "Forgetting this fact is waiting for approval in the originating chat."
           : result.status
     ));
     approval.clear();
@@ -1662,7 +1397,7 @@ export function MemoryView() {
       result.status === "ok"
         ? `Ingestion ${result.id ?? ""} added ${result.facts_added ?? 0} facts after screening.`
         : result.status === "pending_human"
-          ? "Ingestion is waiting for approval in Inbox."
+          ? "Ingestion is waiting for approval in the originating chat."
           : `Ingestion status: ${result.status}.`
     ));
     if (result.status === "ok") {
@@ -1688,7 +1423,7 @@ export function MemoryView() {
         {surfaceState === "loading" && <Unavailable title="Loading memory">Loading facts in your permitted memory scopes.</Unavailable>}
         {surfaceState === "denied" && <Unavailable title="Memory access denied">Your current role cannot browse memory in this workspace.</Unavailable>}
         {surfaceState === "not-found" && <Unavailable title="Memory not found">This deployment does not expose the canonical memory browse route.</Unavailable>}
-        {surfaceState === "unavailable" && <Unavailable title="Memory unavailable">The governed memory service could not be reached.</Unavailable>}
+        {surfaceState === "unavailable" && <Unavailable title="Memory unavailable">The memory service could not be reached.</Unavailable>}
         {surfaceState === "ready" && detailState === "loading" && <Unavailable title="Loading memory detail">Loading the exact scoped fact.</Unavailable>}
         {surfaceState === "ready" && detailState === "denied" && <Unavailable title="Memory detail denied">Your current role cannot inspect that memory fact.</Unavailable>}
         {surfaceState === "ready" && detailState === "not-found" && <Unavailable title="Memory fact not found">That memory fact is outside your current scope or no longer exists.</Unavailable>}
@@ -1847,10 +1582,6 @@ function formatCost(micros: number) {
     minimumFractionDigits: micros < 10_000 ? 6 : 2,
     maximumFractionDigits: micros < 10_000 ? 6 : 2,
   }).format(micros / 1_000_000);
-}
-
-function locatorText(locator: Record<string, unknown>) {
-  return Object.entries(locator).map(([key, value]) => `${key.replaceAll("_", " ")} ${String(value)}`).join(" · ") || "document passage";
 }
 
 function contentText(content: unknown) {

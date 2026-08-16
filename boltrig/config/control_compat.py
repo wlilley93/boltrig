@@ -13,6 +13,7 @@ from typing import Any
 
 from boltrig.models import (
     AI_CONFIG_LEVELS,
+    AI_CONFIG_MODALITIES,
     WORKSPACE_ROLES,
     Workspace,
     WorkspaceMember,
@@ -117,11 +118,14 @@ async def _set_ai_key(store: Any, tenant_id: str, params: dict[str, Any], contex
     await _authorise_ai_key(store, tenant_id, level, scope_id, context)
     provider = str(params["provider"]).strip()
     model = str(params["model"]).strip()
+    modality = str(params.get("modality") or "text").strip().lower()
     proposal_id = str(params["proposal_id"]).strip()
     secret_digest = str(params["secret_digest"]).strip()
+    if modality not in AI_CONFIG_MODALITIES:
+        raise ValueError(f"modality must be one of {sorted(AI_CONFIG_MODALITIES)}")
     if not provider or not model or not proposal_id or not secret_digest:
         raise ValueError(
-            "provider, model, proposal_id and secret_digest are required"
+            "provider, model, modality, proposal_id and secret_digest are required"
         )
     base_url = str(params.get("base_url") or "").strip() or None
     proposal = await store.get_ai_key_secret_proposal(tenant_id, proposal_id)
@@ -149,6 +153,7 @@ async def _set_ai_key(store: Any, tenant_id: str, params: dict[str, Any], contex
         provider=provider,
         model=model,
         base_url=base_url,
+        modality=modality,
         secret_digest=secret_digest,
         now=utcnow(),
     )
@@ -162,6 +167,7 @@ async def _set_ai_key(store: Any, tenant_id: str, params: dict[str, Any], contex
         "provider": provider,
         "model": model,
         "base_url": base_url,
+        "modality": modality,
         "proposal_id": proposal_id,
     }
 
@@ -169,13 +175,37 @@ async def _set_ai_key(store: Any, tenant_id: str, params: dict[str, Any], contex
 async def _delete_ai_key(store: Any, tenant_id: str, params: dict[str, Any], context: Any) -> dict:
     level = str(params["level"]).strip()
     scope_id = str(params["scope_id"]).strip()
+    modality = str(params.get("modality") or "text").strip().lower()
+    if modality not in AI_CONFIG_MODALITIES:
+        raise ValueError(f"modality must be one of {sorted(AI_CONFIG_MODALITIES)}")
     await _authorise_ai_key(store, tenant_id, level, scope_id, context)
-    existing = await store.get_ai_config(tenant_id, level, scope_id)
+    existing = await store.get_ai_config(tenant_id, level, scope_id, modality)
     if existing is None:
         raise LookupError("AI key not found")
-    await store.delete_ai_config(tenant_id, level, scope_id)
+    from boltrig.identity import AiKeyResolution
+    from boltrig.identity.bifrost_user_binding import (
+        BifrostUserGateway,
+        binding_credential_ref,
+    )
+
+    resolution = AiKeyResolution(
+        level=existing.level,
+        scope_id=existing.scope_id,
+        modality=existing.modality,
+        credential_ref=existing.credential_ref,
+        provider=existing.provider,
+        model=existing.model,
+        base_url=existing.base_url,
+    )
+    binding_ref = binding_credential_ref(tenant_id, resolution)
+    if await store.get_credential_ref(tenant_id, binding_ref):
+        # External authority is revoked first. If the gateway is unavailable,
+        # leave the local config intact so deletion can be retried rather than
+        # orphaning a live virtual key.
+        await BifrostUserGateway().revoke(store, tenant_id, resolution)
+    await store.delete_ai_config(tenant_id, level, scope_id, modality)
     await store.set_credential_ref(tenant_id, existing.credential_ref, {})
-    return {"level": level, "scope_id": scope_id}
+    return {"level": level, "scope_id": scope_id, "modality": modality}
 
 
 async def _update_org(store: Any, tenant_id: str, params: dict[str, Any], context: Any) -> dict:

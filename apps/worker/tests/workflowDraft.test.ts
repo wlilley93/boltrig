@@ -89,7 +89,7 @@ describe("Worker workflow drafts", () => {
     const errors = validateWorkflowDraft(draft).join(" ");
     expect(errors).toContain("unique");
     expect(errors).toContain("missing parent");
-    expect(errors).toContain("governed action");
+    expect(errors).toContain("needs an action");
     expect(errors).toContain("JSON object");
   });
 

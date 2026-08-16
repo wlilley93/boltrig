@@ -55,13 +55,13 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-POLICY = ROOT / "boltrig" / "fleet" / "infrastructure" / "codex_cell_policy.py"
+POLICY = ROOT / "boltrig" / "fleet" / "infrastructure" / "codex_binary_pin.py"
 # The conventional install root for standalone releases. Used ONLY to answer "is the pin
 # satisfiable", never to decide what boltrig will exec: that is BOLTRIG_CODEX_BINARY's job.
 RELEASES = Path.home() / ".codex" / "packages" / "standalone" / "releases"
 
 
-def _pin() -> tuple[str, str]:
+def _pins() -> tuple[str, dict[str, str]]:
     """Read the pin from the module that enforces it, never from a second copy.
 
     Two literals for one fact is how a pin and its checker come to disagree, so this parses
@@ -69,14 +69,19 @@ def _pin() -> tuple[str, str]:
     """
     text = POLICY.read_text(encoding="utf-8")
     version = re.search(r'^CODEX_CLI_VERSION\s*=\s*"([^"]+)"', text, re.M)
-    digest = re.search(r'^CODEX_CLI_SHA256\s*=\s*"([0-9a-f]{64})"', text, re.M)
-    if not version or not digest:
+    pairs = {}
+    for suffix in ("", "_ARM64"):
+        target = re.search(rf'^CODEX_CLI_TARGET{suffix}\s*=\s*"([^"]+)"', text, re.M)
+        digest = re.search(rf'^CODEX_CLI_SHA256{suffix}\s*=\s*"([0-9a-f]{{64}})"', text, re.M)
+        if target and digest:
+            pairs[digest.group(1)] = target.group(1)
+    if not version or len(pairs) != 2:
         raise SystemExit(
-            f"FATAL: could not read CODEX_CLI_VERSION / CODEX_CLI_SHA256 from "
+            f"FATAL: could not read both reviewed Codex artifact pairs from "
             f"{POLICY.relative_to(ROOT)}. The pin is the thing this checks; if it cannot be "
             f"read, nothing was checked."
         )
-    return version.group(1), digest.group(1)
+    return version.group(1), pairs
 
 
 def _sha256(path: Path) -> str:
@@ -89,18 +94,21 @@ def _sha256(path: Path) -> str:
 
 def _installed_version() -> str:
     try:
-        out = subprocess.run(
-            ["codex", "--version"], capture_output=True, text=True, timeout=20
+        out = subprocess.run(["codex", "--version"], capture_output=True, text=True, timeout=20)
+        return (
+            (out.stdout or out.stderr).strip().splitlines()[0]
+            if out.stdout or out.stderr
+            else "unknown"
         )
-        return (out.stdout or out.stderr).strip().splitlines()[0] if out.stdout or out.stderr else "unknown"
     except (OSError, subprocess.SubprocessError, IndexError):
         return "not on PATH"
 
 
 def main() -> int:
-    version, want = _pin()
+    version, pins = _pins()
     problems: list[str] = []
-    print(f"Codex pin: {version}  sha256:{want[:12]}...{want[-8:]}")
+    configured_match: Path | None = None
+    print(f"Codex pin: {version}  {len(pins)} reviewed Linux artifacts")
 
     configured = os.environ.get("BOLTRIG_CODEX_BINARY") or ""
     if configured:
@@ -119,13 +127,15 @@ def main() -> int:
                     f"what will be executed. codex_cell_policy refuses this at cell start."
                 )
             got = _sha256(binary)
-            if got != want:
+            target = pins.get(got)
+            if target is None:
                 problems.append(
-                    f"{binary} hashes to {got[:16]}... but the pin is {want[:16]}.... A cell "
+                    f"{binary} hashes to {got[:16]}... but no reviewed artifact matches. A cell "
                     f"would be refused at spawn with 'digest does not match the reviewed pin'."
                 )
             else:
-                print("  digest MATCHES the pin")
+                print(f"  digest MATCHES the {target} pin")
+                configured_match = binary
     else:
         print("  BOLTRIG_CODEX_BINARY is unset: this box is not configured to spawn cells.")
         print("  Not a fault. Reporting whether the pin is SATISFIABLE here instead.")
@@ -133,11 +143,11 @@ def main() -> int:
     # Satisfiability, always reported. This is the question an operator needs before deploying,
     # and it is answered by hashing files rather than by trusting a directory name: a directory
     # called 0.144.3 that holds different bytes is exactly the case a version string misses.
-    found: list[Path] = []
+    found: list[Path] = [] if configured_match is None else [configured_match]
     if RELEASES.is_dir():
         for candidate in sorted(RELEASES.glob("*/bin/codex")):
             try:
-                if candidate.is_file() and _sha256(candidate) == want:
+                if candidate.is_file() and _sha256(candidate) in pins and candidate not in found:
                     found.append(candidate)
             except OSError:
                 continue

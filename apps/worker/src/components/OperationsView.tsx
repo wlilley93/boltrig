@@ -23,6 +23,7 @@ import {
   useExactApprovalFinalizer,
 } from "./ExactApprovalFinalizer";
 import { Topbar, Unavailable } from "./Shell";
+import { SectionHead } from "./settings/SectionHead";
 
 type BudgetMutation =
   | {
@@ -40,7 +41,13 @@ type BudgetMutation =
     success: string;
   };
 
-export function HomeView({ onRoute }: { onRoute(route: WorkerRoute): void }) {
+export function HomeView({
+  onRoute,
+  onSettingsSection,
+}: {
+  onRoute(route: WorkerRoute): void;
+  onSettingsSection?(section: "operations"): void;
+}) {
   const [overview, setOverview] = useState<ConsoleOverviewResponse | null>(null);
   const [error, setError] = useState("");
 
@@ -52,6 +59,11 @@ export function HomeView({ onRoute }: { onRoute(route: WorkerRoute): void }) {
   }
 
   useEffect(refresh, []);
+
+  function openOperations() {
+    onSettingsSection?.("operations");
+    onRoute("settings");
+  }
 
   return (
     <div className="page">
@@ -68,14 +80,13 @@ export function HomeView({ onRoute }: { onRoute(route: WorkerRoute): void }) {
           <button className="primary-button" onClick={() => onRoute("chat")}>Start a task</button>
         </div>
         {error && <p className="notice">{error}</p>}
-        {!overview && !error ? <Unavailable title="Loading your workspace">Reading the governed console projection.</Unavailable> : overview && (
+        {!overview && !error ? <Unavailable title="Loading your workspace">Loading your workspace.</Unavailable> : overview && (
           <>
             <div className="pulse-grid">
               <Pulse
-                label="Needs you"
+                label="Needs attention"
                 value={overview.counts.pending_approvals}
-                detail="pending approvals"
-                onClick={() => onRoute("inbox")}
+                detail="open in the originating chat"
               />
               <Pulse
                 label="Recent work"
@@ -87,13 +98,13 @@ export function HomeView({ onRoute }: { onRoute(route: WorkerRoute): void }) {
                 label="Spend in view"
                 value={formatMoney(overview.cost.total_cost_micros)}
                 detail="scope-filtered"
-                onClick={() => onRoute("operate")}
+                onClick={openOperations}
               />
               <Pulse
                 label="Runtime posture"
                 value={attentionCount(overview)}
                 detail="components need attention"
-                onClick={() => onRoute("operate")}
+                onClick={openOperations}
               />
             </div>
             <div className="home-columns">
@@ -129,38 +140,45 @@ function Pulse(props: {
   label: string;
   value: number | string;
   detail: string;
-  onClick(): void;
+  onClick?(): void;
 }) {
-  return (
-    <button className="pulse-card" onClick={props.onClick}>
-      <span>{props.label}</span>
-      <strong>{props.value}</strong>
-      <small>{props.detail}</small>
-    </button>
-  );
+  const content = <>
+    <span>{props.label}</span>
+    <strong>{props.value}</strong>
+    <small>{props.detail}</small>
+  </>;
+  return props.onClick
+    ? <button className="pulse-card" onClick={props.onClick}>{content}</button>
+    : <div className="pulse-card">{content}</div>;
 }
 
 export function OperateView() {
-  const [tab, setTab] = useState<"posture" | "audit" | "budgets">("posture");
   return (
     <div className="page">
       <Topbar title="Operate" status="Scope filtered" />
       <div className="page-content">
-        <div className="page-intro">
-          <div><h2>Run Boltrig with evidence</h2><p>Readiness, runtimes, audit integrity, spend and budget controls from the canonical kernel.</p></div>
-        </div>
-        <nav className="tabs" aria-label="Operate sections">
-          {(["posture", "audit", "budgets"] as const).map((item) => (
-            <button className={tab === item ? "active" : ""} aria-current={tab === item ? "page" : undefined} onClick={() => setTab(item)} key={item}>
-              {item[0].toUpperCase() + item.slice(1)}
-            </button>
-          ))}
-        </nav>
-        {tab === "posture" && <Posture />}
-        {tab === "audit" && <Audit />}
-        {tab === "budgets" && <Budgets />}
+        <OperationsSection head={false} />
       </div>
     </div>
+  );
+}
+
+export function OperationsSection({ head = true }: { head?: boolean }) {
+  const [tab, setTab] = useState<"posture" | "audit" | "budgets">("posture");
+  return (
+    <>
+      {head && <SectionHead section="operations" />}
+      <nav className="tabs" aria-label="Operations sections">
+        {(["posture", "audit", "budgets"] as const).map((item) => (
+          <button className={tab === item ? "active" : ""} aria-current={tab === item ? "page" : undefined} onClick={() => setTab(item)} key={item}>
+            {item[0].toUpperCase() + item.slice(1)}
+          </button>
+        ))}
+      </nav>
+      {tab === "posture" && <Posture />}
+      {tab === "audit" && <Audit />}
+      {tab === "budgets" && <Budgets />}
+    </>
   );
 }
 
@@ -854,7 +872,7 @@ function Budgets() {
       input.scopeType, input.scopeId, input.body,
     );
     if (finalizer.begin(input, result, "Budget policy change")) {
-      setMessage("Budget change is waiting for approval in Inbox.");
+      setMessage("Budget change is waiting for approval in the originating chat.");
       return;
     }
     setMessage(result.status === "ok"
@@ -875,7 +893,7 @@ function Budgets() {
       input.scopeType, input.scopeId, input.window,
     );
     if (finalizer.begin(input, result, "Budget usage reset")) {
-      setMessage("Usage reset is waiting for approval in Inbox.");
+      setMessage("Usage reset is waiting for approval in the originating chat.");
       return;
     }
     setMessage(result.status === "ok"
@@ -1121,7 +1139,7 @@ function MemoryProjectionDeliveryCard({
       <p className="notice">
         Manual retry is unavailable because Boltrig does not retain the original
         projection payload in these receipts. Recover from the canonical memory
-        source through a future governed replay contract; this view does not
+        source through a future replay contract; this view does not
         create a second write path.
       </p>
     </section>

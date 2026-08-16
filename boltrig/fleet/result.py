@@ -1,6 +1,6 @@
 """The structured result an ephemeral agent returns (US-FLT-03/04).
 
-Every runtime (script / codex / claude-api) returns the same shape so the
+Every runtime (script / codex / typed-unavailable) returns the same shape so the
 spawner, department heads and the audit writer can treat all runtimes
 uniformly. It is a frozen dataclass: a result is a fact, not mutable state.
 """
@@ -154,9 +154,8 @@ def reply_text(result: dict[str, Any]) -> str:
     looked perfect while substantive ones were decapitated.
 
     Lives here, beside the field contract it turns on, rather than at the chat
-    seam: three other runtimes slice identically (runtime.py:396 and :421,
-    opencode_runtime.py:117 and :121), and a caller that wants a reply should not
-    have to know that. Degraded results carry no ``output["text"]`` (only
+    seam: a caller that wants a reply should not need runtime-specific result
+    knowledge. Degraded results carry no ``output["text"]`` (only
     ``output["_degraded"]``), so they fall through to ``summary`` unchanged.
     """
     output = result.get("output")

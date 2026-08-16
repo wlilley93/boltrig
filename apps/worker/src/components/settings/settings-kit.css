@@ -1,0 +1,339 @@
+/* The typed row-control kit and the custom settings screens (Health, Spending,
+ * Overnight, Shortcuts, Archived). Everything here reuses the console tokens
+ * from styles.css; no new colours are introduced, so both themes come for
+ * free. This file is owned by the settings family and imported from the kit,
+ * never from styles.css. */
+
+/* --- Controls ------------------------------------------------------------- */
+
+.settings-switch {
+  width: 38px;
+  height: 22px;
+  flex: 0 0 38px;
+  border: 0;
+  border-radius: 99px;
+  padding: 0 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  background: var(--switch-off);
+  transition: background 140ms ease;
+}
+.settings-switch[aria-checked="true"] { justify-content: flex-end; background: var(--accent); }
+.settings-switch:disabled { opacity: .55; cursor: default; }
+.settings-switch i {
+  width: 17px;
+  height: 17px;
+  border-radius: 99px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
+}
+
+.settings-seg { display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--card-2); flex: 0 0 auto; }
+.settings-seg button {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  background: transparent;
+  color: var(--text-3);
+}
+.settings-seg button[aria-pressed="true"] { background: var(--seg-active); color: var(--text); }
+.settings-seg button:disabled { cursor: default; opacity: .62; }
+
+.settings-visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.settings-select { position: relative; display: flex; align-items: center; flex: 0 0 auto; }
+.settings-select select {
+  padding: 6px 28px 6px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--card-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+}
+.settings-select select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.settings-select select:disabled { cursor: default; opacity: .7; }
+.settings-select svg { position: absolute; right: 9px; pointer-events: none; }
+
+.settings-inline-input {
+  width: 190px;
+  padding: 7px 11px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: var(--inset);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+}
+.settings-inline-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.settings-kit-button {
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  background: var(--card-2);
+  color: var(--text);
+}
+.settings-kit-button:hover:not(:disabled) { filter: brightness(0.96); }
+.settings-kit-button:disabled { opacity: .6; cursor: default; }
+.settings-kit-button[data-tone="danger"] { color: var(--red); }
+
+.settings-info-wrap {
+  align-items: center;
+  display: inline-flex;
+  position: relative;
+}
+
+.settings-info {
+  align-items: center;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--text-3) 38%, transparent);
+  border-radius: 999px;
+  color: var(--text-3);
+  cursor: help;
+  display: inline-flex;
+  font: 600 10px/1 var(--font-ui);
+  height: 17px;
+  justify-content: center;
+  padding: 0;
+  width: 17px;
+}
+
+.settings-info:hover,
+.settings-info:focus-visible {
+  border-color: var(--text-2);
+  color: var(--text-1);
+  outline: none;
+}
+
+.settings-info-tip {
+  background: color-mix(in srgb, var(--card-2) 94%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .22);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 400;
+  left: 50%;
+  line-height: 1.4;
+  max-width: min(260px, calc(100vw - 32px));
+  opacity: 0;
+  padding: 9px 10px;
+  pointer-events: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  transform: translate(-50%, -3px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  visibility: hidden;
+  width: max-content;
+  z-index: 20;
+}
+
+.settings-info-wrap:hover .settings-info-tip,
+.settings-info:focus-visible + .settings-info-tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  visibility: visible;
+}
+
+.settings-status { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+
+/* --- Tone dots, state words and humanised rows ---------------------------- */
+
+.settings-state-word { font-size: 12.5px; white-space: nowrap; color: var(--text-4); }
+.settings-state-word[data-tone="green"] { color: var(--green); }
+.settings-state-word[data-tone="amber"] { color: var(--amber); }
+.settings-state-word[data-tone="red"] { color: var(--red); }
+
+.settings-tone-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 99px; background: var(--unknown); }
+.settings-tone-dot[data-tone="green"] { background: var(--green); }
+.settings-tone-dot[data-tone="amber"] { background: var(--amber); }
+.settings-tone-dot[data-tone="red"] { background: var(--red); }
+
+.settings-tone-row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+.settings-tone-row + .settings-tone-row,
+.settings-row + .settings-tone-row,
+.settings-tone-row + .settings-row { border-top: 1px solid var(--border); }
+.settings-tone-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.settings-tone-title { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.settings-tone-sub { font-size: 12.5px; line-height: 1.5; color: var(--text-3); }
+
+/* --- Per-group disclosure ------------------------------------------------- */
+
+.settings-disclose {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 11px 16px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.settings-disclose:hover { color: var(--text); }
+.settings-disclose i { display: inline-block; font-style: normal; transition: transform 140ms ease; }
+.settings-disclose[aria-expanded="true"] i { transform: rotate(90deg); }
+
+/* --- Group label variants ------------------------------------------------- */
+
+.settings-group-eyebrow {
+  font-size: 12px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
+/* --- Stat cards (Health) -------------------------------------------------- */
+
+.settings-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 28px; }
+.settings-stat {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  padding: 15px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.settings-stat-label { font-size: 12.5px; color: var(--text-3); }
+.settings-stat-value { font-size: 21px; letter-spacing: -.3px; font-variant-numeric: tabular-nums; }
+.settings-stat-note { font-size: 12px; color: var(--text-4); }
+@media (max-width: 640px) { .settings-stat-grid { grid-template-columns: 1fr; } }
+
+/* --- Spend meters --------------------------------------------------------- */
+
+.settings-meter { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; }
+.settings-meter + .settings-meter,
+.settings-row + .settings-meter,
+.settings-meter + .settings-row { border-top: 1px solid var(--border); }
+.settings-meter-head { display: flex; align-items: baseline; gap: 10px; }
+.settings-meter-label { flex: 1; min-width: 0; font-size: 13.5px; }
+.settings-meter-used { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.settings-meter-cap { font-size: 12px; color: var(--text-4); font-variant-numeric: tabular-nums; }
+.settings-meter-track { height: 5px; border-radius: 99px; background: var(--card-2); overflow: hidden; }
+.settings-meter-fill { height: 100%; background: var(--accent); }
+.settings-meter-fill[data-hot="true"] { background: var(--amber); }
+.settings-meter-note { font-size: 12px; color: var(--text-4); }
+
+/* --- Archived rows -------------------------------------------------------- */
+
+.settings-archived-row { display: flex; align-items: center; gap: 14px; padding: 11px 12px 11px 16px; }
+.settings-archived-row + .settings-archived-row { border-top: 1px solid var(--border); }
+.settings-archived-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-archived-date { font-size: 12px; color: var(--text-4); font-variant-numeric: tabular-nums; }
+
+/* --- In-section search + results ------------------------------------------ */
+
+.settings-inline-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: 9px;
+  margin-bottom: 28px;
+}
+.settings-inline-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+}
+/* The wrapper carries the visible ring so the borderless input still shows
+   focus; suppressing it outright would leave keyboard users unplaced. */
+.settings-inline-search:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.settings-results-empty {
+  border: 1px dashed var(--border-2);
+  border-radius: 12px;
+  padding: 28px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-3);
+}
+
+.settings-result-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 16px;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+.settings-result-row:hover { background: var(--hover); }
+.settings-result-row + .settings-result-row { border-top: 1px solid var(--border); }
+
+/* --- Shortcut key chips --------------------------------------------------- */
+
+.settings-keys { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* --- Overnight ------------------------------------------------------------ */
+
+.settings-night-head { display: flex; flex-direction: column; gap: 9px; margin-bottom: 28px; }
+.settings-night-badge {
+  align-self: flex-start;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--border-2);
+  color: var(--text-3);
+}
+.settings-night-badge[data-tone="green"] { border-color: var(--green); color: var(--green); }
+.settings-night-badge[data-tone="amber"] { border-color: var(--amber); color: var(--amber); }
+.settings-night-head h1 { margin: 0; font-size: 26px; font-weight: 500; letter-spacing: -.3px; text-wrap: pretty; }
+.settings-night-head p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text-3); max-width: 56ch; }
+
+.settings-night-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 760px) { .settings-night-grid { grid-template-columns: 1fr; } }
+
+.settings-rules-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  padding: 15px 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.settings-rules-card span { font-size: 12.5px; line-height: 1.55; color: var(--text-2); }

@@ -77,6 +77,15 @@ async def test_ai_config_row_holds_a_credential_ref_never_a_raw_key(store):
     assert replaced.credential_ref == "cred-2" and replaced.base_url == "http://byo/v1"
     assert len(await store.list_ai_configs(T)) == 1
 
+    await store.set_ai_config(AiConfig(
+        tenant_id=T, level="org", scope_id=T,
+        provider="openai", model="gpt-vision", credential_ref="cred-vision",
+        modality="vision",
+    ))
+    vision = await store.get_ai_config(T, "org", T, "vision")
+    assert vision is not None and vision.modality == "vision"
+    assert len(await store.list_ai_configs(T)) == 2
+
 
 @pytest.mark.invariant("FR-AIKEY-01")
 async def test_ai_config_level_must_be_valid(store):

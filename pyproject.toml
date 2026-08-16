@@ -32,13 +32,11 @@ dependencies = [
 [project.optional-dependencies]
 # Durable execution. Optional so the core can run and be tested without a live engine.
 durable = ["hatchet-sdk>=0.47"]
-# Pluggable inference back ends. None are required by the core (P4).
-inference = ["anthropic>=0.39", "openai>=1.54"]
 sql-adapters = ["pymysql>=1.1"]
-# Optional memory projections. The core/offline suite never depends on them; the
-# memory seam lazy-imports heavy backends.
-mem0 = ["mem0ai>=0.1"]
-cognee = ["cognee>=1.2"]
+# Optional knowledge compiler. Cognee 1.4 provides request-scoped LLM configs,
+# which keep tenant virtual keys out of process-global settings; local fastembed
+# keeps enrichment from requiring a second provider/embedding credential.
+cognee = ["cognee[fastembed]>=1.4,<1.5"]
 s3 = ["boto3>=1.35"]
 
 [dependency-groups]
@@ -92,6 +90,36 @@ dev = [
     # gate. The seed is printed on every run, so a failure is reproducible with
     # `-p randomly --randomly-seed=N`.
     "pytest-randomly>=3.15",
+    # The Worker visual-parity comparator's pixel maths
+    # (apps/worker/tests/visual/compare-current.py). It opens the seven Figma
+    # exports and the seven current captures, subtracts them, and writes the diff
+    # and triptych PNGs beside metrics.json.
+    #
+    # DEV GROUP, not `dependencies` and not an optional extra, on purpose. The
+    # dev group is compiled ONLY into requirements-dev-lock.txt, which is what CI
+    # and a workspace .venv install; deploy/kernel.Dockerfile and
+    # deploy/fleet.Dockerfile install requirements-lock.txt, so the runtime
+    # images do not grow an image library for a tool that never runs in them.
+    # This is measurement tooling for a review lane, not product code - the same
+    # class as pytest and pip-audit above.
+    #
+    # Undeclared until now, and the comparator's own error message
+    # ("use the bundled workspace Python") hid it: it names an interpreter that
+    # was never actually specified to carry these. Neither package was reachable
+    # from either lock on the dev path - numpy appears in requirements-lock.txt
+    # only as a transitive of the optional `cognee` extra, which the dev lock does
+    # not include, and Pillow appeared nowhere at all. Both had to be installed by
+    # hand to run a comparison, so the visual-parity lane could not run on a clean
+    # checkout or in CI.
+    #
+    # Floors, not exact pins, matching pytest/fakeredis above rather than the
+    # exact-pinned analyzers: the numbers this produces are integer pixel
+    # arithmetic, not a gate verdict that shifts with a tool version. The Pillow
+    # floor is 12.3 because deploy/browser-cli-overrides.txt already had to
+    # override its way UP to 12.3.0 to clear advisories - do not let a second
+    # resolution walk it back below the version that repo file already demands.
+    "pillow>=12.3",
+    "numpy>=2.5",
 ]
 
 [project.scripts]
@@ -113,6 +141,7 @@ markers = [
     "security: grant enforcement, credential isolation, tenant isolation, HITL gates, PII",
     "store: store-contract parity across InMemoryStore and PostgresStore",
     "invariant(id): a binding invariant (P-/SEC-/K-) the test covers",
+    "linux_only: needs a Linux kernel facility (yama ptrace_scope, SO_PEERCRED, bubblewrap)",
 ]
 
 [tool.ruff]
@@ -184,7 +213,6 @@ files = [
     "boltrig/emotion/relay.py",
     "boltrig/emotion/tables.py",
     "boltrig/fleet/model_gateway_status.py",
-    "boltrig/fleet/model_profiles.py",
     "boltrig/fleet/application",
     "boltrig/fleet/domain",
     "boltrig/fleet/infrastructure/bounded_filesystem.py",
@@ -204,7 +232,6 @@ files = [
     "boltrig/fleet/infrastructure/skill_config.py",
     "boltrig/fleet/infrastructure/skill_discovery.py",
     "boltrig/fleet/ports",
-    "boltrig/fleet/opencode_plugin.py",
     "boltrig/fleet/result.py",
     "boltrig/fleet/runtime_resolver.py",
     "boltrig/fleet/stack_tool_health.py",

@@ -40,10 +40,10 @@ load-bearing, not advisory.
 
 - Respect the import boundary: `kernel/` and `models/` import nothing from
   `fleet/` or the sidecars. Keep the core free of app- and runtime-specifics.
-- Codex is the only target agent runtime (decision 0012). The existing Runtime
-  protocol and Pi/Hermes/Claude-API/OpenCode paths are staged-cutover and rollback
-  residue, not extension targets; do not add product capability to them. Script
-  remains a deterministic non-agent fallback. New Codex integration work must
+- Codex is the only target agent runtime (decision 0012). The Runtime protocol
+  remains the narrow fleet boundary; retired provider and agent implementations
+  are not rollback paths and must not be restored. Script remains a deterministic
+  non-agent fallback. New Codex integration work must
   degrade gracefully: an unavailable binary, identity, or supervised cell returns
   a typed unavailable result rather than crashing or falling through to a side
   door.

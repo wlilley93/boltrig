@@ -42,9 +42,10 @@ class WorkItem:
     parent_id: WorkItemId | None = None
     hatchet_run_id: RunId | None = None
     depth: int = 0
-    # deadlines, assignees, deps; channel intake may add the reserved
-    # ``_channel_thread_ceiling`` narrowing snapshot, re-applied by the fleet
-    # authority resolver before any delegated verb is dispatched.
+    # deadlines, assignees, deps; trusted intake may add reserved channel-thread
+    # and creator grant-ceiling snapshots. The fleet re-applies each as a
+    # narrowing intersection before any delegated verb is dispatched and carries
+    # them to follow-on work; caller/model values never replace those stamps.
     constraints: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)  # original payload, preserved
     on_behalf_of: UserId | None = None

@@ -40,15 +40,15 @@ def _surface(source: str, declarations: str) -> None:
 
 
 _surface(
-    "apps/worker/src/App.tsx",
+    "apps/worker/src/components/shell/useConversationDirectory.ts",
     """
 GET /v1/conversations conversationsPage
 """,
 )
 _surface(
-    "apps/worker/src/components/Shell.tsx",
+    "apps/worker/src/components/settings/SpendingSection.tsx",
     """
-GET /v1/conversations/search searchConversations
+GET /v1/cost cost
 """,
 )
 _surface(
@@ -63,11 +63,39 @@ _surface(
 GET /v1/conversations/{conversation_id} conversation
 GET /v1/conversations/{conversation_id}/events followConversation
 POST /v1/chat streamChat
-GET /v1/chat/config chatConfig
-GET /v1/familiar/phenotype familiarPhenotype
-GET /v1/model-profiles modelProfiles
 GET /v1/artifacts artifacts
 GET /v1/artifacts/{artifact_id}/download downloadArtifact
+""",
+)
+_surface(
+    "apps/worker/src/components/chat/useConversationQueue.ts",
+    """
+PUT /v1/conversations/{conversation_id}/queue reorderConversationQueue
+""",
+)
+_surface(
+    "apps/worker/src/components/chat/ToolReceiptDetails.tsx",
+    """
+GET /v1/runs/{run_id}/events runEvents
+""",
+)
+_surface(
+    "apps/worker/src/components/chat/useStagePhenotype.ts",
+    """
+GET /v1/familiar/phenotype familiarPhenotype
+""",
+)
+_surface(
+    "apps/worker/src/components/chat/useChatModelOptions.ts",
+    """
+GET /v1/chat/config chatConfig
+GET /v1/chat/model-choices chatModelChoices
+""",
+)
+_surface(
+    "apps/worker/src/components/settings/ModelSettingsSection.tsx",
+    """
+GET /v1/bifrost/models bifrostModels
 """,
 )
 _surface(
@@ -86,12 +114,56 @@ GET /v1/me/settings meSettings
 """,
 )
 _surface(
+    "apps/worker/src/components/ApprovalPostureControl.tsx",
+    """
+GET /v1/me/approval-posture approvalPosture
+PUT /v1/me/approval-posture putApprovalPosture
+""",
+)
+_surface(
+    "apps/worker/src/components/settings/SensingSection.tsx",
+    """
+GET /v1/me/sensing sensing
+""",
+)
+_surface(
+    "apps/worker/src/components/settings/SensingSettingsGroups.tsx",
+    """
+PUT /v1/me/sensing/camera putSensingCamera
+PUT /v1/me/sensing/presence putSensingPresence
+DELETE /v1/me/sensing/enrollment deleteSensingEnrollment
+""",
+)
+_surface(
+    "apps/worker/src/components/StageBody.tsx",
+    """
+GET /v1/sensing/capability sensingCapability
+""",
+)
+_surface(
     "apps/worker/src/components/AccountProfileSections.tsx",
     """
 PUT /v1/me/settings putMeSettings
 GET /v1/me/activity meActivity
 GET /v1/me/export meExport
 GET /v1/privacy/policy privacyPolicy
+""",
+)
+_surface(
+    # Was OnboardingGate.tsx until onboarding was split into steps and hooks.
+    # The gate now composes the steps and calls nothing; the profile write moved
+    # here with useOnboardingCompletion, beside the other onboarding hooks that
+    # already declare their own routes (see useProviderSetup.ts below).
+    "apps/worker/src/components/onboarding/useOnboardingCompletion.ts",
+    """
+PATCH /v1/me/profile updateMeProfile
+""",
+)
+_surface(
+    "apps/worker/src/components/onboarding/useProviderSetup.ts",
+    """
+POST /v1/ai-keys/activate activateAiKey
+POST /v1/ai-keys/proposals/{proposal_id}/approve approveAiKeyProposal
 """,
 )
 _surface(
@@ -138,16 +210,42 @@ DELETE /v1/ai-keys/{level}/{scope_id} deleteAiKey
 """,
 )
 _surface(
-    "apps/worker/src/components/AuthGate.tsx",
+    "apps/worker/src/components/auth/LoginScreen.tsx",
     """
 POST /v1/auth/login login
+""",
+)
+_surface(
+    "apps/worker/src/components/AuthGate.tsx",
+    """
+GET /v1/auth/csrf sessionCsrf
+""",
+)
+_surface(
+    "apps/worker/src/components/auth/RecoveryScreens.tsx",
+    """
 POST /v1/auth/password-reset/request requestPasswordReset
 POST /v1/auth/password-reset/confirm confirmPasswordReset
+""",
+)
+_surface(
+    "apps/worker/src/components/auth/AccountRequirementScreens.tsx",
+    """
 POST /v1/auth/2fa/challenge twoFactorChallenge
-POST /v1/auth/accept-invite acceptInvite
 POST /v1/auth/2fa/enroll twoFactorEnrollBegin
 POST /v1/auth/2fa/verify-enroll twoFactorVerifyEnroll
 POST /v1/auth/change-password changePassword
+""",
+)
+_surface(
+    "apps/worker/src/components/auth/AcceptInviteScreen.tsx",
+    """
+POST /v1/auth/accept-invite acceptInvite
+""",
+)
+_surface(
+    "apps/worker/src/components/AuthGate.tsx",
+    """
 POST /v1/auth/refresh refreshSession
 """,
 )
@@ -158,7 +256,10 @@ POST /v1/auth/2fa/disable twoFactorDisable
 """,
 )
 _surface(
-    "apps/worker/src/components/Views.tsx",
+    # Was Views.tsx, which no longer calls it. Sign out is a settings row now.
+    # Shell.tsx also calls client.logout on session teardown; this names the
+    # operator-facing control, which is the one a route ledger is about.
+    "apps/worker/src/components/settings/CompactSections.tsx",
     """
 POST /v1/auth/logout logout
 """,
@@ -230,16 +331,6 @@ PATCH /v1/work/{item_id}/parent reparentWork
 GET /v1/agent-capabilities agentCapabilities
 POST /v1/agent-capabilities/{name}/retire retireAgentCapability
 POST /v1/agent-capabilities/{name}/restore restoreAgentCapability
-GET /v1/knowledge/assets knowledgeAssets
-GET /v1/knowledge/assets/{asset_id} knowledgeAsset
-DELETE /v1/knowledge/assets/{asset_id} eraseKnowledgeAsset
-GET /v1/knowledge/assets/{asset_id}/original knowledgeOriginal
-GET /v1/knowledge/providers knowledgeProviders
-POST /v1/knowledge/providers/{provider_id} setKnowledgeProvider
-POST /v1/knowledge/search knowledgeSearch
-POST /v1/knowledge/uploads uploadKnowledge
-PUT /v1/knowledge/uploads/{upload_id} uploadKnowledge
-POST /v1/knowledge/uploads/{upload_id}/commit uploadKnowledge
 GET /v1/memory/facts memoryFacts
 GET /v1/memory/facts/{fact_id} memoryFact
 POST /v1/memory/recall memoryRecall
@@ -248,6 +339,28 @@ POST /v1/memory/improve memoryImprove
 POST /v1/memory/forget memoryForget
 POST /v1/memory/ingest memoryIngest
 GET /v1/memory/ingestions memoryIngestions
+""",
+)
+_surface(
+    # The settings surface was split into one component per row; the knowledge
+    # provider reads and writes went with the toggle that renders them.
+    "apps/worker/src/components/settings/KnowledgeToggle.tsx",
+    """
+GET /v1/knowledge/providers knowledgeProviders
+POST /v1/knowledge/providers/{provider_id} setKnowledgeProvider
+""",
+)
+_surface(
+    "apps/worker/src/components/knowledge/KnowledgeView.tsx",
+    """
+GET /v1/knowledge/assets knowledgeAssets
+GET /v1/knowledge/assets/{asset_id} knowledgeAsset
+DELETE /v1/knowledge/assets/{asset_id} eraseKnowledgeAsset
+GET /v1/knowledge/assets/{asset_id}/original knowledgeOriginal
+POST /v1/knowledge/search knowledgeSearch
+POST /v1/knowledge/uploads uploadKnowledge
+PUT /v1/knowledge/uploads/{upload_id} uploadKnowledge
+POST /v1/knowledge/uploads/{upload_id}/commit uploadKnowledge
 """,
 )
 _surface(
@@ -355,7 +468,7 @@ POST /v1/mcp/servers/{server_id}/restore restoreMcpServer
 """,
 )
 _surface(
-    "apps/worker/src/components/BuildView.tsx",
+    "apps/worker/src/components/build/RecentlyChanged.tsx",
     """
 GET /v1/capabilities/changelog capabilityChangelog
 """,
@@ -423,10 +536,15 @@ _surface(
     "apps/worker/src/components/DeviceSettings.tsx",
     """
 GET /v1/devices devices
-POST /v1/devices/enrollment/start startDeviceEnrollment
 DELETE /v1/devices/{device_id} revokeDevice
 POST /v1/devices/{device_id}/roots createDeviceRoot
 DELETE /v1/devices/{device_id}/roots/{root_id} revokeDeviceRoot
+""",
+)
+_surface(
+    "apps/worker/src/desktopTrust.ts",
+    """
+POST /v1/devices/enrollment/start startDeviceEnrollment
 """,
 )
 _surface(
@@ -450,17 +568,17 @@ GET /v1/calls/{call_id}/usage callUsage
 
 
 INDIRECT_WORKER_ROUTES: dict[Route, IndirectWorkerSurface] = {
+    ("GET", "/v1/conversations/search"): IndirectWorkerSurface(
+        sdk_method="searchConversations",
+        replacement_method="federatedSearch",
+        source="apps/worker/src/components/CommandPalette.tsx",
+        rationale="the global search control supersedes the removed Recents-only search bar",
+    ),
     ("GET", "/v1/artifacts/{artifact_id}"): IndirectWorkerSurface(
         sdk_method="artifact",
         replacement_method="artifacts",
         source="apps/worker/src/components/ChatView.tsx",
         rationale="the paged list returns the complete immutable Artifact projection",
-    ),
-    ("GET", "/v1/cost"): IndirectWorkerSurface(
-        sdk_method="cost",
-        replacement_method="consoleOverview",
-        source="apps/worker/src/components/OperationsView.tsx",
-        rationale="the overview carries the same scoped totals plus status breakdown",
     ),
     ("GET", "/v1/calls/{call_id}"): IndirectWorkerSurface(
         sdk_method="getCall",
@@ -499,7 +617,6 @@ PUT /v1/admin/config/{section}
 GET /v1/admin/config/{section}/history
 POST /v1/admin/config/{section}/rollback
 GET /v1/admin/credentials
-GET /v1/runs/{run_id}/events
 """,
 )
 _non_ui(
@@ -526,13 +643,33 @@ POST /v1/device-agent/enrollment/complete
 GET /v1/device-agent/{device_id}/leases
 POST /v1/device-agent/{device_id}/leases/{lease_id}/claim
 POST /v1/device-agent/{device_id}/leases/{lease_id}/receipt
+GET /v1/device-agent/{device_id}/camera-bindings
+POST /v1/device-agent/{device_id}/camera-bindings
+GET /v1/device-agent/{device_id}/camera-leases
+POST /v1/device-agent/{device_id}/camera-leases/{lease_id}/claim
+POST /v1/device-agent/{device_id}/camera-leases/{lease_id}/receipt
+GET /v1/device-agent/{device_id}/sensing-config
+POST /v1/device-agent/{device_id}/sensing-enrollment
 POST /v1/device-agent/{device_id}/session/rotate
 GET /v1/hands/commands
 POST /v1/hands/commands/{cmd_id}/receipt
 """,
 )
+_non_ui(
+    "operator-only",
+    """
+GET /v1/devices/{device_id}/camera-bindings
+GET /v1/devices/{device_id}/camera-leases
+""",
+)
 _non_ui("internal-composition", "POST /v1/knowledge/context")
-_non_ui("legacy-superseded", "POST /v1/memory/query")
+_non_ui(
+    "legacy-superseded",
+    """
+POST /v1/memory/query
+GET /v1/model-profiles
+""",
+)
 _non_ui("advanced-compatibility", "POST /v1/spawn")
 
 
@@ -545,21 +682,25 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
         "internal-helper",
         "downloadArtifact uses this URL helper and Chat calls downloadArtifact.",
     ),
-    "cost": (
-        "superseded-read",
-        "consoleOverview is a strict superset used by Home and Operate.",
-    ),
     "getCall": (
         "superseded-read",
         "calls/currentCall already return the complete call projection.",
     ),
-    "health": (
-        "service-probe",
-        "The load-balancer liveness probe is not a user lifecycle.",
-    ),
     "refreshCallMedia": (
         "compatibility-helper",
         "Worker uses reopenCall for recovery and fresh media credentials.",
+    ),
+    "requestDeviceFileListLease": (
+        "unsupported-contract",
+        "Worker chat has no explicit device/root binding, so it must not invent one for workspace reads.",
+    ),
+    "searchConversations": (
+        "superseded-read",
+        "The global federated-search command replaces the removed Recents-only search bar.",
+    ),
+    "modelProfiles": (
+        "superseded-read",
+        "Text chat uses live Bifrost model choices; retained voice profiles stay a compatibility seam.",
     ),
     "spawn": (
         "advanced-compatibility",
@@ -568,4 +709,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 }
 
 
-EXPECTED_ROUTE_COUNT = 257
+EXPECTED_ROUTE_COUNT = 280

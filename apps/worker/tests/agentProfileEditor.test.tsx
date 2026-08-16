@@ -191,3 +191,128 @@ it("refreshes canonical profiles without inferring success for consumed approval
   expect(onSaved).not.toHaveBeenCalled();
   expect(api.invoke).toHaveBeenCalledTimes(1);
 });
+
+it("authors separate text and vision model bindings through the governed profile", async () => {
+  api.modelEndpoints.mockResolvedValue({
+    endpoints: [
+      {
+        id: "bifrost-text",
+        kind: "bifrost",
+        model: "text-model",
+        data_class: "standard",
+        modalities: ["text"],
+        is_active: true,
+        status: "active",
+      },
+      {
+        id: "bifrost-vision",
+        kind: "bifrost",
+        model: "vision-model",
+        data_class: "standard",
+        modalities: ["vision"],
+        is_active: true,
+        status: "active",
+      },
+    ],
+  });
+  api.invoke.mockResolvedValue({ status: "ok", result: {} });
+
+  render(
+    <AgentProfileEditor
+      onSaved={vi.fn()}
+      onCancel={vi.fn()}
+    />,
+  );
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "vision-worker" },
+  });
+  fireEvent.change(screen.getByLabelText("Model arrangement"), {
+    target: { value: "separate" },
+  });
+  await screen.findByRole("option", { name: /bifrost-text/ });
+  fireEvent.change(screen.getByLabelText("Text model"), {
+    target: { value: "bifrost-text" },
+  });
+  fireEvent.change(screen.getByLabelText("Vision model"), {
+    target: { value: "bifrost-vision" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Request profile change" }));
+
+  await waitFor(() => expect(api.invoke).toHaveBeenCalledWith(
+    expect.objectContaining({
+      verb: "control.capability.upsert",
+      params: expect.objectContaining({
+        model_endpoint: "bifrost-text",
+        vision_model_endpoint: "bifrost-vision",
+      }),
+    }),
+  ));
+});
+
+it("preserves normalized text, vision, and directional voice routes when editing", async () => {
+  api.modelEndpoints.mockResolvedValue({
+    endpoints: [
+      ["text-route", ["text"]],
+      ["vision-route", ["vision"]],
+      ["speech-route", ["stt"]],
+      ["voice-route", ["tts"]],
+      ["realtime-route", ["realtime"]],
+    ].map(([id, modalities]) => ({
+      id,
+      kind: "bifrost",
+      model: `${id}-model`,
+      data_class: "standard",
+      modalities,
+      is_active: true,
+      status: "active",
+    })),
+  });
+  api.invoke.mockResolvedValue({ status: "ok", result: {} });
+
+  render(
+    <AgentProfileEditor
+      initial={{
+        name: "routed-worker",
+        runtime: "codex",
+        supported_skills: ["*"],
+        max_depth: 2,
+        is_ephemeral: true,
+        cost_tier: "standard",
+        model_endpoint: null,
+        vision_model_endpoint: null,
+        model_routes: {
+          text: "text-route",
+          vision: "vision-route",
+          stt: "speech-route",
+          tts: "voice-route",
+          realtime: "realtime-route",
+        },
+        familiar_genotype: {},
+      }}
+      onSaved={vi.fn()}
+      onCancel={vi.fn()}
+    />,
+  );
+
+  await screen.findByRole("option", { name: /text-route/ });
+  expect((screen.getByLabelText("Text model") as HTMLSelectElement).value).toBe("text-route");
+  expect((screen.getByLabelText("Vision model") as HTMLSelectElement).value).toBe("vision-route");
+  expect((screen.getByLabelText("Speech to text") as HTMLSelectElement).value).toBe("speech-route");
+  expect((screen.getByLabelText("Text to speech") as HTMLSelectElement).value).toBe("voice-route");
+  expect((screen.getByLabelText("Realtime voice") as HTMLSelectElement).value).toBe("realtime-route");
+
+  fireEvent.click(screen.getByRole("button", { name: "Request profile change" }));
+  await waitFor(() => expect(api.invoke).toHaveBeenCalledWith(
+    expect.objectContaining({
+      params: expect.objectContaining({
+        model_routes: {
+          text: "text-route",
+          vision: "vision-route",
+          stt: "speech-route",
+          tts: "voice-route",
+          realtime: "realtime-route",
+        },
+      }),
+    }),
+  ));
+});

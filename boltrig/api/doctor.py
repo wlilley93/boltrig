@@ -1,9 +1,4 @@
-"""Production-readiness checks for a Boltrig deployment.
-
-The doctor is intentionally static: it inspects environment and manifest posture
-without connecting to databases, IdPs, model gateways, or sidecars. That keeps it
-safe to run before first boot and deterministic enough for CI.
-"""
+"""Static production-readiness checks with no dependency I/O."""
 
 from __future__ import annotations
 
@@ -15,9 +10,12 @@ from pathlib import Path
 from typing import Mapping
 from urllib.parse import parse_qs, urlsplit
 
+from boltrig.api.doctor_backups import backup_checks
+from boltrig.api.doctor_codex import codex_release_check
+from boltrig.api.doctor_edge import edge_checks
+from boltrig.api.doctor_stack_state import stack_state_checks
 from boltrig.config.environment import is_truthy
 from boltrig.config.manifest import FleetManifest, load_manifest
-from boltrig.api.doctor_stack_state import stack_state_checks
 
 # [2026] VJS-CC-BOLTRIG-AUDIT-KEY-PROVISIONING-001 O2: ONE placeholder predicate,
 # shared with the bootstrap audit-key guard and the readiness-receipt key, so the
@@ -118,7 +116,10 @@ def run_doctor(
         _check_stack_tool_state(e, prod, manifest, checks)
         _check_model_posture(e, prod, manifest, checks)
         _check_memory_posture(prod, manifest, checks)
-    _check_backups(e, prod, checks)
+        if codex_check := codex_release_check(e, prod, manifest):
+            _add(checks, *codex_check)
+    for backup_check in backup_checks(e, prod):
+        _add(checks, *backup_check)
     _check_durable_engine(e, checks)
 
     return DoctorReport(production=prod, checks=tuple(checks))
@@ -319,52 +320,14 @@ def _check_auth(env: Mapping[str, str], prod: bool, checks: list[DoctorCheck]) -
 
 
 def _check_edge(env: Mapping[str, str], prod: bool, checks: list[DoctorCheck]) -> None:
-    hosts = _csv(env.get("BOLTRIG_ALLOWED_HOSTS"))
-    if prod and (not hosts or hosts == ["*"]):
-        _add(
-            checks,
-            "fail",
-            "allowed_hosts",
-            "BOLTRIG_ALLOWED_HOSTS is unset or wildcard in production mode.",
-        )
-    elif hosts:
-        _add(checks, "ok", "allowed_hosts", "Host allowlist is explicit.")
-    else:
-        _add(checks, "warn", "allowed_hosts", "BOLTRIG_ALLOWED_HOSTS is unset; dev wildcard applies.")
-
-    origins = _csv(env.get("BOLTRIG_CORS_ORIGINS"))
-    if "*" in origins:
-        _add(checks, "fail", "cors_origins", "BOLTRIG_CORS_ORIGINS contains '*'.")
-    elif origins:
-        _add(checks, "ok", "cors_origins", "Browser CORS origins are explicit.")
-    else:
-        _add(checks, "ok", "cors_origins", "CORS is same-origin by default.")
-
-    max_body = env.get("BOLTRIG_MAX_BODY_BYTES")
-    if max_body:
-        try:
-            if int(max_body) <= 0:
-                raise ValueError
-            _add(checks, "ok", "body_cap", "Request body cap is set.")
-        except ValueError:
-            _add(checks, "warn", "body_cap", "BOLTRIG_MAX_BODY_BYTES is not a positive integer.")
-
-    if prod and not env.get("BOLTRIG_DOMAIN"):
-        _add(
-            checks,
-            "warn",
-            "tls_domain",
-            "BOLTRIG_DOMAIN is unset; doctor cannot confirm secure overlay intent.",
-            "Use make secure-up or set equivalent edge TLS outside compose.",
-        )
+    for check in edge_checks(env, prod):
+        _add(checks, *check)
 
 
-# Runtime kinds that have been REMOVED from the codebase, not merely gated off.
-# A capability or manifest still naming one degrades to the typed unavailable
-# result rather than crashing (P9), so this is drift to report, never a deploy
-# blocker. `pi` (PC-20 L1) and `hermes` (2026-08-06) are both retired; see
-# docs/decisions/0020-retire-the-pi-lane.md. This tuple only ever GROWS.
-_RETIRED_RUNTIMES = ("pi", "hermes")
+# Removed runtime names are migration drift, never revival targets.
+_RETIRED_RUNTIMES = frozenset(
+    "pi hermes openai claude-api opencode rivet rivet_agentos rivet-agentos".split()
+)
 
 
 def _check_runtime(
@@ -528,14 +491,6 @@ def _check_memory_posture(prod: bool, manifest: FleetManifest, checks: list[Doct
     else:
         _add(checks, "ok", "memory_residency", "Memory endpoints are local-sensitive.")
 
-    if prod and str(memory.get("engine", "")).lower() == "local":
-        _add(
-            checks,
-            "warn",
-            "memory_engine",
-            "memory.engine=local; Boltrig v2 production usually wants Mem0 primary"
-            " with Cognee as an optional projection.",
-        )
     if not is_truthy(str((memory.get("ingest") or {}).get("screen_content", False))):
         _add(checks, "warn", "memory_screening", "Memory ingest content screening is disabled.")
 
@@ -545,21 +500,6 @@ def _manifest_gateway_url(manifest: FleetManifest) -> str | None:
     gateway = runtimes.get("gateway") if isinstance(runtimes.get("gateway"), dict) else {}
     value = gateway.get("base_url") if isinstance(gateway, dict) else None
     return str(value) if value else None
-
-
-def _check_backups(env: Mapping[str, str], prod: bool, checks: list[DoctorCheck]) -> None:
-    if env.get("BACKUP_REMOTE"):
-        _add(checks, "ok", "backup_remote", "Off-box backup remote is configured.")
-    else:
-        _add(
-            checks,
-            "fail" if prod else "warn",
-            "backup_remote",
-            "BACKUP_REMOTE is unset; scheduled backups remain local-only.",
-            "Set BACKUP_REMOTE or document an equivalent off-box backup path.",
-        )
-    if prod and not env.get("BACKUP_PASSPHRASE"):
-        _add(checks, "warn", "backup_encryption", "BACKUP_PASSPHRASE is unset.")
 
 
 def _check_durable_engine(env: Mapping[str, str], checks: list[DoctorCheck]) -> None:

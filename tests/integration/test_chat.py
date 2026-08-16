@@ -15,10 +15,18 @@ from boltrig.fleet.chat import (
     ConversationForbidden,
     build_turn_executor,
 )
+from boltrig.fleet import build_spawner
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.kernel.events import EventRelay
-from boltrig.models import GrantSet, TenantPermissions
+from boltrig.models import (
+    AgentCapability,
+    Conversation,
+    ConversationMessage,
+    GrantSet,
+    MessageRole,
+    TenantPermissions,
+)
 from boltrig.store import InMemoryStore
 
 T = "acme"
@@ -64,6 +72,56 @@ async def test_chat_streams_events_and_persists():
     msgs = await store.list_messages(T, convs[0].id)
     assert [m.role.value for m in msgs] == ["user", "assistant"]
     assert msgs[1].content == "Created ticket 1."
+
+
+@pytest.mark.invariant("FR-CONV-04")
+async def test_direct_chat_worker_is_not_rendered_as_a_delegated_subagent():
+    """The worker answering the turn is the root, not a child in its own transcript.
+
+    Real delegated work still uses Spawner's default announcement behaviour; only
+    the direct chat entrypoint suppresses the synthetic child projection.
+    """
+    store, relay = InMemoryStore(), EventRelay()
+    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
+    await store.upsert_capability(
+        AgentCapability("chat-worker", T, "python-script", ["*"], 2, True, "cheap")
+    )
+    kernel = Kernel(store)
+    chat = ChatService(
+        store,
+        relay,
+        turn_executor=build_turn_executor(
+            kernel,
+            build_spawner(kernel),
+            continuity=False,
+            chat_config=ChatConfig(default_capability="chat-worker"),
+        ),
+    )
+
+    out = await _collect(
+        chat.handle_turn(tenant_id=T, user_id="alice", role="engineer", message="hello")
+    )
+
+    assert not any(event["type"] in {"subagent", "subagent_end"} for event in out)
+    text_events = [event for event in out if event["type"] == "text_delta"]
+    assert text_events == [{
+        "type": "text_delta",
+        "delta": (
+            "(degraded) This chat's configured runtime cannot produce a "
+            "conversational answer."
+        ),
+        "degraded": True,
+    }]
+    assert "script run by" not in text_events[0]["delta"]
+
+    conversations = await store.list_conversations(T, "alice")
+    messages = await store.list_messages(T, conversations[0].id)
+    assert messages[1].content == text_events[0]["delta"]
+
+    run_id = next(event["run_id"] for event in out if event["type"] == "message_start")
+    work_item = await store.get_work_item(T, run_id)
+    assert work_item is not None
+    assert work_item.degraded is True
 
 
 @pytest.mark.invariant("FR-CONV-04")
@@ -142,11 +200,19 @@ async def test_http_conversation_list_is_backward_compatible_and_paginates():
     store, relay = InMemoryStore(), EventRelay()
     for i in range(3):
         await _seed_conv(store, f"c{i}", "alice", f"thread {i}")
+    relay.set_active_run(T, "c1", "run-1")
     client = TestClient(create_app(Kernel(store), chat_service=ChatService(store, relay)))
     hdr = {"x-boltrig-tenant": T, "x-boltrig-subject": "alice", "x-boltrig-role": "engineer"}
-    # bare call: unchanged shape, every conversation, no next_offset key
+    # Bare call keeps the legacy wrapper and ordering while adding only the
+    # content-free working boolean; it never exposes the internal run id.
     body = client.get("/v1/conversations", headers=hdr).json()
     assert [c["id"] for c in body["conversations"]] == ["c2", "c1", "c0"]
+    assert {c["id"]: c["working"] for c in body["conversations"]} == {
+        "c2": False,
+        "c1": True,
+        "c0": False,
+    }
+    assert all("active_run_id" not in c for c in body["conversations"])
     assert "next_offset" not in body
     # opt into pagination: one bounded page + a next offset that walks to exhaustion
     p1 = client.get("/v1/conversations?limit=2", headers=hdr).json()
@@ -155,6 +221,9 @@ async def test_http_conversation_list_is_backward_compatible_and_paginates():
     p2 = client.get("/v1/conversations?limit=2&offset=2", headers=hdr).json()
     assert [c["id"] for c in p2["conversations"]] == ["c0"]
     assert p2["next_offset"] is None
+    assert relay.clear_active_run(T, "c1", expected="run-1")
+    settled = client.get("/v1/conversations", headers=hdr).json()
+    assert next(c for c in settled["conversations"] if c["id"] == "c1")["working"] is False
 
 
 @pytest.mark.invariant("SEC-94")
@@ -239,6 +308,149 @@ async def test_steer_queues_during_in_flight_turn_and_is_consumed_at_boundary():
 
 
 @pytest.mark.invariant("US-CHAT-15")
+async def test_reordered_steers_execute_in_owner_selected_order_and_stale_order_is_refused():
+    store, relay = InMemoryStore(), EventRelay()
+    gate = asyncio.Event()
+    calls: list[str] = []
+    chat = ChatService(store, relay, turn_executor=_gated_executor(gate, calls))
+
+    turn = asyncio.create_task(_collect(
+        chat.handle_turn(tenant_id=T, user_id="alice", role="engineer", message="first")
+    ))
+    while not calls:
+        await asyncio.sleep(0)
+    conversation = (await store.list_conversations(T, "alice"))[0]
+    second = await _collect(chat.handle_turn(
+        tenant_id=T,
+        user_id="alice",
+        role="engineer",
+        message="second",
+        conversation_id=conversation.id,
+    ))
+    third = await _collect(chat.handle_turn(
+        tenant_id=T,
+        user_id="alice",
+        role="engineer",
+        message="third",
+        conversation_id=conversation.id,
+    ))
+    expected = [second[0]["message_id"], third[0]["message_id"]]
+    selected = list(reversed(expected))
+
+    assert await chat.reorder_pending_steers(
+        T, "alice", conversation.id, expected, selected
+    )
+    assert not await chat.reorder_pending_steers(
+        T, "alice", conversation.id, expected, expected
+    )
+    assert await chat.pending_steer_ids(
+        T, "alice", "engineer", conversation.id
+    ) == selected
+
+    gate.set()
+    await asyncio.wait_for(turn, timeout=2)
+    assert calls == ["first", "third", "second"]
+    assert await store.pending_conversation_steer_ids(T, conversation.id) == []
+
+
+@pytest.mark.invariant("US-CHAT-15")
+def test_queue_reorder_route_is_owner_scoped_bounded_and_compare_and_swap():
+    store, relay = InMemoryStore(), EventRelay()
+    conversation = Conversation(id="queue-route", tenant_id=T, user_id="alice")
+
+    async def seed() -> None:
+        await store.create_conversation(conversation)
+        for message_id in ("queued-a", "queued-b"):
+            await store.enqueue_conversation_steer(ConversationMessage(
+                id=message_id,
+                conversation_id=conversation.id,
+                tenant_id=T,
+                role=MessageRole.USER,
+                content=message_id,
+            ))
+
+    asyncio.run(seed())
+    client = TestClient(create_app(Kernel(store), chat_service=ChatService(store, relay)))
+    owner = {
+        "x-boltrig-tenant": T,
+        "x-boltrig-subject": "alice",
+        "x-boltrig-role": "engineer",
+    }
+    current = ["queued-a", "queued-b"]
+    selected = list(reversed(current))
+
+    detail = client.get(f"/v1/conversations/{conversation.id}", headers=owner)
+    assert detail.status_code == 200
+    assert detail.json()["queued_message_ids"] == current
+    changed = client.put(
+        f"/v1/conversations/{conversation.id}/queue",
+        json={"expected_message_ids": current, "message_ids": selected},
+        headers=owner,
+    )
+    assert changed.status_code == 200 and changed.json()["message_ids"] == selected
+    stale = client.put(
+        f"/v1/conversations/{conversation.id}/queue",
+        json={"expected_message_ids": current, "message_ids": selected},
+        headers=owner,
+    )
+    assert stale.status_code == 409 and stale.json()["reason"] == "queue_changed"
+    denied = client.put(
+        f"/v1/conversations/{conversation.id}/queue",
+        json={"expected_message_ids": selected, "message_ids": current},
+        headers={**owner, "x-boltrig-subject": "bob"},
+    )
+    assert denied.status_code == 403
+    invalid = client.put(
+        f"/v1/conversations/{conversation.id}/queue",
+        json={"expected_message_ids": selected, "message_ids": ["queued-b", "queued-b"]},
+        headers=owner,
+    )
+    assert invalid.status_code == 400 and invalid.json()["reason"] == "queue_order_invalid"
+
+
+@pytest.mark.invariant("SEC-WRK-02")
+async def test_model_choice_on_in_flight_steer_is_rejected_not_silently_reused():
+    store, relay = InMemoryStore(), EventRelay()
+    gate = asyncio.Event()
+    calls: list[str] = []
+    chat = ChatService(store, relay, turn_executor=_gated_executor(gate, calls))
+
+    turn = asyncio.create_task(
+        _collect(
+            chat.handle_turn(
+                tenant_id=T,
+                user_id="alice",
+                role="engineer",
+                message="first",
+                model_choice_id="choice-a",
+            )
+        )
+    )
+    while not calls:
+        await asyncio.sleep(0)
+    conversation = (await store.list_conversations(T, "alice"))[0]
+
+    from boltrig.models import ModelEndpointUnavailable
+
+    with pytest.raises(ModelEndpointUnavailable, match="cannot change"):
+        await _collect(
+            chat.handle_turn(
+                tenant_id=T,
+                user_id="alice",
+                role="engineer",
+                message="switch while busy",
+                conversation_id=conversation.id,
+                model_choice_id="choice-b",
+            )
+        )
+
+    messages = await store.list_messages(T, conversation.id)
+    assert [message.content for message in messages] == ["first"]
+    gate.set()
+    await asyncio.wait_for(turn, timeout=2)
+
+
+@pytest.mark.invariant("US-CHAT-15")
 async def test_consumed_steer_enters_the_prompt_inside_the_untrusted_envelope():
     store = InMemoryStore()
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
@@ -246,7 +458,7 @@ async def test_consumed_steer_enters_the_prompt_inside_the_untrusted_envelope():
     captured: list[str] = []
 
     async def spawn(tenant_id, task, skills, prefer, context, *,
-                    partial_on_budget=True, grant_ceiling=None):
+                    partial_on_budget=True, grant_ceiling=None, announce_child=True):
         captured.append(task)
         if len(captured) == 1:
             await gate.wait()
@@ -605,7 +817,7 @@ async def test_a_long_reply_is_persisted_in_full_not_capped_at_the_summary_bound
     long_text = "The full answer. " * 30  # 510 chars, comfortably over the 256 bound
 
     async def spawn(tenant_id, task, skills, prefer, context, *,
-                    partial_on_budget=True, grant_ceiling=None):
+                    partial_on_budget=True, grant_ceiling=None, announce_child=True):
         # Mirrors the codex lane: full text in output, a short line in summary.
         return {"output": {"runtime": "codex_app_server", "text": long_text},
                 "summary": long_text[:256]}
@@ -640,7 +852,7 @@ async def test_a_degraded_turn_still_falls_back_to_the_summary_line():
     store, relay = InMemoryStore(), EventRelay()
 
     async def spawn(tenant_id, task, skills, prefer, context, *,
-                    partial_on_budget=True, grant_ceiling=None):
+                    partial_on_budget=True, grant_ceiling=None, announce_child=True):
         return {"output": {"_degraded": True}, "summary": "backend unavailable",
                 "degraded": True}
 
@@ -681,7 +893,7 @@ def test_the_channel_a_turn_arrived_through_is_recorded_without_steering_routing
     store, relay = InMemoryStore(), EventRelay()
 
     async def spawn(tenant_id, task, skills, prefer, context, *,
-                    partial_on_budget=True, grant_ceiling=None):
+                    partial_on_budget=True, grant_ceiling=None, announce_child=True):
         return {"output": {"text": "done"}, "summary": "done"}
 
     kernel = types.SimpleNamespace(store=store)

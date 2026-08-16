@@ -6,7 +6,13 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from boltrig.models import ConversationMessage, GrantSet, MessageRole, utcnow
+from boltrig.models import (
+    ConversationMessage,
+    GrantSet,
+    MessageRole,
+    ModelEndpointUnavailable,
+    utcnow,
+)
 
 from .chat_attachments import validate_attachments
 from .chat_conversation_access import resolve_conversation
@@ -28,6 +34,18 @@ class TurnRequest:
     idempotency_key: str | None
     origin: str | None
     model_profile_id: str | None
+    model_choice_id: str | None
+    input_role: MessageRole
+
+
+def decision_request_id(events: list[dict[str, Any]]) -> str | None:
+    """Return the first canonical HITL id from approval or question frames."""
+    for event in events:
+        if event.get("type") == "hitl" and event.get("hitl_request_id"):
+            return str(event["hitl_request_id"])
+        if event.get("type") == "question" and event.get("question_id"):
+            return str(event["question_id"])
+    return None
 
 
 async def _reserve_or_queue(service, request, conversation, records, run_id):
@@ -44,22 +62,27 @@ async def _reserve_or_queue(service, request, conversation, records, run_id):
                 request.tenant_id, conversation.id, run_id
             )
             try:
-                await _persist_direct_input(
-                    service, request, conversation.id, records, run_id
-                )
+                await _persist_direct_input(service, request, conversation.id, records, run_id)
             except BaseException:
                 service._clear_active_run(  # noqa: SLF001
                     request.tenant_id, conversation.id, expected=run_id
                 )
                 raise
             return None
+        if request.model_choice_id:
+            # A steer joins the already-running request and cannot alter the
+            # immutable model admission being provisioned for it. Worker locks
+            # the switcher while busy; the HTTP door enforces the same truth.
+            raise ModelEndpointUnavailable(
+                "a model choice cannot change while a conversation turn is active"
+            )
         message_id = uuid.uuid4().hex
-        await service._store.add_message(  # noqa: SLF001
+        await service._store.enqueue_conversation_steer(  # noqa: SLF001
             ConversationMessage(
                 id=message_id,
                 conversation_id=conversation.id,
                 tenant_id=request.tenant_id,
-                role=MessageRole.USER,
+                role=request.input_role,
                 content=request.message,
                 attachments=records,
             )
@@ -82,7 +105,7 @@ async def _persist_direct_input(
             id=uuid.uuid4().hex,
             conversation_id=conversation_id,
             tenant_id=request.tenant_id,
-            role=MessageRole.USER,
+            role=request.input_role,
             content=request.message,
             attachments=records,
             run_id=run_id,
@@ -126,6 +149,7 @@ async def _stream_one(
         on_behalf_bearer=request.on_behalf_bearer,
         origin=request.origin,
         model_profile_id=request.model_profile_id,
+        model_choice_id=getattr(request, "model_choice_id", None),
     ):
         if not service._refresh_active_run(  # noqa: SLF001
             request.tenant_id, conversation.id, expected=run_id
@@ -137,22 +161,11 @@ async def _stream_one(
     yield {"type": "message_end", "run_id": run_id}
 
 
-async def _persist_assistant(
-    service, request, conversation, run_id: str, collected
-) -> None:
+async def _persist_assistant(service, request, conversation, run_id: str, collected) -> None:
     text = "".join(
-        event.get("delta", "")
-        for event in collected
-        if event.get("type") == "text_delta"
+        event.get("delta", "") for event in collected if event.get("type") == "text_delta"
     )
-    hitl_id = next(
-        (
-            event.get("hitl_request_id")
-            for event in collected
-            if event.get("type") == "hitl"
-        ),
-        None,
-    )
+    hitl_id = decision_request_id(collected)
     await service._store.add_message(  # noqa: SLF001
         ConversationMessage(
             id=uuid.uuid4().hex,
@@ -179,8 +192,9 @@ async def _next_turn(service, request, conversation, current_run_id):
             != current_run_id
         ):
             return None
+        run_id = uuid.uuid4().hex
         steer = await service._next_pending_steer(  # noqa: SLF001
-            request.tenant_id, conversation.id
+            request.tenant_id, conversation.id, run_id
         )
         if steer is None:
             service._clear_active_run(  # noqa: SLF001
@@ -189,7 +203,6 @@ async def _next_turn(service, request, conversation, current_run_id):
                 expected=current_run_id,
             )
             return None
-        run_id = uuid.uuid4().hex
         service._set_active_run(  # noqa: SLF001
             request.tenant_id, conversation.id, run_id
         )
@@ -217,9 +230,7 @@ async def stream_turn(service, request: TurnRequest):
         request.message,
     )
     run_id = uuid.uuid4().hex
-    queued = await _reserve_or_queue(
-        service, request, conversation, records, run_id
-    )
+    queued = await _reserve_or_queue(service, request, conversation, records, run_id)
     if queued is not None:
         yield queued
         return
@@ -238,14 +249,10 @@ async def stream_turn(service, request: TurnRequest):
                 collected,
             ):
                 yield event
-            await _persist_assistant(
-                service, request, conversation, run_id, collected
-            )
+            await _persist_assistant(service, request, conversation, run_id, collected)
             if any(event.get("type") == "cancelled" for event in collected):
                 return
-            next_turn = await _next_turn(
-                service, request, conversation, run_id
-            )
+            next_turn = await _next_turn(service, request, conversation, run_id)
             if next_turn is None:
                 return
             run_id, steer = next_turn

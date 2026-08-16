@@ -53,9 +53,17 @@ def _event_safe(value: Any) -> Any:
     store (notably for one-time invitation tokens).
     """
     if isinstance(value, dict):
+        media_type = value.get("media_type")
+        media_payload = (
+            isinstance(media_type, str)
+            and (media_type.startswith("image/") or media_type.startswith("audio/") or media_type.startswith("video/"))
+        )
         safe: dict[str, Any] = {}
         for key, item in value.items():
-            safe[str(key)] = "[redacted]" if sensitive_key(key) else _event_safe(item)
+            redact_media = media_payload and str(key) in {"data", "blob", "bytes"}
+            safe[str(key)] = (
+                "[redacted]" if sensitive_key(key) or redact_media else _event_safe(item)
+            )
         return safe
     if isinstance(value, list):
         return [_event_safe(item) for item in value]

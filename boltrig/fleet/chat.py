@@ -10,10 +10,10 @@ This lives in the fleet layer (it orchestrates the fleet); the kernel and models
 import nothing from it.
 
 Mid-run steers (US-CHAT-15): a message posted to a conversation whose turn is in
-flight never starts a parallel turn - it is persisted as a user message (the
-append-only message log is the durable queue), acknowledged with a ``queued``
-frame, and auto-started as the NEXT turn on the same stream once the in-flight
-turn completes. A cancelled turn never auto-consumes the queue (cancel wins).
+flight never starts a parallel turn. Its content remains frozen in the append-only
+message log while a separate, owner-reorderable scheduling projection chooses the
+NEXT turn. ``ChatQueueService`` owns that reorder-and-claim boundary. A cancelled
+turn never auto-consumes the queue (cancel wins).
 """
 
 from __future__ import annotations
@@ -40,9 +40,10 @@ from boltrig.fleet.chat_regeneration import (
     RegenerateNotEligible,
     regeneration_inputs,
 )
+from boltrig.fleet.chat_queue import ChatQueueService
 from boltrig.fleet.chat_stream_drive import drive_turn_events, safe_exec
 from boltrig.fleet.chat_turn_execution import build_turn_executor
-from boltrig.fleet.chat_turn_flow import TurnRequest, stream_turn
+from boltrig.fleet.chat_turn_flow import TurnRequest, decision_request_id, stream_turn
 from boltrig.models import (
     Conversation,
     ConversationMessage,
@@ -72,7 +73,7 @@ TurnExecutor = Callable[..., Awaitable[Any]]
 Summariser = Callable[[list[ConversationMessage]], Awaitable[str]]
 
 
-class ChatService:
+class ChatService(ChatQueueService):
     def __init__(
         self,
         store,
@@ -101,6 +102,10 @@ class ChatService:
     def _active_run_for(self, tenant_id: str, conversation_id: str) -> str | None:
         return self._relay.active_run(tenant_id, conversation_id)
 
+    def conversation_is_working(self, tenant_id: str, conversation_id: str) -> bool:
+        """Project active-run truth without exposing the run identifier."""
+        return self._active_run_for(tenant_id, conversation_id) is not None
+
     def _set_active_run(self, tenant_id: str, conversation_id: str, run_id: str) -> None:
         self._relay.set_active_run(tenant_id, conversation_id, run_id)
 
@@ -124,32 +129,6 @@ class ChatService:
         from boltrig.fleet.chat_live_projection import ChatLiveProjection
 
         return ChatLiveProjection(self)
-
-    async def _next_pending_steer(
-        self, tenant_id: str, conversation_id: str
-    ) -> ConversationMessage | None:
-        """The OLDEST queued steer still waiting for its turn, else None.
-
-        The durable steer queue IS the append-only message log (no new store
-        structure). Derivation: chat turns are serialised per conversation by the
-        in-flight mark, and every turn appends exactly ONE assistant reply
-        (chat.py is the only message writer), so live user/assistant messages pair
-        off in order - the first live user message beyond the live assistant count
-        has no reply yet. The candidate must also carry no ``run_id`` of its own:
-        a turn's direct input is tagged with its run at insert, so only a message
-        that QUEUED as a steer is ever consumed here - an explicit input is never
-        re-run, even when cancel stranded it; it rides the next turn's continuity
-        because cancel wins (US-CHAT-15)."""
-        messages = await self._store.list_messages(tenant_id, conversation_id)
-        live = [m for m in messages if m.superseded_by is None]
-        users = [m for m in live if m.role == MessageRole.USER]
-        answered = sum(1 for m in live if m.role == MessageRole.ASSISTANT)
-        if len(users) <= answered:
-            return None
-        candidate = users[answered]
-        if candidate.run_id is not None:
-            return None
-        return candidate
 
     async def list_conversations(self, tenant_id: str, user_id: str) -> list[Conversation]:
         return await self._store.list_conversations(tenant_id, user_id)
@@ -195,6 +174,16 @@ class ChatService:
             raise ConversationForbidden("not permitted to read this conversation")
         return await self._store.list_messages(tenant_id, conversation_id)
 
+    async def get_conversation(
+        self, tenant_id: str, user_id: str, role: str, conversation_id: str
+    ) -> Conversation | None:
+        conversation = await self._store.get_conversation(tenant_id, conversation_id)
+        if conversation is None:
+            return None
+        if not _can_read(conversation, user_id, role):
+            raise ConversationForbidden("not permitted to read this conversation")
+        return conversation
+
     async def context_compaction_view(
         self,
         tenant_id: str,
@@ -221,7 +210,8 @@ class ChatService:
         on_behalf_bearer: str | None = None,
         idempotency_key: str | None = None,
         origin: str | None = None,
-        model_profile_id: str | None = None,
+        model_profile_id: str | None = None, model_choice_id: str | None = None,
+        input_role: MessageRole = MessageRole.USER,
     ) -> AsyncIterator[dict[str, Any]]:
         request = TurnRequest(
             tenant_id=tenant_id,
@@ -237,13 +227,14 @@ class ChatService:
             idempotency_key=idempotency_key,
             origin=origin,
             model_profile_id=model_profile_id,
+            model_choice_id=model_choice_id,
+            input_role=input_role,
         )
         async for event in stream_turn(self, request):
             yield event
 
     async def _maybe_compact(self, tenant_id: str, conversation_id: str) -> None:
         await maybe_compact(self, tenant_id, conversation_id)
-
     async def _drive(
         self,
         tenant_id,
@@ -260,7 +251,7 @@ class ChatService:
         scope=None,
         on_behalf_bearer=None,
         origin=None,
-        model_profile_id=None,
+        model_profile_id=None, model_choice_id=None,
     ):
         async for event in drive_turn_events(
             self,
@@ -278,6 +269,7 @@ class ChatService:
             on_behalf_bearer=on_behalf_bearer,
             origin=origin,
             model_profile_id=model_profile_id,
+            model_choice_id=model_choice_id,
         ):
             yield event
 
@@ -336,10 +328,7 @@ class ChatService:
             collected.append(event)
 
         text = "".join(e.get("delta", "") for e in collected if e.get("type") == "text_delta")
-        hitl_id = next(
-            (e.get("hitl_request_id") for e in collected if e.get("type") == "hitl"),
-            None,
-        )
+        hitl_id = decision_request_id(collected)
         new_message = ConversationMessage(
             id=uuid.uuid4().hex,
             conversation_id=conversation_id,

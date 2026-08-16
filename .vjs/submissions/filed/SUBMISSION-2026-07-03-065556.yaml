@@ -18,7 +18,7 @@ facts: |
      only the auth/tenancy CORE is the template.
   3. This composes with the in-flight login ([2026] VJS-COUNTY 7): login authenticates;
      org/workspace is the authorization context selected after login and switchable.
-  4. The Principal wants will.lilley93@gmail.com seeded superadmin with password
+  4. The Principal wants a deployment-specific seeded superadmin with password
      'admin' - trivially guessable for the sole gate on an internet-facing console.
 
   ## The question

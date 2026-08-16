@@ -1,38 +1,36 @@
 export type WorkerRoute =
   | "home"
   | "chat"
-  | "inbox"
   | "runs"
   | "work"
   | "agents"
   | "account"
   | "build"
+  | "browser"
   | "channels"
   | "evaluations"
   | "automations"
   | "knowledge"
   | "memory"
   | "integrations"
-  | "operate"
   | "organisation"
   | "settings";
 
 const routes = new Set<WorkerRoute>([
   "home",
   "chat",
-  "inbox",
   "runs",
   "work",
   "agents",
   "account",
   "build",
+  "browser",
   "channels",
   "evaluations",
   "automations",
   "knowledge",
   "memory",
   "integrations",
-  "operate",
   "organisation",
   "settings",
 ]);

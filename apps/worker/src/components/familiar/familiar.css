@@ -7,8 +7,11 @@
   display: grid;
   place-items: center;
   aspect-ratio: 1;
-  /* Mobile: hero shrinks with the viewport; the same rules serve both shells. */
-  width: min(340px, 60vw);
+  /* Mobile: hero shrinks with the viewport; the same rules serve both shells.
+     The 38vh bound is load-bearing: the stage is square, so a width-only bound
+     let it grow taller than a short window and push the transcript, heading and
+     composer out of view entirely. */
+  width: min(340px, 60vw, 38vh);
   margin: 0 auto;
   transition: width 480ms ease;
 }
@@ -39,4 +42,59 @@
 }
 
 /* Renderer fallback: the badge centred where the body would be. */
-.familiar-stage.fallback .familiar-orb { transform: scale(1.6); }
+.familiar-stage.fallback .familiar-orb {
+  width: 88%;
+  height: 88%;
+  transform: none;
+}
+
+/* Below the Stage threshold identity is a crisp, flat SVG silhouette. The
+ * wrapper keeps the legacy class so every existing surface inherits sizing,
+ * while removing the old generic circular background and inset highlight. */
+.familiar-orb.familiar-identity {
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+}
+
+.familiar-badge-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.familiar-badge-ring {
+  opacity: .46;
+  stroke-width: 1.25;
+}
+
+.familiar-orb.familiar-identity.working .familiar-badge-ring {
+  opacity: .9;
+  animation: familiar-badge-halo 1.55s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.familiar-orb.familiar-identity.working .familiar-badge-body {
+  animation: familiar-badge-breathe 1.55s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes familiar-badge-breathe {
+  50% { scale: .94; }
+}
+
+@keyframes familiar-badge-halo {
+  50% { opacity: .48; scale: 1.06; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .familiar-orb.familiar-identity.working .familiar-badge-ring,
+  .familiar-orb.familiar-identity.working .familiar-badge-body {
+    animation: none;
+  }
+}

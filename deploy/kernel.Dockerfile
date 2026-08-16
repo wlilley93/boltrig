@@ -73,31 +73,14 @@ RUN if [ -n "$(ls -A /wheelhouse 2>/dev/null)" ]; then \
       pip install --require-hashes --retries 10 --timeout 60 -r /app/requirements-lock.txt; \
     fi
 
-# Boltrig v2 cockpit runtime: ship Herdr with the stack, not from a developer
-# workstation. Pinned release asset + sha256; override all three args together
-# when intentionally upgrading.
 ARG TARGETARCH
-ARG HERDR_VERSION=0.7.3
-ARG HERDR_LINUX_AMD64_SHA256=043ef43ecbabda28465dcff1eec3184518150d567b8b8f20cda9c6c88770641d
-ARG HERDR_LINUX_ARM64_SHA256=ea490094f2c7c39099870857d00c64c628ef7b5eba1967df4258033455ee2cb1
-RUN set -eux; \
-    case "${TARGETARCH:-amd64}" in \
-        amd64) asset="herdr-linux-x86_64"; sha="${HERDR_LINUX_AMD64_SHA256}" ;; \
-        arm64) asset="herdr-linux-aarch64"; sha="${HERDR_LINUX_ARM64_SHA256}" ;; \
-        *) echo "unsupported Herdr TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
-    esac; \
-    url="https://github.com/ogulcancelik/herdr/releases/download/v${HERDR_VERSION}/${asset}"; \
-    python -c 'import hashlib, sys, urllib.request; url, expected, target = sys.argv[1:4]; data = urllib.request.urlopen(url, timeout=120).read(); actual = hashlib.sha256(data).hexdigest(); sys.exit(f"sha256 mismatch for {url}: {actual} != {expected}") if actual != expected else open(target, "wb").write(data)' "$url" "$sha" /usr/local/bin/herdr; \
-    chmod 0755 /usr/local/bin/herdr; \
-    herdr --version
-
 # Boltrig v2 Codex App Server runtime: ship the pinned Codex CLI in the kernel image
 # too, since a console chat turn resolves + spawns the Codex runtime IN the kernel
 # process (not only the fleet-worker). Same pin + digest as deploy/fleet.Dockerfile;
 # the supervisor re-verifies the exact sha256 at spawn (codex_cell_policy.
 # verify_pinned_binary), so this is defence in depth. Inert unless
 # BOLTRIG_CODEX_TRUSTED is set - the runtime is dev-gated and refuses under any
-# production signal. TARGETARCH is already in scope from the Herdr block above.
+# production signal.
 #
 # 2026-08-05: this block used to skip on non-amd64, on the stated ground that
 # codex was "amd64-only". That was NOT true for this pin - the release publishes
@@ -169,7 +152,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap && \
 # Run directly from the copied, read-only source tree. Installing the project
 # itself would invoke PEP 517 build isolation and download an unlocked hatchling
 # toolchain; /app is the workdir and therefore already on Python's import path.
-# Copied LATE, after the expensive pinned-binary fetches (herdr, codex) so that an
+# Copied LATE, after the expensive pinned Codex fetch so that an
 # ordinary source change re-uses those cached layers instead of re-downloading
 # ~300MB every time.
 COPY boltrig/ /app/boltrig/
@@ -236,11 +219,6 @@ RUN chown 0:0 /etc/codex/managed_config.toml && \
 # runs the container read-only with a tmpfs for /tmp.
 RUN useradd --create-home --uid 10001 boltrig && \
     install -d -o boltrig -g boltrig \
-        /var/lib/boltrig/herdr \
-        /var/lib/boltrig/herdr/home \
-        /var/lib/boltrig/herdr/config \
-        /var/lib/boltrig/herdr/data \
-        /var/lib/boltrig/herdr/state \
         /var/lib/boltrig/knowledge \
         /var/lib/boltrig/cognee
 # [2026] VJS-CC-VJS 7 J3. The entrypoint privilege-separates when, and ONLY when,

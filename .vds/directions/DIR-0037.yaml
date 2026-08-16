@@ -1,0 +1,9 @@
+id: DIR-0037
+logId: DECISION-0026
+decisionDigest: sha256:c214ecfa45b68f432350dc9198877406e49e02125d31b8172bde78e9b0d9c062
+surface: !route
+  route: apps/worker/src/components/ChatView.tsx
+direction: Match the supplied Codex New-chat prompt scale and glass treatment while keeping suggested openers absent.
+magnitude: Keep the voice invitation immediately above the task-context subbar and composer. Apply the named New-chat voice-invitation height, companion-mark size, prompt-column inset, prompt-column width, context-bar height and composer minimum-height requirements. Render the frame as a translucent layered surface with blur, saturation, a quiet highlight and shadow, plus opaque fallbacks for reduced-transparency or unsupported browsers. Preserve the existing heading, real Plugins/approval/model/voice controls, bottom anchoring, keyboard focus treatment, Familiar/Jarvis semantics and the deliberate absence of the four suggested opener cards.
+directedAt: 2026-08-14T16:45:46Z
+notes: This additive Principal direction is grounded in the supplied same-resolution screenshot comparison. It makes no signed Figma parity, conformity or frameDigest claim.

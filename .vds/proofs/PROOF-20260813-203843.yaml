@@ -1,0 +1,25 @@
+id: PROOF-20260813-203843
+kind: states
+status: vacuous
+warrant_id: null
+command: vds proof states
+script: crates/vds-proof/src/states.rs
+exit_code: 0
+rows_considered: 65
+rows_enforced: 0
+rows_skipped_reasons:
+  proposed_nothing_drawn_by_construction: 64
+  record_declares_no_required_state: 1
+violations: []
+notes:
+- '[reach] `states.drawn` was MEASURED against the figma ledger, not taken on the register''s word. A record claiming a state the decided-target file does not draw is a finding here (R2), which is the claim VDS S-5(5) says a hand-maintained register decays into. What this still does not establish is that a drawn frame is GOOD: taste is reserved to the Principal (VDS S-1(6)).'
+- '[taste] whether a drawn state looks right is reserved to the Principal (VDS S-1(6)). This proof checks that a required state is drawn, never that it is good.'
+- '[parity] a required state that is drawn and not built is recorded here as an informational finding and never fails this gate; the `parity` proof is the gate for that gap (VDS S-7(5)). Informational findings are captured on the proof record and are not printed, so the record is where they are read.'
+- '[contract] 1 register records declare no required state at all, so there is nothing about them for this proof to enforce and each is counted and skipped. This proof cannot tell a component that genuinely requires no state from a contract nobody filled in; a contract that disagrees with the code is `reconciliation`''s to find (VDS S-5(6)).'
+inputs_digest: sha256:e83a78524561147ed35ac8935afd5c0da4d5ee5972ed060b3eb3a9d00c931450
+digest: sha256:d6b36434ed432dffb45a9e0ae22af4d30935c406500bfb883b374ec79088a770
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-13T20:38:42Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

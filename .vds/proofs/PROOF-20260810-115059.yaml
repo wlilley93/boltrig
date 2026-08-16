@@ -1,0 +1,27 @@
+id: PROOF-20260810-115059
+kind: contrast
+status: vacuous
+warrant_id: null
+command: vds proof contrast
+script: crates/vds-proof/src/contrast.rs
+exit_code: 3
+rows_considered: 0
+rows_enforced: 0
+rows_skipped_reasons: {}
+violations: []
+notes:
+- '[reach] this run measures the stylesheet VDS S-2(3) fixes as the system of record for what SHIPS, and nothing else. It does not open the decided-target Figma file, because resolving a node is a network read and VDS S-7(2)(1) forbids one inside a proof. A pass therefore establishes that what ships clears the floors in every theme the sheet declares, and never that what ships is what was decided; the agreement between the two records is the `token_pin` kind''s to establish (VDS S-7(5)).'
+- '[redaction] a finding names the component, the floor, its two custom properties, the theme selector and the measured ratio, and never a resolved value, an alpha channel or a colour channel. A captured proof record lands under the tree `no_stored_values` scans, so a finding that copied a resolved value would put a realisation under the record permanently and this gate would then fail forever on a file it wrote itself (VDS S-2(2)). The reason a value could not be read is reported as a stable class rather than as the CSS layer''s own message, because several of those messages quote the value they refused. Open the named property in the named scope to read it.'
+- '[ratio] a measured ratio is recorded as a number against a named floor, and is a measurement over the record VDS S-2(3) names rather than a realisation the record holds: deleting every proof record loses no shipped value, changing the sheet moves the next reading, and no reader can move a shipped pixel by editing one (VDS S-2(5)). VDS S-2(6) settles the shape: a numeral is not automatically a value, and a measured ratio is the same shape as the minimum it is measured against. The single exception is the top of the scale, which is reached by exactly one pair of colours and is therefore recorded as a bound rather than as a point.'
+- '[themes] every theme scope the stylesheet declares is measured, the base included, and the set is discovered from the sheet rather than read from a list of theme names. A component that clears its floor in one theme and fails in another has failed. A palette scope the discovery could not classify is a fatal finding and never a silent omission, because a palette the gate does not ask about is a palette that can ship below its floor with every proof green.'
+- '[alpha] a translucent boundary is composited over its backdrop before being measured, source-over and in gamma-encoded sRGB, which is what a browser paints. A translucent BACKDROP is refused instead, because compositing it over an assumed page colour would be a guess and a guessed backdrop yields a confident wrong reading. A floor names two properties, so the stack this run paints is exactly one layer over one backdrop; naming a middle layer would need a field the component record does not have.'
+- '[scope] a floor''s declared scope is reported in a finding and never decides whether the floor is enforced. A scope that switched enforcement off would be the quietly lowered floor VDS S-9(5) forbids wearing a different hat: the lawful move there is to record the component as decoration WITH its basis, in the register, where a reviewer can contest the claim.'
+- '[unmeasured] a floor whose properties do not resolve is a VIOLATION and never a skip. The only rows this run skips are the five named reasons counted above, and the last two of those carry a fatal finding of their own, so no row anywhere in this proof is both unmeasured and unreported.'
+- '[register] no register record declares a contrast floor in an enforceable status, so no boundary could be measured and this run is vacuous. It establishes nothing about any component (VDS S-7(2)(4)), and it did not read the stylesheet at all: a stylesheet is a precondition for a project that has something to measure against it, and this project has nothing.'
+inputs_digest: sha256:c9d4a6bef2e8652ea72d937b578104117b6d3f29ebbd3dd9ccabd614d0347e5b
+digest: sha256:a7d7fbca828178cadc2bf0c4ae4d10dd84ed7b43451e7c2d7b06a41396fdc1fa
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-10T11:50:56Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

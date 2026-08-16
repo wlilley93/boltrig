@@ -1,0 +1,26 @@
+id: PROOF-20260812-112102
+kind: token_pin
+status: vacuous
+warrant_id: null
+command: vds proof token_pin
+script: crates/vds-proof/src/token_pin.rs
+exit_code: 0
+rows_considered: 0
+rows_enforced: 0
+rows_skipped_reasons: {}
+violations: []
+notes:
+- '[derived] freshness against the local half is DERIVED and not trusted: the shipped record named by the pin is re-digested by this run and compared with the digest the pin recorded for it. `generated_at` is read by nothing here. A stamp says when somebody claims a thing was done, and a pin regenerated against a record that has since moved carries a perfectly recent stamp (VDS S-2(5)(4)).'
+- '[reach] what this run does NOT reach: the decided-target half. That record is a Figma file behind a network call, VDS S-7(2)(1) forbids a network call inside a proof, and nothing offline can re-derive it. This run therefore establishes that the pin still describes the SHIPPED record accurately, and never that the pin still describes the DECIDED one. A pin generated once and never regenerated agrees with a file nobody has looked at since, and a warrant citing this proof must not be described as covering the decided-target side (VDS S-6(3)).'
+- '[redaction] a finding names the pin file, the 1-based row position, the class of defect and the numbers, and it repeats a string the pin authored only where that string provably cannot be a realisation. A captured proof record lands under the tree `no_stored_values` scans and is never deleted, so a finding that copied a realisation out of a pin would make that proof fail forever on a file this one wrote. The screen is deliberately over-eager: withholding a safe name costs a reader one file open, and repeating an unsafe one costs a gate that can never go green again.'
+- '[integrity] a hand-edited agreement flag is REFUSED, not merely detected. Every pin''s `digest` is recomputed here from what the pin says (its subject, direction, both records, rows, counts, fails_closed and generated_by, and deliberately not its `generated_at`), and a pin whose digest does not match its own contents has its rows skipped rather than enforced (R5). Flipping `agrees: false` to `true` in a committed pin therefore produces a run that enforces nothing about that pin and says why, instead of a pass. What this does NOT establish is that the generator computed the rows correctly in the first place: it binds the pin to itself, not to the two records it claims to have compared. The source side is separately re-derived (see the derived note); the decided-target side cannot be. What R5 does NOT establish is that the digest was computed by a generator rather than recomputed by whoever made the edit: `Pin::compute_content_digest` is an unkeyed, unsalted, shipped function, so an editor who flips a flag AND re-runs it produces a self-consistent pin this run accepts. A keyed digest would need a key, and a key in the record is a key the editor has (VDS S-2(7) settled the same question the same way).'
+- '[scope] the pins directory is read as `*.yaml` exactly, so a pin in a subdirectory, or one saved as `.yml`, is invisible to this run rather than reported by it. The register reader refuses such an entry and the pin reader does not, and until it does, an absent pin and an unreadable-by-this-reader pin look identical from here.'
+- '[locator] a record locator the pin authored is screened before it is repeated, like every other pin-authored string. A locator is a path and a path is ordinarily safe, but nothing stops a generator naming a file after a colour literal, and a finding that copied such a path into a captured record would put a realisation under the tree `no_stored_values` scans, permanently, on a file this proof wrote. This note names the class rather than giving the example: an earlier draft of it spelled the colour out and was caught by this proof''s own redaction test, which is the rule working on the author of the rule.'
+- '[vacuous] no pin exists under .vds/pins, so there are no two named records to report the agreement of and this run enforces nothing. A pin is GENERATED OUT OF BAND and only CHECKED here: one of the two records VDS S-2(3) names is a Figma file behind a network call, and VDS S-7(2)(1) forbids a network call inside a proof, so this gate cannot derive one however it is invoked. This record is `vacuous` and is not evidence for any warrant (VDS S-7(2)(4)).'
+inputs_digest: sha256:efeee517e8c4bffbb871cc55cc621e24b5cc2304535d46c8647faed4ff8fd0b0
+digest: sha256:708852436ef37811b2181b05a7231c60532447961d631a7ad88fac269478a2e1
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-12T11:20:57Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

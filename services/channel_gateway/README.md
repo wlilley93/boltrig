@@ -192,7 +192,10 @@ and `api_base`/`http_url` overrides for tests.
   call-id keyed and never shared with the static channel or another browser
   caller. `CHANNEL_GATEWAY_MAX_BROWSER_CALLS` bounds the pool; overflow closes
   the new WebSocket with `4429` and never evicts an active call. `/status`
-  reports only the active count and configured capacity.
+  reports only the active count and configured capacity. Typed mid-call input
+  is additionally bounded to six messages per ten seconds, 64 messages and
+  64,000 characters per canonical call; the durable kernel boundary preserves
+  those limits across media reconnects.
 - **Call authority**: the daemon-wide gateway token has no verb grants. Media
   redemption is tenant/channel bounded and returns a separate short-lived MCP
   token derived from the authenticated call owner's grant snapshot; the adapter
@@ -223,9 +226,10 @@ and `api_base`/`http_url` overrides for tests.
   speaker is bound kernel-side to a Principal like any platform user.
   Outbound `channel.send` text is spoken back through the live session.
 
-Credentialed xAI staging, invoice reconciliation, and hard per-call/daily
-voice budget enforcement remain acceptance gaps. The fake-provider suite proves
-tool/HITL correlation and metering arithmetic without claiming those live seams.
+Credentialed xAI staging, invoice reconciliation, and hard whole-call
+audio/token or daily voice budgets remain acceptance gaps. Typed mid-call text
+has the narrower limits above. The fake-provider suite proves tool/HITL
+correlation and metering arithmetic without claiming those live seams.
 
 ## Automation webhooks (machine sources: CI, monitoring)
 

@@ -1,0 +1,124 @@
+{
+  "schema": "boltrig-figma-connected-inventory.v1",
+  "recordedAt": "2026-08-11T15:05:02Z",
+  "recordedAtKind": "evidence-record-write-time",
+  "fileKey": "iVQBKFc3NpRH3zdOOxfPqr",
+  "observation": {
+    "connector": "Figma MCP",
+    "method": "get_metadata",
+    "successfulNodeReads": 7,
+    "requestedNodeReads": 7,
+    "newChatDesignContextRead": true
+  },
+  "renderVerification": {
+    "method": "get_screenshot",
+    "requestedNodeRenders": 7,
+    "successfulNodeRenders": 7,
+    "format": "png",
+    "width": 1440,
+    "height": 900,
+    "exactByteMatchesAgainstRecordedTargets": 7,
+    "renders": [
+      {
+        "nodeId": "5:2",
+        "sha256": "f6a92ec2b856bf772cd95bafb65d8fa2b137ae4eb906339555d18e6425c667be"
+      },
+      {
+        "nodeId": "13:2",
+        "sha256": "8c51c188fa0e2e42c00487baa65db70dfdba88b8bd931c344f9040c3778979fb"
+      },
+      {
+        "nodeId": "14:2",
+        "sha256": "97c4dcd61311526d8ddfddfce01936bad6804ffd5da9d756fb93db2d8e549344"
+      },
+      {
+        "nodeId": "15:2",
+        "sha256": "d1f626cb5451162f4ec46f3d0eac063c9b920447b530e46834e4a201f924a70e"
+      },
+      {
+        "nodeId": "16:2",
+        "sha256": "d6db445fc5f144ce7e69fb413e54a520e5b1a7a7c3453825543661634fa387d4"
+      },
+      {
+        "nodeId": "17:2",
+        "sha256": "31b55e68eadb7f0a1d8767c9b7435d668b531f2ae38c915ea976bc893d67f45e"
+      },
+      {
+        "nodeId": "22:2",
+        "sha256": "b1d04f772b8f54a22ad02fa3e7917262f7ffecffeb65106c187bb0f5b0758213"
+      }
+    ]
+  },
+  "connectedAccount": {
+    "planName": "My Files",
+    "tier": "pro",
+    "seat": "Full"
+  },
+  "frames": [
+    {
+      "nodeId": "5:2",
+      "name": "2026-08-11 · CURRENT SOURCE · Chat run · 1440×900",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "nodeId": "13:2",
+      "name": "2026-08-11 · CURRENT SOURCE · New chat · 1440×900",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "nodeId": "14:2",
+      "name": "2026-08-11 · CURRENT SOURCE · Plugins · 1440×900",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "nodeId": "15:2",
+      "name": "2026-08-11 · CURRENT SOURCE · Agents fleet · 1440×900",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "nodeId": "16:2",
+      "name": "2026-08-11 · CURRENT SOURCE · Command palette · 1440×900",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "nodeId": "17:2",
+      "name": "2026-08-11 · CURRENT SOURCE · Call + freezone · 1440×900",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "nodeId": "22:2",
+      "name": "2026-08-11 · CURRENT SOURCE · Settings / You · 1440×900",
+      "width": 1440,
+      "height": 900
+    }
+  ],
+  "vdsFrameLedger": {
+    "eligibleInput": false,
+    "reason": "The connector returned MCP metadata XML rather than an authentic saved GET /v1/files/:key/nodes response. It did not return the file version or the request capture timestamp required to regenerate the VDS frame ledger.",
+    "currentLedgerCoverage": {
+      "coveredNodeIds": [
+        "5:2",
+        "14:2",
+        "15:2",
+        "16:2",
+        "17:2",
+        "22:2"
+      ],
+      "missingNodeIds": [
+        "13:2"
+      ]
+    }
+  },
+  "claimsNotMade": [
+    "No REST response or frame content digest is synthesized from MCP metadata.",
+    "No VDS sign-off, warrant, conform verdict, token linkage, or component linkage is implied.",
+    "Exact live Figma render matches do not substitute for the structural frame ledger required by VDS screen parity.",
+    "This inventory does not rebind the historical Worker screenshots to the current working tree."
+  ]
+}

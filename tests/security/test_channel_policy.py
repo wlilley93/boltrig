@@ -6,11 +6,16 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from boltrig.adapters.builtin.inbound_webhook import canonical_body, expected_signature, signed_content
+from boltrig.adapters.builtin.inbound_webhook import (
+    canonical_body,
+    expected_signature,
+    signed_content,
+)
 from boltrig.fleet.authority import context_for
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.kernel.channel_policy import chat_is_allowed, thread_ceiling
+from boltrig.kernel.work_authority import creator_ceiling_from_item
 from boltrig.models import Channel, ChannelBinding, GrantSet, TenantPermissions, User
 from boltrig.store import InMemoryStore
 
@@ -27,15 +32,33 @@ def _signed(payload: dict) -> dict:
 def _kernel(config: dict) -> tuple[Kernel, InMemoryStore]:
     store = InMemoryStore()
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
-    asyncio.run(store.upsert_channel(
-        Channel(id="ch-policy", tenant_id=T, platform="slack", name="Policy",
-                transport="webhook", credential_ref="cred", config={"sender_field": "sender", **config})
-    ))
+    asyncio.run(
+        store.upsert_channel(
+            Channel(
+                id="ch-policy",
+                tenant_id=T,
+                platform="slack",
+                name="Policy",
+                transport="webhook",
+                credential_ref="cred",
+                config={"sender_field": "sender", **config},
+            )
+        )
+    )
     asyncio.run(store.set_credential_ref(T, "cred", {"secret": SECRET}))
-    asyncio.run(store.upsert_channel_binding(
-        ChannelBinding(id="binding", tenant_id=T, channel_id="ch-policy", platform="slack",
-                       external_user_id="U-1", subject="alice", role="member")
-    ))
+    asyncio.run(
+        store.upsert_channel_binding(
+            ChannelBinding(
+                id="binding",
+                tenant_id=T,
+                channel_id="ch-policy",
+                platform="slack",
+                external_user_id="U-1",
+                subject="alice",
+                role="member",
+            )
+        )
+    )
     return Kernel(store), store
 
 
@@ -77,20 +100,36 @@ def test_malformed_allowlist_or_ceiling_never_falls_open():
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-195")
+@pytest.mark.invariant("SEC-164")
 def test_thread_ceiling_is_stamped_and_narrows_execution_authority():
     kernel, store = _kernel({"thread_ceilings": {"C-ops": {"allow": ["job.one"]}}})
-    asyncio.run(store.upsert_user(
-        User(id="alice", tenant_id=T, email="alice@example.test", role="member",
-             scope={"verbs": ["job.one", "job.two"]}, status="active")
-    ))
+    asyncio.run(
+        store.upsert_user(
+            User(
+                id="alice",
+                tenant_id=T,
+                email="alice@example.test",
+                role="member",
+                scope={"verbs": ["job.one", "job.two"]},
+                status="active",
+            )
+        )
+    )
     client = _client(kernel)
     response = _post(client, 4, chat="C-ops")
     assert response.status_code == 202, response.text
     item = asyncio.run(store.get_work_item(T, response.json()["work_item"]))
     assert item is not None
     assert item.constraints["_channel_thread_ceiling"] == {
-        "thread": "C-ops", "allow": ["job.one"], "deny": []
+        "thread": "C-ops",
+        "allow": ["job.one"],
+        "deny": [],
     }
+    creator_ceiling = creator_ceiling_from_item(item)
+    assert creator_ceiling is not None
+    assert creator_ceiling.permits("job.one")
+    assert not creator_ceiling.permits("job.two")
+    assert not creator_ceiling.permits("control.work.create")
     context = asyncio.run(context_for(store, item, item.id))
     assert context.grants.permits("job.one")
     assert not context.grants.permits("job.two")

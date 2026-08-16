@@ -1,0 +1,41 @@
+id: DECISION-0002
+at: 2026-08-10T14:23:35Z
+by: console-parity session
+decision: >-
+  CMP-0061 keeps a failing `border-2:inset` contrast floor on the record. The floor
+  was declared in error and its withdrawal is blocked on a warrant that cannot be
+  granted here. The drawing was corrected; the record was not quietly cleaned up.
+court_required: false
+why: >-
+  This concerns the routine thumbnail's graphical contrast floors. Keeping the
+  stale floor was the reversible, low-blast call: it preserved the stricter
+  registered promise and left a visible failure, while deleting it by hand would
+  have bypassed the breaking-change route.
+
+  Registering CMP-0061 with a 3:1 floor for its node outline made `contrast`
+  enforceable for the first time, and it immediately failed: --border-2 against
+  --inset measured 1.42:1 in dark and 1.31:1 in light, against the 3:1 that WCAG
+  2.2 SC 1.4.11 requires of a graphical object a reader must see to read the graph.
+  This came from the decided target's hairline, not an implementation mismatch.
+
+  The drawing moved from --border-2 to --text-3 for both node outlines and edges.
+  --text-3 was the lightest token that cleared the floor in both themes (4.89:1
+  dark, 4.00:1 light), making the thumbnail a shade firmer than the decided target
+  but legible to the people the floor exists for. The trigger outline and amber pip
+  already cleared 3:1 and were left alone.
+
+  The `border-2:inset` floor then described a boundary nothing drew. Removing a
+  floor is BREAKING under VDS S-9(4) and needs a granted warrant. No warrant could
+  be granted because designpack.lock pins the absence of a designpack and VDS
+  S-15(1) makes the specification commence on a dated, digest-pinned assent event
+  that did not exist. The promise therefore stayed visible and `vds proof contrast`
+  correctly kept failing until the lawful withdrawal route became available.
+
+  Evidence: the proof measured 1.42:1 dark and 1.31:1 light against the 3.00 floor;
+  `vds register amend CMP-0061 --kind breaking --remove-floor` was refused without
+  a granted warrant; and RoutineThumb.tsx now strokes nodes and edges with --text-3.
+  An assent event under VDS S-15(1) would make a W-series warrant possible and allow
+  the dead floor to be withdrawn lawfully.
+basis:
+  - VDS S-9(4)
+  - VDS S-15(1)

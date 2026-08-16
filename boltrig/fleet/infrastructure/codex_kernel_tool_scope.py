@@ -2,7 +2,7 @@
 
 The kernel-tools Codex lane hands the cell exactly one new capability: an
 ``[mcp_servers.boltrig]`` entry whose bearer is a RUN-SCOPED kernel MCP token
-(the same ``McpFace.issue_run_token`` seam pi/opencode/rivet already use,
+(the same ``McpFace.issue_run_token`` seam legacy clients used,
 SEC-23). The token is minted adapter-side, where the invocation context (and
 therefore the run's grants) lives, but CONSUMED provisioning-side, where the
 cell's config and environment are built. This module is the hand-off: a

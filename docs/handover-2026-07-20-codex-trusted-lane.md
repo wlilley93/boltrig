@@ -229,7 +229,7 @@ read-only path has actually been used in anger.
 
 ### 3.6 Propagation - NEEDS THE PRINCIPAL
 
-`jellytot-prod` runs `boltrig/kernel:0.1.0` from 2026-07-05 with `BOLTRIG_CODEX_TRUSTED` unset, so
+the production host runs `boltrig/kernel:0.1.0` from 2026-07-05 with `BOLTRIG_CODEX_TRUSTED` unset, so
 **every fix in this handover is inert there**. Under the standing shipping directive a fix landed in
 git but not propagated is not done. Promoting to prod is an outward-facing act and needs Will's
 authorization. This is one of only two things genuinely outside the process; the other is the

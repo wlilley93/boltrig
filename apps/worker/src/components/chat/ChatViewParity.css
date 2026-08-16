@@ -1,0 +1,99 @@
+/* Latest desktop Chat geometry, isolated from New-chat and closed-composer
+ * states. The target's active composer is one compact 85-ish pixel control,
+ * not the taller free-form document field used by older surfaces. */
+:root[data-theme="dark"] .worker-shell:has(.chat-layout),
+:root[data-theme="dark"] .surface:has(.chat-layout),
+:root[data-theme="dark"] .chat-layout {
+  background: #171717;
+}
+
+.chat-main > .composer.conversation-context:not(.closed) textarea {
+  height: 37px;
+  min-height: 37px;
+  padding: 11px 16px 3px;
+}
+
+/* The textarea deliberately has no native outline because its surrounding
+ * frame is the visible control. Restore a keyboard focus indication on that
+ * frame instead of silently cancelling the global input focus rule. */
+.chat-main .composer-frame:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+/* The transcript is itself a keyboard-scroll target. Keep its focus visible
+ * without adding a resting stroke to the chat canvas. */
+.chat-main .transcript:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The console's composer controls are 28px except for its 30px round primary.
+ * Keeping this Chat-scoped also makes the New frame exactly 96px tall and the
+ * open-conversation frame approximately 85px without shrinking global icon
+ * targets on unrelated surfaces. */
+.chat-main .composer .composer-tools .icon-button {
+  width: 28px;
+  height: 28px;
+}
+
+/* A main response has no author identity in the chat contract. With the
+ * inferred author row gone, do not leave its old avatar gutter behind. */
+.message.assistant > .message-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-left: 0;
+  font-size: 14.5px;
+}
+
+/* The canonical 745px turn column includes 24px inner gutters. This keeps the
+ * work hairline and prose at x=349..1045 in the 1440px Chat frame while the
+ * composer itself remains the full 745px width. */
+.transcript:not(.new-chat-transcript) > .message {
+  padding-right: 24px;
+  padding-left: 24px;
+}
+
+/* ReactMarkdown and the turn-decision components carry legacy block margins;
+ * the target instead spaces every top-level turn section with one 24px gap. */
+.message.assistant > .message-content > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* The voice invitation uses the reference's 48px identity mark so it reads as
+ * a distinct suggestion above the composer rather than another toolbar row. */
+.voice-intro > .familiar-stage.conversation {
+  flex: 0 0 48px;
+  width: 48px;
+  margin: 0;
+}
+
+/* Jarvis normally fills a large instrument panel and therefore carries a
+ * viewport-sized minimum height. In this compact invitation it is the same
+ * 48px identity mark as the Familiar; constrain every dimension so selecting
+ * Jarvis cannot expand the row and squeeze its copy out of view. */
+.voice-intro > .jarvis-stage {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  min-height: 48px;
+  margin: 0;
+}
+
+/* Header values from the canonical 44px row: quiet 12.5px count and two
+ * 28px actions separated by 4px. */
+.chat-header .chat-header-sub {
+  color: var(--text-4);
+  font-size: 12.5px;
+}
+
+.chat-header .chat-header-actions {
+  gap: 4px;
+}
+
+.chat-header .chat-header-actions > .icon-button {
+  width: 28px;
+  height: 28px;
+}

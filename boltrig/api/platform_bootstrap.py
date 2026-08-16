@@ -19,6 +19,7 @@ def _platform_policy_inputs(
     spawn_rules: Sequence[SpawnRule],
 ) -> dict[str, Any]:
     from boltrig.observability.identity_policy import compose_identity_policy
+    from boltrig.fleet.model_gateway import gateway_config
 
     return {
         "model_policy": manifest.models if manifest is not None else None,
@@ -35,17 +36,25 @@ def _platform_policy_inputs(
         ),
         # Projection receives composition truth only, never provider details.
         "codex_trusted_provider_configured": codex_config is not None,
+        # The exact model id is non-secret policy and labels the chat default.
+        # Provider topology, URLs and the upstream key remain absent.
+        "codex_model_id": (
+            str(codex_config.get("model_id"))
+            if codex_config is not None and codex_config.get("model_id")
+            else None
+        ),
+        "model_gateway_configured": bool(gateway_config().get("base_url")),
         "identity_policy": compose_identity_policy(manifest, settings),
     }
 
 
-def _bind_distill_eval(kernel: Any, tenant: str, eval_runner: Any) -> None:
-    """The distill adapter's craft gate uses the composition-owned EvalRunner
-    (never constructing its own spawner - the CODEX-COMPOSITION-1 source gate);
-    injected late like ``control.set_admin`` below."""
-    distill = kernel.loader.peek(tenant, "distill")
-    if distill is not None and hasattr(distill, "set_eval"):
-        distill.set_eval(eval_runner)
+def _bind_control_services(control: Any, admin: Any, workflows: Any, model_catalogue: Any) -> None:
+    if control is not None and hasattr(control, "set_admin"):
+        control.set_admin(admin)
+    if control is not None and hasattr(control, "set_workflows"):
+        control.set_workflows(workflows)
+    if control is not None and hasattr(control, "set_model_catalogue"):
+        control.set_model_catalogue(model_catalogue)
 
 
 def _build_platform_services(
@@ -54,6 +63,7 @@ def _build_platform_services(
     manifest: Any,
     manifest_path: str | None,
     codex_config: dict[str, object] | None,
+    model_catalogue: Any,
     sensitive_endpoint_id: str | None,
     spawn_rules: Sequence[SpawnRule],
     default_tenant: str,
@@ -64,7 +74,6 @@ def _build_platform_services(
     password_reset_readiness_probe: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
     """Build the services shared by platform routes and governed control verbs."""
-
     from boltrig.api.codex_execution import build_codex_execution_stack
     from boltrig.api.readiness import ReadinessService
     from boltrig.config.admin import AdminConfig
@@ -79,6 +88,7 @@ def _build_platform_services(
     spawner = build_spawner(
         kernel,
         codex_config=codex_config,
+        model_catalogue=model_catalogue,
         sensitive_endpoint_id=sensitive_endpoint_id,
         spawn_rules=spawn_rules,
     )
@@ -100,17 +110,14 @@ def _build_platform_services(
     admin = AdminConfig(kernel.store, tenant_id=tenant, path=manifest_path)
     workflows = WorkflowLibrary(kernel.store, executor=executor, kernel=kernel)
     control = kernel.loader.peek(tenant, "control")
-    if control is not None and hasattr(control, "set_admin"):
-        control.set_admin(admin)
-    if control is not None and hasattr(control, "set_workflows"):
-        control.set_workflows(workflows)
+    _bind_control_services(control, admin, workflows, model_catalogue)
 
     eval_runner = EvalRunner(kernel, spawner, workflows=workflows)
-    _bind_distill_eval(kernel, tenant, eval_runner)
     status = StackToolStatusProvider(ModelGatewayStatusProvider())
     codex_execution = build_codex_execution_stack(settings, kernel.store)
     return {
         "admin": admin,
+        "bifrost_models": model_catalogue,
         "eval": eval_runner,
         "spawner": spawner,
         **_platform_policy_inputs(manifest, settings, codex_config, spawn_rules),
@@ -124,6 +131,7 @@ def _build_platform_services(
             tenant_id=tenant,
             executor=executor,
             status_provider=status,
+            manifest=manifest,
             password_reset_notifier=password_reset_notifier,
             password_reset_probe=password_reset_readiness_probe,
         ),
@@ -135,6 +143,7 @@ def make_platform_factory(
     manifest: Any,
     manifest_path: str | None,
     codex_config: dict[str, object] | None,
+    model_catalogue: Any,
     sensitive_endpoint_id: str | None,
     spawn_rules: Sequence[SpawnRule],
     default_tenant: str,
@@ -151,6 +160,7 @@ def make_platform_factory(
         manifest=manifest,
         manifest_path=manifest_path,
         codex_config=codex_config,
+        model_catalogue=model_catalogue,
         sensitive_endpoint_id=sensitive_endpoint_id,
         spawn_rules=spawn_rules,
         default_tenant=default_tenant,

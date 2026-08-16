@@ -49,6 +49,16 @@ Barge-in: server VAD emits ``input_audio_buffer.speech_started`` when the
 human talks over playback; the adapter interrupts the local audio-out seam and
 cancels the in-flight response so playback stops NOW.
 
+Typed mid-call text: ``inject_user_text`` appends a typed browser message as
+an ordinary user ``input_text`` conversation item. It NEVER cancels the
+in-flight response (that is barge-in's job, and only for speech): when the
+assistant is mid-utterance the follow-up ``response.create`` is deferred to
+``response.done``, so the current utterance finishes and the text is answered
+right after. The normalized input transcript (``via: "text"``) must persist
+before provider work, which makes the kernel's canonical ended-call state the
+admission authority. Per-generation limits shed bursts locally; matching
+durable call limits in the kernel preserve the ceiling across reconnects.
+
 The local audio seam (no hardcoded sound card): ``LocalAudio`` is the
 pluggable mic/speaker interface - ``read_frame`` (mic -> session),
 ``write_frame`` (session -> speaker), ``interrupt`` (barge-in). The default
@@ -72,6 +82,8 @@ import json
 import logging
 import os
 import re
+import time
+from collections import deque
 from typing import Any
 
 import websockets
@@ -91,6 +103,10 @@ _AUDIO_FORMAT = {"type": "audio/pcm", "rate": 24000}
 _PCM_BYTES_PER_MINUTE = 24_000 * 2 * 60
 _MAX_FRAME_CHARS = 1_000_000  # a malformed/garbage audio delta is dropped, not played
 _HITL_POLL_SECONDS = 0.5
+_TYPED_TEXT_RATE_LIMIT = 6
+_TYPED_TEXT_RATE_WINDOW_SECONDS = 10.0
+_TYPED_TEXT_CALL_MESSAGE_LIMIT = 64
+_TYPED_TEXT_CALL_CHAR_LIMIT = 64_000
 
 _RECONNECT_SECONDS = 1.0
 _RECONNECT_MAX_SECONDS = 30.0
@@ -273,6 +289,11 @@ class XaiVoiceAdapter(PlatformAdapter):
         self._stopping = asyncio.Event()
         self._tool_names: dict[str, str] = {}  # mangled function name -> verb id
         self._responding = False
+        self._pending_text_response = False
+        self._typed_text_lock = asyncio.Lock()
+        self._typed_text_times: deque[float] = deque()
+        self._typed_text_messages = 0
+        self._typed_text_chars = 0
         self._connected_once = False
         self._browser_call_active = False
         self._connect_lock = asyncio.Lock()
@@ -345,6 +366,9 @@ class XaiVoiceAdapter(PlatformAdapter):
         self._kernel = self._base_kernel.with_token(tool_token)
         self._browser_call_active = True
         self._browser_call_id = call_id
+        self._responding = False
+        self._pending_text_response = False
+        self._reset_typed_text_limits()
         profile = session_profile if isinstance(session_profile, dict) else {}
         routed_model = str(profile.get("model") or "").strip()
         if routed_model and str(profile.get("provider") or "") == "xai":
@@ -371,6 +395,9 @@ class XaiVoiceAdapter(PlatformAdapter):
         self._cancel_pending_hitl()
         self._browser_call_active = False
         self._browser_call_id = None
+        self._responding = False
+        self._pending_text_response = False
+        self._reset_typed_text_limits()
         self._model = self._base_model
         self._instructions = self._base_instructions
         self._kernel = self._base_kernel
@@ -522,6 +549,11 @@ class XaiVoiceAdapter(PlatformAdapter):
             self._responding = False
             self._add_provider_usage(event)
             await self._flush_usage()
+            if self._pending_text_response:
+                # The utterance the caller typed over has finished; answer the
+                # queued typed message now (deferred by inject_user_text).
+                self._pending_text_response = False
+                await self._request_response()
         elif etype == "error":
             # xAI error payloads carry no secrets; log the code, never the key.
             error: dict[str, Any] = (
@@ -565,6 +597,75 @@ class XaiVoiceAdapter(PlatformAdapter):
                 {"text": transcript, "final": True, "kind": "output"},
                 participant_id="boltrig-agent",
             )
+
+    async def inject_user_text(self, text: str) -> bool:
+        """Append one typed browser message to the live call session.
+
+        Unlike barge-in this never cancels the in-flight response: when the
+        assistant is mid-utterance the follow-up ``response.create`` is
+        deferred to ``response.done``, so the current utterance finishes and
+        the text is answered right after. The text rides the same transcript
+        event seam as a spoken turn, so it persists identically.
+        """
+        text = text.strip()
+        async with self._typed_text_lock:
+            if not text or self._ws is None or not self._browser_call_active:
+                return False
+            if not self._admit_typed_text(text):
+                return False
+            # This durable event is also the canonical active-call check. The
+            # kernel rejects ended calls, so no provider work happens unless
+            # the exact call can first accept its normalized input transcript.
+            if not await self._emit_event(
+                "transcript",
+                {"text": text, "final": True, "kind": "input", "via": "text"},
+                participant_id="user",
+            ):
+                return False
+            await self._send({
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": text}],
+                },
+            })
+            if self._responding:
+                self._pending_text_response = True
+            else:
+                await self._request_response()
+            return True
+
+    def _admit_typed_text(self, text: str) -> bool:
+        """Apply deterministic, per-call provider-work limits."""
+        now = time.monotonic()
+        cutoff = now - _TYPED_TEXT_RATE_WINDOW_SECONDS
+        while self._typed_text_times and self._typed_text_times[0] <= cutoff:
+            self._typed_text_times.popleft()
+        if (
+            len(self._typed_text_times) >= _TYPED_TEXT_RATE_LIMIT
+            or self._typed_text_messages >= _TYPED_TEXT_CALL_MESSAGE_LIMIT
+            or self._typed_text_chars + len(text) > _TYPED_TEXT_CALL_CHAR_LIMIT
+        ):
+            return False
+        self._typed_text_times.append(now)
+        self._typed_text_messages += 1
+        self._typed_text_chars += len(text)
+        return True
+
+    def _reset_typed_text_limits(self) -> None:
+        self._typed_text_times.clear()
+        self._typed_text_messages = 0
+        self._typed_text_chars = 0
+
+    async def _request_response(self) -> None:
+        """Create at most one provider response until ``response.done``."""
+        self._responding = True
+        try:
+            await self._send({"type": "response.create"})
+        except Exception:
+            self._responding = False
+            raise
 
     # --- audio out + barge-in -------------------------------------------------
     async def _play_delta(self, event: dict[str, Any]) -> None:

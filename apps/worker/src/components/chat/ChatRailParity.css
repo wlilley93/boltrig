@@ -1,0 +1,385 @@
+/* Desktop task rail parity. The grid keeps the conversation readable, but the
+ * rail column is visually the same canvas: only this blurred, floating surface
+ * is painted. Compact desktop uses an overlay; phones retain the modal sheet. */
+.chat-layout:not([data-rail-collapsed="true"]) {
+  /* 745px content + 24px on each side. The inspector must never buy space by
+   * squeezing or reflowing the canonical conversation column. */
+  grid-template-columns: minmax(793px, 1fr) auto;
+}
+
+.right-rail:not(.task-details-sheet) {
+  position: relative;
+  z-index: 3;
+  width: var(--task-inspector-width, 316px);
+  flex-basis: var(--task-inspector-width, 316px);
+  padding: 16px 12px 12px 2px;
+  background: transparent;
+  scrollbar-color: var(--border-2) transparent;
+  scrollbar-width: thin;
+}
+
+.right-rail:not(.task-details-sheet)::-webkit-scrollbar {
+  width: 6px;
+}
+
+.right-rail:not(.task-details-sheet)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.right-rail:not(.task-details-sheet)::-webkit-scrollbar-thumb {
+  border-radius: 99px;
+  background: var(--border-2);
+}
+
+.right-rail:not(.task-details-sheet) > .chat-rail-glass {
+  overflow: hidden;
+  width: auto;
+  max-width: 100%;
+  border: 0;
+  border-radius: 20px;
+  background:
+    linear-gradient(145deg, rgb(255 255 255 / 4%), transparent 42%),
+    color-mix(in srgb, var(--card) 76%, transparent);
+  box-shadow: 0 16px 42px rgb(0 0 0 / 18%);
+  -webkit-backdrop-filter: blur(22px) saturate(125%);
+  backdrop-filter: blur(22px) saturate(125%);
+}
+
+:root[data-theme="dark"] .right-rail:not(.task-details-sheet) > .chat-rail-glass {
+  background:
+    linear-gradient(145deg, rgb(255 255 255 / 4%), transparent 42%),
+    color-mix(in srgb, #2d2d2d 76%, transparent);
+}
+
+.right-rail:not(.task-details-sheet) .rail-group + .rail-group {
+  position: relative;
+  margin-top: 6px;
+  padding-top: 9.5px;
+  border-top: 0;
+}
+
+.right-rail:not(.task-details-sheet) .rail-group + .rail-group::before {
+  position: absolute;
+  top: 0;
+  right: 14px;
+  left: 14px;
+  height: 1px;
+  background: var(--border);
+  content: "";
+}
+
+.right-rail:not(.task-details-sheet) .rail-group-head {
+  min-height: 32px;
+  padding: 8px 15px 2px;
+}
+
+.right-rail:not(.task-details-sheet) .rail-group-head > span {
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+/* The white glass glint lifts the top of the dark card to roughly #313131.
+ * The shared muted token falls just below 4.5:1 there, so this route-scoped
+ * reading keeps the reference's muted hierarchy without weakening the label. */
+:root[data-theme="dark"] .right-rail:not(.task-details-sheet) .rail-group-head > span {
+  color: #9a9a9a;
+}
+
+.right-rail:not(.task-details-sheet) .rail-action {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  color: var(--text-4);
+  font-size: 18px;
+  line-height: 22px;
+}
+
+.right-rail:not(.task-details-sheet) .rail-row {
+  gap: 8px;
+  min-height: 35px;
+  padding: 7px 15px 8px;
+  border-radius: 8px;
+}
+
+.right-rail:not(.task-details-sheet) .rail-row:focus-visible,
+.right-rail:not(.task-details-sheet) .artifact-download:focus-visible {
+  outline-offset: -2px;
+}
+
+.right-rail:not(.task-details-sheet) .rail-label {
+  font-size: 14px;
+}
+
+.right-rail:not(.task-details-sheet) .rail-meta {
+  font-size: 11.5px;
+}
+
+.right-rail:not(.task-details-sheet) .rail-dot {
+  width: 5px;
+  height: 5px;
+  flex-basis: 5px;
+}
+
+.right-rail:not(.task-details-sheet) .rail-mark .familiar-orb {
+  width: 18px;
+  height: 18px;
+  box-shadow: none;
+}
+
+.rail-agent-stack {
+  display: inline-flex;
+  min-width: 20px;
+  align-items: center;
+  gap: 3px;
+  padding-left: 1px;
+}
+
+.rail-agent-stack .familiar-orb {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+}
+
+.rail-integration-mark {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  place-items: center;
+  border-radius: 5px;
+  color: var(--text-2);
+  background: var(--card-2);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.rail-integration-mark[data-integration="figma"] {
+  border-radius: 0;
+  background: transparent;
+}
+
+.rail-integration-mark > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.rail-tool-mark,
+.rail-view-sources-mark {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  place-items: center;
+  color: var(--text-2);
+}
+
+.rail-tool-mark > svg,
+.rail-view-sources-mark > svg {
+  width: 17px;
+  height: 17px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.55;
+}
+
+.rail-tool-mark[data-tone="red"] { color: var(--red); }
+.rail-tool-mark[data-tone="amber"] { color: var(--amber); }
+.rail-tool-mark[data-tone="green"] { color: var(--text-2); }
+.rail-view-sources-mark { color: var(--text-4); }
+
+.right-rail:not(.task-details-sheet) .rail-body {
+  padding: 0 0 4px;
+}
+
+.right-rail:not(.task-details-sheet) .rail-output-mark {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  background: var(--card-2);
+  font-size: 13px;
+}
+
+.right-rail:not(.task-details-sheet) .artifact-card {
+  gap: 8px;
+  margin: 0;
+  padding: 5px 12px 7px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.right-rail:not(.task-details-sheet) .artifact-card:hover {
+  border-color: transparent;
+  background: var(--hover);
+  transform: none;
+}
+
+.right-rail:not(.task-details-sheet) .artifact-download {
+  gap: 8px;
+}
+
+.right-rail:not(.task-details-sheet) .artifact-download > span:last-child {
+  min-width: 0;
+}
+
+.right-rail:not(.task-details-sheet) .artifact-icon {
+  width: 20px;
+  height: 22px;
+  flex: 0 0 20px;
+  border-radius: 6px;
+}
+
+.right-rail:not(.task-details-sheet) .artifact-card strong,
+.right-rail:not(.task-details-sheet) .artifact-card small {
+  max-width: 150px;
+}
+
+.right-rail:not(.task-details-sheet) .artifact-card strong {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.right-rail:not(.task-details-sheet) .artifact-card small {
+  margin-top: 1px;
+  font-size: 10.5px;
+}
+
+.right-rail:not(.task-details-sheet) .rail-body > .secondary-button {
+  min-height: 27px;
+  margin: 3px 15px 5px;
+  font-size: 11.5px;
+}
+
+.right-rail:not(.task-details-sheet) .rail-body > .notice {
+  margin: 4px 15px 6px;
+}
+
+/* The phone projection remains a dismissible dialog, but it is still the
+ * same floating glass object—not the legacy full-height, stroked side band.
+ * Its header is intentionally only a close affordance and a short accessible
+ * title; conversation controls do not return at smaller breakpoints. */
+@media (max-width: 1374px) {
+  .chat-layout:not([data-rail-collapsed="true"]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .right-rail.task-details-sheet {
+    top: 10px;
+    right: 10px;
+    bottom: 10px;
+    width: min(340px, calc(100vw - 20px));
+    height: auto;
+    max-height: calc(100dvh - 20px);
+    padding: 0 0 10px;
+    border: 0;
+    border-radius: 20px;
+    background:
+      linear-gradient(145deg, rgb(255 255 255 / 4%), transparent 42%),
+      color-mix(in srgb, var(--card) 82%, transparent);
+    box-shadow: 0 20px 55px rgb(0 0 0 / 28%);
+    -webkit-backdrop-filter: blur(22px) saturate(125%);
+    backdrop-filter: blur(22px) saturate(125%);
+    scrollbar-color: var(--border-2) transparent;
+    scrollbar-width: thin;
+  }
+
+  .right-rail.task-details-sheet > .task-details-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    min-height: 42px;
+    margin: 0;
+    padding: 7px 8px 3px 14px;
+    border: 0;
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .right-rail.task-details-sheet .task-details-header .eyebrow {
+    display: none;
+  }
+
+  .right-rail.task-details-sheet .task-details-header h2 {
+    color: var(--text-3);
+    font-size: 13px;
+    font-weight: 450;
+  }
+
+  .right-rail.task-details-sheet .task-details-header .icon-button {
+    width: 30px;
+    height: 30px;
+    border: 0;
+    background: transparent;
+  }
+
+  .right-rail.task-details-sheet > .chat-rail-glass {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .right-rail.task-details-sheet .rail-group + .rail-group {
+    position: relative;
+    margin-top: 5px;
+    padding-top: 6px;
+    border-top: 0;
+  }
+
+  .right-rail.task-details-sheet .rail-group + .rail-group::before {
+    position: absolute;
+    top: 0;
+    right: 14px;
+    left: 14px;
+    height: 1px;
+    background: var(--border);
+    content: "";
+  }
+
+  .right-rail.task-details-sheet .rail-group-head {
+    min-height: 29px;
+    padding: 8px 12px 2px;
+  }
+
+  .right-rail.task-details-sheet .rail-group-head > span,
+  .right-rail.task-details-sheet .rail-label {
+    font-size: 14px;
+  }
+
+  .right-rail.task-details-sheet .rail-group-head > span {
+    color: var(--text-3);
+  }
+
+  .right-rail.task-details-sheet .rail-action {
+    min-width: 22px;
+    height: 22px;
+    padding: 0 5px;
+    color: var(--text-4);
+    font-size: 18px;
+    line-height: 22px;
+  }
+
+  .right-rail.task-details-sheet .rail-row {
+    gap: 8px;
+    min-height: 30px;
+    padding: 5px 12px 7px;
+    border-radius: 8px;
+  }
+
+  .right-rail.task-details-sheet .rail-body {
+    padding: 0 0 4px;
+  }
+
+  .right-rail.task-details-sheet .artifact-card {
+    margin: 0;
+    padding: 5px 12px 7px;
+    border: 0;
+    background: transparent;
+  }
+}

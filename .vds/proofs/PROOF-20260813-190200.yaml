@@ -1,0 +1,48 @@
+id: PROOF-20260813-190200
+kind: contrast
+status: failed
+warrant_id: null
+command: vds proof contrast
+script: crates/vds-proof/src/contrast.rs
+exit_code: 1
+rows_considered: 76
+rows_enforced: 12
+rows_skipped_reasons:
+  proposed_nothing_shipped_by_construction: 64
+violations:
+- location: .vds/register/CMP-0061.yaml [:root[data-theme="dark"]] <CMP-0061 --border-2 against --inset>
+  rule: 'VDS S-7(5) contrast R1: every registered component''s boundaries clear their floors in every theme'
+  expected: --border-2 against --inset at 3.00:1 or more in :root[data-theme="dark"], the floor CMP-0061 declares on the basis it records, for a boundary in scope unstated
+  actual: 1.42:1, measured from what the shipped record resolves those two properties to in :root[data-theme="dark"]. Neither resolved value is repeated here; see the redaction note.
+  severity: fatal
+  drift: undetermined
+- location: .vds/register/CMP-0061.yaml [:root[data-theme="light"]] <CMP-0061 --border-2 against --inset>
+  rule: 'VDS S-7(5) contrast R1: every registered component''s boundaries clear their floors in every theme'
+  expected: --border-2 against --inset at 3.00:1 or more in :root[data-theme="light"], the floor CMP-0061 declares on the basis it records, for a boundary in scope unstated
+  actual: 1.34:1, measured from what the shipped record resolves those two properties to in :root[data-theme="light"]. Neither resolved value is repeated here; see the redaction note.
+  severity: fatal
+  drift: undetermined
+- location: .vds/register/CMP-0061.yaml [:root] <CMP-0061 --border-2 against --inset>
+  rule: 'VDS S-7(5) contrast R1: every registered component''s boundaries clear their floors in every theme'
+  expected: --border-2 against --inset at 3.00:1 or more in :root, the floor CMP-0061 declares on the basis it records, for a boundary in scope unstated
+  actual: 1.34:1, measured from what the shipped record resolves those two properties to in :root. Neither resolved value is repeated here; see the redaction note.
+  severity: fatal
+  drift: undetermined
+notes:
+- '[reach] this run measures the stylesheet VDS S-2(3) fixes as the system of record for what SHIPS, and nothing else. It does not open the decided-target Figma file, because resolving a node is a network read and VDS S-7(2)(1) forbids one inside a proof. A pass therefore establishes that what ships clears the floors in every theme the sheet declares, and never that what ships is what was decided; the agreement between the two records is the `token_pin` kind''s to establish (VDS S-7(5)).'
+- '[redaction] a finding names the component, the floor, its two custom properties, the theme selector and the measured ratio, and never a resolved value, an alpha channel or a colour channel. A captured proof record lands under the tree `no_stored_values` scans, so a finding that copied a resolved value would put a realisation under the record permanently and this gate would then fail forever on a file it wrote itself (VDS S-2(2)). The reason a value could not be read is reported as a stable class rather than as the CSS layer''s own message, because several of those messages quote the value they refused. Open the named property in the named scope to read it.'
+- '[ratio] a measured ratio is recorded as a number against a named floor, and is a measurement over the record VDS S-2(3) names rather than a realisation the record holds: deleting every proof record loses no shipped value, changing the sheet moves the next reading, and no reader can move a shipped pixel by editing one (VDS S-2(5)). VDS S-2(6) settles the shape: a numeral is not automatically a value, and a measured ratio is the same shape as the minimum it is measured against. The single exception is the top of the scale, which is reached by exactly one pair of colours and is therefore recorded as a bound rather than as a point.'
+- '[themes] every theme scope the stylesheet declares is measured, the base included, and the set is discovered from the sheet rather than read from a list of theme names. A component that clears its floor in one theme and fails in another has failed. A palette scope the discovery could not classify is a fatal finding and never a silent omission, because a palette the gate does not ask about is a palette that can ship below its floor with every proof green.'
+- '[alpha] a translucent boundary is composited over its backdrop before being measured, source-over and in gamma-encoded sRGB, which is what a browser paints. A translucent BACKDROP is refused instead, because compositing it over an assumed page colour would be a guess and a guessed backdrop yields a confident wrong reading. A floor names two properties, so the stack this run paints is exactly one layer over one backdrop; naming a middle layer would need a field the component record does not have.'
+- '[scope] a floor''s declared scope is reported in a finding and never decides whether the floor is enforced. A scope that switched enforcement off would be the quietly lowered floor VDS S-9(5) forbids wearing a different hat: the lawful move there is to record the component as decoration WITH its basis, in the register, where a reviewer can contest the claim.'
+- '[unmeasured] a floor whose properties do not resolve is a VIOLATION and never a skip. The only rows this run skips are the five named reasons counted above, and the last two of those carry a fatal finding of their own, so no row anywhere in this proof is both unmeasured and unreported.'
+- '[record] this run measured apps/worker/src/styles.css, which is `[surface] stylesheet` in the project configuration, moved off the default VDS S-2(3) names (app/globals.css). A warrant citing this run is bounded by that choice. It is the ONE record measured: a project that ships some of its tokens from another file is NOT covered by this run, and pointing this gate elsewhere is a configuration change recorded in a diff, never a flag on the command.'
+- '[themes-measured] the theme scopes this run measured, in the order the sheet declares them, base first: :root, :root[data-theme="light"], :root[data-theme="dark"]. A warrant citing this run covers those scopes and no others.'
+- '[margin] the narrowest clearance measured in this run was 4.13:1 against a floor of 3.00:1, at .vds/register/CMP-0061.yaml [:root] <CMP-0061 --orange against --inset>. A pass that records no margin cannot tell a boundary that clears by a hair from one that clears comfortably, and VDS S-1(4)(a) is a boundary whose ratio nobody recomputed.'
+inputs_digest: sha256:2c83054c1a63a5e20c458544db8841999ee8fa844aa735253fa786bec81f5790
+digest: sha256:ea6b565c54f2c30fc73af78080f088abd104465f0a861b23b48626df5dde4b47
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-13T19:01:57Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

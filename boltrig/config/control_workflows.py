@@ -18,6 +18,7 @@ from boltrig.workflows.scheduler import (
     workflow_schedule_state,
 )
 from boltrig.workflows.loop_contract import require_valid_loop_contract
+from boltrig.workflows.routine_contract import require_valid_routine_contract
 
 from .control_workflow_occurrences import (
     retry_workflow_schedule_occurrence_record
@@ -29,6 +30,20 @@ def _visible(item: WorkflowDefinition, workspace_id: str | None) -> bool:
     return item.workspace_id is None or item.workspace_id == workspace_id
 
 
+# A draft is a non-runnable working copy stored under this reserved id prefix,
+# so it can never collide with or shadow the real workflow on the version shelf
+# (list_workflows returns latest-version-per-id; "draft" would otherwise sort
+# highest and hide the published row). The library filters this prefix out of
+# every runnable path (match/trigger/execute); publish copies the draft to the
+# real id. Mirrors the pump's "workflow:" address prefix and the variable
+# pool's reserved node-id prefixes.
+DRAFT_ID_PREFIX = "__draft__:"
+
+
+def draft_id_for(workflow_id: str) -> str:
+    return f"{DRAFT_ID_PREFIX}{workflow_id}"
+
+
 async def upsert_workflow_record(
     store: Any,
     tenant_id: str,
@@ -38,6 +53,10 @@ async def upsert_workflow_record(
 ) -> WorkflowDefinition:
     if "source" in params:
         raise ValueError("workflow source is kernel-owned")
+    if str(params.get("id", "")).startswith(DRAFT_ID_PREFIX):
+        # The draft prefix is kernel-reserved; a caller cannot smuggle a row
+        # into it through the ordinary upsert (that would forge a "draft").
+        raise ValueError("workflow id prefix is reserved")
     existing = next(
         (
             item
@@ -48,6 +67,7 @@ async def upsert_workflow_record(
     )
     definition = dict(params.get("definition", {}))
     require_valid_loop_contract(definition)
+    require_valid_routine_contract(definition)
     if existing is not None:
         lifecycle = existing.definition.get("_boltrig_lifecycle")
         if lifecycle is not None:
@@ -66,6 +86,78 @@ async def upsert_workflow_record(
     )
     await store.upsert_workflow(workflow)
     return workflow
+
+
+async def upsert_draft_record(
+    store: Any,
+    tenant_id: str,
+    params: dict[str, Any],
+    *,
+    workspace_id: str | None,
+) -> WorkflowDefinition:
+    """Save a non-runnable draft under the reserved id prefix (low-consequence).
+
+    Same authoring validation as a real upsert (the loop contract), but the row
+    lands under ``__draft__:<id>`` so it never reaches the runnable shelf, and
+    it is marked ``GENERATED`` provenance because it is a working copy, not a
+    published definition. Re-saving overwrites the draft in place.
+    """
+    workflow_id = str(params["id"])
+    if workflow_id.startswith(DRAFT_ID_PREFIX):
+        raise ValueError("workflow id prefix is reserved")
+    definition = dict(params.get("definition", {}))
+    require_valid_loop_contract(definition)
+    require_valid_routine_contract(definition)
+    draft = WorkflowDefinition(
+        id=draft_id_for(workflow_id),
+        tenant_id=tenant_id,
+        version="draft",
+        source=WorkflowSource.GENERATED,
+        definition=definition,
+        intent_tags=params.get("intent_tags", []),
+        origin_task=None,
+        workspace_id=workspace_id,
+    )
+    await store.upsert_workflow(draft)
+    return draft
+
+
+async def publish_draft_record(
+    store: Any,
+    tenant_id: str,
+    params: dict[str, Any],
+    *,
+    workspace_id: str | None,
+) -> WorkflowDefinition:
+    """Promote a saved draft to a runnable workflow version (high-consequence).
+
+    Reads ``__draft__:<id>`` (workspace-visible), then writes its definition to
+    the real ``<id>`` through the ordinary upsert path - inheriting that path's
+    provenance rules, lifecycle/schedule preservation, and reserved-prefix
+    guard. The draft row is left in place so iteration can continue from it.
+    """
+    workflow_id = str(params["id"])
+    draft = next(
+        (
+            item
+            for item in await store.list_workflows(tenant_id)
+            if item.id == draft_id_for(workflow_id) and _visible(item, workspace_id)
+        ),
+        None,
+    )
+    if draft is None:
+        raise LookupError(f"no draft for workflow '{workflow_id}'")
+    return await upsert_workflow_record(
+        store,
+        tenant_id,
+        {
+            "id": workflow_id,
+            "version": params.get("version", "1.0.0"),
+            "definition": draft.definition,
+            "intent_tags": list(draft.intent_tags),
+        },
+        workspace_id=workspace_id,
+    )
 
 
 async def schedule_workflow_record(

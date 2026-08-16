@@ -45,12 +45,12 @@ class AiKeyProposalStorePG:
                 await conn.execute(
                     """INSERT INTO ai_key_secret_proposals
                          (id,tenant_id,requested_by,requested_on_behalf_of,
-                          workspace_id,level,scope_id,provider,model,base_url,
+                          workspace_id,level,scope_id,provider,model,base_url,modality,
                           secret_ref,secret_digest,status,approval_id,
                           created_at,expires_at,updated_at,consumed_at)
                        VALUES
-                         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
-                          $15,$16,$17,$18)""",
+                         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
+                          $16,$17,$18,$19)""",
                     proposal.id,
                     proposal.tenant_id,
                     proposal.requested_by,
@@ -61,6 +61,7 @@ class AiKeyProposalStorePG:
                     proposal.provider,
                     proposal.model,
                     proposal.base_url,
+                    proposal.modality,
                     proposal.secret_ref,
                     proposal.secret_digest,
                     proposal.status,
@@ -189,6 +190,7 @@ class AiKeyProposalStorePG:
         base_url,
         secret_digest,
         now,
+        modality="text",
     ):
         evidence = {
             "requested_by": requested_by,
@@ -199,6 +201,7 @@ class AiKeyProposalStorePG:
             "provider": provider,
             "model": model,
             "base_url": base_url,
+            "modality": modality,
             "secret_digest": secret_digest,
         }
         async with self._pool.acquire() as conn:
@@ -277,10 +280,11 @@ async def _consume_locked(conn, tenant_id, proposal_id, evidence, now):
         return None
     previous_ref = await conn.fetchval(
         """SELECT credential_ref FROM ai_configs
-           WHERE tenant_id=$1 AND level=$2 AND scope_id=$3""",
+           WHERE tenant_id=$1 AND level=$2 AND scope_id=$3 AND modality=$4""",
         tenant_id,
         proposal.level,
         proposal.scope_id,
+        proposal.modality,
     )
     await _upsert_ai_config(conn, proposal, now)
     await conn.execute(
@@ -305,9 +309,9 @@ async def _upsert_ai_config(conn, proposal, now):
     await conn.execute(
         """INSERT INTO ai_configs
              (tenant_id,level,scope_id,provider,model,credential_ref,
-              base_url,created_at,updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
-           ON CONFLICT (tenant_id,level,scope_id) DO UPDATE SET
+              base_url,modality,created_at,updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)
+           ON CONFLICT (tenant_id,level,scope_id,modality) DO UPDATE SET
              provider=EXCLUDED.provider,
              model=EXCLUDED.model,
              credential_ref=EXCLUDED.credential_ref,
@@ -320,6 +324,7 @@ async def _upsert_ai_config(conn, proposal, now):
         proposal.model,
         proposal.secret_ref,
         proposal.base_url,
+        proposal.modality,
         now,
     )
 
@@ -333,6 +338,7 @@ def _ai_config_from_proposal(proposal, now):
         model=proposal.model,
         credential_ref=proposal.secret_ref,
         base_url=proposal.base_url,
+        modality=proposal.modality,
         created_at=now,
         updated_at=now,
     )

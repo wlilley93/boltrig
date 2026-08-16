@@ -47,6 +47,7 @@ async def drive_turn_events(
     on_behalf_bearer,
     origin,
     model_profile_id,
+    model_choice_id,
 ):
     if service._exec is None:  # noqa: SLF001
         yield {"type": "text_delta", "delta": "(no runtime configured)"}
@@ -66,6 +67,7 @@ async def drive_turn_events(
             on_behalf_bearer=on_behalf_bearer,
             origin=origin,
             model_profile_id=model_profile_id,
+            model_choice_id=model_choice_id,
         )
     )
     interval = service._cfg.heartbeat_seconds if heartbeat else 0  # noqa: SLF001

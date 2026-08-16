@@ -1,7 +1,7 @@
 """Queued memory projection fanout.
 
 The canonical memory write/delete stays in the kernel ledger. This module only
-turns projection catch-up into named task payloads so Mem0/Cognee writes can run
+turns projection catch-up into named task payloads so Cognee writes can run
 on the existing executor seam instead of blocking the request path.
 """
 
@@ -43,7 +43,7 @@ class QueuedMemoryProjectionFanout(MemoryProjectionFanout):
         store: Any,
         projections: list[MemoryProjection] | None = None,
         *,
-        primary_projection_id: str = "mem0",
+        primary_projection_id: str = "cognee",
         executor: Any = None,
         task_name: str = _DEFAULT_TASK_NAME,
         max_operation_attempts: int = _DEFAULT_MAX_OPERATION_ATTEMPTS,

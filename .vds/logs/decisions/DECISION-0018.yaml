@@ -1,0 +1,10 @@
+id: DECISION-0018
+at: 2026-08-14T11:15:28Z
+by: williamlilley
+decision: Live Chat places an expandable compact workflow-step receipt and a thin durable queued-turn stack directly above the composer, using only state published by the kernel.
+court_required: false
+why: The Principal showed Codex's live-run hierarchy for steps and queued messages. Boltrig should preserve that compact orchestration rhythm without inventing repository statistics, queue mutations or plan text that its public Chat contract does not expose.
+basis:
+- USER-DIRECTION-2026-08-14:CHAT-STEPS-AND-QUEUED-MESSAGES
+- BOLTRIG-INVARIANT:NFR-MNT-08-SOURCE-BOUND-VISUAL-EVIDENCE
+- BOLTRIG-CONTRACT:STRUCTURED-REATTACHABLE-CHAT-STREAM

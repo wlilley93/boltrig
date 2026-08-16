@@ -31,7 +31,7 @@ from .models import (
     now,
 )
 from .ports import StagedObject
-from .projections import UNAVAILABLE_PROVIDER_IDS, UNAVAILABLE_PROVIDER_REASON
+from .projections import SUPPORTED_PROVIDER_IDS
 from .service_public import asset_type, projection_public, segment_public, stable_id
 
 
@@ -344,7 +344,9 @@ class KnowledgeService:
         )
         for key in blob_keys:
             await self.vault.erase(key)
-        projections = await self.projections.erase(context.tenant_id, asset_id, segment_ids)
+        projections = await self.projections.erase(
+            context.tenant_id, asset_id, segment_ids, context
+        )
         return {
             "asset_id": asset_id,
             "status": "erased",
@@ -354,29 +356,18 @@ class KnowledgeService:
         }
 
     async def list_providers(self, context) -> dict[str, Any]:
-        await self.projections.refresh_health(context.tenant_id)
+        await self.projections.refresh_health(context.tenant_id, context)
         providers = await self.repository.list_providers(context.tenant_id)
-        return {"providers": [provider.public() for provider in providers]}
+        return {
+            "providers": [
+                provider.public() for provider in providers if provider.id in SUPPORTED_PROVIDER_IDS
+            ]
+        }
 
     async def set_provider(self, provider_id: str, enabled: bool, context) -> dict[str, Any]:
         provider = await self.repository.get_provider(context.tenant_id, provider_id)
-        if provider is None:
+        if provider is None or provider_id not in SUPPORTED_PROVIDER_IDS:
             raise LookupError("provider not found")
-        if provider_id in UNAVAILABLE_PROVIDER_IDS:
-            if enabled:
-                raise ValueError(
-                    f"{provider.display_name} is unavailable: {UNAVAILABLE_PROVIDER_REASON}"
-                )
-            updated = replace(
-                provider,
-                enabled=False,
-                health="unavailable",
-                status="unavailable",
-                last_error=UNAVAILABLE_PROVIDER_REASON,
-                updated_at=now(),
-            )
-            await self.repository.save_provider(updated)
-            return {"provider": updated.public()}
         updated = replace(
             provider,
             enabled=enabled,
@@ -386,6 +377,6 @@ class KnowledgeService:
         )
         await self.repository.save_provider(updated)
         if provider_id == "cognee" and enabled:
-            await self.projections.refresh_health(context.tenant_id)
+            await self.projections.refresh_health(context.tenant_id, context)
             updated = await self.repository.get_provider(context.tenant_id, provider_id) or updated
         return {"provider": updated.public()}

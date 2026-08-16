@@ -66,10 +66,16 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from boltrig.models import InvocationContext, BoltrigError, IdempotencyConflict
+from boltrig.models import InvocationContext
 from . import control_flow, run_events
 from .loop_contract import selected_params
-from .loop_execution import LoopWalk, invalid_loop_run_record
+from .loop_execution import (
+    LoopWalk,
+    invalid_loop_run_record,
+    loop_item_error_mode,
+    run_parallel_block,
+)
+from .step_execution import run_capability_step
 
 
 def _topological_order(steps: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -171,11 +177,33 @@ async def run_workflow_definition(
 
     ordered, unrunnable = _topological_order(steps)
     results: dict[str, dict[str, Any]] = {}
+    # ``$inputs.<key>`` sugar (graphon-parity namespaced reads): the run inputs
+    # are referenceable directly, without routing through a trigger.start
+    # step's ``$<start>.output.inputs.<key>``. Seeded as a synthetic results
+    # entry so every existing resolver (predicates, items_from, bindings) gets
+    # it for free; a REAL step authored with id "inputs" wins - the synthetic
+    # entry is only seeded when no step claims the name (fail-closed to the
+    # author's graph, never shadowing it).
+    if not any(s.get("id") == "inputs" for s in steps):
+        results["inputs"] = dict(inputs or {})
+    # Two skip lineages with different join semantics (graphon-parity OR-join):
+    # * ``failed_or_skipped`` is FAILURE lineage - a failed/errored/paused step
+    #   and everything skipped because of it. Any failure-lineage parent blocks
+    #   a child (fail-closed: its data genuinely never arrived).
+    # * ``benign_skipped`` is BRANCH lineage - a step skipped because a branch
+    #   arm was not taken, and descendants skipped only for that reason. A
+    #   child with at least one delivered parent still RUNS (the merge node
+    #   after an if/else); only a child whose EVERY parent is benign-skipped
+    #   skips too. This is what makes branch+merge graphs compose.
     failed_or_skipped: set[str] = {s["id"] for s in unrunnable}
+    benign_skipped: set[str] = set()
     # Genuine failures (errored / unrunnable) that fail the run's overall status.
     # Conditional skips (branch_mismatch) and propagation skips (parent_failed) do
     # NOT count: a branch that omits an arm is a normal completed run.
     failed: set[str] = set(failed_or_skipped)
+    # Steps whose failure was absorbed by an error strategy (graphon-parity
+    # partial success): the run completes, the count stays observable.
+    exceptions: list[str] = []
     for s in unrunnable:
         results[s["id"]] = {"action": s.get("action"), "status": "skipped",
                             "reason": "missing_parent_or_cycle"}
@@ -184,6 +212,16 @@ async def run_workflow_definition(
 
     paused = False
     loops = LoopWalk()
+    # Shared walk state for the parallel-iteration clone runner: the same
+    # refs the sequential walk mutates, so both paths record identically.
+    walk_env: dict[str, Any] = {
+        "kernel": kernel, "executor": executor,
+        "store": store if checkpointing else None,
+        "wf": wf, "rid": rid, "run_ctx": run_ctx, "prior": prior, "ck": _ck,
+        "results": results, "failed_or_skipped": failed_or_skipped,
+        "benign_skipped": benign_skipped, "failed": failed,
+        "exceptions": exceptions, "emit_step": _emit_step,
+    }
     idx = 0
     while idx < len(ordered):
         step = ordered[idx]
@@ -214,13 +252,25 @@ async def run_workflow_definition(
                 )
             idx += 1
             continue
-        # A step whose parent failed/was skipped cannot run (fail-closed).
-        if any(p in failed_or_skipped for p in step.get("parents", []) or []):
+        parents = step.get("parents", []) or []
+        # A step with a failure-lineage parent cannot run (fail-closed).
+        if any(p in failed_or_skipped for p in parents):
             results[step_id] = {"action": step.get("action"), "status": "skipped",
                                 "reason": "parent_failed"}
             failed_or_skipped.add(step_id)
             _emit_step({"step_id": step_id, "action": step.get("action"),
                         "status": "skipped", "reason": "parent_failed"})
+            idx += 1
+            continue
+        # OR-join: a step runs when at least one parent delivered. Only when
+        # EVERY parent was benign-skipped (all upstream arms not taken) does
+        # the skip propagate - the merge node after a branch runs exactly once.
+        if parents and all(p in benign_skipped for p in parents):
+            results[step_id] = {"action": step.get("action"), "status": "skipped",
+                                "reason": "parents_skipped"}
+            benign_skipped.add(step_id)
+            _emit_step({"step_id": step_id, "action": step.get("action"),
+                        "status": "skipped", "reason": "parents_skipped"})
             idx += 1
             continue
         # A step that mixes a loop-body parent with a parent outside the loop
@@ -236,12 +286,14 @@ async def run_workflow_definition(
             idx += 1
             continue
         # A branched step only runs when its declared branch matches every
-        # parent that produced a branch label (conditional execution).
+        # parent that produced a branch label (conditional execution). An
+        # unmatched arm is a BENIGN skip: downstream merge nodes with another
+        # delivered parent still run (OR-join above).
         branch_ok, branch_reason = control_flow.branch_matches(step, results)
         if not branch_ok:
             results[step_id] = {"action": step.get("action"), "status": "skipped",
                                 "reason": branch_reason}
-            failed_or_skipped.add(step_id)
+            benign_skipped.add(step_id)
             _emit_step({"step_id": step_id, "action": step.get("action"),
                         "status": "skipped", "reason": branch_reason})
             idx += 1
@@ -269,7 +321,21 @@ async def run_workflow_definition(
             # Loop body iteration: a flow.loop with a non-empty items list
             # expands its body into the walk so each item runs the body once.
             # The body is the loop's self-contained descendant sub-graph.
-            ordered = loops.expand_outcome(ordered, step_id, coutcome)
+            expansions_before = len(loops.expanded)
+            ordered = loops.expand_outcome(
+                ordered, step_id, coutcome,
+                on_item_error=loop_item_error_mode(params),
+            )
+            if len(loops.expanded) > expansions_before:
+                # A parallel-declared, capability-only body runs its
+                # iterations concurrently (windowed) instead of inline.
+                ordered, par_paused, par_stop = await run_parallel_block(
+                    ordered, idx, params, loops, walk_env
+                )
+                if par_paused:
+                    paused = True
+                if par_stop:
+                    break
             idx += 1
             continue
 
@@ -280,87 +346,30 @@ async def run_workflow_definition(
         # (NFR-REL-03, SEC-14); a second resume finds the approval spent.
         approval_id = done.hitl_request_id if done is not None and done.status == "paused" else None
 
-        # The checkpoint seam's other half (NFR-REL-02): a deterministic
-        # per-step idempotency key, so a step whose verb COMPLETED but whose
-        # checkpoint write was lost (worker died between the two) replays its
-        # recorded kernel result on the resumed run instead of re-executing
-        # side effects. An idempotency-disabled verb keeps no key: its
-        # one-time secret result must never be replay-cached.
-        idempotency_key: str | None = None
-        if checkpointing:
-            get_verb = getattr(store, "get_verb", None)
-            verb_def = await get_verb(wf.tenant_id, verb) if get_verb is not None else None
-            mode = getattr(getattr(verb_def, "idempotency_mode", None), "value", None)
-            if verb_def is not None and mode != "disabled":
-                idempotency_key = f"workflow:{wf.id}:{rid}:{step_id}"
-
-        async def _dispatch(
-            noun=noun, verb=verb, params=params, approval_id=approval_id,
-            idempotency_key=idempotency_key,
-        ) -> dict[str, Any]:
-            try:
-                return await kernel.invoke(
-                    noun, verb, params, run_ctx,
-                    idempotency_key=idempotency_key, approval_id=approval_id,
-                )
-            except IdempotencyConflict:
-                if idempotency_key is None:
-                    raise
-                # A prior attempt parked the key (worker died between execution
-                # start and claim completion; a COMPLETED prior record replays
-                # above and never reaches here). Fall back to a keyless invoke:
-                # standard engine-retry semantics, at-least-once for the
-                # genuinely interrupted step (NFR-REL-02) - exactly what an
-                # unkeyed dispatch already accepted.
-                return await kernel.invoke(noun, verb, params, run_ctx, approval_id=approval_id)
-
-        boundary = f"workflow:{wf.id}:{step_id}"
-        try:
-            if executor is not None:
-                output = await executor.run_step(boundary, _dispatch, run_id=rid)
-            else:
-                output = await _dispatch()
-            results[step_id] = {"action": action, "status": "ok", "output": output}
-            if checkpointing:
-                await store.upsert_checkpoint(wf.tenant_id, rid, _ck(step_id), "ok", output=output)
-            _emit_step({"step_id": step_id, "action": action, "status": "ok"})
-        except BoltrigError as exc:
-            reason = getattr(exc, "reason", type(exc).__name__)
-            # A held HITL gate is a pause, not a failure - the run can resume.
-            status = "paused" if reason in {"pending_human", "approval_required"} else "failed"
-            hitl_id = getattr(exc, "hitl_request_id", None)
-            failed_or_skipped.add(step_id)
-            if status == "paused":
-                # A pause is not a failure, but for dependency purposes it is
-                # treated like one: without checkpointing the walk continues,
-                # and descendants must never dispatch with the paused parent's
-                # (missing) output.
-                paused = True
-            else:
-                failed.add(step_id)
-            results[step_id] = {"action": action, "status": status, "reason": reason}
-            if hitl_id:
-                results[step_id]["hitl_request_id"] = hitl_id
-            _emit_step({"step_id": step_id, "action": action, "status": status, "reason": reason})
-            if status == "paused" and checkpointing:
-                # NFR-REL-03: the pause is durable - the request id is the
-                # approval id the resumed run re-invokes with; stop the walk.
-                await store.upsert_checkpoint(
-                    wf.tenant_id, rid, _ck(step_id), "paused", hitl_request_id=hitl_id
-                )
-                break
-        except Exception as exc:  # an adapter bug must not crash the fleet (P9)
-            failed_or_skipped.add(step_id)
-            failed.add(step_id)
-            results[step_id] = {"action": action, "status": "error",
-                                "reason": type(exc).__name__}
-            _emit_step({"step_id": step_id, "action": action, "status": "error",
-                        "reason": type(exc).__name__})
+        # Retry, error strategies, checkpointing and the per-step idempotency
+        # key all live in step_execution.run_capability_step - one governed
+        # dispatch, many ways to record the outcome (never a second path).
+        step_paused, stop_walk = await run_capability_step(
+            kernel=kernel, executor=executor,
+            store=store if checkpointing else None,
+            wf=wf, rid=rid, run_ctx=run_ctx,
+            step=step, step_id=step_id, action=action, noun=noun, verb=verb,
+            params=params, approval_id=approval_id,
+            results=results, failed_or_skipped=failed_or_skipped,
+            failed=failed, exceptions=exceptions,
+            emit_step=_emit_step, ck=_ck,
+        )
+        if step_paused:
+            paused = True
+        if stop_walk:
+            break
         idx += 1
 
     # Collapse per-item loop-clone results back onto each original body step so
-    # the run record (keyed by original step id) reflects the iteration.
-    loops.aggregate(results)
+    # the run record (keyed by original step id) reflects the iteration. Under
+    # ``on_item_error: continue|drop`` absorbed item errors are removed from
+    # ``failed`` here (they no longer fail the run) and surface as exceptions.
+    absorbed_item_errors = loops.aggregate(results, failed=failed)
 
     if paused:
         overall = "paused"
@@ -376,6 +385,9 @@ async def run_workflow_definition(
         "tenant_id": wf.tenant_id,
         "version": wf.version,
         "status": overall,
+        # Absorbed failures (error strategies + loop item-error modes): the run
+        # status stays projection-compatible, the partial success stays visible.
+        "exceptions_count": len(exceptions) + absorbed_item_errors,
         "steps": [{"id": s["id"], **results.get(s["id"], {"status": "skipped"})} for s in steps],
         "inputs": dict(inputs or {}),
     }

@@ -21,7 +21,13 @@ import pytest
 from boltrig.adapters.builtin.memory_tickets import build as build_tickets
 from boltrig.fleet import ChiefOfStaff, Department, DepartmentHead, WorkPump, build_spawner
 from boltrig.fleet.authority import context_for, principal_grants_for_item
+from boltrig.fleet.pump import persist_new_work_items
 from boltrig.kernel import Kernel
+from boltrig.kernel.work_authority import (
+    CREATOR_GRANT_CEILING_KEY,
+    creator_ceiling_from_item,
+    stamp_creator_ceiling,
+)
 from boltrig.models import (
     ActionType,
     AgentCapability,
@@ -54,35 +60,48 @@ async def _kernel() -> Kernel:
     # hand the verb to any user's run, because the skill's grants were intersected
     # only against the tenant ceiling.
     await store.upsert_skill(
-        Skill(id="risky", tenant_id=T, version="1.0.0", prompt_fragment="p",
-              tool_grants=[RISKY_VERB], context_requirements={})
+        Skill(
+            id="risky",
+            tenant_id=T,
+            version="1.0.0",
+            prompt_fragment="p",
+            tool_grants=[RISKY_VERB],
+            context_requirements={},
+        )
     )
     return kernel
 
 
 async def _seat(kernel: Kernel, user_id: str, scope: dict) -> None:
-    await kernel.store.upsert_user(User(
-        id=user_id, tenant_id=T, email=f"{user_id}@example.com", role="member",
-        scope=scope, status="active",
-    ))
+    await kernel.store.upsert_user(
+        User(
+            id=user_id,
+            tenant_id=T,
+            email=f"{user_id}@example.com",
+            role="member",
+            scope=scope,
+            status="active",
+        )
+    )
 
 
 def _pump(kernel: Kernel, *, heads: dict | None = None) -> WorkPump:
     spawner = build_spawner(kernel)
     if heads is None:
-        heads = {
-            DEPT: DepartmentHead(
-                DEPT, ["risky"], [], 32, spawner=spawner, store=kernel.store
-            )
-        }
+        heads = {DEPT: DepartmentHead(DEPT, ["risky"], [], 32, spawner=spawner, store=kernel.store)}
     cos = ChiefOfStaff(kernel, [Department(name=name) for name in heads])
     return WorkPump(kernel, spawner, cos, heads)
 
 
 def _item(**kw) -> WorkItem:
     return WorkItem(
-        id=uuid.uuid4().hex, tenant_id=T, source="internal",
-        intent="create a ticket", confidence=0.9, convergent=False, **kw,
+        id=uuid.uuid4().hex,
+        tenant_id=T,
+        source="internal",
+        intent="create a ticket",
+        confidence=0.9,
+        convergent=False,
+        **kw,
     )
 
 
@@ -186,10 +205,16 @@ async def test_a_deactivated_principal_carries_no_authority():
     """Deactivation revokes a work item's authority too (SEC-34), because the pump
     resolves through the same ``effective_grants_for_request`` the request path uses."""
     kernel = await _kernel()
-    await kernel.store.upsert_user(User(
-        id="ex", tenant_id=T, email="ex@example.com", role="member",
-        scope={"all": True}, status="deactivated",
-    ))
+    await kernel.store.upsert_user(
+        User(
+            id="ex",
+            tenant_id=T,
+            email="ex@example.com",
+            role="member",
+            scope={"all": True},
+            status="deactivated",
+        )
+    )
     grants = await principal_grants_for_item(kernel.store, _item(on_behalf_of="ex"))
     assert grants.allow == ()
 
@@ -206,8 +231,7 @@ async def test_system_originated_item_still_completes_and_audits_on_behalf_of():
     assert done.status == WorkStatus.DONE
     assert _child_grants(done) == set()  # ran, but with nothing granted
     spawns = [
-        e for e in await kernel.store.audit_query(T)
-        if e.action_type == ActionType.AGENT_SPAWN
+        e for e in await kernel.store.audit_query(T) if e.action_type == ActionType.AGENT_SPAWN
     ]
     assert spawns and all(e.on_behalf_of is None for e in spawns)
 
@@ -226,10 +250,62 @@ async def test_on_behalf_of_is_still_carried_through_the_tree_and_the_audit():
     kids = await kernel.store.list_work_items(T, parent_id=done.id)
     assert kids and all(k.on_behalf_of == "alice" and k.workspace_id == "ws-1" for k in kids)
     spawns = [
-        e for e in await kernel.store.audit_query(T)
-        if e.action_type == ActionType.AGENT_SPAWN
+        e for e in await kernel.store.audit_query(T) if e.action_type == ActionType.AGENT_SPAWN
     ]
     assert spawns and all(e.on_behalf_of == "alice" for e in spawns)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-164")
+async def test_creator_ceiling_survives_promotion_and_propagates_to_follow_on_work():
+    """Queued work never acquires authority granted after it was created.
+
+    The ceiling is server-stamped on the parent and replaces any reserved value a
+    model tries to place in a follow-on payload. Descendants therefore remain no
+    broader than the authority under which the original work was accepted.
+    """
+    kernel = await _kernel()
+    await _seat(kernel, "alice", {"verbs": ["ticket.read"]})
+    parent = _item(on_behalf_of="alice")
+    stamp_creator_ceiling(parent, GrantSet.of(["ticket.read"]))
+    await kernel.store.create_work_item(parent)
+
+    # A later role change must not retroactively widen already-queued authority.
+    await _seat(kernel, "alice", {"all": True})
+    parent_context = await context_for(kernel.store, parent, parent.id)
+    assert not parent_context.grants.permits(RISKY_VERB)
+
+    (child,) = await persist_new_work_items(
+        kernel.store,
+        parent,
+        [
+            {
+                "intent": "follow on",
+                # Reserved authority-shaped model data is not a trusted stamp.
+                CREATOR_GRANT_CEILING_KEY: {"allow": ["*"], "deny": []},
+            }
+        ],
+        source="test",
+    )
+    assert creator_ceiling_from_item(child) == GrantSet.of(["ticket.read"])
+    child_context = await context_for(kernel.store, child, child.id)
+    assert not child_context.grants.permits(RISKY_VERB)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-164")
+async def test_malformed_creator_ceiling_fails_closed():
+    kernel = await _kernel()
+    await _seat(kernel, "alice", {"all": True})
+    item = _item(on_behalf_of="alice")
+    item.constraints[CREATOR_GRANT_CEILING_KEY] = {
+        "allow": ["*"],
+        "deny": "not-a-list",
+    }
+
+    context = await context_for(kernel.store, item, item.id)
+    assert context.grants.allow == ()
+    assert not context.grants.permits(RISKY_VERB)
 
 
 # --- SEC-165: an unroutable department parks, never mis-routes ----------------
@@ -246,9 +322,7 @@ async def test_an_unroutable_department_parks_instead_of_running_under_another_h
         async def route(self, item, context):
             return "finance"  # a department the pump has no head for
 
-    finance_head = DepartmentHead(
-        DEPT, ["risky"], [], 32, spawner=spawner, store=kernel.store
-    )
+    finance_head = DepartmentHead(DEPT, ["risky"], [], 32, spawner=spawner, store=kernel.store)
     pump = WorkPump(kernel, spawner, _UnroutableCoS(), {DEPT: finance_head})
 
     item = _item(on_behalf_of="alice")

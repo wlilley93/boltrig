@@ -91,20 +91,19 @@ Two live traps, both already established in this repo:
   (`--lora` / per-request `lora` list) or mlx-lm. Both are OpenAI-shaped, so
   `kind: openai` needs no code change, and the keyless local-endpoint path is
   already bound (`tests/invariants.yaml:787`).
-- **The route.** The kernel runs inside `boltrig-vm`; a model server running
-  native on macOS for Metal is reachable only at `host.orb.internal`, and that
-  name resolves to a ULA IPv6 the SSRF guard blocks. It needs the same documented
-  `allow_internal` opt-in `local_whisper` uses. Do not rediscover this.
+- **The route.** A native model server is not a permitted runtime override.
+  Candidate evaluation must eventually enter through a governed Bifrost model
+  endpoint and the same Codex admission used by production execution.
 
 ## Phase 2 - the gate
 
 `boltrig/distill/gate.py`. Two mechanical gates, no judge.
 
-- **craft**: run the existing `EvalRunner` (`fleet/eval.py`) over the tenant's
-  active cases with `endpoint_override` = the candidate. Promote iff mean score
-  >= incumbent **and** `{cases passing on incumbent} ⊆ {cases passing on
-  candidate}`. The subset clause matters: a mean can rise while a case that used
-  to work silently breaks.
+- **craft verdict**: compare the tenant's active cases and promote iff mean
+  score >= incumbent **and** `{cases passing on incumbent} ⊆ {cases passing on
+  candidate}`. The verdict function remains tested, but the adapter lane is
+  fail-closed until inactive candidates have a governed Codex/Bifrost
+  admission contract. It must not inject a provider URL into runtime context.
 - **register**: mean token log-likelihood of a held-out 10% of that tenant's
   accepted assistant turns, candidate vs incumbent. Held-out at corpus-build
   time and pinned by digest, so it cannot be trained on.
@@ -140,7 +139,7 @@ replay corpus** with recency weighting - never from last night's adapter.
 | DIS-3 | A conversation covered by a `MemoryErasure` is absent from every corpus built after it, and the erasure watermark is in the digest. |
 | DIS-4 | Training input is the pinned base, never a prior adapter; a candidate naming an adapter base is refused. |
 | DIS-5 | A candidate endpoint is created `is_active=False` and only a passing gate flips it. |
-| DIS-6 | Promotion requires mean >= incumbent AND no incumbent-passing case regressing. |
+| DIS-6 | Craft evaluation refuses until inactive candidates use governed Codex/Bifrost admission; no direct-provider bypass. |
 | DIS-7 | Every consolidation writes an audit row - promote and hold alike - carrying corpus digest and both scores. |
 | DIS-8 | A promoted adapter id is present in the price table at promotion time (else `cost.py` charges it at the tier default). |
 
@@ -169,9 +168,8 @@ replay corpus** with recency weighting - never from last night's adapter.
 - A production-scale corpus (needs real tenant history in Postgres).
 - The 7B production base + `mlx_lm.server` serving of a promoted adapter, and
   the Codex-composition sensitive-role consumption of that endpoint.
-- The craft gate against a real eval-case set (the mechanism is tested with
-  the runner injected; no department has a case library yet - authoring
-  `EvalCase` rows is the highest-leverage remaining work).
+- A governed inactive-candidate admission contract for the craft gate. The
+  verdict itself remains tested; direct provider routing was retired.
 - The schedule itself (a runbook act, below), and DPO over pref pairs (the
   sidecar trains pref records' CHOSEN side only, stated in `app.py`).
 
@@ -179,11 +177,10 @@ replay corpus** with recency weighting - never from last night's adapter.
 
 1. **Sidecar**: `services/distill_sidecar/README.md` - mlx venv, launchd
    plist, `curl :8930/health` must say `"mlx": true`.
-2. **Manifest**: set the `distill:` section (`enabled: true`, `base_pin`,
-   `sidecar_url`, and `serve_url` for the craft lane - the trainer serves no
-   chat completions, so without `serve_url` the craft gate refuses typed) -
-   see `manifest.example.yaml`; add `distill.*` to the operating role's scope
-   if the tenant ceiling is not `*`.
+2. **Manifest**: set the `distill:` section (`enabled: true`, `base_pin`, and
+   `sidecar_url`) - see `manifest.example.yaml`; add `distill.*` to the
+   operating role's scope if the tenant ceiling is not `*`. Only the register
+   gate is operational; the craft gate refuses typed.
 3. **Candidate endpoint**: `control.model_endpoint.upsert` then immediately
    `control.model_endpoint.retire` (upsert re-defaults to active) for
    `craft-candidate`, `kind: openai`, `data_class: sensitive`, `base_url`

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -66,16 +66,36 @@ beforeEach(() => {
       { id: "question-a", type: "question", question: "Which contract?" },
     ],
   });
+  localStorage.clear();
+  document.documentElement.removeAttribute("data-character");
 });
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   window.location.hash = "";
+  localStorage.clear();
 });
 
-describe("global Worker identity and decision context", () => {
-  it("shows user, organisation, active workspace, and pending decisions globally", async () => {
+describe("global Worker identity context", () => {
+  it("applies the authoritative character during an existing identity refresh", async () => {
+    api.meSettings.mockResolvedValue({
+      profile,
+      settings: { "agent.character": "jarvis" },
+    });
+    render(
+      <WorkerGlobalContextProvider>
+        <Topbar title="Runs" />
+      </WorkerGlobalContextProvider>,
+    );
+
+    expect(await screen.findByText("Alice")).toBeTruthy();
+    expect(screen.queryByText("Acme / Operations")).toBeNull();
+    expect(document.documentElement.dataset.character).toBe("jarvis");
+    expect(api.meSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the user without a redundant organisation or workspace label", async () => {
     render(
       <WorkerGlobalContextProvider>
         <Topbar title="Runs" status="12 visible" />
@@ -94,43 +114,61 @@ describe("global Worker identity and decision context", () => {
 
     const topbar = screen.getByRole("banner");
     expect(await within(topbar).findByText("Alice")).toBeTruthy();
-    expect(within(topbar).getByText("Acme / Operations")).toBeTruthy();
-    expect(within(topbar).getByText("2 pending")).toBeTruthy();
-    expect(screen.getByLabelText("2 pending decisions").textContent).toBe("2");
-
-    fireEvent.click(within(topbar).getByRole("button", {
-      name: "Open Inbox, 2 pending decisions",
-    }));
-    expect(window.location.hash).toBe("#/inbox");
+    expect(within(topbar).queryByText("Acme / Operations")).toBeNull();
+    expect(within(topbar).queryByText(/pending/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Inbox/i })).toBeNull();
   });
 
-  it("refreshes the visible active workspace after a context switch", async () => {
+  it("refreshes context without adding a visible workspace label", async () => {
     api.consoleOverview
       .mockResolvedValueOnce({ workspace_id: "workspace-a" })
       .mockResolvedValueOnce({ workspace_id: "workspace-b" });
-    api.hitl
-      .mockResolvedValueOnce({
-        requests: [{ id: "approval-a", type: "approval", question: "Approve transfer?" }],
-      })
-      .mockResolvedValueOnce({ requests: [] });
-
     render(
       <WorkerGlobalContextProvider>
         <Topbar title="Account" />
       </WorkerGlobalContextProvider>,
     );
 
-    expect(await screen.findByText("Acme / Operations")).toBeTruthy();
-    expect(screen.getByText("1 pending")).toBeTruthy();
+    expect(await screen.findByText("Alice")).toBeTruthy();
+    expect(screen.queryByText("Acme / Operations")).toBeNull();
     notifyWorkerContextChanged();
 
-    expect(await screen.findByText("Acme / Research")).toBeTruthy();
-    expect(await screen.findByText("Inbox clear")).toBeTruthy();
     await waitFor(() => expect(api.consoleOverview).toHaveBeenCalledTimes(2));
-    expect(api.hitl).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Acme / Research")).toBeNull();
+    expect(api.hitl).not.toHaveBeenCalled();
   });
 
-  it("reports unavailable pending status instead of claiming the Inbox is clear", async () => {
+  it("refreshes a remotely changed role when the client regains focus", async () => {
+    api.meSettings
+      .mockResolvedValueOnce({ profile: { ...profile, role: "member" }, settings: {} })
+      .mockResolvedValueOnce({ profile: { ...profile, role: "superadmin" }, settings: {} });
+    render(
+      <WorkerGlobalContextProvider>
+        <Sidebar
+          route="chat"
+          conversations={[]}
+          selectedConversation={null}
+          onRoute={vi.fn()}
+          onConversation={vi.fn()}
+          onLoadMore={vi.fn()}
+          hasMoreConversations={false}
+        />
+      </WorkerGlobalContextProvider>,
+    );
+
+    expect(await screen.findByRole("button", {
+      name: /Signed in as Alice, role member/i,
+    })).toBeTruthy();
+
+    window.dispatchEvent(new Event("focus"));
+
+    expect(await screen.findByRole("button", {
+      name: /Signed in as Alice, role superadmin/i,
+    })).toBeTruthy();
+    expect(api.meSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not poll a global approval queue", async () => {
     api.consoleOverview.mockResolvedValue({ workspace_id: null });
     api.hitl.mockRejectedValue(new Error("offline"));
 
@@ -140,8 +178,8 @@ describe("global Worker identity and decision context", () => {
       </WorkerGlobalContextProvider>,
     );
 
-    expect(await screen.findByText("Acme / Organisation-wide")).toBeTruthy();
-    expect(await screen.findByText("Inbox unavailable")).toBeTruthy();
-    expect(screen.queryByText("Inbox clear")).toBeNull();
+    expect(await screen.findByText("Alice")).toBeTruthy();
+    expect(screen.queryByText("Acme / Organisation-wide")).toBeNull();
+    expect(api.hitl).not.toHaveBeenCalled();
   });
 });

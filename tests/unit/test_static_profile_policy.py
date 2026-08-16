@@ -198,6 +198,17 @@ def test_exact_model_policy_rejects_aliases_paths_and_controls(model_id: str) ->
         ExactModelPolicy(model_id, ReasoningEffort.HIGH)
 
 
+def test_exact_model_policy_accepts_nested_bifrost_ids_through_160_chars() -> None:
+    nested = "openrouter/vendor/team/" + "m" * 137
+    assert len(nested) == 160
+    assert ExactModelPolicy(nested, ReasoningEffort.HIGH).model_id == nested
+
+
+def test_exact_model_policy_accepts_provider_scoped_bifrost_ids() -> None:
+    model_id = "cloudflare/@cf/meta/llama-3.1-8b-instruct"
+    assert ExactModelPolicy(model_id, ReasoningEffort.HIGH).model_id == model_id
+
+
 def test_tool_sandbox_and_native_subagent_defaults_must_stay_within_ceilings() -> None:
     with pytest.raises(ValueError, match="runtime tools"):
         RuntimeToolPolicy(defaults=("shell.exec",), ceiling=("filesystem.read",))

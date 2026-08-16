@@ -53,7 +53,7 @@ class _StatusProvider:
                 {"id": "bad", "status": "surprising"},
             ],
             "runtimes": {
-                "opencode": {
+                "codex": {
                     "status": "degraded",
                     "metadata": {"model": "ornith", "token": "secret"},
                 }
@@ -111,7 +111,7 @@ def test_platform_status_is_bounded_and_redacted():
     assert body["tenant_id"] == T
     assert body["components"][0]["status"] == "ok"
     assert body["components"][1]["status"] == "unknown"
-    assert body["runtimes"][0]["id"] == "opencode"
+    assert body["runtimes"][0]["id"] == "codex"
 
     rendered = repr(body).lower()
     assert "rpa_secret" not in rendered
@@ -128,7 +128,7 @@ def test_model_gateway_status_is_bounded_and_redacted(monkeypatch):
     monkeypatch.setenv("BOLTRIG_MODEL_GATEWAY_URL", "http://bifrost:8080/v1")
     monkeypatch.setenv("BOLTRIG_MODEL_GATEWAY_TTL", "120")
     # Live-health polling stays OFF regardless of test order: apply_manifest's
-    # runtime-env export (pinned by tests/security/test_model_routing.py) leaks
+    # runtime-env export can leak
     # BOLTRIG_MODEL_GATEWAY_* into os.environ process-wide, and a HEALTH=1 leak
     # would have this snapshot poll a dead health URL.
     monkeypatch.delenv("BOLTRIG_MODEL_GATEWAY_HEALTH", raising=False)
@@ -189,11 +189,7 @@ def test_model_gateway_status_reports_inert_when_unconfigured(monkeypatch):
 @pytest.mark.invariant("FR-HOST-12")
 def test_stack_tool_status_reports_shipped_tools_without_user_paths():
     env = {
-        "BOLTRIG_HERDR_HOME": "/var/lib/boltrig/herdr",
-        "BOLTRIG_OPENCODE_HOME": "/var/lib/boltrig/opencode",
         "BOLTRIG_BROWSER_CLI_HOME": "/var/lib/boltrig/browser-cli",
-        "HERDR_BIN": "/usr/local/bin/herdr",
-        "BOLTRIG_OPENCODE_BIN": "/usr/local/bin/opencode",
         "BOLTRIG_BROWSER_CLI_BIN": "/usr/local/bin/browser-use",
         "BOLTRIG_BROWSER_ALLOWED_DOMAINS": "example.com,app.example.com",
         "BOLTRIG_BROWSER_CLOUD_POLICY": "stack",
@@ -210,12 +206,13 @@ def test_stack_tool_status_reports_shipped_tools_without_user_paths():
     components = {item["id"]: item for item in body["components"]}
     runtimes = {item["id"]: item for item in body["runtimes"]}
 
-    for tool in ("herdr", "opencode", "browser-cli"):
-        assert components[tool]["status"] == "ok"
-        assert components[tool]["metadata"]["install_mode"] == "first_party_image"
-        assert components[tool]["metadata"]["state_root_stack_owned"] is True
-        assert components[tool]["metadata"]["binary_stack_owned"] is True
-        assert runtimes[f"{tool}-cli"]["metadata"]["profile_state"] == "stack_owned"
+    tool = "browser-cli"
+    assert components[tool]["status"] == "ok"
+    assert components[tool]["metadata"]["install_mode"] == "first_party_image"
+    assert components[tool]["metadata"]["state_root_stack_owned"] is True
+    assert components[tool]["metadata"]["binary_stack_owned"] is True
+    assert components[tool]["metadata"]["runtime_container"] == "browser-executor"
+    assert runtimes[f"{tool}-cli"]["metadata"]["profile_state"] == "stack_owned"
     assert components["browser-cli"]["metadata"]["allowed_domain_count"] == 2
     assert components["browser-cli"]["metadata"]["cloud_profile_policy"] == "stack_owned"
     assert components["browser-cli"]["metadata"]["cloud_profile_configured"] is True
@@ -224,16 +221,11 @@ def test_stack_tool_status_reports_shipped_tools_without_user_paths():
     assert "/var/lib/boltrig" not in rendered
     assert "/usr/local/bin" not in rendered
     assert ".config" not in rendered
-    assert ".opencode" not in rendered
     assert "stack-key" not in rendered
     assert "stack-profile" not in rendered
     cached = provider.cached_snapshot(tenant_id=T, workspace_id=None)
     assert cached is not None
-    assert {item["id"] for item in cached["components"]} >= {
-        "herdr",
-        "opencode",
-        "browser-cli",
-    }
+    assert {item["id"] for item in cached["components"]} >= {"browser-cli"}
     cached["components"].clear()
     assert provider.cached_snapshot(tenant_id=T, workspace_id=None)["components"]
     assert provider.cached_snapshot(tenant_id=T, workspace_id="other") is None
@@ -243,11 +235,7 @@ def test_stack_tool_status_reports_shipped_tools_without_user_paths():
 @pytest.mark.invariant("FR-HOST-12")
 def test_stack_tool_status_degrades_personal_state_without_leaking_it():
     env = {
-        "BOLTRIG_HERDR_HOME": "/home/will/.config/herdr",
-        "BOLTRIG_OPENCODE_HOME": "/Users/will/.opencode",
         "BOLTRIG_BROWSER_CLI_HOME": "$HOME/.local/share/browser-use",
-        "HERDR_BIN": "/home/will/.local/bin/herdr",
-        "BOLTRIG_OPENCODE_BIN": "/Users/will/.opencode/bin/opencode",
         "BOLTRIG_BROWSER_CLI_BIN": "/home/will/.local/bin/browser-use",
     }
     resp = _client({"status": StackToolStatusProvider(env=env)}).get(
@@ -256,17 +244,16 @@ def test_stack_tool_status_degrades_personal_state_without_leaking_it():
     assert resp.status_code == 200
     components = {item["id"]: item for item in resp.json()["components"]}
 
-    for tool in ("herdr", "opencode", "browser-cli"):
-        assert components[tool]["status"] == "degraded"
-        assert components[tool]["metadata"]["profile_state"] == "rejected"
-        assert components[tool]["metadata"]["state_root_stack_owned"] is False
-        assert components[tool]["metadata"]["binary_stack_owned"] is False
+    tool = "browser-cli"
+    assert components[tool]["status"] == "degraded"
+    assert components[tool]["metadata"]["profile_state"] == "rejected"
+    assert components[tool]["metadata"]["state_root_stack_owned"] is False
+    assert components[tool]["metadata"]["binary_stack_owned"] is False
 
     rendered = repr(resp.json()).lower()
     assert "/home/will" not in rendered
     assert "/users/will" not in rendered
     assert "$home" not in rendered
-    assert ".opencode/bin" not in rendered
     assert ".local/share/browser-use" not in rendered
 
 
@@ -312,7 +299,7 @@ def test_model_telemetry_is_aggregated_scoped_and_redacted():
                     ts=utcnow(),
                     run_id=run_id,
                     workspace_id=workspace,
-                    actor="opencode-worker",
+                    actor="codex-worker",
                     actor_tier="ephemeral",
                     action_type=ActionType.AGENT_SPAWN,
                     status=status,
@@ -324,7 +311,7 @@ def test_model_telemetry_is_aggregated_scoped_and_redacted():
                             "profile": "deep",
                             "provider": "cerebras",
                             "model": "qwen-3-coder",
-                            "runtime": "opencode",
+                            "runtime": "codex",
                             "base_url": "https://secret.example/v1",
                             "api_key": "never",
                         }
@@ -343,7 +330,7 @@ def test_model_telemetry_is_aggregated_scoped_and_redacted():
         {
             "provider": "cerebras",
             "model": "qwen-3-coder",
-            "runtime": "opencode",
+            "runtime": "codex",
             "calls": 2,
             "tokens": 125,
             "cost_micros": 250,

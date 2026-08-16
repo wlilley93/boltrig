@@ -1,0 +1,459 @@
+/*
+ * Desktop console-shell adjustments derived from the canonical Claude Design
+ * export. These selectors are deliberately scoped to the console rail so the
+ * independently evolving Settings sidebar does not inherit its row geometry.
+ */
+
+/* The rail is a tinted glass layer over the application's own canvas. The
+ * dark green-black tint supplies the deliberate Codex-like colour split while
+ * the alpha and blur keep it part of the same depth system. */
+.worker-shell:has(.sidebar.shell-parity) {
+  grid-template-columns: 266px minmax(0, 1fr);
+}
+
+.sidebar.shell-parity {
+  --shell-rail-glass: color-mix(in srgb, var(--side) 82%, transparent);
+  width: 266px;
+  border-right: 0;
+  background: var(--shell-rail-glass);
+  -webkit-backdrop-filter: blur(22px) saturate(1.05);
+  backdrop-filter: blur(22px) saturate(1.05);
+}
+
+:root[data-theme="dark"] .sidebar.shell-parity {
+  --shell-rail-glass: rgb(32 36 29 / 96%);
+  background: rgb(32 36 29 / 96%);
+}
+
+/* Codex shell rhythm: one 14px label scale, 32px navigation rows, and a
+ * compact 40px brand rail. Settings remains independently tokened. */
+.shell-parity .side-top {
+  position: relative;
+  z-index: 50;
+  flex-basis: 40px;
+  height: 40px;
+  overflow: visible;
+  padding: 0 8px;
+}
+
+.companion-switcher {
+  position: relative;
+  z-index: 41;
+}
+
+.companion-switcher-trigger {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.companion-switcher-trigger:hover,
+.companion-switcher-trigger[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.companion-switcher-trigger svg {
+  flex: 0 0 auto;
+  color: var(--text-3);
+}
+
+.companion-menu-scrim {
+  position: fixed;
+}
+
+.companion-menu {
+  top: 35px;
+  right: auto;
+  bottom: auto;
+  left: 0;
+  z-index: 60;
+  width: 242px;
+  max-height: min(420px, calc(100vh - 52px));
+  padding: 5px;
+  border-color: color-mix(in srgb, var(--text) 14%, transparent);
+  background: color-mix(in srgb, var(--side) 94%, var(--text) 6%);
+  -webkit-backdrop-filter: blur(22px) saturate(1.1);
+  backdrop-filter: blur(22px) saturate(1.1);
+}
+
+.companion-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 50px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.companion-menu-row:hover,
+.companion-menu-row:focus-visible {
+  outline: 0;
+  background: var(--hover);
+}
+
+.companion-menu-row:disabled { cursor: wait; opacity: .62; }
+
+.companion-menu-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.companion-menu-copy strong {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.companion-menu-copy small {
+  overflow: hidden;
+  color: var(--text-4);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.companion-menu-check {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-size: 15px;
+}
+
+.companion-menu-error {
+  margin: 3px 8px 5px;
+  color: var(--red);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.shell-parity .side-nav {
+  position: relative;
+  z-index: 1;
+  gap: 0;
+  padding: 6px 8px 0;
+}
+
+.shell-parity .nav-row {
+  height: 32px;
+  padding: 0 8px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.shell-parity .nav-row:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 62%, transparent);
+  outline-offset: -2px;
+}
+
+.shell-parity .nav-key {
+  font-size: 11px;
+}
+
+/* Pinned tasks are a real hierarchy, not merely a hidden sort key. Keep both
+ * groups in the same scrolling region so account/help remain anchored at the
+ * foot and the rail does not gain a second scrollbar. */
+.shell-task-list {
+  gap: 0;
+  padding-top: 26px;
+}
+
+.shell-task-group {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shell-task-group + .shell-task-group {
+  margin-top: 22px;
+}
+
+.shell-task-group-label {
+  margin: 0;
+  padding: 0 8px;
+  color: var(--text-4);
+  font-size: 13.5px;
+  line-height: 20px;
+}
+
+.shell-task-group .muted.small {
+  margin: 0;
+  padding: 0 8px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.shell-project-empty {
+  margin: 0;
+  padding: 0 8px;
+  color: var(--text-4);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.shell-task-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.shell-parity .session-row {
+  position: relative;
+  display: block;
+  gap: 0;
+  max-height: 31px;
+}
+
+.shell-parity .session-main {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  height: 31px;
+  max-height: 31px;
+  min-height: 0;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 17px;
+}
+
+/* Selected and ordinary tasks share one compact line. Selection is expressed
+ * by the quiet fill; it does not create a second, taller row anatomy. */
+.shell-parity .session-row.active,
+.shell-parity .session-row.active .session-main {
+  height: 31px;
+  max-height: 31px;
+}
+
+/* Row actions remain available on deliberate pointer or keyboard interaction,
+ * without becoming persistent navigation chrome. */
+.shell-parity .session-row:hover .session-main,
+.shell-parity .session-row:focus-within .session-main {
+  padding-right: 61px;
+}
+
+.shell-parity .session-title {
+  flex: 1;
+}
+
+.shell-parity .session-title > span:first-child {
+  flex: 1;
+}
+
+/* Recents are task titles, not an activity log. Relative timestamps and search
+ * snippets stay out of the navigation rail. */
+.shell-parity small.shell-recent-meta {
+  display: none;
+}
+
+.shell-parity time.shell-recent-meta {
+  display: none;
+}
+
+.shell-parity .session-working-indicator {
+  width: 12px;
+  height: 12px;
+  margin-left: auto;
+  border: 2px solid color-mix(in srgb, var(--text-3) 38%, transparent);
+  border-top-color: var(--text-2);
+  color: var(--text-3);
+  background: transparent;
+  opacity: 1;
+  animation: shell-task-working-spin 800ms linear infinite;
+}
+
+@keyframes shell-task-working-spin { to { transform: rotate(360deg); } }
+
+/* Pin/archive remain real controls without changing the canonical resting
+ * chrome. Pointer and keyboard focus reveal them in-place. */
+.shell-parity .session-actions {
+  position: absolute;
+  top: 4px;
+  right: 12px;
+  gap: 1px;
+  padding: 0;
+  border-radius: 7px;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.shell-parity .session-row.pinned .session-actions {
+  opacity: 0;
+}
+
+.shell-parity .session-row.active .session-actions {
+  top: 4px;
+  opacity: 0;
+}
+
+.shell-parity .session-row:hover .session-actions,
+.shell-parity .session-row:focus-within .session-actions {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-parity .session-working-indicator { animation: none; }
+}
+
+.shell-overlay-menu {
+  overflow: hidden;
+}
+
+.shell-parity-menu-row {
+  padding: 8px 10px;
+}
+
+.shell-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-menu-tail {
+  color: var(--text-4);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.shell-menu-tail.disclosure {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.shell-help-heading {
+  margin: 0;
+  padding: 8px 10px 6px;
+  color: var(--text-4);
+  font-size: 12px;
+}
+
+/* The account control follows the reference's quiet identity treatment: the
+ * name is the footer label, while role detail lives inside the opened menu
+ * instead of appearing as a native hover tooltip. */
+.shell-parity .sidebar-footer { gap: 8px; }
+.shell-parity .side-account {
+  min-height: 30px;
+  gap: 9px;
+  padding: 3px 8px;
+}
+.shell-parity .side-account:hover,
+.shell-parity .side-account[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--text) 11%, transparent);
+}
+.shell-parity .side-avatar {
+  flex-basis: 20px;
+  width: 20px;
+  height: 20px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--text-3) 58%, var(--green));
+  font-size: 8.5px;
+}
+.shell-parity .side-round-button {
+  width: 24px;
+  height: 24px;
+}
+.side-menu-identity-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+.side-menu-role { color: var(--text-4); font-size: 10.5px; }
+
+@media (hover: none) {
+  .shell-parity .session-row.pinned .session-actions,
+  .shell-parity .session-row.active .session-actions,
+  .shell-parity .session-actions {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .sidebar.shell-parity {
+    background: var(--side);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  :root[data-theme="dark"] .sidebar.shell-parity { background: #20231d; }
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .sidebar.shell-parity { background: var(--side); }
+  :root[data-theme="dark"] .sidebar.shell-parity { background: #20231d; }
+}
+
+@media (max-width: 760px) {
+  .sidebar.shell-parity {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+@media (max-width: 640px) {
+  .shell-parity .side-top {
+    height: 52px;
+    flex-basis: 52px;
+  }
+
+  .shell-parity .side-icon-button,
+  .shell-parity .companion-switcher-trigger,
+  .shell-parity .nav-row,
+  .shell-parity .side-menu-row,
+  .shell-parity .side-account,
+  .shell-parity .side-round-button,
+  .shell-parity .shell-task-list > .secondary-button {
+    min-height: 44px;
+  }
+
+  .shell-parity .side-icon-button,
+  .shell-parity .side-round-button {
+    width: 44px;
+    min-width: 44px;
+  }
+
+  .shell-parity .session-row,
+  .shell-parity .session-row .session-main {
+    height: 44px;
+    max-height: 44px;
+  }
+
+  /* Touch devices reveal both row actions, so reserve their two full targets
+     instead of letting those controls paint over the task title. */
+  .shell-parity .session-row .session-main { padding-right: 101px; }
+  .shell-parity .session-row .session-actions,
+  .shell-parity .session-row.active .session-actions {
+    top: 0;
+    right: 8px;
+  }
+
+  .shell-parity .session-action {
+    width: 44px;
+    height: 44px;
+  }
+}

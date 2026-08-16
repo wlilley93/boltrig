@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Boltrig visual parity fixture</title>
+    <style>
+      /* Evidence frames must not catch a transition, blinking caret or CSS
+         animation between states. Product layout and paint still come from
+         the real component styles; this only removes time as an input. */
+      *, *::before, *::after {
+        animation: none !important;
+        caret-color: transparent !important;
+        scroll-behavior: auto !important;
+        transition: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/tests/visual/parity.tsx"></script>
+  </body>
+</html>

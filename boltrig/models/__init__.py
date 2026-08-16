@@ -53,6 +53,7 @@ from .context import (
 from .conversation import (
     Conversation as Conversation,
     ConversationMessage as ConversationMessage,
+    ConversationOrigin as ConversationOrigin,
     ConversationStatus as ConversationStatus,
     ConversationSummary as ConversationSummary,
     MessageRole as MessageRole,
@@ -172,11 +173,13 @@ from .errors import (
     IdempotencyConflict as IdempotencyConflict,
     BoltrigError as BoltrigError,
     EvalCaseArchived as EvalCaseArchived,
+    ModelCatalogueUnavailable as ModelCatalogueUnavailable,
     ModelEndpointUnavailable as ModelEndpointUnavailable,
     NetworkPolicyViolation as NetworkPolicyViolation,
     PendingHuman as PendingHuman,
     RateLimited as RateLimited,
     SchemaValidationError as SchemaValidationError,
+    SensingCapabilityUnavailable as SensingCapabilityUnavailable,
     SensitiveDataMisrouted as SensitiveDataMisrouted,
     SpawnRulePolicyInvalid as SpawnRulePolicyInvalid,
     TenantIsolation as TenantIsolation,
@@ -249,6 +252,7 @@ from .libraries import (
     Budget as Budget,
     BudgetWindowRef as BudgetWindowRef,
     COST_TIERS as COST_TIERS,
+    MODEL_MODALITIES as MODEL_MODALITIES,
     ModelEndpoint as ModelEndpoint,
     Skill as Skill,
     validate_cost_tier as validate_cost_tier,
@@ -277,6 +281,7 @@ from .runtime_identity import (
 )
 from .tenancy import (
     AI_CONFIG_LEVELS as AI_CONFIG_LEVELS,
+    AI_CONFIG_MODALITIES as AI_CONFIG_MODALITIES,
     WORKSPACE_ROLES as WORKSPACE_ROLES,
     AiConfig as AiConfig,
     OrgMember as OrgMember,

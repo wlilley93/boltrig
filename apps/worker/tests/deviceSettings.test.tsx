@@ -23,7 +23,6 @@ const native = vi.hoisted(() => ({
   listenDesktopDeviceStatus: vi.fn(),
   listenDeviceLeaseTerminals: vi.fn(),
   materializeArtifact: vi.fn(),
-  serializeDesktopEnrollment: vi.fn((value: unknown) => JSON.stringify(value)),
   stageDesktopWrite: vi.fn(),
   takeDesktopReadResult: vi.fn(),
   unbindDesktopRoot: vi.fn(),
@@ -71,6 +70,7 @@ const localStatus = {
 };
 
 beforeEach(() => {
+  vi.stubEnv("VITE_DESKTOP_DOWNLOAD_URL", "https://downloads.boltrig.test/desktop");
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -102,11 +102,19 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
   native.leaseHandler = null;
 });
 
 describe("Worker desktop device lifecycle", () => {
-  it("consumes the desktop enrollment with the exact verifier bootstrap", async () => {
+  it("connects the authenticated desktop without exposing its verifier bootstrap", async () => {
+    api.devices.mockResolvedValue({ devices: [] });
+    native.desktopDeviceStatus.mockResolvedValue({
+      state: "unenrolled",
+      device_id: null,
+      root_ids: [],
+      reason: null,
+    });
     api.startDeviceEnrollment.mockResolvedValue(enrollment);
     native.completeDesktopEnrollment.mockResolvedValue({
       device_id: "device_1",
@@ -116,12 +124,12 @@ describe("Worker desktop device lifecycle", () => {
       lease_verifier_key_id: verifier.key_id,
     });
     render(<DeviceSettings />);
-    fireEvent.change(screen.getByLabelText("Device label"), {
+    fireEvent.change(screen.getByLabelText("Computer name"), {
       target: { value: "Office Mac" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Enroll this desktop" }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect this computer" }));
     await waitFor(() => expect(native.completeDesktopEnrollment).toHaveBeenCalledWith(enrollment));
-    expect(await screen.findByText(/session and verifier are held in the OS keychain/i)).toBeTruthy();
+    expect(await screen.findByText(/private key stays in the OS keychain/i)).toBeTruthy();
     expect(screen.queryByText("one-time-code")).toBeNull();
   });
 
@@ -189,26 +197,30 @@ describe("Worker desktop device lifecycle", () => {
     });
     render(<DeviceSettings />);
 
-    expect(await screen.findByText(/Browser sign-in remains independent/i))
+    expect(await screen.findByText(/Account sign-in remains active/i))
       .toBeTruthy();
     fireEvent.click(screen.getByRole("button", {
-      name: "Remove orphaned local enrollment",
+      name: "Remove stale local credentials",
     }));
     expect(native.clearDesktopSession).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", {
-      name: "Confirm local enrollment removal",
+      name: "Confirm local credential removal",
     }));
 
     await waitFor(() => expect(native.clearDesktopSession).toHaveBeenCalled());
     expect(api.revokeDevice).not.toHaveBeenCalled();
-    expect(await screen.findByText(/No server device was revoked/i)).toBeTruthy();
+    expect(await screen.findByText(/No trusted computer was revoked/i)).toBeTruthy();
   });
 
-  it("keeps browser and remote-device local controls honestly disabled", async () => {
+  it("offers the signed desktop download without creating a browser handoff", async () => {
     native.hasDesktopRuntime.mockReturnValue(false);
     render(<DeviceSettings />);
     await waitFor(() => expect(api.devices).toHaveBeenCalled());
-    expect(screen.getByRole("button", { name: "Create desktop handoff code" })).toBeTruthy();
+    const download = screen.getByRole("link", { name: "Download Boltrig Desktop" });
+    expect(download.getAttribute("href")).toBe("https://downloads.boltrig.test/desktop");
+    expect(screen.queryByText("This computer’s connection")).toBeNull();
+    expect(screen.queryByText(/one-time enrollment code/i)).toBeNull();
+    expect(api.startDeviceEnrollment).not.toHaveBeenCalled();
     expect((screen.getByLabelText("Opaque root label") as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Request exact-action lease" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/browser cannot execute them/i)).toBeTruthy();
@@ -216,30 +228,14 @@ describe("Worker desktop device lifecycle", () => {
     expect(api.invoke).not.toHaveBeenCalled();
   });
 
-  it("reports desktop enrollment bundle copy success and failure", async () => {
+  it("refuses to publish an unsafe desktop download URL", async () => {
+    vi.stubEnv("VITE_DESKTOP_DOWNLOAD_URL", "http://downloads.boltrig.test/desktop");
     native.hasDesktopRuntime.mockReturnValue(false);
-    api.startDeviceEnrollment.mockResolvedValue(enrollment);
     render(<DeviceSettings />);
-    fireEvent.change(screen.getByLabelText("Device label"), {
-      target: { value: "Office Mac" },
-    });
-    fireEvent.click(screen.getByRole("button", {
-      name: "Create desktop handoff code",
-    }));
-    expect(await screen.findByText("one-time-code")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Copy desktop bundle" }));
-    expect(await screen.findByText(/Desktop enrollment bundle copied/)).toBeTruthy();
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      expect.stringContaining('"authorization_code":"one-time-code"'),
-    );
-
-    vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(
-      new Error("clipboard denied"),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Copy desktop bundle" }));
-    expect(await screen.findByText(/enrollment bundle could not be copied/i))
-      .toBeTruthy();
+    await waitFor(() => expect(api.devices).toHaveBeenCalled());
+    expect(screen.queryByText(/signed desktop download has not been published/i)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Download Boltrig Desktop" })).toBeNull();
+    expect(api.startDeviceEnrollment).not.toHaveBeenCalled();
   });
 
   it("keeps a server-enrolled remote device view-only in the desktop app", async () => {
@@ -250,7 +246,7 @@ describe("Worker desktop device lifecycle", () => {
       reason: null,
     });
     render(<DeviceSettings />);
-    expect(await screen.findByText(/not the device enrolled in the local native agent/i)).toBeTruthy();
+    expect(await screen.findByText(/not the computer connected to the local native agent/i)).toBeTruthy();
     expect((screen.getByLabelText("Opaque root label") as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Request exact-action lease" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("remote · view only")).toBeTruthy();
@@ -352,7 +348,7 @@ describe("Worker local-device dispatcher actions", () => {
       target: { value: "reports/final.txt" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Request exact-action lease" }));
-    expect(await screen.findByText(/needs an independent approval in Inbox/i)).toBeTruthy();
+    expect(await screen.findByText(/needs an independent approval in the originating chat/i)).toBeTruthy();
     const first = api.invoke.mock.calls[0][0];
     fireEvent.click(screen.getByRole("button", { name: "Retry approved action" }));
     await waitFor(() => expect(api.invoke).toHaveBeenCalledTimes(2));
@@ -398,8 +394,8 @@ describe("Worker local-device dispatcher actions", () => {
       },
     });
     render(<DeviceSettings />);
-    await waitFor(() => expect(api.devices).toHaveBeenCalled());
-    fireEvent.change(screen.getByLabelText("Local action"), {
+    const localAction = await screen.findByLabelText("Local action");
+    fireEvent.change(localAction, {
       target: { value: "device.file.write" },
     });
     fireEvent.change(screen.getByLabelText("Root-relative destination"), {

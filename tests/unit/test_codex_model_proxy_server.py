@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+import pytest
 
 from boltrig.fleet.infrastructure.model_proxy_tool_ceiling import (
     MAX_MODEL_CALL_BODY_BYTES,
@@ -35,6 +36,7 @@ def _upstream(captured: dict[str, Any], *, fail: bool = False) -> httpx.AsyncCli
             raise httpx.ConnectError("upstream down")
         captured["url"] = str(request.url)
         captured["auth"] = request.headers.get("authorization")
+        captured["virtual_key"] = request.headers.get("x-bf-vk")
         captured["body"] = request.content
         return httpx.Response(
             200, headers={"content-type": "application/json"}, content=_stream_body()
@@ -51,6 +53,37 @@ def _server(verify: Any, client: httpx.AsyncClient) -> PerCellModelProxyServer:
         client=client,
         allowed_model="gpt-5.2-codex",
     )
+
+
+@pytest.mark.invariant("SEC-AIKEY-01")
+async def test_scoped_virtual_key_is_injected_without_forwarding_the_cell_bearer() -> None:
+    captured: dict[str, Any] = {}
+
+    async def verify(token: str) -> bool:
+        return token == "cell-bearer"
+
+    server = PerCellModelProxyServer(
+        verify_bearer=verify,
+        upstream_base_url="http://gateway/v1",
+        upstream_key="KERNEL-ONLY-KEY",
+        upstream_virtual_key="vk-scoped-only",
+        client=_upstream(captured),
+        allowed_model="gpt-5.2-codex",
+    )
+    port = await server.start()
+    try:
+        async with httpx.AsyncClient() as caller:
+            response = await caller.post(
+                f"http://127.0.0.1:{port}/v1/responses",
+                headers={"authorization": "Bearer cell-bearer"},
+                content=b'{"model":"gpt-5.2-codex","input":"hi"}',
+            )
+        assert response.status_code == 200
+        assert captured["auth"] == "Bearer KERNEL-ONLY-KEY"
+        assert captured["virtual_key"] == "vk-scoped-only"
+        assert "cell-bearer" not in repr(captured)
+    finally:
+        await server.aclose()
 
 
 async def test_the_tool_ceiling_is_enforced_before_the_call_leaves_the_box() -> None:

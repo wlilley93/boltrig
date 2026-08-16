@@ -1,0 +1,26 @@
+/* User-selected reduced motion is independent of the OS preference. The VDS
+ * density and contrast axes already live in the imported token layer; this
+ * component-owned rule completes the runtime contract without adding a
+ * second palette or editing the shared console stylesheet. */
+:root.reduce-motion *,
+:root.reduce-motion *::before,
+:root.reduce-motion *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* Settings is form-weighted, so compact keeps an error-safe 10px vertical
+ * rhythm while still making the selected density visibly real. Data-heavy
+ * surfaces also consume VDS --gap/--lh-body directly from the token imports. */
+:root[data-density="compact"] .settings-group {
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+:root[data-density="compact"] .settings-row,
+:root[data-density="compact"] .settings-tone-row,
+:root[data-density="compact"] .settings-meter {
+  padding-block: 10px;
+}

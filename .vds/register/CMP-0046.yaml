@@ -1,0 +1,37 @@
+id: CMP-0046
+name: LocalDeviceActions
+status: proposed
+contractVersion: 1
+figma: null
+code:
+  importPath: ./components/components/LocalDeviceActions
+  sourceFile: apps/worker/src/components/LocalDeviceActions.tsx
+  exportName: LocalDeviceActions
+props:
+- name: device
+  type: EnrolledDevice
+  required: true
+  figmaProperty: null
+- name: nativeStatus
+  type: DesktopDeviceStatus | null
+  required: true
+  figmaProperty: null
+states:
+  required: []
+  drawn: []
+  built: []
+a11y:
+  role: null
+  accessibleNameSource: children
+  keyboard: []
+  contrastFloors: []
+demand:
+  routes: 0
+  measuredAt: 2026-08-10T14:23:03Z
+  measuredBy: vds register measure-demand
+supersedes: []
+supersededBy: null
+amendments: []
+basis:
+- ACT-VDS-001:s5
+notes: 'Imported by `vds register import` from apps/worker/src/components/LocalDeviceActions.tsx:89. A CANDIDATE, not a contract: it carries what the code says and nothing the code cannot say. Its required states, contrast floors, role and keyboard contract are decisions nobody has made yet.'

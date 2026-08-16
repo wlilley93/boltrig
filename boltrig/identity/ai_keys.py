@@ -44,6 +44,8 @@ class AiKeyResolution:
     """
 
     level: str
+    scope_id: str | None = None
+    modality: str = "text"
     credential_ref: str | None = None
     provider: str | None = None
     model: str | None = None
@@ -58,6 +60,8 @@ class AiKeyResolution:
 def _from_config(level: str, config) -> AiKeyResolution:
     return AiKeyResolution(
         level=level,
+        scope_id=config.scope_id,
+        modality=getattr(config, "modality", "text"),
         credential_ref=config.credential_ref,
         provider=config.provider,
         model=config.model,
@@ -71,39 +75,59 @@ async def resolve_ai_key(
     *,
     workspace_id: str | None = None,
     user_id: str | None = None,
+    modality: str = "text",
 ) -> AiKeyResolution:
-    """Resolve the AI key for a call, precedence user -> workspace -> org -> default.
+    """Resolve a text or vision AI key, precedence user -> workspace -> org -> default.
 
     ``allow_own_ai_keys`` gate (read off the org): when it is False, a workspace or
     user row is skipped entirely (a member cannot bring their own key), so only the
     ORG row is considered before falling back to the manifest/env default. The org
     key always applies (an org may always set its own key). When the flag is True the
-    full precedence holds: the caller's own user key wins, then their active
-    workspace's key, then the org key, then the env/manifest default.
+    full precedence holds: the caller's own key wins, then their active workspace's
+    key, then the org key, then the env/manifest default. Vision first looks for a
+    same-purpose key at each scope and falls back to that scope's text key.
 
     Every read is tenant-scoped (SEC-08): only rows inside ``tenant_id`` are ever
     consulted, and ``workspace_id`` is the caller's ALREADY-authorized active
     workspace (the session resolver re-checks membership every request), so this can
     never surface another org's or another workspace's key.
     """
+    requested_modality = str(modality or "text").strip().lower()
+    if requested_modality not in {"text", "vision"}:
+        requested_modality = "text"
     org = await store.get_org(tenant_id)
     allow_own = bool(org.allow_own_ai_keys) if org is not None else False
 
+    async def configured(level: str, scope_id: str) -> AiKeyResolution | None:
+        cfg = await store.get_ai_config(
+            tenant_id, level, scope_id, requested_modality
+        )
+        if cfg is not None:
+            return _from_config(level, cfg)
+        # A vision route is optional. When it is absent, the main text/API key
+        # remains the fallback, allowing a multimodal primary endpoint to serve
+        # vision without requiring a second credential.
+        if requested_modality == "vision":
+            cfg = await store.get_ai_config(tenant_id, level, scope_id, "text")
+            if cfg is not None:
+                return _from_config(level, cfg)
+        return None
+
     if allow_own:
         if user_id:
-            cfg = await store.get_ai_config(tenant_id, "user", user_id)
-            if cfg is not None:
-                return _from_config("user", cfg)
+            resolution = await configured("user", user_id)
+            if resolution is not None:
+                return resolution
         if workspace_id:
-            cfg = await store.get_ai_config(tenant_id, "workspace", workspace_id)
-            if cfg is not None:
-                return _from_config("workspace", cfg)
+            resolution = await configured("workspace", workspace_id)
+            if resolution is not None:
+                return resolution
 
     # The org key always applies (independent of allow_own_ai_keys). The org row's
     # scope_id IS the tenant_id (the org id == tenant boundary).
-    cfg = await store.get_ai_config(tenant_id, "org", tenant_id)
-    if cfg is not None:
-        return _from_config("org", cfg)
+    resolution = await configured("org", tenant_id)
+    if resolution is not None:
+        return resolution
 
     # No config at any applicable level: fall back to the manifest/env key.
     return AiKeyResolution(level="default")

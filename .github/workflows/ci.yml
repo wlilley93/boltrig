@@ -7,10 +7,6 @@ name: ci
 
 permissions:
   contents: read
-  # Read-only. ui/ depends on @wlilley93/boltrig-web-sdk, published to GitHub
-  # Packages, so `pnpm install` needs an authenticated registry or it fails with
-  # ERR_PNPM_FETCH_401. Same owner, no new credential class.
-  packages: read
 
 on:
   push:
@@ -56,6 +52,8 @@ jobs:
         run: python -m pip install --require-hashes -r requirements-dev-lock.txt
       - name: Python quality gate (invariants, lint, strict types, Postgres, coverage)
         run: make python-quality PY=python
+      - name: Public product boundary (BYO providers, stock companions)
+        run: make public-product-validate PY=python
       # `make quality` calls itself "the complete local release gate", and these two
       # of its components ran in NO workflow until 2026-07-26: the Alembic-head vs
       # schema.sql parity check and the secure-posture doctor fixture were local-only,
@@ -66,34 +64,44 @@ jobs:
       - name: Secure production-doctor fixture
         run: make doctor-fixture PY=python
 
-  ui-build:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "22"
-      # pnpm cannot fetch the scoped @wlilley93 package anonymously; the committed
-      # ui/.npmrc points the scope at GitHub Packages but carries no token. Write
-      # a user-level token file for the install, then remove it.
-      - name: Authenticate pnpm to GitHub Packages
-        env:
-          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          umask 077
-          printf '//npm.pkg.github.com/:_authToken=%s\n' "$GH_PACKAGES_TOKEN" >> "$HOME/.npmrc"
-      - name: UI quality gate (lock, audit, types, coverage, bundle budget)
-        run: make ui-quality
-      - name: Remove the registry token
-        if: always()
-        run: rm -f "$HOME/.npmrc"
-
   worker-build:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      # The event supplies the immutable pre-change commit. The structural gate
+      # loads its prior debt catalogue from this Git object, never from a
+      # contributor-controlled second working-tree file.
+      WORKER_STRUCTURE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: Worker quality gate (lock, structure, audit, types, contracts, web bundle)
+        run: make worker-quality
+
+  worker-desktop-package:
+    name: Worker desktop package (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            # Tauri recommends the oldest supported WebKitGTK 4.1 baseline so
+            # AppImage/DEB glibc requirements do not accidentally jump forward.
+            runner: ubuntu-22.04
+          - platform: macos-arm64
+            runner: macos-15
+          - platform: windows-x86_64
+            runner: windows-2025
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -101,8 +109,71 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-      - name: Worker quality gate (lock, audit, types, contracts, web bundle)
-        run: make worker-quality
+      - name: Install Linux desktop build dependencies
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+      - name: Install the pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal
+          rustup default 1.97.1
+          test "$(rustc --version | awk '{print $2}')" = 1.97.1
+      - name: Install the frozen Worker dependency graph
+        working-directory: apps/worker
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.5.0 --activate
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm rebuild esbuild
+      - name: Test the native desktop boundary
+        run: cargo test --locked --manifest-path apps/worker/src-tauri/Cargo.toml
+      - name: Build an unsigned installer without release secrets
+        working-directory: apps/worker
+        # Tauri's beforeBuildCommand is `pnpm run build:desktop`, which starts with
+        # require-desktop-origin.mjs: a desktop build must be PINNED to a known API
+        # origin rather than inheriting a default, or an installer ships pointing at
+        # whatever the builder happened to have set. release.yml supplies the real
+        # origin from repository vars; this job deliberately builds WITHOUT release
+        # secrets, so it pins loopback instead -- which the guard allows explicitly
+        # (http is permitted on localhost/127.0.0.1/[::1], https everywhere else).
+        #
+        # Loopback is the honest value here, not a placeholder to tidy away later: an
+        # artifact built by this job must not be able to talk to production, and the
+        # next step asserts no updater signature was minted for exactly that reason.
+        env:
+          BOLTRIG_DESKTOP_API_ORIGIN: http://127.0.0.1:8000
+          VITE_API_BASE: http://127.0.0.1:8000
+        run: pnpm run tauri build --ci --config src-tauri/tauri.ci.conf.json
+      - name: Require a real installer and prove no updater signature was minted
+        run: |
+          bundle=apps/worker/src-tauri/target/release/bundle
+          test -d "$bundle"
+          case "$RUNNER_OS" in
+            Linux)
+              test -n "$(find "$bundle" -type f \( -name '*.AppImage' -o -name '*.deb' \) -print -quit)"
+              ;;
+            macOS)
+              test -n "$(find "$bundle" -type f -name '*.dmg' -print -quit)"
+              ;;
+            Windows)
+              test -n "$(find "$bundle" -type f \( -name '*.msi' -o -name '*-setup.exe' \) -print -quit)"
+              ;;
+          esac
+          if find "$bundle" -type f -name '*.sig' -print -quit | grep -q .; then
+            echo "pull-request packaging unexpectedly minted an updater signature" >&2
+            exit 1
+          fi
 
   site-build-test-lint:
     runs-on: ubuntu-24.04
@@ -117,75 +188,6 @@ jobs:
       - name: Site quality gate (lock, audit, lint, coverage, build)
         run: make site-quality
 
-  # UI browser-test harness ([2026] VJS-COUNTY 2, order
-  # 2026-VJS-CC-BOLTRIG-UI-TEST-HARNESS-001): the chromium-only smoke drives the
-  # BUILT UI (vite preview over dist) against the real kernel booted with the
-  # in-memory store and no turn executor - hermetic, no model keys, no
-  # credentials, no egress. Make this a REQUIRED status check in branch
-  # protection alongside test-and-gate, ui-build, and site-build-test-lint.
-  ui-e2e:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-      - name: Install kernel (in-memory store, offline)
-        run: python -m pip install --require-hashes -r requirements-lock.txt
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "22"
-      # pnpm cannot fetch the scoped @wlilley93 package anonymously; the committed
-      # ui/.npmrc points the scope at GitHub Packages but carries no token. Write
-      # a user-level token file for the install, then remove it.
-      - name: Authenticate pnpm to GitHub Packages
-        env:
-          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          umask 077
-          printf '//npm.pkg.github.com/:_authToken=%s\n' "$GH_PACKAGES_TOKEN" >> "$HOME/.npmrc"
-      - name: UI e2e smoke (built artifact, explicit preview bind)
-        run: make ui-e2e PY=python PLAYWRIGHT_INSTALL_ARGS="--with-deps chromium"
-      - name: Remove the registry token
-        if: always()
-        run: rm -f "$HOME/.npmrc"
-
-  worker-e2e:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-      - name: Install kernel (in-memory store, offline)
-        run: python -m pip install --require-hashes -r requirements-lock.txt
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "22"
-      # worker-e2e depends on ui-install as well as worker-install, because the
-      # Playwright binaries and the harness live under ui/. apps/worker resolves
-      # the SDK with `file:../../sdks/web` and needs no registry at all, but ui/
-      # takes the published @wlilley93 package, so this job needs the same token
-      # step ui-e2e has. Without it the run dies at ERR_PNPM_FETCH_401 before a
-      # single test executes - which is exactly how it failed on first landing.
-      - name: Authenticate pnpm to GitHub Packages
-        env:
-          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          umask 077
-          printf '//npm.pkg.github.com/:_authToken=%s\n' "$GH_PACKAGES_TOKEN" >> "$HOME/.npmrc"
-      - name: Worker e2e and accessibility (built artifact, explicit preview bind)
-        run: make worker-e2e PY=python PLAYWRIGHT_INSTALL_ARGS="--with-deps chromium"
-      - name: Remove the registry token
-        if: always()
-        run: rm -f "$HOME/.npmrc"
-
   compose-validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -195,8 +197,17 @@ jobs:
           persist-credentials: false
       # The target shells out to the release validators via $(PY), which defaults
       # to .venv/bin/python and does not exist on a bare runner - that was an
-      # exit-127 "command not found", not a Compose error. Both validators are
-      # stdlib-only, so an interpreter is enough; no dependency install needed.
+      # exit-127 "command not found", not a Compose error.
+      #
+      # An interpreter is still enough, and no dependency install is needed, but
+      # not because the validators are stdlib-only: validate_release_compose.py
+      # imports boltrig.release_mode so the admitted release modes have ONE
+      # definition. That module is itself pure stdlib and ships in the checkout,
+      # so it costs no install - it only has to be importable, and a script run
+      # by path gets scripts/ on sys.path rather than the repo root. The scripts
+      # put the root on the path themselves. Do not restate that claim as
+      # "stdlib-only" again: it was false from the moment the shared import
+      # landed, and the venv hid it locally for a week.
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -211,19 +222,15 @@ jobs:
     runs-on: ubuntu-24.04
     needs:
       - test-and-gate
-      - ui-build
       - worker-build
+      - worker-desktop-package
       - site-build-test-lint
-      - ui-e2e
-      - worker-e2e
       - compose-validate
     steps:
       - name: Require every quality component
         run: |
           test "${{ needs.test-and-gate.result }}" = success
-          test "${{ needs.ui-build.result }}" = success
           test "${{ needs.worker-build.result }}" = success
+          test "${{ needs.worker-desktop-package.result }}" = success
           test "${{ needs.site-build-test-lint.result }}" = success
-          test "${{ needs.ui-e2e.result }}" = success
-          test "${{ needs.worker-e2e.result }}" = success
           test "${{ needs.compose-validate.result }}" = success

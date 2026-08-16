@@ -1,0 +1,23 @@
+id: PROOF-20260811-045516
+kind: screen_parity
+status: passed
+warrant_id: null
+command: vds proof screen_parity
+script: crates/vds-proof/src/screen_parity.rs
+exit_code: 0
+rows_considered: 6
+rows_enforced: 6
+rows_skipped_reasons: {}
+violations: []
+notes:
+- '[reach] this run establishes that each registered screen''s required arrangement is the one its AUTHORITATIVE FRAME draws, in the decided-target file, as of the capture the frame ledger was derived from. It does NOT establish what the code renders. Counting a route''s columns from its source means parsing the subject''s own layout components, and there is no general answer to that: in the subject this was derived from it took an AST pass over one component''s three pane props PLUS the rails contributed by every enclosing layout, and both halves were defects before they were features. A subject that can read its own arrangement supplies an `ArrangementSource` and the same rules run over it. Until it does, a pass here is a pass about the FRAME, and saying so is the point: three separate numbers in the subject were reported as parity and none of them was.'
+- '[exclusions] a screen is EXCLUDED only where the DESIGN states nothing to measure against, and an exclusion is never a pass. Two things qualify: a screen the register has not put in an enforceable status, and a frame that DISCLAIMS ITSELF, meaning its authoritative layer says in its own name that it is not source-current or was never built (25 of 188 frames in the subject did this). Everything else this run could not measure is UNSCORED and carries a fatal finding, including a reading taken at the capture boundary: bytes that cannot distinguish "draws nothing here" from "we did not look" are not a reading, the prior art recorded the first as a fact about one of the two busiest routes in the product, and the truth was the second.'
+- '[source] read from the frame ledger, captured from file iVQBKFc3NpRH3zdOOxfPqr at depth 3'
+- '[coverage] 6 of 6 registered screen(s) were SCORED (100%). 0 UNSCORED: a requirement exists and this run could not measure it, which is a finding and never a pass. 0 EXCLUDED: the design states nothing to measure against, which is a different fact from the code being wrong.'
+inputs_digest: sha256:4dce72d0ff3574b30f58e023946f6ca5765731d138ff78872d64b229dd6b88fc
+digest: sha256:c1df870b35ed04ade811be2cfe9ff249900b256bf3fac1252dabf61325037d9d
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-11T04:55:09Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

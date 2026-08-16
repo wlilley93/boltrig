@@ -101,8 +101,15 @@ SOURCE_SUFFIXES = {".py", ".js", ".mjs", ".cjs", ".ts", ".conf"}
 # .claude/worktrees, an agent worktree that puts a SECOND copy of the whole repo
 # inside the repo and would otherwise be cited as the file serving the route.
 SKIP_DIRS = {
-    "__pycache__", "node_modules", "dist", "build", "coverage",
-    "site-packages", "tests", "test", "e2e",
+    "__pycache__",
+    "node_modules",
+    "dist",
+    "build",
+    "coverage",
+    "site-packages",
+    "tests",
+    "test",
+    "e2e",
 }
 
 _ROUTE_PATTERNS = (
@@ -156,8 +163,8 @@ def parse_services(path: Path) -> dict[str, dict]:
     `volumes:` cannot be mistaken for services."""
     services: dict[str, dict] = {}
     service: str | None = None
-    key: str | None = None      # the current indent-4 key
-    sub: str | None = None      # `test` while reading its block list
+    key: str | None = None  # the current indent-4 key
+    sub: str | None = None  # `test` while reading its block list
     in_services = False
 
     for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -177,7 +184,14 @@ def parse_services(path: Path) -> dict[str, dict]:
             service = stripped[:-1].strip()
             services.setdefault(
                 service,
-                {"build": False, "context": None, "image": None, "test": None, "test_line": 0},
+                {
+                    "build": False,
+                    "context": None,
+                    "image": None,
+                    "command": None,
+                    "test": None,
+                    "test_line": 0,
+                },
             )
             key = sub = None
             continue
@@ -194,6 +208,10 @@ def parse_services(path: Path) -> dict[str, dict]:
                 services[service]["build"] = True
                 if value and value not in {"null", "~"}:
                     services[service]["context"] = value
+            elif key == "command" and value:
+                services[service]["command"] = (
+                    " ".join(_flow_list(value)) if value.startswith("[") else value
+                )
             continue
         if indent == 6 and key == "build" and stripped.startswith("context:"):
             services[service]["context"] = _strip_tag(stripped.split(":", 1)[1])
@@ -238,11 +256,15 @@ def routes_in(directory: Path) -> dict[Path, set[str]]:
     if not directory.is_dir():
         return table
     for parent, dirnames, filenames in os.walk(directory):
-        dirnames[:] = sorted(
-            d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")
-        )
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and not d.startswith("."))
         for filename in sorted(filenames):
             path = Path(parent) / filename
+            # This gate's own explanatory examples include literal
+            # ``@app.get("/readyz")`` / ``/health`` snippets. The gate is not
+            # copied into or imported by any service application and must not
+            # become fictional route evidence for every root build context.
+            if path.resolve() == Path(__file__).resolve():
+                continue
             if path.suffix not in SOURCE_SUFFIXES or not path.is_file():
                 continue
             try:
@@ -308,6 +330,9 @@ _CLI_INVOCATION = re.compile(
     r"(?:python\d?(?:\.\d+)?\s+-m\s+boltrig(?:[.\w]*)|(?<![\w./-])boltrig)"
     r"((?:\s+-{1,2}[\w-]+(?:=\S+)?)*)\s+([a-z][\w-]*)"
 )
+_PRIVATE_MODULE_HEALTH = re.compile(
+    r"\bpython(?:3)?\s+-m\s+(boltrig(?:\.[A-Za-z_]\w*)+)\s+--health\b"
+)
 
 
 def cli_subcommands() -> dict[str, str]:
@@ -349,8 +374,7 @@ def cli_subcommands() -> dict[str, str]:
                         out.extend(
                             elt.value
                             for elt in comparator.elts
-                            if isinstance(elt, ast.Constant)
-                            and isinstance(elt.value, str)
+                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
                         )
         return out
 
@@ -466,9 +490,7 @@ def readiness_evidence(route_table: dict[Path, set[str]]) -> tuple[set[str], lis
     return evidence, derived_from
 
 
-def consults_readiness_command(
-    test: str, evidence: set[str]
-) -> tuple[bool, str]:
+def consults_readiness_command(test: str, evidence: set[str]) -> tuple[bool, str]:
     """Does this non-HTTP healthcheck run a command wired to readiness evidence?"""
     match = _CLI_INVOCATION.search(test)
     if not match:
@@ -499,6 +521,41 @@ def consults_readiness_command(
     return True, f"`{sub}` reads {', '.join(shared)}"
 
 
+def consults_private_socket_readiness(test: str, service_command: str) -> tuple[bool, str]:
+    """Recognise the exact in-process Unix-socket server health contract.
+
+    This is intentionally narrower than accepting arbitrary ``--health``
+    commands.  The probe module must also be the service entry point, create a
+    UDS-only server, expose its own health route, and prove live Chromium.
+    Removing any leg turns the health-claim gate red.
+    """
+    match = _PRIVATE_MODULE_HEALTH.search(test)
+    if not match:
+        return False, ""
+    module = match.group(1)
+    if service_command.strip() != f"python -m {module}":
+        return False, "the --health module is not the service's own entry point"
+    source = ROOT / (module.replace(".", "/") + ".py")
+    try:
+        text = source.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False, f"the private health module {_rel(source)} cannot be read"
+    required = (
+        '@app.get("/health")',
+        'args == ["--health"]',
+        "executor_health",
+        "_probe_browser_cdp",
+        "uds=str(path)",
+    )
+    missing = [token for token in required if token not in text]
+    if missing:
+        return False, (
+            f"the private health module {_rel(source)} is missing its UDS/live-effect "
+            f"contract ({', '.join(missing)})"
+        )
+    return True, f"`{module} --health` probes its UDS route and live effect"
+
+
 # --------------------------------------------------------------------------- #
 # Exemptions
 # --------------------------------------------------------------------------- #
@@ -523,9 +580,7 @@ def load_exemptions() -> tuple[dict[str, dict], list[str]]:
     today = date.today()
     for name, entry in sorted(entries.items()):
         if not isinstance(entry, dict) or not str(entry.get("reason", "")).strip():
-            problems.append(
-                f"{name}: exemption gives no reason (a blank waiver is a blank claim)"
-            )
+            problems.append(f"{name}: exemption gives no reason (a blank waiver is a blank claim)")
             continue
         if not str(entry.get("owner", "")).strip():
             problems.append(f"{name}: exemption names no owner")
@@ -559,11 +614,12 @@ def main() -> int:
     for manifest in manifests:
         for name, spec in parse_services(manifest).items():
             entry = merged.setdefault(
-                name, {"build": False, "context": None, "image": None}
+                name, {"build": False, "context": None, "image": None, "command": None}
             )
             entry["build"] = entry["build"] or spec["build"]
             entry["context"] = entry["context"] or spec["context"]
             entry["image"] = entry["image"] or spec["image"]
+            entry["command"] = entry["command"] or spec["command"]
             if spec["test"] is not None:
                 occurrences.append((name, manifest, spec))
 
@@ -594,6 +650,12 @@ def main() -> int:
         if not paths:
             # No URL to probe is not the same as no readiness surface: a command
             # can consult the same evidence the readiness route consults.
+            private_ready, private_why = consults_private_socket_readiness(
+                test, str(info.get("command") or "")
+            )
+            if private_ready:
+                rows.append((name, where, "readiness (uds)", "ok"))
+                continue
             if ROOT not in route_cache:
                 route_cache[ROOT] = routes_in(ROOT)
             if evidence is None:
@@ -605,7 +667,8 @@ def main() -> int:
 
             vacuous = not _SERVING_HINTS.search(test)
             detail = (
-                why
+                private_why
+                or why
                 or (
                     "the test names no host, port or endpoint of its own service, so it "
                     "cannot distinguish serving from process-exists"
@@ -631,14 +694,22 @@ def main() -> int:
             context.relative_to(ROOT)
         except (OSError, ValueError):
             context = ROOT
+        # A monorepo root build context can contain several independent HTTP
+        # applications. When Compose names a Python module entry point, narrow
+        # route discovery to that module's package instead of attributing a
+        # sibling service's `/health` and `/readyz` to this process.
+        command = str(info.get("command") or "")
+        module_match = re.search(r"\bpython(?:3)?\s+-m\s+([A-Za-z_][\w.]*)", command)
+        if context == ROOT and module_match:
+            module_source = ROOT / (module_match.group(1).replace(".", "/") + ".py")
+            if module_source.is_file():
+                context = module_source.parent
         if context not in route_cache:
             route_cache[context] = routes_in(context)
         table = route_cache[context]
 
         serving: list[tuple[Path, set[str]]] = [
-            (path, registered)
-            for path, registered in table.items()
-            if registered & set(paths)
+            (path, registered) for path, registered in table.items() if registered & set(paths)
         ]
         with_readiness = [
             (path, registered)
@@ -653,12 +724,14 @@ def main() -> int:
                 rows.append((name, where, ", ".join(paths), "exempt"))
                 continue
             rows.append((name, where, ", ".join(paths), "FAIL"))
-            findings.append((
-                name,
-                where,
-                f"probes {', '.join(paths)} (liveness) while "
-                f"{path.relative_to(ROOT).as_posix()} also serves {', '.join(ready)}",
-            ))
+            findings.append(
+                (
+                    name,
+                    where,
+                    f"probes {', '.join(paths)} (liveness) while "
+                    f"{path.relative_to(ROOT).as_posix()} also serves {', '.join(ready)}",
+                )
+            )
         elif serving:
             rows.append((name, where, ", ".join(paths), "ok (no readiness route)"))
         else:
@@ -679,8 +752,7 @@ def main() -> int:
 
     if findings:
         print(
-            "\nHEALTHY-BUT-UNABLE-TO-SERVE "
-            "(a health signal that cannot go red for a real outage):"
+            "\nHEALTHY-BUT-UNABLE-TO-SERVE (a health signal that cannot go red for a real outage):"
         )
         for name, where, detail in findings:
             print(f"  - {name} ({where})")
@@ -703,8 +775,10 @@ def main() -> int:
     if findings or exempt_problems or stale:
         print("\nRESULT: FAIL - a service can report healthy while unable to serve.")
         return 1
-    print("\nRESULT: PASS - every first-party health signal consults readiness or is "
-          "recorded as unable to.")
+    print(
+        "\nRESULT: PASS - every first-party health signal consults readiness or is "
+        "recorded as unable to."
+    )
     return 0
 
 

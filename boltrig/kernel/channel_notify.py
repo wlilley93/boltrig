@@ -1,10 +1,10 @@
 """Channel notification delivery (decision 0003, Phase 2; SEC-179).
 
-Closes the notification loop for channel-originated work: when something a
-human must hear about happens (a HITL approval request, an escalation, a run
-reaching a terminal state), the kernel enqueues a DURABLE outbox row to the
-user's BOUND channel surface, addressed back to the thread the triggering
-message came from (round-trip integrity). The severed gateway's outbox pump
+Closes the notification loop for governed work: when something a human must
+hear about happens (a HITL approval request, an escalation, a requested or
+automatic run reaching a terminal state), the kernel enqueues a DURABLE outbox
+row to the user's BOUND channel surface. When work originated on a channel it
+is addressed back to that thread (round-trip integrity). The gateway's outbox pump
 delivers it over the platform connection it holds; ack/retry/backoff are the
 existing channel_outbox machinery, so a notification survives restarts and is
 never silently dropped.

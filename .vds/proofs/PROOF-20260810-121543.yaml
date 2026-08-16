@@ -1,0 +1,31 @@
+id: PROOF-20260810-121543
+kind: parity
+status: vacuous
+warrant_id: null
+command: vds proof parity
+script: crates/vds-proof/src/parity.rs
+exit_code: 3
+rows_considered: 60
+rows_enforced: 0
+rows_skipped_reasons:
+  record_below_registered_is_a_candidate_not_a_contract: 60
+violations: []
+notes:
+- '[figma] a figma ledger is on disk and was relied on, so R11 and R12 ran. This limb compares the LEGAL VALUES of a prop against the legal values of the variant property it names: `intent: ''success'' | ''warning''` in code and `Intent: Success, Warning` in the frame are two spellings of one set, and until now nothing compared them. What it establishes is bounded by the ledger''s freshness, which is `ledger_staleness`''s to hold, and by the fact that a variant property the pull could not read is absent rather than empty.'
+- '[figma-normalisation] a member matches across the boundary case-insensitively and ignoring separators, so `partially_paid`, `PARTIALLY_PAID` and `Partially paid` are one member. That is deliberate and it is also the limit of this limb: Figma variant values are typed by a designer in prose case and TypeScript union members are typed by an engineer in code case, and a comparison that failed on the difference would fail on every honest pair and be switched off within a week. The cost is stated rather than hidden: this limb cannot see a member that differs ONLY in case or punctuation, so `partially-paid` against `partially_paid` reads as agreement. It is not the checker for that.'
+- '[scope] only records at `registered` or later are compared. VDS S-5(4) makes the lifecycle a directed path in which `registered` is the point a contract becomes complete and binding, so a `proposed` or `designed` record is a candidate and there is no contract to hold the code to. A `retired` record is a tombstone kept forever (VDS S-9(6)(3)) and its ABSENCE from the code is the correct state (VDS S-9(8)), so comparing a contract against a file that ought to be gone would invert the rule. A `deprecated` record is still shipped until it drains (VDS S-9(6)(2)) and is compared like any other.'
+- '[normalisation] two type expressions are compared as TOKEN SEQUENCES, not as strings. The comparison normalises exactly three things and nothing else: all whitespace between tokens, the quote character around a string literal, and the ORDER of the members of a top-level union. Everything else is a difference. Nested unions inside a generic or a function type are NOT reordered, and `T | undefined` is not folded into an optional `T`, because under exactOptionalPropertyTypes those are different contracts and folding them would erase a distinction the author may have made deliberately. Exact string equality was rejected because it reports a reordered union and a re-wrapped line as drift, and a gate that cries wolf gets disabled.'
+- '[export-limb] a record naming an export that the scanner READ THE FILE and did not find among the exports it did find is a fatal finding. A record whose source file yielded NO export at all is counted, skipped and warned about instead. The scanner is not a TypeScript compiler, so an export style it does not recognise would otherwise become a fatal finding against code that is perfectly correct, and that is the direction in which a gate gets turned off.'
+- '[props-reach] the prop list comes from a `<Name>Props` interface or type alias in the same file as the export. The scanner does not follow an `extends`, does not resolve a mapped or utility type, does not read a props type declared in another file and does not expand a spread of another component''s props. Where it finds no such type the row is counted, skipped and reported rather than compared, because a contract measured against a prop list that is empty for want of a reader would fail on every prop it names.'
+- '[states-reach] the states limb compares the record''s `states.required` against the record''s own `states.built`. It does NOT establish that the component implements a state: deciding from a static read of a TSX file whether hover, focus or loading is really implemented would need an analysis of styles, variants and event handling that this build does not do, and a heuristic that guessed would be confidently wrong. A pass therefore establishes that the contract''s required set is covered by the record''s own built claim, and never that the claim is true. The limb runs only on a row that was enforced, so a row skipped for want of a readable source carries no states finding either.'
+- |-
+  [redaction] a finding names the prop, the record, the source file and the SHAPE of the disagreement in counts, and never the type expressions themselves. A type expression can carry a realisation, a captured proof record lands under the tree `no_stored_values` scans, and a finding that copied one would put it there permanently and fail that gate forever on a file this proof wrote (VDS S-2(2), S-2(8)). Open the named record and the named source file to read the two expressions.
+  ONE EXCEPTION, R12: a finding about a figmaProperty NAMES the variant values on both sides. A variant value is not a realisation, and that is settled where the field is defined rather than asserted here (crates/vds-figma/src/ledger.rs: "a variant value is a label a designer typed, not a design value"), which is why the ledger carrying them already passes `no_stored_values`. Naming them costs nothing in safety and saves the reader diffing two files by hand.
+- '[reach] this run establishes, for every row it enforced, that the contract''s prop set and the component''s prop set are the same set, that they agree on requiredness, that their type expressions agree wherever agreement was decidable, and that `states.built` covers `states.required`. It establishes nothing about a row it skipped, nothing about a Figma variant, and nothing about whether a built state is really implemented. A warrant citing this proof must not be described more widely than that (VDS S-6(3)).'
+inputs_digest: sha256:ec4265335829e23c3dc6a815746ab9d78f1525dde1638416ced14df18cc5ff83
+digest: sha256:92c00c4439f7977d60ab22d294b1a627dd7de35eeb126553e24f40923cbaacbf
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-10T12:15:38Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

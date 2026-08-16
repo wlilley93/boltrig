@@ -52,8 +52,11 @@ from boltrig.fleet.infrastructure.codex_cell_boundary import (
 from boltrig.fleet.infrastructure.codex_cell_provisioning import (
     ProvisioningCodexPhaseAdmissionSource,
 )
+from boltrig.fleet.infrastructure.codex_assignment_model_binding import (
+    CodexAssignmentModelBinding,
+)
 from boltrig.fleet.infrastructure.codex_cell_supervisor import CodexCellSupervisor
-from boltrig.fleet.infrastructure.codex_cell_policy import CODEX_CLI_SHA256
+from boltrig.fleet.infrastructure.codex_cell_policy import reviewed_codex_artifacts
 from boltrig.fleet.infrastructure.codex_runtime_preflight import (
     QuarantinedCodexPreflightProbe,
 )
@@ -140,9 +143,9 @@ async def test_the_pinned_binary_offers_built_in_tools_and_none_reach_upstream(
 
     binary = Path(os.environ[_BINARY_ENV])
     # Re-runs meaningfully when the pin moves: a new binary may offer a new tool.
-    assert (
-        hashlib.sha256(binary.read_bytes()).hexdigest() == CODEX_CLI_SHA256
-    ), "the smoke binary is not the pinned Codex 0.144.3 artifact"
+    assert hashlib.sha256(binary.read_bytes()).hexdigest() in reviewed_codex_artifacts(), (
+        "the smoke binary is not a reviewed Codex 0.144.3 Linux artifact"
+    )
 
     arriving: list[bytes] = []
     leaving: list[bytes] = []
@@ -181,7 +184,15 @@ async def test_the_pinned_binary_offers_built_in_tools_and_none_reach_upstream(
             http_client=client,
             env=env,
         )
-        leased = await provider.acquire(_assignment())
+        exact_assignment = _assignment()
+        provider.model_bindings.register(
+            CodexAssignmentModelBinding(
+                assignment=exact_assignment,
+                tenant_id=exact_assignment.phase.principal.tenant_id,
+                model_id="glm-4.6",
+            )
+        )
+        leased = await provider.acquire(exact_assignment)
         try:
             started = await leased.cell.client.thread_start(
                 cwd=leased.admission.layout.workspace.as_posix(),

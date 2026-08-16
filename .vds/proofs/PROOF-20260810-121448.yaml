@@ -1,0 +1,24 @@
+id: PROOF-20260810-121448
+kind: visual_review
+status: vacuous
+warrant_id: null
+command: vds proof visual_review
+script: crates/vds-proof/src/visual_review.rs
+exit_code: 3
+rows_considered: 0
+rows_enforced: 0
+rows_skipped_reasons: {}
+violations: []
+notes:
+- '[reserved] This kind validates, stores and stales VERDICT RECORDS. The capture and review pipeline (render, screenshot, export, compare) lives in the consuming repo: a proof may not call a network or a model (VDS S-7(2)(1)). The verdict vocabulary is conform | deviate | no_authority, and there is NO ACCEPTANCE STATE: an addition the frame omits is a deviation exactly like a missing element, and its resolution path is a new signed frame version recorded as a redraw, never an engine-side excusal. A delta''s DISPOSITION classifies a difference and never disposes of it: the taxonomy carries no `accepted` and no `wont_fix`, because either would be a fourth verdict wearing a different field name, reachable by the recorder rather than by the signer. BEFORE a surface''s frame is entered in the sign-off register this kind REPORTS AND NEVER BLOCKS ([2026] VJS-SC-OPBOX 1 orders 20, 23 and 24): registration is the moment a surface flips from report to block, and there is no estate-wide flag day.'
+- '[stage-4 coverage] UNKNOWN: no route manifest is supplied, so this run can report on the verdicts it holds and CANNOT say what it was supposed to cover. A never-reviewed route is invisible in this state, which is the defect the manifest exists to close. Supply the estate''s enumeration with `vds ledger routes --from <list>`.'
+- '[region correspondence] R14 ran on 0 route(s) and COULD NOT RUN on 0 route(s), each named above. It runs only where a screen record claims the route AND declares its bands, so a route missing either has an UNCHECKED checklist rather than a clean one. The key is the screen record''s `bands` and never its `regions`: the region vocabulary is the subject''s own and is deliberately open, and an open set cannot refuse a name that is not a band.'
+- '[pipeline] This kind is STAGE 4 of four, in fixed order: (1) the machine-readable contract derived from signed frames, (2) Figma AND code both built to that contract, (3) source-side gates per push, (4) this artefact-side visual check per route. STAGE 3 AND STAGE 4 ARE NOT SUBSTITUTES: gates read SOURCE and cannot see the page; the visual check reads the PAGE and is slow and sampled. Neither may be cited as covering the other''s ground. On the motivating estate, 28 green stage-3 gates were read as evidence about stage 4, and the pages looked nothing like their frames.'
+- '[scope] no visual review and no redraw is recorded, so every row is skipped and this run is vacuous. That is the honest state of a project whose capture pipeline has not run, and it is NOT evidence (VDS S-7(2)(4)).'
+inputs_digest: sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
+digest: sha256:ce218348750c259d2548cd7f0c98296614dee561c0257df5a2ed9de761217525
+designpack_digest: sha256:f9c369f3175c15169dafde47c01d7efc2f45c64090444f17f5b3f480e710ec5a
+captured_at: 2026-08-10T12:14:37Z
+capture_mode: automatic
+invoked_by: manual
+duration_ms: 0

@@ -1,0 +1,53 @@
+{
+  "$schema": "../../../../../schemas/character-bundle/v1/character-bundle.schema.json",
+  "schemaVersion": 1,
+
+  "id": "jarvis",
+  "name": "Jarvis",
+  "blurb": "An instrument that displays the machine's measured state.",
+
+  "type": "shader",
+
+  "visual": {
+    "type": "shader",
+    "source": "boltrig.canvas.jarvis",
+    "fragment": {
+      "file": "jarvis.frag",
+      "sha256": "1c13e4b61064f37933e249270bdfb59185411dcd52e4ad162b5529364cb2daec"
+    },
+    "uniforms": [
+      "iResolution", "iTime", "uListening", "uThinking", "uWorking", "uSpeaking",
+      "uLevel", "uOnset", "uBands", "uWave", "uWaveHead", "uReadout", "uReduced",
+      "uAccent", "uScale", "uLabelTop", "uLabelBottom", "uLabelTopAmt",
+      "uLabelBottomAmt", "uSpin", "uPhenoFresh",
+      "uValence", "uArousal", "uIrritation", "uFatigue", "uAttention",
+      "uLuminosity", "uTension",
+      "uBudgetFill", "uBudgetKnown", "uBudgetHard", "uTokenFill", "uTokenKnown",
+      "uWorkLoad", "uWorkFail", "uHDR", "uSpinDelta", "uParallax",
+      "uGene"
+    ]
+  },
+
+  "phenotype": {
+    "reads": true
+  },
+
+  "voice": {
+    "fallbackVoiceIds": {
+      "fish": "d2d43385f4a749389dda58ecff883bb5",
+      "pocket-voice": "jarvis"
+    }
+  },
+
+  "capabilities": {
+    "camera": { "wanted": false },
+    "presence": { "wanted": false },
+    "budgets": { "wanted": true }
+  },
+
+  "provenance": {
+    "ships": true,
+    "upstream": "boltrig-stock:jarvis",
+    "note": "VOICE: two providers, two different jobs. `fish` is the GENERATION id -- it rendered the eight register references in pocket-voice/refs/jarvis/ via make_registers.py, and is not used at runtime. `pocket-voice: jarvis` IS the runtime voice: nine local clones (jarvis plus jarvis-<tag> for all eight registers), which cost nothing per call and keep the audio on the box. A tag maps to a voice STATE rather than a parameter because Pocket TTS's contract has no emotion, style, speed or pitch field -- a tone written into the text would simply be read aloud. The eight picks were made on duration closest to 7.0s, a measurable proxy, and are PROVISIONAL: register fit is an ear judgement, and re-choosing in me-lora's bench overwrites the same names. Jarvis was registered inline in characters.ts while Familiar came from a bundle; this manifest makes both bodies the same kind of thing. He names his OWN canvas source: the shader source supplies the Familiar's uniform set, and Jarvis needs a different one entirely (budgets, work, speech, readout), so drawing him through it would have been refused at registration -- correctly. uGene is listed because the shader needs it, though JarvisRenderer uploads it once at mount rather than per frame. scripts/check_jarvis_shader.sh pins the vendored frag against its canon copy."
+  }
+}

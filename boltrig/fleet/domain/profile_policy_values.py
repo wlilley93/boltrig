@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .execution import SandboxPolicy
+from boltrig.models.model_id_policy import exact_model_id
 
 MAX_CONTENT_REFERENCE_LENGTH = 512
 MAX_RUNTIME_TOOLS = 32
@@ -29,19 +30,6 @@ _VERB = re.compile(
     r"[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+\Z"
 )
 _PATH_COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,95}\Z")
-_MUTABLE_MODEL_SEGMENTS = frozenset(
-    {
-        "auto",
-        "beta",
-        "current",
-        "default",
-        "experimental",
-        "latest",
-        "preview",
-        "recommended",
-        "stable",
-    }
-)
 
 
 def _has_control(value: str) -> bool:
@@ -177,10 +165,7 @@ class ExactModelPolicy:
     reasoning_effort: ReasoningEffort
 
     def __post_init__(self) -> None:
-        model_id = governed_name("model_id", self.model_id)
-        segments = set(re.split(r"[._-]", model_id))
-        if segments & _MUTABLE_MODEL_SEGMENTS:
-            raise ValueError("model_id must not use a mutable model alias")
+        model_id = exact_model_id(self.model_id)
         if type(self.reasoning_effort) is not ReasoningEffort:
             raise TypeError("reasoning_effort must be an exact ReasoningEffort")
         object.__setattr__(self, "model_id", model_id)

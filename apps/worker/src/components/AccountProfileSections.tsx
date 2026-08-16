@@ -6,6 +6,7 @@ import type {
 } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../client";
+import { setThemePreference, type ThemePreference } from "../theme";
 import { Unavailable } from "./Shell";
 
 export function ProfileSettings({
@@ -15,12 +16,18 @@ export function ProfileSettings({
   account: MeSettingsResponse;
   onSaved(): void;
 }) {
+  const [displayName, setDisplayName] = useState(account.profile.display_name ?? "");
   const [theme, setTheme] = useState(stringSetting(account.settings.theme));
   const [locale, setLocale] = useState(stringSetting(account.settings.locale));
   const [timezone, setTimezone] = useState(stringSetting(account.settings.timezone));
   const [message, setMessage] = useState("");
 
   async function save() {
+    const profileResult = await client.updateMeProfile({ display_name: displayName.trim() });
+    if (profileResult.status !== "ok") {
+      setMessage(profileResult.reason ?? "Your profile could not be saved.");
+      return;
+    }
     const result = await client.putMeSettings({
       settings: {
         theme: theme || "system",
@@ -28,9 +35,9 @@ export function ProfileSettings({
         timezone: timezone || "UTC",
       },
     });
-    setMessage(result.status === "ok" ? "Preferences saved." : result.reason ?? result.status);
+    setMessage(result.status === "ok" ? "Profile and preferences saved." : result.reason ?? result.status);
     if (result.status === "ok") {
-      applyTheme(theme || "system");
+      setThemePreference((theme || "system") as ThemePreference);
       onSaved();
     }
   }
@@ -40,39 +47,16 @@ export function ProfileSettings({
       <p className="eyebrow">Profile and preferences</p>
       <h2>{account.profile.display_name || account.profile.email || account.profile.id}</h2>
       <p>{account.profile.role || "member"} · {account.profile.status || "active"}</p>
-      <label>
-        <span className="muted small">Theme</span>
-        <select
-          className="field-control"
-          aria-label="Theme"
-          value={theme}
-          onChange={(event) => setTheme(event.target.value)}
-        >
-          <option value="system">System</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
-      </label>
-      <label>
-        <span className="muted small">Locale</span>
-        <input
-          className="field-control"
-          aria-label="Locale"
-          value={locale}
-          onChange={(event) => setLocale(event.target.value)}
-          placeholder="en"
-        />
-      </label>
-      <label>
-        <span className="muted small">Timezone</span>
-        <input
-          className="field-control"
-          aria-label="Timezone"
-          value={timezone}
-          onChange={(event) => setTimezone(event.target.value)}
-          placeholder="UTC"
-        />
-      </label>
+      <ProfileFields
+        displayName={displayName}
+        locale={locale}
+        setDisplayName={setDisplayName}
+        setLocale={setLocale}
+        setTheme={setTheme}
+        setTimezone={setTimezone}
+        theme={theme}
+        timezone={timezone}
+      />
       {(account.setting_sources?.locale === "tenant_default"
         || account.setting_sources?.timezone === "tenant_default") && (
         <p className="muted small">
@@ -80,10 +64,66 @@ export function ProfileSettings({
         </p>
       )}
       <div className="button-row">
-        <button className="primary-button" onClick={() => void save()}>Save preferences</button>
+        <button
+          className="primary-button"
+          disabled={!displayName.trim()}
+          onClick={() => void save()}
+        >
+          Save profile
+        </button>
       </div>
       {message && <p className="notice" role="status">{message}</p>}
     </section>
+  );
+}
+
+function ProfileFields({
+  displayName,
+  locale,
+  setDisplayName,
+  setLocale,
+  setTheme,
+  setTimezone,
+  theme,
+  timezone,
+}: {
+  displayName: string;
+  locale: string;
+  setDisplayName(value: string): void;
+  setLocale(value: string): void;
+  setTheme(value: string): void;
+  setTimezone(value: string): void;
+  theme: string;
+  timezone: string;
+}) {
+  return (
+    <>
+      <label>
+        <span className="muted small">Display name</span>
+        <input className="field-control" aria-label="Display name" autoComplete="name"
+          maxLength={80} required value={displayName}
+          onChange={(event) => setDisplayName(event.target.value)} />
+      </label>
+      <label>
+        <span className="muted small">Theme</span>
+        <select className="field-control" aria-label="Theme" value={theme}
+          onChange={(event) => setTheme(event.target.value)}>
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+      <label>
+        <span className="muted small">Locale</span>
+        <input className="field-control" aria-label="Locale" value={locale}
+          onChange={(event) => setLocale(event.target.value)} placeholder="en" />
+      </label>
+      <label>
+        <span className="muted small">Timezone</span>
+        <input className="field-control" aria-label="Timezone" value={timezone}
+          onChange={(event) => setTimezone(event.target.value)} placeholder="UTC" />
+      </label>
+    </>
   );
 }
 
@@ -206,17 +246,6 @@ export function PrivacyPolicyEvidence() {
 
 function stringSetting(value: unknown): string {
   return typeof value === "string" ? value : "";
-}
-
-function applyTheme(theme: string) {
-  try {
-    localStorage.setItem("boltrig-worker-theme", theme);
-    const dark = theme === "dark"
-      || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
-  } catch {
-    // A hardened browser may deny storage/media queries; server preference still saved.
-  }
 }
 
 function formatDate(value: string | null): string {

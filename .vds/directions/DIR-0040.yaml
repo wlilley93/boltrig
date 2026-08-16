@@ -1,0 +1,9 @@
+id: DIR-0040
+logId: DECISION-0029
+decisionDigest: sha256:20fc9772a68aaf29af08eaf5bb53d7d5d721c8c9a090121355c05db3f48f0dd9
+surface: !route
+  route: apps/worker/src/components/VoiceCall.tsx
+direction: Reduce live voice to one immersive selected-character stage with the Shell's left and right panels animated away and one bottom control dock.
+magnitude: Render exactly one full-resolution Familiar or Jarvis stage for the call. Remove ordinary visible title, elapsed time, participant picker, transcript excerpt, connection notice and status copy. Keep a quiet Leave control, a typed-call input whose trailing action becomes Resume/Reconnect when needed, independent Mute me and Silence <character> controls, screen-reader transcript and status, and an urgent approval notice only when action is actually required. Animate both Shell rails out before the call surface covers them, restore them on exit, and honor reduced-motion. Preserve media generation fencing, microphone-only capture mute, playback-only character silence, focus trapping, Escape behavior, reconnect authority and cleanup.
+directedAt: 2026-08-15T11:45:33Z
+notes: This additive Principal direction narrows DECISION-0024's visible participant/notice treatment without weakening its media or governance boundaries. It makes no Figma parity, signed review, conformity or frameDigest claim.

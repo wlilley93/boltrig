@@ -96,3 +96,22 @@ regexTarget = "line"
 # every other one here - a real credential appearing in these files would still
 # be caught.
 regexes = ['''(?:discord|signal|telegram|voice)roundtrip_123|roundtripsec_123''']
+
+[[allowlists]]
+# A Figma FILE KEY is a URL path component (figma.com/design/<key>/...), not a
+# credential - access still requires Figma authentication. The VDS figma ledger
+# records it as the decided-target pin. Entropy alone trips generic-api-key.
+description = "VDS figma ledger: file keys are URL identifiers, not secrets"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^\.vds/directions/DIR-000[1-7]\.yaml$''',
+  '''^\.vds/ledgers/(?:figma|frames)\.yaml$''',
+  '''^\.vds/reviews/VRW-000[1-6]\.yaml$''',
+  '''^\.vds/screens/SCR-000[1-7]\.yaml$''',
+  '''^docs/design/evidence/2026-08-11-console-parity/capture-manifest\.json$''',
+  '''^docs/design/evidence/2026-08-11-console-parity/figma-connected-inventory\.json$''',
+  '''^docs/design/evidence/2026-08-11-console-parity/vds-review-inputs\.pending\.json$''',
+]
+regexTarget = "line"
+regexes = ['''iVQBKFc3NpRH3zdOOxfPqr''']

@@ -1,24 +1,114 @@
 //! Boltrig Worker desktop shell.
 //!
-//! This is intentionally only a native boundary around the Worker SPA. It
-//! starts no local agent or Python server, receives no model/integration
-//! credential, and exposes no arbitrary filesystem or command primitive.
+//! The signed desktop owns two native boundaries: an enrolled, lease-driven
+//! device executor and a private local Codex App Server over stdio. The latter
+//! is the desktop chat runtime; it has no listener and does not receive Boltrig
+//! integration credentials. The web build keeps using the hosted Fleet.
 
+mod camera_discovery;
+mod camera_protocol;
+mod desktop_account;
 mod desktop_oauth;
 mod desktop_updater;
 mod device_agent;
 mod device_protocol;
 mod device_roots;
+mod local_agent;
+mod local_agent_protocol;
 mod materialized;
 mod session;
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use materialized::MaterializedArtifacts;
+
+#[tauri::command]
+async fn desktop_account_login(
+    app: tauri::AppHandle,
+    email: String,
+    password: String,
+) -> Result<desktop_account::AccountResponse, String> {
+    desktop_account::login(&app, email, password).await
+}
+
+#[tauri::command]
+async fn desktop_account_challenge(
+    app: tauri::AppHandle,
+    challenge_token: String,
+    code: String,
+) -> Result<desktop_account::AccountResponse, String> {
+    desktop_account::challenge(&app, challenge_token, code).await
+}
+
+#[tauri::command]
+async fn desktop_account_refresh(
+    app: tauri::AppHandle,
+) -> Result<desktop_account::AccountResponse, String> {
+    desktop_account::refresh(&app).await
+}
+
+#[tauri::command]
+async fn desktop_account_logout(
+    app: tauri::AppHandle,
+) -> Result<desktop_account::AccountResponse, String> {
+    desktop_account::logout(&app).await
+}
+
+#[tauri::command]
+async fn desktop_api_request(
+    app: tauri::AppHandle,
+    method: String,
+    path: String,
+    headers: Vec<(String, String)>,
+    body: Vec<u8>,
+) -> Result<tauri::ipc::Response, String> {
+    desktop_account::api_request(&app, method, path, headers, body).await
+}
+
+#[tauri::command]
+fn camera_discover(
+    runtime: tauri::State<'_, camera_discovery::CameraRuntime>,
+) -> Result<camera_discovery::CameraDiscoveryStatus, String> {
+    runtime.refresh()
+}
+
+#[tauri::command]
+fn camera_status(
+    runtime: tauri::State<'_, camera_discovery::CameraRuntime>,
+) -> Result<camera_discovery::CameraDiscoveryStatus, String> {
+    runtime.status()
+}
+
+#[tauri::command]
+fn camera_verify_snapshot(
+    runtime: tauri::State<'_, camera_discovery::CameraRuntime>,
+    camera_id: String,
+) -> Result<camera_discovery::CameraVerification, String> {
+    runtime.verify_snapshot(&camera_id)
+}
+
+#[tauri::command]
+fn camera_verify_ptz(
+    runtime: tauri::State<'_, camera_discovery::CameraRuntime>,
+    camera_id: String,
+) -> Result<camera_discovery::CameraVerification, String> {
+    runtime.verify_ptz(&camera_id)
+}
+
+#[tauri::command]
+fn camera_validate_lease(
+    runtime: tauri::State<'_, camera_discovery::CameraRuntime>,
+    lease: camera_protocol::CameraLease,
+    expected_device_id: String,
+    verifier: session::LeaseVerifier,
+) -> Result<camera_discovery::CameraLeaseValidation, String> {
+    runtime.validate_lease(lease, &expected_device_id, &verifier)
+}
 
 const MAX_ARTIFACT_BYTES: usize = 100 * 1024 * 1024;
 
@@ -30,6 +120,7 @@ async fn complete_device_enrollment(
     authorization_code: String,
     expected_verifier: session::LeaseVerifier,
 ) -> Result<device_agent::EnrollmentView, String> {
+    let api_origin = desktop_account::require_configured_origin(&api_origin)?;
     device_agent::complete_enrollment(
         &app,
         &runtime,
@@ -44,12 +135,22 @@ async fn complete_device_enrollment(
 async fn clear_device_session(
     runtime: tauri::State<'_, device_agent::DeviceRuntime>,
 ) -> Result<(), String> {
+    local_agent::reset_posture()?;
     device_agent::clear(&runtime).await
 }
 
 #[tauri::command]
-fn device_agent_status() -> Result<device_agent::AgentStatus, String> {
-    device_agent::status()
+async fn device_agent_status() -> Result<device_agent::AgentStatus, String> {
+    // macOS may ask the user to re-authorize Keychain access after an app
+    // update. Never perform that synchronous Security.framework call on the
+    // Tauri event loop: the authorization sheet itself needs the event loop.
+    tokio::time::timeout(
+        Duration::from_secs(15),
+        tauri::async_runtime::spawn_blocking(device_agent::status),
+    )
+    .await
+    .map_err(|_| "device_agent_status_timeout".to_string())?
+    .map_err(|_| "device_agent_status_unavailable".to_string())?
 }
 
 #[tauri::command]
@@ -86,6 +187,52 @@ fn take_device_read_result(
     lease_id: String,
 ) -> Result<Option<Vec<u8>>, String> {
     device_agent::take_read(&runtime, lease_id)
+}
+
+#[tauri::command]
+async fn local_agent_status(
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, local_agent::LocalAgentRuntime>,
+) -> Result<local_agent::LocalAgentStatus, String> {
+    Ok(runtime.status(&app).await)
+}
+
+#[tauri::command]
+fn local_agent_roots() -> Result<Vec<local_agent::LocalAgentRoot>, String> {
+    local_agent::roots()
+}
+
+#[tauri::command]
+fn local_agent_posture() -> Result<local_agent::LocalAgentPostureView, String> {
+    local_agent::posture()
+}
+
+#[tauri::command]
+async fn put_local_agent_posture(
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, local_agent::LocalAgentRuntime>,
+    posture: local_agent_protocol::ApprovalPosture,
+    confirm: Option<String>,
+) -> Result<local_agent::LocalAgentPostureView, String> {
+    runtime.set_posture(&app, posture, confirm).await
+}
+
+#[tauri::command]
+async fn run_local_agent_turn(
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, local_agent::LocalAgentRuntime>,
+    request: local_agent_protocol::LocalTurnRequest,
+    on_event: tauri::ipc::Channel<local_agent_protocol::LocalAgentEvent>,
+) -> Result<local_agent_protocol::LocalTurnOutcome, String> {
+    let version = app.package_info().version.to_string();
+    local_agent::run_turn(&app, &runtime, request, on_event, &version).await
+}
+
+#[tauri::command]
+async fn stop_local_agent_turn(
+    runtime: tauri::State<'_, local_agent::LocalAgentRuntime>,
+) -> Result<(), String> {
+    local_agent::stop(&runtime).await
 }
 
 fn safe_name(value: &str) -> String {
@@ -161,8 +308,8 @@ fn reveal_materialized_artifact(
 }
 
 #[tauri::command]
-fn desktop_update_readiness() -> desktop_updater::UpdateReadiness {
-    desktop_updater::readiness()
+fn desktop_update_readiness(app: tauri::AppHandle) -> desktop_updater::UpdateReadiness {
+    desktop_updater::readiness(app.package_info().version.to_string())
 }
 
 #[tauri::command]
@@ -230,8 +377,11 @@ fn cancel_desktop_oauth_return(
 pub fn run() {
     let runtime = device_agent::DeviceRuntime::new()
         .expect("Boltrig Worker device HTTP client failed to initialize");
+    let camera_runtime = camera_discovery::CameraRuntime::new();
     tauri::Builder::default()
         .manage(runtime)
+        .manage(camera_runtime)
+        .manage(local_agent::LocalAgentRuntime::new())
         .manage(MaterializedArtifacts::default())
         .manage(desktop_updater::UpdateRuntime::default())
         .manage(desktop_oauth::OAuthReturnRuntime::default())
@@ -253,16 +403,34 @@ pub fn run() {
             desktop_oauth::configure(app);
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(device_agent::run_loop(handle));
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(camera_discovery::run_loop(handle));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             complete_device_enrollment,
+            desktop_account_login,
+            desktop_account_challenge,
+            desktop_account_refresh,
+            desktop_account_logout,
+            desktop_api_request,
             clear_device_session,
             device_agent_status,
+            camera_discover,
+            camera_status,
+            camera_verify_snapshot,
+            camera_verify_ptz,
+            camera_validate_lease,
             bind_device_root,
             unbind_device_root,
             stage_device_write,
             take_device_read_result,
+            local_agent_status,
+            local_agent_roots,
+            local_agent_posture,
+            put_local_agent_posture,
+            run_local_agent_turn,
+            stop_local_agent_turn,
             materialize_artifact,
             open_materialized_artifact,
             reveal_materialized_artifact,

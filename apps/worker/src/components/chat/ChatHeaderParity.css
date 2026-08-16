@@ -1,0 +1,59 @@
+/* Canonical desktop conversation header. Kept separate from the shared chat
+ * sheet so mobile, transcript and composer geometry cannot inherit it. */
+
+.chat-header-familiar {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 0 6px 0 0;
+  color: inherit;
+  text-align: left;
+}
+
+.chat-header-familiar:hover h1 { color: var(--text); }
+
+.chat-header-familiar-action {
+  position: absolute;
+  z-index: 1;
+  inset: -4px -6px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.chat-header-familiar-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.chat-header-familiar-action:disabled {
+  cursor: default;
+}
+
+.chat-header-familiar-mark {
+  display: flex;
+  flex: 0 0 20px;
+}
+
+.chat-header-familiar-mark .familiar-orb {
+  width: 20px;
+  height: 20px;
+  box-shadow: 0 0 0 2px rgb(66 139 162 / 9%), inset -4px -4px 7px rgb(4 20 29 / 26%);
+}
+
+.chat-header-familiar-mark .familiar-orb i {
+  width: 5px;
+  height: 5px;
+  filter: blur(1px);
+}
+
+.chat-header-familiar h1 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

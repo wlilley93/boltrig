@@ -45,9 +45,9 @@ Boltrig also uses “add-on” informally for three feature families which are n
 registered there and must not be folded into this result by inference:
 
 - Knowledge projections already have their own tenant-scoped canonical provider
-  catalogue at `/v1/knowledge/providers`. Worker should continue to render
-  Cognee, Supermemory and Mem0 from that contract, including its enabled,
-  bundled, health and status fields.
+  catalogue at `/v1/knowledge/providers`. Worker renders the shipped Cognee
+  compiler from that contract, including its enabled, bundled, health and status
+  fields. Retired provider rows are not public add-ons.
 - The emotion relay is a process-level optional projection. It has an enable
   switch but no authenticated status/version/readiness projection.
 - Legacy desktop hands is an opt-in set of verbs and a host pull route.

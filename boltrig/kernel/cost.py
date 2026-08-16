@@ -140,10 +140,9 @@ def _priced_micros(
     # runtime reports a split today; every other producer sets a bare total, so `unattributed`
     # is the WHOLE run there and the premium leg priced all of it. On Anthropic's rate card
     # ($3 in / $15 out per 1M) that is a 3.84x OVER-bill - worse than the tier fallback this
-    # function exists to replace. Latent rather than live, because those runtimes sit behind
-    # BOLTRIG_ENABLE_LEGACY_RUNTIMES (default OFF, decision 0012) - but VJS-PC 20 cond.(1)
-    # requires a non-Codex leaf stay RE-WIRABLE, so it would have gone live the moment anyone
-    # exercised that seam, and silently.
+    # function exists to replace. Provider-native runtimes have since been removed;
+    # the conservative unattributed-token rule remains part of the generic ledger
+    # contract for any future producer that reports only a total.
     #
     # The input rate is the honest estimator when the split is unknown: an agent turn is heavily
     # input-weighted (a long composed prompt plus tool schemas, a short answer), so it is the

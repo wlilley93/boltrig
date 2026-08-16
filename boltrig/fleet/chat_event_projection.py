@@ -206,12 +206,16 @@ def _workflow_step(event: dict[str, Any]) -> dict[str, Any]:
     status = _required_text(event, "status")
     if status not in {"running", "ok", "failed", "skipped", "paused", "error"}:
         raise _UnsupportedEvent("status")
-    return {
+    out = {
         "type": "workflow_step",
         "step_id": _required_text(event, "step_id"),
         "action": _required_text(event, "action"),
         "status": status,
     }
+    # The interpreter's cause label (skip reason, retry tick, absorbed-failure
+    # strategy). A hint for rendering, value-free by construction upstream.
+    _put(out, "reason", _optional_text(event, "reason"))
+    return out
 
 
 def _workflow_run(event: dict[str, Any]) -> dict[str, Any]:

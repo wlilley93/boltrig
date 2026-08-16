@@ -12,6 +12,8 @@ and prove two things the engine claims:
 """
 
 import asyncio
+import json
+import math
 import re
 from pathlib import Path
 
@@ -40,6 +42,90 @@ def test_build_embedder_selects_offline_by_default_and_model_when_configured():
     )
     assert isinstance(e, ModelEmbedder)
     assert e.dim == 384 and e.base_url == "http://local-embed/v1" and e.model == "e5-small"
+
+
+class _EmbeddingResponse:
+    def __init__(self, body: bytes, headers: dict[str, str] | None = None) -> None:
+        self._body = body
+        self.headers = headers or {}
+        self.read_sizes: list[int] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def read(self, size: int = -1) -> bytes:
+        self.read_sizes.append(size)
+        return self._body if size < 0 else self._body[:size]
+
+
+class _EmbeddingOpener:
+    def __init__(self, response: _EmbeddingResponse) -> None:
+        self.response = response
+
+    def open(self, _request, *, timeout):
+        assert timeout > 0
+        return self.response
+
+
+def _patch_embedding_response(monkeypatch, response: _EmbeddingResponse) -> None:
+    import urllib.request
+
+    monkeypatch.setattr(
+        urllib.request,
+        "build_opener",
+        lambda *_handlers: _EmbeddingOpener(response),
+    )
+
+
+@pytest.mark.invariant("SEC-196")
+def test_model_embedder_bounds_and_validates_the_remote_vector(monkeypatch):
+    raw = json.dumps({"data": [{"embedding": [3.0, 4.0]}]}).encode()
+    response = _EmbeddingResponse(raw, {"content-length": str(len(raw))})
+    _patch_embedding_response(monkeypatch, response)
+
+    vector = ModelEmbedder(
+        base_url="https://models.example/v1", model="embed", dim=2
+    ).embed("hello")
+
+    assert vector == [0.6, 0.8]
+    assert response.read_sizes == [1024 * 1024 + 1]
+
+
+@pytest.mark.invariant("SEC-196")
+def test_model_embedder_rejects_declared_oversize_before_reading(monkeypatch):
+    response = _EmbeddingResponse(
+        b"{}", {"content-length": str(1024 * 1024 + 1)}
+    )
+    _patch_embedding_response(monkeypatch, response)
+
+    with pytest.raises(ValueError, match="safety boundary"):
+        ModelEmbedder(
+            base_url="https://models.example/v1", model="embed", dim=2
+        ).embed("hello")
+
+    assert response.read_sizes == []
+
+
+@pytest.mark.parametrize(
+    "embedding",
+    [
+        [1.0],
+        [1.0, math.inf],
+        [1.0, math.nan],
+    ],
+)
+def test_model_embedder_rejects_malformed_vectors(monkeypatch, embedding):
+    raw = json.dumps({"data": [{"embedding": embedding}]}).encode()
+    response = _EmbeddingResponse(raw)
+    _patch_embedding_response(monkeypatch, response)
+
+    with pytest.raises(ValueError, match="dimension|non-finite"):
+        ModelEmbedder(
+            base_url="https://models.example/v1", model="embed", dim=2
+        ).embed("hello")
 
 
 def test_embedding_dim_matches_schema():

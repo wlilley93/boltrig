@@ -1,0 +1,76 @@
+id: VRW-0001
+routes:
+- apps/worker/src/components/ChatView.tsx
+fileKey: iVQBKFc3NpRH3zdOOxfPqr
+nodeId: 5:2
+shippedScreenshotDigest: sha256:482686991ef9534f06b913f10f1f98f1b6eb6ad5b83cd1f28deb7782964e8fa6
+screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png
+servedBuild: "feat/console-target@3f96081c34a08ea0042ec2ce998f60711ce2717b; dirty; capture-source sha256:ba51ddd948e822bec05b269ede16422e535de764c5812bf30d698a39955958d7; capture-manifest sha256:5c39b27c8f1d1376488999aa6cfd30ddce61ec7f4741e243722e9df67d6e6d09"
+shippedSourceDigest: sha256:67c25eb29ad34b7bec814ee5b69f8a4dae8f9e813cdc87191a257897e02e8bb1
+frameImageDigest: sha256:f6a92ec2b856bf772cd95bafb65d8fa2b137ae4eb906339555d18e6425c667be
+frameDigest: sha256:214f01d660057812c66ea2d1fc487c78f01b9c1a78b78b445c90dd2adbbd67f2
+verdict: no_authority
+regions:
+- region: header
+  examined: true
+  finding: The conversation title and participant summary align broadly; the compact status mark and later Principal-directed Shell chrome differ from the original Figma frame.
+- region: facets
+  examined: false
+  finding: This screen declares no facet band.
+- region: body_rows
+  examined: true
+  finding: The persisted transcript answers directly, using one compact Queried data receipt and a thin agent-update row; the separately exercised disclosure expands on demand into visibility-fenced redacted per-tool evidence without changing the resting capture.
+- region: rail
+  examined: true
+  finding: The resizable borderless-glass Task details rail truthfully presents the stable empty Outputs section, completed Subagents and observed Run activity, and omits conversation-title, governance, unbound Files, Git, process inventory and terminal controls.
+- region: footer
+  examined: true
+  finding: The composer occupies the intended footer band, names the exact Automatic Bifrost model, exposes the caller's kernel-derived approval posture and one visible voice action while retaining the mounted hidden call controller; its governed action set differs from the illustrative frame.
+- region: empty_state
+  examined: false
+  finding: The compared state is a populated conversation, not an empty state.
+- region: keyboard
+  examined: true
+  finding: Visible shell and composer affordances were compared; the primary composer action differs.
+deltas:
+- describes: The persisted fixture has no target duration or live-participant status; the shipped transcript truthfully renders one compact Queried data receipt and completed-agent chips around a direct answer, with exact execution evidence available only after explicit expansion.
+  disposition: needs_absent_data
+- describes: The frame's live approval, waiting, computer-use and spend evidence are absent because the captured backend state provides no corresponding governed receipt.
+  disposition: forbidden_by_policy
+  owedBy: DIR-0001
+- describes: Later Principal directions require grouped compact task navigation, glass Chat rails, transcript navigation, a resizable contract-observed inspector, no persistent status or duplicate search, exact model identity, one visible composer voice action and the caller's kernel-derived approval posture; those overrides intentionally differ from the original Figma chat frame and do not alter it.
+  disposition: belongs_to_app_chrome
+  owedBy: SCR-0001
+reviewedBy: Codex deterministic current-capture evidence rebind v31
+reviewedAt: 2026-08-14T19:01:08Z
+basis:
+- DIR-0001
+- DIR-0008
+- DIR-0009
+- DIR-0010
+- DIR-0011
+- DIR-0012
+- DIR-0015
+- DIR-0016
+- DIR-0017
+- DIR-0018
+- DIR-0020
+- DIR-0021
+- DIR-0022
+- DIR-0023
+- DIR-0024
+- DIR-0025
+- DIR-0026
+- DIR-0027
+- DIR-0028
+- DIR-0029
+- DIR-0030
+- DIR-0033
+- DIR-0035
+- DIR-0036
+- DIR-0039
+- SCR-0001
+- apps/worker/tests/visual/states.json
+- docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json
+- docs/design/evidence/2026-08-11-console-parity/current/metrics.json
+notes: The unchanged frame digest is retained from the existing depth-limited ledger only and is not eligible for sign-off. New chat remains separately measured outside this route-scoped record because VDS keys stage-four coverage by route. The source-bound additive Chat-direction capture at the same capture-source digest exercises contract-backed inspector sections and the calm DIR-0022 receipt state; the expanded redacted trail was inspected separately and is regression-tested. DIR-0023 is a separately browser-tested phone-density direction with no canonical phone frame. DIR-0024 is regression-tested and visually inspected immediately below and above the wide-inspector boundary; the governed desktop capture exercises its inline-rail state. DIR-0025 was browser-tested at a representative narrow-desktop viewport; opening the non-modal overlay left the canonical composer and transcript rectangles unchanged, added no scrim, body lock or inert background, and Escape closed it with trigger focus restored. DIR-0026 was visually inspected with live workflow and queued state; the completed governed capture correctly contains neither surface, while focused regressions cover its expandable truthful step list and thin steerable queue. DIR-0027 adds owner-scoped durable queue reordering with pointer, keyboard and touch controls; the completed capture correctly keeps those live-only controls absent, while focused UI, SDK, Memory and PostgreSQL regressions prove the order reaches the next serial claim. DIR-0033 is opt-in and remains off in this static fixture; hosted and local completion, governed voice resolution and failure behavior are regression-tested. DIR-0039 is an interaction-only attachment target and remains at rest in this static capture; drag and long-paste behavior is regression-tested. This no_authority row binds only the deterministic current desktop screenshot and current route source; it creates no parity or conformity verdict.

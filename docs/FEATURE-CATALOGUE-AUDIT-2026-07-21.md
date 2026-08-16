@@ -38,7 +38,7 @@ the implementation is real after the wording is narrowed to its shipped boundary
 | 7 | Human approvals | Verified | `boltrig/kernel/approval_gate.py`, `tests/security/test_hitl_gate.py`, `tests/security/test_hitl_access.py` |
 | 8 | Secrets stay server-side | Verified | `boltrig/kernel/credentials.py`, `tests/security/test_credential_isolation.py`, `tests/security/test_mcp_consumer_credential.py` |
 | 9 | Scoped cost boundaries | Bounded | `boltrig/kernel/cost.py`, `boltrig/fleet/spawn.py`, `tests/security/test_budget_and_pii.py` |
-| 10 | Sensitive routing | Verified | `boltrig/fleet/model_router.py`, `tests/security/test_sensitive_routing.py`, `tests/security/test_model_routing.py` |
+| 10 | Sensitive routing | Verified | `boltrig/fleet/model_router.py`, `tests/security/test_sensitive_routing.py`, `tests/security/test_model_endpoint_lifecycle.py` |
 | 11 | Live execution stream | Verified | `boltrig/kernel/events.py`, `tests/kernel/test_event_relay.py`, `tests/security/test_chat_streaming_richness.py` |
 | 12 | Run inspector | Verified | `boltrig/observability/tree.py`, `ui/src/panels/RunView.tsx`, `ui/tests/__characterization__/panels/RunView.test.tsx` |
 | 13 | Audit and scoped reporting | Verified | `boltrig/kernel/audit.py`, `tests/kernel/test_audit_chain.py`, `tests/security/test_audit_tree_scope.py` |
@@ -71,5 +71,5 @@ These are product gaps, not claims in the corrected catalogue:
 - Wire and harden the MQ, OCR, and file-share adapter seams before listing them as connectors.
 - Add Office, image/OCR, audio/video, email, web-capture, and structured-data representations
   before broadening Knowledge beyond text, Markdown, and PDF.
-- Bind credential-backed Supermemory and Mem0 Knowledge projection adapters before describing
-  their provider-catalogue entries as active external connections.
+- Do not add a Knowledge provider to the catalogue until its credential, health,
+  compile, erase, and recovery lifecycle is implemented.

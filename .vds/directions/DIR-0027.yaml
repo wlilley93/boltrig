@@ -1,0 +1,9 @@
+id: DIR-0027
+logId: DECISION-0019
+decisionDigest: sha256:f33a920952d1b1ad9591082af9fe9f4d7f91be8b527966157304aab894360c14
+surface: !route
+  route: apps/worker/src/components/ChatView.tsx
+direction: Let the owner reorder pending queued turns before the next serial Chat run claims them.
+magnitude: On desktop, expose one six-dot handle per reorderable row with pointer drag and ArrowUp, ArrowDown, Home and End keyboard movement. On touch surfaces, expose explicit move-earlier and move-later controls. Persist the complete expected and desired id orders through an owner-scoped compare-and-swap; reload canonical state on conflict. Keep queued message content immutable, omit deletion or overflow actions without a governed contract, and remove reorder controls when fewer than two pending turns remain.
+directedAt: 2026-08-14T11:54:11Z
+notes: Governed visual fixtures are completed persisted turns and therefore must keep queue/reorder controls absent. Functional, SDK, Memory and PostgreSQL tests exercise the live queue state and its execution order.

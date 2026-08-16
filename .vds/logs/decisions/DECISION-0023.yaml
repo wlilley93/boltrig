@@ -1,0 +1,10 @@
+id: DECISION-0023
+at: 2026-08-14T12:49:45Z
+by: williamlilley
+decision: An ongoing chat shows one compact activity ring at the right edge of its task row, driven by actual active-run state and cleared when the run settles.
+court_required: false
+why: The Principal identified the compact spinner treatment for an ongoing chat. The state must survive navigation and reload without exposing internal run identifiers or inventing activity from fixture-only UI state.
+basis:
+- USER-DIRECTION-2026-08-14:ONGOING-CHAT-ROW
+- CODEX-REFERENCE-2026-08-14:COMPACT-TASK-ACTIVITY-RING
+- BOLTRIG-CONTRACT:SERVER-OWNED-ACTIVE-RUN-TRUTH

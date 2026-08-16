@@ -119,7 +119,7 @@ export function validateWorkflowDraft(draft: WorkflowDraft): string[] {
 
   for (const step of draft.steps) {
     const id = step.id.trim() || "Unnamed step";
-    if (!step.action.trim()) errors.push(`${id} needs a governed action.`);
+    if (!step.action.trim()) errors.push(`${id} needs an action.`);
     const limitation = workflowActionLimitation(step.action);
     const existingAction = typeof step.baseRecord.action === "string"
       ? step.baseRecord.action

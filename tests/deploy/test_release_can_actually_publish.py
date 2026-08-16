@@ -9,16 +9,15 @@ block, no cosign signature, no SBOM attestation, no digest reverification.
 Three things stopped that run. Two were already fixed by #115 and are pinned here
 so they cannot silently regress:
 
-  * the ui candidate built with an EMPTY `gh_npmrc` secret mount and died on
-    ERR_PNPM_FETCH_401, because nothing in the workflow ever wrote the token the
-    Dockerfile mounts;
+  * the former frontend candidate built with an EMPTY `gh_npmrc` secret mount and
+    died on ERR_PNPM_FETCH_401;
   * the vulnerability gate read no `.trivyignore.yaml`, so it blocked on an
     advisory the security workflow already accepts with a written justification
     and an expiry. A release gate stricter than the security gate BY ACCIDENT is
     not a stricter policy, it is drift.
 
 The third is not fixable in code, and that is the reason the preflight exists.
-kernel, fleet and ui are user-owned GHCR packages that predate this workflow, so
+kernel and fleet are user-owned GHCR packages that predate this workflow, so
 the repository's Actions token cannot write them. The same run proved it by
 accident: `pi-sidecar`, the one package LINKED to the repository, pushed fine.
 GitHub links a package by the `org.opencontainers.image.source` label only when the
@@ -36,6 +35,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from scripts.validate_release_mode import validate_release_mode
+
 _REPO = Path(__file__).resolve().parents[2]
 _WORKFLOW = yaml.safe_load((_REPO / ".github" / "workflows" / "release.yml").read_text())
 _TEXT = (_REPO / ".github" / "workflows" / "release.yml").read_text()
@@ -50,6 +51,126 @@ def _step(job: str, prefix: str) -> dict:
         if str(step.get("name", "")).startswith(prefix):
             return step
     raise AssertionError(f"no step in {job} named {prefix!r}")
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+@pytest.mark.parametrize(
+    "mode",
+    ("", "CORE", " core", "full ", "core,full", "desktop", "false"),
+)
+def test_release_mode_rejects_missing_or_ambiguous_values(mode: str) -> None:
+    with pytest.raises(ValueError, match="must be set explicitly"):
+        validate_release_mode(mode)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+@pytest.mark.parametrize("mode", ("core", "full"))
+def test_release_mode_accepts_only_the_two_exact_postures(mode: str) -> None:
+    assert validate_release_mode(mode) == mode
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+def test_core_release_is_explicit_and_keeps_all_server_evidence() -> None:
+    preflight = _WORKFLOW["jobs"]["preflight"]
+    assert preflight["env"]["RELEASE_MODE"] == "${{ vars.BOLTRIG_RELEASE_MODE }}"
+    mode_step = _step("preflight", "Require one explicit protected release mode")
+    assert "scripts/validate_release_mode.py" in mode_step["run"]
+    assert preflight["outputs"]["release-mode"] == (
+        "${{ steps.release-mode.outputs.release-mode }}"
+    )
+
+    candidates = _WORKFLOW["jobs"]["candidates"]
+    images = {entry["image"] for entry in candidates["strategy"]["matrix"]["include"]}
+    assert images == {"kernel", "fleet", "worker-ui", "backup"}
+
+    desktop = _WORKFLOW["jobs"]["desktop-candidates"]
+    assert desktop["if"] == "${{ needs.preflight.outputs.release-mode == 'full' }}"
+    publish = _WORKFLOW["jobs"]["publish"]
+    publish_condition = str(publish["if"])
+    assert "needs.candidates.result == 'success'" in publish_condition
+    assert "needs.preflight.outputs.release-mode == 'core'" in publish_condition
+
+    evidence = _step("publish", "Download and validate all draft release evidence")["run"]
+    for required in (
+        "image-ref-*.txt",
+        "sbom-*.cdx.json",
+        "provenance-*.intoto.json",
+        'test "$(find release-evidence -name \'image-ref-*.txt\' -type f | wc -l)" -eq 4',
+        'test "$(find release-evidence -name \'sbom-*.cdx.json\' -type f | wc -l)" -eq 4',
+        'test "$(find release-evidence -name \'provenance-*.intoto.json\' -type f | wc -l)" -eq 4',
+    ):
+        assert required in evidence
+    assert 'test "$desktop_count" -eq 0' in evidence
+    assert "$RELEASE_MODE release draft contains an unexpected asset" in evidence
+    assert "select(($allowed | index($name)) == null)" in evidence
+    for server_asset in (
+        "release-metadata.json",
+        "image-ref-kernel.txt",
+        "image-ref-fleet.txt",
+        "image-ref-worker-ui.txt",
+        "image-ref-backup.txt",
+        "sbom-kernel.cdx.json",
+        "sbom-fleet.cdx.json",
+        "sbom-worker-ui.cdx.json",
+        "sbom-backup.cdx.json",
+        "provenance-kernel.intoto.json",
+        "provenance-fleet.intoto.json",
+        "provenance-worker-ui.intoto.json",
+        "provenance-backup.intoto.json",
+    ):
+        assert f'"{server_asset}"' in evidence
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+def test_full_release_still_requires_every_desktop_candidate() -> None:
+    publish = _WORKFLOW["jobs"]["publish"]
+    assert "desktop-candidates" in publish["needs"]
+    assert "needs.desktop-candidates.result == 'success'" in str(publish["if"])
+
+    evidence = _step("publish", "Download and validate all draft release evidence")["run"]
+    assert "if [ \"$RELEASE_MODE\" = full ]; then" in evidence
+    assert "--pattern 'desktop-evidence-*.txt'" in evidence
+    assert "--pattern 'desktop-update-*.json'" in evidence
+    assert 'test "$desktop_count" -eq 3' in evidence
+    assert 'test "$desktop_fragment_count" -eq 3' in evidence
+    assert "build_desktop_update_manifest.py merge" in evidence
+    assert "release-evidence/latest.json" in evidence
+    for platform in ("linux-x86_64", "darwin-aarch64", "windows-x86_64"):
+        assert platform in evidence
+
+    final = _step("release", "Require a fully published signed release")["run"]
+    assert 'full) test "$DESKTOP_CANDIDATES_RESULT" = success' in final
+    assert 'core) test "$DESKTOP_CANDIDATES_RESULT" = skipped' in final
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+def test_release_metadata_binds_mode_and_closed_runtime_admissions() -> None:
+    preflight = _WORKFLOW["jobs"]["preflight"]
+    assert preflight["outputs"]["release-id"] == "${{ steps.draft.outputs.release-id }}"
+    binding = _step("preflight", "Bind draft metadata")["run"]
+    binding_env = _step("preflight", "Bind draft metadata")["env"]
+    assert binding_env["RELEASE_ID"] == "${{ steps.draft.outputs.release-id }}"
+    assert 'mode: $mode' in binding
+    assert 'desktop: $desktop' in binding
+    assert 'hosted_agent: $hosted_agent' in binding
+    assert 'local_desktop_agent: $local_desktop_agent' in binding
+    assert 'channels: "disabled"' in binding
+    assert "release-metadata.json" in binding
+    assert "cmp -s" in binding
+    assert "--clobber" not in binding
+    assert "unbound draft already contains assets; refusing adoption" in binding
+    assert 'releases/$RELEASE_ID' in binding
+
+    evidence = _step("publish", "Download and validate all draft release evidence")["run"]
+    assert ".admissions.hosted_agent" in evidence
+    assert ".admissions.local_desktop_agent" in evidence
+    assert '.admissions.channels == "disabled"' in evidence
+    assert '.mode == $mode' in evidence
 
 
 @pytest.mark.security
@@ -150,19 +271,6 @@ def test_every_registry_login_prefers_a_pat_when_one_exists() -> None:
 
 @pytest.mark.security
 @pytest.mark.invariant("IAC-005")
-def test_frontend_candidates_receive_the_packages_token_they_mount() -> None:
-    """Both first-party frontend Dockerfiles mount the ephemeral gh_npmrc."""
-    step = _step("candidates", "Authenticate frontend builds to GitHub Packages")
-    condition = str(step.get("if"))
-    assert "matrix.image == 'ui'" in condition
-    assert "matrix.image == 'worker-ui'" in condition
-    assert "npm.pkg.github.com/:_authToken" in step["run"]
-    build = _step("candidates", "Build release candidate locally")["run"]
-    assert "id=gh_npmrc" in build, "the built token is never mounted into the build"
-
-
-@pytest.mark.security
-@pytest.mark.invariant("IAC-005")
 def test_the_release_vuln_gate_reads_the_same_acceptances_as_the_security_gate() -> None:
     """#115. Otherwise the two gates disagree about an identical image.
 
@@ -213,3 +321,150 @@ def test_promotion_publishes_the_exact_digest_that_was_signed() -> None:
     assert 'if [ "$fetched" != "$digest" ]; then' in run
     # The integrity check must come before anything is written to a public tag.
     assert run.index('if [ "$fetched" != "$digest" ]; then') < run.index("-X PUT")
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+def test_desktop_candidates_embed_the_protected_api_origin() -> None:
+    desktop = _WORKFLOW["jobs"]["desktop-candidates"]
+    configured = str(desktop["env"]["BOLTRIG_DESKTOP_API_ORIGIN"])
+    assert desktop["environment"] == "release"
+    assert configured == "${{ vars.BOLTRIG_DESKTOP_API_ORIGIN }}"
+    assert "secrets." not in configured
+
+    requirement = _step("desktop-candidates", "Require protected API")["run"]
+    assert "BOLTRIG_DESKTOP_API_ORIGIN" in requirement
+    assert 'origin.protocol !== "https:"' in requirement
+    assert 'raw !== canonical' in requirement
+    assert 'hostname.endsWith(".boltrig.io")' in requirement
+
+    build = _step("desktop-candidates", "Build signed installers")
+    assert build["env"]["VITE_API_BASE"] == (
+        "${{ env.BOLTRIG_DESKTOP_API_ORIGIN }}"
+    )
+    proof = _step("desktop-candidates", "Verify the packaged frontend")
+    assert proof["env"]["VITE_API_BASE"] == build["env"]["VITE_API_BASE"]
+    assert "find dist" in proof["run"]
+    assert 'grep -RFl --include=\'*.js\' -- "$VITE_API_BASE" dist' in proof["run"]
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+def test_full_release_bakes_only_a_reviewed_desktop_download_into_worker() -> None:
+    candidates = _WORKFLOW["jobs"]["candidates"]
+    assert candidates["env"]["RELEASE_MODE"] == (
+        "${{ needs.preflight.outputs.release-mode }}"
+    )
+    assert candidates["env"]["BOLTRIG_DESKTOP_DOWNLOAD_URL"] == (
+        "${{ vars.BOLTRIG_DESKTOP_DOWNLOAD_URL }}"
+    )
+    build = _step("candidates", "Build release candidate locally")["run"]
+    assert 'if [ "$IMAGE" = worker-ui ]' in build
+    assert 'if [ "$RELEASE_MODE" = full ]' in build
+    assert 'parsed.scheme != "https"' in build
+    assert 'parsed.username is not None' in build
+    assert '--build-arg "VITE_DESKTOP_DOWNLOAD_URL=$desktop_download_url"' in build
+
+    dockerfile = (_REPO / "apps" / "worker" / "Dockerfile").read_text()
+    assert 'ARG VITE_DESKTOP_DOWNLOAD_URL=""' in dockerfile
+    assert "ENV VITE_DESKTOP_DOWNLOAD_URL=${VITE_DESKTOP_DOWNLOAD_URL}" in dockerfile
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+def test_release_reruns_reuse_only_the_exact_unpublished_draft() -> None:
+    step = _step("preflight", "Create or reuse only the exact draft")
+    run = step["run"]
+    assert step["env"]["RELEASE_COMMIT"] == "${{ steps.verify.outputs.release-commit }}"
+    assert step["id"] == "draft"
+    assert "--paginate --slurp" in run
+    assert ".tag_name == $tag" in run
+    assert "releases/tags/$RELEASE_TAG" not in run
+    assert "target_commitish" in run and "is_draft" in run
+    assert 'if [ "$is_draft" != true ]; then' in run
+    assert '"$DEFAULT_BRANCH"|"$RELEASE_COMMIT"' in run
+    assert 'echo "release-id=$release_id" >> "$GITHUB_OUTPUT"' in run
+    assert '--target "$RELEASE_COMMIT"' in run
+    assert run.index('if [ "$is_draft" != true ]; then') < run.index("using draft")
+    assert "--clobber" not in _TEXT
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+def test_candidate_retry_reuses_only_the_new_builds_exact_digest() -> None:
+    build = _step("candidates", "Build release candidate locally")["run"]
+    push = _step("candidates", "Push only a run-scoped candidate")["run"]
+
+    assert '--metadata-file "$BUILD_METADATA_FILE"' in build
+    assert '."containerimage.digest" // empty' in push
+    assert 'if [ "$existing_digest" != "$expected_digest" ]; then' in push
+    assert 'reusing exact candidate $candidate_ref@$expected_digest' in push
+    assert "404)" in push and 'docker push "$candidate_ref"' in push
+    assert 'if [ "$digest" != "$expected_digest" ]; then' in push
+    assert push.index('if [ "$existing_digest" != "$expected_digest" ]; then') < (
+        push.index('docker push "$candidate_ref"')
+    )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+def test_fixed_release_assets_are_read_back_without_replacement() -> None:
+    attach = _step("candidates", "Attach immutable evidence")["run"]
+    desktop = _step("desktop-candidates", "Attach signed desktop packages")["run"]
+    compose = _step("publish", "Attach the digest-pinned Compose environment")["run"]
+    latest = _step("publish", "Attach the signed desktop update manifest")["run"]
+
+    assert 'release_asset.sh exact "$IMAGE_REF_FILE"' in attach
+    assert 'release_asset.sh cyclonedx "$SBOM_FILE" "$IMAGE_REF"' in attach
+    assert 'release_asset.sh provenance "$PROVENANCE_FILE" "$IMAGE_REF"' in attach
+    assert 'release_asset.sh exact "$asset"' in desktop
+    assert 'release_asset.sh exact "$fragment"' in desktop
+    assert 'release_asset.sh exact "$evidence"' in desktop
+    assert "release_asset.sh exact release-evidence/boltrig-images.env" in compose
+    assert "release_asset.sh exact release-evidence/latest.json" in latest
+    assert "--clobber" not in _TEXT
+    assert "release delete-asset" not in _TEXT
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+def test_desktop_updater_uses_the_manifest_this_workflow_atomically_publishes() -> None:
+    desktop = _WORKFLOW["jobs"]["desktop-candidates"]
+    assert desktop["env"]["BOLTRIG_UPDATER_ENDPOINT"] == (
+        "https://github.com/${{ github.repository }}/releases/latest/download/latest.json"
+    )
+    requirement = _step("desktop-candidates", "Require protected API")["run"]
+    assert "expected_updater_endpoint" in requirement
+    assert '"$BOLTRIG_UPDATER_ENDPOINT" != "$expected_updater_endpoint"' in requirement
+
+    package = _step("desktop-candidates", "Attach signed desktop packages")["run"]
+    assert "build_desktop_update_manifest.py fragment" in package
+    assert '--platform "$PLATFORM"' in package
+    assert '--commit "$RELEASE_COMMIT"' in package
+
+    publish = _step("publish", "Publish the fully verified GitHub release")["run"]
+    assert "latest=(--latest=false)" in publish
+    assert 'elif [ "$RELEASE_MODE" = full ]; then' in publish
+    assert "latest=(--latest)" in publish
+    assert '[[ "$RELEASE_TAG" == *-* ]]' in publish
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+def test_partial_publication_reuses_exact_tags_and_refuses_mismatches() -> None:
+    preflight = _step(
+        "publish", "Require existing public image tags to match expected digests"
+    )["run"]
+    promote = _step("publish", "Promote verified digests")["run"]
+
+    assert 'if [ "$existing_digest" != "$digest" ]; then' in preflight
+    assert "reusing exact immutable public tag" in preflight
+    assert "404) ;;" in preflight
+    assert "-X PUT" not in preflight
+
+    assert 'if [ "$existing_digest" != "$digest" ]; then' in promote
+    assert "leaving exact immutable public tag" in promote
+    assert "404)" in promote and "-X PUT" in promote
+    exact_branch = promote.split("200)", 1)[1].split("404)", 1)[0]
+    assert "-X PUT" not in exact_branch
+    assert 'test "$promoted_digest" = "$digest"' in promote

@@ -1,0 +1,10 @@
+id: DECISION-0020
+at: 2026-08-14T12:18:17Z
+by: williamlilley
+decision: Shared Shell conversation rows use the compact filled diagonal pin and rounded archive glyphs shown in the Principal's Codex reference.
+court_required: false
+why: The Principal explicitly compared the current thin upright outline controls with the quieter solid Codex controls and asked for the latter visual treatment. The action meanings, accessibility labels and interaction targets remain unchanged.
+basis:
+- USER-DIRECTION-2026-08-14:SHELL-PIN-ARCHIVE-GLYPHS
+- CODEX-REFERENCE-2026-08-14:SOLID-TASK-ROW-ACTIONS
+- BOLTRIG-CONTRACT:ACCESSIBLE-CONVERSATION-LIFECYCLE-ACTIONS

@@ -41,9 +41,7 @@ from boltrig.adapters.base import (
     bearer_token,
 )
 from boltrig.adapters.mcp_transport import McpHttpRefusal, StreamableHttp
-from boltrig.addons import consequence_hint_for
 from boltrig.models import (
-    Consequence,
     CredentialResolution,
     InvocationContext,
     McpToolSnapshot,
@@ -56,6 +54,8 @@ from .mcp_discovery import (
     McpProtocolInvalid,
     snapshot_from_response,
 )
+from .mcp_tool_policy import consequence_hint as _consequence_hint
+from .mcp_tool_policy import external_description
 
 log = logging.getLogger(__name__)
 
@@ -66,22 +66,7 @@ Rpc = Callable[[dict], Awaitable[dict]]
 # (ASCII alphanumerics plus . _ -): applied to the PREFIXED id, so a tool name
 # with a '/' (a presentation meta-tool like opbox/expand_tools), whitespace, or
 # an empty name can never publish.
-# A consumed server may declare a per-tool ``consequence`` hint in the tool
-# descriptor. The ceiling is the Consequence enum itself ("high" - the same
-# ceiling generated adapters live under, where only mutating verbs reach high):
-# an absent or unrecognised hint defaults to "low", so nothing a consumed server
-# declares can push a verb above it.
-_CONSEQUENCE_HINTS = frozenset({Consequence.LOW.value, Consequence.HIGH.value})
 MCP_PROBE_TIMEOUT_S = 5.0
-# A consumed server that declares no ``consequence`` field may still carry its own
-# risk vocabulary somewhere in its tool projection. Reading THAT vocabulary is
-# integration-specific KNOWLEDGE, so the regex lives in an addon
-# (``boltrig.addons``) rather than in this module, which ships in every boltrig.
-#
-# It is consulted from every REGISTERED addon, not only the activated ones. A
-# reading can only raise a consequence, so gating it on ``BOLTRIG_ADDONS`` bought
-# no safety and cost the approval gate: measured, an opbox tool carrying
-# ``riskClass=DESTRUCTIVE`` registered as ``low`` wherever the flag was unset.
 
 
 def _status_error(status: int) -> ErrorClass:
@@ -94,45 +79,6 @@ def _status_error(status: int) -> ErrorClass:
     if status >= 500:
         return ErrorClass.UNAVAILABLE
     return ErrorClass.INVALID
-
-
-def _addon_hint(tool: dict) -> str | None:
-    """The consumed server's own risk vocabulary, per every addon this build ships.
-
-    REGISTERED, not active: a reading can only RAISE a consequence, so gating it on
-    ``BOLTRIG_ADDONS`` bought nothing and cost the approval gate. See
-    ``consequence_hint_for``.
-    """
-    return consequence_hint_for(None, tool)
-
-
-def _annotations_hint(tool: dict) -> str | None:
-    """Standard MCP tool annotations: destructiveHint -> high, readOnlyHint -> low."""
-    annotations = tool.get("annotations")
-    if not isinstance(annotations, dict):
-        return None
-    if annotations.get("destructiveHint") is True:
-        return Consequence.HIGH.value
-    return Consequence.LOW.value if annotations.get("readOnlyHint") is True else None
-
-
-def _consequence_hint(tool: dict) -> str:
-    # An explicit ``consequence`` declaration is the server's own contract and
-    # wins outright (an unrecognised value clamps low, fail-closed).
-    if tool.get("consequence") is not None:
-        hint = str(tool.get("consequence") or "").lower()
-        return hint if hint in _CONSEQUENCE_HINTS else Consequence.LOW.value
-    # Otherwise take the HIGHEST of the remaining signals, never the first.
-    # ``high`` is the tier that can require human approval (US-HIL-01), so
-    # first-wins precedence let an addon's mapping return ``low`` for a tool whose
-    # own MCP annotations declared ``destructiveHint: true`` and quietly drop it
-    # below the approval gate. An addon is a reading of a server's vocabulary, not
-    # an authority over it: it may RAISE a consequence and must never lower one.
-    # No path returns above the Consequence ceiling.
-    signals = (_addon_hint(tool), _annotations_hint(tool))
-    if any(hint == Consequence.HIGH.value for hint in signals):
-        return Consequence.HIGH.value
-    return Consequence.LOW.value
 
 
 class _McpFailure(Exception):
@@ -224,18 +170,14 @@ class McpConsumerAdapter:
             code = "unexpected_failure"
         return McpProbeResult(False, code, ())
 
-    async def _discover(
-        self, credential: Credential | None
-    ) -> tuple[McpToolSnapshot, ...]:
+    async def _discover(self, credential: Credential | None) -> tuple[McpToolSnapshot, ...]:
         resp = await self._call(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
             bearer_token(credential),
         )
         return snapshot_from_response(self.id, resp, _consequence_hint)
 
-    def apply_tool_snapshot(
-        self, snapshot: tuple[McpToolSnapshot, ...]
-    ) -> list[VerbSpec]:
+    def apply_tool_snapshot(self, snapshot: tuple[McpToolSnapshot, ...]) -> list[VerbSpec]:
         """Load an already-vetted snapshot into this in-process adapter only."""
         validate_mcp_tool_snapshot(snapshot)
         specs: list[VerbSpec] = []
@@ -258,7 +200,7 @@ class McpConsumerAdapter:
                     # otherwise accept any JSON rather than inventing a constraint
                     # the protocol does not make.
                     output_schema=tool.output_schema,
-                    description=tool.description,
+                    description=external_description(tool.description),
                     consequence=tool.consequence,
                 )
             )
@@ -285,30 +227,28 @@ class McpConsumerAdapter:
                 AdapterError(ErrorClass.INTERNAL, f"adapter error: {type(exc).__name__}")
             )
 
-    async def _execute(
-        self, verb: str, params: dict, credential: Credential | None
-    ) -> Result:
+    async def _execute(self, verb: str, params: dict, credential: Credential | None) -> Result:
         if not self.activated:  # inert until reviewed (defence in depth, SEC-22)
-            return Result.failure(
-                AdapterError(ErrorClass.UNAVAILABLE, "mcp server pending review")
-            )
+            return Result.failure(AdapterError(ErrorClass.UNAVAILABLE, "mcp server pending review"))
         # The kernel-resolved credential is the ONLY bearer source: no instance
         # token, so rotation and per-run scoping are live and a missing
         # credential fails closed rather than posting an empty bearer.
         if self._rpc is None and bearer_token(credential) is None:
-            return Result.failure(
-                AdapterError(ErrorClass.UNAUTHORISED, "mcp credential missing")
-            )
+            return Result.failure(AdapterError(ErrorClass.UNAUTHORISED, "mcp credential missing"))
         # The prefixed verb id maps back to the server's BARE tool name - the
         # server never sees the namespace. The prefix strip is deterministic,
         # so a boot-rehydrated consumer (activated, not yet re-connected) also
         # calls correctly before any re-discovery.
         name = self._tools.get(verb) or (
-            verb[len(self.id) + 1:] if verb.startswith(f"{self.id}.") else verb
+            verb[len(self.id) + 1 :] if verb.startswith(f"{self.id}.") else verb
         )
         resp = await self._call(
-            {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-             "params": {"name": name, "arguments": params}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": params},
+            },
             bearer_token(credential),
         )
         result = resp.get("result") or {}

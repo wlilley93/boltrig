@@ -25,16 +25,16 @@ Genesis reads these from the environment if set, otherwise prompts interactively
 
 | Variable | Prompt | Default |
 | --- | --- | --- |
-| `ORG_NAME` | First organisation name | `Boltrig` |
+| `ORG_NAME` | First organisation name | required |
 | `WS_NAME` | First workspace name | the org name |
-| `SUPERADMIN_EMAIL` | Superadmin email | `will.lilley93@gmail.com` |
-| `SUPERADMIN_PASSWORD` | Superadmin password | `admin` |
+| `SUPERADMIN_EMAIL` | Superadmin email | required |
+| `SUPERADMIN_PASSWORD` | Superadmin password | required |
 
 Non-interactive example:
 
 ```bash
-ORG_NAME="Acme" WS_NAME="Acme HQ" \
-SUPERADMIN_EMAIL="admin@acme.com" SUPERADMIN_PASSWORD="a-strong-passphrase" \
+ORG_NAME="Your organisation" WS_NAME="Your workspace" \
+SUPERADMIN_EMAIL="admin@example.com" SUPERADMIN_PASSWORD="a-strong-passphrase" \
 bash genesis.sh dev
 ```
 
@@ -60,7 +60,7 @@ Genesis is idempotent and resume-safe: secret fills only touch blanks, and re-ru
 
 ## Log in
 
-Open the console at `http://localhost:8080` (the `UI_PORT`, `8080` by default). The login page posts to `POST /v1/auth/login` with your email and password. On success the kernel sets an httpOnly session cookie (`boltrig_session`) plus a readable CSRF cookie (`boltrig_csrf`) and returns your user record.
+Open the Worker at `http://localhost:8082` (the `WORKER_PORT`, `8082` by default). The login page posts to `POST /v1/auth/login` with your email and password. On success the kernel sets an httpOnly session cookie (`boltrig_session`) plus a readable CSRF cookie (`boltrig_csrf`) and returns your user record.
 
 From a headless client you can hit the same endpoint directly:
 

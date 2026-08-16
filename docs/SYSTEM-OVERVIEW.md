@@ -1,17 +1,12 @@
 # Boltrig - system overview (the whole picture)
 
-> **Runtime currency (2026-07-21):** this is a historical whole-system view of
-> the Round Six/Seven implementation. Its Pi, Hermes, and runtime-selection
-> sections do not describe the target product architecture. Accepted decision
-> 0012 makes Codex the target agent runtime; `docs/PATH-TO-10.md` records the
-> incomplete cutover and the still-live legacy residue. Historical labels remain
-> below so the implementation it documented can still be understood.
+> **Runtime currency (2026-08-14):** Codex is the only shipped model-backed
+> runtime. Script aliases are deterministic non-model jobs. All former
+> provider-native and alternative agent runtimes have been removed and stale
+> manifest names fail closed.
 
-Addendum, not a replacement. The whole-system view that the Pi runtime spec
-(`requirements-pi-runtime.md`, Round Six) and the control plane spec
-(`requirements-control-plane.md`, Round Seven) sit inside. It does not repeat
-their proposals; it gives the layer-by-layer walkthrough, the extension points,
-the corrected request-flow model, and the consolidated gap list.
+This is the layer-by-layer whole-system view: request flow, extension points and
+the governed runtime boundary.
 
 > **Build status (as of Round Seven).** The four gaps this addendum consolidates
 > in Section 5 have since been built (Rounds Six and Seven). The original gap
@@ -56,11 +51,10 @@ replay, resolve credentials, execute, validate output, audit. No second path.
   capable runtime, enforces depth + budget, runs.
 
 ### 2.4 Execution
-Four runtime kinds, one agentic. **Script** = deterministic no-LLM fallback.
-**Hermes** / **Claude-API** = single-shot, non-tool model calls. **Pi** = the only
-multi-step, tool-calling lane, in a severed process reached over HTTP, no
-filesystem/process/credential access, given only a model key + a run-scoped MCP
-token, every tool call back through the chokepoint.
+Two shipped runtime families. **Codex** is the sole model-backed, multi-step
+agent lane and receives an exact per-run tool ceiling through the governed
+kernel boundary. **Script** is deterministic and model-free. A stale runtime
+name produces a typed unavailable result and executes nothing.
 - **Chat** - a thin conversational layer (persists messages, streams events).
 - **Skills** - composable capability fragments, parent-first inheritance, resolved
   at spawn time.
@@ -89,17 +83,15 @@ token, every tool call back through the chokepoint.
   pattern -> runtime + skills).
 - **3.2 New capability, three weights** - Adapters (deterministic actions;
   `AdapterConfig.module_ref` means any importable module, not just builtins);
-  Runtimes (reasoning backends; where Pi/Hermes/Claude-API/Script live, and where
-  a gateway-fronted call attaches); Skills (pure data, no code).
+  Runtimes (trusted Codex or deterministic script); Skills (pure data, no code).
 - **3.3 New judgment** - Verbs + verb bindings (registered data; the agent reasons
   in noun/verb vocabulary, never the backend); Workflows (selection + sequencing).
 - **3.4 Constraining what is allowed in** - Identity / Network / Privacy / HITL
   config, each its own governance dimension.
 - **3.5 New front doors** - `kernel/app.py`'s HTTP surface reads no policy; it
   authenticates, builds a context, and calls the same `kernel.invoke`. An internal
-  kernel MCP face exists (built for the retired Pi sidecar, now serving the Codex
-  lane); a broader MCP front door is a future
-  surface.
+  kernel MCP face serves the trusted Codex lane; a broader MCP front door is a
+  future surface.
 - **3.6 The flywheel edge** - `learn_from_success` re-saves a succeeded generated
   workflow as `source='learned'`, feeding `match()` next time. The one place
   output becomes input.
@@ -123,7 +115,7 @@ token, every tool call back through the chokepoint.
 
 - **5.1 A conversation doesn't remember itself** - the most foundational gap; no
   prior turns threaded into the prompt.
-- **5.2 Bifrost isn't wired in** - every Pi-lane call goes straight to a provider.
+- **5.2 Bifrost isn't wired in** - the original model lane called providers directly.
 - **5.3 Workflows are data with nothing reading them** - only two demo workflows
   registered; nothing walks a stored definition's steps.
 - **5.4 No live way to change any of this** - departments built once at startup; no
@@ -143,8 +135,8 @@ Bifrost + the live control plane.
 
 The recommended order was followed: continuity first (Round Six), then the
 interpreter and the governed control plane (Round Seven). The remaining residue is
-environmental, not code: Bifrost (the cost gateway) and a live Hatchet engine are
-external services the box points at; the hard Pi sandbox substrate (agentOS) is
-deferred until a real third-party Pi loop replaces the first-party stand-in. The
-durable, portable agent box (P7) is now complete for workflows: ship one image,
-point it at a manifest plus tenant data, and a data-defined workflow executes.
+environmental, not code: Bifrost (the model gateway) and a live Hatchet engine
+are external services the box points at. Trusted Codex cells are the sole agent
+runtime substrate. The durable, portable agent box (P7) is complete for
+workflows: ship one image, point it at a manifest plus tenant data, and a
+data-defined workflow executes.

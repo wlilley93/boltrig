@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,13 +11,16 @@ from boltrig.adapters.builtin.memory_tickets import build as build_tickets
 from boltrig.api.bootstrap import wire_hitl_resume
 from boltrig.fleet.chat import ChatService
 from boltrig.kernel import Kernel
+from boltrig.kernel import call_gateway_routes
 from boltrig.kernel.app import create_app
 from boltrig.models import (
     AgentCapability,
     Channel,
     GrantSet,
     ModelEndpoint,
+    RealtimeCallEvent,
     TenantPermissions,
+    utcnow,
 )
 from boltrig.store import InMemoryStore
 
@@ -288,6 +292,106 @@ def test_call_metadata_and_normalized_events_are_owner_scoped_and_never_store_au
         json={"type": "transcript", "payload": {"text": "too late"}},
         headers=gateway,
     ).status_code == 409
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-03")
+def test_typed_call_text_limits_are_durable_reconnect_stable_and_call_isolated():
+    kernel, store = asyncio.run(_kernel())
+    client = TestClient(create_app(kernel))
+    gateway = _gateway(kernel, ["ch-voice"])
+
+    def claimed_call() -> str:
+        created = client.post("/v1/calls", json={}, headers=_headers()).json()
+        call_id = created["call"]["id"]
+        claimed = client.post(
+            "/v1/calls/gateway/claim",
+            json={"call_id": call_id, "media_token": created["media_token"]},
+            headers=gateway,
+        )
+        assert claimed.status_code == 200, claimed.text
+        return call_id
+
+    def typed(call_id: str, text: str):
+        return client.post(
+            f"/v1/calls/gateway/{call_id}/events",
+            json={
+                "type": "transcript",
+                "payload": {
+                    "text": text,
+                    "final": True,
+                    "kind": "input",
+                    "via": "text",
+                },
+            },
+            headers=gateway,
+        )
+
+    rate_call = claimed_call()
+    for index in range(call_gateway_routes._TYPED_TEXT_RATE_LIMIT):
+        assert typed(rate_call, f"rate {index}").status_code == 200
+    refused = typed(rate_call, "rate overflow")
+    assert refused.status_code == 429
+    assert refused.json() == {
+        "status": "error",
+        "reason": "typed_text_limit_reached",
+    }
+
+    # Another canonical call has an independent budget.
+    isolated_call = claimed_call()
+    assert typed(isolated_call, "independent").status_code == 200
+
+    old = utcnow() - timedelta(minutes=1)
+
+    count_call = claimed_call()
+    for index in range(call_gateway_routes._TYPED_TEXT_CALL_MESSAGE_LIMIT):
+        asyncio.run(store.append_realtime_call_event(RealtimeCallEvent(
+            id=f"typed-count-{index}",
+            tenant_id=T,
+            call_id=count_call,
+            type="transcript",
+            payload={
+                "text": "x",
+                "final": True,
+                "kind": "input",
+                "via": "text",
+            },
+            created_at=old,
+        )))
+    assert typed(count_call, "count overflow").status_code == 429
+
+    char_call = claimed_call()
+    full_frames = call_gateway_routes._TYPED_TEXT_CALL_CHAR_LIMIT // 8_000
+    for index in range(full_frames):
+        asyncio.run(store.append_realtime_call_event(RealtimeCallEvent(
+            id=f"typed-chars-{index}",
+            tenant_id=T,
+            call_id=char_call,
+            type="transcript",
+            payload={
+                "text": "x" * 8_000,
+                "final": True,
+                "kind": "input",
+                "via": "text",
+            },
+            created_at=old,
+        )))
+    assert typed(char_call, "x").status_code == 429
+
+    # Reopening rotates transport authority but cannot reset durable history.
+    refreshed = client.post(
+        f"/v1/calls/{count_call}/media-token", headers=_headers()
+    )
+    assert refreshed.status_code == 200
+    assert client.post(
+        "/v1/calls/gateway/claim",
+        json={
+            "call_id": count_call,
+            "media_token": refreshed.json()["media_token"],
+        },
+        headers=gateway,
+    ).status_code == 200
+    assert typed(count_call, "still over count").status_code == 429
 
 
 @pytest.mark.security

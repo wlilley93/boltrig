@@ -90,12 +90,6 @@
       "expires": "2026-09-30",
       "reason": "memory.ingest:529 'process only new/changed content'. SURFACED IN THE UI, so an operator can toggle it and it does nothing. Sits beside on_session_end, and the MemoryIngestion receipt built for session distillation (424302f) already carries what it needs: distil only messages after the last receipt. Tracked on task #40.",
       "blocker": "design:flag-meaning-undecided"
-    },
-    "native_tools": {
-      "owner": "memory-maintainers",
-      "expires": "2026-09-30",
-      "reason": "manifest.example.yaml:457. SURFACED IN THE UI and read by nothing. Needs a decision on what it should mean before it is wired or deleted. Tracked on task #40.",
-      "blocker": "design:flag-meaning-undecided"
     }
   }
 }

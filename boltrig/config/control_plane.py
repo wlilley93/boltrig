@@ -82,6 +82,7 @@ class ControlPlaneAdapter:
         admin: Any = None,
         workflows: Any = None,
         credentials: Any = None,
+        model_catalogue: Any = None,
     ) -> None:
         self._store = store
         self._loader = loader
@@ -89,6 +90,7 @@ class ControlPlaneAdapter:
         self._admin = admin
         self._workflows = workflows
         self._credentials = credentials
+        self._model_catalogue = model_catalogue
 
     def set_admin(self, admin: Any) -> None:
         self._admin = admin
@@ -98,6 +100,9 @@ class ControlPlaneAdapter:
 
     def set_workflows(self, workflows: Any) -> None:
         self._workflows = workflows
+
+    def set_model_catalogue(self, catalogue: Any) -> None:
+        self._model_catalogue = catalogue
 
     def describe(self) -> list[VerbSpec]:
         return control_specs()
@@ -117,7 +122,11 @@ class ControlPlaneAdapter:
     ) -> dict[str, Any] | None:
         """Bind approvals to mutable control resources, not just request fields."""
         from .control_approval import control_approval_context
+        from .control_model_endpoints import preflight_model_endpoint_catalogue
 
+        await preflight_model_endpoint_catalogue(
+            verb, params, self._model_catalogue
+        )
         return await control_approval_context(self._store, self._loader, verb, params, context)
 
     def _unavailable(self, collaborator: str) -> Result:
@@ -134,7 +143,12 @@ class ControlPlaneAdapter:
         self, verb: str, params: dict[str, Any], context: InvocationContext
     ) -> Result | None:
         return await execute_profile_operation(
-            self._store, self._loader, verb, params, context
+            self._store,
+            self._loader,
+            verb,
+            params,
+            context,
+            model_catalogue=self._model_catalogue,
         )
 
     async def _permanent_fleet(
@@ -369,8 +383,10 @@ def build_control_plane_adapter(
     admin: Any = None,
     workflows: Any = None,
     credentials: Any = None,
+    model_catalogue: Any = None,
 ) -> ControlPlaneAdapter:
     return ControlPlaneAdapter(
         store, loader=loader, registry=registry, admin=admin,
         workflows=workflows, credentials=credentials,
+        model_catalogue=model_catalogue,
     )

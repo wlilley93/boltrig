@@ -7,10 +7,14 @@
   "license": "UNLICENSED",
   "scripts": {
     "dev": "vite",
+    "dev:desktop": "node scripts/require-desktop-origin.mjs && vite",
     "build": "tsc && vite build",
+    "build:desktop": "node scripts/require-desktop-origin.mjs && tsc && vite build",
     "preview": "vite preview",
+    "structure": "node scripts/check-structure.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --reporter=dot",
+    "test:structure": "node --test scripts/check-structure.node.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

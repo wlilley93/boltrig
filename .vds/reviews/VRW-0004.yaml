@@ -1,0 +1,63 @@
+id: VRW-0004
+routes:
+- apps/worker/src/components/CommandPalette.tsx
+fileKey: iVQBKFc3NpRH3zdOOxfPqr
+nodeId: 16:2
+shippedScreenshotDigest: sha256:810d205f7d1a2938c263cdc2d3a25bc4f900b5610d037f17b678bb6165ee298d
+screenshotPath: docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png
+servedBuild: "feat/console-target@3f96081c34a08ea0042ec2ce998f60711ce2717b; dirty; capture-source sha256:2d74c933d31a87a2ab6cd99b8747be242663f385f08da0345ca0c5d5ab99bc95; capture-manifest sha256:ed3f7421c58d6fa7e8ac9c56787b48912076e803451cdab97aed7220fbf7fbb9"
+shippedSourceDigest: sha256:3044e646b0c9c5d5ec1eb9831a86de5d8ae0fbcc96aa6fed1639b51709e8ce45
+frameImageDigest: sha256:d6db445fc5f144ce7e69fb413e54a520e5b1a7a7c3453825543661634fa387d4
+frameDigest: sha256:9ae8fb405f8f4bdec541d73acd9ffbe43f866a228398948d37faab61ccd37f86
+verdict: no_authority
+regions:
+- region: header
+  examined: false
+  finding: The palette screen declares no independent header band.
+- region: facets
+  examined: true
+  finding: Search copy and dismissal affordance align; the shipped dialog matches the governing Figma frame at x=660, y=135.
+- region: body_rows
+  examined: true
+  finding: The existing command labels and iconography remain coherent; the executable Camera and presence consent destination now occupies the sixth visible row, and the same palette is reused by the empty-composer slash affordance rather than a second command store.
+- region: rail
+  examined: false
+  finding: The palette screen declares no rail band.
+- region: footer
+  examined: false
+  finding: The palette screen declares no footer band.
+- region: empty_state
+  examined: true
+  finding: The real empty-query command set is present and was compared without fabricating a search result.
+- region: keyboard
+  examined: true
+  finding: Escape and destination hints are visible and align broadly.
+deltas:
+- describes: The palette is now mounted over the truthful completed Chat-run fixture; the Figma sample's live HITL, computer-use and spend details remain absent because the fixture has no corresponding receipts.
+  disposition: belongs_to_app_chrome
+  owedBy: SCR-0001
+reviewedBy: Codex deterministic current-capture evidence rebind v30
+reviewedAt: 2026-08-14T16:39:01Z
+basis:
+- DIR-0006
+- DIR-0010
+- DIR-0011
+- DIR-0012
+- DIR-0015
+- DIR-0016
+- DIR-0017
+- DIR-0018
+- DIR-0020
+- DIR-0021
+- DIR-0022
+- DIR-0028
+- DIR-0029
+- DIR-0030
+- DIR-0033
+- DIR-0035
+- DIR-0036
+- SCR-0005
+- apps/worker/tests/visual/states.json
+- docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json
+- docs/design/evidence/2026-08-11-console-parity/current/metrics.json
+notes: The unchanged frame digest is retained from the existing depth-limited ledger only and is not eligible for sign-off. The current palette capture preserves the governing Figma x=660, y=135 placement over Chat-run. DECISION-0003 makes Figma govern over the executable HTML crop's x=440 centring disagreement. This no_authority row binds only the deterministic current screenshot and current route source.

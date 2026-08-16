@@ -60,6 +60,9 @@ export interface AgentCapabilityInfo {
   is_ephemeral: boolean;
   cost_tier: string;
   model_endpoint?: string | null;
+  vision_model_endpoint?: string | null;
+  /** Per-agent modality overrides. Values are opaque endpoint ids. */
+  model_routes?: Record<string, string>;
   familiar_genotype: FamiliarGenotype;
 }
 
@@ -157,6 +160,8 @@ export interface ModelEndpointInfo {
   kind: string;
   model: string;
   data_class: string;
+  modalities?: Array<"text" | "vision" | "stt" | "tts" | "realtime" | string>;
+  revision: number;
   is_active: boolean;
   status: "active" | "retired";
 }
@@ -500,6 +505,12 @@ export interface ConversationSummary {
   title: string;
   status: string;
   updated_at: string;
+  /** Server-owned active-run truth; older kernels may omit this field. */
+  working?: boolean;
+  origin?: "user" | "routine";
+  source_ref?: string | null;
+  source_run_id?: string | null;
+  companion_id?: string | null;
 }
 
 export interface ConversationsResponse {
@@ -510,7 +521,8 @@ export interface ConversationsResponse {
 // page (a limit and/or a non-zero offset) returns this shape: the page's rows
 // plus next_offset, the offset to request for the following page (null once the
 // list is exhausted). A bare GET /v1/conversations (no params) still returns the
-// unpaginated ConversationsResponse above, so that legacy path is untouched.
+// unpaginated ConversationsResponse wrapper above; only the optional content-free
+// working projection was added to each summary.
 export interface ConversationsPageResponse {
   conversations: ConversationSummary[];
   next_offset: number | null;
@@ -627,9 +639,27 @@ export interface ConversationModelContext {
 }
 
 export interface ConversationResponse {
+  conversation?: Pick<
+    ConversationSummary,
+    "id" | "title" | "status" | "origin" | "source_ref" | "source_run_id" | "companion_id"
+  >;
   messages: ChatMessage[];
   active_run_id?: string | null;
   model_context?: ConversationModelContext;
+  /** Pending steer ids in the exact order the server will claim them. */
+  queued_message_ids?: string[];
+}
+
+export interface ConversationQueueReorderRequest {
+  /** Complete order observed before the move; provides optimistic concurrency. */
+  expected_message_ids: string[];
+  /** Complete desired order, containing the exact same ids. */
+  message_ids: string[];
+}
+
+export interface ConversationQueueReorderResponse {
+  status: "ok";
+  message_ids: string[];
 }
 
 export interface ChatFollowFrame {
@@ -661,6 +691,9 @@ export interface ChatRequest {
   // availability, or cost policy; the selected profile is emitted as a
   // model_routing event.
   model_profile_id?: string;
+  // Opaque tenant-approved text-chat choice. The server resolves its exact model
+  // and may override it under classification or availability policy.
+  model_choice_id?: string;
 }
 
 // POST /v1/me/conversations/{cid}/messages/{mid}/regenerate: re-runs the last
@@ -813,6 +846,12 @@ export interface ChatWorkflowStep {
   step_id: string;
   action: string;
   status: "running" | "ok" | "failed" | "skipped" | "paused" | "error";
+  // WHY the step is in that status, when the interpreter said: a skip's cause
+  // ("branch_mismatch" | "parents_skipped" | "parent_failed" | ...), a retry
+  // tick ("retry_1"), or an absorbed failure ("error_strategy_branch" |
+  // "error_strategy_default"). Free text, bounded server-side; render as a
+  // hint, never parse for control flow.
+  reason?: string;
 }
 
 // The interpreter's run-level state marker. A completed or failed marker lets
@@ -1322,6 +1361,15 @@ export interface WorkflowStepDefinition extends Record<string, unknown> {
 
 export interface WorkflowDefinition extends Record<string, unknown> {
   steps?: unknown[];
+  _boltrig_routine?: RoutineDefinition;
+}
+
+export interface RoutineDefinition {
+  version: 1;
+  name: string;
+  goal: string;
+  companion_id: "familiar" | "jarvis";
+  notify?: { completion?: boolean };
 }
 
 export type WorkflowScheduleObservedStatus =
@@ -1355,6 +1403,7 @@ export interface WorkflowSummary {
   status: "active" | "archived";
   schedule?: { cron: string; timezone: string } | null;
   schedule_state?: WorkflowScheduleState;
+  routine?: RoutineDefinition | null;
 }
 
 export interface WorkflowsResponse {
@@ -1370,6 +1419,7 @@ export interface WorkflowDetail {
   status: "active" | "archived";
   schedule?: { cron: string; timezone: string } | null;
   schedule_state?: WorkflowScheduleState;
+  routine?: RoutineDefinition | null;
 }
 
 export interface UpsertWorkflowRequest {
@@ -1560,6 +1610,54 @@ export interface ModelProfilesResponse {
   profiles: ModelProfile[];
 }
 
+/** A caller-visible, tenant-approved model choice for conversational turns.
+ * `id` remains an opaque governed selection; only the exact non-secret model
+ * name needed to label the switcher is projected to the client. */
+export interface ChatModelChoice {
+  id: string;
+  model_name: string;
+  available: boolean;
+  is_default: boolean;
+  modalities: string[];
+  unavailable_reason?: string | null;
+}
+
+export interface ChatModelChoicesResponse {
+  status: "ok" | "unavailable";
+  reason: string | null;
+  choices: ChatModelChoice[];
+  default_choice_id?: string | null;
+  default_model_name?: string | null;
+  default_source?: "personal" | "platform";
+  default_available?: boolean;
+  default_unavailable_reason?: string | null;
+}
+
+export type BifrostCatalogueUnavailableReason =
+  | "not_configured"
+  | "invalid_gateway_configuration"
+  | "gateway_timeout"
+  | "gateway_unavailable"
+  | "gateway_redirect_rejected"
+  | "gateway_response_rejected"
+  | "response_too_large"
+  | "schema_invalid"
+  | "catalogue_too_large"
+  | "pagination_limit";
+
+/** The deliberately small, non-secret projection of one Bifrost model. */
+export interface BifrostModelView {
+  id: string;
+  name: string;
+  input_modalities?: string[];
+}
+
+export interface BifrostModelsResponse {
+  status: "ok" | "unavailable";
+  models: BifrostModelView[];
+  reason: BifrostCatalogueUnavailableReason | null;
+}
+
 export type ArtifactProvenanceKind =
   | "agent"
   | "tool"
@@ -1674,13 +1772,46 @@ export interface OwnerDeviceLeaseReceipt {
   duration_ms?: number;
   exit_code?: number | null;
   output_captured?: false;
+  relative_path?: string | null;
+  entries?: DeviceFileListEntry[];
+  truncated?: boolean;
+}
+
+export type DeviceFileKind = "file" | "directory" | "symlink";
+
+export interface DeviceFileListEntry {
+  name: string;
+  path: string;
+  kind: DeviceFileKind;
+  byte_size: number | null;
+}
+
+export interface DeviceFileListReceipt {
+  relative_path: string | null;
+  entries: DeviceFileListEntry[];
+  truncated: boolean;
+}
+
+export interface DeviceFileListRequest {
+  relative_path: string | null;
+  max_entries: number;
+}
+
+export interface DeviceLeaseInvokeOptions {
+  approvalId?: string;
+  idempotencyKey?: string;
+  context?: Record<string, unknown>;
 }
 
 export interface OwnerDeviceLease {
   id: string;
   device_id: string;
   root_id: string;
-  verb: "device.file.read" | "device.file.write" | "device.command.run";
+  verb:
+    | "device.file.list"
+    | "device.file.read"
+    | "device.file.write"
+    | "device.command.run";
   status: OwnerDeviceLeaseStatus;
   issued_at: string;
   expires_at: string;
@@ -1995,6 +2126,7 @@ export interface WorkflowRunDescriptor {
   status?: string;
   inputs?: Record<string, unknown>;
   queued_at?: string;
+  conversation_id?: string;
   error?: string;
   [key: string]: unknown;
 }
@@ -2027,9 +2159,14 @@ export interface WorkflowStatsResponse {
 export interface WorkflowStepResult {
   id: string;
   action?: string;
-  status: "ok" | "failed" | "skipped" | "paused" | "error" | string;
+  // "exception" = the step failed but a declared error strategy absorbed it
+  // (on_error: branch|default) - the run continues, honestly marked.
+  status: "ok" | "failed" | "skipped" | "paused" | "error" | "exception" | string;
   output?: unknown;
   reason?: string;
+  // Present on a checkpoint-replayed step of a resumed run.
+  replayed?: boolean;
+  hitl_request_id?: string;
 }
 
 export interface WorkflowRunRecord {
@@ -2037,6 +2174,9 @@ export interface WorkflowRunRecord {
   workflow_id: string;
   version: string;
   status: "completed" | "failed" | "paused" | string;
+  // Failures absorbed by step error strategies or loop item-error modes:
+  // the run completed, but not cleanly - partial success stays observable.
+  exceptions_count?: number;
   steps: WorkflowStepResult[];
   inputs: Record<string, unknown>;
 }
@@ -3068,6 +3208,16 @@ export interface MeSettingsResponse {
   setting_sources?: Record<string, "tenant_default" | "user_override">;
 }
 
+export interface UpdateMeProfileRequest {
+  display_name: string;
+}
+
+export interface UpdateMeProfileResponse {
+  status: string;
+  profile?: UserProfile;
+  reason?: string;
+}
+
 // PUT accepts either {key, value} or {settings: {k: v}}.
 export interface PutSettingsRequest {
   key?: string;
@@ -3079,6 +3229,149 @@ export interface PutSettingsResponse {
   status: string;
   keys?: string[];
   reason?: string;
+}
+
+export type ApprovalPosture = "always_ask" | "risk_based" | "full_access";
+
+export interface ApprovalPostureResponse {
+  status?: "ok";
+  posture: ApprovalPosture;
+  source: "safe_default" | "user_override";
+  enforcement: {
+    applies_to: "delegated_agent_adapter_calls";
+    workspace_blocking_verbs_remain: true;
+    control_plane_approvals_remain: true;
+    direct_human_consequence_gate_remains: true;
+    authority_is_never_widened: true;
+  };
+}
+
+export interface PutApprovalPostureRequest {
+  posture: ApprovalPosture;
+  confirm?: "full_access";
+}
+
+// --- Camera and presence -----------------------------------------------------
+// First-class Boltrig SERVICES, not a character's private daemons
+// (docs/SPEC-character-bundle.md). The user owns the switch; a bundle only ever
+// declares that it would like the capability and is refused honestly when it is
+// off. Every reason code below is one the kernel actually emits — with the one
+// marked exception, which by construction it cannot — so the Worker can render
+// an absent capability rather than inventing a substitute for it.
+
+export type SensingCapability = "camera_observations" | "presence";
+
+export type SensingRefusalReason =
+  | "camera_disabled"
+  | "camera_not_bound"
+  | "camera_device_missing"
+  | "camera_paused_quiet_hours"
+  | "camera_paused_dark"
+  | "camera_paused_gesture"
+  /** The interlock's own string, reused verbatim rather than given a synonym. */
+  | "camerad_holds_device"
+  | "presence_disabled"
+  | "presence_not_enrolled"
+  | "presence_not_calibrated"
+  /**
+   * A capability name this Boltrig does not offer at all. It is NOT "the
+   * character never asked for this one" — see the note below the union; the
+   * kernel is never told which character is asking and cannot make that claim.
+   */
+  | "capability_unknown"
+  /**
+   * The one client-originated code, and the only one the kernel can never emit:
+   * a kernel that answers is by definition reachable. The caller synthesises it
+   * when the ask fails or the route is unknown to this build, because being
+   * unable to ask is not consent — but it is also not a switch the user moved,
+   * so it must not borrow `camera_disabled`.
+   */
+  | "kernel_unreachable";
+
+/**
+ * `capability_not_declared` is DELIBERATELY ABSENT, and was removed on
+ * 2026-08-13 rather than left as decoration.
+ *
+ * The kernel sent it for any name outside its capability set, which reads as
+ * "this character did not declare that" — an enforcement NO LAYER PERFORMS.
+ * `GET /v1/sensing/capability` carries the user's session and no character
+ * identity, so the kernel cannot tell one caller from another. Declaration is
+ * honoured only by the Stage, which asks for exactly what `wantsSensing` lists;
+ * anything calling `client.sensingCapability` directly bypasses that. A wire
+ * code asserting a check nobody runs is the kind of thing a later reader builds
+ * on. `capability_unknown` says only what is actually known.
+ */
+
+/** A correct answer, never a fault: `refused` rather than `error`. */
+export interface SensingCapabilityDecision {
+  status: "granted" | "refused";
+  capability: string;
+  reason?: SensingRefusalReason;
+  detail?: string;
+  /**
+   * What changes the answer. `settings:sensing` is a place the user goes;
+   * `retry:automatic` is the honest remedy for an unreachable kernel — there is
+   * nowhere to go, the caller re-asks on its own cadence.
+   */
+  remedy?: "settings:sensing" | "retry:automatic";
+}
+
+export interface SensingCameraBinding {
+  camera_id: string;
+  device_id: string;
+  descriptor_fingerprint?: string;
+  label?: string;
+}
+
+export interface SensingCameraSettings {
+  enabled: boolean;
+  source: "safe_default" | "user_override";
+  binding: SensingCameraBinding | null;
+  retention_hours: number;
+  quiet_hours: { start: number; end: number };
+}
+
+export interface SensingPresenceSettings {
+  enabled: boolean;
+  source: "safe_default" | "user_override";
+  /** Why presence cannot be turned on, stated rather than left as a dead toggle. */
+  blocked_by?: SensingRefusalReason | null;
+}
+
+/**
+ * The enrolled face, described but never disclosed. It is the USER's biometrics,
+ * so `exportable` is a constant `false` rather than a preference: anchor images
+ * are the character's face and travel with a bundle; this never does.
+ */
+export interface SensingEnrollmentView {
+  present: boolean;
+  count: number;
+  threshold: number | null;
+  /** Honest: the false-accept rate has not been measured on this enrolment. */
+  far_measured: boolean;
+  exportable: false;
+}
+
+export interface SensingResponse {
+  status?: "ok";
+  camera: SensingCameraSettings;
+  presence: SensingPresenceSettings;
+  enrollment: SensingEnrollmentView;
+  capabilities: SensingCapabilityDecision[];
+  reason?: string;
+}
+
+export interface PutSensingCameraRequest {
+  enabled?: boolean;
+  /** `null` clears the binding; a camera the agent never published is refused. */
+  camera_id?: string | null;
+  device_id?: string;
+  retention_hours?: number;
+  quiet_hours?: { start: number; end: number };
+}
+
+export interface PutSensingPresenceRequest {
+  enabled: boolean;
 }
 
 export interface ActivityRow {
@@ -3589,6 +3882,12 @@ export interface LoginResponse {
   challenge_token?: string;
 }
 
+export interface SessionCsrfResponse {
+  status: string;
+  csrf_token?: string;
+  reason?: string;
+}
+
 // The follow-up second-factor verification that issues the session withheld by
 // login ([2026] VJS-COUNTY 10, D3). The code is a 6-digit TOTP or a recovery code.
 export interface TwoFactorChallengeRequest {
@@ -3753,6 +4052,7 @@ export interface OrgMembersResponse {
 }
 
 export type AiKeyLevel = "org" | "workspace" | "user";
+export type AiKeyModality = "text" | "vision";
 
 // An AI-config row for listing: provider/model + WHETHER a key is set, NEVER the
 // key itself (the secret lives only in the sealed credential store).
@@ -3761,8 +4061,10 @@ export interface AiKeyView {
   scope_id: string;
   provider: string;
   model: string;
+  modality?: AiKeyModality;
   base_url?: string | null;
   has_key: boolean;
+  gateway_ready?: boolean;
   updated_at?: string | null;
 }
 
@@ -3777,8 +4079,15 @@ export interface SetAiKeyRequest {
   scope_id?: string;
   provider: string;
   model: string;
+  modality?: AiKeyModality;
   base_url?: string;
   api_key: string;
+}
+
+export interface ActivateAiKeyRequest {
+  level: AiKeyLevel;
+  scope_id?: string;
+  modality?: AiKeyModality;
 }
 
 export type AiKeyProposalStatus =
@@ -3796,6 +4105,7 @@ export interface AiKeyProposalView {
   scope_id: string;
   provider: string;
   model: string;
+  modality?: AiKeyModality;
   base_url?: string | null;
   status: AiKeyProposalStatus;
   created_at: string;
@@ -3810,6 +4120,7 @@ export interface SetAiKeyResponse {
   scope_id?: string;
   provider?: string;
   model?: string;
+  modality?: AiKeyModality;
   reason?: string;
 }
 
@@ -3825,6 +4136,7 @@ export interface AiKeyProposalResponse {
   scope_id?: string;
   provider?: string;
   model?: string;
+  modality?: AiKeyModality;
   base_url?: string | null;
   reason?: string;
 }
@@ -3834,5 +4146,6 @@ export interface DeleteAiKeyResponse {
   hitl_request_id?: string;
   level?: string;
   scope_id?: string;
+  modality?: AiKeyModality;
   reason?: string;
 }

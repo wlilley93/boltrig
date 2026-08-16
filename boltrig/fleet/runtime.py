@@ -1,133 +1,22 @@
-"""The pluggable agent-runtime abstraction (P4, US-FLT-04).
+"""Agent-runtime selection for the Codex-owned fleet.
 
-A ``Runtime`` is the seam between the fleet's spawn logic and however an agent
-is actually executed: a deterministic in-process script, an OpenAI-compatible
-gateway, or the Claude API. The spawner never imports an SDK directly - it asks
-``build_runtime`` for the right implementation given an ``AgentCapability`` and
-runs it. Every implementation returns the same ``AgentResult``.
-
-Offline-safety is a hard rule (P9): importing this module never imports an LLM
-SDK, and running any runtime with no SDK installed and no API key present falls
-back to a clearly-marked degraded result rather than crashing.
+Codex is the only model-backed agent runtime Boltrig ships.  ``ScriptRuntime``
+remains as the deterministic, non-agent execution seam used by tests and
+integration-only capabilities.  Historical provider-native, OpenCode, and
+Rivet runtimes are deliberately not importable or feature-gated: a stale stored
+capability naming one fails honestly through ``UnavailableRuntime``.
 """
 
 from __future__ import annotations
 
-import os
-from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from boltrig.config.environment import is_truthy
 from boltrig.models import InvocationContext
 
 from .result import AgentResult
 
-if TYPE_CHECKING:  # avoid importing the model record at runtime; keep it a seam
-    from boltrig.models import AgentCapability, ModelEndpoint
-
-# A lookup from a model-endpoint id to its record (or ``None``). The spawner
-# resolves this from the store (async) and hands ``build_runtime`` a plain
-# sync callable, so the factory itself stays synchronous.
-EndpointLookup = Callable[[str], "ModelEndpoint | None"]
-
-# Rough per-token cost by tier (millionths of a currency unit). Used only when a
-# backend does not report real usage, so accounting is never left blank.
-_MICROS_PER_TOKEN: dict[str, int] = {"cheap": 1, "standard": 5, "expensive": 25}
-
-
-# Map an ai_config PROVIDER selection ([2026] VJS-COUNTY 8, D5) to the runtime kind
-# that serves it. This is the model/provider-routing seam: with a resolved config the
-# spawner selects the runtime by provider, not by the capability's env default. Local
-# OpenAI-compatible servers (ollama / vllm) are served by the OpenAI runtime; the
-# Anthropic provider names map to the Claude API runtime. A provider OUTSIDE this set
-# is UNKNOWN and must degrade to the env default runtime, never crash a run (P9).
-_PROVIDER_RUNTIME: dict[str, str] = {
-    "openai": "openai",
-    "ollama": "openai",
-    "vllm": "openai",
-    "bifrost": "openai",
-    "cerebras": "openai",
-    "fireworks": "openai",
-    "runpod": "openai",
-    "opencode": "opencode",
-    "rivet": "rivet_agentos",
-    "rivet_agentos": "rivet_agentos",
-    "rivet-agentos": "rivet_agentos",
-    "anthropic": "claude-api",
-    "claude": "claude-api",
-    "claude-api": "claude-api",
-}
-
-
-def runtime_for_provider(provider: str | None) -> str | None:
-    """The runtime kind serving an ai_config PROVIDER selection, or None if unknown.
-
-    None is the fail-safe signal (D5): an unknown / empty provider must degrade to the
-    capability's env-default runtime rather than crash a run (P9). Case-insensitive so
-    a config's ``provider`` is matched the way ``ModelEndpoint.kind`` values are named.
-    """
-    if not provider:
-        return None
-    return _PROVIDER_RUNTIME.get(provider.strip().lower())
-
-
-# Decision 0012: Codex is the only target agent runtime and script stays the
-# deterministic non-agent fallback. Every other lane (openai / claude-api /
-# opencode / rivet) is staged-cutover rollback residue: it is
-# reachable only when the operator explicitly opts in with
-# BOLTRIG_ENABLE_LEGACY_RUNTIMES (default OFF). With the flag unset, requesting
-# a legacy lane returns the typed unavailable result instead of reaching the
-# lane; with it set, dispatch is byte-for-byte what it was (rollback-ability).
-#
-# The `pi` lane is GONE, not gated: [2026] VJS-PC 20 L1 permits retiring pi from
-# the roster, and a measurement on both prod tenants found one real request in
-# three weeks against 61,212 health probes. THIS SET AND THE DISPATCH BELOW ARE
-# THE ROUTING MECHANISM PC-20 L3 REQUIRES TO STAY LIVE: five non-Codex lanes
-# remain re-wirable by setting the flag alone, with no fresh order. Emptying this
-# set, or reducing it to Codex, is expressly forbidden while production_ready is
-# False. See docs/decisions/0020-retire-the-pi-lane.md.
-LEGACY_RUNTIMES_ENV = "BOLTRIG_ENABLE_LEGACY_RUNTIMES"
-_LEGACY_RUNTIME_KINDS = frozenset(
-    {"openai", "claude-api", "opencode", "rivet", "rivet_agentos", "rivet-agentos"}
-)
-
-
-def _legacy_runtimes_enabled() -> bool:
-    """The legacy-lane opt-in, read LIVE (not at import) so tests and dynamic
-    config honour a flag set after import."""
-    return is_truthy(os.environ.get(LEGACY_RUNTIMES_ENV))
-
-
-def _first_env(names: tuple[str, ...]) -> str | None:
-    """The first non-empty environment value among ``names`` (empty is falsy)."""
-    for env in names:
-        value = os.environ.get(env)
-        if value:
-            return value
-    return None
-
-
-def _estimate_tokens(prompt: str, tools: list[str]) -> int:
-    """A deterministic, offline token estimate (~4 chars/token)."""
-    chars = len(prompt) + sum(len(t) for t in tools)
-    return max(16, chars // 4)
-
-
-def _system_for(context) -> str | None:
-    """The kernel-composed system prompt for this run's tier (may be None)."""
-    from boltrig.fleet.prompt_stack import compose_system_prompt
-
-    return compose_system_prompt(getattr(context, "actor_tier", "ephemeral"))
-
-
-def _messages(context, prompt: str) -> list[dict]:
-    """OpenAI-style messages with the authoritative system prompt prepended; the
-    caller's prompt is the user content and can never strip the system frame."""
-    system = _system_for(context)
-    msgs: list[dict] = []
-    if system:
-        msgs.append({"role": "system", "content": system})
-    msgs.append({"role": "user", "content": prompt})
-    return msgs
+if TYPE_CHECKING:
+    from boltrig.models import AgentCapability
 
 
 @runtime_checkable
@@ -140,17 +29,12 @@ class Runtime(Protocol):
     async def run(
         self, prompt: str, context: InvocationContext, *, tools: list[str]
     ) -> AgentResult:
-        """Execute the agent and return a structured ``AgentResult``."""
+        """Execute the agent and return a structured result."""
         ...
 
 
 class ScriptRuntime:
-    """Deterministic, offline, NO-LLM runtime (US-FLT-04).
-
-    Used for integration-only tasks (the agent just needs to drive verbs, not
-    reason) and as the universal test / offline fallback. It echoes the task and
-    reports zero cost, so it is safe to run anywhere with no network or keys.
-    """
+    """Deterministic, offline, non-model runtime for explicit script work."""
 
     runtime = "python-script"
 
@@ -160,7 +44,6 @@ class ScriptRuntime:
     async def run(
         self, prompt: str, context: InvocationContext, *, tools: list[str]
     ) -> AgentResult:
-        """Return a deterministic result echoing the task; zero cost."""
         return AgentResult.succeeded(
             output={
                 "runtime": self.runtime,
@@ -176,16 +59,7 @@ class ScriptRuntime:
 
 
 class UnavailableRuntime(ScriptRuntime):
-    """The deterministic fallback for a runtime Boltrig cannot provide.
-
-    An unknown capability runtime, a legacy lane gated off by
-    ``BOLTRIG_ENABLE_LEGACY_RUNTIMES`` (decision 0012), or a trusted lane that
-    is not wired still must not crash a run (P9), but a stand-in echo is never
-    presented upstream as a real run: the result is degrade-marked under the
-    REQUESTED runtime's name (US-FLT-07; an unavailable runtime returns a typed
-    unavailable result, never a silent side door). A capability that actually
-    asks for 'script' keeps the plain, non-degraded ScriptRuntime.
-    """
+    """Typed, non-executing result for stale or unconfigured runtime names."""
 
     def __init__(self, *, requested: str, cost_tier: str = "cheap") -> None:
         super().__init__(cost_tier=cost_tier)
@@ -194,276 +68,38 @@ class UnavailableRuntime(ScriptRuntime):
     async def run(
         self, prompt: str, context: InvocationContext, *, tools: list[str]
     ) -> AgentResult:
-        """A typed unavailable result, never an unmarked echo."""
         return AgentResult.degrade(
             runtime=self._requested, reason="runtime_unavailable", prompt=prompt
         )
 
 
-class OpenAiRuntime:
-    """A native OpenAI-compatible runtime (lazy HTTP, degrade if absent).
-
-    First-class runtime for the sensitive-local lane (US-RUN-01): it talks the
-    OpenAI ``/chat/completions`` shape directly, so a local server (vLLM, Ollama)
-    or a z.ai/GLM endpoint is a runtime, not only a routing guard. The model is
-    pinned by the resolved ``ModelEndpoint`` (P4). With no endpoint or a
-    transport failure it returns a degraded result instead of crashing (P9).
-
-    Keyless-local: local servers usually need no auth, so an empty key is NOT a
-    hard degrade - only an unset endpoint is. When a key is present it is sent as
-    a bearer; when empty, the Authorization header is omitted and the call still
-    proceeds. No tool/verb credential is ever placed in the body (SEC-27).
-    """
-
-    runtime = "openai"
-    _KEY_ENVS = ("BOLTRIG_OPENAI_API_KEY", "OPENAI_API_KEY")
-
-    def __init__(
-        self,
-        *,
-        endpoint: ModelEndpoint | None = None,
-        cost_tier: str = "standard",
-        api_key: str | None = None,
-    ) -> None:
-        self.endpoint = endpoint
-        self.cost_tier = cost_tier
-        # Resolved per-org/workspace/user AI key (D5); env fallback when None.
-        self._key_override = api_key or None
-
-    def _api_key(self) -> str | None:
-        return self._key_override or _first_env(self._KEY_ENVS)
-
-    async def run(
-        self, prompt: str, context: InvocationContext, *, tools: list[str]
-    ) -> AgentResult:
-        """Call an OpenAI-compatible endpoint; degrade cleanly when unconfigured."""
-        if self.endpoint is None or not self.endpoint.base_url:
-            return AgentResult.degrade(
-                runtime=self.runtime, reason="no_endpoint", prompt=prompt
-            )
-        api_key = self._api_key()  # empty is fine: keyless local is allowed
-        try:  # lazy import: never required at module import time
-            import httpx
-
-            payload = {
-                "model": self.endpoint.model,
-                "messages": _messages(context, prompt),
-                "tools": list(tools),  # names only - never a tool/verb credential (SEC-27)
-            }
-            headers = {}
-            if api_key:  # only present a bearer when a real key exists (keyless local)
-                headers["Authorization"] = f"Bearer {api_key}"
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(
-                    f"{self.endpoint.base_url.rstrip('/')}/chat/completions",
-                    json=payload,
-                    headers=headers,
-                )
-                resp.raise_for_status()
-                data: dict[str, Any] = resp.json()
-            return _result_from_chat(data, self.runtime, self.cost_tier, prompt, tools)
-        except Exception as exc:  # network/SDK/parse failure -> degrade, never crash
-            return AgentResult.degrade(
-                runtime=self.runtime, reason=type(exc).__name__, prompt=prompt
-            )
-
-
-class ClaudeApiRuntime:
-    """A Claude-API-backed runtime (lazy ``anthropic`` import, degrade if absent).
-
-    The model is pinned by the resolved ``ModelEndpoint`` (P4). With no SDK
-    installed or no ``ANTHROPIC_API_KEY`` it returns a degraded result (P9).
-    """
-
-    runtime = "claude-api"
-    _KEY_ENVS = ("ANTHROPIC_API_KEY", "BOLTRIG_ANTHROPIC_API_KEY")
-    _DEFAULT_MODEL = "claude-sonnet-4-5"
-
-    def __init__(
-        self,
-        *,
-        endpoint: ModelEndpoint | None = None,
-        cost_tier: str = "expensive",
-        api_key: str | None = None,
-    ) -> None:
-        self.endpoint = endpoint
-        self.cost_tier = cost_tier
-        # Resolved per-org/workspace/user AI key (D5); env fallback when None.
-        self._key_override = api_key or None
-
-    def _api_key(self) -> str | None:
-        return self._key_override or _first_env(self._KEY_ENVS)
-
-    async def run(
-        self, prompt: str, context: InvocationContext, *, tools: list[str]
-    ) -> AgentResult:
-        """Call the Claude API; degrade cleanly when the SDK/key is absent."""
-        api_key = self._api_key()
-        if api_key is None:
-            return AgentResult.degrade(
-                runtime=self.runtime, reason="no_api_key", prompt=prompt
-            )
-        try:
-            from anthropic import AsyncAnthropic  # lazy: optional dependency
-        except Exception as exc:
-            return AgentResult.degrade(
-                runtime=self.runtime, reason=f"sdk_absent:{type(exc).__name__}",
-                prompt=prompt,
-            )
-        model = (self.endpoint.model if self.endpoint else None) or self._DEFAULT_MODEL
-        base_url = self.endpoint.base_url if self.endpoint else None
-        try:
-            client = AsyncAnthropic(api_key=api_key, base_url=base_url)
-            # Anthropic takes the system prompt as a top-level param, not a message.
-            system = _system_for(context)
-            create_kwargs: dict[str, Any] = {
-                "model": model,
-                "max_tokens": 1024,
-                "messages": [{"role": "user", "content": prompt}],
-            }
-            if system:
-                create_kwargs["system"] = system
-            msg = await client.messages.create(**create_kwargs)
-            text = "".join(
-                getattr(block, "text", "") for block in getattr(msg, "content", [])
-            )
-            usage = getattr(msg, "usage", None)
-            tokens = 0
-            if usage is not None:
-                tokens = int(getattr(usage, "input_tokens", 0)) + int(
-                    getattr(usage, "output_tokens", 0)
-                )
-            cost = tokens * _MICROS_PER_TOKEN.get(self.cost_tier, 5)
-            return AgentResult.succeeded(
-                output={"runtime": self.runtime, "model": model, "text": text},
-                summary=text[:256],
-                tokens_used=tokens,
-                cost_micros=cost,
-            )
-        except Exception as exc:  # API/network failure -> degrade, never crash
-            return AgentResult.degrade(
-                runtime=self.runtime, reason=type(exc).__name__, prompt=prompt
-            )
-
-
-def _result_from_chat(
-    data: dict[str, Any], runtime: str, cost_tier: str, prompt: str, tools: list[str]
-) -> AgentResult:
-    """Map an OpenAI-shaped chat-completions response into an ``AgentResult``."""
-    try:
-        text = data["choices"][0]["message"]["content"] or ""
-    except (KeyError, IndexError, TypeError):
-        text = ""
-    usage = data.get("usage") or {}
-    tokens = int(usage.get("total_tokens") or 0)
-    if tokens == 0:
-        tokens = _estimate_tokens(prompt, tools)
-    cost = tokens * _MICROS_PER_TOKEN.get(cost_tier, 5)
-    return AgentResult.succeeded(
-        output={"runtime": runtime, "text": text},
-        summary=text[:256],
-        tokens_used=tokens,
-        cost_micros=cost,
-    )
-
-
-def _build_legacy_runtime(
-    kind: str,
-    capability: AgentCapability,
-    *,
-    endpoint: "ModelEndpoint | None",
-    api_key: str | None,
-    opencode_config: dict[str, Any] | None,
-    rivet_config: dict[str, Any] | None,
-) -> Runtime:
-    """Construct a legacy lane. Reached ONLY when the decision-0012 opt-in flag
-    (``BOLTRIG_ENABLE_LEGACY_RUNTIMES``) is set; otherwise ``build_runtime``
-    returns the typed unavailable result without ever landing here."""
-    if kind == "openai":
-        return OpenAiRuntime(
-            endpoint=endpoint, cost_tier=capability.cost_tier, api_key=api_key
-        )
-    if kind == "claude-api":
-        return ClaudeApiRuntime(
-            endpoint=endpoint, cost_tier=capability.cost_tier, api_key=api_key
-        )
-    if kind == "opencode":
-        from .opencode_runtime import OpenCodeRuntime
-
-        cfg = dict(opencode_config or {})
-        return OpenCodeRuntime(
-            endpoint=endpoint, cost_tier=capability.cost_tier or "standard", **cfg
-        )
-    # rivet / rivet_agentos / rivet-agentos
-    from .rivet_runtime import RivetAgentOSRuntime
-
-    cfg = dict(rivet_config or {})
-    cfg.setdefault("agentos_url", None)
-    return RivetAgentOSRuntime(
-        endpoint=endpoint, cost_tier=capability.cost_tier or "standard", **cfg
-    )
-
-
 def build_runtime(
     capability: AgentCapability,
-    endpoint_lookup: EndpointLookup | None = None,
+    endpoint_lookup: object | None = None,
     *,
-    opencode_config: dict[str, Any] | None = None,
-    rivet_config: dict[str, Any] | None = None,
     codex_config: dict[str, Any] | None = None,
-    api_key: str | None = None,
-    runtime_override: str | None = None,
-    endpoint_override: "ModelEndpoint | None" = None,
 ) -> Runtime:
-    """Select the runtime implementation for a capability (P4, US-FLT-04, US-RUN-01).
+    """Build Codex or an explicit deterministic script runtime.
 
-    Dispatch is by ``capability.runtime``. The model endpoint (if any) is resolved
-    through ``endpoint_lookup`` so the model is pinned by data. ``opencode_config``
-    supplies the OpenCode scoped-MCP callbacks. Unknown runtimes fall back to a
-    degrade-marked deterministic runtime.
-
-    ``api_key`` is the resolved per-org/workspace/user AI key ([2026] VJS-COUNTY 8,
-    D5): a network runtime uses it instead of the env-configured provider key; None
-    falls back to the env key so an existing single-tenant deploy is unchanged.
-
-    ``runtime_override`` / ``endpoint_override`` carry the model/provider ROUTING an
-    ai_config selects (D5): a known provider's mapped runtime kind + endpoint win over
-    ``capability.runtime`` and the lookup. Both default to None (dispatch EXACTLY as
-    before), the spawner only passes a KNOWN override, and never routes sensitive data
-    this way (SEC-12).
-
-    Legacy lanes (everything except codex and the script family) are gated behind
-    ``BOLTRIG_ENABLE_LEGACY_RUNTIMES`` (decision 0012, default OFF): with the flag
-    unset the resolved legacy kind - whether from ``capability.runtime`` or an
-    override - returns an ``UnavailableRuntime`` instead of the lane.
+    ``endpoint_lookup`` remains in the call shape because endpoint resolution is
+    owned by ``RuntimeResolver``; it is intentionally unused here.  Unknown and
+    retired names never revive a provider client or subprocess lane.
     """
-    endpoint: ModelEndpoint | None = endpoint_override
-    if endpoint is None and capability.model_endpoint and endpoint_lookup is not None:
-        endpoint = endpoint_lookup(capability.model_endpoint)
 
-    kind = runtime_override or capability.runtime
-    if kind in _LEGACY_RUNTIME_KINDS:
-        if not _legacy_runtimes_enabled():
-            # Gated-off legacy lane (decision 0012): the typed unavailable result,
-            # degrade-marked under the REQUESTED lane's name, never the lane itself.
-            return UnavailableRuntime(
-                requested=kind, cost_tier=capability.cost_tier or "cheap"
-            )
-        return _build_legacy_runtime(
-            kind,
-            capability,
-            endpoint=endpoint,
-            api_key=api_key,
-            opencode_config=opencode_config,
-            rivet_config=rivet_config,
-        )
-    if kind == "codex":  # trusted read-only Codex; wall re-asserted in builder (D1)
+    del endpoint_lookup
+    kind = capability.runtime
+    if kind == "codex":
         from .codex_runtime import build_trusted_codex_runtime
 
         return build_trusted_codex_runtime(codex_config, capability.cost_tier)
     if kind in {"script", "python-script", "go-binary"}:
-        # The deterministic non-agent fallback a capability actually asked for.
         return ScriptRuntime(cost_tier=capability.cost_tier or "cheap")
-    # Anything unknown: deterministic, but honestly degrade-marked rather than
-    # an echo presented upstream as a real run (US-FLT-07).
     return UnavailableRuntime(requested=kind, cost_tier=capability.cost_tier or "cheap")
+
+
+__all__ = [
+    "Runtime",
+    "ScriptRuntime",
+    "UnavailableRuntime",
+    "build_runtime",
+]

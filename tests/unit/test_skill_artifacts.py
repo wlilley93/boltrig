@@ -16,6 +16,15 @@ from boltrig.fleet.infrastructure.skill_artifacts import (
     project_sanitized_workspace,
 )
 
+# Linux-only for a different reason than the codex cell suites: not a kernel
+# facility but filesystem semantics. project_sanitized_workspace chmods the
+# capture to 0o500 (skill_artifacts.py:230) and then renames it into place,
+# and BSD requires write permission on the SOURCE directory itself to rename
+# it, where Linux only requires it on the parent. So the product code, not
+# just the test, is Linux-only here - which is fine, because the projection
+# only ever runs inside a cell, and cells need bubblewrap.
+pytestmark = pytest.mark.linux_only
+
 
 def _directory(parent: Path, name: str, mode: int = 0o700) -> Path:
     path = parent / name

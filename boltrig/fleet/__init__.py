@@ -28,9 +28,9 @@ from .department_head import DepartmentHead
 from .pump import WorkPump, build_org
 from .result import AgentResult
 from .runtime import (
-    ClaudeApiRuntime,
     Runtime,
     ScriptRuntime,
+    UnavailableRuntime,
     build_runtime,
 )
 from .spawn import (
@@ -60,7 +60,7 @@ __all__ = [
     # runtimes
     "Runtime",
     "ScriptRuntime",
-    "ClaudeApiRuntime",
+    "UnavailableRuntime",
     "build_runtime",
     "AgentResult",
     # durable execution seam

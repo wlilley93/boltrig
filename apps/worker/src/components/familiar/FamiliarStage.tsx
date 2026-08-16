@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FamiliarGenotype, FamiliarPhenotypeResponse } from "@wlilley93/boltrig-web-sdk";
-import { FamiliarBadge } from "./FamiliarBadge";
+import { FamiliarBadge, familiarPalette } from "./FamiliarBadge";
+import { familiarVisualIdentity } from "./FamiliarGenotype";
 import { FamiliarWebGLRenderer } from "./FamiliarWebGLRenderer";
 import type { FamiliarPresentationMode, FamiliarStageState } from "./FamiliarState";
 import "./familiar.css";
@@ -24,21 +25,27 @@ export function FamiliarStage({
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<FamiliarWebGLRenderer | null>(null);
-  const [fallback, setFallback] = useState(false);
+  const [rendererKind, setRendererKind] = useState<"pending" | "webgl2" | "badge">("pending");
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const renderer = new FamiliarWebGLRenderer();
+    let active = true;
+    const renderer = new FamiliarWebGLRenderer({
+      onFirstPaint: () => {
+        if (active) setRendererKind("webgl2");
+      },
+    });
+    renderer.setGenotype(genotype);
     rendererRef.current = renderer;
     renderer.mount(host);
-    if (renderer.status().state === "failed") setFallback(true);
+    if (renderer.status().state === "failed") setRendererKind("badge");
     return () => {
+      active = false;
       renderer.destroy();
       rendererRef.current = null;
     };
   }, []);
-
   useEffect(() => {
     rendererRef.current?.update(state);
   }, [state]);
@@ -53,17 +60,28 @@ export function FamiliarStage({
     );
   }, [phenotype]);
 
+  useEffect(() => {
+    rendererRef.current?.setGenotype(genotype);
+  }, [genotype]);
+
   const busy = state.working || state.speaking;
+  const identity = familiarVisualIdentity(genotype);
+  const accessibleName = familiarStageAccessibleName(label);
   return (
     <div
       ref={hostRef}
-      className={`familiar-stage ${mode}${fallback ? " fallback" : ""}`}
+      className={`familiar-stage ${mode}${rendererKind === "badge" ? " fallback" : ""}`}
       role="img"
-      aria-label={`Boltrig Familiar · ${busy ? "working" : "ready"}`}
-      data-renderer={fallback ? "badge" : "webgl2"}
+      aria-label={`${accessibleName} · ${busy ? "working" : "ready"}`}
+      aria-busy={rendererKind === "pending" ? "true" : undefined}
+      data-familiar-body={identity.body}
+      data-genotype-source={identity.source}
+      data-renderer={rendererKind}
+      style={familiarPalette(identity.palette)}
     >
-      {fallback && (
+      {rendererKind === "badge" && (
         <FamiliarBadge
+          decorative
           state={busy ? "working" : "ready"}
           genotype={genotype}
           label={label}
@@ -71,4 +89,11 @@ export function FamiliarStage({
       )}
     </div>
   );
+}
+
+function familiarStageAccessibleName(label?: string) {
+  const trimmed = label?.trim();
+  return trimmed?.toLocaleLowerCase() === "familiar"
+    ? trimmed
+    : `${trimmed || "Boltrig"} Familiar`;
 }

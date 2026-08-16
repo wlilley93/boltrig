@@ -20,6 +20,7 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from boltrig.kernel.work_authority import inherit_work_authority
 from boltrig.models import HITLType, InvocationContext, Urgency, WorkItem, WorkStatus
 
 if TYPE_CHECKING:  # type-only seams (no runtime import cost / no cycle)
@@ -103,7 +104,8 @@ class DepartmentHead:
         # US-EXE-04: reject/escalate when the step's fan-out exceeds the cap.
         if len(subtasks) > self.max_children_per_step:
             return await self._escalate(
-                work_item, context,
+                work_item,
+                context,
                 reason="max_children_per_step",
                 detail=f"{len(subtasks)} children > cap {self.max_children_per_step}",
             )
@@ -112,7 +114,8 @@ class DepartmentHead:
         tree = tree_id or await tree_root_id(self._store, work_item)
         if not await self._reserve_budget(work_item.tenant_id, tree, len(subtasks)):
             return await self._escalate(
-                work_item, context,
+                work_item,
+                context,
                 reason="spawn_budget_exhausted",
                 detail=(
                     f"{len(subtasks)} children would exceed spawn budget "
@@ -123,16 +126,19 @@ class DepartmentHead:
         # D8: bounded-parallel children under a per-step semaphore; every result
         # (including a failure record) is captured, and the join never raises.
         semaphore = asyncio.Semaphore(self.max_children_per_step)
-        children = list(await asyncio.gather(
-            *(self._run_child(work_item, s, prefer, context, semaphore) for s in subtasks)
-        ))
+        children = list(
+            await asyncio.gather(
+                *(self._run_child(work_item, s, prefer, context, semaphore) for s in subtasks)
+            )
+        )
 
         new_items: list[Any] = []
         for child in children:
             new_items.extend(child.get("new_work_items", []))
         if len(new_items) > self.max_new_items_per_step:
             escalation = await self._escalate(
-                work_item, context,
+                work_item,
+                context,
                 reason="max_new_items_per_step",
                 detail=f"{len(new_items)} new items > cap {self.max_new_items_per_step}",
             )
@@ -203,9 +209,7 @@ class DepartmentHead:
             result["work_item_id"] = child_item.id
         return result
 
-    async def _create_child_item(
-        self, parent: WorkItem, subtask: str
-    ) -> WorkItem | None:
+    async def _create_child_item(self, parent: WorkItem, subtask: str) -> WorkItem | None:
         """Persist the sub-task as a child WorkItem so the delegation tree is
         visible in the store (US-FLT-06). Created IN_FLIGHT - this step owns it,
         the pump must never claim it. Storeless stubs skip the record."""
@@ -225,12 +229,11 @@ class DepartmentHead:
             on_behalf_of=parent.on_behalf_of,
             workspace_id=parent.workspace_id,
         )
+        inherit_work_authority(parent, child)
         await self._store.create_work_item(child)
         return child
 
-    async def _decompose(
-        self, work_item: WorkItem, context: InvocationContext
-    ) -> list[str]:
+    async def _decompose(self, work_item: WorkItem, context: InvocationContext) -> list[str]:
         """Break a work item into sub-task strings (reasoning, then fallback)."""
         if self._runtime is not None:
             try:
@@ -243,7 +246,8 @@ class DepartmentHead:
             except Exception:  # decomposition must never crash the loop (P9)
                 log.debug(
                     "decomposition failed for %s; using fallback",
-                    work_item.id, exc_info=True,
+                    work_item.id,
+                    exc_info=True,
                 )
         # Deterministic fallback: a single sub-task carrying the item's intent.
         return [work_item.intent]

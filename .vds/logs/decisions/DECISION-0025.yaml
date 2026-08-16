@@ -1,0 +1,11 @@
+id: DECISION-0025
+at: 2026-08-14T16:33:25Z
+by: williamlilley
+decision: The shared Shell keeps the Familiar or Jarvis switcher visually above primary navigation, gives the primary navigation a clearer break from conversation history, and places a truthful Projects group immediately before Recents.
+court_required: false
+why: The Principal identified a real stacking collision between the companion menu and New chat and explicitly set the sidebar information hierarchy. The current conversation contract has no project field, so the honest implementation presents the Projects locus with an inert No projects state rather than inventing project membership or a selector.
+basis:
+- USER-DIRECTION-2026-08-14:SHELL-COMPANION-PROJECT-HIERARCHY
+- BOLTRIG-CONTRACT:INSTALLED-FAMILIAR-AND-JARVIS
+- BOLTRIG-CONTRACT:CONVERSATION-SUMMARY-HAS-NO-PROJECT-FIELD
+- BOLTRIG-CONTRACT:TOP-COMMAND-SEARCH-ONLY

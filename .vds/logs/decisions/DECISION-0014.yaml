@@ -1,0 +1,10 @@
+id: DECISION-0014
+at: 2026-08-14T09:52:31Z
+by: williamlilley
+decision: Chat tool receipts will retain their quiet one-line summary at rest, then expose the authorized redacted run trail on demand with individual tool rows, exact verb names, structured input and result evidence, command output and truthful completion state.
+court_required: false
+why: 'The Principal compared Codex''s expandable command trail with Boltrig''s keys-only "Queried data" row and called out that Boltrig carries less useful information. The existing tenant/workspace-scoped run-event route already owns the redacted detailed receipt; loading that route only after explicit expansion enriches inspection without widening the bounded chat stream or creating a second execution authority.'
+basis:
+- USER-DIRECTION-2026-08-14:CHAT-TOOL-DETAIL
+- BOLTRIG-INVARIANT:US-CHAT-10-BOUNDED-CHAT-STREAM
+- BOLTRIG-INVARIANT:SEC-56-SCOPED-RUN-EVENTS

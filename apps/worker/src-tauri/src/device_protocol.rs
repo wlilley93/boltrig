@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
+use crate::camera_protocol::CameraLease;
 use crate::session::{valid_identifier, LeaseVerifier};
 
 const MAX_RESPONSE_BYTES: usize = 256 * 1024;
@@ -18,6 +19,7 @@ const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
 const MAX_PATH_BYTES: usize = 1024;
 const MAX_ARG_BYTES: usize = 4096;
 const MAX_ARGS: usize = 64;
+const MAX_DIRECTORY_ENTRIES: u64 = 100;
 
 #[derive(Clone, Debug)]
 pub(crate) enum ApiError {
@@ -90,6 +92,10 @@ pub(crate) struct DeviceLease {
 
 #[derive(Debug)]
 pub(crate) enum ValidatedAction {
+    List {
+        relative_path: Option<String>,
+        max_entries: usize,
+    },
     Read {
         relative_path: String,
         max_bytes: u64,
@@ -119,6 +125,20 @@ pub(crate) struct ClaimResponse {
     pub(crate) lease: DeviceLease,
     pub(crate) claim_token: String,
     pub(crate) claim_expires_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CameraClaimResponse {
+    pub(crate) lease: CameraLease,
+    pub(crate) claim_token: String,
+    pub(crate) claim_expires_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CameraPendingResponse {
+    leases: Vec<CameraLease>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -206,6 +226,105 @@ impl AgentApi {
             .await
             .map_err(|_| ApiError::Transport)?;
         decode_success(response).await
+    }
+
+    pub(crate) async fn publish_camera_binding(
+        &self,
+        origin: &str,
+        device_id: &str,
+        token: &str,
+        binding: &Value,
+    ) -> Result<(), ApiError> {
+        let response = self
+            .client
+            .post(endpoint(
+                origin,
+                &format!("/v1/device-agent/{device_id}/camera-bindings"),
+            ))
+            .bearer_auth(token)
+            .json(binding)
+            .send()
+            .await
+            .map_err(|_| ApiError::Transport)?;
+        let _: Value = decode_success(response).await?;
+        Ok(())
+    }
+
+    pub(crate) async fn pending_camera(
+        &self,
+        origin: &str,
+        device_id: &str,
+        token: &str,
+    ) -> Result<Vec<CameraLease>, ApiError> {
+        let response = self
+            .client
+            .get(endpoint(
+                origin,
+                &format!("/v1/device-agent/{device_id}/camera-leases"),
+            ))
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(|_| ApiError::Transport)?;
+        decode_success::<CameraPendingResponse>(response)
+            .await
+            .map(|body| body.leases)
+    }
+
+    pub(crate) async fn claim_camera(
+        &self,
+        origin: &str,
+        device_id: &str,
+        token: &str,
+        lease: &CameraLease,
+    ) -> Result<CameraClaimResponse, ApiError> {
+        let response = self
+            .client
+            .post(endpoint(
+                origin,
+                &format!(
+                    "/v1/device-agent/{device_id}/camera-leases/{}/claim",
+                    lease.id
+                ),
+            ))
+            .bearer_auth(token)
+            .json(&json!({"signature": lease.signature}))
+            .send()
+            .await
+            .map_err(|_| ApiError::Transport)?;
+        decode_success(response).await
+    }
+
+    pub(crate) async fn camera_receipt(
+        &self,
+        origin: &str,
+        device_id: &str,
+        token: &str,
+        submission: ReceiptSubmission<'_>,
+    ) -> Result<(), ApiError> {
+        let response = self
+            .client
+            .post(endpoint(
+                origin,
+                &format!(
+                    "/v1/device-agent/{device_id}/camera-leases/{}/receipt",
+                    submission.lease_id
+                ),
+            ))
+            .bearer_auth(token)
+            .json(&json!({
+                "claim_token": submission.claim_token,
+                "status": submission.status,
+                "receipt": submission.receipt,
+            }))
+            .send()
+            .await
+            .map_err(|_| ApiError::Transport)?;
+        if response.status().is_success() {
+            let _: Value = decode_success(response).await?;
+            return Ok(());
+        }
+        Err(classify_status(response.status()))
     }
 
     pub(crate) async fn receipt(
@@ -368,6 +487,18 @@ fn validate_action(verb: &str, action: &Value) -> Result<ValidatedAction, String
         .as_object()
         .ok_or_else(|| "invalid_device_action".to_string())?;
     match verb {
+        "device.file.list" => {
+            exact_keys(object, &["max_entries", "relative_path"])?;
+            let relative_path = optional_relative_field(object, "relative_path")?;
+            let max_entries = u64_field(object, "max_entries")?;
+            if !(1..=MAX_DIRECTORY_ENTRIES).contains(&max_entries) {
+                return Err("invalid_device_action".to_string());
+            }
+            Ok(ValidatedAction::List {
+                relative_path,
+                max_entries: max_entries as usize,
+            })
+        }
         "device.file.read" => {
             exact_keys(object, &["max_bytes", "relative_path"])?;
             let relative_path = relative_path(string_field(object, "relative_path")?)?;
@@ -464,6 +595,17 @@ fn u64_field(object: &Map<String, Value>, key: &str) -> Result<u64, String> {
         .get(key)
         .and_then(Value::as_u64)
         .ok_or_else(|| "invalid_device_action".to_string())
+}
+
+fn optional_relative_field(
+    object: &Map<String, Value>,
+    key: &str,
+) -> Result<Option<String>, String> {
+    match object.get(key) {
+        Some(Value::Null) => Ok(None),
+        Some(Value::String(value)) => relative_path(value).map(Some),
+        _ => Err("invalid_device_action".to_string()),
+    }
 }
 
 pub(crate) fn relative_path(value: &str) -> Result<String, String> {
@@ -650,6 +792,27 @@ mod tests {
     fn strict_actions_reject_traversal_shell_strings_and_missing_write_digest() {
         assert!(relative_path("../secret").is_err());
         assert!(relative_path("reports/./secret").is_err());
+        assert!(matches!(
+            validate_action(
+                "device.file.list",
+                &json!({"relative_path": null, "max_entries": 100})
+            )
+            .unwrap(),
+            ValidatedAction::List {
+                relative_path: None,
+                max_entries: 100,
+            }
+        ));
+        assert!(validate_action(
+            "device.file.list",
+            &json!({"relative_path": "../secret", "max_entries": 10})
+        )
+        .is_err());
+        assert!(validate_action(
+            "device.file.list",
+            &json!({"relative_path": null, "max_entries": 101})
+        )
+        .is_err());
         assert!(validate_action(
             "device.command.run",
             &json!({"argv": "git status", "cwd_relative": null, "timeout_seconds": 30})

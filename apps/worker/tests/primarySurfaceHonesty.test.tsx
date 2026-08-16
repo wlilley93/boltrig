@@ -8,8 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({
   agentCapabilities: vi.fn(),
   auditTree: vi.fn(),
+  capabilityChangelog: vi.fn(),
+  hitl: vi.fn(),
   knowledgeAsset: vi.fn(),
   knowledgeAssets: vi.fn(),
+  knowledgeSearch: vi.fn(),
   knowledgeProviders: vi.fn(),
   memoryFact: vi.fn(),
   memoryFacts: vi.fn(),
@@ -112,6 +115,8 @@ const surfaces: Array<{
 
 beforeEach(() => {
   api.auditTree.mockResolvedValue({ root: null });
+  api.capabilityChangelog.mockResolvedValue({ changes: [] });
+  api.hitl.mockResolvedValue({ requests: [] });
   api.knowledgeProviders.mockResolvedValue({ providers: [] });
   api.runTopology.mockResolvedValue({ root: null });
   api.modelEndpoints.mockResolvedValue({ endpoints: [] });
@@ -279,10 +284,11 @@ describe("Worker exact-detail response ordering", () => {
     ));
 
     render(<KnowledgeView />);
-    const inspect = await screen.findAllByRole("button", { name: "Inspect" });
-    fireEvent.click(inspect[0]);
+    // Selection is the row itself in the file table; the detail opens in the
+    // right rail.
+    fireEvent.click(await screen.findByRole("button", { name: /Source A/ }));
     await waitFor(() => expect(api.knowledgeAsset).toHaveBeenCalledWith("asset-a"));
-    fireEvent.click(inspect[1]);
+    fireEvent.click(screen.getByRole("button", { name: /Source B/ }));
     await waitFor(() => expect(api.knowledgeAsset).toHaveBeenCalledWith("asset-b"));
 
     await act(async () => detailB.resolve({
@@ -304,5 +310,76 @@ describe("Worker exact-detail response ordering", () => {
     }));
     expect(screen.getByRole("heading", { level: 2, name: "Detail B" })).toBeTruthy();
     expect(screen.queryByRole("heading", { level: 2, name: "Detail A" })).toBeNull();
+  });
+
+  it("never renders search A after the Knowledge query has switched to B", async () => {
+    const searchA = deferred<unknown>();
+    const searchB = deferred<unknown>();
+    api.knowledgeAssets.mockResolvedValue({ assets: [], next_offset: null });
+    api.knowledgeSearch.mockImplementation((query: string) => (
+      query === "alpha" ? searchA.promise : searchB.promise
+    ));
+
+    render(<KnowledgeView />);
+    const input = await screen.findByLabelText("Search Knowledge");
+    const form = input.closest("form")!;
+    fireEvent.change(input, { target: { value: "alpha" } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(api.knowledgeSearch).toHaveBeenCalledWith("alpha"));
+
+    fireEvent.change(input, { target: { value: "beta" } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(api.knowledgeSearch).toHaveBeenCalledWith("beta"));
+
+    await act(async () => searchB.resolve({
+      query: "beta",
+      hits: [{
+        asset_id: "asset-b",
+        revision_id: "revision-b",
+        segment_id: "segment-b",
+        title: "Beta result",
+        filename: "beta.pdf",
+        text: "Only the current query should render this passage.",
+        locator: { page: 2 },
+        score: 0.92,
+        citation: {
+          asset_id: "asset-b",
+          revision_id: "revision-b",
+          segment_id: "segment-b",
+          title: "Beta result",
+          filename: "beta.pdf",
+          locator: { page: 2 },
+          source_kind: "upload",
+          content_hash: "hash-b",
+        },
+      }],
+    }));
+    expect(await screen.findByText("Beta result")).toBeTruthy();
+
+    await act(async () => searchA.resolve({
+      query: "alpha",
+      hits: [{
+        asset_id: "asset-a",
+        revision_id: "revision-a",
+        segment_id: "segment-a",
+        title: "Alpha result",
+        filename: "alpha.pdf",
+        text: "This stale passage must never replace the current result.",
+        locator: { page: 1 },
+        score: 0.98,
+        citation: {
+          asset_id: "asset-a",
+          revision_id: "revision-a",
+          segment_id: "segment-a",
+          title: "Alpha result",
+          filename: "alpha.pdf",
+          locator: { page: 1 },
+          source_kind: "upload",
+          content_hash: "hash-a",
+        },
+      }],
+    }));
+    expect(screen.getByText("Beta result")).toBeTruthy();
+    expect(screen.queryByText("Alpha result")).toBeNull();
   });
 });

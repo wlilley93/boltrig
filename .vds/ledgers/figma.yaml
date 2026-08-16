@@ -1,0 +1,12 @@
+schema_version: 1
+generated_at: 2026-08-10T11:55:16Z
+generated_by: vds figma pull
+file_key: iVQBKFc3NpRH3zdOOxfPqr
+file_version: '2386064713862372315'
+file_name: Boltrig Console — decided target (2026-08-10)
+content_digest: sha256:8ae4108f18f70001201dfc86418863ee891b96d525deb3b618544a96287c933e
+nodes: []
+unclaimed: []
+notes:
+- pulled from the Figma REST API
+- 'This ledger records names, node ids, variant property names and variant values. It records no colour, length, font, duration or easing curve: those stay in the Figma file, which [2026] VJS-CC-OPBOX 3 D1 makes the system of record for what is decided.'

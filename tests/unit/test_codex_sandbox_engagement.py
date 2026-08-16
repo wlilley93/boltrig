@@ -29,10 +29,17 @@ from pathlib import Path
 import pytest
 
 from boltrig.fleet.infrastructure.codex_sandbox_engagement import (
+
     CodexSandboxEngagementError,
     SANDBOX_MECHANISM,
     prove_sandbox_engagement,
 )
+
+# Every leg here needs a Linux kernel facility macOS does not have: yama
+# ptrace_scope, abstract AF_UNIX names, SO_PEERCRED, or bubblewrap. Marked so a
+# non-Linux box reports them as unverified instead of failing; on Linux the
+# marker is inert and they always run.
+pytestmark = pytest.mark.linux_only
 
 # A stand-in that accepts `sandbox -c <cfg> -- <cmd...>` and runs the command with NO
 # sandbox at all. This is the host-without-Landlock shape, and it is the seed the

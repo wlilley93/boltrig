@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Every active user must resolve to usable authority. Run against a live tenant.
 
-WHY THIS EXISTS. On Classical Visas, 2026-07-28, the client's own account
-(``info@classicalvisas.com``) could log in, had a password, and read ``role=admin``.
+WHY THIS EXISTS. On one deployment, a client's own account could log in, had a
+password, and read ``role=admin``.
 It also had zero authority. Two independent causes, either one fatal, both silent:
 
   * its ``scope`` was ``{}``. Grants derive from SCOPE, not from role

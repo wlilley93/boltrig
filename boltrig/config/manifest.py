@@ -35,7 +35,6 @@ _BUILTIN_MODULES: dict[str, str] = {
     "jira": "boltrig.adapters.builtin.jira",
     "crm-sql": "boltrig.adapters.builtin.crm_sql",
     "memory-tickets": "boltrig.adapters.builtin.memory_tickets",
-    "herdr": "boltrig.adapters.builtin.herdr",
     "runpod": "boltrig.adapters.builtin.runpod",
     "browser-cli": "boltrig.adapters.builtin.browser_cli",
 }
@@ -271,6 +270,12 @@ class ChatConfig:
     tighten each cap below its default, never loosen it, so the code default is a
     hard ceiling on how much a turn may carry."""
 
+    # The capability that owns the direct conversational turn. Without this
+    # pin, a skill-less chat makes every active capability eligible and the
+    # generic cheapest-capability selector can pick an unrelated integration or
+    # test script. None keeps manifest-less/test composition fail-closed and
+    # backwards compatible; shipped manifests name the conversational worker.
+    default_capability: str | None = None
     skills_by_role: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     default_skills: tuple[str, ...] = ()
     max_attachments: int = DEFAULT_MAX_ATTACHMENTS
@@ -525,6 +530,7 @@ def _parse_models(raw: Mapping[str, Any], tenant_id: str) -> ModelsConfig:
             base_url=e.get("base_url"),
             fallback=e.get("fallback"),
             data_class=str(e.get("data_class", "standard")),
+            modalities=tuple(e.get("modalities") or ("text",)),
         )
         for e in (raw.get("endpoints") or [])
     )
@@ -692,7 +698,14 @@ def _parse_chat(raw: Mapping[str, Any]) -> ChatConfig:
     compaction = raw.get("compaction") or {}
     pagination = raw.get("pagination") or {}
     tool_work = raw.get("tool_work") or {}
+    default_capability_raw = raw.get("default_capability")
+    default_capability = (
+        default_capability_raw.strip()
+        if isinstance(default_capability_raw, str) and default_capability_raw.strip()
+        else None
+    )
     return ChatConfig(
+        default_capability=default_capability,
         skills_by_role=skills_by_role,
         default_skills=_as_tuple(raw.get("default_skills")),
         max_attachments=_tighten_cap(DEFAULT_MAX_ATTACHMENTS, caps.get("max_count")),
@@ -776,7 +789,7 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
         chat=_parse_chat(doc.get("chat") or {}),
         extra={k: doc[k] for k in (
             "evaluation", "notifications", "personal_agents", "memory", "knowledge",
-            "runtimes", "mcp", "chat", "stack", "mastra", "rivet_agentos",
+            "runtimes", "mcp", "chat", "stack", "mastra",
             "browser_cli", "langfuse", "reconcile", "distill",
         ) if k in doc},
     )

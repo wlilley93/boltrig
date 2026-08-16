@@ -1,6 +1,7 @@
 import type {
   ActivateAdapterRequest,
   ActivateAdapterResponse,
+  ActivateAiKeyRequest,
   AddWorkspaceMemberRequest,
   AddWorkspaceMemberResponse,
   AdminInvitationsResponse,
@@ -45,6 +46,8 @@ import type {
   ChatConfigResponse,
   ChatEvent,
   ChatFollowFrame,
+  ChatModelChoicesResponse,
+  BifrostModelsResponse,
   ChatRequest,
   AgentCapabilitiesResponse,
   PermanentFleetApplyResponse,
@@ -61,6 +64,8 @@ import type {
   ConnectionsResponse,
   ConsoleOverviewResponse,
   ConversationResponse,
+  ConversationQueueReorderRequest,
+  ConversationQueueReorderResponse,
   ConversationSearchResponse,
   ConversationsPageResponse,
   ConversationsResponse,
@@ -76,6 +81,8 @@ import type {
   DevicesResponse,
   DeleteAiKeyResponse,
   DeviceEnrollmentStart,
+  DeviceFileListRequest,
+  DeviceLeaseInvokeOptions,
   OwnerDeviceLeasesResponse,
   DeviceRootResponse,
   CreateDeviceRootRequest,
@@ -90,6 +97,12 @@ import type {
   HealthResponse,
   HITLListResponse,
   HitlPolicyResponse,
+  ApprovalPostureResponse,
+  PutApprovalPostureRequest,
+  PutSensingCameraRequest,
+  PutSensingPresenceRequest,
+  SensingCapabilityDecision,
+  SensingResponse,
   PrivacyPolicyResponse,
   BackupStatusResponse,
   IntegrationCatalogueResponse,
@@ -116,6 +129,8 @@ import type {
   MeNotificationsResponse,
   MyOrganisationsResponse,
   MeSettingsResponse,
+  UpdateMeProfileRequest,
+  UpdateMeProfileResponse,
   MemoryFactResponse,
   MemoryFactsResponse,
   MemoryForgetRequest,
@@ -174,6 +189,7 @@ import type {
   SetAiKeyRequest,
   SetAiKeyResponse,
   SessionsResponse,
+  SessionCsrfResponse,
   SetBindingRequest,
   SkillsResponse,
   SkillResponse,
@@ -431,6 +447,17 @@ export class BoltrigClient {
     return this.request(`/v1/conversations/${encodeURIComponent(id)}`);
   }
 
+  reorderConversationQueue(
+    id: string,
+    body: ConversationQueueReorderRequest,
+  ): Promise<ConversationQueueReorderResponse> {
+    return this.json(
+      `/v1/conversations/${encodeURIComponent(id)}/queue`,
+      "PUT",
+      body,
+    );
+  }
+
   async followConversation(
     id: string,
     onFrame: (frame: ChatFollowFrame) => void,
@@ -505,12 +532,20 @@ export class BoltrigClient {
     return this.request("/v1/me/settings");
   }
 
+  updateMeProfile(body: UpdateMeProfileRequest): Promise<UpdateMeProfileResponse> {
+    return this.json("/v1/me/profile", "PATCH", body, true);
+  }
+
   aiKeys(): Promise<AiKeysResponse> {
     return this.request("/v1/ai-keys", { tolerateStatus: true });
   }
 
   setAiKey(body: SetAiKeyRequest): Promise<SetAiKeyResponse> {
     return this.json("/v1/ai-keys", "PUT", body, true);
+  }
+
+  activateAiKey(body: ActivateAiKeyRequest): Promise<SetAiKeyResponse> {
+    return this.json("/v1/ai-keys/activate", "POST", body, true);
   }
 
   aiKeyProposals(): Promise<AiKeyProposalsResponse> {
@@ -533,6 +568,15 @@ export class BoltrigClient {
     );
   }
 
+  approveAiKeyProposal(proposalId: string): Promise<AiKeyProposalResponse> {
+    return this.json(
+      `/v1/ai-keys/proposals/${encodeURIComponent(proposalId)}/approve`,
+      "POST",
+      {},
+      true,
+    );
+  }
+
   invalidateAiKeyProposal(proposalId: string): Promise<AiKeyProposalResponse> {
     return this.json(
       `/v1/ai-keys/proposals/${encodeURIComponent(proposalId)}`,
@@ -546,9 +590,13 @@ export class BoltrigClient {
     level: string,
     scopeId: string,
     approvalId?: string,
+    modality: "text" | "vision" = "text",
   ): Promise<DeleteAiKeyResponse> {
+    const suffix = modality === "text"
+      ? ""
+      : `?modality=${encodeURIComponent(modality)}`;
     return this.governedJson(
-      `/v1/ai-keys/${encodeURIComponent(level)}/${encodeURIComponent(scopeId)}`,
+      `/v1/ai-keys/${encodeURIComponent(level)}/${encodeURIComponent(scopeId)}${suffix}`,
       "DELETE",
       undefined,
       approvalId,
@@ -557,6 +605,48 @@ export class BoltrigClient {
 
   putMeSettings(body: PutSettingsRequest): Promise<PutSettingsResponse> {
     return this.json("/v1/me/settings", "PUT", body, true);
+  }
+
+  approvalPosture(): Promise<ApprovalPostureResponse> {
+    return this.request("/v1/me/approval-posture");
+  }
+
+  putApprovalPosture(body: PutApprovalPostureRequest): Promise<ApprovalPostureResponse> {
+    return this.json("/v1/me/approval-posture", "PUT", body, true);
+  }
+
+  // --- Camera and presence ---------------------------------------------------
+  // The camera is a Boltrig SERVICE with a UI, not a companion's private daemon.
+  // These four are the consent surface; the fifth is what a CHARACTER gets when
+  // it asks, and it answers with a reason rather than throwing.
+
+  sensing(): Promise<SensingResponse> {
+    return this.request("/v1/me/sensing");
+  }
+
+  putSensingCamera(body: PutSensingCameraRequest): Promise<SensingResponse> {
+    return this.json("/v1/me/sensing/camera", "PUT", body, true);
+  }
+
+  putSensingPresence(body: PutSensingPresenceRequest): Promise<SensingResponse> {
+    return this.json("/v1/me/sensing/presence", "PUT", body, true);
+  }
+
+  deleteSensingEnrollment(): Promise<SensingResponse> {
+    return this.json("/v1/me/sensing/enrollment", "DELETE", undefined, true);
+  }
+
+  /**
+   * What a character asking for this capability RIGHT NOW is told. Checked at
+   * use and never cached: a cached grant would keep a character watching after
+   * the user moved the toggle. `tolerateStatus` is on because a refusal is a
+   * 409 the caller must read, not an exception it must catch.
+   */
+  sensingCapability(capability: string): Promise<SensingCapabilityDecision> {
+    return this.request(
+      `/v1/sensing/capability?capability=${encodeURIComponent(capability)}`,
+      { tolerateStatus: true },
+    );
   }
 
   meActivity(params: { limit?: number; offset?: number } = {}): Promise<MeActivityResponse> {
@@ -1067,6 +1157,10 @@ export class BoltrigClient {
     return this.json("/v1/auth/login", "POST", body, true);
   }
 
+  sessionCsrf(): Promise<SessionCsrfResponse> {
+    return this.request("/v1/auth/csrf");
+  }
+
   requestPasswordReset(
     body: PasswordResetRequest,
   ): Promise<PasswordResetRequestResponse> {
@@ -1122,6 +1216,49 @@ export class BoltrigClient {
     return this.json(`/v1/runs/${encodeURIComponent(runId)}/cancel`, "POST", undefined, true);
   }
 
+  /**
+   * Load the already-authorized run-event snapshot used by execution drawers.
+   * Unlike the bounded chat stream, this route can include server-redacted
+   * input/output values, so callers should request it only after an explicit
+   * user action and render it as untrusted text.
+   */
+  async runEvents(runId: string, signal?: AbortSignal): Promise<ChatEvent[]> {
+    const headers = new Headers({ accept: "text/event-stream" });
+    for (const [key, value] of Object.entries(this.options.headers?.() ?? {})) {
+      headers.set(key, value);
+    }
+    const accessToken = await this.options.accessToken?.();
+    if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
+
+    let response: Response;
+    try {
+      response = await this.fetcher(`${this.baseUrl}/v1/runs/${encodeURIComponent(runId)}/events`, {
+        method: "GET",
+        headers,
+        credentials: "include",
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted) return [];
+      throw new BoltrigApiError(
+        0,
+        null,
+        error instanceof Error ? error.message : "Run details failed",
+      );
+    }
+    if (!response.ok || !response.body) {
+      throw new BoltrigApiError(response.status, await parseResponse(response));
+    }
+
+    const events: ChatEvent[] = [];
+    try {
+      await pumpSse(response.body, (event) => events.push(event), signal);
+    } catch (error) {
+      if (!signal?.aborted) throw error;
+    }
+    return events;
+  }
+
   hitl(): Promise<HITLListResponse> {
     return this.request("/v1/hitl");
   }
@@ -1158,6 +1295,14 @@ export class BoltrigClient {
 
   modelProfiles(): Promise<ModelProfilesResponse> {
     return this.request("/v1/model-profiles");
+  }
+
+  chatModelChoices(): Promise<ChatModelChoicesResponse> {
+    return this.request("/v1/chat/model-choices");
+  }
+
+  bifrostModels(): Promise<BifrostModelsResponse> {
+    return this.request("/v1/bifrost/models");
   }
 
   modelEndpoints(): Promise<ModelEndpointsResponse> {
@@ -2082,6 +2227,29 @@ export class BoltrigClient {
     return this.request(
       `/v1/devices/${encodeURIComponent(deviceId)}/leases`,
     );
+  }
+
+  requestDeviceFileListLease(
+    deviceId: string,
+    rootId: string,
+    body: DeviceFileListRequest,
+    options: DeviceLeaseInvokeOptions = {},
+  ): Promise<InvokeResult> {
+    return this.invoke({
+      noun: "device",
+      verb: "device.file.list",
+      params: {
+        device_id: deviceId,
+        root_id: rootId,
+        relative_path: body.relative_path,
+        max_entries: body.max_entries,
+      },
+      ...(options.approvalId ? { approval_id: options.approvalId } : {}),
+      ...(options.idempotencyKey
+        ? { idempotency_key: options.idempotencyKey }
+        : {}),
+      ...(options.context ? { context: options.context } : {}),
+    });
   }
 
   startDeviceEnrollment(label: string): Promise<DeviceEnrollmentStart | StatusAck> {

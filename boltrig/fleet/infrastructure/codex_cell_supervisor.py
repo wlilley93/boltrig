@@ -16,8 +16,6 @@ from .cell_lane import CellLane
 from .cell_slots import CellSlot
 from .codex_runtime_config_argv import validate_app_server_arguments
 from .codex_cell_policy import (
-    CODEX_CLI_SHA256,
-    CODEX_CLI_TARGET,
     CODEX_CLI_VERSION,
     CodexCellLayout,
     CodexCellPolicyError,
@@ -427,8 +425,8 @@ class CodexCellSupervisor:
             cell_id=layout.cell_id,
             pid=process.pid,
             cli_version=CODEX_CLI_VERSION,
-            cli_target=CODEX_CLI_TARGET,
-            binary_sha256=CODEX_CLI_SHA256,
+            cli_target=binary.target,
+            binary_sha256=binary.sha256,
             binary_path=binary.path,
             workspace=layout.workspace,
             workspace_digest=layout.workspace_digest,

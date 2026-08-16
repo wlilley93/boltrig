@@ -18,17 +18,15 @@ from boltrig.fleet.domain.profile_policy import (
     VersionedSkillManifest,
 )
 from boltrig.fleet.domain.skill_attestation import (
-    SkillAttestation,
     SkillAttestationPlan,
     SkillScope,
 )
 
 from .codex_app_server import CodexAppServerClient
 from .codex_cell_policy import (
-    CODEX_CLI_SHA256,
-    CODEX_CLI_TARGET,
     CODEX_CLI_VERSION,
     CodexCellLayout,
+    reviewed_codex_artifacts,
 )
 from .codex_cell_supervisor import CodexCellSupervisor, InitializedCodexCell
 from .codex_kernel_tools_phase import (
@@ -38,33 +36,16 @@ from .codex_kernel_tools_phase import (
     validated_kernel_tool_names,
 )
 from .codex_runtime_config_argv import CODEX_APP_SERVER_BASE_ARGUMENTS
+from .codex_preflight_receipt import (
+    CODEX_PROTOCOL_BUNDLE_DIGEST,
+    QUARANTINED_PREFLIGHT_BLOCKERS,
+    CodexRuntimeAdmissionError,
+    QuarantinedCodexPreflightReceipt,
+)
+from .codex_runtime_surface_evidence import surface_tools_match
 from .skill_artifacts import SanitizedWorkspaceProjection
 
 MAX_BIRTH_INSTRUCTIONS_BYTES = 128 * 1024
-CODEX_PROTOCOL_BUNDLE_DIGEST = (
-    "sha256:0194f4370fd6ec268f81270217b56b2d1133ecc2c2a1560f3870dd6ec16e9810"
-)
-# ``effective_tools`` is NOT discharged by asking Codex: 0.144.3 has no method that
-# enumerates a thread's effective tools, and its [tools] table accepts only
-# web_search and experimental_request_user_input. It is instead DETERMINED by the
-# kernel at the per-cell model proxy, which filters the tools array against this
-# policy's enabled_tools on every upstream call. [2026] VJS-CC-VJS 4 holds that
-# determination discharges such a limb, but only on four proofs by test -
-# exclusivity, derivation, fail-closed and live re-proof - so the blocker STAYS
-# until all four pass. Never read this value as a vendored self-report.
-QUARANTINED_PREFLIGHT_BLOCKERS = (
-    "effective_apps",
-    "effective_config",
-    "effective_external_agents",
-    "effective_plugins",
-    "effective_provider",
-    "effective_tools",
-    "full_generated_schema_contract",
-)
-
-
-class CodexRuntimeAdmissionError(PermissionError):
-    """A phase was not admitted to the exact quarantined read-only cell."""
 
 
 @dataclass(frozen=True)
@@ -96,56 +77,6 @@ class CodexWorkspaceProjectionBinding:
                 "tenant_id": phase.principal.tenant_id,
                 "total_bytes": projection.total_bytes,
                 "workspace_id": phase.workspace_id,
-            }
-        )
-
-
-@dataclass(frozen=True)
-class QuarantinedCodexPreflightReceipt:
-    """Incomplete evidence from the probes safe to run before ``thread/start``."""
-
-    skill_attestation: SkillAttestation
-    observed_mcp_server_count: int = 0
-    observed_hook_count: int = 0
-    protocol_version: str = CODEX_CLI_VERSION
-    protocol_bundle_digest: str = CODEX_PROTOCOL_BUNDLE_DIGEST
-    production_blockers: tuple[str, ...] = QUARANTINED_PREFLIGHT_BLOCKERS
-
-    def __post_init__(self) -> None:
-        if type(self.skill_attestation) is not SkillAttestation:
-            raise TypeError("skill_attestation must be an exact SkillAttestation")
-        if (
-            type(self.observed_mcp_server_count) is not int
-            or type(self.observed_hook_count) is not int
-            or not 0 <= self.observed_mcp_server_count <= 1
-            or self.observed_hook_count != 0
-        ):
-            raise CodexRuntimeAdmissionError("quarantined external inventory must be empty")
-        # The ONLY tolerated non-empty MCP inventory is the kernel-tools lane's one
-        # server (the kernel's own face). AdmittedCodexCell binds the count to the
-        # admission's lane, so a read-only admission can never carry a server and a
-        # kernel-tools admission can never attest one it did not declare.
-        if self.protocol_version != CODEX_CLI_VERSION:
-            raise CodexRuntimeAdmissionError("quarantined receipt uses another protocol")
-        if self.protocol_bundle_digest != CODEX_PROTOCOL_BUNDLE_DIGEST:
-            raise CodexRuntimeAdmissionError("quarantined receipt uses another schema bundle")
-        if self.production_blockers != QUARANTINED_PREFLIGHT_BLOCKERS:
-            raise CodexRuntimeAdmissionError("quarantined receipt omitted a production blocker")
-
-    @property
-    def production_complete(self) -> bool:
-        return False
-
-    def digest(self) -> str:
-        return _document_digest(
-            {
-                "observed_hook_count": self.observed_hook_count,
-                "observed_mcp_server_count": self.observed_mcp_server_count,
-                "production_blockers": self.production_blockers,
-                "production_complete": False,
-                "protocol_bundle_digest": self.protocol_bundle_digest,
-                "protocol_version": self.protocol_version,
-                "skill_attestation": self.skill_attestation.digest,
             }
         )
 
@@ -186,9 +117,7 @@ class CodexPhaseAdmission:
             KERNEL_TOOLS_PROFILE_NAME,
             KERNEL_TOOLS_PROFILE_VERSION,
         ):
-            raise CodexRuntimeAdmissionError(
-                "kernel tools require the kernel-tools profile"
-            )
+            raise CodexRuntimeAdmissionError("kernel tools require the kernel-tools profile")
         if self.layout.phase_id != self.assignment.phase.phase_id:
             raise CodexRuntimeAdmissionError("cell phase does not match the assignment")
         if (
@@ -235,6 +164,11 @@ class AdmittedCodexCell:
             raise CodexRuntimeAdmissionError(
                 "observed MCP inventory does not match the admitted lane"
             )
+        evidence = self.quarantined_preflight.surface_evidence
+        if evidence is not None and not surface_tools_match(evidence, self.admission.kernel_tools):
+            raise CodexRuntimeAdmissionError(
+                "observed tool ceiling does not match the admitted lane"
+            )
         plan = self.admission.skill_plan
         proof = self.quarantined_preflight.skill_attestation
         if (
@@ -271,6 +205,8 @@ class CodexPhaseAdmissionSource(Protocol):
         assignment: PhaseAssignmentRef,
         slot: "CellSlot | None" = None,
         kernel_tools: tuple[str, ...] = (),
+        *,
+        model_id: str | None = None,
     ) -> CodexPhaseAdmission: ...
 
 
@@ -382,8 +318,7 @@ def _validate_initialized_cell(
         metadata.phase_id != admission.assignment.phase.phase_id
         or metadata.cell_id != layout.cell_id
         or metadata.cli_version != CODEX_CLI_VERSION
-        or metadata.cli_target != CODEX_CLI_TARGET
-        or metadata.binary_sha256 != CODEX_CLI_SHA256
+        or reviewed_codex_artifacts().get(metadata.binary_sha256) != metadata.cli_target
         or metadata.workspace != layout.workspace
         or metadata.workspace_digest != layout.workspace_digest
         or metadata.home != layout.home

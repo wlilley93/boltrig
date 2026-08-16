@@ -147,7 +147,18 @@ def resolve_host(host: str) -> list[str]:
         infos = socket.getaddrinfo(host, None)
     except OSError:
         return []
-    return list({info[4][0] for info in infos})
+    # Preserve the resolver's preference order while removing duplicates.  A
+    # set made the selected, pinned address effectively random; on an
+    # IPv4-only container it could pick a perfectly public IPv6 answer first
+    # and fail every browser navigation even though the resolver had returned a
+    # reachable IPv4 address first.  We still resolve exactly once and vet every
+    # answer before the caller connects to the first audited address.
+    addresses: list[str] = []
+    for info in infos:
+        address = info[4][0]
+        if isinstance(address, str) and address not in addresses:
+            addresses.append(address)
+    return addresses
 
 
 class EgressBlocked(Exception):
@@ -193,16 +204,21 @@ def _pinned_backend(pinned_ip: str, inner: Any | None = None) -> Any:
 
     base = inner if inner is not None else httpcore.AnyIOBackend()
 
-    class _PinnedBackend(httpcore.AnyIOBackend):  # type: ignore[misc]
+    class _PinnedBackend(httpcore.AnyIOBackend):
         async def connect_tcp(  # noqa: D401
-            self, host, port, timeout=None, local_address=None, socket_options=None
-        ):
+            self,
+            host: Any,
+            port: Any,
+            timeout: Any = None,
+            local_address: Any = None,
+            socket_options: Any = None,
+        ) -> Any:
             return await base.connect_tcp(
                 pinned_ip, port, timeout=timeout,
                 local_address=local_address, socket_options=socket_options,
             )
 
-        async def connect_unix_socket(self, *args: Any, **kwargs: Any):
+        async def connect_unix_socket(self, *args: Any, **kwargs: Any) -> Any:
             return await base.connect_unix_socket(*args, **kwargs)
 
         async def sleep(self, seconds: float) -> None:
@@ -261,20 +277,25 @@ def _pinned_sync_backend(pinned_ip: str, inner: Any | None = None) -> Any:
 
     base = inner if inner is not None else httpcore.SyncBackend()
 
-    class _PinnedSyncBackend(httpcore.SyncBackend):  # type: ignore[misc]
+    class _PinnedSyncBackend(httpcore.SyncBackend):
         def connect_tcp(  # noqa: D401
-            self, host, port, timeout=None, local_address=None, socket_options=None
-        ):
+            self,
+            host: Any,
+            port: Any,
+            timeout: Any = None,
+            local_address: Any = None,
+            socket_options: Any = None,
+        ) -> Any:
             return base.connect_tcp(
                 pinned_ip, port, timeout=timeout,
                 local_address=local_address, socket_options=socket_options,
             )
 
-        def connect_unix_socket(self, *args: Any, **kwargs: Any):
+        def connect_unix_socket(self, *args: Any, **kwargs: Any) -> Any:
             return base.connect_unix_socket(*args, **kwargs)
 
         def sleep(self, seconds: float) -> None:
-            return base.sleep(seconds)
+            base.sleep(seconds)
 
     return _PinnedSyncBackend()
 

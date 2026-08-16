@@ -37,11 +37,17 @@ def _adapter(rpc) -> McpConsumerAdapter:
 async def test_standard_mcp_content_falls_back_to_text_output():
     async def rpc(request):
         # A non-Boltrig MCP server: no _boltrig envelope, standard content array.
-        return {"jsonrpc": "2.0", "id": 2, "result": {
-            "content": [{"type": "text", "text": "hello"},
-                        {"type": "image", "data": "..."},
-                        {"type": "text", "text": "world"}],
-        }}
+        return {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+                "content": [
+                    {"type": "text", "text": "hello"},
+                    {"type": "image", "data": "..."},
+                    {"type": "text", "text": "world"},
+                ],
+            },
+        }
 
     result = await _adapter(rpc).execute("tool.x", {}, _cred(), _ctx())
 
@@ -51,10 +57,14 @@ async def test_standard_mcp_content_falls_back_to_text_output():
 
 async def test_boltrig_envelope_still_wins_over_content():
     async def rpc(request):
-        return {"jsonrpc": "2.0", "id": 2, "result": {
-            "_boltrig": {"output": {"structured": True}},
-            "content": [{"type": "text", "text": "ignored"}],
-        }}
+        return {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+                "_boltrig": {"output": {"structured": True}},
+                "content": [{"type": "text", "text": "ignored"}],
+            },
+        }
 
     result = await _adapter(rpc).execute("tool.x", {}, _cred(), _ctx())
 
@@ -100,9 +110,7 @@ def _sse(payload: dict, *, headers=None) -> _HttpResp:
 
 
 def _http_consumer(monkeypatch, door) -> McpConsumerAdapter:
-    monkeypatch.setattr(
-        "boltrig.adapters.egress.pinned_async_client", lambda url, timeout: door
-    )
+    monkeypatch.setattr("boltrig.adapters.egress.pinned_async_client", lambda url, timeout: door)
     return McpConsumerAdapter("ext-mcp", url="https://mcp.example.com/mcp")
 
 
@@ -120,10 +128,14 @@ class _PlainDoor:
     async def post(self, url, json, headers):  # noqa: ANN001 - httpx-shaped stub
         self.posts.append((json.get("method"), dict(headers)))
         if json.get("method") == "tools/list":
-            return _HttpResp({"jsonrpc": "2.0", "id": json["id"],
-                              "result": {"tools": self.tools}})
-        return _HttpResp({"jsonrpc": "2.0", "id": json.get("id"), "result": {
-            "content": [{"type": "text", "text": "done"}]}})
+            return _HttpResp({"jsonrpc": "2.0", "id": json["id"], "result": {"tools": self.tools}})
+        return _HttpResp(
+            {
+                "jsonrpc": "2.0",
+                "id": json.get("id"),
+                "result": {"content": [{"type": "text", "text": "done"}]},
+            }
+        )
 
     async def __aenter__(self):
         return self
@@ -182,11 +194,15 @@ class _StrictDoor:
             session = f"sess-{self._mints}"
             self.live_sessions.add(session)
             return _sse(
-                {"jsonrpc": "2.0", "id": json["id"], "result": {
-                    "protocolVersion": "2025-06-18",
-                    "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "strict-fake", "version": "0"},
-                }},
+                {
+                    "jsonrpc": "2.0",
+                    "id": json["id"],
+                    "result": {
+                        "protocolVersion": "2025-06-18",
+                        "capabilities": {"tools": {}},
+                        "serverInfo": {"name": "strict-fake", "version": "0"},
+                    },
+                },
                 headers={"mcp-session-id": session},
             )
         if headers.get("mcp-session-id") not in self.live_sessions:
@@ -194,11 +210,15 @@ class _StrictDoor:
         if method == "notifications/initialized":
             return _HttpResp(status=202)
         if method == "tools/list":
-            return _sse({"jsonrpc": "2.0", "id": json["id"],
-                         "result": {"tools": self.tools}})
+            return _sse({"jsonrpc": "2.0", "id": json["id"], "result": {"tools": self.tools}})
         if method == "tools/call":
-            return _sse({"jsonrpc": "2.0", "id": json["id"], "result": {
-                "content": [{"type": "text", "text": "strict-ok"}]}})
+            return _sse(
+                {
+                    "jsonrpc": "2.0",
+                    "id": json["id"],
+                    "result": {"content": [{"type": "text", "text": "strict-ok"}]},
+                }
+            )
         return _HttpResp(status=400)
 
     async def __aenter__(self):
@@ -226,7 +246,8 @@ async def test_a_strict_streamable_http_door_gets_the_full_round_trip(monkeypatc
     assert result.ok and result.output == {"text": "strict-ok"}  # SSE-decoded
     assert [m for m, _ in door.posts] == [
         "tools/list",  # refused (400): no session yet
-        "initialize", "notifications/initialized",  # the lazy handshake
+        "initialize",
+        "notifications/initialized",  # the lazy handshake
         "tools/list",  # retried, now with the session
         "tools/call",
     ]
@@ -256,7 +277,8 @@ async def test_an_expired_session_re_handshakes_once_and_retries(monkeypatch):
     assert result.ok and result.output == {"text": "strict-ok"}
     assert [m for m, _ in door.posts][-4:] == [
         "tools/call",  # refused: sess-1 is dead
-        "initialize", "notifications/initialized",  # re-handshake mints sess-2
+        "initialize",
+        "notifications/initialized",  # re-handshake mints sess-2
         "tools/call",  # retried on the fresh session
     ]
 
@@ -277,11 +299,13 @@ def _opbox_desc(name: str, risk_class: str) -> str:
 
 _PRECEDENCE_TOOLS = [
     # an explicit consequence declaration wins over the Opbox risk class
-    {"name": "t.explicit_low", "consequence": "low",
-     "description": _opbox_desc("t.explicit_low", "DESTRUCTIVE")},
+    {
+        "name": "t.explicit_low",
+        "consequence": "low",
+        "description": _opbox_desc("t.explicit_low", "DESTRUCTIVE"),
+    },
     # a bogus explicit hint clamps low, fail-closed - even over a MONEY class
-    {"name": "t.bogus", "consequence": "critical",
-     "description": _opbox_desc("t.bogus", "MONEY")},
+    {"name": "t.bogus", "consequence": "critical", "description": _opbox_desc("t.bogus", "MONEY")},
     # a structured riskClass field is honoured too (tolerant parse)
     {"name": "t.structured", "riskClass": "WRITE"},
     # standard MCP annotations: destructive -> high, read-only -> low
@@ -290,20 +314,25 @@ _PRECEDENCE_TOOLS = [
     # a signal may RAISE a tier and never lower one: a tool declaring both a READ
     # risk class and a destructive hint contradicts itself, and high is the
     # fail-closed reading (high is the tier that can require human approval).
-    {"name": "t.class_never_lowers", "annotations": {"destructiveHint": True},
-     "description": _opbox_desc("t.class_never_lowers", "READ")},
+    {
+        "name": "t.class_never_lowers",
+        "annotations": {"destructiveHint": True},
+        "description": _opbox_desc("t.class_never_lowers", "READ"),
+    },
     # an unknown class (structured or in the token) falls through to low
     {"name": "t.unknown", "riskClass": "CHARGE"},
     # prose alone never trips the description parse
-    {"name": "t.prose",
-     "description": "a destructive purge that deletes every record, irreversible"},
+    {
+        "name": "t.prose",
+        "description": "a destructive purge that deletes every record, irreversible",
+    },
 ]
 
 
 @pytest.mark.invariant("FR-MCP-03")
 @pytest.mark.usefixtures("opbox_addon")
 async def test_consequence_hint_precedence_and_fail_closed_clamps():
-    """Explicit ``consequence`` (bogus clamps low) wins outright; otherwise the
+    """Explicit ``consequence`` (bogus clamps high) wins outright; otherwise the
     HIGHEST of the addon's risk vocabulary and the MCP annotations, never the
     first. Nothing climbs above the Consequence ceiling.
 
@@ -311,15 +340,15 @@ async def test_consequence_hint_precedence_and_fail_closed_clamps():
     and drop a tool below the human-approval gate, so an addon can now raise a
     tier and never lower one. Requires the opbox addon ACTIVE: reading that
     server's ``riskClass`` token is integration knowledge, not core behaviour."""
+
     async def rpc(request):
-        return {"jsonrpc": "2.0", "id": request["id"],
-                "result": {"tools": _PRECEDENCE_TOOLS}}
+        return {"jsonrpc": "2.0", "id": request["id"], "result": {"tools": _PRECEDENCE_TOOLS}}
 
     specs = await McpConsumerAdapter(id="mcp-x", rpc=rpc).connect(_cred())
 
     assert {s.verb_id: s.consequence for s in specs} == {
         "mcp-x.t.explicit_low": "low",  # verb ids are namespaced
-        "mcp-x.t.bogus": "low",
+        "mcp-x.t.bogus": "high",
         "mcp-x.t.structured": "high",
         "mcp-x.t.ann_destructive": "high",
         "mcp-x.t.ann_readonly": "low",
@@ -397,12 +426,18 @@ async def test_unpublishable_tool_names_are_skipped_without_logging_content(capl
     import logging
 
     async def rpc(request):
-        return {"jsonrpc": "2.0", "id": request["id"], "result": {"tools": [
-            {"name": "matter.list", "inputSchema": {}},
-            {"name": "opbox/expand_tools", "inputSchema": {}},
-            {"name": "weird name", "inputSchema": {}},
-            {"name": "", "inputSchema": {}},
-        ]}}
+        return {
+            "jsonrpc": "2.0",
+            "id": request["id"],
+            "result": {
+                "tools": [
+                    {"name": "matter.list", "inputSchema": {}},
+                    {"name": "opbox/expand_tools", "inputSchema": {}},
+                    {"name": "weird name", "inputSchema": {}},
+                    {"name": "", "inputSchema": {}},
+                ]
+            },
+        }
 
     with caplog.at_level(logging.WARNING, logger="boltrig.adapters.mcp_consumer"):
         specs = await McpConsumerAdapter(id="opbox", rpc=rpc).connect(_cred())
@@ -423,11 +458,17 @@ async def test_calls_use_the_bare_tool_name_not_the_prefixed_verb():
 
     async def rpc(request):
         if request["method"] == "tools/list":
-            return {"jsonrpc": "2.0", "id": request["id"],
-                    "result": {"tools": [{"name": "matter.list", "inputSchema": {}}]}}
+            return {
+                "jsonrpc": "2.0",
+                "id": request["id"],
+                "result": {"tools": [{"name": "matter.list", "inputSchema": {}}]},
+            }
         seen.append(request["params"]["name"])
-        return {"jsonrpc": "2.0", "id": request["id"],
-                "result": {"content": [{"type": "text", "text": "ok"}]}}
+        return {
+            "jsonrpc": "2.0",
+            "id": request["id"],
+            "result": {"content": [{"type": "text", "text": "ok"}]},
+        }
 
     consumer = McpConsumerAdapter(id="opbox", rpc=rpc)
     await consumer.connect(_cred())

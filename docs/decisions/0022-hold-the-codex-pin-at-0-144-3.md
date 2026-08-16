@@ -51,6 +51,17 @@ the same change. A native-subagent UPLIFT on top of that would additionally need
 kernel identities, a sandbox-engagement re-probe per thread, and per-cell memory bounds, none
 of which exist; that one is first-impression and belongs to the court, not to this file.
 
+## 2026-08-12 architecture clarification
+
+The version and protocol decision is unchanged. Release images already installed the
+official `aarch64-unknown-linux-musl` build on arm64, but the runtime verifier still accepted
+only the x86_64 digest. That made an otherwise valid arm64 image refuse every Codex cell.
+The verifier now accepts exactly two reviewed digest/target pairs for 0.144.3:
+`x86_64-unknown-linux-musl` and `aarch64-unknown-linux-musl`. Metadata carries the pair that
+was actually verified. The checked-in generated protocol bundle remains anchored to the
+canonical x86_64 artifact because both binaries expose the same reviewed stable-v2 schema;
+this is multi-architecture packaging of one pin, not a version or protocol migration.
+
 ## What was built alongside it
 
 `scripts/check_codex_pin_health.py`, wired into `make check`. Two risks were live and

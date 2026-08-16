@@ -122,6 +122,13 @@ def test_composes_exact_secretless_read_only_config_and_receipt() -> None:
     assert receipt.proxy_port == 43190
 
 
+def test_runtime_config_accepts_exact_provider_scoped_bifrost_model() -> None:
+    model_id = "cloudflare/@cf/meta/llama-3.1-8b-instruct"
+    composed = compose_codex_runtime_config(replace(_request(), model_id=model_id))
+    assert _document(composed)["model"] == model_id
+    assert composed.receipt.model_id == model_id
+
+
 def test_custom_provider_contract_uses_only_verified_command_auth_fields() -> None:
     document = _document(compose_codex_runtime_config(_request()))
     provider = document["model_providers"]["boltrig_model_proxy"]  # type: ignore[index]

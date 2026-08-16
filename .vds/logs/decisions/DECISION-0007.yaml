@@ -1,0 +1,9 @@
+id: DECISION-0007
+at: 2026-08-12T11:18:44Z
+by: williamlilley
+decision: For Chat composers, the Principal's 2026-08-12 follow-up removes the duplicate adjacent waveform control so only one voice action is visible, while the real VoiceCall controller remains mounted and hidden behind the empty-draft primary action.
+court_required: false
+why: The adjacent controls exposed the same voice affordance twice. Removing only the duplicate visible control is a reversible presentation correction; retaining the mounted controller preserves the real call lifecycle rather than replacing it with screenshot-shaped UI. This additive record preserves the earlier Figma and Codex direction provenance instead of pretending those references changed.
+basis:
+- USER-DIRECTION-2026-08-12:SINGLE-COMPOSER-VOICE-ACTION
+- DIR-0008

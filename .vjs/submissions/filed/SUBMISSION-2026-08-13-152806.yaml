@@ -1,0 +1,98 @@
+id: SUBMISSION-2026-08-13-152806
+court_requested: county
+jurisdiction: default
+question: 'Was "player on beelink only" meant to include the 5.0 GB clip library? Both machines already hold a byte-identical 875-file copy, neither is declared canonical, and the voice pipeline''s upscaler that reads it is destructive, GPU-bound and currently unrunnable on either box.'
+facts: |
+  # Case: the clip library exists twice, and the writer that reads it is broken
+
+  ## Facts (verified)
+  1. Both machines hold it. M4 `~/Projects/gen-pipeline/store/clips`: 875 `.mp4`,
+     5,014,357,224 bytes (`du -sh` 5.1G). beelink
+     `~/Projects/gen-pipeline/store/clips`: 875 `.mp4`, **5,014,357,224 bytes**
+     (`du -sh` 5.2G - ext4 against APFS accounting). Per character both read
+     Maya 2.9/3.0G, Bella 2.0G, Luna 110/111M, amara 70/71M, _global 780K/788K.
+  2. So the premise is only half true: the clips did not STAY on the M4, they were
+     COPIED, and neither copy is declared canonical. beelink's store carries
+     `clips`, `personal` and `state` only - no `voice`, `exports`, `uploads` or
+     `migration-backup`.
+  3. The player on beelink reads beelink's copy: `maya_player.py:41`,
+     `DATASET = Path.home()/"Projects/gen-pipeline/store/clips"`. It is live -
+     `ss -ltnp` shows `192.168.50.2:8901` (the cable) beside a tailnet listener on
+     `100.113.51.76:8901`.
+  4. beelink already breaks the rule the store README states.
+     `~/Projects/gen-pipeline/me-lora/dataset` there is a real, empty DIRECTORY
+     (`dataset/Maya`, 0 `.mp4`), where on the M4 it is a symlink to
+     `../store/clips`. The README says replacing it with a real directory forks the
+     clip library in two. beelink's `me-lora` holds nothing else - no `scripts`,
+     no `ui`.
+  5. `upscale_library.py:16` sets
+     `ROOT = ~/Projects/gen-pipeline/store/clips/Maya/wan`, and :73 exposes
+     `--dir`. Repointing it is a flag, not a rewrite.
+  6. It cannot run on either machine today. `:18` sets
+     `REALESRGAN_BIN = ~/Projects/maya-remote/realesrgan-full`; that directory does
+     not exist on the M4, and `realesrgan-ncnn-vulkan` is not on PATH anywhere
+     under `~/Projects`, `~/Applications`, `/usr/local/bin` or `/opt/homebrew/bin`.
+     `main()` catches per clip and prints `FAIL <e>`, so it fails once per clip
+     rather than at startup - it looks like a run, not a missing dependency.
+  7. It HAS run before: 10 `.mp4.done` markers under `Maya/wan` - bow 4, clap 4,
+     dance_groove 2 - matching `frame_bake.py`'s note that the 4K masters are bow
+     and clap.
+  8. It is destructive. On success (`:64-66`) it writes the marker,
+     `path.unlink()`s the original and renames the 4K file over it. Pointed at a
+     copy, it rewrites THAT copy in place and deletes its originals.
+  9. Its upscaler is Vulkan (`realesrgan-ncnn-vulkan`). beelink has no GPU, so this
+     script cannot follow the media there under any option.
+  10. It is misfiled: it lives in `me-lora/scripts/voice-pipeline/` and upscales
+      VIDEO. Nine scripts under `me-lora/scripts` reference the `dataset/` path.
+  11. It is not the only reader. `frame_bake.py:24` reads the same M4 store, and
+      the two existing `.frame.mp4` bakes were produced from it.
+
+  ## The question
+  Was "player on beelink only" meant to include the media - and given that both
+  machines already hold a byte-identical library, which copy is canonical, what
+  becomes of the other, and is the voice pipeline repointed before it, instead of
+  it, or not at all?
+
+  ## Options
+  A. BEELINK'S COPY IS CANONICAL; THE M4'S GOES. Restore beelink's `dataset`
+     symlink, repoint `upscale_library.py` (ROOT) and `frame_bake.py` (DATASET) at
+     the beelink path over the cable, then delete the M4 copy. Strongest case: it
+     is the agreed end state - M4 = whisper and omnivoice only, beelink = dev
+     servers and containers - it is where the live player already reads from, and
+     it returns 5.0 GB to the 24GB box that is also the physical-I/O machine.
+     Cost: the upscaler cannot follow (fact 9), so this turns a
+     broken-by-missing-binary script into a permanently unrunnable one; and the M4
+     reaches `192.168.50.2` only over the cable, where Local Network permission is
+     per-binary, so a repointed script that works in a shell can fail under launchd
+     with "no route to host" and look like a routing bug.
+
+  B. THE M4'S COPY IS CANONICAL; BEELINK'S IS A READ-ONLY REPLICA. Nothing is
+     repointed; beelink's copy is declared derived, refreshed by an explicit sync,
+     and never written. Strongest case: this library is the TRAINING corpus -
+     me-lora, its `dataset` symlink, 9 scripts and `frame_bake.py` are all
+     M4-resident - and the upscaler's GPU requirement can only ever be met on a
+     Mac. It also keeps the destructive writer aimed at exactly one copy, which is
+     the property that matters for a script that unlinks originals. Cost: it
+     accepts a permanent 5.0 GB duplicate and a sync nobody has written, leaves a
+     22G store on the 24GB box, and concedes that "player on beelink only" does not
+     include the media - the very thing being asked.
+
+  C. NEITHER YET - FIX THE WRITER FIRST. Supply the binary or delete the script and
+     its 10 stale `.done` markers, restore beelink's `dataset` symlink, record which
+     invocation produced each library, and only then take A or B. Strongest case:
+     the sole reason placement is blocking is a script that cannot run, so deciding
+     placement around it decides on a false constraint; and it stops two identical
+     libraries diverging silently, which is the failure the store README already
+     warns about. Cost: it defers the 5.0 GB and the M4/beelink split for however
+     long the repair takes, and "decide after" is what has kept this open.
+
+  ## Constraints
+  Exactly one copy may be writable by `upscale_library.py`, because it deletes
+  originals and there is no undo. beelink's `me-lora/dataset` must be the symlink
+  the store README requires before anything writes through that path. The two
+  libraries are byte-identical today and will diverge the moment either is written,
+  so the answer must state plainly whether "player on beelink only" includes media
+  rather than leaving both copies live and unowned.
+requested_order: TBD
+private_boundary: local
+word_count: 914

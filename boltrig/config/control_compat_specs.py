@@ -50,6 +50,7 @@ def _tenancy_specs() -> list[VerbSpec]:
                 "provider": _STRING,
                 "model": _STRING,
                 "base_url": _STRING,
+                "modality": {"type": "string", "enum": ["text", "vision"]},
                 "proposal_id": _STRING,
                 "secret_digest": _STRING,
             },
@@ -66,7 +67,11 @@ def _tenancy_specs() -> list[VerbSpec]:
         ),
         _spec(
             "control.ai_key.delete",
-            {"level": _STRING, "scope_id": _STRING},
+            {
+                "level": _STRING,
+                "scope_id": _STRING,
+                "modality": {"type": "string", "enum": ["text", "vision"]},
+            },
             ("level", "scope_id"),
             "Delete a scoped model-provider key and clear its sealed credential",
         ),

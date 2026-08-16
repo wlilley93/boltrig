@@ -1,0 +1,9 @@
+id: DIR-0014
+logId: DECISION-0009
+decisionDigest: sha256:c7917b3d2a9a1d9c033453b2d52335ab7c7d7b89b88a649843c12e4d9cfa2e8d
+surface: !route
+  route: apps/worker/src/components/SettingsSurface.tsx
+direction: Remove the Autonomy design-versus-build footnote beginning 'The decided target offers a three-way posture here' and omit comparable editorial implementation commentary from Settings product copy. Let the settings rows state the current workspace behavior directly.
+magnitude: Apply this wording correction to Settings content without fabricating a three-way posture control or hiding real approval, hard-stop and credential-boundary facts. Preserve concise unavailable and error states, accessibility, intentionally enabled developer details and the governed operations evidence surface; this direction removes commentary, not operational evidence or controls.
+directedAt: 2026-08-12T13:37:44Z
+notes: This additive copy direction does not alter the earlier Settings frame, model-lifecycle direction or runtime policy. It creates no frameDigest, signed review, Code Connect linkage, token linkage, conformity or sign-off.

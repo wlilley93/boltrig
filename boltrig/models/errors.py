@@ -207,6 +207,30 @@ class ModelEndpointUnavailable(BoltrigError):
     reason = "model_endpoint_unavailable"
 
 
+class SensingCapabilityUnavailable(BoltrigError):
+    """A declared sensing capability is off, unbound, or out of policy.
+
+    409 rather than 403, deliberately. 403 would say "you are not permitted";
+    the truth is that the user IS permitted and has chosen off, which is a
+    correct answer rather than a denial. It mirrors ``ModelEndpointUnavailable``
+    for the same reason it mirrors its rule: an absent capability is named and
+    refused, never silently substituted with a cached frame, a previous
+    observation, or stock prose.
+
+    ``reason`` is one of ``boltrig.kernel.sensing_policy.SensingRefusal``.
+    """
+
+    status_code = 409
+    reason = "sensing_capability_unavailable"
+
+
+class ModelCatalogueUnavailable(BoltrigError):
+    """The server-owned Bifrost catalogue could not prove a model route."""
+
+    status_code = 503
+    reason = "model_catalogue_unavailable"
+
+
 class EvalCaseArchived(BoltrigError):
     """An archived evaluation case cannot start a new run."""
 

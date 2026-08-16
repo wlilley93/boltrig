@@ -233,9 +233,9 @@ def test_sensitive_memory_stays_local():
 
 
 def test_memory_projection_fanout_records_per_backend_status():
-    mem0 = _Projection("mem0")
-    cognee = _Projection("cognee", fail_remember=True)
-    k, store, engine = asyncio.run(_kernel(projections=[mem0, cognee]))
+    cognee = _Projection("cognee")
+    secondary = _Projection("secondary-test", fail_remember=True)
+    k, store, engine = asyncio.run(_kernel(projections=[cognee, secondary]))
     c = _client(k)
 
     resp = c.post("/v1/memory/remember", json={"content": "customer likes blue"},
@@ -246,23 +246,22 @@ def test_memory_projection_fanout_records_per_backend_status():
     fid = body["fact_ids"][0]
     assert asyncio.run(store.get_memory_fact(T, fid)) is not None
     assert body["projections"] == [
-        {"projection_id": "mem0", "operation": "remember", "status": "written",
-         "fact_id": fid, "projection_ref": f"mem0:{fid}"},
-        {"projection_id": "cognee", "operation": "remember", "status": "failed",
-         "fact_id": fid, "error": "RuntimeError: cognee remember down"},
+        {"projection_id": "cognee", "operation": "remember", "status": "written",
+         "fact_id": fid, "projection_ref": f"cognee:{fid}"},
+        {"projection_id": "secondary-test", "operation": "remember", "status": "failed",
+         "fact_id": fid, "error": "RuntimeError: secondary-test remember down"},
     ]
     rows = asyncio.run(store.list_memory_projection_statuses(T, fact_id=fid))
     by_projection = {row.projection_id: row for row in rows if row.operation == "remember"}
-    assert by_projection["mem0"].status == "written"
-    assert by_projection["mem0"].projection_ref == f"mem0:{fid}"
-    assert by_projection["cognee"].status == "failed"
-    assert mem0.remembered == [(T, fid, "user:alice")]
+    assert by_projection["cognee"].status == "written"
+    assert by_projection["cognee"].projection_ref == f"cognee:{fid}"
+    assert by_projection["secondary-test"].status == "failed"
+    assert cognee.remembered == [(T, fid, "user:alice")]
 
 
 def test_memory_recall_defaults_to_primary_projection_and_labels_source():
-    mem0 = _Projection("mem0")
-    cognee = _Projection("cognee")
-    k, store, engine = asyncio.run(_kernel(projections=[mem0, cognee]))
+    primary = _Projection("cognee")
+    k, store, engine = asyncio.run(_kernel(projections=[primary]))
     c = _client(k)
     created = c.post("/v1/memory/remember", json={"content": "customer likes blue"},
                      headers=_h("alice")).json()
@@ -270,18 +269,18 @@ def test_memory_recall_defaults_to_primary_projection_and_labels_source():
 
     out = c.post("/v1/memory/recall", json={"query": "customer"}, headers=_h("alice")).json()
 
-    assert out["projection_source"] == "mem0"
+    assert out["projection_source"] == "cognee"
     assert out["facts"][0]["id"] == fid
     assert out["facts"][0]["content"] == "projected:customer likes blue"
     assert out["facts"][0]["projection"] == {
-        "source": "mem0",
-        "ref": f"mem0:{fid}",
+        "source": "cognee",
+        "ref": f"cognee:{fid}",
         "authority": "kernel_ledger",
     }
 
 
 def test_memory_projection_invalid_status_records_failure():
-    bad = _Projection("mem0", remember_status="queued")
+    bad = _Projection("cognee", remember_status="queued")
     k, store, engine = asyncio.run(_kernel(projections=[bad]))
     c = _client(k)
 
@@ -310,9 +309,9 @@ def test_memory_ledger_write_failure_does_not_touch_engine():
 
 
 def test_memory_forget_fans_out_delete_without_owning_erasure():
-    mem0 = _Projection("mem0")
-    cognee = _Projection("cognee", fail_forget=True)
-    k, store, engine = asyncio.run(_kernel(projections=[mem0, cognee]))
+    cognee = _Projection("cognee")
+    secondary = _Projection("secondary-test", fail_forget=True)
+    k, store, engine = asyncio.run(_kernel(projections=[cognee, secondary]))
     c = _client(k)
     created = c.post("/v1/memory/remember", json={"content": "apollo note"},
                      headers=_h("alice")).json()
@@ -323,17 +322,17 @@ def test_memory_forget_fans_out_delete_without_owning_erasure():
     assert out["removed"] == [fid]
     assert asyncio.run(store.get_memory_fact(T, fid)) is None
     assert out["projections"] == [
-        {"projection_id": "mem0", "operation": "forget", "status": "deleted",
-         "fact_id": fid, "projection_ref": f"mem0:{fid}"},
-        {"projection_id": "cognee", "operation": "forget", "status": "delete_failed",
-         "fact_id": fid, "projection_ref": f"cognee:{fid}",
-         "error": "RuntimeError: cognee forget down"},
+        {"projection_id": "cognee", "operation": "forget", "status": "deleted",
+         "fact_id": fid, "projection_ref": f"cognee:{fid}"},
+        {"projection_id": "secondary-test", "operation": "forget", "status": "delete_failed",
+         "fact_id": fid, "projection_ref": f"secondary-test:{fid}",
+         "error": "RuntimeError: secondary-test forget down"},
     ]
     rows = asyncio.run(store.list_memory_projection_statuses(T, fact_id=fid, limit=10))
     deletes = {row.projection_id: row for row in rows if row.operation == "forget"}
-    assert deletes["mem0"].status == "deleted"
-    assert deletes["cognee"].status == "delete_failed"
-    assert mem0.forgotten == [(T, fid, f"mem0:{fid}")]
+    assert deletes["cognee"].status == "deleted"
+    assert deletes["secondary-test"].status == "delete_failed"
+    assert cognee.forgotten == [(T, fid, f"cognee:{fid}")]
 
 
 # --- SEC-44: complete, audited erasure ---------------------------------------

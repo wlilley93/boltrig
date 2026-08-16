@@ -6,7 +6,7 @@
       "column": 51,
       "row": 14
     },
-    "filename": "/home/jellytot/Projects/boltrig/scripts/cf-wire-boltrig.py",
+    "filename": "/path/to/boltrig/scripts/cf-wire-boltrig.py",
     "fix": {
       "applicability": "safe",
       "edits": [
@@ -41,7 +41,7 @@
       "column": 26,
       "row": 143
     },
-    "filename": "/home/jellytot/Projects/boltrig/tests/security/test_round_three.py",
+    "filename": "/path/to/boltrig/tests/security/test_round_three.py",
     "fix": null,
     "location": {
       "column": 25,

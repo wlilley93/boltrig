@@ -37,7 +37,9 @@ if TYPE_CHECKING:
 
     from .spawn import Spawner
 
-_PUBLIC_ROUTE_KEYS = frozenset({"profile", "provider", "model", "runtime", "tier"})
+_PUBLIC_ROUTE_KEYS = frozenset(
+    {"choice_id", "profile", "provider", "model", "runtime", "tier"}
+)
 
 
 def _public_model_route(route: Any) -> dict[str, str]:

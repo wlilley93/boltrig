@@ -15,10 +15,37 @@ from boltrig.fleet.infrastructure.codex_runtime_config_argv import (
 from boltrig.fleet.infrastructure.codex_runtime_config_toml import (
     codex_runtime_features,
 )
+from boltrig.fleet.infrastructure.codex_runtime_admission import (
+    QuarantinedCodexPreflightReceipt,
+)
+from boltrig.fleet.infrastructure.codex_runtime_surface_preflight import (
+    BoundCodexSurfacePreflightProbe,
+)
+from boltrig.fleet.infrastructure.codex_trusted_proxy_support import (
+    model_policy_digest,
+    render_trusted_config,
+    write_cell_config,
+)
+from boltrig.fleet.infrastructure.codex_runtime_config import CodexReasoningEffort
+from boltrig.fleet.domain.skill_attestation import (
+    SkillAttestationPlan,
+    SkillDiscoveryReport,
+    attest_skill_discovery,
+)
 from tests.unit.codex_process_fakes import pinned_arguments
 from boltrig.fleet.infrastructure.skill_artifacts import SanitizedWorkspaceProjection
 
 _BINARY_ENV = "BOLTRIG_CODEX_01443_SMOKE_BINARY"
+
+
+class _EmptyBaseProbe:
+    async def probe(self, _client, plan):
+        return QuarantinedCodexPreflightReceipt(
+            attest_skill_discovery(
+                plan,
+                SkillDiscoveryReport(plan.workspace_path, ()),
+            )
+        )
 
 
 def _empty_layout(tmp_path: Path, *, suffix: str) -> CodexCellLayout:
@@ -112,5 +139,54 @@ async def test_exact_pinned_binary_accepts_stable_v1_collaboration_limits(
     cell = await supervisor.start(layout, arguments=arguments)
     try:
         assert cell.metadata.binary_path == binary
+    finally:
+        await cell.aclose()
+
+
+@pytest.mark.invariant("SEC-159")
+@pytest.mark.skipif(
+    sys.platform != "linux" or not os.environ.get(_BINARY_ENV),
+    reason=f"requires Linux and an explicit absolute {_BINARY_ENV} pin path",
+)
+async def test_exact_pinned_binary_reports_the_bound_quarantined_surfaces(
+    tmp_path: Path,
+) -> None:
+    """Real 0.144.3 config/apps/plugins/external-agent probes match the receipt."""
+
+    binary = Path(os.environ[_BINARY_ENV])
+    layout = _empty_layout(tmp_path, suffix="surface-probe")
+    helper = Path("/opt/boltrig/codex/model_auth_helper")
+    composed = render_trusted_config(
+        cell_id=layout.cell_id,
+        cell_root=layout.cell_root,
+        codex_home=layout.codex_home,
+        helper_path=helper,
+        helper_sha256="sha256:" + hashlib.sha256(b"helper").hexdigest(),
+        socket_name="@boltrig-mp-0123456789abcdef0123456789abcdef",
+        model_id="openai/gpt-5.4",
+        policy_digest=model_policy_digest("openai/gpt-5.4", CodexReasoningEffort.HIGH),
+        reasoning_effort=CodexReasoningEffort.HIGH,
+        proxy_port=41235,
+    )
+    write_cell_config(layout.codex_home, composed.config_toml)
+    supervisor = CodexCellSupervisor(
+        binary=binary,
+        startup_timeout=10.0,
+        initialize_timeout=10.0,
+        close_timeout=2.0,
+        terminate_timeout=2.0,
+        kill_timeout=2.0,
+    )
+    cell = await supervisor.start(
+        layout,
+        arguments=composed.receipt.app_server_arguments,
+    )
+    try:
+        plan = SkillAttestationPlan(layout.workspace.as_posix(), (), generation=1)
+        receipt = await BoundCodexSurfacePreflightProbe(
+            _EmptyBaseProbe(), composed.receipt, ()
+        ).probe(cell.client, plan)
+        assert receipt.surface_evidence is not None
+        assert receipt.surface_evidence.composed_config_digest == composed.receipt.config_digest
     finally:
         await cell.aclose()

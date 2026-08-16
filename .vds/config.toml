@@ -1,0 +1,75 @@
+# VDS project configuration. The one fixed anchor (VDS S-3(7)).
+# This file holds NO design value (VDS S-2(2)). Paths, globs and governance only.
+version = 1
+jurisdiction_id = "boltrig"
+repo_code = "BOLTRIG"
+designpack = "none@0"
+
+[paths]
+register = ".vds/register"
+# The screen register (VDS S-5A): one record per governed screen, holding the
+# ARRANGEMENT it requires. A count of content panes and a list of region names;
+# never a width, because a width is a realisation (VDS S-2(4)).
+screens = ".vds/screens"
+warrants = ".vds/warrants"
+proofs = ".vds/proofs"
+pins = ".vds/pins"
+ledgers = ".vds/ledgers"
+submissions = ".vds/submissions"
+logs = ".vds/logs"
+permits = ".vds/permits"
+
+[surface]
+# The DECLARED SURFACE. Every VDS claim is bounded by it, and a screen outside
+# these globs is outside every proof.
+screen_globs = [
+  "apps/worker/src/components/*View.tsx",
+  "apps/worker/src/components/CommandPalette.tsx",
+  "apps/worker/src/components/PermanentFleetTopology.tsx",
+  "apps/worker/src/components/SettingsSurface.tsx",
+  "apps/worker/src/components/VoiceCall.tsx",
+]
+# A component reference whose import path starts with one of these is IN SCOPE
+# for enforcement. Anything else is counted and not enforced, and the count is
+# printed, so the carve-out is visible rather than assumed.
+governed_import_prefixes = ["./components/", "../components/", "./"]
+# Directories the register is expected to cover, used by reconciliation.
+library_dirs = ["apps/worker/src/components"]
+screens_ledger = ".vds/ledgers/screens.yaml"
+component_extensions = ["tsx", "jsx"]
+# The shipped stylesheet: the system of record for what a token RESOLVES to
+# (VDS S-2(3)). `contrast` measures every floor in the register against it, in
+# every theme it declares. The value here is the path the specification names;
+# change it only if your project genuinely ships its tokens elsewhere, and know
+# that nothing else is measured.
+stylesheet = "apps/worker/src/styles.css"
+
+[screens]
+# THE SCREEN SEAM: everything about a screen frame that is THIS PROJECT's
+# vocabulary rather than VDS's. A screen frame carries several drawings and says
+# in a layer NAME which one governs.
+#
+# An authority marker is matched ANYWHERE in the name and case-insensitively; a
+# quarantine marker is matched against the LEADING SEGMENT only. That asymmetry
+# is load-bearing and is not a compromise: an authoritative layer in the subject
+# this was derived from carries its marker mid-name and lower case, while a
+# hybrid name that merely MENTIONS a target is a current screen, and matching
+# quarantine anywhere excluded nine of them.
+authority_markers = ["CURRENT SOURCE", "SOURCE AUTHORITY", "CURRENT CODE"]
+quarantine_markers = ["LEGACY UNDERLAY", "REFERENCE", "TARGET"]
+name_separator = "\u00b7"
+# The shell regions the generator looks for by name. A screen record's required
+# regions are checked against what it found, so both halves read THIS list.
+region_names = ["sidebar", "header", "body", "rail", "composer"]
+frames_ledger = ".vds/ledgers/frames.yaml"
+
+[governance]
+# VDS S-3(8): the enforcement machinery must not be editable without a permit.
+permit_required = [
+  "apps/worker/src/styles.css",
+  "apps/worker/src/components/**",
+  "designpack/v1/**",
+  ".vds/register/**",
+  ".vds/config.toml",
+]
+permit_exempt = [".vds/logs/**", ".vds/permits/**", ".vds/proofs/**"]

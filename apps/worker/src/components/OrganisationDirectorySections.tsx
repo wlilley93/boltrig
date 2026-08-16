@@ -130,7 +130,7 @@ export function AdminDirectory({ currentRole }: { currentRole: string }) {
     };
     const result = await client.patchUser(user.id, input.body);
     if (finalizer.begin(input, result, "User role change")) {
-      setMessage("Pending approval in your Inbox.");
+      setMessage("Pending approval. Continue in the originating chat.");
       return;
     }
     setMessage(responseMessage(result, input.success));
@@ -152,7 +152,7 @@ export function AdminDirectory({ currentRole }: { currentRole: string }) {
     };
     const result = await client.patchUser(user.id, input.body);
     if (finalizer.begin(input, result, "User status change")) {
-      setMessage("Pending approval in your Inbox.");
+      setMessage("Pending approval. Continue in the originating chat.");
       setArmedId(null);
       return;
     }
@@ -175,7 +175,7 @@ export function AdminDirectory({ currentRole }: { currentRole: string }) {
       };
       const result = await client.patchUser(user.id, input.body);
       if (finalizer.begin(input, result, "User scope change")) {
-        setMessage("Pending approval in your Inbox.");
+        setMessage("Pending approval. Continue in the originating chat.");
         return;
       }
       setMessage(responseMessage(result, input.success));
@@ -339,7 +339,7 @@ export function InvitationAdministration({ currentRole }: { currentRole: string 
       };
       const result = await client.createInvitation(input.body);
       if (finalizer.begin(input, result, "Invitation creation")) {
-        setMessage("Pending approval in your Inbox.");
+        setMessage("Pending approval. Continue in the originating chat.");
         return;
       }
       setMessage(responseMessage(result, input.success));
@@ -366,7 +366,7 @@ export function InvitationAdministration({ currentRole }: { currentRole: string 
     };
     const result = await client.revokeInvitation(id);
     if (finalizer.begin(input, result, "Invitation revocation")) {
-      setMessage("Pending approval in your Inbox.");
+      setMessage("Pending approval. Continue in the originating chat.");
       setArmedId(null);
       return;
     }
@@ -490,7 +490,7 @@ function grantableRoles(currentRole: string): string[] {
 
 function responseMessage(result: { status?: string; reason?: string }, success: string): string {
   if (result.status === "ok") return success;
-  if (result.status === "pending_human") return "Pending approval in your Inbox.";
+  if (result.status === "pending_human") return "Pending approval. Continue in the originating chat.";
   return result.reason ?? result.status ?? "Unexpected server response.";
 }
 

@@ -1,0 +1,9 @@
+id: DIR-0023
+logId: DECISION-0015
+decisionDigest: sha256:340572bec346da82593f6e8f30ce05657179b13e2a51c1b98b94dcfaa1f82981
+surface: !route
+  route: apps/worker/src/components/MobileChat.tsx
+direction: Make thin Chat feel like the same compact Codex-like workspace rather than a separate oversized mobile product.
+magnitude: Resolve the phone surface through shared Chat colour, compact-header, transcript-type and minimum-touch-target tokens; use restrained gaps and smaller bubbles; reuse the exact tool disclosure; collapse the agent fanout behind its count; dock queued instructions immediately above a multiline bottom composer. Preserve safe areas, governed approvals, task details, live continuity and send/stop semantics. Do not add fictional mobile controls or hide real execution detail.
+directedAt: 2026-08-14T10:20:54Z
+notes: No canonical phone-width VDS state exists. The direction is regression-tested and visually inspected at representative phone viewports; governed desktop captures remain a source-binding receipt, not phone parity authority.

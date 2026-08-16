@@ -4,7 +4,7 @@
 WHY THIS EXISTS. `.venv` was tracked on origin/main as a symlink pointing at
 itself:
 
-    .venv -> /home/jellytot/Projects/boltrig/.venv          # ELOOP
+    .venv -> /path/to/boltrig/.venv                         # ELOOP
 
 It reached main in 7c6153b (#177) and every clone taken since materialised it,
 so `stat(".venv")` raised OSError 40 (Too many levels of symbolic links) on a

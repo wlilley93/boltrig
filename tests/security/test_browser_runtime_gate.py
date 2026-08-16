@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -29,7 +30,7 @@ _BASE = """
 organisation: Acme
 tenant_id: acme
 stack:
-  cockpit: herdr
+  cockpit: boltrig_ui
 identity:
   provider: oidc
 models:
@@ -73,7 +74,10 @@ def test_each_declaring_limb_wants_a_browser(tmp_path: Path, extra: str) -> None
     demanding it.
     """
     if extra.startswith("  "):  # a stack-section limb belongs under `stack:`
-        text = _BASE.replace("  cockpit: herdr\n", "  cockpit: herdr\n" + extra)
+        text = _BASE.replace(
+            "  cockpit: boltrig_ui\n",
+            "  cockpit: boltrig_ui\n" + extra,
+        )
         path = tmp_path / "m.yaml"
         path.write_text(text, encoding="utf-8")
         assert browser_automation_wanted(str(path)) is True
@@ -124,7 +128,13 @@ def _stub_path(tmp_path: Path, *, wanted: bool) -> Path:
     (binder / "chromium").write_text(
         f"#!/bin/sh\ntouch {marker}\nsleep 2\n", encoding="utf-8"
     )
-    (binder / "browser-use").write_text("#!/bin/sh\ncat > /dev/null\nexit 0\n", encoding="utf-8")
+    (binder / "browser-use").write_text(
+        "#!/bin/sh\n"
+        'test "${BU_CDP_URL:-}" = "http://127.0.0.1:9222" || exit 42\n'
+        "cat > /dev/null\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
     for name in ("python", "chromium", "browser-use"):
         (binder / name).chmod(0o755)
     return binder
@@ -144,7 +154,30 @@ def _run_entrypoint(tmp_path: Path, *, wanted: bool) -> tuple[int, bool]:
         # and a timeout here reads as the GATE failing, which it was not.
         timeout=180,
     )
-    return proc.returncode, (tmp_path / "chromium-started").exists()
+    # WAIT FOR THE MARKER; DO NOT SAMPLE IT ONCE.
+    #
+    # The entrypoint backgrounds chromium with `&` (fleet-entrypoint.sh:60) and
+    # then polls readiness through the `python` stub -- which exits 0
+    # immediately, so the poll waits for nothing. The chromium stub is
+    # `touch <marker>; sleep 2`. So the entrypoint can return 0 before that
+    # backgrounded shell has reached its `touch`, and a single .exists() call
+    # races it. The symptom is exactly rc == 0 with started False.
+    #
+    # Measured 2026-08-14: fails 2 of 2 full `make quality-gate` runs inside
+    # boltrig-vm, and passes 2 of 2 in the same VM in isolation, on the macOS
+    # host, and in CI. That combination IS the diagnosis -- it needs the full
+    # suite's parallel load AND the slower environment, so the fast machines
+    # never see it and the VM always does.
+    #
+    # A short bounded wait is the fix rather than a longer subprocess timeout:
+    # the 180s above already passed, so the process was never slow. Only the
+    # observation was early. The negative test is unaffected -- it asserts the
+    # marker is ABSENT, and waiting cannot make an absent file appear.
+    deadline = time.monotonic() + 10.0
+    marker = tmp_path / "chromium-started"
+    while not marker.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return proc.returncode, marker.exists()
 
 
 def test_entrypoint_does_not_start_chromium_when_unwanted(tmp_path: Path) -> None:
@@ -159,7 +192,13 @@ def test_entrypoint_does_not_start_chromium_when_unwanted(tmp_path: Path) -> Non
 
 
 def test_entrypoint_still_starts_chromium_when_wanted(tmp_path: Path) -> None:
-    """The negative control: without it, a guard that always skips would pass."""
+    """The negative control also proves the CLI is pinned to owned loopback CDP.
+
+    Browser Harness otherwise follows its interactive desktop-Chrome recovery
+    path and waits for a user to approve ``chrome://inspect``.  The browser-use
+    stub exits 42 unless the entrypoint exports the exact endpoint started by
+    this worker.
+    """
     rc, started = _run_entrypoint(tmp_path, wanted=True)
     assert rc == 0
     assert started is True, "a declaring tenant lost its browser"
@@ -187,13 +226,13 @@ async def test_heartbeat_omits_the_key_rather_than_reporting_it_broken(
 # --- the readiness gate that requires it ----------------------------------
 
 
-class _HerdrOnlyStatus:
-    """What a worker that started no Chromium actually reports: herdr, alone."""
+class _NoBrowserStatus:
+    """What a worker that started no Chromium reports."""
 
     async def snapshot(self, *, tenant_id: str, workspace_id: str | None) -> dict:
         del tenant_id, workspace_id
         return {
-            "components": [{"id": "herdr", "status": "ok", "metadata": {}}],
+            "components": [],
             "runtimes": [],
         }
 
@@ -207,6 +246,7 @@ async def _stack_tools_check(manifest: str) -> dict:
     only assertion worth making is on the check readiness actually emits.
     """
     from boltrig.api.readiness import ReadinessService
+    from boltrig.config.manifest import load_manifest
     from boltrig.kernel import Kernel
     from boltrig.store import InMemoryStore
 
@@ -215,7 +255,8 @@ async def _stack_tools_check(manifest: str) -> dict:
         Kernel(InMemoryStore()),
         tenant_id="acme",
         env={},
-        status_provider=_HerdrOnlyStatus(),
+        manifest=load_manifest(manifest),
+        status_provider=_NoBrowserStatus(),
     )
     stack, _gateway = await service._platform_checks({}, 0.5)
     return stack
@@ -233,7 +274,7 @@ async def test_readiness_stops_requiring_a_browser_it_does_not_run(
     monkeypatch.setenv("BOLTRIG_MANIFEST", _manifest(tmp_path))
     stack = await _stack_tools_check(_manifest(tmp_path))
     assert stack["status"] == "ok", stack
-    assert stack["expected"] == 1
+    assert stack["expected"] == 0
 
 
 @pytest.mark.asyncio
@@ -249,7 +290,7 @@ async def test_readiness_still_fails_when_a_declared_browser_is_missing(
     monkeypatch.setenv("BOLTRIG_MANIFEST", manifest)
     stack = await _stack_tools_check(manifest)
     assert stack["status"] == "failed", stack
-    assert stack["expected"] == 2
+    assert stack["expected"] == 1
 
 
 def test_receipt_round_trips_with_no_browser(

@@ -21,8 +21,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from collections.abc import AsyncIterator, Mapping
 from typing import TYPE_CHECKING, Any, Protocol
 
 from pathlib import Path
@@ -32,15 +31,14 @@ if TYPE_CHECKING:  # avoid importing runtime.py at module load (it imports us la
 
 from boltrig.fleet.domain import (
     PhaseAssignmentRef,
-    PhaseRef,
     RuntimeEvent,
-    RuntimeEventKind,
     RuntimeThreadRef,
     RuntimeTurnRef,
 )
-from boltrig.fleet.infrastructure.codex_kernel_tool_scope import (
-    CodexKernelToolScope,
-    CodexKernelToolScopeRegistry,
+from boltrig.fleet.infrastructure.codex_kernel_tool_scope import CodexKernelToolScope
+from boltrig.fleet.infrastructure.codex_assignment_model_binding import (
+    CodexAssignmentModelBinding,
+    CodexAssignmentModelBindingRegistry,
 )
 from boltrig.fleet.infrastructure.codex_kernel_tools_phase import (
     codex_mcp_tool_name,
@@ -48,56 +46,25 @@ from boltrig.fleet.infrastructure.codex_kernel_tools_phase import (
     validated_kernel_tool_names,
 )
 from boltrig.fleet.infrastructure.codex_read_only_phase import read_only_thread_spec
-from boltrig.fleet.infrastructure.codex_runtime_config_policy import (
-    CodexRuntimeConfigError,
-    validate_mcp_server_url,
-)
 from boltrig.fleet.ports.runtime import RuntimeThreadSpec, RuntimeTurnSpec
-from boltrig.models import GrantSet, InvocationContext
-from boltrig.models.execution_scope import OrganisationUserRef
+from boltrig.models import InvocationContext
 
+from .codex_kernel_tool_wiring import (
+    DEFAULT_KERNEL_TOOLS_TOKEN_TTL_SECONDS,
+    CodexKernelToolWiring,
+)
+from .codex_runtime_support import (
+    drain_until_complete,
+    empty_output_reason,
+    mint_assignment,
+)
 from .result import AgentResult
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_KERNEL_TOOLS_TOKEN_TTL_SECONDS = 3600
-
-# issue_token(tenant_id, grants, *, run_id, actor, skills, ...) -> token (the
-# same McpFace.issue_run_token seam pi/opencode/rivet mint from, SEC-23).
-TokenIssuer = Callable[..., str]
-# compile_tool_ceiling(tenant_id, grants) -> the run's effective verb ids
-# (tenant ceiling ∩ run grants - exactly the kernel MCP tools/list derivation,
-# FR-MCP-02). Injected at the composition seam; the runtime holds no store.
-ToolCeilingCompiler = Callable[[str, GrantSet], Awaitable[tuple[str, ...]]]
-
-
-@dataclass(frozen=True, repr=False, slots=True)
-class CodexKernelToolWiring:
-    """The kernel-tools lane's injected seams; carries NO secret material."""
-
-    issue_token: TokenIssuer
-    revoke_token: Callable[[str], None]
-    compile_tool_ceiling: ToolCeilingCompiler
-    mcp_url: str
-    registry: CodexKernelToolScopeRegistry
-    ttl_seconds: int = DEFAULT_KERNEL_TOOLS_TOKEN_TTL_SECONDS
-
-    def __post_init__(self) -> None:
-        if not callable(self.issue_token) or not callable(self.revoke_token):
-            raise TypeError("kernel tool wiring token callables are required")
-        if not callable(self.compile_tool_ceiling):
-            raise TypeError("kernel tool wiring requires a tool ceiling compiler")
-        try:
-            validate_mcp_server_url(self.mcp_url)
-        except CodexRuntimeConfigError as error:
-            raise ValueError(str(error)) from None
-        if type(self.registry) is not CodexKernelToolScopeRegistry:
-            raise TypeError("registry must be an exact CodexKernelToolScopeRegistry")
-        if type(self.ttl_seconds) is not int or not 1 <= self.ttl_seconds <= 3600:
-            raise ValueError("kernel tool token TTL must be between 1 and 3600 seconds")
-
-    def __repr__(self) -> str:
-        return "CodexKernelToolWiring(redacted=True)"
+# Retained private compatibility name for focused token-accounting tests and
+# downstream diagnostics; the runtime itself calls the extracted helper directly.
+_drain_until_complete = drain_until_complete
 
 
 class CodexPhaseLifecycle(Protocol):
@@ -128,13 +95,28 @@ class CodexRuntime:
         stack_root: Path,
         cost_tier: str = "standard",
         kernel_tools: CodexKernelToolWiring | None = None,
+        model_id: str | None = None,
+        model_endpoint_id: str | None = None,
+        gateway_virtual_key: str | None = None,
+        model_bindings: CodexAssignmentModelBindingRegistry | None = None,
     ) -> None:
         if kernel_tools is not None and type(kernel_tools) is not CodexKernelToolWiring:
             raise TypeError("kernel_tools must be an exact CodexKernelToolWiring")
+        if (
+            model_bindings is not None
+            and type(model_bindings) is not CodexAssignmentModelBindingRegistry
+        ):
+            raise TypeError("model_bindings must be an exact CodexAssignmentModelBindingRegistry")
+        if (model_bindings is None) != (model_id is None):
+            raise ValueError("model id and binding registry must be configured together")
         self._lifecycle = lifecycle
         self._stack_root = stack_root
         self.cost_tier = cost_tier
         self._kernel_tools = kernel_tools
+        self._model_id = model_id
+        self._model_endpoint_id = model_endpoint_id
+        self._gateway_virtual_key = gateway_virtual_key
+        self._model_bindings = model_bindings
 
     async def run(
         self, prompt: str, context: InvocationContext, *, tools: list[str]
@@ -147,12 +129,38 @@ class CodexRuntime:
             return AgentResult.degrade(
                 runtime=self.runtime, reason="no_read_only_phase_scope", prompt=prompt
             )
-        assignment = _mint_assignment(context, run_id, workspace_id)
-        if self._kernel_tools is not None:
-            return await self._run_kernel_tools(prompt, context, assignment)
-        return await self._run_phase(
-            prompt, read_only_thread_spec(assignment, self._stack_root)
-        )
+        assignment = mint_assignment(context, run_id, workspace_id)
+        binding_registered = False
+        if self._model_bindings is not None:
+            try:
+                assert self._model_id is not None
+                self._model_bindings.register(
+                    CodexAssignmentModelBinding(
+                        assignment=assignment,
+                        tenant_id=context.tenant_id,
+                        model_id=self._model_id,
+                        endpoint_id=self._model_endpoint_id,
+                        gateway_virtual_key=self._gateway_virtual_key,
+                    )
+                )
+                binding_registered = True
+            except Exception as error:
+                logger.exception("codex model binding failed for run %s", context.run_id)
+                return AgentResult.degrade(
+                    runtime=self.runtime,
+                    reason=f"codex_model_binding_failed:{type(error).__name__}",
+                    prompt=prompt,
+                )
+        try:
+            if self._kernel_tools is not None:
+                return await self._run_kernel_tools(prompt, context, assignment)
+            return await self._run_phase(
+                prompt, read_only_thread_spec(assignment, self._stack_root)
+            )
+        finally:
+            if binding_registered:
+                assert self._model_bindings is not None
+                self._model_bindings.discard(assignment)
 
     async def _run_kernel_tools(
         self, prompt: str, context: InvocationContext, assignment: PhaseAssignmentRef
@@ -218,9 +226,7 @@ class CodexRuntime:
         except Exception as error:
             # Same contract as the read-only lane: degrade, never raise into the
             # caller, and carry only a cause tag - never token material.
-            logger.exception(
-                "codex kernel-tools turn failed for run %s", context.run_id
-            )
+            logger.exception("codex kernel-tools turn failed for run %s", context.run_id)
             return AgentResult.degrade(
                 runtime=self.runtime,
                 reason=f"codex_turn_failed:{type(error).__name__}",
@@ -250,11 +256,9 @@ class CodexRuntime:
         try:
             thread = await self._lifecycle.start_thread(spec)
             await self._lifecycle.start_turn(
-                RuntimeTurnSpec(
-                    thread=thread, prompt=prompt, client_message_id=uuid.uuid4().hex
-                )
+                RuntimeTurnSpec(thread=thread, prompt=prompt, client_message_id=uuid.uuid4().hex)
             )
-            tokens_used = await _drain_until_complete(
+            tokens_used = await drain_until_complete(
                 self._lifecycle.events(thread), usage_seen, usage_legs, runtime_errors
             )
             text = await self._lifecycle.read_turn_output(thread)
@@ -286,9 +290,7 @@ class CodexRuntime:
             # handed the tenant a full budget refund for spend that really happened.
             return AgentResult.degrade(
                 runtime=self.runtime,
-                reason=_empty_output_reason(
-                    runtime_errors, spec.assignment.phase.root_run_id
-                ),
+                reason=empty_output_reason(runtime_errors, spec.assignment.phase.root_run_id),
                 prompt=prompt,
                 tokens_used=tokens_used,
                 input_tokens=usage_legs.get("input_tokens", 0),
@@ -308,9 +310,7 @@ class CodexRuntime:
         )
 
 
-def build_trusted_codex_runtime(
-    codex_config: dict[str, Any] | None, cost_tier: str
-) -> "Runtime":
+def build_trusted_codex_runtime(codex_config: dict[str, Any] | None, cost_tier: str) -> "Runtime":
     """Construct the trusted read-only Codex runtime, or a typed unavailable one.
 
     The provider + stack_root are pre-built at the composition root and carried in
@@ -332,7 +332,14 @@ def build_trusted_codex_runtime(
     cfg = dict(codex_config or {})
     provider = cfg.get("provider")
     stack_root = cfg.get("stack_root")
-    if not (cfg.get("trusted") and provider is not None and stack_root is not None):
+    model_id = cfg.get("model_id")
+    if not (
+        cfg.get("trusted")
+        and provider is not None
+        and stack_root is not None
+        and isinstance(model_id, str)
+        and model_id
+    ):
         return UnavailableRuntime(requested="codex", cost_tier=cost_tier or "cheap")
     from boltrig.fleet.codex_trusted_wall import require_codex_trusted_posture
     from boltrig.fleet.infrastructure.codex_agent_runtime import CodexAgentRuntime
@@ -341,10 +348,10 @@ def build_trusted_codex_runtime(
     )
 
     require_codex_trusted_posture()
+    if type(provider) is not TrustedProxyCodexPhaseCellProvider:
+        return UnavailableRuntime(requested="codex", cost_tier=cost_tier or "cheap")
     kernel_tools: CodexKernelToolWiring | None = None
     if cfg.get("kernel_tools"):
-        if type(provider) is not TrustedProxyCodexPhaseCellProvider:
-            return UnavailableRuntime(requested="codex", cost_tier=cost_tier or "cheap")
         try:
             kernel_tools = CodexKernelToolWiring(
                 issue_token=cfg.get("issue_token"),
@@ -352,7 +359,9 @@ def build_trusted_codex_runtime(
                 compile_tool_ceiling=cfg.get("compile_tool_ceiling"),
                 mcp_url=cfg.get("mcp_url"),
                 registry=provider.kernel_tool_scopes,
-                ttl_seconds=int(cfg.get("mcp_token_ttl_seconds") or DEFAULT_KERNEL_TOOLS_TOKEN_TTL_SECONDS),
+                ttl_seconds=int(
+                    cfg.get("mcp_token_ttl_seconds") or DEFAULT_KERNEL_TOOLS_TOKEN_TTL_SECONDS
+                ),
             )
         except (TypeError, ValueError):
             return UnavailableRuntime(requested="codex", cost_tier=cost_tier or "cheap")
@@ -361,107 +370,11 @@ def build_trusted_codex_runtime(
         stack_root=stack_root,
         cost_tier=cost_tier or "standard",
         kernel_tools=kernel_tools,
+        model_id=model_id,
+        model_endpoint_id=cfg.get("model_endpoint_id"),
+        gateway_virtual_key=cfg.get("gateway_virtual_key"),
+        model_bindings=provider.model_bindings,
     )
-
-
-def _empty_output_reason(errors: list[Mapping[str, object]], run_id: str) -> str:
-    """Silence, or a failure this path used to swallow - they want different responses.
-
-    `_drain_until_complete` ignored RuntimeEventKind.ERROR, so a bad key, an unknown model
-    id and a gateway 5xx all surfaced as `codex_empty_output`: "the model had nothing to
-    say". No provider message is carried, here or in the log - runtime events must not copy
-    content (a provider error can quote the prompt), so `will_retry` and the event's
-    existence do the work.
-    """
-    if not errors:
-        return "codex_empty_output"
-    logger.warning(
-        "codex reported %d runtime error(s) before an empty turn for run %s (will_retry=%s)",
-        len(errors),
-        run_id,
-        [observed.get("will_retry") for observed in errors],
-    )
-    return "codex_empty_output_after_error"
-
-
-async def _drain_until_complete(
-    events: AsyncIterator[RuntimeEvent],
-    seen: list[int] | None = None,
-    legs: dict[str, int] | None = None,
-    errors: list[Mapping[str, object]] | None = None,
-) -> int:
-    """Consume the lifecycle stream until the turn completes (the completion
-    signal, not the content source), returning the tokens the turn reported.
-
-    Usage arrives on its own notification, mid-turn and possibly more than once, so
-    the LAST report before completion wins (Codex's `total` is cumulative for the
-    thread). Zero when the runtime reported nothing - which is the honest answer,
-    and is what the fleet used to bill unconditionally for every Codex turn because
-    the usage notification was being discarded upstream.
-
-    ``seen`` is the caller's sink for usage observed SO FAR. A terminal stream
-    raises and the caller degrades, and a raise discards this function's locals -
-    so without the sink a turn that consumed real tokens and then died reported
-    zero, and the tenant was refunded for spend the provider had already taken.
-
-    ``legs`` is the same idea for that report's input/output SPLIT, which rides on
-    the same frame as the total. It is carried because the two legs are priced at
-    different rates (boltrig/kernel/cost.py): billing an input-heavy turn at the
-    output rate over-bills it substantially. Both sinks are written from the SAME
-    accepted report, so they can never disagree about which frame won.
-    """
-    tokens = 0
-    async for event in events:
-        if event.kind is RuntimeEventKind.ERROR:
-            # The runtime said the turn FAILED; this loop used to drop it. See
-            # _empty_output_reason.
-            if errors is not None:
-                errors.append(event.payload.to_mapping())
-        elif event.kind is RuntimeEventKind.TOKEN_USAGE:
-            payload = event.payload.to_mapping()
-            reported = payload.get("total_tokens")
-            if type(reported) is int and reported > 0:
-                tokens = reported
-                if seen is not None:
-                    seen.append(reported)
-                if legs is not None:
-                    legs["input_tokens"] = _reported_leg(payload.get("input_tokens"))
-                    legs["output_tokens"] = _reported_leg(payload.get("output_tokens"))
-        elif event.kind is RuntimeEventKind.TURN_COMPLETED:
-            return tokens
-    return tokens
-
-
-def _reported_leg(value: object) -> int:
-    """One usage leg as a non-negative int, or 0 when absent/malformed.
-
-    0 is the honest answer for a leg the runtime did not report, and 0/0 is priced
-    at a single rate on the TOTAL - so a partial report degrades to the previous
-    behaviour rather than billing the turn as free.
-    """
-    return value if type(value) is int and value > 0 else 0
-
-
-def _mint_assignment(
-    context: InvocationContext, run_id: str, workspace_id: str
-) -> PhaseAssignmentRef:
-    """Mint the read-only phase assignment for this chat turn from the context.
-
-    The read-only reasoning phase is identity-bound to the run, not gated by the
-    write-phase assignment admission; a deterministic per-run phase/assignment id
-    keeps a re-run mapping onto the same phase.
-    """
-    principal = OrganisationUserRef(
-        tenant_id=context.tenant_id,
-        user_id=context.on_behalf_of or context.actor or "agent",
-    )
-    phase = PhaseRef(
-        root_run_id=run_id,
-        phase_id=f"{run_id}-codex",
-        principal=principal,
-        workspace_id=workspace_id,
-    )
-    return PhaseAssignmentRef(phase=phase, assignment_id=f"{run_id}-codex-assignment")
 
 
 __all__ = [

@@ -77,6 +77,8 @@ from boltrig.models.execution_scope import OrganisationUserRef
 
 from .codex_process_fakes import make_layout
 
+
+
 # --- the environment precondition this whole module needs -------------------
 # Every test here drives the trusted-Codex lane, and that lane's ONE available
 # boundary is a helper owned by ANOTHER ACCOUNT on a directory chain this account
@@ -123,14 +125,21 @@ def _every_ancestor_is_foreign(path: str) -> bool:
     return True
 
 
-pytestmark = pytest.mark.skipif(
+# Two conditions, both of which must hold, so this is a LIST: a second
+# `pytestmark = ...` assignment would rebind the name and silently drop
+# whichever came first. linux_only covers the kernel facilities; the skipif
+# below covers the file-mode boundary these tests rest on.
+pytestmark = [
+    pytest.mark.linux_only,
+    pytest.mark.skipif(
     not _every_ancestor_is_foreign(os.path.realpath("/bin/sh")),
     reason=(
         f"an ancestor of {os.path.realpath('/bin/sh')} is owned by this account "
         f"(euid {os.geteuid()}), so the file-mode boundary the trusted-Codex lane "
         "rests on does not exist here and these tests would prove nothing"
     ),
-)
+),
+]
 
 _CODEX_BIN = Path("/opt/boltrig/codex/codex")
 _CELL_ID = "cell-abc1234567890ab"

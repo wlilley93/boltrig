@@ -85,10 +85,14 @@ wait_healthy() {  # wait_healthy SERVICE SECONDS
   done
 }
 
-ORG_NAME="$(prompt_default ORG_NAME 'First organisation name' 'Boltrig')"
+ORG_NAME="$(prompt_default ORG_NAME 'First organisation name' 'Your organisation')"
 WS_NAME="$(prompt_default WS_NAME 'First workspace name' "$ORG_NAME")"
-SUPERADMIN_EMAIL="$(prompt_default SUPERADMIN_EMAIL 'Superadmin email' 'will.lilley93@gmail.com')"
-SUPERADMIN_PASSWORD="$(prompt_default SUPERADMIN_PASSWORD 'Superadmin password' 'admin')"
+# A public checkout must never guess an owner identity or password. Interactive
+# genesis prompts for them; non-interactive runs must provide both explicitly.
+SUPERADMIN_EMAIL="$(prompt_default SUPERADMIN_EMAIL 'Superadmin email' '')"
+SUPERADMIN_PASSWORD="$(prompt_default SUPERADMIN_PASSWORD 'Superadmin password' '')"
+[ -n "$SUPERADMIN_EMAIL" ] || { echo "SUPERADMIN_EMAIL is required; no personal default is bundled" >&2; exit 2; }
+[ -n "$SUPERADMIN_PASSWORD" ] || { echo "SUPERADMIN_PASSWORD is required; no default password is bundled" >&2; exit 2; }
 
 echo "== BOLTRIG GENESIS  target=$TARGET  org='$ORG_NAME'  ws='$WS_NAME'  super=$SUPERADMIN_EMAIL =="
 
@@ -164,7 +168,7 @@ fi
 
 # ---------------------------------------------------------------- Phase 5: verify
 echo "==> Phase 5: verify (kernel health + a real login round-trip)"
-BASE="http://localhost:${UI_PORT:-8080}"
+BASE="http://localhost:${WORKER_PORT:-8082}"
 HZ="$(curl -s -o /dev/null -w '%{http_code}' "$BASE/healthz" || true)"
 echo "  GET /healthz -> $HZ"
 LOGIN="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/v1/auth/login" \

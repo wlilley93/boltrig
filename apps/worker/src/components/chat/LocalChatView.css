@@ -1,0 +1,27 @@
+.local-chat-layout .chat-main { background: var(--bg); }
+
+.local-chat-header .chat-header-sub {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.local-workspace-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 660px);
+  margin: -8px auto 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.local-workspace-picker select {
+  min-width: 0;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-2);
+  background: var(--inset);
+}
+
+.local-workspace-notice { margin: -8px 0 0; }

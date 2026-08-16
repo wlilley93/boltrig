@@ -1,8 +1,8 @@
 # Boltrig fleet image (the fleet runtime + durable workers, Epics F/G).
 #
-# Same shape as deploy/kernel.Dockerfile but installs the [durable,inference]
-# extras so the worker can talk to Hatchet (durable execution) and to inference
-# back ends. Honours the same optional corporate proxy + CA bundle (US-DEP-04).
+# Same shape as deploy/kernel.Dockerfile; the worker talks to Hatchet and the
+# pinned Codex runtime without installing provider-native model SDKs. Honours
+# the same optional corporate proxy + CA bundle (US-DEP-04).
 
 # IAC-002: pinned to a stable tag + digest.
 FROM python:3.12.13-slim-bookworm@sha256:8a7e7cc04fd3e2bd787f7f24e22d5d119aa590d429b50c95dfe12b3abe52f48b AS base
@@ -110,23 +110,7 @@ RUN printf '%s\n' \
     'printf "%s\n" "new_tab(\"data:text/html,<title>boltrig-browser-smoke</title>\")" "print(page_info())" | browser-use | grep -F boltrig-browser-smoke' && \
     rm -f /tmp/browser-smoke-manifest.yaml
 
-# Boltrig v2 coding-agent runtime: ship OpenCode with the stack, not from a
-# developer workstation. Use the native npm binary tarball directly rather than
-# running npm install scripts in the image.
 ARG TARGETARCH
-ARG OPENCODE_VERSION=1.17.16
-ARG OPENCODE_LINUX_AMD64_SHA256=fee3fea8d03d5bbe70bc9f1258d097ad07090415df029296765c61bb9fb677a4
-ARG OPENCODE_LINUX_ARM64_SHA256=2f659f652fae638c49b9e9400f143693af91274c4f1353ce35c9291d27a15f81
-RUN set -eux; \
-    case "${TARGETARCH:-amd64}" in \
-        amd64) package="opencode-linux-x64-baseline"; sha="${OPENCODE_LINUX_AMD64_SHA256}" ;; \
-        arm64) package="opencode-linux-arm64"; sha="${OPENCODE_LINUX_ARM64_SHA256}" ;; \
-        *) echo "unsupported OpenCode TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
-    esac; \
-    url="https://registry.npmjs.org/${package}/-/${package}-${OPENCODE_VERSION}.tgz"; \
-    python -c 'import hashlib, io, os, stat, sys, tarfile, urllib.request; url, expected, target = sys.argv[1:4]; data = urllib.request.urlopen(url, timeout=120).read(); actual = hashlib.sha256(data).hexdigest(); sys.exit(f"sha256 mismatch for {url}: {actual} != {expected}") if actual != expected else None; tar = tarfile.open(fileobj=io.BytesIO(data), mode="r:gz"); member = tar.getmember("package/bin/opencode"); source = tar.extractfile(member); os.makedirs(os.path.dirname(target), exist_ok=True); open(target, "wb").write(source.read()); os.chmod(target, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)' "$url" "$sha" /usr/local/bin/opencode; \
-    opencode --version
-
 # Boltrig v2 Codex App Server runtime: ship the pinned Codex CLI with the stack
 # (the reasoning/subagent runtime that supersedes Pi under decision 0012). Pinned
 # by reviewed version + the sha256 of the executable; the fleet supervisor
@@ -199,18 +183,13 @@ RUN find / -xdev -perm /6000 -type f -exec chmod a-s {} + 2>/dev/null; \
 # read-only with a tmpfs for /tmp.
 RUN useradd --create-home --uid 10001 boltrig && \
     install -d -o boltrig -g boltrig \
-        /var/lib/boltrig/opencode \
-        /var/lib/boltrig/opencode/home \
-        /var/lib/boltrig/opencode/config \
-        /var/lib/boltrig/opencode/config/opencode \
-        /var/lib/boltrig/opencode/data \
-        /var/lib/boltrig/opencode/state \
         /var/lib/boltrig/browser-cli \
         /var/lib/boltrig/browser-cli/home \
         /var/lib/boltrig/browser-cli/config \
         /var/lib/boltrig/browser-cli/data \
         /var/lib/boltrig/browser-cli/state \
-        /var/lib/boltrig/browser-cli/cache
+        /var/lib/boltrig/browser-cli/cache \
+        /run/boltrig-browser
 USER boltrig
 
 # Compose overrides this; it is the sensible default for `docker run`.

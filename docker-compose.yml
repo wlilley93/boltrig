@@ -16,7 +16,7 @@
 #   fleet-worker      the fleet runtime + durable workers (Epics F/G)
 #   hatchet-engine    optional durable execution engine (US-FLT-06, seam)
 #   hatchet-dashboard optional Hatchet web console (seam)
-#   ui                the React console: Router, Kanban, Approvals (Epic L)
+#   worker-ui         the first-party React console (the only browser surface)
 #   bifrost           optional model cost/cache gateway (profile: gateway)
 #   local-model       optional on-box inference for sensitive data (profile: local)
 
@@ -50,8 +50,12 @@ services:
       # strong value and put it in .env - see .env.example.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD (see .env.example)}
       POSTGRES_DB: ${POSTGRES_DB:-boltrig}
+      # The official image exposes these variables to first-boot hooks. Hatchet
+      # uses a separate durable database by default.
+      HATCHET_DATABASE_NAME: ${HATCHET_DATABASE_NAME:-hatchet}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres-init-hatchet.sh:/docker-entrypoint-initdb.d/00-hatchet-db.sh:ro
       # First-boot schema load (idempotent; CREATE TABLE IF NOT EXISTS).
       # Production schema changes go through `make migrate` (alembic).
       - ./boltrig/store/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -148,12 +152,12 @@ services:
       - /var/lib/boltrig/codex-cells/slot-2:mode=0700,uid=20003,gid=20003,noexec,nosuid,nodev
       - /var/lib/boltrig/codex-cells/slot-3:mode=0700,uid=20004,gid=20004,noexec,nosuid,nodev
     command: ["uvicorn", "boltrig.api.asgi:app", "--host", "0.0.0.0", "--port", "8000"]
-    # Local/operator runs keep the conventional .env default. Validation and CI
+    # Local administrative runs keep the conventional .env default. Validation and CI
     # can point at the checked non-secret fixture without creating an ignored
     # file in a clean checkout.
     env_file: ${BOLTRIG_ENV_FILE:-.env}
     environment:
-      BOLTRIG_HERDR_HOME: ${BOLTRIG_HERDR_HOME:-/var/lib/boltrig/herdr}
+      BOLTRIG_BROWSER_EXECUTOR_SOCKET: /run/boltrig-browser/browser.sock
       BOLTRIG_KNOWLEDGE_VAULT: ${BOLTRIG_KNOWLEDGE_VAULT:-/var/lib/boltrig/knowledge}
       BOLTRIG_COGNEE_ROOT: ${BOLTRIG_COGNEE_ROOT:-/var/lib/boltrig/cognee}
       BOLTRIG_BACKUP_HEALTH_FILE: /run/boltrig-backup-health/last-success
@@ -169,17 +173,18 @@ services:
     volumes:
       - ./manifest.yaml:/app/manifest.yaml:ro
       - ./libraries:/app/libraries:ro
-      # Stack-owned Herdr state only; never bind a developer user's ~/.config/herdr.
-      - herdr_data:/var/lib/boltrig/herdr
       # Canonical originals and rebuildable Cognee state are persisted separately.
       - knowledge_data:/var/lib/boltrig/knowledge
       - cognee_data:/var/lib/boltrig/cognee
+      - browser_executor_socket:/run/boltrig-browser:ro
       # Safe epoch marker only. The kernel cannot read backup artifacts.
       - backup_health:/run/boltrig-backup-health:ro
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      browser-executor:
         condition: service_healthy
     # The container health signal consults READINESS, not liveness. It probed
     # /healthz until 2026-07-26, and /healthz knows nothing about the schema: on
@@ -242,8 +247,9 @@ services:
       - /var/lib/boltrig/codex-cells:mode=0711,uid=10001,gid=10001,noexec,nosuid,nodev
     env_file: ${BOLTRIG_ENV_FILE:-.env}
     environment:
-      BOLTRIG_OPENCODE_HOME: ${BOLTRIG_OPENCODE_HOME:-/var/lib/boltrig/opencode}
-      BOLTRIG_BROWSER_CLI_HOME: ${BOLTRIG_BROWSER_CLI_HOME:-/var/lib/boltrig/browser-cli}
+      BOLTRIG_BROWSER_EXECUTOR_SOCKET: /run/boltrig-browser/browser.sock
+      # Browser state and Chromium live only in browser-executor. This worker
+      # carries admitted requests over the private read-only socket mount.
       BOLTRIG_BROWSER_CLI_BIN: ${BOLTRIG_BROWSER_CLI_BIN:-/usr/local/bin/browser-use}
       # Reflection is the ONLY automatic memory writer in the stack: fleet/pump.py
       # calls memory.remember with a distilled lesson when a work item reaches a
@@ -276,14 +282,13 @@ services:
     volumes:
       - ./manifest.yaml:/app/manifest.yaml:ro
       - ./libraries:/app/libraries:ro
-      # Stack-owned OpenCode state only; never bind a developer user's ~/.config/opencode.
-      - opencode_data:/var/lib/boltrig/opencode
-      # Stack-owned Browser Use CLI state only; never bind a developer browser profile.
-      - browser_cli_data:/var/lib/boltrig/browser-cli
+      - browser_executor_socket:/run/boltrig-browser:ro
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      browser-executor:
         condition: service_healthy
     # The worker serves no HTTP, so this cannot be a URL probe - but it does
     # publish a signed, short-lived receipt naming which of its tools probed ok,
@@ -305,12 +310,108 @@ services:
       interval: 60s
       timeout: 10s
       retries: 3
-      # Measured on jellytot-prod, not guessed: container start 09:23:47 ->
+      # Measured on a production host, not guessed: container start 09:23:47 ->
       # "delegation pump live" 09:24:23 is 36s of kernel build and org assembly
       # before the heartbeat task is even created, and the first receipt lands a
       # probe-and-publish cycle after that. 20s would have had the probe failing
       # for the whole of a normal boot.
       start_period: 90s
+
+  browser-executor:
+    build:
+      context: .
+      dockerfile: deploy/fleet.Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    image: boltrig/fleet:0.1.0
+    restart: unless-stopped
+    <<: *app-hardening
+    command: ["python", "-m", "boltrig.fleet.browser_executor"]
+    env_file: ${BOLTRIG_ENV_FILE:-.env}
+    environment:
+      BOLTRIG_BROWSER_CLI_HOME: /var/lib/boltrig/browser-cli/executor
+      BOLTRIG_BROWSER_CLI_BIN: /usr/local/bin/browser-use
+      BOLTRIG_BROWSER_EXECUTOR_SERVER: "1"
+      BOLTRIG_BROWSER_EXECUTOR_SOCKET: /run/boltrig-browser/browser.sock
+      BOLTRIG_BROWSER_PROXY_PORT: "9223"
+    networks:
+      - browser-egress
+    volumes:
+      - ./manifest.yaml:/app/manifest.yaml:ro
+      - ./libraries:/app/libraries:ro
+      - browser_cli_data:/var/lib/boltrig/browser-cli
+      - browser_executor_socket:/run/boltrig-browser
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -m boltrig.fleet.browser_executor --health
+      interval: 15s
+      timeout: 4s
+      retries: 5
+      start_period: 30s
+
+  hatchet-worker:
+    # Serves the Hatchet task bodies (boltrig-workflow-run, boltrig-work-item,
+    # boltrig-invoke, ...). Without this service, every run enqueued through
+    # HatchetExecutor.enqueue sits unclaimed and a pushed approval event has no
+    # waiter - the durable path enqueues and nothing executes. That gap was
+    # discovered and recorded in docs/decisions/0018-held-write-resume.md
+    # ("no process in the shipped stack serves the Hatchet tasks"); this
+    # service closes it. Same image, hardening, env and mounts as fleet-worker
+    # (it bootstraps the same kernel/org), different entry point.
+    build:
+      context: .
+      dockerfile: deploy/fleet.Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    image: boltrig/fleet:0.1.0
+    restart: unless-stopped
+    <<: *app-hardening
+    command: ["python", "-m", "boltrig.fleet.hatchet_worker"]
+    # Same codex-cells tmpfs as fleet-worker, deliberately: the worker
+    # bootstrap runs the same codex trust gate and probes the same root.
+    tmpfs:
+      - /tmp
+      - /var/lib/boltrig/codex-cells:mode=0711,uid=10001,gid=10001,noexec,nosuid,nodev
+    env_file: ${BOLTRIG_ENV_FILE:-.env}
+    environment:
+      BOLTRIG_BROWSER_EXECUTOR_SOCKET: /run/boltrig-browser/browser.sock
+      # Durable tasks use the same isolated browser through the private socket;
+      # they neither start Chromium nor own browser profile state.
+      BOLTRIG_BROWSER_CLI_BIN: ${BOLTRIG_BROWSER_CLI_BIN:-/usr/local/bin/browser-use}
+      BOLTRIG_REFLECT: ${BOLTRIG_REFLECT:-}
+      # The pinned Hatchet SDK serves this endpoint from the action-listener
+      # process itself. It becomes healthy only after the worker has connected
+      # and completed a listener heartbeat, so it detects both process death and
+      # an unregistered/unreachable durable task worker.
+      HATCHET_CLIENT_WORKER_HEALTHCHECK_ENABLED: "true"
+      HATCHET_CLIENT_WORKER_HEALTHCHECK_PORT: "8001"
+      HATCHET_CLIENT_WORKER_HEALTHCHECK_BIND_ADDRESS: 127.0.0.1
+    volumes:
+      - ./manifest.yaml:/app/manifest.yaml:ro
+      - ./libraries:/app/libraries:ro
+      - browser_executor_socket:/run/boltrig-browser:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      hatchet-engine:
+        condition: service_started
+      browser-executor:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)" || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   hatchet-engine:
     # Optional durable execution (US-FLT-06). The kernel and fleet run WITHOUT
@@ -321,7 +422,7 @@ services:
     restart: unless-stopped
     environment:
       # M9 (SEC-69): interpolate the DB credential instead of a literal boltrig:boltrig.
-      DATABASE_URL: ${HATCHET_DATABASE_URL:-postgresql://${POSTGRES_USER:-boltrig}:${POSTGRES_PASSWORD}@postgres:5432/hatchet?sslmode=disable}
+      DATABASE_URL: ${HATCHET_DATABASE_URL:-postgresql://${POSTGRES_USER:-boltrig}:${POSTGRES_PASSWORD}@postgres:5432/${HATCHET_DATABASE_NAME:-hatchet}?sslmode=disable}
       SERVER_GRPC_BROADCAST_ADDRESS: hatchet-engine:7077
       SERVER_GRPC_BIND_ADDRESS: 0.0.0.0
       # hatchet-lite binds gRPC on 7070 by default; pin the bind port to the
@@ -342,6 +443,10 @@ services:
     ports:
       - "127.0.0.1:${HATCHET_GRPC_PORT:-7077}:7077"
       - "127.0.0.1:${HATCHET_API_PORT:-8888}:8888"
+    volumes:
+      # Persist Hatchet's token-signing configuration across container recreate.
+      # Production's signed backup path also captures this volume encrypted.
+      - hatchet_config:/config
     depends_on:
       postgres:
         condition: service_healthy
@@ -360,56 +465,26 @@ services:
     depends_on:
       - hatchet-engine
 
-  ui:
-    build:
-      context: ./ui
-      dockerfile: Dockerfile
-      secrets:
-        # Token-bearing .npmrc so `pnpm install` can read @wlilley93/boltrig-web-sdk
-        # (the shared UI-SDK) from GitHub Packages, which requires auth even for a
-        # public package. Only the CENTRAL build needs this; release/demo overlays
-        # `build: !reset null` and pull the pinned image, so tenants never build.
-        - gh_npmrc
-    image: boltrig/ui:0.1.0
-    restart: unless-stopped
-    ports:
-      - "${UI_PORT:-8080}:80"
-    depends_on:
-      - kernel
-    healthcheck:
-      # 127.0.0.1 (not "localhost"): nginx binds IPv4 0.0.0.0:80, but localhost
-      # can resolve to IPv6 ::1 first in the container -> connection refused.
-      test:
-        - CMD-SHELL
-        - wget -q --spider http://127.0.0.1/index.html || exit 1
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
   worker-ui:
-    # Decision 0021 candidate topology. This remains explicitly profile-gated
-    # until parity, connector, device, call and accessibility acceptance pass.
-    # It serves Worker at / and the maintained Operator at /operator/.
-    profiles: ["worker"]
+    # The Worker is the only first-party browser surface.
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
-      secrets:
-        - gh_npmrc
+      args:
+        VITE_DESKTOP_DOWNLOAD_URL: ${BOLTRIG_DESKTOP_DOWNLOAD_URL:-}
     image: boltrig/worker-ui:0.1.0
     restart: unless-stopped
     networks:
       - default
       - sandbox
     ports:
-      - "${WORKER_PORT:-8082}:80"
+      - "${WORKER_PORT:-8082}:8080"
     depends_on:
       - kernel
     healthcheck:
       test:
         - CMD-SHELL
-        - wget -q --spider http://127.0.0.1/index.html && wget -q --spider http://127.0.0.1/operator/index.html || exit 1
+        - wget -q --spider http://127.0.0.1:8080/index.html || exit 1
       interval: 30s
       timeout: 5s
       retries: 5
@@ -595,7 +670,7 @@ services:
       # DNS-rebinding defence in addition to loopback.
       WA_ACCEPTED_HOSTS: whatsapp-bridge
     volumes:
-      - whatsapp-session:/data
+      - whatsapp_session:/data
     expose:
       - "3000"
     depends_on:
@@ -616,10 +691,10 @@ services:
     # hosted deployment with a durable audit chain is not one-disk-failure away
     # from total loss. Profile-gated so the DEFAULT (dev) stack is unaffected:
     #   docker compose --profile backup up -d
-    # It loops scripts/backup.sh every BACKUP_INTERVAL seconds: pg_dump (custom
-    # format) -> a timestamped file under /backups, optional passphrase encryption,
-    # and an off-box copy via rclone when BACKUP_REMOTE is set (skipped cleanly,
-    # with a warning, when it is unset - so it is safe to enable in dev too).
+    # It loops scripts/backup.sh every BACKUP_INTERVAL seconds: verified custom-
+    # format dumps for the Boltrig + Hatchet databases, optional encryption, and
+    # an off-box copy via rclone. The signed release overlay also mounts stack file
+    # state and requires encryption for that sensitive archive.
     profiles: ["backup"]
     build:
       context: .
@@ -630,6 +705,9 @@ services:
       PGUSER: ${POSTGRES_USER:-boltrig}
       PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD (see .env.example)}
       PGDATABASE: ${POSTGRES_DB:-boltrig}
+      # Durable execution uses a separate Hatchet database. One health marker is
+      # written only after both databases have verified and uploaded.
+      BACKUP_DATABASES: ${BACKUP_DATABASES:-${POSTGRES_DB:-boltrig},${HATCHET_DATABASE_NAME:-hatchet}}
       BACKUP_DIR: /backups
       BACKUP_INTERVAL: ${BACKUP_INTERVAL:-86400}
       BACKUP_KEEP: ${BACKUP_KEEP:-7}
@@ -664,23 +742,21 @@ networks:
   # forces Pi to route model traffic through the sandbox peers (bifrost/local-model).
   sandbox:
     driver: bridge
-
-secrets:
-  # Build-only secret for the central `ui` image build (see ui.build.secrets).
-  # Provide a user .npmrc carrying `//npm.pkg.github.com/:_authToken=<read:packages token>`.
-  # Defaults to a gitignored .secrets/gh_npmrc; override with GH_NPMRC_FILE.
-  gh_npmrc:
-    file: ${GH_NPMRC_FILE:-./.secrets/gh_npmrc}
+  # Browser content has internet access but no Compose service peers. Chromium
+  # is additionally forced through its pinned public-address proxy, which blocks
+  # direct/private/link-local destinations after redirects and page clicks.
+  browser-egress:
+    driver: bridge
 
 volumes:
   pgdata:
   redis_data:
   bifrost_data:
-  herdr_data:
-  opencode_data:
   browser_cli_data:
+  browser_executor_socket:
   knowledge_data:
   cognee_data:
   signal_cli_data:
   whatsapp_session:
   backup_health:
+  hatchet_config:

@@ -1,0 +1,179 @@
+import { useMemo } from "react";
+import {
+  normalizeEvents,
+  type ChatEvent,
+  type ChatMessage,
+  type NormalizedTurn,
+  type SubagentEntry,
+} from "@wlilley93/boltrig-web-sdk";
+
+import { LiveQuestionCard } from "../LiveQuestionCard";
+import { InlineApproval } from "./InlineApproval";
+import { OrderedWorkTranscript } from "./OrderedWorkTranscript";
+import { PersistedDecision } from "./PersistedDecision";
+import { SubagentChips } from "./SubagentChips";
+import {
+  attachmentIdentity,
+  downloadAttachment,
+  formatBytes,
+} from "./attachmentPresentation";
+
+export function Message({
+  message,
+  tech,
+  durationSeconds,
+  onDecisionResolved,
+  onOpenSubagent,
+}: {
+  message: ChatMessage;
+  tech: boolean;
+  durationSeconds?: number;
+  onDecisionResolved?(): void;
+  onOpenSubagent?(agent: SubagentEntry): void;
+}) {
+  const turn = useMemo(() => normalizeEvents(message.events ?? []), [message.events]);
+  return (
+    <article className={`message ${message.role}`}>
+      <div className="message-content">
+        {turn.degraded && (
+          <p className="notice" role="status">
+            This response used a degraded fallback; treat its result as incomplete.
+          </p>
+        )}
+        <OrderedWorkTranscript
+          content={message.content}
+          events={message.events ?? []}
+          runId={message.run_id ?? undefined}
+          turn={turn}
+          settled
+          durationSeconds={durationSeconds ?? null}
+        />
+        {message.attachments?.map((item) => (
+          <button
+            type="button"
+            className="attachment"
+            key={attachmentIdentity(item)}
+            onClick={() => downloadAttachment(item)}
+          >
+            ▧ {item.name}{item.size != null ? ` · ${formatBytes(item.size)}` : ""}
+          </button>
+        ))}
+        {message.events?.length ? (
+          <TurnDecisions turn={turn} settled tech={tech} onDecisionResolved={onDecisionResolved}
+            onOpenSubagent={onOpenSubagent} />
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+export function LiveTurn({
+  events,
+  turn,
+  tech,
+  startedAt,
+  onOpenSubagent,
+}: {
+  events: ChatEvent[];
+  turn: NormalizedTurn;
+  tech: boolean;
+  startedAt: number | null;
+  onOpenSubagent?(agent: SubagentEntry): void;
+}) {
+  return (
+    <article className="message assistant live">
+      <div className="message-content">
+        <span aria-atomic="true" className="chat-live-announcement" role="status">
+          {turn.ended
+            ? "Response complete."
+            : turn.text
+              ? "Response in progress."
+              : "Boltrig is working."}
+        </span>
+        {turn.degraded && (
+          <p className="notice" role="status">
+            This response used a degraded fallback; treat its result as incomplete.
+          </p>
+        )}
+        {turn.reasoning && <details><summary>Working notes</summary><p>{turn.reasoning}</p></details>}
+        <OrderedWorkTranscript
+          content={turn.text}
+          emptyText="Working…"
+          events={events}
+          turn={turn}
+          startedAt={startedAt}
+        />
+        <TurnDecisions turn={turn} tech={tech} onOpenSubagent={onOpenSubagent} />
+        {/* The resolved routing receipt is developer detail; the plain console
+            already names the selected model in the composer chip. */}
+        {tech && turn.modelRouting && (
+          <p className="routing-note">
+            {turn.modelRouting.selectedProfileId} · {turn.modelRouting.routingClass}
+            {turn.modelRouting.overridden ? " · policy adjusted" : ""}
+          </p>
+        )}
+      </div>
+    </article>
+  );
+}
+
+/** Everything below the prose and its compact tool receipt: the subagent chip
+ * row, then decision cards (approvals and questions) in stream order. */
+export function TurnDecisions({
+  turn,
+  settled = false,
+  tech,
+  onDecisionResolved,
+  onOpenSubagent,
+}: {
+  turn: NormalizedTurn;
+  settled?: boolean;
+  tech: boolean;
+  onDecisionResolved?(): void;
+  onOpenSubagent?(agent: SubagentEntry): void;
+}) {
+  const decisions = turn.timeline.filter(
+    (item) => item.kind === "hitl" || item.kind === "question",
+  );
+  if (turn.subagents.length === 0 && decisions.length === 0) return null;
+  return (
+    <>
+      <SubagentChips
+        subagents={turn.subagents}
+        turnEnded={turn.ended || settled}
+        tech={tech}
+        onOpenSubagent={onOpenSubagent}
+      />
+      {decisions.map((item) => {
+        if (item.kind === "hitl") {
+          if (settled) return <PersistedDecision
+            decision={{ kind: "approval", entry: item.entry }}
+            tech={tech}
+            onResolved={onDecisionResolved}
+            key={item.key}
+          />;
+          return (
+            <InlineApproval
+              entry={item.entry}
+              tech={tech}
+              disabled={turn.ended}
+              onResolved={onDecisionResolved}
+              key={item.key}
+            />
+          );
+        }
+        if (item.kind === "question") {
+          if (settled) return <PersistedDecision
+            decision={{ kind: "question", entry: item.entry }}
+            tech={tech}
+            onResolved={onDecisionResolved}
+            key={item.key}
+          />;
+          return <LiveQuestionCard question={item.entry} key={item.key}
+            onAnswered={onDecisionResolved} />;
+        }
+        return null;
+      })}
+    </>
+  );
+}
