@@ -242,6 +242,16 @@
   color: var(--text-3);
   font-size: 12.5px;
   font-weight: 400;
+  /* PINNED, and it has to be. With no line-height this box fell back to
+     `normal`, which the engine derives from the font metrics and rounds
+     differently per platform: 2px shorter on Linux than on macOS. Everything
+     below inherited the shift, so .plugins-search landed at y=254 instead of
+     the contracted 256 and the governed geometry check failed.
+
+     A geometry contract that depends on `normal` cannot be reproduced on
+     another machine. That was invisible while every capture happened on the
+     same Mac, and moving the build to the beelink is what exposed it. */
+  line-height: 17px;
 }
 
 .plugins-inventory-heading > span {
