@@ -42,8 +42,10 @@ _TOOLS = [
     {
         "name": "ticket.read",
         "description": "read a ticket",
+        "annotations": {"readOnlyHint": True},
         "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}},
-        # no hint: defaults to low
+        # a positive low signal reads low; ABSENCE of any hint now fails
+        # closed high (owner-approved 2026-08-16)
     },
     {
         "name": "ticket.purge",

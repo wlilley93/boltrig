@@ -422,6 +422,21 @@ class PostgresStore(
         )
         return row is not None
 
+    async def transition_work_item_settled(
+        self, tenant_id, item_id, *, expected, new_status, result
+    ):
+        # The payload-carrying twin: status CAS + lease clear + result stamp in
+        # ONE conditional UPDATE, so a sweeper's settle carries its reason
+        # without a read-then-write window a concurrent re-queue can slip into.
+        row = await self._pool.fetchrow(
+            """UPDATE work_items
+                  SET status=$4, lease_owner=NULL, lease_expires_at=NULL,
+                      result=$5, updated_at=now()
+               WHERE tenant_id=$1 AND id=$2 AND status=$3 RETURNING id""",
+            tenant_id, item_id, expected.value, new_status.value, result,
+        )
+        return row is not None
+
     async def claim_work_item(self, tenant_id, worker_id, lease_seconds):
         # atomic pending -> in_flight claim with a lease (US-FLT-05): one
         # statement, FOR UPDATE SKIP LOCKED so concurrent claimers never block
@@ -547,6 +562,13 @@ class PostgresStore(
         rows = await self._pool.fetch(
             "SELECT * FROM hitl_requests WHERE tenant_id=$1 AND status=$2",
             tenant_id, HITLStatus.PENDING.value,
+        )
+        return [_hitl_req(r) for r in rows]
+
+    async def list_answered_hitl(self, tenant_id):
+        rows = await self._pool.fetch(
+            "SELECT * FROM hitl_requests WHERE tenant_id=$1 AND status=$2",
+            tenant_id, HITLStatus.ANSWERED.value,
         )
         return [_hitl_req(r) for r in rows]
 

@@ -1,9 +1,16 @@
 """PII detection and redaction at the kernel boundary (US-PRIV-02, SEC-13).
 
-A deterministic, model-free, network-free scan runs before any data is sent to
-an external (non-local) model endpoint. Detected PII is redacted (default),
-which the policy may upgrade to "route to a local model" (handled by the model
-router). The same scanner backs audit scrubbing (K-20).
+STATUS (be precise, per the implemented-vs-scaffolded rule): the detector is
+WIRED to three consumers - audit/security scrubbing (K-20, via ``contains_secret``
+/ ``contains_identity`` in kernel/audit.py), distill corpus ingest
+(``distill/corpus.py``), and model-egress ROUTING: at the model-gateway seam
+``fleet/model_router.outbound_text_classifies_sensitive`` consults
+``redact``/``contains_identity`` over the outbound prompt text and a detection
+classifies the request sensitive, forcing the local route even when no caller
+classified the payload (SEC-13). That wiring CLASSIFIES but never MUTATES: no
+egress path redacts or rewrites payload text (``manifest.privacy.pii_redaction``
+is parsed and stored but read by nothing), which remains its own decision. The
+same scanner backs audit scrubbing (K-20).
 """
 
 from __future__ import annotations
@@ -37,6 +44,10 @@ _SECRET_PATTERNS: dict[str, re.Pattern[str]] = {
     "google_api_key": re.compile(r"AIza[0-9A-Za-z_-]{35}"),
     "slack_token": re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
     "github_token": re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
+    # Prefixed platform tokens shorter than the 32-char entropy floor below
+    # (a 20-char glpat- or npm_ token matched nothing and persisted verbatim).
+    "gitlab_token": re.compile(r"glpat-[A-Za-z0-9_-]{20,}"),
+    "npm_token": re.compile(r"npm_[A-Za-z0-9]{20,}"),
     "aws_key": re.compile(r"AKIA[0-9A-Z]{16}"),
     "bearer": re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]{16,}"),
     "password_kv": re.compile(r"(?i)(password|passwd|secret)\s*[=:]\s*\S+"),

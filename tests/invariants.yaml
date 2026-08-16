@@ -731,6 +731,9 @@ invariants:
       - tests/security/test_sensitive_routing.py::test_sensitive_data_routes_to_local_endpoint
       - tests/security/test_sensitive_routing.py::test_spawn_blocks_sensitive_on_hosted_capability
       - tests/security/test_sensitive_routing.py::test_ai_key_profile_cannot_override_governed_model_endpoint
+      - tests/security/test_sensitive_routing.py::test_pii_bearing_payload_routes_local_despite_caller_classification
+      - tests/security/test_sensitive_routing.py::test_clean_payload_still_routes_hosted
+      - tests/security/test_sensitive_routing.py::test_pii_bearing_payload_without_local_endpoint_fails_closed
   SEC-15:
     description: 'Idempotent replay is tenant-, authenticated actor/delegation-, noun/verb-, workspace-, and canonical-request-bound; one atomic owner executes while concurrent reuse fails closed, completed non-secret results replay before execution-side gates, expired pre-execution claims are reclaimable, expired executing claims become reconciliation-required uncertainty, and secret-shaped results are completed uncacheable without persisting bearer material.'
     tests:
@@ -862,7 +865,7 @@ invariants:
       - tests/security/test_rls_auth_binding.py::test_provision_user_binds_tenant_before_the_first_read
       - tests/integration/test_migration_parity.py::test_data_bearing_rls_database_upgrades_from_previous_head
   SEC-13:
-    description: 'A PII redactor exists, detects the catalogued patterns and substitutes [REDACTED:<kind>] for them. It is NOT applied at an outbound boundary: `pii.redact` has no production caller, and `manifest.privacy.pii_redaction` is parsed and stored but read by nothing. This description used to say "before it leaves the boundary", which was a security guarantee nothing enforced. The audit path IS scrubbed, by `pii.redact_identity` under SEC-42 and CC-OPBOX 4; that is a different, real control. See the `redact` entry in docs/refactoring/unwired-claims-allow.json.'
+    description: 'A PII redactor exists, detects the catalogued patterns and substitutes [REDACTED:<kind>] for them. The detector IS consulted on model egress for ROUTING: at the model-gateway seam (fleet/model_router.outbound_text_classifies_sensitive, fed the outbound prompt by the runtime resolver) a detection classifies the request sensitive and forces the local route even when no caller classified the payload. That wiring classifies only and never mutates - no egress path redacts or rewrites payload text, and `manifest.privacy.pii_redaction` is parsed and stored but read by nothing. The audit path IS scrubbed, by `pii.redact_identity` under SEC-42 and CC-OPBOX 4; that is a different, real control.'
     tests:
       - tests/security/test_budget_and_pii.py::test_pii_redaction
   SEC-14:
@@ -1242,10 +1245,11 @@ invariants:
       - tests/security/test_round_seventeen.py::test_app_containers_are_hardened
       - tests/security/test_round_seventeen.py::test_app_images_run_non_root
   SEC-66:
-    description: 'Inbound webhook replay is defeated - the timestamp is bound into the signed HMAC (t.body) so a captured signature cannot replay under a rewritten timestamp, a signing secret makes a timestamp mandatory, and a stable delivery id dedups a genuine replay so it never mints a second work item (M3).'
+    description: 'Inbound webhook replay is defeated - the timestamp is bound into the signed HMAC (t.body) so a captured signature cannot replay under a rewritten timestamp, the boltrig-native scheme makes a timestamp mandatory, a platform raw-bytes scheme that supplies one (Stripe t=) binds and window-checks it the same way over the raw body, and a stable delivery id dedups a genuine replay so it never mints a second work item (M3).'
     tests:
       - tests/security/test_channel_inbound.py::test_webhook_replay_with_rewritten_timestamp_rejected
       - tests/security/test_channel_inbound.py::test_duplicate_delivery_not_double_ingested
+      - tests/security/test_channel_inbound.py::test_stripe_style_platform_signature_binds_timestamp_to_raw_body
   SEC-67:
     description: 'Inbound channel intake is rate-limited before a work item is minted - per-channel and per-(channel, sender) fixed-window limits return 429 without creating a work item, so an abusive channel or sender cannot drive unbounded model spend (M5; per-tenant intake budget is the follow-on #81).'
     tests:

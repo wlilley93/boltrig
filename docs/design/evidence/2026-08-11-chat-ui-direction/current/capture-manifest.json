@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-16T10:43:22.324Z",
+  "capturedAt": "2026-08-16T17:55:13.437Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,19 +17,19 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "b687431831ac2712ffae29f2fc79f60d41051f2da2cb9ad1ea96808d5a657bf2",
-    "digestAfterCapture": "b687431831ac2712ffae29f2fc79f60d41051f2da2cb9ad1ea96808d5a657bf2",
+    "digestBeforeCapture": "8816a108dcb6c490118ac5532657998dfbf092e853802783ad46160a3e38b1bd",
+    "digestAfterCapture": "8816a108dcb6c490118ac5532657998dfbf092e853802783ad46160a3e38b1bd",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/console-target",
-    "head": "b301dd8bfc6c289c32ed198505498fcd11d7ea73",
+    "branch": "",
+    "head": "5becb31a3224700dfb610f7bb17c5740f6712051",
     "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
-    "node": "v24.15.0",
+    "node": "v24.18.0",
     "browser": "chromium",
     "browserVersion": "151.0.7922.34",
-    "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
+    "browserExecutable": "/Users/williamlilley/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
     "origin": "http://localhost:1420",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
@@ -40,7 +40,7 @@
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "015ca5a23e11535f558c5014b656121778a3c430eee6b3f6c51dbc8ab9fe9e61",
+      "sha256": "975cc1b4b4fc37ca44fe03b4576a50a6f2d49cf3c32a3e9138d4671aa3443f71",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -56,7 +56,7 @@
         "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

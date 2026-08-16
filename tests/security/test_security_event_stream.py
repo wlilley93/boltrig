@@ -194,3 +194,53 @@ def test_login_failure_and_throttle_record_security_signals(monkeypatch):
     assert any(e.event_type == SecurityEventType.RATE_LIMIT_TRIP for e in sec)
     # keys-only: no signal row carries the password.
     assert all("wrong-pw" not in str(e.detail) for e in sec)
+
+
+# --------------------------------------------------------------------------- #
+# chain fields are scrubbed too, not just detail (K-20)
+# --------------------------------------------------------------------------- #
+@pytest.mark.security
+@pytest.mark.invariant("SEC-121")
+async def test_user_agent_carrying_a_secret_is_scrubbed_not_chained():
+    # user_agent is the raw attacker-controlled header; before the free-text
+    # scrub it entered BOTH append-only streams verbatim, so a UA carrying a
+    # bearer token defeated the keys-only rule without touching detail.
+    from boltrig.kernel.security_events import SecurityWriter
+
+    store = InMemoryStore()
+    writer = SecurityWriter(store)
+    await writer.write(SecurityEvent(
+        tenant_id=TENANT, ts=utcnow(), event_type=SecurityEventType.LOGIN_FAILURE,
+        reason="invalid_email_or_password", actor="a@x.io",
+        user_agent="Mozilla/5.0 (X11; Linux) bearer eyJhbGciOi.abcdef0123456789",
+    ))
+    rows = await store.security_query(TENANT)
+    assert rows[0].user_agent is not None
+    assert "eyJhbGciOi" not in rows[0].user_agent
+    assert rows[0].user_agent.startswith("[scrubbed:")
+    ok, bad = await writer.verify(TENANT)
+    assert ok and bad is None
+
+
+@pytest.mark.security
+async def test_dropped_security_signal_is_counted_and_logged_not_silent(monkeypatch):
+    # record() must never break the guarded path, but the old bare `pass` let a
+    # failing append silently disable the whole security stream. The drop
+    # counter + log line is the operator's symptom.
+    from boltrig.kernel import security_events
+    from boltrig.kernel.security_events import SecurityWriter
+
+    store = InMemoryStore()
+
+    async def _failing_append(event):
+        raise RuntimeError("security_append blew up")
+
+    monkeypatch.setattr(store, "security_append", _failing_append)
+    writer = SecurityWriter(store)
+    before = security_events.dropped_signal_count()
+    # must not raise - the guarded path continues.
+    await writer.record(
+        TENANT, SecurityEventType.LOGIN_FAILURE, "invalid_email_or_password",
+        actor="a@x.io",
+    )
+    assert security_events.dropped_signal_count() == before + 1

@@ -25,11 +25,18 @@ item; see :func:`is_duplicate_delivery`. A message with NO stable id (id-less
 and unsigned) is deduped by CONTENT within a shorter bounded window instead of
 not at all; see :func:`content_delivery_id`.
 
-Note: an HMAC is strictly a function of exact bytes. Where the caller can supply
-the raw request body it should HMAC that. Here we receive a decoded payload, so
-we sign its canonical JSON form (sorted keys, tight separators). Senders that
-sign a canonical body interoperate directly; senders that sign their own raw
-bytes should be verified at the byte boundary before decoding.
+Note: an HMAC is strictly a function of exact bytes, so WHICH bytes are signed
+is decided by the header that carries the signature (SEC-01). The boltrig-native
+``x-boltrig-signature`` scheme signs the payload's canonical JSON form (sorted
+keys, tight separators) with the timestamp bound in, because it is defined over
+a decoded object. Every OTHER recognised header (GitHub's
+``x-hub-signature-256``, Stripe's ``stripe-signature``, the generic
+``x-signature*`` forms) belongs to a platform that signed the RAW request bytes
+it sent, so those are verified against the raw body the caller passes through
+as ``raw_body``; hashing our re-serialisation instead could never match, which
+pushed integrators toward running unsigned. A platform signature whose raw
+body is unavailable fails closed rather than being checked against bytes the
+platform never signed.
 """
 
 from __future__ import annotations
@@ -41,9 +48,14 @@ from typing import Any
 
 from boltrig.models import utcnow
 
+# The boltrig-NATIVE scheme header: canonical-body HMAC with the timestamp
+# bound into the signed bytes (M3/SEC-66). Every other name below is a PLATFORM
+# scheme whose signer hashed the raw request bytes, not our canonical form.
+_BOLTRIG_SIGNATURE_HEADER = "x-boltrig-signature"
+
 # Signature headers we recognise, in priority order (lower-cased for lookup).
 _SIGNATURE_HEADERS = (
-    "x-boltrig-signature",
+    _BOLTRIG_SIGNATURE_HEADER,
     "x-hub-signature-256",
     "x-signature-256",
     "x-signature",
@@ -193,10 +205,14 @@ def _lower_headers(headers: dict[str, Any] | None) -> dict[str, str]:
     return {str(k).lower(): str(v) for k, v in (headers or {}).items()}
 
 
-def _find_signature(lower_headers: dict[str, str]) -> str | None:
+def _find_signature(lower_headers: dict[str, str]) -> tuple[str, str] | None:
+    """The first recognised signature header as ``(name, value)``, else None.
+
+    The NAME decides the scheme (SEC-01): the boltrig header signs the
+    canonical body, every platform header signs the raw request bytes."""
     for name in _SIGNATURE_HEADERS:
         if name in lower_headers:
-            return lower_headers[name]
+            return name, lower_headers[name]
     return None
 
 
@@ -237,6 +253,67 @@ def _extract_hex(raw_signature: str) -> str:
     return sig
 
 
+def _verify_signature(
+    secret: str,
+    payload: dict[str, Any],
+    lower: dict[str, str],
+    header_name: str,
+    provided: str,
+    raw_body: bytes | None,
+    *,
+    replay_window_seconds: int,
+    now: float | None,
+) -> str:
+    """Reconstruct and constant-time compare the signature, enforcing the
+    replay window. Returns the provided hex digest (the caller's stable
+    delivery id) or raises :class:`WebhookAuthError` - fail closed on every
+    mismatch (SEC-01/SEC-05).
+
+    WHICH bytes were signed is decided by ``header_name`` (SEC-01): the
+    boltrig-native header signs the canonical body with the timestamp bound in
+    (M3/SEC-66); a platform header signs the RAW request bytes, the timestamp
+    bound in only when the platform itself supplies one."""
+    ts = _extract_timestamp(provided, lower)
+    if header_name == _BOLTRIG_SIGNATURE_HEADER:
+        # Native scheme (M3/SEC-66): replay protection binds the timestamp
+        # INTO the signed bytes, so we must have one to reconstruct the
+        # signature. Refuse a signed request that omits it - without this,
+        # an attacker replays forever.
+        if ts is None:
+            raise WebhookAuthError("signed webhook is missing its timestamp (replay protection)")
+        expected = expected_signature(secret, signed_content(ts, canonical_body(payload)))
+    else:
+        # Platform scheme (SEC-01): GitHub/Stripe/generic signed the RAW
+        # request bytes they sent, never our canonical re-serialisation -
+        # verifying those against canonical bytes could never match, which
+        # pushed integrators toward running unsigned. When the platform
+        # binds a timestamp into its signature (Stripe's ``t=``) the raw
+        # body rides the same timestamp-bound form and the same replay
+        # window; when it does not (GitHub), the body alone is what was
+        # signed and replay defence falls to the delivery dedup instead.
+        if raw_body is None:
+            # Fail closed: without the exact wire bytes there is nothing we
+            # can honestly verify a platform signature against.
+            raise WebhookAuthError(
+                "platform-signed webhook cannot be verified without the raw request body"
+            )
+        signed = signed_content(ts, raw_body) if ts is not None else raw_body
+        expected = expected_signature(secret, signed)
+    signature_hex = _extract_hex(provided)
+    # constant-time compare, unchanged (SEC-05): never branch on secret bytes.
+    if not hmac.compare_digest(signature_hex, expected):
+        raise WebhookAuthError("webhook signature mismatch")
+    # The window check still applies on top: a captured request whose bound
+    # timestamp is stale is refused even though its signature is genuine.
+    # A platform scheme with no timestamp anywhere (GitHub) has nothing to
+    # window-check; its replay defence is the dedup, not the clock.
+    if replay_window_seconds > 0 and ts is not None:
+        current = now if now is not None else utcnow().timestamp()
+        if abs(current - ts) > replay_window_seconds:
+            raise WebhookAuthError("stale webhook: replay window exceeded")
+    return signature_hex
+
+
 def verify_and_normalise(
     payload: dict[str, Any],
     headers: dict[str, Any],
@@ -246,6 +323,7 @@ def verify_and_normalise(
     now: float | None = None,
     channel_id: str | None = None,
     sender: str | None = None,
+    raw_body: bytes | None = None,
 ) -> dict[str, Any]:
     """Authenticate and validate an inbound webhook, returning a normalised
     work-item candidate (US-ADP-05).
@@ -255,7 +333,13 @@ def verify_and_normalise(
     stale (replayed) request outside the timestamp window (ADP-08).
 
     ``channel_id``/``sender`` scope the content-hash fallback delivery id; the
-    signed ingress path never needs it (a signature IS the stable id)."""
+    signed ingress path never needs it (a signature IS the stable id).
+
+    ``raw_body`` is the exact request bytes when the caller has them (SEC-01).
+    It is REQUIRED to verify a platform signature header - those sign the wire
+    bytes, never our canonical re-serialisation - and a platform-signed request
+    without it fails closed. The boltrig-native scheme ignores it and keeps its
+    canonical-bytes + bound-timestamp scheme unchanged."""
     if not isinstance(payload, dict):
         raise WebhookValidationError("webhook payload must be a JSON object")
 
@@ -263,26 +347,14 @@ def verify_and_normalise(
     authenticated = False
     signature_hex: str | None = None
     if secret:
-        provided = _find_signature(lower)
-        if not provided:
+        found = _find_signature(lower)
+        if not found:
             raise WebhookAuthError("signed webhook is missing its signature header")
-        # Replay protection (M3/SEC-66, ADP-08): the timestamp is bound INTO the
-        # signed bytes, so we must have one to reconstruct the signature. Refuse a
-        # signed request that omits it - without this, an attacker replays forever.
-        ts = _extract_timestamp(provided, lower)
-        if ts is None:
-            raise WebhookAuthError("signed webhook is missing its timestamp (replay protection)")
-        expected = expected_signature(secret, signed_content(ts, canonical_body(payload)))
-        signature_hex = _extract_hex(provided)
-        # constant-time compare, unchanged (SEC-05): never branch on secret bytes.
-        if not hmac.compare_digest(signature_hex, expected):
-            raise WebhookAuthError("webhook signature mismatch")
-        # The window check still applies on top: a captured request whose bound
-        # timestamp is stale is refused even though its signature is genuine.
-        if replay_window_seconds > 0:
-            current = now if now is not None else utcnow().timestamp()
-            if abs(current - ts) > replay_window_seconds:
-                raise WebhookAuthError("stale webhook: replay window exceeded")
+        header_name, provided = found
+        signature_hex = _verify_signature(
+            secret, payload, lower, header_name, provided, raw_body,
+            replay_window_seconds=replay_window_seconds, now=now,
+        )
         authenticated = True
 
     source = lower.get("x-boltrig-source") or lower.get("user-agent") or "webhook"

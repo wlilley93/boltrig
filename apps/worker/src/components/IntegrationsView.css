@@ -197,6 +197,11 @@
 .plugins-alert-copy strong {
   font-size: 13.5px;
   font-weight: 500;
+  /* PINNED (see the inventory-heading pin below for the doctrine): 13.5px at
+     `normal` is 16px on macOS and 15px on Linux, which left the alert box -
+     and everything below it - 1px short off-platform against the contracted
+     .plugins-alert height of 64.125. */
+  line-height: 16px;
 }
 
 .plugins-alert-copy span {
@@ -244,14 +249,19 @@
   font-weight: 400;
   /* PINNED, and it has to be. With no line-height this box fell back to
      `normal`, which the engine derives from the font metrics and rounds
-     differently per platform: 2px shorter on Linux than on macOS. Everything
-     below inherited the shift, so .plugins-search landed at y=254 instead of
-     the contracted 256 and the governed geometry check failed.
+     differently per platform, and everything below inherits the shift, so
+     .plugins-search left its contracted y=256. A geometry contract that
+     depends on `normal` cannot be reproduced on another machine. That was
+     invisible while every capture happened on the same Mac, and moving the
+     build to the beelink is what exposed it.
 
-     A geometry contract that depends on `normal` cannot be reproduced on
-     another machine. That was invisible while every capture happened on the
-     same Mac, and moving the build to the beelink is what exposed it. */
-  line-height: 17px;
+     CORRECTED 2026-08-16: the pin landed as 17px, which does NOT reproduce
+     the contract - it moved macOS itself to y=258 (measured on both rigs at
+     chrome-for-testing 151.0.7922.34). 15px is the value macOS `normal`
+     actually computed for this box before the pin, verified by bisect: the
+     parent of the pin commit renders y=256 on macOS with `normal`, and 15px
+     reproduces that on both platforms. */
+  line-height: 15px;
 }
 
 .plugins-inventory-heading > span {

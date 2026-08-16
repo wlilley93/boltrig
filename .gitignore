@@ -75,3 +75,6 @@ _migration/
 # pnpm content-addressable cache. Never source; it was committed by
 # accident in e7f56dfc and carries third-party fixture keys.
 .pnpm-store/
+
+# a pnpm install tree for linux docker builds; materialised by the Dockerfile install, never source
+apps/worker/node_modules.linux/

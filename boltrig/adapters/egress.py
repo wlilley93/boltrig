@@ -42,9 +42,36 @@ client/transport are the thin network-touching helpers.
 from __future__ import annotations
 
 import ipaddress
+import logging
 import socket
 from typing import Any
 from urllib.parse import urlparse
+
+_egress_log = logging.getLogger("boltrig.egress")
+
+# The process-wide default NetworkConfig (SEC-52): the composition root
+# installs the manifest's ``network`` section once at boot, because the
+# module-ref factories the loader calls as plain ``build()`` have no
+# construction seam to receive it - without this, an operator's air-gap /
+# allow-list policy is silently void for every adapter built that way. Global
+# mutable state, bounded: written at composition (last projected manifest
+# wins), read at adapter construction, and ALWAYS superseded by an explicit
+# config passed to a constructor - never by an agent-influenced value.
+_default_network_config: dict[str, Any] | None = None
+
+
+def set_default_network_config(config: dict[str, Any] | None) -> None:
+    """Install the process-wide egress posture (the manifest ``network``
+    section). Call only from the composition root; pass None to withdraw."""
+    global _default_network_config
+    _default_network_config = dict(config) if config else None
+
+
+def default_network_config() -> dict[str, Any] | None:
+    """The process-wide egress posture, or None when no manifest installed
+    one (bare boots and tests: egress then behaves exactly as pre-manifest).
+    A copy: a reader must not be able to amend the operator's posture."""
+    return dict(_default_network_config) if _default_network_config else None
 
 
 def is_blocked_ip(ip: str) -> bool:
@@ -136,7 +163,13 @@ def check_network_policy(
         if not config.get("allow_internal"):
             for ip in resolved_ips:
                 if is_blocked_ip(ip):
-                    return f"target resolves to a non-routable/internal address ({ip})"
+                    # The resolved address is deliberately NOT in the reason: the
+                    # message rides EgressBlocked into agent-visible AdapterErrors,
+                    # and an internal hostname probe then read back the internal
+                    # network topology (which ranges live on 10.x here) from the
+                    # error text. Operators get the addresses from the kernel log
+                    # at the raise site instead.
+                    return "target resolves to a non-routable/internal address"
     return None
 
 
@@ -177,6 +210,7 @@ def assert_egress_allowed(url: str, config: dict[str, Any] | None = None) -> Non
     host = urlparse(url).hostname or ""
     reason = check_network_policy(url, config, resolved_ips=resolve_host(host))
     if reason:
+        _egress_log.warning("egress refused for %s: %s", url, reason)
         raise EgressBlocked(f"egress refused: {reason}")
 
 
@@ -190,6 +224,9 @@ def resolve_and_vet(url: str, config: dict[str, Any] | None = None) -> tuple[str
     ips = resolve_host(host)
     reason = check_network_policy(url, config, resolved_ips=ips)
     if reason:
+        # The refusal itself is operator evidence; the resolved addresses stay
+        # here (kernel log) and out of the exception, whose text agents can read.
+        _egress_log.warning("egress refused for %s: %s (resolved=%s)", url, reason, ips)
         raise EgressBlocked(f"egress refused: {reason}")
     return host, ips[0]  # every ip in ips passed is_blocked_ip; pin the first
 
