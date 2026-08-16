@@ -13,7 +13,7 @@
     "source": "boltrig.canvas.jarvis",
     "fragment": {
       "file": "jarvis.frag",
-      "sha256": "1c13e4b61064f37933e249270bdfb59185411dcd52e4ad162b5529364cb2daec"
+      "sha256": "f7d6f5e423b2bdeba9bce1e3d23d0f0837bccbf1a3864ba39a5cfa5524caf3d5"
     },
     "uniforms": [
       "iResolution", "iTime", "uListening", "uThinking", "uWorking", "uSpeaking",
