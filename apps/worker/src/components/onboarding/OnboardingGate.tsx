@@ -8,6 +8,7 @@ import {
 } from "../../character";
 import { client } from "../../client";
 import { needsOnboarding } from "../../onboarding";
+import { BrandMark } from "../BrandMark";
 import { BrandWordmark } from "../BrandWordmark";
 import { CompanionStep } from "./CompanionStep";
 import { NameStep } from "./NameStep";
@@ -80,7 +81,7 @@ function OnboardingUnavailable() {
       <div className="onboarding-aurora one" /><div className="onboarding-aurora two" />
       <section className="onboarding-panel" aria-label="Boltrig setup">
         <header className="onboarding-topbar">
-          <BrandWordmark className="onboarding-brand" />
+          <span className="onboarding-lockup"><BrandMark className="onboarding-mark" /><BrandWordmark className="onboarding-brand" /></span>
         </header>
         <div className="onboarding-content">
           <div className="onboarding-step">
@@ -258,7 +259,7 @@ function ProviderStepLoading() {
   return (
     <div className="onboarding-step provider-step" aria-busy="true">
       <div className="onboarding-heading onboarding-rise">
-        <h1>Choose your AI</h1>
+        <h1>Choose your AI provider</h1>
       </div>
       <div className="onboarding-loader"><span /><span /><span /></div>
     </div>
@@ -364,7 +365,7 @@ function OnboardingFrame({
       <div className="onboarding-aurora one" /><div className="onboarding-aurora two" />
       <section className="onboarding-panel" aria-label="Boltrig setup">
         <header className="onboarding-topbar">
-          <BrandWordmark className="onboarding-brand" />
+          <span className="onboarding-lockup"><BrandMark className="onboarding-mark" /><BrandWordmark className="onboarding-brand" /></span>
           <span className="onboarding-progress" aria-label={`Step ${step + 1} of 5`}>
             {[0, 1, 2, 3, 4].map((index) => <i className={index <= step ? "active" : ""} key={index} />)}
           </span>
