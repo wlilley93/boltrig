@@ -1,7 +1,6 @@
 import { forwardRef, useImperativeHandle } from "react";
 import type { UserProfile } from "@wlilley93/boltrig-web-sdk";
 
-import { configuredDesktopDownloadUrl } from "../../desktopDownload";
 import {
   AI_PROVIDERS,
   exactModelId,
@@ -120,7 +119,6 @@ function ProviderKeyForm({
             type="password"
           />
         </label>
-        {provider?.id === "ollama" ? <DesktopBanner /> : null}
         {provider?.id === "custom" ? (
           <CustomModelFields setup={setup} />
         ) : provider?.requiresBaseUrl ? (
@@ -219,20 +217,6 @@ function OllamaModelFields({
   );
 }
 
-function DesktopBanner() {
-  const downloadUrl = configuredDesktopDownloadUrl();
-  return (
-    <p className="onboarding-desktop-banner" role="note">
-      You’d be better using Boltrig Desktop.{" "}
-      {downloadUrl ? (
-        <a href={downloadUrl} rel="noreferrer" target="_blank">
-          Click here to download
-          <span aria-hidden="true"> ↗</span>
-        </a>
-      ) : null}
-    </p>
-  );
-}
 
 function CapabilityNotice({ vision }: { vision: boolean }) {
   return (

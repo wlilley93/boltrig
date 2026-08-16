@@ -358,12 +358,8 @@ describe("first-run onboarding", () => {
     fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "ollama" } });
     fireEvent.click(screen.getByRole("option", { name: /Ollama Self-hosted/ }));
 
-    // Selecting self-hosted Ollama recommends the desktop build, linked to
-    // the reviewed download page.
-    const banner = screen.getByRole("note");
-    expect(banner.textContent).toContain("You’d be better using Boltrig Desktop.");
-    const download = screen.getByRole("link", { name: "Click here to download" }) as HTMLAnchorElement;
-    expect(download.href).toBe("https://downloads.boltrig.test/desktop");
+    // Self-hosted Ollama no longer recommends the desktop build.
+    expect(screen.queryByRole("note")).toBeNull();
 
     // The key field is optional for this provider and the model field is
     // usable without one.
