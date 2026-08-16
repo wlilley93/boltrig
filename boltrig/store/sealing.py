@@ -23,9 +23,16 @@ marker is returned verbatim, so existing plaintext rows keep working
 Keys (kernel-held, from the environment - never in the DB):
 
   - ``BOLTRIG_SEAL_KEY``: the active sealing passphrase. Any high-entropy
-    string; the Fernet key is derived as SHA-256 of the passphrase, so
+    string; the Fernet key is derived with **scrypt** over a fixed salt, so
     operators supply a passphrase, not a pre-baked Fernet key. Generate with
     ``python -c "import secrets; print(secrets.token_urlsafe(48))"``.
+
+    The derivation was a single unsalted SHA-256 until 2026-08-16, which made
+    each guess cost one hash. Rows sealed then are still readable: v1 is kept
+    for DECRYPT ONLY and MultiFernet tries it, while every new seal uses v2.
+    The lazy re-seal below migrates rows as they are rewritten - but until a
+    row IS rewritten it remains v1, and the honest reading is that the old
+    derivation still guards it.
   - ``BOLTRIG_SEAL_KEY_PREVIOUS`` (optional): the previous passphrase,
     honoured for DECRYPT ONLY, so a rotation is: set the new key as
     ``BOLTRIG_SEAL_KEY``, the old one as ``BOLTRIG_SEAL_KEY_PREVIOUS``,
@@ -88,18 +95,73 @@ def _production_signal(env: dict[str, str]) -> str | None:
     return None
 
 
-def _passphrase_to_fernet(passphrase: str) -> Fernet:
-    """Derive a Fernet key from an arbitrary passphrase (SHA-256, urlsafe-b64)."""
+# A FIXED salt, and the design forces it. scrypt wants a per-secret random salt
+# stored beside the ciphertext, and there is nowhere to put one: the envelope
+# carries no key id (see above - at most one decrypt-only predecessor, no
+# per-row material), so a random salt could never be recovered to derive the
+# same key twice.
+#
+# What a constant salt does and does not buy, stated plainly rather than
+# implied: it does NOT make two deployments with the same passphrase derive
+# different keys, and it does NOT stop a table precomputed against THIS salt. It
+# does raise the cost of each guess from one SHA-256 to a 16 MB, ~20ms scrypt -
+# measured 3916x on an M4. Brute-forcing a token_urlsafe(48) passphrase was
+# never the realistic attack; brute-forcing a human-chosen one at billions of
+# guesses per second was, and that is what closes.
+_SCRYPT_SALT = b"boltrig.store.sealing.v2"
+_SCRYPT_N = 2**14          # ~16 MB. Paid once per PROCESS, not per row:
+_SCRYPT_R = 8              # _fernets is lru_cached on the key material itself.
+_SCRYPT_P = 1
+
+
+def _passphrase_to_fernet_v1(passphrase: str) -> Fernet:
+    """The ORIGINAL derivation: a single unsalted SHA-256.
+
+    Retained for DECRYPT ONLY. Every row sealed before v2 was written with this,
+    and the envelope has no key id to tell them apart - so the only way to read
+    them is to keep the derivation and let MultiFernet try it.
+    """
     digest = hashlib.sha256(passphrase.encode("utf-8")).digest()
     return Fernet(urlsafe_b64encode(digest))
 
 
-@lru_cache(maxsize=8)
+def _passphrase_to_fernet_v2(passphrase: str) -> Fernet:
+    """The current derivation: scrypt, memory-hard, over a fixed salt."""
+    digest = hashlib.scrypt(
+        passphrase.encode("utf-8"),
+        salt=_SCRYPT_SALT,
+        n=_SCRYPT_N,
+        r=_SCRYPT_R,
+        p=_SCRYPT_P,
+        dklen=32,
+    )
+    return Fernet(urlsafe_b64encode(digest))
+
+
+# maxsize was 8, chosen when a derivation cost 0.006ms and a miss was free.
+# A miss now costs FOUR scrypt runs (~90ms), so the sizing is a different
+# question: production still uses one key and never notices, but a test suite
+# cycling many keys through an 8-slot cache re-derives constantly. 64 entries of
+# key material already resident in memory is not a leak, and it is not a
+# security boundary -- the passphrase is in the environment either way.
+@lru_cache(maxsize=64)
 def _fernets(key: str, previous: str | None) -> MultiFernet:
-    """Build (and cache, keyed on the material itself) the active+previous set."""
-    fernets = [_passphrase_to_fernet(key)]
+    """Build (and cache, keyed on the material itself) the decrypt set.
+
+    ORDER IS THE WHOLE MIGRATION. MultiFernet encrypts with the FIRST member and
+    decrypts with ANY, so putting v2 first means every new seal is scrypt while
+    v1 keeps reading rows written before it. This module already re-seals any
+    row it rewrites, so rows migrate as they are touched - no migration script,
+    no downtime, and no need for a key id the envelope does not have.
+
+    v1 is kept for the ACTIVE key, not only the previous one: the passphrase
+    does not change here, only the derivation, so old rows are v1-of-the-same-key
+    rather than v1-of-a-predecessor.
+    """
+    fernets = [_passphrase_to_fernet_v2(key), _passphrase_to_fernet_v1(key)]
     if previous:
-        fernets.append(_passphrase_to_fernet(previous))
+        fernets.append(_passphrase_to_fernet_v2(previous))
+        fernets.append(_passphrase_to_fernet_v1(previous))
     return MultiFernet(fernets)
 
 

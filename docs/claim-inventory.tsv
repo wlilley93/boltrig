@@ -1315,8 +1315,12 @@ ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:806		[2026] VJS-COUNTY 4) 
 ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:913		is DERIVED data INSERTED here;
 ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:945		One atomic transaction: a crash mid-purge cannot strand a conversation
 ORDINARY	NO-SUBJECT	comment	boltrig/store/rls_pool.py:50		False when rls.sql was never applied, so this stays a no-op rather than
-ORDINARY	NO-SUBJECT	docstring	boltrig/store/sealing.py:126		Seal a reference dict into its versioned envelope for at-rest storage.
-ORDINARY	NO-SUBJECT	comment	boltrig/store/sealing.py:73		store layer may NOT import boltrig.config (SEC-54 stack boundary: config is an
+ORDINARY	NO-SUBJECT	comment	boltrig/store/sealing.py:101		per-row material), so a random salt could never be recovered to derive the
+ORDINARY	NO-SUBJECT	comment	boltrig/store/sealing.py:109		never the realistic attack;
+ORDINARY	NO-SUBJECT	docstring	boltrig/store/sealing.py:117		The ORIGINAL derivation: a single unsalted SHA-256.
+ORDINARY	NO-SUBJECT	comment	boltrig/store/sealing.py:143		question: production still uses one key and never notices, but a test suite
+ORDINARY	NO-SUBJECT	docstring	boltrig/store/sealing.py:188		Seal a reference dict into its versioned envelope for at-rest storage.
+ORDINARY	NO-SUBJECT	comment	boltrig/store/sealing.py:80		store layer may NOT import boltrig.config (SEC-54 stack boundary: config is an
 ORDINARY	NO-SUBJECT	comment	boltrig/store/work_items.py:120		can only REMOVE rows from the already-scoped set - never resurrect a
 ORDINARY	NO-SUBJECT	comment	boltrig/store/work_items.py:249		ONLY - never the hidden-alias subquery - so a filter can only NARROW
 ORDINARY	NO-SUBJECT	comment	boltrig/store/work_items.py:250		the already-scoped, hidden-wins-deduped set, never widen it.
@@ -1544,7 +1548,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/skills/loader.py:84	Skill	Return a fl
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/skills/schema.py:1	parse_skill	Parse and validate a skill from its YAML library shape (S7.4, US-SKL-01).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/store/channel_dedup.py:1	ChannelDedupStorePG	Channel delivery dedup store domain (decision 0003, Phase 2; M3/SEC-66).
 ORDINARY	SUBJECT-REACHED	comment	boltrig/store/memory.py:635	restore_closed_conversation	`restore_closed_conversation` never upserts;
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/store/sealing.py:139	CredentialResolution	Unseal an envelope back to the original reference dict.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/store/sealing.py:201	CredentialResolution	Unseal an envelope back to the original reference dict.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/work/normalise.py:58	decide_mode	Turn a raw source payload into a :class:`WorkItem` (US-WRK-01).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/work/queue.py:1	decide_mode	Source queue adapters and the confidence scorer (S7.7, US-WRK-02).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/workflows/control_flow.py:148	_compare	Evaluate one multi-case branch case: a condition list joined and/or.
