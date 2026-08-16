@@ -16,8 +16,21 @@ describe("the character registry", () => {
     expect(characterFor("familiar").readsPhenotype).toBe(false);
   });
 
-  it("ships Familiar and Jarvis only through the production plugin join", () => {
-    expect(listCharacters().map((c) => c.id).sort()).toEqual(["familiar", "jarvis"]);
+  it("ships exactly the three stock bodies through the production plugin join", () => {
+    expect(listCharacters().map((c) => c.id).sort())
+      .toEqual(["familiar", "jarvis", "ultron"]);
+  });
+
+  // Jarvis and Ultron are SEPARATE CHARACTERS, not one with two skins, and the
+  // reference is why: Animal Logic coded JARVIS orange and angular and ULTRON
+  // blue and organic. The gold hologram is Jarvis's own look in that film,
+  // which is why it is a skin ON him and Ultron is his own entry.
+  it("keeps the Age of Ultron look a skin of Jarvis, and Ultron a character", () => {
+    const jarvis = characterFor("jarvis");
+    expect(jarvis.skins?.map((skin) => skin.id)).toEqual(["default", "ultron"]);
+    expect(characterFor("ultron").id).toBe("ultron");
+    // Ultron has one body, so he declares no skins at all rather than one.
+    expect(characterFor("ultron").skins).toBeUndefined();
   });
 
   // An uninstalled plugin, or a setting carried over from a build that shipped

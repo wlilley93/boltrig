@@ -18,17 +18,26 @@ describe("Boltrig wordmark", () => {
     expect(container.textContent).not.toContain("ϟ");
   });
 
-  it("keeps in-product brand call sites wordmark-only", () => {
+  it("keeps in-product brand call sites wordmark-led", () => {
     const auth = readFileSync(join(process.cwd(), "src/components/auth/AuthShell.tsx"), "utf8");
     const onboarding = readFileSync(
       join(process.cwd(), "src/components/onboarding/OnboardingGate.tsx"),
       "utf8",
     );
+    const lockup = readFileSync(
+      join(process.cwd(), "src/components/onboarding/BrandLockup.tsx"),
+      "utf8",
+    );
 
     expect(auth).toContain("<BrandWordmark");
-    expect(onboarding).toContain("<BrandWordmark");
-    expect(`${auth}\n${onboarding}`).not.toContain("ϟ");
-    expect(`${auth}\n${onboarding}`).not.toContain("bolt-mark");
+    // Onboarding reaches the wordmark THROUGH the lockup, which is the single
+    // place mark and wordmark are paired. Asserting the gate goes through it,
+    // rather than that the gate mentions the wordmark itself, is what stops the
+    // two onboarding headers drifting into two different brands.
+    expect(onboarding).toContain("<BrandLockup");
+    expect(lockup).toContain("<BrandWordmark");
+    expect(`${auth}\n${onboarding}\n${lockup}`).not.toContain("ϟ");
+    expect(`${auth}\n${onboarding}\n${lockup}`).not.toContain("bolt-mark");
   });
 
   it("binds browser tabs and installs to the standalone mark assets", () => {

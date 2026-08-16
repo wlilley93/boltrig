@@ -7,6 +7,7 @@ import {
   modelAcceptsVision,
   providerKeyOptional,
 } from "./providerCatalogue";
+import { StepHeading } from "./StepHeading";
 import { SearchablePicker, type SearchableOption } from "./SearchablePicker";
 import { useProviderSetup } from "./useProviderSetup";
 
@@ -50,11 +51,7 @@ export const ProviderStepBase = forwardRef<
 
   return (
     <div className="onboarding-step provider-step">
-      <div className="onboarding-heading onboarding-rise">
-        {kicker ? <p className="onboarding-kicker">{kicker}</p> : null}
-        <h1>{heading}</h1>
-        {sub ? <p>{sub}</p> : null}
-      </div>
+      <StepHeading heading={heading} kicker={kicker} sub={sub} />
       {!setup.readiness
         ? <ProviderLoading />
         : setup.canAddKey
@@ -107,18 +104,7 @@ function ProviderKeyForm({
           searchLabel="Search providers"
           value={setup.provider}
         />
-        <label>
-          <span>{provider?.keyOptional ? "API key (optional)" : "API key"}</span>
-          <input
-            aria-label="Provider API key"
-            autoComplete="off"
-            onChange={(event) => setup.setKeyPresent(Boolean(event.currentTarget.value))}
-            placeholder={provider?.keyOptional ? "Leave empty for a local Ollama" : undefined}
-            ref={setup.apiKeyInput}
-            required={provider?.keyOptional !== true}
-            type="password"
-          />
-        </label>
+        <ApiKeyField optional={provider?.keyOptional === true} setup={setup} />
         {provider?.id === "custom" ? (
           <CustomModelFields setup={setup} />
         ) : provider?.requiresBaseUrl ? (
@@ -133,7 +119,7 @@ function ProviderKeyForm({
               label="Model"
               onChange={setup.setModel}
               options={modelOptions}
-              placeholder={setup.keyPresent || providerKeyOptional(provider.id) ? "Choose a model" : "Enter your API key first"}
+              placeholder={setup.keyPresent ? "Choose a model" : "Enter your API key first"}
               searchLabel="Search models"
               value={setup.model}
             />
@@ -147,6 +133,41 @@ function ProviderKeyForm({
         </button>
       ) : null}
     </div>
+  );
+}
+
+/** The provider API key input, and the one rule that governs it.
+ *
+ * Whether a key is required is a property of the PROVIDER, not of the form: a
+ * self-hosted Ollama authenticates nothing, so demanding one made it
+ * impossible to finish setup against a local model (FR-AIKEY-04). Keeping the
+ * label, the placeholder and the `required` flag together means they cannot
+ * drift into saying three different things about the same field.
+ */
+function ApiKeyField({ optional, setup }: {
+  optional: boolean;
+  setup: ReturnType<typeof useProviderSetup>;
+}) {
+  return (
+    <label>
+      <span>{optional ? "API key (optional)" : "API key"}</span>
+      <input
+        aria-label="Provider API key"
+        // `off` is advisory and Chrome ignores it on password inputs; it was
+        // filling this with a saved credential, so a keyless Ollama looked
+        // like it already had a key. `new-password` is the value browsers
+        // actually honour, and the two data- attributes opt out of 1Password
+        // and LastPass, which ignore both.
+        autoComplete="new-password"
+        data-1p-ignore
+        data-lpignore="true"
+        onChange={(event) => setup.setKeyPresent(Boolean(event.currentTarget.value))}
+        placeholder={optional ? "Leave empty for a local Ollama" : undefined}
+        ref={setup.apiKeyInput}
+        required={!optional}
+        type="password"
+      />
+    </label>
   );
 }
 

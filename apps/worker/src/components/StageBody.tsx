@@ -12,10 +12,7 @@ import {
   loadCharacter,
   type CharacterId,
 } from "../character";
-import {
-  useCharacter,
-  type StageTurnInput,
-} from "./characters";
+import { skinFor, type StageTurnInput, useCharacter, useSkin } from "./characters";
 import type { FamiliarPresentationMode } from "./familiar/FamiliarState";
 
 // The one place that decides WHICH body is on the Stage — and it does so
@@ -161,8 +158,10 @@ export function StageBody({
   genotype?: FamiliarGenotype | null;
   label?: string;
 }) {
+  const storedSkin = useSkin();
   const body = useFamiliarBody();
   const character = useCharacter(body);
+  const skin = skinFor(character, storedSkin);
   const budgets = useBudgets(character.wantsBudgets === true);
   const sensing = useSensing(character.wantsSensing);
 
@@ -185,6 +184,7 @@ export function StageBody({
         mode,
         phenotype: inner,
         sensing,
+        skin,
         turn,
       })}
     </Suspense>

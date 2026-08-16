@@ -8,8 +8,9 @@ import {
 } from "../../character";
 import { client } from "../../client";
 import { needsOnboarding } from "../../onboarding";
-import { BrandMark } from "../BrandMark";
-import { BrandWordmark } from "../BrandWordmark";
+import { BrandLockup } from "./BrandLockup";
+import { onboardingActionDisabled, onboardingActionLabel } from "./onboardingActionState";
+import { StepSkeleton } from "./StepSkeleton";
 import { CompanionStep } from "./CompanionStep";
 import { NameStep } from "./NameStep";
 import type { ProviderStepHandle } from "./ProviderStep";
@@ -85,7 +86,7 @@ function OnboardingUnavailable() {
       <div className="onboarding-aurora one" /><div className="onboarding-aurora two" />
       <section className="onboarding-panel" aria-label="Boltrig setup">
         <header className="onboarding-topbar">
-          <span className="onboarding-lockup"><BrandMark className="onboarding-mark" /><BrandWordmark className="onboarding-brand" /></span>
+          <BrandLockup />
         </header>
         <div className="onboarding-content">
           <div className="onboarding-step">
@@ -264,9 +265,9 @@ function OnboardingSlide({
 }) {
   if (step === 0) return <NameStep name={name} onName={onName} />;
   if (step === 1) return <CompanionStep selected={character} onSelect={onSelectCharacter} />;
-  if (step === 2) return <Suspense fallback={<ProviderStepLoading />}><ProviderStep profile={profile} ref={attachProviderStep} /></Suspense>;
-  if (step === 3) return <Suspense fallback={<VisionStepLoading />}><VisionStep onSkip={onSkipVision} profile={profile} ref={attachVisionStep} /></Suspense>;
-  if (step === 4) return <Suspense fallback={<VoiceStepLoading />}><VoiceStep onSkip={onFinish} profile={profile} ref={attachVoiceStep} /></Suspense>;
+  if (step === 2) return <Suspense fallback={<StepSkeleton heading="Choose your AI provider" step="provider-step" />}><ProviderStep profile={profile} ref={attachProviderStep} /></Suspense>;
+  if (step === 3) return <Suspense fallback={<StepSkeleton heading="Add vision" kicker="Optional" step="provider-step" />}><VisionStep onSkip={onSkipVision} profile={profile} ref={attachVisionStep} /></Suspense>;
+  if (step === 4) return <Suspense fallback={<StepSkeleton heading="Add voice" kicker="Optional" step="voice-step" />}><VoiceStep onSkip={onFinish} profile={profile} ref={attachVoiceStep} /></Suspense>;
   return <ReadyStep character={character} userName={name.trim()} />;
 }
 
@@ -278,41 +279,6 @@ function useOnboardingEnter(canContinue: boolean, onContinue: () => void) {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   });
-}
-
-function ProviderStepLoading() {
-  return (
-    <div className="onboarding-step provider-step" aria-busy="true">
-      <div className="onboarding-heading onboarding-rise">
-        <h1>Choose your AI provider</h1>
-      </div>
-      <div className="onboarding-loader"><span /><span /><span /></div>
-    </div>
-  );
-}
-
-function VisionStepLoading() {
-  return (
-    <div className="onboarding-step provider-step" aria-busy="true">
-      <div className="onboarding-heading onboarding-rise">
-        <p className="onboarding-kicker">Optional</p>
-        <h1>Add vision</h1>
-      </div>
-      <div className="onboarding-loader"><span /><span /><span /></div>
-    </div>
-  );
-}
-
-function VoiceStepLoading() {
-  return (
-    <div className="onboarding-step voice-step" aria-busy="true">
-      <div className="onboarding-heading onboarding-rise">
-        <p className="onboarding-kicker">Optional</p>
-        <h1>Add voice</h1>
-      </div>
-      <div className="onboarding-loader"><span /><span /><span /></div>
-    </div>
-  );
 }
 
 function OnboardingActions({
@@ -369,41 +335,6 @@ function OnboardingActions({
   );
 }
 
-function onboardingActionLabel({
-  providerConnecting, saving, step, visionConnecting, voiceConnecting,
-}: {
-  providerConnecting: boolean;
-  saving: boolean;
-  step: Step;
-  visionConnecting: boolean;
-  voiceConnecting: boolean;
-}) {
-  if (saving) return "Finishing…";
-  if (providerConnecting) return "Connecting…";
-  if (visionConnecting) return "Connecting…";
-  if (voiceConnecting) return "Saving…";
-  return step === 5 ? "Continue in browser" : "Continue";
-}
-
-function onboardingActionDisabled({
-  busy, nameReady, providerReady, setupComplete, step, visionReady, voiceReady,
-}: {
-  busy: boolean;
-  nameReady: boolean;
-  providerReady: boolean;
-  setupComplete: boolean;
-  step: Step;
-  visionReady: boolean;
-  voiceReady: boolean;
-}) {
-  return busy
-    || (step === 0 && !nameReady)
-    || (step === 2 && !providerReady)
-    || (step === 3 && !visionReady)
-    || (step === 4 && !voiceReady)
-    || (step === 5 && !setupComplete);
-}
-
 function OnboardingFrame({
   children,
   step,
@@ -416,7 +347,7 @@ function OnboardingFrame({
       <div className="onboarding-aurora one" /><div className="onboarding-aurora two" />
       <section className="onboarding-panel" aria-label="Boltrig setup">
         <header className="onboarding-topbar">
-          <span className="onboarding-lockup"><BrandMark className="onboarding-mark" /><BrandWordmark className="onboarding-brand" /></span>
+          <BrandLockup />
           <span className="onboarding-progress" aria-label={`Step ${step + 1} of 6`}>
             {[0, 1, 2, 3, 4, 5].map((index) => <i className={index <= step ? "active" : ""} key={index} />)}
           </span>

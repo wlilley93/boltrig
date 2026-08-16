@@ -92,6 +92,12 @@ export interface CharacterRenderProps<TPhenotype = unknown, TGenotype = unknown>
   turn?: Pick<NormalizedTurn, "tools" | "subagents" | "steps"> | null;
   genotype?: TGenotype | null;
   label?: string;
+  /**
+   * Which of the character's skins to draw. Absent, or naming one the character
+   * does not offer, means the first -- a stored skin from an uninstalled
+   * variant costs the Stage a look, never a render.
+   */
+  skin?: string;
 }
 
 /** Short name used by character add-ins. */
@@ -99,6 +105,19 @@ export type StageRenderProps<TPhenotype = unknown, TGenotype = unknown> =
   CharacterRenderProps<TPhenotype, TGenotype>;
 
 export type CharacterId = string;
+
+/**
+ * One selectable LOOK for a character -- structurally the bundle's skin entry.
+ *
+ * Declared on the character rather than discovered from its bundle so that a
+ * picker can ask any registered character what looks it offers. A plugin that
+ * registers directly, with no manifest at all, can still have skins.
+ */
+export interface CharacterSkin {
+  id: string;
+  name?: string;
+  blurb?: string;
+}
 
 export interface Character<TNode = unknown, TPhenotype = unknown, TGenotype = unknown> {
   id: CharacterId;
@@ -130,6 +149,15 @@ export interface Character<TNode = unknown, TPhenotype = unknown, TGenotype = un
    */
   voiceIds?: Readonly<Record<string, string>>;
   blurb: string;
+  /**
+   * Looks this character offers, FIRST IS DEFAULT. Absent means one look --
+   * the honest encoding, because an array of one implies a choice that does not
+   * exist and every picker would have to special-case it.
+   *
+   * Presentation only. A skin never changes prompts, dispatch or voice, so the
+   * character you are talking to is the same character either way.
+   */
+  skins?: readonly CharacterSkin[];
   render(props: CharacterRenderProps<TPhenotype, TGenotype>): TNode;
 }
 

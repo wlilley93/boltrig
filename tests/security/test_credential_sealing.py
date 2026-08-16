@@ -19,6 +19,7 @@ import pytest
 
 from boltrig.models import CredentialResolution
 from boltrig.store import InMemoryStore
+from boltrig.store import sealing
 from boltrig.store.sealing import is_sealed, seal_ref, unseal_ref
 
 T = "default"
@@ -142,3 +143,67 @@ def test_the_dev_default_seals_offline_and_round_trips(monkeypatch):
     assert unseal_ref(envelope) == {"secret": SECRET}
     # Sealing is idempotent - a re-persisted envelope is never double-sealed.
     assert seal_ref(envelope) is envelope
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-169")
+def test_a_row_sealed_under_the_old_derivation_still_unseals(monkeypatch):
+    """The migration property, and the only one that could lose data.
+
+    The key derivation moved from an unsalted SHA-256 (v1) to scrypt (v2) on
+    2026-08-16. The envelope carries NO key id, so the only way an existing row
+    can still be read is for the old derivation to remain in the decrypt set and
+    for MultiFernet to try it. If this test fails, every credential sealed
+    before that date is unreadable.
+    """
+    _dev_env(monkeypatch)
+    monkeypatch.setenv("BOLTRIG_SEAL_KEY", "an-operator-passphrase-" + "q" * 20)
+    key = "an-operator-passphrase-" + "q" * 20
+
+    # A row exactly as the module would have written it BEFORE the change.
+    v1_only = sealing.MultiFernet([sealing._passphrase_to_fernet_v1(key)])
+    legacy = {"sealed": sealing.SEALED_VERSION,
+              "ct": v1_only.encrypt(json.dumps({"secret": SECRET}).encode()).decode()}
+
+    assert unseal_ref(legacy) == {"secret": SECRET}
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-169")
+def test_new_seals_use_the_new_derivation(monkeypatch):
+    """v2 must LEAD, or the hardening is inert.
+
+    MultiFernet encrypts with its first member. Order the list the other way and
+    every test above still passes while every new row is written with the weak
+    derivation - so this asserts the negative: a v1-only reader cannot open a
+    freshly sealed row.
+    """
+    _dev_env(monkeypatch)
+    key = "an-operator-passphrase-" + "q" * 20
+    monkeypatch.setenv("BOLTRIG_SEAL_KEY", key)
+
+    fresh = seal_ref({"secret": SECRET})
+    v1_only = sealing.MultiFernet([sealing._passphrase_to_fernet_v1(key)])
+    with pytest.raises(sealing.InvalidToken):
+        v1_only.decrypt(fresh["ct"].encode())
+    # ...and the module itself still reads it, so this is about derivation only.
+    assert unseal_ref(fresh) == {"secret": SECRET}
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-169")
+def test_rotation_still_works_across_both_derivations(monkeypatch):
+    """A previous key must decrypt whichever derivation sealed it.
+
+    Rotation and the KDF change are independent, and a row sealed by the OLD
+    binary under the PREVIOUS passphrase is the case where they meet.
+    """
+    _dev_env(monkeypatch)
+    old_key, new_key = "passphrase-one-" + "a" * 20, "passphrase-two-" + "b" * 20
+    v1_old = sealing.MultiFernet([sealing._passphrase_to_fernet_v1(old_key)])
+    sealed_long_ago = {"sealed": sealing.SEALED_VERSION,
+                       "ct": v1_old.encrypt(json.dumps({"secret": SECRET}).encode()).decode()}
+
+    monkeypatch.setenv("BOLTRIG_SEAL_KEY", new_key)
+    monkeypatch.setenv("BOLTRIG_SEAL_KEY_PREVIOUS", old_key)
+    assert unseal_ref(sealed_long_ago) == {"secret": SECRET}

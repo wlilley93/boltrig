@@ -3153,7 +3153,9 @@ button.console-row-main { border: 0; background: transparent; color: inherit; cu
 }
 
 .settings-head { display: flex; flex-direction: column; gap: 8px; margin-bottom: 28px; }
-.settings-head h1 { margin: 0; font-size: 26px; font-weight: 500; letter-spacing: -.3px; }
+/* line-height pinned for the same reason as .plugins-inventory-heading h2:
+   `normal` is font-metric derived and rounds per platform. */
+.settings-head h1 { margin: 0; font-size: 26px; line-height: 32px; font-weight: 500; letter-spacing: -.3px; }
 .settings-head p { margin: 0; color: var(--text-3); font-size: 14px; line-height: 1.55; text-wrap: pretty; }
 .settings-group { display: flex; flex-direction: column; gap: 11px; margin-bottom: 28px; }
 .settings-row {

@@ -53,8 +53,22 @@ export function resolveToken(explicit?: string): string {
   return token;
 }
 
-function baseUrl(server: string): string {
-  return server.replace(/\/+$/, "");
+/** `server` with any trailing slashes removed.
+ *
+ * NO REGEX, deliberately. This was `server.replace(/\/+$/, "")`, which CodeQL
+ * flags as a polynomial ReDoS (js/polynomial-redos) and is: on a string of N
+ * slashes the engine retries `\/+$` from every position, so the work is O(N^2)
+ * for input that never matches. A megabyte of slashes is not a realistic server
+ * URL, but this is a PUBLISHED SDK -- the string is whatever a caller passes,
+ * and "our callers would not do that" is not a property this package can check.
+ *
+ * Exported so head.ts and register.ts stop carrying their own copy of the same
+ * regex; three copies of one expression is three places to fix it next time.
+ */
+export function baseUrl(server: string): string {
+  let end = server.length;
+  while (end > 0 && server.charCodeAt(end - 1) === 0x2f) end -= 1;  // 0x2f = '/'
+  return server.slice(0, end);
 }
 
 export async function kernelPost(

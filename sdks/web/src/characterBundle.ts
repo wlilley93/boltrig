@@ -40,7 +40,7 @@ export interface CharacterBundleShaderVisual {
   type: "shader";
   /** Id of the canvas source that draws this character. */
   source: string;
-  fragment: CharacterBundleAssetRef;
+  fragment?: CharacterBundleAssetRef;
   /** Uniform names the shader NEEDS; checked against what the source supplies. */
   uniforms?: string[];
 }
@@ -82,6 +82,20 @@ export interface CharacterBundleCapabilities {
   automations?: string[];
 }
 
+/**
+ * One selectable look for a character.
+ *
+ * The FIRST entry is the default, so a bundle that adds skins does not change
+ * what an existing install renders. An id is the persisted value, so it follows
+ * the same grammar as a character id.
+ */
+export interface CharacterBundleSkin {
+  id: string;
+  /** Shown in a picker. Falls back to the character's own name when absent. */
+  name?: string;
+  blurb?: string;
+}
+
 export interface CharacterBundleManifest {
   schemaVersion: typeof CHARACTER_BUNDLE_SCHEMA_VERSION;
   id: string;
@@ -111,6 +125,12 @@ export interface CharacterBundleManifest {
     fallbackVoiceIds?: Record<string, string>;
   };
   capabilities?: CharacterBundleCapabilities;
+  /**
+   * Selectable looks. ABSENT means one look, which is the honest encoding of
+   * "this character has no variants" -- an array of one would imply a choice
+   * that does not exist, and every picker would have to special-case it.
+   */
+  skins?: CharacterBundleSkin[];
   distillation?: { enabled: boolean; schedule?: string; corpus?: string[] };
   /** Provider NAMES the character wishes to use. Never keys. */
   credentials?: { providers: string[] };
@@ -192,7 +212,15 @@ function shaderVisual(visual: Record<string, unknown>): CharacterBundleShaderVis
   return {
     type: "shader",
     source: label(visual.source, "visual.source", 128),
-    fragment: assetRef(visual.fragment, "visual.fragment"),
+    // ABSENT means the character ships no fragment of its own and is drawn
+    // entirely by the named canvas source. Pin what you ship: a bundle carrying
+    // a .frag must digest it so a file moving under the manifest fails here
+    // rather than at first paint, but a character whose renderer is host
+    // machinery has nothing to pin, and a digest of an invented file would be a
+    // pin that lies.
+    fragment: visual.fragment === undefined
+      ? undefined
+      : assetRef(visual.fragment, "visual.fragment"),
     uniforms: uniforms(visual.uniforms, "visual.uniforms"),
   };
 }
@@ -258,6 +286,34 @@ function emotionOf(value: unknown): CharacterBundleEmotion | undefined {
 }
 
 /**
+ * Skins, validated. Duplicate ids are refused rather than deduplicated: two
+ * skins claiming one id is a bundle that cannot say which look it means, and
+ * silently keeping the first would pick for it.
+ */
+function skinsOf(value: unknown): CharacterBundleSkin[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new CharacterBundleError("skins", "must be a non-empty array when present");
+  }
+  const seen = new Set<string>();
+  return value.map((entry, index) => {
+    const skin = record(entry, `skins[${index}]`);
+    if (typeof skin.id !== "string" || !BUNDLE_ID.test(skin.id)) {
+      throw new CharacterBundleError(`skins[${index}].id`, "must match [a-z][a-z0-9-]{0,63}");
+    }
+    if (seen.has(skin.id)) {
+      throw new CharacterBundleError(`skins[${index}].id`, `duplicates "${skin.id}"`);
+    }
+    seen.add(skin.id);
+    return {
+      id: skin.id,
+      name: skin.name === undefined ? undefined : label(skin.name, `skins[${index}].name`, 64),
+      blurb: skin.blurb === undefined ? undefined : label(skin.blurb, `skins[${index}].blurb`, 240),
+    };
+  });
+}
+
+/**
  * Validates a manifest and returns it typed. Unknown top-level keys are kept as
  * written rather than stripped: a host that does not understand a field must
  * not quietly delete it on the way through, or a round-trip through an older
@@ -291,12 +347,24 @@ export function parseCharacterBundle(value: unknown): CharacterBundleManifest {
     visual,
     phenotype: phenotypeOf(manifest.phenotype),
     emotion: emotionOf(manifest.emotion),
+    skins: skinsOf(manifest.skins),
   } as CharacterBundleManifest;
 }
 
 /** Does this bundle read the host's measured affective state? Absence is false. */
 export function bundleReadsPhenotype(manifest: CharacterBundleManifest): boolean {
   return manifest.phenotype?.reads === true;
+}
+
+/**
+ * The looks this character offers, first-is-default. Always at least one entry,
+ * so a caller never has to distinguish "no skins" from "one skin" -- a bundle
+ * that declares none has exactly one look, and it is the character itself.
+ */
+export function bundleSkins(manifest: CharacterBundleManifest): CharacterBundleSkin[] {
+  const declared = manifest.skins;
+  if (!declared || declared.length === 0) return [{ id: "default", name: manifest.name }];
+  return declared;
 }
 
 /** Polling budgets costs a request, so only a character that asked for them gets them. */
@@ -344,7 +412,7 @@ export function bundleWantsPresence(manifest: CharacterBundleManifest): boolean 
 const EXPORTABLE_BUNDLE_FIELDS = [
   "$schema", "schemaVersion", "id", "name", "blurb", "type", "visual",
   "prompts", "phenotype", "emotion", "identity", "voice", "capabilities",
-  "distillation", "credentials", "provenance",
+  "skins", "distillation", "credentials", "provenance",
 ] as const;
 
 /**
