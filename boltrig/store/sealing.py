@@ -138,7 +138,13 @@ def _passphrase_to_fernet_v2(passphrase: str) -> Fernet:
     return Fernet(urlsafe_b64encode(digest))
 
 
-@lru_cache(maxsize=8)
+# maxsize was 8, chosen when a derivation cost 0.006ms and a miss was free.
+# A miss now costs FOUR scrypt runs (~90ms), so the sizing is a different
+# question: production still uses one key and never notices, but a test suite
+# cycling many keys through an 8-slot cache re-derives constantly. 64 entries of
+# key material already resident in memory is not a leak, and it is not a
+# security boundary -- the passphrase is in the environment either way.
+@lru_cache(maxsize=64)
 def _fernets(key: str, previous: str | None) -> MultiFernet:
     """Build (and cache, keyed on the material itself) the decrypt set.
 
