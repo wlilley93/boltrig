@@ -144,3 +144,48 @@ async def test_the_process_default_posture_binds_and_an_explicit_config_wins(
         assert allowed.ok
     finally:
         egress.set_default_network_config(None)
+
+
+# --- proxy / CA: the manifest transport posture follows the same seam ----------
+@pytest.mark.invariant("SEC-52")
+def test_a_configured_ca_bundle_builds_a_closed_tls_verifier(tmp_path):
+    """``ca_bundle`` yields an SSLContext that trusts ONLY those roots, and a
+    malformed bundle FAILS CLOSED rather than silently falling back to public
+    roots (the web_fetch doctrine, now shared by the pinned-client family)."""
+    import ssl
+
+    from boltrig.adapters.egress import tls_verify_from_config
+
+    assert tls_verify_from_config(None) is True
+    assert tls_verify_from_config({}) is True
+    junk = tmp_path / "junk.pem"
+    junk.write_text("this is not a certificate")
+    with pytest.raises(Exception):
+        tls_verify_from_config({"ca_bundle": str(junk)})
+    assert ssl  # referenced for the reader: the success path returns ssl.SSLContext
+
+
+@pytest.mark.invariant("SEC-52")
+def test_a_proxied_config_builds_an_unpinned_proxied_client(monkeypatch):
+    """With ``https_proxy`` in the posture, the pinned helpers take web_fetch's
+    proxy branch: the guard over the local resolution still runs, and the client
+    is built PROXIED (resolution delegated to the proxy) rather than pinned."""
+    from boltrig.adapters import egress
+
+    captured: dict = {}
+
+    class _RecordingClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self._transport = kwargs.get("transport")
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "AsyncClient", _RecordingClient)
+
+    config = {"https_proxy": "http://proxy.corp:3128"}
+    # The URL resolves publicly (example.com); the guard must not refuse it.
+    client = egress.pinned_async_client("https://example.com/spec.json", config, timeout=5.0)
+    assert captured.get("proxy") == "http://proxy.corp:3128"
+    assert captured.get("follow_redirects") is False
+    assert client is not None

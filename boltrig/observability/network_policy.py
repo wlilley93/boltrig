@@ -24,9 +24,10 @@ _SEPARATE_SURFACES: tuple[dict[str, Any], ...] = (
             "governed_server_registration",
             "shared_ssrf_and_dns_pinning",
             "manifest_airgap_and_domain_lists",
+            "manifest_proxy_and_ca_rules",
             "reviewed_internal_server_waiver",
         ),
-        "limitation": "manifest_proxy_and_ca_rules_remain_web_fetch_only",
+        "limitation": "proxy_mode_delegates_resolution_to_the_proxy",
     },
     {
         "surface": "http_adapters",
@@ -35,8 +36,9 @@ _SEPARATE_SURFACES: tuple[dict[str, Any], ...] = (
         "controls": (
             "adapter_specific_shared_ssrf_or_dns_pinning",
             "manifest_airgap_and_domain_lists",
+            "manifest_proxy_and_ca_rules",
         ),
-        "limitation": "coverage_varies_and_manifest_proxy_ca_rules_remain_web_fetch_only",
+        "limitation": "coverage_varies_by_adapter_family",
     },
     {
         "surface": "model_providers_and_embeddings",

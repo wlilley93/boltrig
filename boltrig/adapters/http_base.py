@@ -179,10 +179,16 @@ class HttpAdapter:
         # policy, SEC-52) FAILS the construction: shipping an unpinned client
         # instead would hand httpx a second, unaudited DNS lookup at connect time -
         # the exact rebinding TOCTOU pinning exists to close.
-        from boltrig.adapters.egress import EgressBlocked, pinned_transport
+        from boltrig.adapters.egress import (
+            EgressBlocked,
+            pinned_transport,
+            tls_verify_from_config,
+        )
 
         try:
-            transport = pinned_transport(base, self._network_config)
+            transport = pinned_transport(
+                base, self._network_config, verify=tls_verify_from_config(self._network_config)
+            )
         except EgressBlocked as exc:
             raise _HttpFailure(
                 AdapterError(ErrorClass.INVALID, str(exc), retryable=False)
