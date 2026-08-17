@@ -204,6 +204,7 @@ export class NeuralPasses {
       // as a force; the draws use them as light, which is what makes the pulse
       // visible rather than merely real.
       uWaveT: d.waveT, uWaveAmp: d.waveAmp, uSwell: d.swell,
+      uReverb: tuning.reverb,
       uSwirl: tuning.swirl,
       uOuter: tuning.outerShell,
     };

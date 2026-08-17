@@ -194,6 +194,7 @@ export class UltronPasses {
       // The wavefront reaches the DRAW passes, not only SIM: there it is a
       // force, here it is light, and only the second one is visible.
       uWaveT: d.waveT, uWaveAmp: d.waveAmp, uSwell: d.swell,
+      uReverb: tuning.reverb,
       uSwirl: tuning.swirl,
       uOuter: tuning.outerShell,
     };

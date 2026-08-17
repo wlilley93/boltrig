@@ -32,6 +32,7 @@ import {
 import { ULTRON_TUNING, type UltronTuning } from "../canvas/bodyTuning";
 import {
   INTRO_SECONDS,
+  TRANSITION_SECONDS,
   applyPulses,
   easeFactor,
   easeTuning,
@@ -148,6 +149,12 @@ export class UltronRenderer {
     this.introLeft = INTRO_SECONDS;
   }
 
+  /** Ease to a new look without replaying the arrival. See the Jarvis twin. */
+  transitionTo(next: UltronTuning, seconds = TRANSITION_SECONDS): void {
+    this.tuning = next;
+    this.introLeft = Math.max(this.introLeft, seconds);
+  }
+
 
   mount(host: HTMLElement): void {
     this.host = host;
@@ -198,10 +205,19 @@ export class UltronRenderer {
   }
 
   update(state: UltronStageState): void {
+    // AN ONSET TOPS THE RING UP; it only restarts it once the ring has died. See
+    // the same block in JarvisNeuralRenderer for why: resetting the clock on every
+    // syllable puts the front back at the centre before it has reached the shell,
+    // so it never completes a round trip and speech pings once per syllable however
+    // long the reverb tail is set to.
     const onset = typeof state.onset === "number" ? state.onset : 0;
-    if (onset > 0.35 && this.waveT > 0.18) {
-      this.waveT = 0;
-      this.waveAmp = Math.min(1, onset);
+    if (onset > 0.35) {
+      if (this.waveAmp < 0.25) {
+        this.waveT = 0;
+        this.waveAmp = Math.min(1, onset);
+      } else if (this.waveT > 0.12) {
+        this.waveAmp = Math.min(1, this.waveAmp + onset * 0.6);
+      }
     }
     const bands = state.bands;
     if (bands && bands.length === 8) {
@@ -252,6 +268,11 @@ export class UltronRenderer {
       shown = this.live;
     } else if (this.tuning) {
       shown = this.tuning;
+      // KEEP `live` ON WHAT IS ACTUALLY DRAWN while pinned. Otherwise it holds
+      // whatever it was when the last ease finished, and the next transition starts
+      // from that stale value rather than from the look on screen -- so a change of
+      // mode would jump backwards before travelling forwards.
+      this.live = this.tuning;
     } else {
       const target = ultronModeTuning(mode);
       // Reduced motion gets the destination and none of the journey: the entry
@@ -305,7 +326,14 @@ export class UltronRenderer {
     if (!this.reducedMotion) this.animClock += dt;
 
     this.waveT += dt;
-    this.waveAmp *= Math.exp(-dt * 2.2);
+    // SLOW, so the shader's reverb decay is what governs the ring.
+    //
+    // At 2.2 per second this envelope was down to 11% within a second, which killed
+    // every front before it could reach the shell and come back -- so the
+    // reverberation existed in the arithmetic and was never seen. There are two
+    // decays in this system and only one of them should be doing the shaping: this
+    // one keeps the excitation alive, uReverb.z decides how long it rings.
+    this.waveAmp *= Math.exp(-dt * 0.5);
 
     const mode = this.state?.mode ?? "standby";
     const level = Math.min(1, Math.max(0, this.state?.level ?? 0));

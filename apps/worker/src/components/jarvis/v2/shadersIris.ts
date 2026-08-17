@@ -107,7 +107,7 @@ void main() {
   // that stops dead at the rim draws a circle.
   vAmp *= smoothstep(0.0, 0.22, t) * smoothstep(1.0, 0.55, t);
   vAmp *= 0.66 + 0.34 * uEnergy;
-  vAmp *= 1.0 + 2.6 * pulse(q) + 0.35 * uSwell;
+  vAmp *= 1.0 + 2.8 * pulse(q) + 0.3 * uSwell;
 
   vCell = vec2(t, across);
   gl_Position = project(q, uAspect);

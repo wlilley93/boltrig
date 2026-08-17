@@ -51,7 +51,8 @@
       "uDendTip",
       "uBead",
       "uEye",
-      "uLayerPace"
+      "uLayerPace",
+      "uReverb"
     ]
   },
   "prompts": {

@@ -93,7 +93,7 @@ void main() {
   // visible things on screen -- the flares around the edge.
   vFade *= 1.0 - 0.85 * ember(p, 0.98);
   // The wavefront lights what it passes, and a held note keeps a low swell.
-  vFade *= 1.0 + 3.2 * pulse(p) + 0.55 * uSwell;
+  vFade *= 1.0 + 2.2 * pulse(p) + 0.38 * uSwell;
 
   p -= v * uStreak * float(tail);
   gl_Position = project(p, uAspect);
@@ -188,7 +188,7 @@ void main() {
   // every other pass had just been made to leave empty -- and a shell with a
   // solid interior is a ball, not a globe.
   vFade *= limbMix(p);
-  vFade *= 1.0 + 3.6 * pulse(p) + 0.5 * uSwell;
+  vFade *= 1.0 + 2.4 * pulse(p) + 0.35 * uSwell;
   gl_Position = project(p, uAspect);
 }`;
 

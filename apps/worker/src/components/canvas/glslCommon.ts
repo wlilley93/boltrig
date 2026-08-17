@@ -363,13 +363,54 @@ uniform float uWaveT;
 uniform float uWaveAmp;
 uniform float uSwell;
 
+/**
+ * x speed, y echo spacing in seconds, z decay rate, w the radius it reflects off.
+ *
+ * Self-contained rather than reading uOuter, because PULSE_GLSL is included by
+ * shaders that do not include FIELD_GLSL -- depending on a uniform from another
+ * chunk is how a pass ends up compiling everywhere and behaving correctly nowhere.
+ */
+uniform vec4 uReverb;
+
+/**
+ * THE VOICE, REVERBERATING, rather than one front leaving and never returning.
+ *
+ * It was a single narrow shell travelling outward at a fixed 1.35 and fading as it
+ * went. That reads as a ping: something leaves the middle, crosses the body once,
+ * and is gone. A voice in a cavity does not do that -- it reaches the wall, comes
+ * BACK, and keeps doing so more quietly each time, which is the whole difference
+ * between a body that pings when spoken to and a body that rings.
+ *
+ * Two mechanisms, and both matter:
+ *
+ *   THE BOUNCE. The front's position is a triangle wave rather than a ramp, so at
+ *   the reflecting radius it turns around and travels inward again. One front
+ *   therefore crosses the body many times. A ramp put the front outside the
+ *   silhouette after about a second and everything went still while the voice was
+ *   still going.
+ *
+ *   THE ECHOES. Three fronts, each starting a little later and at half the
+ *   amplitude of the last. One bouncing front is a single ripple sloshing; three
+ *   overlapping ones interfere, which is what fills the body with motion instead of
+ *   sweeping a bright band across it.
+ */
 float pulse(vec3 p) {
-  float front = uWaveT * 1.35;
-  float d = length(p) - front;
-  // Narrow, and it fades as it travels: a front that stayed as bright at the
-  // rim as at the core reads as the whole body flashing, not as something
-  // crossing it.
-  float shell = exp(-d * d * 22.0) * exp(-uWaveT * 1.6);
-  return shell * uWaveAmp;
+  float r = length(p);
+  // A floor on the reflecting radius: at zero the triangle wave collapses and every
+  // front sits at the origin, which would put a static blob in the middle of any
+  // body that had not set this yet.
+  float reach = max(0.35, uReverb.w);
+  float sum = 0.0;
+  for (int i = 0; i < 3; i += 1) {
+    float t = uWaveT - float(i) * uReverb.y;
+    if (t <= 0.0) continue;
+    float travel = mod(t * uReverb.x, 2.0 * reach);
+    float front = travel > reach ? 2.0 * reach - travel : travel;
+    float d = r - front;
+    // Narrow, and it fades as it travels: a front as bright at the rim as at the
+    // core reads as the whole body flashing rather than as something crossing it.
+    sum += exp(-d * d * 22.0) * exp(-t * uReverb.z) * pow(0.5, float(i));
+  }
+  return sum * uWaveAmp;
 }
 `;

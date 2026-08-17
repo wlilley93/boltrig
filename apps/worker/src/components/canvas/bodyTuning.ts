@@ -160,6 +160,15 @@ export interface JarvisTuning {
    * untunable.
    */
   linkBow: readonly [amount: number, speed: number];
+  /**
+   * How the voice reverberates: speed, echo spacing, decay, reflecting radius.
+   *
+   * Per mode, because a body that rings the same way when idle as when speaking is
+   * not answering the voice -- standby wants a slow, almost-still swell and speech
+   * wants the whole thing ringing. The reflecting radius is what the front bounces
+   * off, so it should sit at or just past the silhouette.
+   */
+  reverb: readonly [speed: number, spacing: number, decay: number, reach: number];
   /** The filaments. */
   /**
    * The INNER layer: brightness, trail and silhouette of the core cloud.
@@ -301,6 +310,15 @@ export interface UltronTuning {
    * edge; at 0 he is Jarvis in blue, and the references separate the two by
    * silhouette as much as by colour.
    */
+  /** How the voice reverberates. See JarvisTuning.reverb. */
+  reverb: readonly [speed: number, spacing: number, decay: number, reach: number];
+  /**
+   * How far the three bands reach along their own axes.
+   *
+   * 0.3, not 1.0. At 1.0 the arms reach far enough to read as flares around the
+   * edge; at 0 he is Jarvis in blue, and the references separate the two by
+   * silhouette as much as by colour.
+   */
   petal: number;
   veinLimb: LimbMix;
   crackLimb: LimbMix;
@@ -309,28 +327,29 @@ export interface UltronTuning {
 
 /** What ships. The bench overrides a copy; nothing mutates this. */
 export const JARVIS_TUNING: JarvisTuning = {
-  outerShell: [1.45, 0.34, 0.62],
-  ringGain: [0.62, 0.4],
-  ringSpin: [0.045, 0.012],
-  ringRadius: [0.9, 1.34],
+  outerShell: [1.45, 0.34, 0.46],
+  ringGain: [0.8, 0.42],
+  ringSpin: [0.016, 0.005],
+  ringRadius: [1.02, 1.32],
   ringBeam: 0.085,
-  ringLife: 0.09,
-  ringArc: [4, 0.66],
-  ringWidth: 0.095,
-  irisGain: [0.62, 0.4],
-  irisRadius: [0.1, 0.44],
-  irisFil: [0.78, 0.006],
+  ringLife: 0.05,
+  ringArc: [1.3, 0.82],
+  ringWidth: 0.145,
+  irisGain: [0.85, 0.5],
+  irisRadius: [0.05, 0.26],
+  irisFil: [0.88, 0.005],
   irisFlow: [0.14, 0.65],
   // The links are superseded by the iris. Kept at zero rather than deleted: the
   // pass is sound and a network may be wanted on another body.
   glyphGain: [0.34, 0.22],
-  glyphRadius: [0.62, 1.16],
+  glyphRadius: [0.66, 0.94],
   glyphSize: [0.055, 0.008],
   glyphSpin: [0.026, 0.55],
   glyphDensity: [0.72, 0.55],
-  rings: 5,
+  rings: 2,
   swirl: [0.115, 0],
   linkGain: [0, 0],
+  reverb: [1.9, 0.22, 0.85, 1.35],
   linkBow: [0.158, 0.2],
   linkRange: 0.6,
   drawGain: [1, 1],
@@ -341,7 +360,7 @@ export const JARVIS_TUNING: JarvisTuning = {
   core: [1, 1],
   outerGain: [1.15, 0.55],
   outerStreak: [0.0018, 0],
-  outerLimb: [2.4, 5.4],
+  outerLimb: [1.9, 2.3],
   outerPace: -0.55,
   starburst: 1,
   eye: [1, 1.5, 0.34, 15],
@@ -365,6 +384,7 @@ export const ULTRON_TUNING: UltronTuning = {
   facetSize: 0.020,
   core: [0.13, 0.17],
   eye: [1, 1, 0, 60],
+  reverb: [1.7, 0.26, 0.8, 1.4],
   petal: 0.3,
   veinLimb: [0.30, 0.95],
   crackLimb: [0.36, 0.88],

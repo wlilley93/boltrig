@@ -104,6 +104,7 @@ const LEGEND: Record<string, readonly string[]> = {
   // ---- The eye ------------------------------------------------------------
   core: ["heart brightness", "×voice"],
   eye: ["pupil", "iris aura", "lens ring radius", "aura width"],
+  reverb: ["front SPEED", "echo spacing", "decay", "reflect radius"],
   starburst: ["horizontal flare"],
   // ---- Ultron: the neurons ------------------------------------------------
   dendriteGain: ["pathway brightness", "×voice"],
@@ -145,6 +146,10 @@ const RANGE_AT: Record<string, [number, number, number]> = {
   // An EXPONENT, not a gain: 60 is tight and 8 is broad, so it needs a range of
   // its own or the slider tops out an order of magnitude below anything useful.
   "eye:3": [4, 90, 1],
+  // Spacing and decay are seconds and per-second, not gains.
+  "reverb:1": [0.04, 1.2, 0.02],
+  "reverb:2": [0.1, 3, 0.02],
+  "reverb:3": [0.4, 2.4, 0.02],
 };
 
 /** Slider ranges. A number with no entry gets 0..1, which is right for a gain. */
@@ -170,6 +175,7 @@ const RANGE: Record<string, [number, number, number]> = {
   ringLife: [0, 0.4, 0.005],
   ringWidth: [0.002, 0.18, 0.002],
   eye: [0, 2.2, 0.02],
+  reverb: [0, 4, 0.05],
   irisRadius: [0.02, 1.2, 0.01],
   irisFil: [0, 1, 0.02],
   irisFlow: [0, 0.8, 0.005],
@@ -336,6 +342,8 @@ function renderMode(at: Slot): BodyMode {
 const slotKey = (which: string, at: Slot): string => `${which}.${at}`;
 
 let renderer: JarvisNeuralRenderer | UltronRenderer | null = null;
+/** Whether the arrival has already been shown this page load. */
+let introPlayed = false;
 let tuning: Tuning = clone(JARVIS_TUNING);
 let shipped: Tuning = JARVIS_TUNING;
 let body: "jarvis" | "ultron" = "jarvis";
@@ -397,7 +405,12 @@ function mount(): void {
   // easing TOWARD -- the saved look if there is one, not the shipped preset -- and
   // then the draw-in runs from the arrival state to that. Skipping the push would
   // animate to the wrong destination and then jump when the first slider moved.
-  renderer.intro();
+  // ONCE PER PAGE. mount() also runs on a change of body, and replaying the
+  // arrival there was the same complaint one level down.
+  if (!introPlayed) {
+    renderer.intro();
+    introPlayed = true;
+  }
   loop();
 }
 
@@ -606,6 +619,9 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "6 · The eye — core and composite", fields: [
     "core", "eye", "starburst", "petal",
   ] },
+  { title: "6 · Voice reverberation — how speech crosses the body", fields: [
+    "reverb",
+  ] },
 ];
 
 /**
@@ -665,6 +681,7 @@ const TITLES: Record<string, string> = {
   facetLimb: "How much the facets favour the rim",
   core: "How bright the heart is",
   eye: "The eye — pupil, iris and lens ring",
+  reverb: "How the voice rings through the body",
   starburst: "Horizontal flare across the middle",
   petal: "How many bloom lobes",
   ...Object.fromEntries(Object.entries(PHENO_TITLES)
@@ -1162,7 +1179,17 @@ $("mode").addEventListener("change", (event) => {
   // The mode select drives BOTH the render state and which preset is loaded.
   // Two controls for those would be two things to forget to line up.
   slot = (event.target as HTMLSelectElement).value as Slot;
-  mount();
+  // A TRANSITION, NOT A REMOUNT. This used to call mount(), which destroys the
+  // renderer, rebuilds it and plays the arrival -- so every change of mode sent the
+  // body back out to twice the radius and drew it in again. Changing mode is a
+  // response, not an introduction; the arrival happens once, on load.
+  shipped = shippedFor(body, slot);
+  tuning = saved(slotKey(body, slot), shipped);
+  for (const id of Object.keys(sliderDom)) delete sliderDom[id];
+  lfos = savedLfos(slotKey(body, slot));
+  buildControls();
+  remember(slotKey(body, slot), tuning);
+  renderer?.transitionTo(clone(tuning) as never);
 });
 $("save").addEventListener("click", () => { void savePreset(); });
 $("voicePlay").addEventListener("click", () => {

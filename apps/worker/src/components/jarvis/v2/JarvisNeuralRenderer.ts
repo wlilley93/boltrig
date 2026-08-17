@@ -68,6 +68,7 @@ import {
 import { JARVIS_TUNING, type JarvisTuning } from "../../canvas/bodyTuning";
 import {
   INTRO_SECONDS,
+  TRANSITION_SECONDS,
   applyPulses,
   easeFactor,
   easeTuning,
@@ -196,6 +197,20 @@ export class JarvisNeuralRenderer {
     this.introLeft = INTRO_SECONDS;
   }
 
+  /**
+   * Move to a new look by EASING to it, without replaying the arrival.
+   *
+   * The entry animation belongs to arriving, and it was firing on every change of
+   * mode -- so switching from listening to thinking sent him back out to twice the
+   * radius and gathered him in again, which reads as being reintroduced rather than
+   * as changing his mind. This keeps wherever he currently is as the starting point
+   * and travels from there.
+   */
+  transitionTo(next: JarvisTuning, seconds = TRANSITION_SECONDS): void {
+    this.tuning = next;
+    this.introLeft = Math.max(this.introLeft, seconds);
+  }
+
 
   mount(host: HTMLElement): void {
     this.host = host;
@@ -247,12 +262,31 @@ export class JarvisNeuralRenderer {
   }
 
   update(state: JarvisStageState): void {
-    // An onset RESTARTS the travelling wave rather than adding to it: two
-    // syllables close together should send two waves, not one twice as strong.
+    // AN ONSET TOPS THE RING UP; it only restarts it once the ring has died.
+    //
+    // It used to reset waveT to 0 on every onset, on the reasoning that two
+    // syllables should send two waves rather than one twice as strong. That is
+    // right for a single travelling front and wrong now that the front REFLECTS:
+    // resetting the clock puts it back at the centre before it has reached the
+    // shell, so it never completes a round trip and speech pings once per syllable
+    // however long the reverb tail is set to. Measured as a val trace that was flat
+    // between a handful of large spikes -- the shape of a ping, not a ring.
+    //
+    // So a syllable arriving into a live ring re-excites it in place: the clock
+    // keeps running, the front keeps bouncing, and the amplitude is topped up
+    // rather than replaced. Only silence long enough for the ring to fade below a
+    // quarter starts a fresh front, which is what makes the first word of a
+    // sentence land differently from the fifth.
     const onset = typeof state.onset === "number" ? state.onset : 0;
-    if (onset > 0.35 && this.waveT > 0.18) {
-      this.waveT = 0;
-      this.waveAmp = Math.min(1, onset);
+    if (onset > 0.35) {
+      if (this.waveAmp < 0.25) {
+        this.waveT = 0;
+        this.waveAmp = Math.min(0.85, onset);
+      } else if (this.waveT > 0.12) {
+        // Capped below full: a fast run of syllables kept topping this to 1 and
+        // held it there, which is the heave rather than the ring.
+        this.waveAmp = Math.min(0.72, this.waveAmp + onset * 0.4);
+      }
     }
     const bands = state.bands;
     if (bands && bands.length === 8) {
@@ -314,6 +348,11 @@ export class JarvisNeuralRenderer {
       shown = this.live;
     } else if (this.tuning) {
       shown = this.tuning;
+      // KEEP `live` ON WHAT IS ACTUALLY DRAWN while pinned. Otherwise it holds
+      // whatever it was when the last ease finished, and the next transition starts
+      // from that stale value rather than from the look on screen -- so a change of
+      // mode would jump backwards before travelling forwards.
+      this.live = this.tuning;
     } else {
       const target = jarvisModeTuning(mode);
       // Reduced motion gets the destination and none of the journey: the entry
@@ -370,7 +409,14 @@ export class JarvisNeuralRenderer {
     this.waveT += dt;
     // The wave decays rather than being switched off, so the last syllable of a
     // sentence finishes crossing the body.
-    this.waveAmp *= Math.exp(-dt * 2.2);
+    // SLOW, so the shader's reverb decay is what governs the ring.
+    //
+    // At 2.2 per second this envelope was down to 11% within a second, which killed
+    // every front before it could reach the shell and come back -- so the
+    // reverberation existed in the arithmetic and was never seen. There are two
+    // decays in this system and only one of them should be doing the shaping: this
+    // one keeps the excitation alive, uReverb.z decides how long it rings.
+    this.waveAmp *= Math.exp(-dt * 0.5);
 
     const mode = this.state?.mode ?? "standby";
     const level = Math.min(1, Math.max(0, this.state?.level ?? 0));

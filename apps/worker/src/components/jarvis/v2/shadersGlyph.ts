@@ -109,7 +109,7 @@ void main() {
   // looking printed.
   vAmp *= 1.0 - uGlyphDensity.y * hash(vec3(float(mark) * 0.53, flayer, 7.0));
   vAmp *= 0.70 + 0.30 * uEnergy;
-  vAmp *= 1.0 + 2.2 * pulse(q) + 0.3 * uSwell;
+  vAmp *= 1.0 + 2.3 * pulse(q) + 0.28 * uSwell;
 
   vCell = vec2(along, across);
   gl_Position = project(q, uAspect);

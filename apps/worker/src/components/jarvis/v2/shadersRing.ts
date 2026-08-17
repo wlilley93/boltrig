@@ -209,7 +209,7 @@ void main() {
   vAmp *= depthFade(q);
   // The beams flare as the front reaches them, which is what makes the pulse read
   // as leaving the body rather than happening inside it.
-  vAmp *= 1.0 + 4.5 * pulse(q) + 0.4 * uSwell;
+  vAmp *= 1.0 + 2.9 * pulse(q) + 0.3 * uSwell;
 
   vAcross = across;
   // Where this segment sits along its own beam, so the fragment can cap the ends.
@@ -346,7 +346,7 @@ void main() {
   // The data in transit gets the circuitry: migrating particles carry brighter
   // shards than the resident interior does.
   vFade *= isMigrating(uv) ? 1.0 : 0.45;
-  vFade *= 1.0 + 3.0 * pulse(p) + 0.5 * uSwell;
+  vFade *= 1.0 + 2.2 * pulse(p) + 0.35 * uSwell;
 
   float size = uSize * (0.6 + 0.8 * hash(vec3(uv * 11.1, 9.0)));
   vec2 offset = (dir * vLocal.x * 2.0 + perp * vLocal.y) * size;

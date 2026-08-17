@@ -138,6 +138,15 @@ export const EASE_SECONDS = 1.6;
  */
 export const INTRO_SECONDS = 4.5;
 
+/**
+ * How long a change of MODE takes, as distinct from an arrival.
+ *
+ * Much shorter than the intro: arriving is an event and changing mode is a
+ * response, so a mode change that took four and a half seconds would still be
+ * finishing by the time the state it was heading for had passed.
+ */
+export const TRANSITION_SECONDS = 1.5;
+
 /** The per-frame blend factor for a time-constant ease. */
 export function easeFactor(dt: number): number {
   return 1 - Math.exp(-Math.max(0, dt) / EASE_SECONDS);

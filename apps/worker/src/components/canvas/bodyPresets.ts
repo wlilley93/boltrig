@@ -37,6 +37,9 @@ export const JARVIS_ARRIVAL: JarvisTuning = {
   rings: 1,
   swirl: [0.105, 0],
   linkGain: [0, 0],
+  // Still on arrival: the draw-in is the animation, and a wavefront crossing it
+  // would compete with the gather.
+  reverb: [0.9, 0.4, 1.2, 1.35],
   linkBow: [0.158, 0.2],
   linkRange: 0.6,
   drawGain: [1, 1],
@@ -66,101 +69,111 @@ export const JARVIS_ARRIVAL: JarvisTuning = {
  * that still looks like last month.
  */
 export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
-  // Ticking over. Rings nearly still, network quiet, heart low. A waiting
-  // instrument should look like it could wait all day.
+  // IDLE, AND IT BREATHES. Not "everything turned down": a body that is merely dim
+  // when idle reads as switched off, and the pulse table below gives this mode more
+  // simultaneous motion than any other precisely because there is nothing else
+  // happening to look at. The rings turn slowest here and take longest to come and
+  // go, so the silhouette changes over twenty seconds rather than five.
   standby: {
-    swirl: [0.055, 0],
-    ringGain: [0.42, 0.20],
-    ringSpin: [0.018, 0.006],
-    ringLife: 0.045,
-    ringArc: [3, 0.36],
-    irisGain: [0.4, 0.22],
-    irisFlow: [0.07, 0.5],
-    glyphGain: [0.2, 0.12],
-    glyphDensity: [0.5, 0.6],
-    linkGain: [0, 0],
-    core: [0.55, 0.30],
-    shardGain: [0.55, 0.20],
-    outerGain: [0.7, 0.3],
-    outerPace: -0.68,
+    swirl: [0.05, 0],
+    ringGain: [0.58, 0.2],
+    ringSpin: [0.008, 0.003],
+    ringLife: 0.028,
+    ringArc: [1.15, 0.74],
+    ringWidth: 0.125,
+    irisGain: [0.5, 0.2],
+    irisFlow: [0.05, 0.45],
+    glyphGain: [0.16, 0.1],
+    glyphDensity: [0.42, 0.62],
+    outerGain: [0.62, 0.24],
+    outerPace: -0.72,
+    core: [0.55, 0.3],
+    shardGain: [0.42, 0.16],
+    // A slow, wide swell rather than a ring: the front barely outruns the body, so
+    // an idle pulse reads as the whole thing breathing.
+    reverb: [0.85, 0.42, 0.5, 1.3],
   },
-  // Turned toward you: rings pick up, the network opens and reaches further,
-  // but nothing is being computed yet so the shards stay down.
+  // Turned toward you. The iris opens first -- that is the part of him that looks
+  // at things -- and the rings pick up a little without hurrying.
   listening: {
-    swirl: [0.085, 0],
-    ringGain: [0.58, 0.34],
-    ringSpin: [0.032, 0.009],
-    ringLife: 0.075,
-    ringArc: [4, 0.42],
-    irisGain: [0.58, 0.34],
-    irisFlow: [0.11, 0.6],
-    glyphGain: [0.3, 0.2],
-    glyphDensity: [0.66, 0.55],
-    linkGain: [0, 0],
-    linkRange: 0.72,
-    core: [0.78, 0.50],
-    shardGain: [0.65, 0.30],
-    outerGain: [0.95, 0.45],
-    outerPace: -0.6,
+    swirl: [0.075, 0],
+    ringGain: [0.7, 0.3],
+    ringSpin: [0.013, 0.004],
+    ringLife: 0.04,
+    ringArc: [1.25, 0.78],
+    irisGain: [0.95, 0.55],
+    irisRadius: [0.05, 0.3],
+    irisFil: [0.92, 0.005],
+    irisFlow: [0.1, 0.6],
+    glyphGain: [0.26, 0.16],
+    glyphDensity: [0.6, 0.55],
+    outerGain: [0.85, 0.4],
+    outerPace: -0.62,
+    core: [0.75, 0.48],
+    shardGain: [0.5, 0.24],
+    reverb: [1.25, 0.34, 0.68, 1.34],
   },
-  // The network is the point. Pathways brighten and WANDER further -- the one
-  // mode where the bow is doing visible work.
+  // The inscriptions and the iris do the work: this is the mode that is reading
+  // something. The flow through the iris quickens and more marks light.
   thinking: {
-    swirl: [0.125, 0],
-    linkGain: [0, 0],
-    linkBow: [0.235, 0.31],
-    linkRange: 0.80,
-    ringGain: [0.55, 0.32],
-    ringSpin: [0.040, 0.012],
-    ringLife: 0.10,
-    outerGain: [1.1, 0.5],
-    outerPace: -0.48,
-    ringArc: [4, 0.48],
-    irisGain: [0.72, 0.46],
-    irisFil: [0.92, 0.006],
-    irisFlow: [0.22, 0.75],
-    glyphGain: [0.46, 0.3],
+    swirl: [0.105, 0],
+    ringGain: [0.72, 0.34],
+    ringSpin: [0.02, 0.006],
+    ringLife: 0.058,
+    irisGain: [1.05, 0.6],
+    irisFil: [0.96, 0.005],
+    irisFlow: [0.24, 0.78],
+    glyphGain: [0.48, 0.3],
     glyphSpin: [0.05, 0.7],
-    glyphDensity: [0.88, 0.45],
-    core: [0.88, 0.70],
+    glyphDensity: [0.92, 0.42],
+    outerGain: [1.0, 0.46],
+    outerPace: -0.5,
+    core: [0.86, 0.66],
+    shardGain: [0.72, 0.34],
+    reverb: [1.7, 0.28, 0.78, 1.34],
   },
-  // Circuitry in transit: the shards lead and the rings turn like platters.
+  // Circuitry in transit. The shards lead, the rings turn like platters and come
+  // and go fastest, and the outer shell keeps closer to the interior's pace.
   working: {
-    swirl: [0.16, 0],
-    ringGain: [0.72, 0.44],
-    ringSpin: [0.075, 0.020],
-    ringLife: 0.14,
-    ringArc: [5, 0.54],
-    irisGain: [0.66, 0.4],
-    irisFlow: [0.18, 0.7],
+    swirl: [0.14, 0],
+    ringGain: [0.86, 0.46],
+    ringSpin: [0.034, 0.011],
+    ringLife: 0.085,
+    ringArc: [1.6, 0.86],
+    ringWidth: 0.16,
+    irisGain: [0.9, 0.5],
+    irisFlow: [0.2, 0.62],
     glyphGain: [0.42, 0.28],
     glyphSpin: [0.042, 0.6],
-    glyphDensity: [0.8, 0.5],
-    ringWidth: 0.072,
-    shardGain: [1.18, 0.60],
+    outerGain: [1.15, 0.55],
+    outerPace: -0.34,
+    shardGain: [1.18, 0.6],
     shardStride: 9,
-    outerGain: [1.25, 0.6],
-    outerPace: -0.4,
-    linkGain: [0, 0],
+    core: [0.9, 0.72],
+    reverb: [2.1, 0.24, 0.88, 1.36],
   },
-  // Everything present and the HEART is what moves: pulsedCore oscillates the
-  // energy half against the voice bands rather than merely raising it.
+  // SPEAKING, AND IT REVERBERATES. The distinguishing setting is not brightness --
+  // it is the reverb's DECAY, at 0.4 against standby's 0.5 and working's 0.88. A
+  // slow decay means each front survives several reflections, so a syllable is
+  // still crossing the body when the next one arrives and the whole thing rings
+  // rather than pinging. The reach is pushed past the silhouette so the front turns
+  // around out at the shell and comes back through everything.
   speaking: {
-    swirl: [0.135, 0],
-    ringGain: [0.78, 0.52],
-    ringSpin: [0.055, 0.016],
-    ringLife: 0.11,
-    ringArc: [4, 0.5],
-    irisGain: [0.7, 0.48],
-    irisFlow: [0.15, 0.68],
-    glyphGain: [0.36, 0.26],
-    glyphDensity: [0.74, 0.52],
-    ringWidth: 0.068,
-    linkGain: [0, 0],
+    swirl: [0.115, 0],
+    ringGain: [0.92, 0.55],
+    ringSpin: [0.022, 0.007],
+    ringLife: 0.062,
+    ringArc: [1.35, 0.84],
+    ringWidth: 0.155,
+    irisGain: [1.1, 0.7],
+    irisFlow: [0.18, 0.72],
+    glyphGain: [0.4, 0.3],
+    glyphDensity: [0.78, 0.5],
+    outerGain: [1.2, 0.62],
+    outerPace: -0.44,
     core: [1, 1],
     shardGain: [1, 0.475],
-    outerGain: [1.2, 0.58],
-    outerPace: -0.5,
+    reverb: [2.45, 0.15, 0.4, 1.52],
   },
 };
 
@@ -186,39 +199,63 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
  * which is worse than not moving at all.
  */
 export const JARVIS_PULSES: Record<BodyMode, readonly Pulse[]> = {
+  // THE MOST CROWDED TABLE, deliberately. Idle is the mode a person actually looks
+  // at for minutes at a time, so it needs the most things moving and the least
+  // amplitude in any of them: eight terms between 4% and 12%, on rates from a
+  // sixty-second cycle down to a twenty-second one. Nothing here is fast enough to
+  // catch the eye on its own, which is the entire point.
   standby: [
-    { field: "ringGain", index: 0, depth: 0.10, rate: 0.041, phase: 0.00 },
-    { field: "core", index: 0, depth: 0.07, rate: 0.029, phase: 0.31 },
-    { field: "swirl", index: 0, depth: 0.04, rate: 0.023, phase: 0.62 },
-    { field: "ringBeam", index: 0, depth: 0.08, rate: 0.037, phase: 0.17 },
+    { field: "ringGain", index: 0, depth: 0.12, rate: 0.023, phase: 0.00 },
+    { field: "ringWidth", index: 0, depth: 0.10, rate: 0.017, phase: 0.21 },
+    { field: "irisGain", index: 0, depth: 0.11, rate: 0.031, phase: 0.38 },
+    { field: "irisFlow", index: 0, depth: 0.09, rate: 0.019, phase: 0.57 },
+    { field: "core", index: 0, depth: 0.08, rate: 0.029, phase: 0.72 },
+    { field: "outerGain", index: 0, depth: 0.10, rate: 0.013, phase: 0.86 },
+    { field: "glyphDensity", index: 0, depth: 0.09, rate: 0.037, phase: 0.11 },
+    { field: "swirl", index: 0, depth: 0.04, rate: 0.021, phase: 0.64 },
   ],
   listening: [
-    { field: "ringGain", index: 0, depth: 0.09, rate: 0.067, phase: 0.00 },
-    { field: "linkGain", index: 0, depth: 0.14, rate: 0.053, phase: 0.27 },
-    { field: "core", index: 0, depth: 0.08, rate: 0.043, phase: 0.55 },
-    { field: "linkRange", index: 0, depth: 0.06, rate: 0.031, phase: 0.79 },
-    { field: "ringSpin", index: 0, depth: 0.04, rate: 0.049, phase: 0.13 },
+    { field: "irisGain", index: 0, depth: 0.12, rate: 0.053, phase: 0.00 },
+    { field: "irisFlow", index: 0, depth: 0.14, rate: 0.037, phase: 0.19 },
+    { field: "ringGain", index: 0, depth: 0.09, rate: 0.043, phase: 0.35 },
+    { field: "core", index: 0, depth: 0.09, rate: 0.029, phase: 0.52 },
+    { field: "outerGain", index: 0, depth: 0.11, rate: 0.023, phase: 0.68 },
+    { field: "glyphDensity", index: 0, depth: 0.10, rate: 0.061, phase: 0.81 },
+    { field: "ringWidth", index: 0, depth: 0.07, rate: 0.031, phase: 0.94 },
+    { field: "swirl", index: 0, depth: 0.04, rate: 0.027, phase: 0.44 },
   ],
   thinking: [
-    { field: "linkGain", index: 0, depth: 0.18, rate: 0.089, phase: 0.00 },
-    { field: "linkBow", index: 0, depth: 0.16, rate: 0.061, phase: 0.23 },
-    { field: "linkRange", index: 0, depth: 0.09, rate: 0.047, phase: 0.48 },
-    { field: "ringGain", index: 0, depth: 0.10, rate: 0.073, phase: 0.66 },
-    { field: "core", index: 0, depth: 0.09, rate: 0.037, phase: 0.84 },
-    { field: "swirl", index: 0, depth: 0.04, rate: 0.029, phase: 0.09 },
+    { field: "glyphDensity", index: 0, depth: 0.16, rate: 0.089, phase: 0.00 },
+    { field: "irisFlow", index: 0, depth: 0.18, rate: 0.071, phase: 0.17 },
+    { field: "irisGain", index: 0, depth: 0.12, rate: 0.047, phase: 0.31 },
+    { field: "glyphGain", index: 0, depth: 0.14, rate: 0.101, phase: 0.46 },
+    { field: "ringGain", index: 0, depth: 0.09, rate: 0.059, phase: 0.63 },
+    { field: "core", index: 0, depth: 0.11, rate: 0.037, phase: 0.77 },
+    { field: "outerGain", index: 0, depth: 0.10, rate: 0.029, phase: 0.90 },
+    { field: "shardGain", index: 0, depth: 0.12, rate: 0.113, phase: 0.08 },
+    { field: "swirl", index: 0, depth: 0.04, rate: 0.041, phase: 0.55 },
   ],
   working: [
-    { field: "shardGain", index: 0, depth: 0.13, rate: 0.113, phase: 0.00 },
-    { field: "ringSpin", index: 0, depth: 0.04, rate: 0.071, phase: 0.35 },
-    { field: "ringGain", index: 0, depth: 0.08, rate: 0.091, phase: 0.58 },
-    { field: "swirl", index: 0, depth: 0.04, rate: 0.043, phase: 0.72 },
-    { field: "linkGain", index: 0, depth: 0.10, rate: 0.059, phase: 0.19 },
+    { field: "shardGain", index: 0, depth: 0.15, rate: 0.127, phase: 0.00 },
+    { field: "ringGain", index: 0, depth: 0.11, rate: 0.083, phase: 0.22 },
+    { field: "ringWidth", index: 0, depth: 0.10, rate: 0.061, phase: 0.41 },
+    { field: "glyphGain", index: 0, depth: 0.12, rate: 0.109, phase: 0.58 },
+    { field: "irisFlow", index: 0, depth: 0.13, rate: 0.091, phase: 0.73 },
+    { field: "outerGain", index: 0, depth: 0.11, rate: 0.047, phase: 0.87 },
+    { field: "core", index: 0, depth: 0.09, rate: 0.067, phase: 0.13 },
+    { field: "ringSpin", index: 0, depth: 0.04, rate: 0.053, phase: 0.36 },
   ],
+  // Shallower than the others, and that is not an oversight. While he is speaking
+  // the REVERB is what moves the body, and a pulse table competing with it makes
+  // both read as noise. These keep the parts the wavefront does not reach alive.
   speaking: [
-    { field: "ringGain", index: 0, depth: 0.08, rate: 0.079, phase: 0.00 },
-    { field: "ringBeam", index: 0, depth: 0.07, rate: 0.053, phase: 0.29 },
-    { field: "linkGain", index: 0, depth: 0.11, rate: 0.067, phase: 0.51 },
-    { field: "swirl", index: 0, depth: 0.04, rate: 0.037, phase: 0.74 },
+    { field: "ringWidth", index: 0, depth: 0.08, rate: 0.073, phase: 0.00 },
+    { field: "ringGain", index: 0, depth: 0.07, rate: 0.049, phase: 0.27 },
+    { field: "irisGain", index: 0, depth: 0.09, rate: 0.061, phase: 0.48 },
+    { field: "glyphDensity", index: 0, depth: 0.08, rate: 0.037, phase: 0.66 },
+    { field: "outerGain", index: 0, depth: 0.08, rate: 0.029, phase: 0.83 },
+    { field: "irisFlow", index: 0, depth: 0.10, rate: 0.083, phase: 0.05 },
+    { field: "swirl", index: 0, depth: 0.03, rate: 0.031, phase: 0.59 },
   ],
 };
 
@@ -257,6 +294,7 @@ export const ULTRON_ARRIVAL: UltronTuning = {
   // No iris, ever: his brief is a crystalline cloud. Width 60 is the pre-eye
   // value, so his centre is exactly what it was.
   eye: [1, 1, 0, 60],
+  reverb: [0.9, 0.4, 1.2, 1.4],
   petal: 0.3,
   veinLimb: [0.30, 0.95],
   crackLimb: [0.36, 0.88],
@@ -273,77 +311,81 @@ export const ULTRON_ARRIVAL: UltronTuning = {
  * agitated. Ultron talks like he already knows the answer.
  */
 export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
-  // The least exciting state, and deliberately so. The crystal is nearly still,
-  // the pathways dim, the heart a low ember.
+  // IDLE, AND IT BREATHES -- the same principle as Jarvis, in his own vocabulary.
+  // The crystal barely turns, the neurons are quiet, and the pulse table carries
+  // eight shallow terms so that a body nobody is talking to is still plainly alive.
   standby: {
-    dendriteGain: [0.34, 0.20],
-    dendrite: [0.30, 0.46, 0.78, 0.018],
+    dendriteGain: [0.34, 0.2],
+    dendrite: [0.30, 0.46, 0.78, 0.016],
     bead: [6.0, 0.42],
-    swirl: [0.09, 0.12],
-    facetSpin: [0.05, 0.14],
-    veinGain: [0.11, 0.10],
+    swirl: [0.08, 0.1],
+    facetSpin: [0.04, 0.12],
+    veinGain: [0.11, 0.1],
     crackGain: [0.16, 0.12],
-    facetGain: [0.20, 0.14],
+    facetGain: [0.2, 0.14],
     core: [0.07, 0.09],
-    outerShell: [1.45, 0.20, 0.22],
+    outerShell: [1.45, 0.2, 0.2],
+    reverb: [0.8, 0.44, 0.48, 1.34],
   },
-  // Attending. The shell brightens -- he is listening with the whole surface --
-  // and the pathways open, but the interior stays composed.
   listening: {
     dendriteGain: [0.52, 0.36],
-    dendrite: [0.33, 0.50, 0.78, 0.026],
-    bead: [6.5, 0.50],
-    swirl: [0.16, 0.24],
-    facetSpin: [0.09, 0.26],
+    dendrite: [0.33, 0.5, 0.78, 0.024],
+    bead: [6.5, 0.5],
+    swirl: [0.15, 0.22],
+    facetSpin: [0.08, 0.24],
     veinGain: [0.18, 0.16],
-    crackGain: [0.26, 0.20],
-    facetGain: [0.30, 0.22],
-    core: [0.10, 0.13],
-    outerShell: [1.45, 0.22, 0.36],
+    crackGain: [0.26, 0.2],
+    facetGain: [0.3, 0.22],
+    core: [0.1, 0.13],
+    outerShell: [1.45, 0.22, 0.34],
+    reverb: [1.2, 0.36, 0.66, 1.36],
   },
   // THE BUSIEST STATE. Every pass is up, the crystal turns fastest, the pathways
-  // reach their longest and wander their widest, and the fracture lines spread.
+  // reach furthest and wander widest, the fracture lines spread.
   thinking: {
     dendriteGain: [0.86, 0.62],
-    dendrite: [0.42, 0.58, 0.72, 0.058],
-    dendriteTip: [1.10, 0.34],
+    dendrite: [0.42, 0.58, 0.72, 0.055],
+    dendriteTip: [1.1, 0.34],
     bead: [8.5, 0.62],
-    swirl: [0.34, 0.52],
-    facetSpin: [0.19, 0.52],
-    veinGain: [0.30, 0.26],
-    veinStreak: [0.135, 0.100],
+    swirl: [0.32, 0.5],
+    facetSpin: [0.18, 0.5],
+    veinGain: [0.3, 0.26],
+    veinStreak: [0.135, 0.1],
     crackGain: [0.44, 0.32],
     crackRange: 0.26,
     facetGain: [0.46, 0.32],
     core: [0.17, 0.22],
+    reverb: [1.65, 0.3, 0.76, 1.36],
   },
-  // Processing rather than reasoning: the facets and fracture lines lead, the
-  // dendrites hold steady. Busy, but ordered -- it is executing, not searching.
+  // Executing rather than searching: facets and fractures lead, the neurons hold.
   working: {
     dendriteGain: [0.66, 0.46],
-    dendrite: [0.36, 0.52, 0.76, 0.032],
+    dendrite: [0.36, 0.52, 0.76, 0.03],
     bead: [9.5, 0.58],
-    swirl: [0.26, 0.40],
-    facetSpin: [0.15, 0.44],
+    swirl: [0.25, 0.38],
+    facetSpin: [0.14, 0.42],
     veinGain: [0.26, 0.22],
-    crackGain: [0.40, 0.30],
-    facetGain: [0.42, 0.30],
+    crackGain: [0.4, 0.3],
+    facetGain: [0.42, 0.3],
     facetSize: 0.024,
     core: [0.14, 0.18],
+    reverb: [2.05, 0.26, 0.86, 1.38],
   },
-  // Structured, not crazy. Deliberately CALMER than thinking: the pathways settle
-  // into an even bead train, the crystal turns steadily, and the heart is the only
-  // thing really moving -- pulsedCore drives it from the voice bands.
+  // STRUCTURED, AND RINGING. Calmer in its parts than thinking -- an even bead
+  // train, a steady crystal -- while the reverb's slow decay carries the voice
+  // through the whole body. Something that thrashes while it talks reads as
+  // agitated; Ultron talks like he already knows the answer.
   speaking: {
     dendriteGain: [0.62, 0.48],
-    dendrite: [0.34, 0.52, 0.78, 0.028],
+    dendrite: [0.34, 0.52, 0.78, 0.026],
     bead: [7.0, 0.55],
-    swirl: [0.20, 0.30],
-    facetSpin: [0.11, 0.34],
-    veinGain: [0.22, 0.20],
+    swirl: [0.19, 0.28],
+    facetSpin: [0.1, 0.32],
+    veinGain: [0.22, 0.2],
     crackGain: [0.34, 0.26],
     facetGain: [0.36, 0.26],
     core: [0.16, 0.24],
+    reverb: [2.35, 0.16, 0.42, 1.54],
   },
 };
 
@@ -358,47 +400,55 @@ export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
  */
 export const ULTRON_PULSES: Record<BodyMode, readonly Pulse[]> = {
   standby: [
-    { field: "dendriteGain", index: 0, depth: 0.11, rate: 0.031, phase: 0.00 },
-    { field: "facetGain", index: 0, depth: 0.09, rate: 0.023, phase: 0.28 },
-    { field: "core", index: 0, depth: 0.10, rate: 0.019, phase: 0.53 },
-    { field: "bead", index: 1, depth: 0.08, rate: 0.043, phase: 0.71 },
-    { field: "outerShell", index: 2, depth: 0.09, rate: 0.017, phase: 0.14 },
+    { field: "dendriteGain", index: 0, depth: 0.12, rate: 0.023, phase: 0.00 },
+    { field: "facetGain", index: 0, depth: 0.10, rate: 0.017, phase: 0.19 },
+    { field: "crackGain", index: 0, depth: 0.09, rate: 0.031, phase: 0.36 },
+    { field: "core", index: 0, depth: 0.11, rate: 0.013, phase: 0.54 },
+    { field: "bead", index: 1, depth: 0.09, rate: 0.037, phase: 0.69 },
+    { field: "outerShell", index: 2, depth: 0.10, rate: 0.019, phase: 0.83 },
+    { field: "veinGain", index: 0, depth: 0.08, rate: 0.027, phase: 0.96 },
+    { field: "swirl", index: 0, depth: 0.04, rate: 0.021, phase: 0.42 },
   ],
   listening: [
-    { field: "dendriteGain", index: 0, depth: 0.12, rate: 0.053, phase: 0.00 },
-    { field: "crackGain", index: 0, depth: 0.10, rate: 0.041, phase: 0.22 },
-    { field: "facetGain", index: 0, depth: 0.09, rate: 0.061, phase: 0.44 },
-    { field: "core", index: 0, depth: 0.11, rate: 0.029, phase: 0.63 },
-    { field: "outerShell", index: 2, depth: 0.12, rate: 0.037, phase: 0.81 },
-    { field: "bead", index: 0, depth: 0.07, rate: 0.047, phase: 0.11 },
+    { field: "dendriteGain", index: 0, depth: 0.13, rate: 0.047, phase: 0.00 },
+    { field: "crackGain", index: 0, depth: 0.11, rate: 0.037, phase: 0.18 },
+    { field: "facetGain", index: 0, depth: 0.10, rate: 0.059, phase: 0.34 },
+    { field: "core", index: 0, depth: 0.12, rate: 0.026, phase: 0.51 },
+    { field: "outerShell", index: 2, depth: 0.13, rate: 0.031, phase: 0.67 },
+    { field: "bead", index: 0, depth: 0.08, rate: 0.043, phase: 0.82 },
+    { field: "veinGain", index: 0, depth: 0.09, rate: 0.053, phase: 0.95 },
+    { field: "swirl", index: 0, depth: 0.04, rate: 0.029, phase: 0.40 },
   ],
   thinking: [
     { field: "dendriteGain", index: 0, depth: 0.17, rate: 0.097, phase: 0.00 },
-    { field: "dendrite", index: 1, depth: 0.10, rate: 0.071, phase: 0.19 },
-    { field: "dendrite", index: 3, depth: 0.08, rate: 0.113, phase: 0.37 },
-    { field: "crackGain", index: 0, depth: 0.15, rate: 0.083, phase: 0.52 },
-    { field: "crackRange", index: 0, depth: 0.11, rate: 0.059, phase: 0.68 },
-    { field: "facetGain", index: 0, depth: 0.13, rate: 0.101, phase: 0.79 },
-    { field: "veinGain", index: 0, depth: 0.14, rate: 0.067, phase: 0.91 },
-    { field: "core", index: 0, depth: 0.12, rate: 0.043, phase: 0.07 },
-    { field: "bead", index: 0, depth: 0.09, rate: 0.089, phase: 0.26 },
+    { field: "dendrite", index: 1, depth: 0.10, rate: 0.071, phase: 0.16 },
+    { field: "dendrite", index: 3, depth: 0.08, rate: 0.113, phase: 0.31 },
+    { field: "crackGain", index: 0, depth: 0.15, rate: 0.083, phase: 0.45 },
+    { field: "crackRange", index: 0, depth: 0.11, rate: 0.059, phase: 0.59 },
+    { field: "facetGain", index: 0, depth: 0.13, rate: 0.101, phase: 0.72 },
+    { field: "veinGain", index: 0, depth: 0.14, rate: 0.067, phase: 0.85 },
+    { field: "core", index: 0, depth: 0.12, rate: 0.043, phase: 0.97 },
+    { field: "bead", index: 0, depth: 0.09, rate: 0.089, phase: 0.24 },
   ],
   working: [
-    { field: "facetGain", index: 0, depth: 0.13, rate: 0.109, phase: 0.00 },
-    { field: "crackGain", index: 0, depth: 0.12, rate: 0.079, phase: 0.24 },
-    { field: "facetSpin", index: 0, depth: 0.04, rate: 0.061, phase: 0.46 },
-    { field: "dendriteGain", index: 0, depth: 0.09, rate: 0.091, phase: 0.61 },
-    { field: "bead", index: 0, depth: 0.11, rate: 0.127, phase: 0.77 },
-    { field: "core", index: 0, depth: 0.08, rate: 0.047, phase: 0.93 },
-    { field: "veinStreak", index: 0, depth: 0.10, rate: 0.071, phase: 0.15 },
+    { field: "facetGain", index: 0, depth: 0.14, rate: 0.109, phase: 0.00 },
+    { field: "crackGain", index: 0, depth: 0.12, rate: 0.079, phase: 0.21 },
+    { field: "facetSpin", index: 0, depth: 0.04, rate: 0.061, phase: 0.39 },
+    { field: "dendriteGain", index: 0, depth: 0.10, rate: 0.091, phase: 0.56 },
+    { field: "bead", index: 0, depth: 0.12, rate: 0.127, phase: 0.71 },
+    { field: "core", index: 0, depth: 0.09, rate: 0.047, phase: 0.85 },
+    { field: "veinStreak", index: 0, depth: 0.11, rate: 0.071, phase: 0.98 },
+    { field: "facetSize", index: 0, depth: 0.08, rate: 0.053, phase: 0.32 },
   ],
+  // Shallow, because the reverb is what carries speech through him.
   speaking: [
-    { field: "dendriteGain", index: 0, depth: 0.09, rate: 0.067, phase: 0.00 },
-    { field: "facetGain", index: 0, depth: 0.08, rate: 0.049, phase: 0.31 },
-    { field: "crackGain", index: 0, depth: 0.08, rate: 0.057, phase: 0.57 },
-    { field: "veinGain", index: 0, depth: 0.09, rate: 0.039, phase: 0.72 },
-    { field: "bead", index: 1, depth: 0.07, rate: 0.083, phase: 0.88 },
-    { field: "outerShell", index: 2, depth: 0.07, rate: 0.029, phase: 0.12 },
+    { field: "dendriteGain", index: 0, depth: 0.09, rate: 0.061, phase: 0.00 },
+    { field: "facetGain", index: 0, depth: 0.08, rate: 0.047, phase: 0.28 },
+    { field: "crackGain", index: 0, depth: 0.08, rate: 0.053, phase: 0.52 },
+    { field: "veinGain", index: 0, depth: 0.09, rate: 0.037, phase: 0.7 },
+    { field: "bead", index: 1, depth: 0.07, rate: 0.079, phase: 0.86 },
+    { field: "outerShell", index: 2, depth: 0.08, rate: 0.029, phase: 0.1 },
+    { field: "core", index: 0, depth: 0.07, rate: 0.043, phase: 0.63 },
   ],
 };
 
