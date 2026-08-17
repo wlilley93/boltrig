@@ -954,7 +954,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/model_gateway.py:155		: boolean; the U
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/model_gateway.py:33		An in-memory, TTL-bounded ``conversation_id -> model`` binding.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/model_router.py:24		Choose an agent's governed endpoint for one input modality.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/permanent_runtime.py:1		Governed lazy runtime binding for permanent Chief/Department profiles.
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/personas.py:36		The persona text for a character id, or None.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/personas.py:46		The persona text for a character id, or None.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/authority.py:11		Resolve all current ceilings;
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/capability_attestations.py:31		The bounded attestation store cannot retain another immutable set.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/execution_ledger.py:1		Canonical execution-ledger persistence boundary.
@@ -1421,7 +1421,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/model_proxy_pee
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/model_proxy_peer_registry.py:115	max_cells	Bounded registry with durable logical-cell tombstones.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/model_proxy_tool_ceiling.py:367	name	The wire name of a Responses-API tool entry, or None if it has no name.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/model_gateway.py:162	disabled	The gateway's readiness `(status, reason)` when no probe is armed.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/personas.py:1	prompt_stack	Character personas, keyed by id.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/personas.py:28	registerCharacter	Add an out-of-tree character's voice.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/ports/grant_leases.py:17	expected_authority	Durable atomic operations; implementations must never persist raw bearers.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/fleet/prompt_stack.py:85	GOVERNANCE_FLOOR	is in ``GOVERNANCE_FLOOR``, which that lane never sent.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:657	hierarchy.tier2	Build the live org (CoS + heads + pump) from the manifest hierarchy (P7).
@@ -1524,6 +1524,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/model_proxy_tool
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/postgres_capability_attestations.py:26	resolve	Durable insert-once capability-attestation store backed by PostgreSQL.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/model_gateway.py:113	endpoint	Route a resolved endpoint through the gateway for a conversation.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/model_router.py:1	SensitiveDataMisrouted	The model-endpoint router guard (US-PRIV-01, SEC-12).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/personas.py:1	register_persona	Character personas: what a character sounds like, and nothing more.
 ORDINARY	SUBJECT-REACHED	comment	boltrig/fleet/pump.py:77	_maybe_learn	defined here, read once below, and set only by tests, so `_maybe_learn` has never fired
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/pump_progress.py:93	WorkPump	The pump's serving loop, instrumented.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/retention.py:108	run_retention_once	Loop :func:`run_retention_once` forever; cancellable, idle-sleeping.

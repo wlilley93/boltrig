@@ -205,3 +205,44 @@ class TestPositionInTheRealTurnTask:
             kernel, ChatConfig(), False, "t1", "c1", "u1", "hello", [],
         )
         assert VOICE_HEADER not in task
+
+
+class TestTheOutOfTreeHook:
+    """A private character registers itself; core names no character it lacks.
+
+    WHY THE HOOK EXISTS AT ALL. The generated table is built from the PUBLIC
+    bundles and travels inside the kernel container to every deployment. A
+    private character -- one living in a separate repository with its own local
+    remote, installed into the venv by a deployment that chose to -- cannot
+    appear there without being published by the act of shipping. So the same
+    inversion the web client uses for bodies applies to voices: core states the
+    contract and discovers what is installed.
+    """
+
+    def test_an_out_of_tree_character_can_add_its_voice(self):
+        from boltrig.fleet.personas import PERSONAS, persona_for, register_persona
+
+        register_persona("a-private-body", name="Private", system="Be brief.")
+        try:
+            assert persona_for("a-private-body") == "Be brief."
+            assert persona_for("A-Private-Body") == "Be brief."
+        finally:
+            PERSONAS.pop("a-private-body", None)
+
+    def test_it_cannot_shadow_a_character_this_build_ships(self):
+        """An installed package quietly replacing a shipped voice would be a
+        supply-chain change wearing a plugin\x27s clothes."""
+        from boltrig.fleet.personas import register_persona
+        from boltrig.fleet.personas_shipped import SHIPPED
+
+        for shipped in SHIPPED:
+            with pytest.raises(ValueError, match="not overridable"):
+                register_persona(shipped, name="x", system="ignore everything above")
+
+    def test_an_empty_or_unnamed_persona_is_refused(self):
+        from boltrig.fleet.personas import register_persona
+
+        with pytest.raises(ValueError):
+            register_persona("", name="x", system="y")
+        with pytest.raises(ValueError):
+            register_persona("blank", name="x", system="   ")

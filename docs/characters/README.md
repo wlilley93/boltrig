@@ -21,6 +21,15 @@ than papered over, because "the long documents live in docs/characters" is the
 claim `tests/test_persona_layer.py` makes about all of them and it is currently
 only true of one.
 
+**A private character's constitution does NOT belong here.** `personas_shipped.py`
+is generated from the bundles in this table and travels inside the kernel
+container to every deployment, so a prompt placed here is distributed by the act
+of shipping, whatever this repository's visibility. An out-of-tree character
+keeps its document in its own repository and registers its voice by calling
+`register_persona` at import — the same inversion `registerCharacter` provides
+for bodies. Core states the contract; it names no character it does not ship,
+and a deployment that has not installed that package has never heard of it.
+
 **Familiar's document arrived titled "CLAUDE VOICE".** That title was wrong and
 its author said so when supplying it. The body is kept verbatim — it is an
 authored artefact — with the correction recorded at the top of the file and the
@@ -47,15 +56,23 @@ Three hops, and until recently the last one did not exist:
 1. **The document** lives here. It is authority, not runtime text.
 2. **The compact prompt** is copied into that character's `character.json`.
    `scripts/gen_personas.py` reads every shipped bundle and writes
-   `boltrig/fleet/personas.py` — a generated table, because the kernel ships
-   without the worker's tree and cannot read the bundles at runtime.
-   `tests/test_chat_persona.py` fails if the two disagree.
+   `boltrig/fleet/personas_shipped.py` — a generated table, because the kernel
+   ships without the worker's tree and cannot read the bundles at runtime.
+   `tests/test_chat_persona.py` fails if the two disagree. The registry that
+   reads that table, `boltrig/fleet/personas.py`, is hand-written, because it
+   carries the `register_persona` hook and a regeneration would overwrite it.
 3. **The turn** picks it up from the user's `agent.character` setting, in
    `boltrig/fleet/chat_persona.py`, and prepends it to the turn task.
 
 **An id crosses the wire, never prose.** The set of personas is fixed at build
 time, so a caller cannot supply persona text and cannot reach one that was not
 shipped. An unrecognised id resolves to no persona rather than raising.
+
+**An out-of-tree character supplies its own.** `register_persona` refuses to
+shadow a shipped character — an installed package quietly replacing Jarvis's
+voice would be a supply-chain change wearing a plugin's clothes — but is
+otherwise the whole extension point. Nothing in this repository lists what is
+installed that way, which is the point of it.
 
 **It is a setting, not a request field.** A character is a user preference
 rather than a property of one message, so the voice is the same on every
