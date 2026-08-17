@@ -538,7 +538,11 @@ ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/inbound_webhook.py:107		del
 ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/builtin/inbound_webhook.py:58		A webhook payload was structurally invalid and cannot become a work item.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/inbound_webhook.py:90		check alone cannot stop a second ingest.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/jira.py:63		returns a fresh list over them so a caller can never mutate the shared table.
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/local_whisper.py:67		Same bounds as the remote STT adapters so switching provider cannot change how
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/local_whisper.py:161		WHY THE TONE IS MEASURED HERE.
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/local_whisper.py:163		a transcript cannot carry tone.
+ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/builtin/local_whisper.py:186		Measure the delivery, or None when there is nothing defensible to say.
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/local_whisper.py:204		Observed AFTER classifying, so an utterance is never measured
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/local_whisper.py:70		Same bounds as the remote STT adapters so switching provider cannot change how
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/pocket_voice.py:107		Left None on purpose.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/pocket_voice.py:68		Bounds, fail-closed, matching the vendor siblings.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/runpod.py:187		URL-quoted: a pod id with '/', '?' or '..' must not rewrite the path.
@@ -701,7 +705,12 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/distill/corpus_io.py:1		JSONL serialisatio
 ORDINARY	NO-SUBJECT	comment	boltrig/emotion/engine.py:141		Tension decays with a REAL 1.4 s half-life, never tempo-scaled.
 ORDINARY	NO-SUBJECT	comment	boltrig/emotion/engine.py:144		Attachment decays in REAL days, never tempo-scaled (0024): the bond
 ORDINARY	NO-SUBJECT	comment	boltrig/emotion/engine.py:70		Attachment (0024): REAL-days half-life (never tempo-scaled - the tension
+ORDINARY	NO-SUBJECT	docstring	boltrig/emotion/prosody.py:240		Sign changes per sample, 0..1 -- the tilt PROXY.
+ORDINARY	NO-SUBJECT	comment	boltrig/emotion/prosody.py:74		so leading and trailing room tone cannot drag the numbers.
 ORDINARY	NO-SUBJECT	comment	boltrig/emotion/relay.py:263		--- publisher thread (the ONLY place that touches the filesystem after init) ---
+ORDINARY	NO-SUBJECT	comment	boltrig/emotion/tone.py:138		resting pitch, so loudness cannot tell them apart.
+ORDINARY	NO-SUBJECT	comment	boltrig/emotion/tone.py:30		: judgement: enough that one unusually loud sentence cannot define "normal",
+ORDINARY	NO-SUBJECT	docstring	boltrig/emotion/valence.py:49		How warm the words are, -1..1, or None when there is nothing to judge.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/anchor.py:187		needs no clause here and must not get one: _record iterates the same
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/anchor.py:190		description of a janitor that cannot see the fleet.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/anchor.py:191		term would read as load-bearing while never being able to be false.
@@ -1400,6 +1409,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/camera/cache.py:61	hardware_key	Retu
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/control_workflows.py:91	GENERATED	Save a non-runnable draft under the reserved id prefix (low-consequence).
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/config/manifest.py:177	APPROVAL_TIMEOUT_SECONDS_FLOOR	``APPROVAL_TIMEOUT_SECONDS_FLOOR`` and cannot resolve differently.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/spawn_rules.py:337	capability	Resolve one policy snapshot into effective skills/routing.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/prosody.py:1	audioop	Prosody from a spoken utterance: the half of tone that words cannot carry.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:1	model.yaml	Load the emotion tables from ``libraries/emotion`` into engine dataclasses (EMO-5).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:172	None	Load and validate the three emotion YAML tables, or ``None`` on ANY failure.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:68	DEFAULT_INTERVAL_SECONDS	The configured sweep interval (seconds), or :data:`DEFAULT_INTERVAL_SECONDS`.
@@ -1478,8 +1488,8 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/workflows/scheduler_loop.py:40	next_
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/desktop.py:1	HandsRegistry	The desktop-hands adapter (source = 'builtin'), binding DH-1.
 ORDINARY	SUBJECT-REACHED	comment	boltrig/adapters/builtin/fish_audio.py:204	bearer_token	Fail closed before the request is built: when `bearer_token` yields None
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/local_whisper.py:1	allow_internal	Local whisper.cpp STT as a governed Boltrig verb.
-ORDINARY	SUBJECT-REACHED	comment	boltrig/adapters/builtin/local_whisper.py:134	bearer_token	Requiring `bearer_token` here would fail closed on the one provider that is
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/local_whisper.py:189	allow_internal	Multipart upload the base's JSON ``request()`` cannot carry.
+ORDINARY	SUBJECT-REACHED	comment	boltrig/adapters/builtin/local_whisper.py:139	bearer_token	Requiring `bearer_token` here would fail closed on the one provider that is
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/local_whisper.py:260	allow_internal	Multipart upload the base's JSON ``request()`` cannot carry.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/pocket_voice.py:195	allow_internal	The same raw path the vendor siblings use: the base's JSON ``request()`` cannot carry raw audio bytes back from TTS.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:106	allow_internal	Return a refusal reason if the fetch is not permitted, else ``None``.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:168	pinned_async_client	Resolve the URL's host and refuse it (raise) if the egress guard says so.
@@ -1503,6 +1513,9 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:1	now	The pure affe
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:197	now	Apply the ``kind`` appraisal's deltas, scaled by ``intensity``.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:220	now	The ten observable scalars (each 0..1), after decaying state to ``now``.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:266	tick	Rebuild an engine from a :meth:`snapshot` mapping, tolerantly.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/tone.py:1	Baseline	Turning prosody into a tone the emotion engine can appraise.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/tone.py:47	observe	What ordinary sounds like, for one speaker.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/valence.py:1	boltrig.emotion.tone.classify	A lexical warmth gate -- the text half of the sarcasm test, and no more.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/__init__.py:1	kernel.set_agent_invoker	The Boltrig agent fleet (Epic FLT).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/application/assignment_admission.py:58	GrantLeaseBinding.from_execution_assignment	The sole atomic, total path from trusted facts to an attested assignment.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/chat.py:276	store.mark_message_superseded	Regenerate the last assistant reply (append-plus-supersede, [2026] VJS-COUNTY 4).

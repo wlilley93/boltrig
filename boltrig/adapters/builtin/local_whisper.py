@@ -51,6 +51,9 @@ from boltrig.adapters.base import (
     VerbSpec,
 )
 from boltrig.adapters.egress import EgressBlocked, assert_egress_allowed
+from boltrig.emotion.prosody import analyse_prosody
+from boltrig.emotion.tone import Baseline, classify
+from boltrig.emotion.valence import warmth
 from boltrig.adapters.http_base import Handler, HttpAdapter
 from boltrig.adapters.http_response import (
     MAX_JSON_RESPONSE_BYTES,
@@ -112,6 +115,8 @@ class LocalWhisperAdapter(HttpAdapter):
     ) -> None:
         super().__init__(base_url=base_url, timeout=timeout)
         self._transport = transport
+        # See the voice tone section below for why these live on the instance.
+        self._baselines: dict[str, Baseline] = {}
 
     def describe(self) -> list[VerbSpec]:
         any_out = {"type": "object"}
@@ -151,6 +156,67 @@ class LocalWhisperAdapter(HttpAdapter):
     async def health(self) -> str:
         return "unknown"
 
+    # --- voice tone -----------------------------------------------------------
+    #
+    # WHY THE TONE IS MEASURED HERE. This adapter is the only place in the stack
+    # that holds the decoded waveform: everything downstream has a transcript and
+    # a transcript cannot carry tone. "Fine." typed and "Fine." snapped are the
+    # same string.
+    #
+    # It reports rather than acts. The result gains a `tone` block and the kernel
+    # decides whether to emit a voice_tone event from it -- an adapter reaching
+    # into the emotion relay directly would give a governed verb a side effect
+    # nobody reading the verb could see.
+
+    #: Per-speaker baselines, keyed by the human on whose behalf the call runs.
+    #: PER PROCESS, and that is a deliberate acceptance rather than an oversight:
+    #: a restart loses them and the next six utterances re-learn. Persisting them
+    #: would mean a store, a migration and a per-user record of how someone's
+    #: voice usually sounds, which is a much heavier thing to own than a feature
+    #: that recovers on its own inside one conversation.
+    _MAX_SPEAKERS = 64
+
+    def _speaker(self, context: InvocationContext) -> str:
+        """The baseline key: the delegated human first, the tenant only as a
+        fallback. Keying on tenant alone would average two people in one
+        workspace into a single "normal", which is exactly the population
+        baseline this design exists to avoid."""
+        return str(context.on_behalf_of or context.tenant_id)
+
+    def _tone(
+        self, audio: bytes, text: str, context: InvocationContext
+    ) -> dict[str, Any] | None:
+        """Measure the delivery, or None when there is nothing defensible to say.
+
+        Every failure path returns None and never raises: a transcript is the
+        product here and tone is a garnish, so a malformed recording or an
+        unexpected codec must not cost the user their words. That is also why the
+        except clause is broad -- a new numeric edge in the analysis should
+        degrade the garnish, not fail the verb.
+        """
+        try:
+            prosody = analyse_prosody(audio, words=len(text.split()))
+            if prosody is None:
+                return None
+            key = self._speaker(context)
+            baseline = self._baselines.get(key, Baseline())
+            tone = classify(prosody, baseline, text_valence=warmth(text))
+            # Observed AFTER classifying, so an utterance is never measured
+            # against a baseline it has already moved.
+            self._baselines[key] = baseline.observe(prosody)
+            if len(self._baselines) > self._MAX_SPEAKERS:
+                self._baselines.pop(next(iter(self._baselines)))
+            if tone is None:
+                return None
+            return {
+                "tone": tone.kind.removeprefix("user_"),
+                "intensity": round(tone.intensity, 3),
+                "because": list(tone.because),
+                "calibrated_on": baseline.heard,
+            }
+        except Exception:  # noqa: BLE001 - see the docstring
+            return None
+
     # --- handlers ------------------------------------------------------------
     async def _listen(
         self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
@@ -183,7 +249,12 @@ class LocalWhisperAdapter(HttpAdapter):
         # whisper-server returns a leading space and a trailing newline on the
         # transcript; strip so callers get the same shape the remote providers
         # give and a switch of provider is not visible downstream.
-        return Result.success({"text": str(body.get("text") or "").strip()})
+        text = str(body.get("text") or "").strip()
+        payload: dict[str, Any] = {"text": text}
+        tone = self._tone(audio, text, context)
+        if tone is not None:
+            payload["tone"] = tone
+        return Result.success(payload)
 
     # --- multipart carrier ----------------------------------------------------
     async def _raw_request(
