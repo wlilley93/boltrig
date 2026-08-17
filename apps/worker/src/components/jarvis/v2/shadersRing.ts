@@ -46,108 +46,168 @@ uniform float uBands[8];
 // crest should orbit SLOWLY" is a judgement made while watching it, and the
 // rates were 0.16 + 0.09*ring with a 0.05 precession baked in.
 uniform vec2 uRingSpin;
+// Cycles per second for a crest's fade in and out. Its OWN uniform: see the
+// note at the lifecycle below for why it stopped riding the precession rate.
+uniform float uRingLife;
+// x the innermost ring's radius, y the outermost. A uniform because where the
+// wheels SIT is the difference between a body with rings inside it and a body
+// wearing them: they were at 0.34 to 0.66 of the radius, which is under the
+// shell at 0.88 to 0.98, so they were structure buried in the field rather than
+// bands wrapping it.
+uniform vec2 uRingRadius;
+// x how many separate beams each wheel is broken into, y what fraction of the gap
+// between them each beam actually fills. Together they are what stops a wheel
+// being a wheel: a coverage of 1.0 closes the circumference back up.
+uniform vec2 uRingArc;
+// Half-width of a beam in clip space, before the perspective scale. This is the
+// number that decides whether a beam reads as a hairline or as a bar.
+uniform float uRingWidth;
 
 out float vAmp;
+// -1..1 across the beam, so the fragment can round it off. Without this the quad
+// is a flat ribbon and reads as a sticker rather than as an object.
+out float vAcross;
 ${FIELD_GLSL}
 ${PROJECT_GLSL}
 ${PULSE_GLSL}
 
 void main() {
+  // SIX VERTICES PER BEAM SEGMENT, not two.
+  //
+  // These were LINES, and a line is one pixel wide however much the comment
+  // beside it called the element an oblong. A one-pixel element cannot read as a
+  // three-dimensional bar no matter what it is shaded -- there is no across to
+  // shade. So each segment is now a quad, expanded perpendicular to its own
+  // direction ON SCREEN, which is what keeps it facing the viewer at every
+  // orientation a great circle puts it through.
+  const float ALONG[6]  = float[6](0.0,  1.0,  0.0,  0.0,  1.0, 1.0);
+  const float ACROSS[6] = float[6](-1.0, -1.0, 1.0,  1.0, -1.0, 1.0);
   int v = gl_VertexID;
-  int end = v & 1;
-  int idx = v >> 1;
+  int corner = v % 6;
+  int idx = v / 6;
   int seg = idx % uSegments;
   int ring = idx / uSegments;
   float fring = float(ring);
+  float along = ALONG[corner];
+  float across = ACROSS[corner];
 
   float tau = 6.28318530718;
   float span = tau / float(uSegments);
   float spin = uTime * uRingSpin.x * (1.0 + 0.56 * fring)
              * (mod(fring, 2.0) < 0.5 ? 1.0 : -1.0);
-  // Each element is an OBLONG stretched along the tangent, not a tick: the beam
-  // flows round the circle instead of being beads threaded on it. Length varies
-  // per element so the wall never reads as a repeating pattern.
+
+  // NO FULL CIRCUMFERENCE. The wheels are cut into a few separate beams that
+  // float round the edge, because a closed hoop reads as a mounted part and the
+  // reference has pieces travelling past each other at different rates.
+  //
+  // Each beam also drifts on its OWN clock on top of the wheel's spin, so they
+  // separate and re-converge instead of holding formation. Beams locked to the
+  // wheel looked like a dashed line, which is a hoop with holes in it rather than
+  // several objects.
+  // FRACTIONAL, not floored. Flooring made this an integer dial that jumped, and
+  // it also made easing between modes step rather than glide -- a mode change from
+  // three beams to five visibly snapped through four. A fractional count leaves the
+  // last slot partial, which shows up as one irregular gap and reads as natural
+  // rather than as an artefact.
+  float beams = max(0.25, uRingArc.x);
+  float u = float(seg) / float(uSegments);
+  float slot = u * beams;
+  float bi = floor(slot);
+  float within = fract(slot);
+  float drift = uTime * uRingSpin.x * 0.55
+              * (hash(vec3(bi * 3.7, fring * 1.9, 0.0)) - 0.5);
+  if (within > clamp(uRingArc.y, 0.0, 1.0)) {
+    // Off-screen and unlit. Discarding in the vertex stage costs nothing and
+    // keeps the gap a real gap rather than a very dim beam.
+    vAmp = 0.0;
+    vAcross = 0.0;
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+
   float seed = hash(vec3(float(seg) * 0.071, fring * 2.3, 0.0));
-  float lenScale = 0.55 + 1.9 * seed;
-  float a = float(seg) * span + spin + span * lenScale * float(end);
+  // Overlapping segments, so a beam is one continuous bar rather than a row of
+  // tiles with seams between them.
+  float lenScale = 1.35 + 0.5 * seed;
+  float a0 = float(seg) * span + spin + drift;
+  float a1 = a0 + span * lenScale;
 
-  // GREAT CIRCLES ON DIFFERENT AXES, not parallel platters.
-  //
-  // The film's hologram, and the ophanim imagery it borrows from -- wheels
-  // within wheels at every orientation around a central eye -- are the same
-  // structure, and it is not three tilted hoops on nearby planes. Each ring
-  // here gets its own axis from a hash, so they intersect rather than nest,
-  // which is what makes a sphere of rings read as a sphere at all.
-  //
-  // BETWEEN A THIRD AND TWO THIRDS of the body. Hooped outside everything the
-  // wheels read as an orb with rings parked around it; inside the halo and
-  // around the core they read as structure belonging to one being.
-  float radius = (0.34 + 0.32 * hash(vec3(fring * 5.1, 0.0, 0.0))) * uRadius;
+  // GREAT CIRCLES ON DIFFERENT AXES, not parallel platters. The film's hologram,
+  // and the ophanim imagery it borrows from -- wheels within wheels at every
+  // orientation around a central eye -- is not three tilted hoops on nearby
+  // planes. Each wheel takes its own axis so they intersect rather than nest,
+  // which is what makes a sphere of wheels read as a sphere.
+  float radius = mix(uRingRadius.x, uRingRadius.y,
+                     hash(vec3(fring * 5.1, 0.0, 0.0))) * uRadius;
 
-  // A FIBONACCI SPHERE, not a hash, for the axes. Six hashed directions came
-  // back visibly clustered -- all six wheels leaning the same way, which reads
-  // as one wobbly hoop rather than as wheels within wheels. Six points spaced
-  // by the golden angle are as far apart as six points on a sphere get, and
-  // they are deterministic, so the arrangement is designed rather than drawn.
+  // A FIBONACCI SPHERE, not a hash, for the axes. Six hashed directions came back
+  // visibly clustered -- all six leaning the same way, which reads as one wobbly
+  // hoop. Points spaced by the golden angle are as far apart as points on a sphere
+  // get, and they are deterministic, so the arrangement is designed.
   float k = (fring + 0.5) / float(uRings);
   float az = 1.0 - 2.0 * k;
   float ar = sqrt(max(0.0, 1.0 - az * az));
   float aphi = fring * 2.39996323;
   vec3 axis = normalize(vec3(ar * cos(aphi), ar * sin(aphi), az) + vec3(1e-4));
-  // Any vector not parallel to the axis will do for the first basis leg; the
-  // fallback covers the case where the axis happens to be near +Z.
   vec3 seedv = abs(axis.z) > 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 0.0, 1.0);
   vec3 bu = normalize(cross(axis, seedv));
   vec3 bv = cross(axis, bu);
-  vec3 centre = cos(a) * bu + sin(a) * bv;
-  // THE TUBE. Scatter this element inside a disc perpendicular to the
-  // centreline, so the beam has a cross-section you can see through rather than
-  // an infinitely thin wall. Polar-disc sampling (sqrt on the radius) keeps the
-  // fill even instead of crowding the axis.
-  vec3 tangent = -sin(a) * bu + cos(a) * bv;
-  vec3 outward = normalize(centre + 1e-5);
-  vec3 side = normalize(cross(tangent, outward) + 1e-5);
-  float ta = hash(vec3(float(seg) * 0.19, fring, 1.0)) * tau;
-  float tr = sqrt(hash(vec3(float(seg) * 0.37, fring, 2.0))) * uBeam * radius;
-  vec3 q = centre * radius + (cos(ta) * outward + sin(ta) * side) * tr;
 
   // A slow precession, so the arrangement never settles into a fixed lattice.
   float pr = uTime * uRingSpin.y * (0.6 + 0.3 * fring);
-  q = vec3(q.x * cos(pr) - q.z * sin(pr), q.y, q.x * sin(pr) + q.z * cos(pr));
+  mat2 prec = mat2(cos(pr), -sin(pr), sin(pr), cos(pr));
 
-  // AUDIO REACTIVITY, which is the adjective the reference uses. Segments map
-  // to bands by position around the ring, so different arcs answer to different
-  // parts of the voice and the platter never pulses as a block.
-  int band = (seg + ring * 3) % 8;
-  // A floor well above zero: a silent ring must still be a ring. The voice
-  // modulates the platters, it does not switch them on.
+  // BOTH ENDS, in world space. The screen-space width needs the direction the
+  // segment actually runs in, and one endpoint cannot say what that is.
+  vec3 pa = (cos(a0) * bu + sin(a0) * bv) * radius;
+  vec3 pb = (cos(a1) * bu + sin(a1) * bv) * radius;
+  pa.xz = prec * pa.xz;
+  pb.xz = prec * pb.xz;
+  vec3 q = mix(pa, pb, along);
+
+  vec4 ca = project(pa, uAspect);
+  vec4 cb = project(pb, uAspect);
+  vec2 dir = cb.xy - ca.xy;
+  // A degenerate segment -- both ends on the same pixel -- has no direction to be
+  // perpendicular to, and normalize() of it is a NaN that takes the whole beam
+  // with it. This is the guard that keeps a wheel edge-on from vanishing.
+  dir = length(dir) > 1e-6 ? normalize(dir) : vec2(1.0, 0.0);
+  vec2 perp = vec2(-dir.y, dir.x);
+  // Thickness follows perspective, so a beam on the near side is visibly fatter
+  // than the same beam behind the body. A constant width flattened the sphere.
+  float halfW = uRingWidth * (0.55 + 0.9 * depthOf(q)) * (0.75 + 0.5 * seed);
+  vec4 clip = mix(ca, cb, along);
+  clip.xy += perp * across * halfW;
+
+  // AUDIO REACTIVITY. Beams map to bands by position, so different arcs answer to
+  // different parts of the voice and the wheel never pulses as a block.
+  int band = (int(bi) + ring * 3) % 8;
+  // A floor well above zero: a silent wheel must still be a wheel. The voice
+  // modulates the beams, it does not switch them on.
   vAmp = 0.55 + 0.45 * clamp(uBands[band], 0.0, 1.0);
 
-  // UP TO FOUR, COMING AND GOING. Rings that are all present all of the time
-  // read as a fixed cage bolted round the body; the reference has a few bands
-  // that arrive, sweep across and leave, which is what makes them feel like they
-  // are orbiting rather than mounted. Each ring gets its own slow phase, so how
-  // many are visible at once varies on its own.
-  //
-  // Tied to the PRECESSION rate rather than a knob of its own: both are the same
-  // judgement -- how slowly the arrangement changes -- and splitting them would
-  // let the crest crawl while the rings still blinked.
-  float lifePhase = fract(uTime * uRingSpin.y * 0.62
-                        + hash(vec3(fring * 7.7, 1.7, 0.0)));
+  // ITS OWN RATE, and it used to ride the precession. The argument for coupling
+  // them was that both describe how slowly the arrangement changes. What it
+  // produced was the opposite failure: precession ships at 0.016, so the lifecycle
+  // period came out at 1.0 / (0.016 * 0.62) -- about 101 SECONDS. The beams never
+  // came and went, they sat in whatever state the page loaded into and drifted over
+  // minutes. Measured as brightness variance that made two samples of the same body
+  // a minute apart differ by a factor of two.
+  float lifePhase = fract(uTime * uRingLife
+                        + hash(vec3(fring * 7.7, 1.7, 0.0)) + bi * 0.31);
   vAmp *= smoothstep(0.0, 0.16, lifePhase) * smoothstep(1.0, 0.70, lifePhase);
 
-  // Dropped sectors and radial striation -- the reel-to-reel read. Stable per
-  // segment, so a gap stays a gap while the ring turns rather than strobing.
-  float glitch = hash(vec3(float(seg) * 0.13, fring * 3.7, 0.0));
-  if (glitch < 0.09) vAmp = 0.0;
-  vAmp *= 0.72 + 0.28 * step(0.5, fract(float(seg) * 0.25));
+  // Radial striation along the beam, stable per segment so a bright stretch stays
+  // put while the beam travels rather than strobing.
+  vAmp *= 0.78 + 0.22 * step(0.5, fract(float(seg) * 0.25));
   vAmp *= 0.62 + 0.38 * uEnergy;
   vAmp *= depthFade(q);
-  // The rings flare as the front reaches them, which is what makes the pulse
-  // read as leaving the body rather than happening inside it.
+  // The beams flare as the front reaches them, which is what makes the pulse read
+  // as leaving the body rather than happening inside it.
   vAmp *= 1.0 + 4.5 * pulse(q) + 0.4 * uSwell;
 
-  gl_Position = project(q, uAspect);
+  vAcross = across;
+  gl_Position = clip;
 }`;
 
 // NO FRINGE ON THE RINGS, deliberately.
@@ -165,14 +225,25 @@ void main() {
 export const RING_FRAG = `#version 300 es
 precision highp float;
 in float vAmp;
+in float vAcross;
 out vec4 oColor;
 uniform vec3 uWarm;
 uniform vec3 uHot;
 uniform float uGain;
 
 void main() {
-  vec3 c = mix(uWarm, uHot, vAmp * vAmp);
-  oColor = vec4(c * vAmp * uGain, 1.0);
+  // ROUNDED ACROSS, which is the whole difference between a bar and a sticker.
+  // A quad shaded flat is a flat thing however thick it is drawn; falling off
+  // toward both edges gives it a lit near face and a dark silhouette, and that
+  // is what the eye reads as a solid object with a cross-section.
+  float across = clamp(abs(vAcross), 0.0, 1.0);
+  float round_ = 1.0 - across * across;
+  // A tighter hot filament inside the softer body of the beam, so it has a
+  // highlight rather than being uniformly bright.
+  float spine = pow(round_, 6.0);
+  float shape = round_ * 0.55 + spine * 0.75;
+  vec3 c = mix(uWarm, uHot, clamp(vAmp * vAmp * 0.6 + spine * 0.5, 0.0, 1.0));
+  oColor = vec4(c * vAmp * shape * uGain, 1.0);
 }`;
 
 // ------------------------------------------------------ circuit shards (SHARD)

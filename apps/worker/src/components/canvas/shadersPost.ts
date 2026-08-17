@@ -68,7 +68,21 @@ void main() {
     sum += tap(vUV + o) * w[i];
     sum += tap(vUV - o) * w[i];
   }
-  if (uThreshold >= 0.0) sum = max(sum - uThreshold, vec3(0.0));
+  if (uThreshold >= 0.0) {
+    // SOFT KNEE, and the hard one is why a gain slider felt like a switch.
+    //
+    // A hard max(sum - uThreshold, 0) contributes NO bloom below the threshold and
+    // starts contributing with a discontinuous slope above it. So raising a pass's
+    // gain through 0.55 does not brighten it gradually -- it is dim, dim, dim, and
+    // then it pops, because the bloom that makes a pass read as lit switches on all
+    // at once across the whole pass at the same moment.
+    //
+    // sum^2 / (sum + t) has the same asymptote -- it approaches sum - t once sum is
+    // well past t -- but below the threshold it falls off as sum^2/t instead of to
+    // exactly zero. Small, always increasing, and smooth through the knee, so the
+    // slider fades.
+    sum = sum * sum / max(vec3(1e-4), sum + uThreshold);
+  }
   oColor = vec4(sum, 1.0);
 }`;
 
@@ -84,6 +98,7 @@ uniform vec3 uWarm;
 uniform vec3 uHot;
 uniform float uCore;
 uniform float uStarburst;
+uniform vec4 uEye;
 ${FINITE_CEILING}
 void main() {
   // Clamped on read, for the reason FINITE_CEILING gives: an Inf reaching the
@@ -105,8 +120,30 @@ void main() {
   // anything above the knee is white whatever hue arrived there. The heart in
   // the reference frames is brighter than what surrounds it and still plainly
   // orange; it is never a white spot.
-  c += uWarm * uCore * exp(-r * r * 60.0) * 1.1;
-  c += mix(uWarm, uHot, 0.35) * uCore * exp(-r * r * 900.0) * 1.2;
+  // THE EYE, three terms rather than two -- AND THIS COMPOSITE IS SHARED.
+  //
+  // Jarvis and Ultron both run this fragment, and Ultron's brief is explicitly
+  // "not an eye; rather a crystalline cloud". So the aura's WIDTH is a uniform
+  // rather than a constant: at uEye.w = 60 with the lens off, these two lines are
+  // exactly the pair that shipped before, which is what keeps a settled body
+  // settled. Hardcoding the wide aura changed Ultron's centre as a side effect of
+  // improving Jarvis's, which is the kind of edit that gets noticed a week later
+  // as "something looks off" with nothing to point at.
+  //
+  // The ratio is the point for Jarvis: familiar runs about 10 against 78, a factor
+  // of seven, where this ran 60 against 900 and the two lobes sat almost on top of
+  // each other and summed to a blob.
+  c += uWarm * uCore * uEye.y * exp(-r * r * max(1.0, uEye.w)) * 0.9;
+  c += mix(uWarm, uHot, 0.35) * uCore * uEye.x * exp(-r * r * 900.0) * 1.2;
+  // THE LENS RING, the term that was missing and the one that makes it an eye. A
+  // thin bright annulus at a fixed radius reads as the boundary of an iris; without
+  // it the centre is a lamp, and no adjustment of the two gaussians above will ever
+  // produce a pupil, because a pupil is an EDGE and a gaussian has none. Gated on a
+  // positive radius so a body that wants no eye simply asks for none.
+  if (uEye.z > 0.001) {
+    float lens = r - uEye.z;
+    c += uHot * uCore * exp(-lens * lens * 620.0) * 0.6;
+  }
 
   // Anamorphic starburst, and it is OFF for the two hologram bodies. Read at
   // the sizes these stages actually draw at, exp(-y*y*4000) * exp(-x*x*26) is a

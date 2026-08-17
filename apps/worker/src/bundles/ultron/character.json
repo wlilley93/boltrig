@@ -46,7 +46,11 @@
       "uLimb",
       "uSwirl",
       "uFacetSpin",
-      "uOuter"
+      "uOuter",
+      "uDend",
+      "uDendTip",
+      "uBead",
+      "uEye"
     ]
   },
   "prompts": {

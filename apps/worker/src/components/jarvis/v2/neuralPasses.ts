@@ -24,10 +24,13 @@ import {
   setUniforms,
   type FloatUniforms,
 } from "../../canvas/glResources";
-import { JARVIS_TUNING, ramp, type JarvisTuning } from "../../canvas/bodyTuning";
+import { JARVIS_TUNING, pulsedCore, ramp, type JarvisTuning } from "../../canvas/bodyTuning";
 import { BLOOM_FRAG, COMPOSITE_FRAG } from "../../canvas/shadersPost";
 import { DRAW_FRAG, DRAW_VERT, LINK_FRAG, LINK_VERT } from "./shadersField";
 import { QUAD_VERT, SIM_FRAG } from "../../canvas/shadersSim";
+import { LINK_SEGMENTS } from "./shadersField";
+import { GLYPH_FRAG, GLYPH_VERT, GLYPH_VERTS } from "./shadersGlyph";
+import { IRIS_FRAG, IRIS_VERT, IRIS_VERTS } from "./shadersIris";
 import {
   RING_FRAG,
   RING_SEGMENTS,
@@ -90,6 +93,8 @@ export class NeuralPasses {
       link: createProgram(gl, LINK_VERT, LINK_FRAG),
       draw: createProgram(gl, DRAW_VERT, DRAW_FRAG),
       ring: createProgram(gl, RING_VERT, RING_FRAG),
+      glyph: createProgram(gl, GLYPH_VERT, GLYPH_FRAG),
+      iris: createProgram(gl, IRIS_VERT, IRIS_FRAG),
       shard: createProgram(gl, SHARD_VERT, SHARD_FRAG),
       bloom: createProgram(gl, QUAD_VERT, BLOOM_FRAG),
       comp: createProgram(gl, QUAD_VERT, COMPOSITE_FRAG),
@@ -142,7 +147,7 @@ export class NeuralPasses {
     this.simulate(d, tuning);
     this.drawScene(d, palette, tuning);
     this.bloom();
-    this.composite(palette, ramp(tuning.core, d.energy), tuning.starburst);
+    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), tuning.starburst, tuning.eye);
   }
 
   destroy(): void {
@@ -234,11 +239,54 @@ export class NeuralPasses {
       ...shared,
       uGain: ramp(tuning.ringGain, d.energy),
       uRingSpin: tuning.ringSpin,
+      uRingLife: tuning.ringLife,
+      uRingArc: tuning.ringArc,
+      uRingWidth: tuning.ringWidth,
+      uRingRadius: tuning.ringRadius,
       uBeam: tuning.ringBeam,
       uRadius: d.radius,
       uBands: d.bands,
     }, { uSegments: RING_SEGMENTS, uRings: tuning.rings });
-    gl.drawArrays(gl.LINES, 0, tuning.rings * RING_SEGMENTS * 2);
+    gl.drawArrays(gl.TRIANGLES, 0, tuning.rings * RING_SEGMENTS * 6);
+
+    // ------------------------------------------------------------ GLYPH layers
+    //
+    // Its own program and its own uniforms, so the inscriptions can be tuned
+    // without touching the wheels. Sharing a channel is what lost them last time.
+    const glyph = this.progs.glyph;
+    gl.useProgram(glyph);
+    setUniforms(gl, glyph, {
+      ...shared,
+      // The phenotype is already folded into `tuning` by jarvisEmotion before this
+      // is called, so there is no mood to apply again here -- doing so would apply
+      // brightness twice and make an attentive body wash out.
+      uGain: ramp(tuning.glyphGain, d.energy),
+      uGlyphRadius: tuning.glyphRadius,
+      uGlyphSize: tuning.glyphSize,
+      uGlyphSpin: tuning.glyphSpin,
+      uGlyphDensity: tuning.glyphDensity,
+      uRadius: d.radius,
+      uBands: d.bands,
+    });
+    gl.drawArrays(gl.TRIANGLES, 0, GLYPH_VERTS);
+
+    // ---------------------------------------------------------------- THE IRIS
+    //
+    // After the glyph layers and before the field, so the particles draw over its
+    // outer reaches while it still sits on top of the inscriptions. It replaces the
+    // LINK pass as the centre's structure -- see irisGain in bodyTuning.
+    const iris = this.progs.iris;
+    gl.useProgram(iris);
+    setUniforms(gl, iris, {
+      ...shared,
+      uGain: ramp(tuning.irisGain, d.energy),
+      uIrisRadius: tuning.irisRadius,
+      uIrisFil: tuning.irisFil,
+      uIrisFlow: tuning.irisFlow,
+      uRadius: d.radius,
+      uBands: d.bands,
+    });
+    gl.drawArrays(gl.TRIANGLES, 0, IRIS_VERTS);
 
     const link = this.progs.link;
     gl.useProgram(link);
@@ -251,8 +299,9 @@ export class NeuralPasses {
       uGain: ramp(tuning.linkGain, d.energy),
       uLinkRange: tuning.linkRange,
       uLimb: tuning.linkLimb,
+      uLinkBow: tuning.linkBow,
     }, { uState: 0, uGrid: GRID });
-    gl.drawArrays(gl.LINES, 0, PARTICLES * 2);
+    gl.drawArrays(gl.LINES, 0, PARTICLES * LINK_SEGMENTS * 2);
 
     const draw = this.progs.draw;
     gl.useProgram(draw);
@@ -296,7 +345,12 @@ export class NeuralPasses {
     this.fullscreen(prog);
   }
 
-  private composite(palette: FloatUniforms, core: number, starburst: number): void {
+  private composite(
+    palette: FloatUniforms, core: number, starburst: number,
+    // Passed in rather than read off a field: this method has no tuning of its
+    // own, and reaching for one is what made it fail to compile.
+    eye: readonly number[],
+  ): void {
     const gl = this.gl;
     const [w, h] = this.size;
     const prog = this.progs.comp;
@@ -309,7 +363,7 @@ export class NeuralPasses {
     gl.bindTexture(gl.TEXTURE_2D, this.blurTex[1]);
     setUniforms(gl, prog, {
       ...palette, uAspect: w / Math.max(1, h), uBloomGain: 0.85,
-      uCore: core, uStarburst: starburst,
+      uCore: core, uStarburst: starburst, uEye: eye,
     }, { uScene: 0, uBloom: 1 });
     this.fullscreen(prog);
     gl.activeTexture(gl.TEXTURE0);

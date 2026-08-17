@@ -88,6 +88,98 @@ function shared(pheno: BodyPhenotype): {
   };
 }
 
+/**
+ * EMOTION AS COLOURATION, not only as brightness.
+ *
+ * Irritation was the only scalar that touched colour -- everything else moved
+ * gains and rates. That makes nine of the ten registers legible only as "more" or
+ * "less" of the same look, and a mood you can only express by turning something up
+ * is not really expression: it is a volume knob with ten inputs.
+ *
+ * Returned as MULTIPLIERS on whatever palette a body already has, so it composes
+ * with Jarvis's orange and Ultron's blue rather than replacing either. A resting
+ * phenotype returns exactly 1 everywhere, which is what keeps an unmeasured body
+ * looking like itself -- the same guarantee the gain mappings make.
+ *
+ * The channels move independently and each one has a reason:
+ *
+ *   irritation  crushes green and blue hard -- toward blood. It was here already
+ *               and it is the strongest colour term because anger should be the
+ *               one mood nobody has to be told about.
+ *   valence     lifts blue slightly when positive and crushes it when negative,
+ *               which reads as warm/cold rather than as bright/dim.
+ *   arousal     lifts the HOT end only. A roused body has a harder highlight; its
+ *               resting colour is unchanged, so the change reads as intensity.
+ *   fatigue     pulls every channel toward its own average -- desaturation. A
+ *               tired thing loses colour before it loses light, which is why this
+ *               is separate from the brightness term.
+ *   tension     whitens the hot end by lifting green and blue together. Held
+ *               tension reads as glare rather than as hue.
+ *   attachment  warms the warm end a little, and only the warm end. Same logic as
+ *               its heart term: a bond is a resting quality, not a reaction.
+ */
+export function emotionColour(pheno: BodyPhenotype): {
+  warm: readonly [number, number, number];
+  hot: readonly [number, number, number];
+  fringe: readonly [number, number, number];
+  /**
+   * How far toward grey the palette should be pulled, 0..1.
+   *
+   * Separate from the multipliers because a MULTIPLIER CANNOT DESATURATE. An earlier
+   * cut folded it in by pulling every channel's multiplier toward 1 -- but 1 is the
+   * base palette, whose saturation is whatever it always was, so a fully fatigued
+   * body measured 0.801 against 0.805: no change, under a comment claiming there was
+   * one. Desaturating [1.0, 0.38, 0.04] means lifting green and blue toward red,
+   * which takes multipliers above 1 whose size depends on the base. So the amount
+   * travels as a number and `tint` -- which is handed the base -- applies it.
+   */
+  desaturate: number;
+} {
+  const irr = pheno.irritation;
+  const val = pheno.valence;
+  return {
+    warm: [
+      1 + 0.04 * pheno.attachment,
+      (1 - irr * 0.55) * (1 + 0.05 * val),
+      (1 - irr * 0.80) * (1 + 0.12 * val + 0.05 * pheno.attachment),
+    ],
+    hot: [
+      1,
+      (1 - irr * 0.35) * (1 + 0.10 * pheno.arousal + 0.10 * pheno.tension),
+      (1 - irr * 0.60) * (1 + 0.06 * pheno.arousal + 0.18 * pheno.tension),
+    ],
+    fringe: [1, 1 - irr * 0.4, 1 - irr * 0.6],
+    // A tired thing loses colour before it loses light, which is why this is a
+    // separate term from the brightness one in shared().
+    desaturate: pheno.fatigue * 0.55,
+  };
+}
+
+/**
+ * Apply a register to one palette colour: multiply, then pull toward grey.
+ *
+ * Toward the colour's OWN luminance rather than toward a fixed grey, so a warm body
+ * fades to a warm grey and a cold one to a cold grey -- fading both to the same
+ * neutral would make two different beings converge as they tired.
+ */
+export function tint(
+  base: readonly number[],
+  mul: readonly [number, number, number],
+  desaturate = 0,
+): [number, number, number] {
+  const rgb: [number, number, number] = [
+    base[0] * mul[0], base[1] * mul[1], base[2] * mul[2],
+  ];
+  if (desaturate <= 0) return rgb;
+  const lum = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+  const k = Math.min(1, desaturate);
+  return [
+    rgb[0] + (lum - rgb[0]) * k,
+    rgb[1] + (lum - rgb[1]) * k,
+    rgb[2] + (lum - rgb[2]) * k,
+  ];
+}
+
 export function jarvisEmotion(tuning: JarvisTuning, pheno: BodyPhenotype): JarvisTuning {
   const s = shared(pheno);
   return {

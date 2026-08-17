@@ -7,17 +7,7 @@ import {
   type CharacterCanvasSource,
 } from "../src/components/characterBundle";
 import { ULTRON_UNIFORMS } from "../src/components/characters";
-import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL } from "../src/components/canvas/glslCommon";
-import { BLOOM_FRAG, COMPOSITE_FRAG } from "../src/components/canvas/shadersPost";
-import { QUAD_VERT, SIM_FRAG } from "../src/components/canvas/shadersSim";
-import {
-  CRACK_FRAG,
-  CRACK_VERT,
-  FACET_FRAG,
-  FACET_VERT,
-  VEIN_FRAG,
-  VEIN_VERT,
-} from "../src/components/ultron/shadersUltron";
+
 
 /**
  * Ultron's manifest, pinned against the shaders that actually run.
@@ -37,11 +27,32 @@ import {
  * spent his first day not listening to the voice.
  */
 
-const SHADERS = [
-  QUAD_VERT, SIM_FRAG, BLOOM_FRAG, COMPOSITE_FRAG,
-  VEIN_VERT, VEIN_FRAG, CRACK_VERT, CRACK_FRAG, FACET_VERT, FACET_FRAG,
-  FIELD_GLSL, PROJECT_GLSL, FRINGE_GLSL,
-];
+/**
+ * Every shader module, DISCOVERED rather than listed.
+ *
+ * It was a hand-written array of imported constants, and that array is the exact
+ * failure this file's own header warns about, one level up: the dendrite pass was
+ * added with its uniforms wired into the shaders, ULTRON_UNIFORMS and the manifest,
+ * and the test that exists to catch a forgotten list had a forgotten list of its
+ * own. It reported the three new uniforms as supplying nothing -- the one direction
+ * that reads like the new code is wrong rather than the checker.
+ *
+ * A glob cannot be forgotten. Add a pass module and it is scanned; delete one and
+ * it stops being scanned. There is no third place to update.
+ */
+const SHADER_MODULES = {
+  ...import.meta.glob<Record<string, unknown>>(
+    "../src/components/ultron/shaders*.ts", { eager: true }),
+  ...import.meta.glob<Record<string, unknown>>(
+    "../src/components/canvas/{glslCommon,shadersPost,shadersSim}.ts", { eager: true }),
+};
+
+const SHADERS = Object.values(SHADER_MODULES).flatMap((module) =>
+  // String exports only, and only the ones that are actually GLSL. A module may
+  // reasonably export a name or a segment count beside its source.
+  Object.values(module).filter(
+    (value): value is string => typeof value === "string" && /\bvoid main\b|\buniform\b/.test(value),
+  ));
 
 /** Every `uniform <type> <name>` the passes declare, array suffix stripped. */
 function declaredUniforms(): Set<string> {
@@ -71,6 +82,15 @@ describe("Ultron as a character bundle", () => {
   // and ULTRON_UNIFORMS says which the canvas source can drive. A uniform in the
   // first two but not the third is refused at registration -- at runtime, on the
   // real page, with the suite green.
+  it("finds the shader modules at all", () => {
+    // Without this, a glob that matched nothing would leave `declared` empty and
+    // every assertion below would pass by having nothing to compare. A checker
+    // that cannot fail is worse than no checker.
+    expect(Object.keys(SHADER_MODULES).length).toBeGreaterThanOrEqual(5);
+    expect(SHADERS.length).toBeGreaterThanOrEqual(10);
+    expect(declaredUniforms().size).toBeGreaterThanOrEqual(20);
+  });
+
   it("has a canvas source that can drive every uniform his shaders declare", () => {
     const declared = declaredUniforms();
     const supplies = new Set(ULTRON_UNIFORMS);

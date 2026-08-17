@@ -61,9 +61,22 @@ import {
   RESTING_PHENOTYPE,
   jarvisEmotion,
   readBodyPhenotype,
+  emotionColour,
+  tint,
   type BodyPhenotype,
 } from "../../canvas/bodyEmotion";
 import { JARVIS_TUNING, type JarvisTuning } from "../../canvas/bodyTuning";
+import {
+  INTRO_SECONDS,
+  applyPulses,
+  easeFactor,
+  easeTuning,
+} from "../../canvas/bodyModes";
+import {
+  JARVIS_ARRIVAL,
+  JARVIS_PULSES,
+  jarvisModeTuning,
+} from "../../canvas/bodyPresets";
 import type { JarvisStageState } from "../JarvisState";
 import type { FloatUniforms } from "../../canvas/glResources";
 import { NeuralPasses, type Drive } from "./neuralPasses";
@@ -108,7 +121,28 @@ export class JarvisNeuralRenderer {
   private waveAmp = 0;
   private bands = new Float32Array(8);
   private _status: Status = { state: "idle" };
-  private tuning: JarvisTuning = JARVIS_TUNING;
+  /**
+   * What is being DRAWN, which is not the same as what the mode asks for.
+   *
+   * It starts at the ARRIVAL tuning and eases toward the current mode's target,
+   * so the body draws itself in on first load and then travels between modes by
+   * the same arithmetic. Two behaviours, one mechanism, one place to be wrong.
+   */
+  /** Unclamped wall-clock seconds since the last frame, for the tuning ease. */
+  private easeDt = 0;
+  /**
+   * Seconds of draw-in still to run.
+   *
+   * A COUNTDOWN rather than a flag, because "has it arrived yet" has no clean answer
+   * when the target is a struct of twenty fields -- comparing them all for
+   * near-equality is both slow and arbitrary about what near means. A duration says
+   * exactly when the animation is over, and it is over at the same moment on every
+   * machine, which a convergence test is not.
+   */
+  private introLeft = 0;
+  private live: JarvisTuning = JARVIS_ARRIVAL;
+  /** A bench override. Null means follow the mode, which is the shipped path. */
+  private tuning: JarvisTuning | null = null;
 
   constructor(private readonly opts: NeuralRendererOptions = {}) {}
 
@@ -122,10 +156,46 @@ export class JarvisNeuralRenderer {
    * pass sequence and drifted from it. Nothing in the product calls this, and
    * the field defaults to what ships.
    */
-  setTuning(next: JarvisTuning): void { this.tuning = next; }
+  setTuning(next: JarvisTuning): void {
+    // SNAPPED, not eased. A slider that took half a second to arrive would make
+    // the bench feel broken, and worse, the panel and the picture would disagree
+    // for as long as the ease lasted.
+    this.tuning = next;
+    this.live = next;
+  }
 
   /** What it is currently drawing with, so a bench can seed its own controls. */
-  currentTuning(): JarvisTuning { return this.tuning; }
+  currentTuning(): JarvisTuning { return this.tuning ?? JARVIS_TUNING; }
+
+  /**
+   * Hand the body back to its own mode logic and draw it in again.
+   *
+   * The bench pins the tuning so a dragged slider is instant, and that pin also
+   * defeats the entry ease -- so the draw-in was the one animation that could not
+   * be watched in the place built for watching animations. This releases the pin
+   * and puts the body back at its arrival state, which is exactly what happens on
+   * a fresh mount.
+   */
+  replay(): void {
+    this.tuning = null;
+    this.live = JARVIS_ARRIVAL;
+    this.introLeft = INTRO_SECONDS;
+  }
+
+  /**
+   * Draw in from the arrival state WITHOUT giving up the current tuning.
+   *
+   * replay() hands the body back to its mode logic, which is right for watching what
+   * a mode does. This is for the other case: a bench that has a look loaded -- maybe
+   * a saved one -- and wants the entry animation to end on THAT rather than on the
+   * shipped preset. Easing to the wrong destination and then jumping to the right one
+   * when the first slider moved is the failure this avoids.
+   */
+  intro(): void {
+    this.live = JARVIS_ARRIVAL;
+    this.introLeft = INTRO_SECONDS;
+  }
+
 
   mount(host: HTMLElement): void {
     this.host = host;
@@ -229,7 +299,33 @@ export class JarvisNeuralRenderer {
     // stays exactly what the bench set and what Copy settings would print. A
     // phenotype folded into the stored value would slowly rewrite the look
     // being tuned, which is the one thing a bench must not do.
-    passes.render(d, this.palette(), jarvisEmotion(this.tuning, this.pheno));
+    // The mode is the target and `live` chases it; the pulses then ride on top.
+    // An explicit bench override replaces the target outright, which is why
+    // dragging a slider is instant.
+    const mode = this.state?.mode ?? "standby";
+    let shown = this.live;
+    if (this.introLeft > 0 && !this.reducedMotion) {
+      // THE DRAW-IN, and it outranks a pinned tuning for as long as it lasts. The
+      // destination is the pin when there is one, so a bench with a saved look
+      // animates to that look rather than to the shipped preset.
+      this.introLeft = Math.max(0, this.introLeft - this.easeDt);
+      const target = this.tuning ?? jarvisModeTuning(mode);
+      this.live = easeTuning(this.live, target, easeFactor(this.easeDt));
+      shown = this.live;
+    } else if (this.tuning) {
+      shown = this.tuning;
+    } else {
+      const target = jarvisModeTuning(mode);
+      // Reduced motion gets the destination and none of the journey: the entry
+      // animation and the pulses are both motion, and neither is information.
+      this.live = this.reducedMotion
+        ? target
+        : easeTuning(this.live, target, easeFactor(this.easeDt));
+      shown = this.reducedMotion
+        ? this.live
+        : applyPulses(this.live, JARVIS_PULSES[mode], this.animClock);
+    }
+    passes.render(d, this.palette(), jarvisEmotion(shown, this.pheno));
   }
 
   // ------------------------------------------------------------------ internals
@@ -257,7 +353,17 @@ export class JarvisNeuralRenderer {
 
   /** What the frame is driven by, derived once and shared by every pass. */
   private drive(nowMs: number): Drive {
-    const dt = Math.min(0.05, Math.max(0.001, (nowMs - this.lastFrameAt) / 1000));
+    // TWO dt's, and conflating them made the ease frame-rate-dependent again.
+    //
+    // The simulation's dt is clamped to 50ms because a longer step makes the
+    // particle integrator overshoot and the field explodes -- on a slow frame the
+    // right move is to advance the physics LESS than real time. The tuning ease
+    // wants the opposite: it is a wall-clock animation, and clamping its dt on a
+    // machine managing 7fps stretched a 1.6s ease into about 5s. Measured on
+    // swiftshader, where the draw-in had not finished after eight seconds.
+    const wall = Math.max(0.001, (nowMs - this.lastFrameAt) / 1000);
+    const dt = Math.min(0.05, wall);
+    this.easeDt = wall;
     this.lastFrameAt = nowMs;
     if (!this.reducedMotion) this.animClock += dt;
 
@@ -297,11 +403,13 @@ export class JarvisNeuralRenderer {
     const warm = this.opts.warm ?? [1.0, 0.38, 0.04];
     const hot = this.opts.hot ?? [1.0, 0.74, 0.32];
     const fringe = this.opts.fringe ?? [0.42, 0.09, 0.02];
-    const irr = this.pheno.irritation;
+    // The WHOLE register, not just irritation. Nine of the ten scalars used to
+    // reach colour not at all, so a mood could only ever make him brighter.
+    const c = emotionColour(this.pheno);
     return {
-      uWarm: [warm[0], warm[1] * (1 - irr * 0.55), warm[2] * (1 - irr * 0.8)],
-      uHot: [hot[0], hot[1] * (1 - irr * 0.35), hot[2] * (1 - irr * 0.6)],
-      uFringe: fringe,
+      uWarm: tint(warm, c.warm, c.desaturate),
+      uHot: tint(hot, c.hot, c.desaturate),
+      uFringe: tint(fringe, c.fringe, c.desaturate),
       // The fringe band. See FRINGE_GLSL: outer = inner / scale, and everything
       // below outer draws nothing at all.
       uInner: 0.52,

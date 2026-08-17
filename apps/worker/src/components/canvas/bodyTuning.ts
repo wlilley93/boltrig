@@ -54,8 +54,82 @@ export interface JarvisTuning {
   ringGain: EnergyRamp;
   /** x turns the wheels, y precesses the arrangement. Slow is the whole point. */
   ringSpin: readonly [spin: number, precess: number];
+  /**
+   * Innermost and outermost ring radius, as a fraction of the body.
+   *
+   * They used to be fixed at 0.34 to 0.66 -- under a shell that sits at 0.88 to
+   * 0.98, so the bands were buried in the field rather than wrapping it. The
+   * reference has them sweeping the silhouette and reaching out to the faint
+   * outer sphere, which is where they are now.
+   */
+  ringRadius: readonly [inner: number, outer: number];
   /** Beam cross-section as a fraction of each ring's radius. */
   ringBeam: number;
+  /**
+   * How often a crest fades in and out, in cycles per second.
+   *
+   * A knob of its own rather than a multiple of the precession rate, which is what
+   * it was. Precession ships at 0.016, so "coming and going" had a period of about
+   * a hundred seconds and read as a fixed arrangement. Around 0.09 gives an
+   * eleven-second life, which is slow enough to feel like orbiting and quick
+   * enough that the set of visible crests plainly changes while you watch.
+   */
+  ringLife: number;
+  /**
+   * How many separate beams each wheel is cut into, and how much of the gap
+   * between them each one fills.
+   *
+   * A closed hoop reads as a mounted part. The reference has PIECES travelling
+   * past each other, so a wheel is a few beams floating round the edge and the
+   * circumference is deliberately incomplete. Coverage of 1.0 closes it back up,
+   * which is the old look and is available if it turns out to be wanted.
+   */
+  ringArc: readonly [beams: number, coverage: number];
+  /**
+   * Half-width of a beam in clip space, before the perspective scale.
+   *
+   * The beams were LINES -- one pixel wide, whatever the comment beside them
+   * called them -- so there was no across to shade and nothing could make them
+   * read as three-dimensional. They are quads now and this is the number that
+   * decides bar versus hairline.
+   */
+  ringWidth: number;
+  /**
+   * THE GLYPH RINGS, on a channel of their own.
+   *
+   * They used to ride the wheel pass, which is why they vanished when the wheels
+   * became floating beams: one gain and one spin governing an object that moves and
+   * an inscription that does not. Separating them is what makes both adjustable.
+   *
+   * The gap between layers is meant to be EMPTY -- the reference has almost nothing
+   * between them but the glow of the layers themselves -- so these stay thin and
+   * quiet, and nothing else should be added to fill that space.
+   */
+  /**
+   * THE IRIS, which is what the centre is now made of.
+   *
+   * The neural links are still in the tree and still work, but they ship at zero:
+   * they joined whichever particles the simulation happened to leave adjacent, so
+   * their structure was wherever the field drifted rather than anywhere meaningful,
+   * and over a bright centre that reads as clutter. Radial filaments point AT the
+   * nucleus from every angle, which is what makes the figure an eye.
+   */
+  irisGain: EnergyRamp;
+  /** Inner and outer edge of the iris. Inside the inner edge is the pupil. */
+  irisRadius: readonly [inner: number, outer: number];
+  /** How many filaments are lit, and how wide each is. */
+  irisFil: readonly [lit: number, width: number];
+  /** Outward flow speed, and how pronounced the travelling band is. */
+  irisFlow: readonly [speed: number, contrast: number];
+  glyphGain: EnergyRamp;
+  /** Innermost and outermost layer radius. Concentric, not scattered. */
+  glyphRadius: readonly [inner: number, outer: number];
+  /** Mark height and width. Both small: inscriptions, not bars. */
+  glyphSize: readonly [height: number, width: number];
+  /** Rotation rate, and how much each layer counter-rotates against the last. */
+  glyphSpin: readonly [speed: number, stagger: number];
+  /** What fraction of the marks are lit, and how hard the lit ones vary. */
+  glyphDensity: readonly [lit: number, variance: number];
   /** How many great circles. Six read as a sphere of wheels; three as a skirt. */
   rings: number;
   /**
@@ -75,6 +149,17 @@ export interface JarvisTuning {
    * only gives brighter gaps.
    */
   linkRange: number;
+  /**
+   * How far a connection bows off the straight line, and how fast the bow
+   * travels.
+   *
+   * The pathways were straight segments, which reads as wiring. A nervous system
+   * wanders, so the middle of each connection is pushed off the chord by a curl
+   * sample on its OWN clock -- a pathway's squiggle has nothing to do with how
+   * fast the field is turning over, and tying them together made one of them
+   * untunable.
+   */
+  linkBow: readonly [amount: number, speed: number];
   /** The filaments. */
   drawGain: EnergyRamp;
   /**
@@ -98,6 +183,19 @@ export interface JarvisTuning {
    * whose CRT beam earns a horizontal streak.
    */
   starburst: number;
+  /**
+   * The eye, after familiar.frag's heart -- pupil, iris, and the lens ring.
+   *
+   * Two stacked gaussians were already here and they made a bright BLOB. What
+   * familiar has and this did not is the third term: a thin ring at a fixed
+   * radius, which she calls the pupil of the thing. That ring is what turns a
+   * glow into an eye, because an eye is not a bright patch, it is a bright patch
+   * with a boundary. Her ratio is also far wider than this pass had -- a broad
+   * aura around a compact core rather than two nearly-equal lobes.
+   *
+   * x scales the pupil, y the iris aura, z is the lens ring's radius.
+   */
+  eye: readonly [pupil: number, iris: number, lens: number, auraWidth: number];
   /** The streaks' silhouette. An order of magnitude, not a factor of three. */
   drawLimb: LimbMix;
   /** The network's silhouette. Without it the web fills the see-through middle. */
@@ -105,6 +203,21 @@ export interface JarvisTuning {
 }
 
 export interface UltronTuning {
+  /**
+   * THE NEURONS: nine pathways out of the centre, each forking to a cluster.
+   *
+   * His birth is a tree growing, not a cloud condensing, and none of his three
+   * existing passes can draw one -- CRACK connects TEXTURE neighbours, which are
+   * spatially unrelated by design, so it can flicker a web but never grow a
+   * branch. See ultron/shadersDendrite.
+   */
+  dendriteGain: EnergyRamp;
+  /** Root segment length, fork angle, per-level taper, per-node wander. */
+  dendrite: readonly [rootLength: number, fork: number, taper: number, wander: number];
+  /** Cluster glow at the tips, and how much a voice GROWS the tree. */
+  dendriteTip: readonly [cluster: number, growth: number];
+  /** Beads per segment, and the lit fraction of each -- the glyph detailing. */
+  bead: readonly [perSegment: number, duty: number];
   /**
    * The distant outer sphere: radius, population fraction, brightness.
    *
@@ -146,6 +259,15 @@ export interface UltronTuning {
   /** The core glow. */
   core: EnergyRamp;
   /**
+   * NOT an eye, deliberately, and that is why he has this field at all.
+   *
+   * The composite is shared with Jarvis, so Ultron has to say what he wants from
+   * it. His brief is a crystalline cloud with no iris, so the lens radius is 0 and
+   * the aura width is the pre-eye value of 60 -- which reproduces exactly the
+   * centre he had before the eye existed.
+   */
+  eye: readonly [pupil: number, iris: number, lens: number, auraWidth: number];
+  /**
    * Three concentric clouds spread into arms. Jarvis leaves this at 0.
    *
    * 0.3, not 1.0. At 1.0 the arms reach far enough to read as flares around the
@@ -161,25 +283,46 @@ export interface UltronTuning {
 /** What ships. The bench overrides a copy; nothing mutates this. */
 export const JARVIS_TUNING: JarvisTuning = {
   outerShell: [1.45, 0, 0.28],
-  ringGain: [0.30, 0.32],
+  ringGain: [0.62, 0.4],
   ringSpin: [0.045, 0.012],
-  ringBeam: 0.025,
-  rings: 4,
-  swirl: [0.26, 0.40],
-  linkGain: [0.30, 0.24],
-  linkRange: 0.23,
-  drawGain: [0.21, 0.19],
-  streak: [0.051, 0.042],
-  shardGain: [0.26, 0.20],
-  shardSize: 0.014,
-  shardStride: 11,
-  core: [0.12, 0.16],
-  starburst: 0.0,
-  drawLimb: [0.12, 1.30],
-  linkLimb: [0.25, 1.15],
+  ringRadius: [0.9, 1.34],
+  ringBeam: 0.085,
+  ringLife: 0.09,
+  ringArc: [4, 0.66],
+  ringWidth: 0.095,
+  irisGain: [0.62, 0.4],
+  irisRadius: [0.1, 0.44],
+  irisFil: [0.78, 0.006],
+  irisFlow: [0.14, 0.65],
+  // The links are superseded by the iris. Kept at zero rather than deleted: the
+  // pass is sound and a network may be wanted on another body.
+  glyphGain: [0.34, 0.22],
+  glyphRadius: [0.62, 1.16],
+  glyphSize: [0.055, 0.008],
+  glyphSpin: [0.026, 0.55],
+  glyphDensity: [0.72, 0.55],
+  rings: 5,
+  swirl: [0.115, 0],
+  linkGain: [0, 0],
+  linkBow: [0.158, 0.2],
+  linkRange: 0.6,
+  drawGain: [1, 1],
+  streak: [0.004, 0],
+  shardGain: [1, 0.475],
+  shardSize: 0.003,
+  shardStride: 12,
+  core: [1, 1],
+  starburst: 1,
+  eye: [1, 1.5, 0.34, 15],
+  drawLimb: [3, 3],
+  linkLimb: [3, 3],
 };
 
 export const ULTRON_TUNING: UltronTuning = {
+  dendriteGain: [0.62, 0.48],
+  dendrite: [0.34, 0.52, 0.78, 0.035],
+  dendriteTip: [0.9, 0.22],
+  bead: [7.0, 0.55],
   outerShell: [1.45, 0.20, 0.30],
   facetSpin: [0.13, 0.40],
   swirl: [0.26, 0.40],
@@ -190,11 +333,33 @@ export const ULTRON_TUNING: UltronTuning = {
   facetGain: [0.36, 0.26],
   facetSize: 0.020,
   core: [0.13, 0.17],
+  eye: [1, 1, 0, 60],
   petal: 0.3,
   veinLimb: [0.30, 0.95],
   crackLimb: [0.36, 0.88],
   facetLimb: [0.28, 0.95],
 };
+
+/**
+ * The heart, OSCILLATING with the voice rather than merely scaled by it.
+ *
+ * `ramp` gives a core that rises while speaking and then sits there, which reads
+ * as a lamp on a dimmer. The half that answers to energy is the half that should
+ * MOVE, so it is modulated by the voice bands themselves -- the body pulses with
+ * what is being said, rather than on a timer that happens to be running.
+ *
+ * The resting half is untouched. A silent body keeps exactly the heart its base
+ * gives it; only the part a voice added is allowed to flicker.
+ */
+export function pulsedCore(core: EnergyRamp, energy: number, bands: Float32Array): number {
+  // Weighted toward the LOW bands, which is where a voice's amplitude envelope
+  // lives. Weighting the highs equally makes the heart chatter on sibilance,
+  // which reads as a fault rather than as speech.
+  const weights = [0.26, 0.22, 0.16, 0.12, 0.09, 0.07, 0.05, 0.03];
+  let sum = 0;
+  for (let i = 0; i < 8 && i < bands.length; i += 1) sum += bands[i] * weights[i];
+  return core[0] + core[1] * energy * (0.45 + 0.85 * Math.min(1, sum));
+}
 
 /** `base + perEnergy * energy`, the one place the ramp is evaluated. */
 export function ramp(value: EnergyRamp, energy: number): number {

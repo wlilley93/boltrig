@@ -24,9 +24,16 @@ import {
   setUniforms,
   type FloatUniforms,
 } from "../canvas/glResources";
-import { ULTRON_TUNING, ramp, type UltronTuning } from "../canvas/bodyTuning";
+import { ULTRON_TUNING, pulsedCore, ramp, type UltronTuning } from "../canvas/bodyTuning";
 import { BLOOM_FRAG, COMPOSITE_FRAG } from "../canvas/shadersPost";
 import { QUAD_VERT, SIM_FRAG } from "../canvas/shadersSim";
+import {
+  DENDRITE_DEPTH,
+  DENDRITE_FRAG,
+  DENDRITE_SEGMENTS,
+  DENDRITE_TRUNKS,
+  DENDRITE_VERT,
+} from "./shadersDendrite";
 import {
   CRACK_FRAG,
   CRACK_SEGMENTS,
@@ -81,6 +88,7 @@ export class UltronPasses {
     const gl = this.gl;
     this.progs = {
       sim: createProgram(gl, QUAD_VERT, SIM_FRAG),
+      dendrite: createProgram(gl, DENDRITE_VERT, DENDRITE_FRAG),
       vein: createProgram(gl, VEIN_VERT, VEIN_FRAG),
       crack: createProgram(gl, CRACK_VERT, CRACK_FRAG),
       facet: createProgram(gl, FACET_VERT, FACET_FRAG),
@@ -127,7 +135,7 @@ export class UltronPasses {
     this.simulate(d, tuning);
     this.drawScene(d, palette, tuning);
     this.bloom();
-    this.composite(palette, ramp(tuning.core, d.energy), 0.0);
+    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), 0.0, tuning.eye);
   }
 
   destroy(): void {
@@ -195,6 +203,27 @@ export class UltronPasses {
     gl.bindVertexArray(this.vao);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.simTex[this.ping]);
+
+    // THE NEURONS, FIRST. They are the armature the rest of him hangs on, so the
+    // membrane and the fractures draw over them rather than under.
+    //
+    // 558 vertices for the whole tree, against 32768 for the field. Cheap enough
+    // that the question is only whether it is right, never whether it fits.
+    const dendrite = this.progs.dendrite;
+    gl.useProgram(dendrite);
+    setUniforms(gl, dendrite, {
+      ...shared,
+      uGain: ramp(tuning.dendriteGain, d.energy),
+      uDend: tuning.dendrite,
+      uDendTip: tuning.dendriteTip,
+      uBead: tuning.bead,
+      uRadius: d.radius,
+      // uLimb is set PER PASS, never in `shared` -- so a pass that forgets it
+      // gets (0,0), limbMix returns zero, and the whole pass draws nothing while
+      // the renderer reports itself healthy. That is how this one debuted.
+      uLimb: tuning.veinLimb,
+    }, {});
+    gl.drawArrays(gl.LINES, 0, DENDRITE_TRUNKS * DENDRITE_SEGMENTS * 2);
 
     const vein = this.progs.vein;
     gl.useProgram(vein);
@@ -273,7 +302,12 @@ export class UltronPasses {
     this.fullscreen(prog);
   }
 
-  private composite(palette: FloatUniforms, core: number, starburst: number): void {
+  private composite(
+    palette: FloatUniforms, core: number, starburst: number,
+    // Passed in rather than read off a field: this method has no tuning of its
+    // own, and reaching for one is what made it fail to compile.
+    eye: readonly number[],
+  ): void {
     const gl = this.gl;
     const [w, h] = this.size;
     const prog = this.progs.comp;
@@ -286,7 +320,7 @@ export class UltronPasses {
     gl.bindTexture(gl.TEXTURE_2D, this.blurTex[1]);
     setUniforms(gl, prog, {
       ...palette, uAspect: w / Math.max(1, h), uBloomGain: 1.05,
-      uCore: core, uStarburst: starburst,
+      uCore: core, uStarburst: starburst, uEye: eye,
     }, { uScene: 0, uBloom: 1 });
     this.fullscreen(prog);
     gl.activeTexture(gl.TEXTURE0);

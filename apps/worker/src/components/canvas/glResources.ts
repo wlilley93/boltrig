@@ -122,7 +122,14 @@ export function setUniforms(
     if (typeof value === "number") gl.uniform1f(loc, value);
     else if (value.length === 2) gl.uniform2f(loc, value[0], value[1]);
     else if (value.length === 3) gl.uniform3f(loc, value[0], value[1], value[2]);
-    else gl.uniform1fv(loc, value as Float32Array | number[]);
+    // A vec4 needs its own branch. Without it a four-element value fell through
+    // to uniform1fv, which sets a float ARRAY -- so a `uniform vec4` stayed at
+    // zero, GL raised INVALID_OPERATION nobody was reading, and the pass that
+    // depended on it drew nothing while the renderer reported itself healthy.
+    // The eight voice bands are genuinely a float[8] and still take the fv path.
+    else if (value.length === 4) {
+      gl.uniform4f(loc, value[0], value[1], value[2], value[3]);
+    } else gl.uniform1fv(loc, value as Float32Array | number[]);
   }
   for (const [name, value] of Object.entries(ints)) {
     const loc = gl.getUniformLocation(program, name);

@@ -75,3 +75,8 @@ _migration/
 # pnpm content-addressable cache. Never source; it was committed by
 # accident in e7f56dfc and carries third-party fixture keys.
 .pnpm-store/
+
+# The shader bench's locked-in presets: a handoff from the browser to a human
+# porting them into bodyPresets.ts, not a source of truth. Committing it would put
+# two copies of every look in the tree and make the stale one look authoritative.
+apps/worker/tests/visual/presets.json

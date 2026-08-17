@@ -5,6 +5,18 @@
 
 import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../../canvas/glslCommon";
 
+/**
+ * Segments per connection. Six is the fewest that reads as a CURVE.
+ *
+ * A straight line between two particles is a wire, and a nervous system is not
+ * wired -- its pathways wander. Four segments still read as a bent stick; six
+ * carry an S-bend, which is what makes them look grown rather than routed.
+ *
+ * It multiplies the pass's vertex count by six, and it is still the cheap pass:
+ * two texel fetches per vertex and no state of its own.
+ */
+export const LINK_SEGMENTS = 6;
+
 // ------------------------------------------------------------ streaks (DRAW)
 //
 // Two vertices per particle. gl_VertexID even = head, odd = tail. The tail is
@@ -103,20 +115,45 @@ uniform sampler2D uState;
 uniform float uAspect;
 uniform int uGrid;
 uniform float uLinkRange;
+uniform float uTime;
+/** x how far the path bows off the straight line, y how fast the bow travels. */
+uniform vec2 uLinkBow;
 
 out float vFade;
+${FIELD_GLSL}
 ${PROJECT_GLSL}
 ${PULSE_GLSL}
 
+const int SEGMENTS = ${LINK_SEGMENTS};
+
 void main() {
-  int id = gl_VertexID >> 1;
-  int far = gl_VertexID & 1;
+  // Six segments per connection, so a pathway can bend. The vertex id now
+  // carries three things: which link, which segment of it, and which end of that
+  // segment.
+  int v = gl_VertexID;
+  int id = v / (SEGMENTS * 2);
+  int seg = (v % (SEGMENTS * 2)) >> 1;
+  int far = v & 1;
   ivec2 tc = ivec2(id % uGrid, id / uGrid);
   ivec2 nc = ivec2((tc.x + 1) % uGrid, tc.y);
 
   vec4 a = texelFetch(uState, tc, 0);
   vec4 b = texelFetch(uState, nc, 0);
-  vec3 p = far == 0 ? a.xyz : b.xyz;
+
+  // Where along the connection this vertex sits, 0 at one particle and 1 at the
+  // other.
+  float t = float(seg + far) / float(SEGMENTS);
+  vec3 straight = mix(a.xyz, b.xyz, t);
+
+  // THE BOW. A curl sample bends the middle of the path while sin(pi*t) pins
+  // both ENDS to their particles -- a pathway that let go of its endpoints would
+  // read as loose string rather than as a connection between two things. The
+  // sample moves with its own clock, so the pathways wander at a rate that is
+  // nothing to do with how fast the field is turning over.
+  float bow = sin(3.14159265 * t);
+  vec3 p = straight
+         + curl(straight * 2.3 + vec3(float(id) * 0.017), uTime * uLinkBow.y)
+           * uLinkBow.x * bow;
 
   float d = length(a.xyz - b.xyz);
   // Only genuinely close pairs are a connection. Beyond the range this goes to
