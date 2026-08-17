@@ -12,6 +12,7 @@ Layers:
   1. governance floor  - the cage, non-overridable
   2. tier character    - Chief of Staff / Department Head / Worker
   3. department slant  - for a Department Head (optional; org-agnostic)
+  4. character persona - the BODY's voice (optional; prose only, never authority)
 """
 
 from __future__ import annotations
@@ -236,11 +237,22 @@ def compose_system_prompt(
     *,
     department: str | None = None,
     department_brief: str | None = None,
+    persona: str | None = None,
 ) -> str | None:
     """Compose the layered system prompt for an agent at ``actor_tier``.
 
     Returns ``None`` when there is no agent character to assert (a human principal
     or an unknown tier) - the runtime then sends no system message.
+
+    ``persona`` is a character bundle's ``prompts.system``: the VOICE of whichever
+    body the user chose. It is appended LAST, below every layer that carries
+    authority, so it can shape how something is said and never what may be done.
+    A persona that tried to widen its own permissions would be arguing with the
+    grant checker, which does not read prose.
+
+    Absent, the composition is byte-for-byte what it was before characters had
+    personas at all -- which is what keeps a build with no character selected,
+    and every existing caller, unchanged.
     """
     character = TIER_CHARACTER.get(actor_tier)
     if not character:
@@ -255,4 +267,6 @@ def compose_system_prompt(
         if slant_bits:
             parts.append(" ".join(slant_bits))
     parts.extend((TOOL_HARNESS, OPERATING_METHOD))
+    if persona and persona.strip():
+        parts.append(persona.strip())
     return "\n\n".join(parts)
