@@ -32,17 +32,29 @@ export class TickerBed {
   private audio: HTMLAudioElement | null = null;
   private fade = 0;
 
-  /** Start, or keep running. Idempotent -- called from a state effect. */
+  /** Play the arrival, once.
+   *
+   * NOT A LOOP ANY MORE. Running it for the whole time he speaks makes the
+   * clatter ambient, and ambient sound stops carrying information. The board
+   * only makes that noise when the message CHANGES, so this fires on the
+   * message first appearing and is silent while the same one keeps scrolling --
+   * which is what makes hearing it mean something new arrived.
+   *
+   * Idempotent while a play is in flight, so a re-render cannot stack two. */
   start(): void {
     if (this.audio) return;
     if (typeof Audio !== "function") return;
     try {
       const audio = new Audio(SRC);
-      audio.loop = true;
       audio.volume = 0;
       this.audio = audio;
+      // Ends itself: one pass, then release, so nothing has to remember to
+      // stop it when the message stops being new.
+      audio.addEventListener("ended", () => {
+        if (this.audio === audio) this.audio = null;
+      });
       void audio.play().catch(() => this.stop());
-      this.ramp(VOLUME);
+      audio.volume = VOLUME;
     } catch {
       this.audio = null;
     }

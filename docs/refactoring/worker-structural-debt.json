@@ -919,21 +919,11 @@
     },
     "apps/worker/src/components/familiar/FamiliarWebGLRenderer.ts": {
       "file_lines": 435,
-      "max_function_lines": 102,
+      "max_function_lines": 49,
       "max_parameters": 2,
-      "max_complexity": 24,
+      "max_complexity": 12,
       "max_nesting_depth": 3,
-      "over_limit_functions": [
-        {
-          "name": "FamiliarWebGLRenderer.frame",
-          "line": 333,
-          "column": 19,
-          "lines": 102,
-          "parameters": 1,
-          "complexity": 24,
-          "nesting_depth": 2
-        }
-      ],
+      "over_limit_functions": [],
       "owner": "worker-maintainers",
       "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"

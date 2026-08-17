@@ -133,8 +133,14 @@ describe("Jarvis's voice", () => {
     expect(bundleVoiceId(manifest, "xai")).toBeUndefined();
   });
 
-  it("says nothing for the Familiar, who declares no voice at all", () => {
+  it("reads the Familiar's own fish id rather than Jarvis's", () => {
+    // She declares one now, where she used to declare nothing. The point of the
+    // assertion is unchanged: bundleVoiceId must answer from the manifest it was
+    // handed. Returning Jarvis's id here would be the failure, and it is a live
+    // possibility precisely because both bundles now name the same provider.
     const manifest = parseCharacterBundle(familiarBundle);
-    expect(bundleVoiceId(manifest, "fish")).toBeUndefined();
+    const jarvis = parseCharacterBundle(jarvisBundle);
+    expect(bundleVoiceId(manifest, "fish")).toBe("c8f64deb39914cfca7f47ccfc3bca82f");
+    expect(bundleVoiceId(manifest, "fish")).not.toBe(bundleVoiceId(jarvis, "fish"));
   });
 });

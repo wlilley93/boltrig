@@ -158,7 +158,7 @@ export class UltronRenderer {
     if (!passes || !this.canvas) return;
     this.resize();
     const d = this.drive(nowMs);
-    passes.render(d, this.palette(), 0.24 + 0.34 * d.energy, 0.04 + 0.10 * d.energy);
+    passes.render(d, this.palette(), 0.13 + 0.17 * d.energy, 0.0);
   }
 
   // ------------------------------------------------------------------ internals

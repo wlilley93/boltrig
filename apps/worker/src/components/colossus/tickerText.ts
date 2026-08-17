@@ -77,7 +77,11 @@ export function compileTicker(text: string): TickerBuffer {
  * stopped would read as broken, and every reference panel is moving.
  */
 export function scrollSpeed(mode: ColossusMode, level: number): number {
-  const base = mode === "speaking" ? 9 : mode === "working" ? 6.5
-    : mode === "thinking" ? 5 : mode === "listening" ? 4 : 3;
-  return base + (mode === "speaking" ? level * 9 : level * 2);
+  // Cells per second. A glyph is six cells wide, so 9 was a character every two
+  // thirds of a second -- a clause took the better part of a minute to cross and
+  // read as a machine struggling rather than a machine reporting. These are a
+  // reading pace: the sentence arrives while it is still of interest.
+  const base = mode === "speaking" ? 26 : mode === "working" ? 20
+    : mode === "thinking" ? 16 : mode === "listening" ? 13 : 10;
+  return base + (mode === "speaking" ? level * 22 : level * 5);
 }

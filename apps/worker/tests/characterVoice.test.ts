@@ -22,21 +22,35 @@ const silent = { id: "ghost", name: "Ghost", type: "shader", schemaVersion: 1 } 
   Parameters<typeof resolveVoiceId>[0];
 
 describe("Familiar's shipped voice", () => {
-  it("declares vera, which is CC-BY-4.0 and therefore shippable WITH attribution", () => {
-    // vera resolves to hf://kyutai/tts-voices/vctk/p229_023_enhanced.wav. VCTK is
-    // CC-BY-4.0, so shipping it obliges us to credit — see THIRD_PARTY_NOTICES.md.
+  it("declares her own clone, not a voice out of somebody else's catalogue", () => {
+    // She used to declare `vera` — hf://kyutai/tts-voices/vctk/p229_023_enhanced.wav,
+    // CC-BY-4.0 via VCTK, shippable only WITH attribution. She now declares a clone
+    // of our own reference, which needs no third-party credit at all.
     //
-    // This assertion is about LICENSING as much as sound. Kyutai's catalogue is
-    // licensed per SOURCE DATASET, not uniformly: cosette comes from Expresso and
-    // jean from EARS, both CC-BY-NC-4.0, and neither may ship in a commercial
-    // build. Pinning the default here stops it drifting onto one of those because
-    // somebody preferred the sound.
-    expect(resolveVoiceId(manifest, OVERRIDE_PROVIDER, undefined, "familiar")).toBe("vera");
+    // The LICENSING hazard the old assertion existed for is unchanged and is what
+    // is really pinned here. Kyutai's catalogue is licensed per SOURCE DATASET, not
+    // uniformly: cosette comes from Expresso and jean from EARS, both CC-BY-NC-4.0,
+    // and neither may ship in a commercial build. A default that drifts onto one of
+    // those because somebody preferred the sound is the failure, and it is caught
+    // by naming them rather than by pinning one permitted value — so replacing this
+    // clone later with another of ours does not require editing the test, and
+    // replacing it with an NC voice does.
+    const NON_COMMERCIAL = ["cosette", "jean"];
+    const shipped = resolveVoiceId(manifest, OVERRIDE_PROVIDER, undefined, "familiar");
+    expect(shipped).toBe("familiar");
+    expect(NON_COMMERCIAL).not.toContain(shipped);
   });
 
-  it("names no cloud voice id, so the stock build needs no vendor account", () => {
+  it("always names a LOCAL voice, so the stock build needs no vendor account", () => {
+    // Every character now declares a cloud id beside the local one, so the old
+    // form of this — asserting no cloud id exists — would be asserting something
+    // the build does not do. What must stay true is that the cloud id is never
+    // the only way to hear her: the default provider resolves locally, and a
+    // provider the bundle does not name resolves to nothing rather than falling
+    // through to somebody else's voice.
+    expect(resolveVoiceId(manifest, OVERRIDE_PROVIDER, undefined, "familiar")).toBeDefined();
     expect(resolveVoiceId(manifest, "elevenlabs", undefined, "familiar")).toBeUndefined();
-    expect(resolveVoiceId(manifest, "fish", undefined, "familiar")).toBeUndefined();
+    expect(resolveVoiceId(manifest, "xai", undefined, "familiar")).toBeUndefined();
   });
 });
 
@@ -55,7 +69,7 @@ describe("the user's choice", () => {
   it("clears back to the bundle's voice rather than to silence", () => {
     const cleared = voiceOverrideToSettings(settings, "familiar", null);
     expect(cleared[VOICE_OVERRIDE_SETTING_KEY]).toEqual({});
-    expect(resolveVoiceId(manifest, OVERRIDE_PROVIDER, cleared, "familiar")).toBe("vera");
+    expect(resolveVoiceId(manifest, OVERRIDE_PROVIDER, cleared, "familiar")).toBe("familiar");
   });
 
   it("survives a malformed sibling entry instead of losing every voice", () => {

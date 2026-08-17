@@ -61,13 +61,24 @@ export function ColossusStage({
     else rendererRef.current?.resume();
   }, [suspended]);
 
-  // The room tone, under his voice and only while he has one. Gated on the
-  // mode rather than on the level, so a quiet passage in a sentence does not
-  // switch the building off and on again.
+  // The board's arrival sound, on a NEW message only.
+  //
+  // Keyed on the MODE CHANGING rather than on being in a mode: the sign makes
+  // that noise when its message changes, so a second and third pass of the same
+  // sentence are silent. Firing it for the whole time he speaks made the
+  // clatter ambient, and ambient sound carries no information -- hearing it now
+  // means something arrived.
+  const spoken = useRef<string | null>(null);
   useEffect(() => {
     const bed = bedRef.current ?? (bedRef.current = new TickerBed());
-    if (state.mode === "speaking" && !suspended) bed.start();
-    else bed.stop();
+    if (suspended) {
+      bed.stop();
+      spoken.current = null;
+      return;
+    }
+    if (state.mode === spoken.current) return;
+    spoken.current = state.mode;
+    if (state.mode === "speaking") bed.start();
   }, [state.mode, suspended]);
 
   useEffect(() => () => {

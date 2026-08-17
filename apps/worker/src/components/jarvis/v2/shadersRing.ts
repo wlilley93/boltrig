@@ -200,7 +200,7 @@ void main() {
   vec2 uv = (vec2(tc) + 0.5) / float(uGrid);
 
   vec3 p = st.xyz;
-  vec3 v = curl(p, uTime) * (0.55 + 0.85 * uEnergy);
+  vec3 v = curl(p, uTime) * flowSpeed(uEnergy);
 
   vec4 head = project(p, uAspect);
   vec4 ahead = project(p + v * 0.04, uAspect);

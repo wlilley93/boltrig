@@ -221,7 +221,7 @@ export class NeuralPasses {
     const draw = this.progs.draw;
     gl.useProgram(draw);
     setUniforms(gl, draw, {
-      ...shared, uStreak: 0.024 + 0.020 * d.energy, uGain: 0.12 + 0.14 * d.energy,
+      ...shared, uStreak: 0.051 + 0.042 * d.energy, uGain: 0.12 + 0.14 * d.energy,
     }, { uState: 0, uGrid: GRID });
     gl.drawArrays(gl.LINES, 0, PARTICLES * 2);
 

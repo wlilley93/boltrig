@@ -51,14 +51,14 @@ void main() {
     return;
   }
 
-  vec3 v = curl(p, uTime) * (0.55 + 0.85 * uEnergy);
+  vec3 v = curl(p, uTime) * flowSpeed(uEnergy);
 
   // Soft radial constraint toward this particle's own home radius. Weak enough
   // that particles overshoot, which is what keeps the surface broken rather
   // than reading as a drawn sphere.
   float d = length(p);
   vec3 outward = normalize(p + 1e-5);
-  v += outward * (shapedRadius(vUV, p, uTime, uRadius, uPetal) - d) * 5.0;
+  v += outward * (shapedRadius(vUV, p, uTime, uRadius, uPetal) - d) * 3.0;
 
   // THE SPEECH WAVE. An onset starts an impulse at the centre which travels
   // outward at a fixed speed, so a syllable visibly CROSSES the body instead of

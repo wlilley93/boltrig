@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-17T02:55:57.823Z",
+  "capturedAt": "2026-08-17T04:56:32.219Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,11 +16,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "886ee56da93d8e3b91fc29658eee79859a8fcae29cf2f2d9d18940620e230d63",
-    "digestAfterCapture": "886ee56da93d8e3b91fc29658eee79859a8fcae29cf2f2d9d18940620e230d63",
+    "digestBeforeCapture": "b42c52a103c3d2862394a907009b3a92826769c7e14d26c4aff0c0d4a57694f7",
+    "digestAfterCapture": "b42c52a103c3d2862394a907009b3a92826769c7e14d26c4aff0c0d4a57694f7",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/real-brand-mark",
-    "head": "d41691ee61791c6a53c8afad1a83adde8c757e7a",
+    "head": "84ddeb7ecb31bb0ad96df7b855c1468ee75aa9d7",
     "dirty": true
   },
   "runner": {
@@ -103,7 +103,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

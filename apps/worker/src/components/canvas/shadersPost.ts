@@ -47,10 +47,22 @@ void main() {
   // without it the field reads as debris rather than as a mind with a centre.
   // Two lobes: a wide halo and a tight point, so it has a falloff rather than
   // being a disc.
+  // BOTH LOBES SIT AT THE WARM END. The tight one used uHot at 2.4x, which
+  // put the middle of the frame above what the knee below can represent -- and
+  // anything above the knee is white whatever hue arrived there. The heart in
+  // the reference frames is brighter than what surrounds it and still plainly
+  // orange; it is never a white spot.
   c += uWarm * uCore * exp(-r * r * 60.0) * 1.1;
-  c += uHot * uCore * exp(-r * r * 900.0) * 2.4;
+  c += mix(uWarm, uHot, 0.35) * uCore * exp(-r * r * 900.0) * 1.2;
 
-  // Anamorphic starburst. The cheap cousin of Animal Logic's physically based
+  // Anamorphic starburst, and it is OFF for the two hologram bodies. Read at
+  // the sizes these stages actually draw at, exp(-y*y*4000) * exp(-x*x*26) is a
+  // bar fifteen times wider than it is tall laid across the middle in the hot
+  // colour -- which is the "white hot block shining through the iris". The
+  // reference hologram has no lens flare on it. It stays in the shader because
+  // Colossus is a CRT, where a horizontal streak off the beam is correct.
+  //
+  // The cheap cousin of Animal Logic's physically based
   // lens flare (DigiPro 2019, after Hullin et al.) -- a real lens simulation is
   // not happening in a fragment shader, and this does not pretend to be one. It
   // is a horizontal streak off the core, which is the part of a flare the eye

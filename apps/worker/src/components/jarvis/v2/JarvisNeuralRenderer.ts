@@ -202,7 +202,14 @@ export class JarvisNeuralRenderer {
     if (!passes || !this.canvas) return;
     this.resize();
     const d = this.drive(nowMs);
-    passes.render(d, this.palette(), 0.30 + 0.40 * d.energy, 0.05 + 0.12 * d.energy);
+    // NO LENS FLARE ON A HOLOGRAM, AND A WARM HEART. Three things stacked at the
+    // centre: the field converges there, the composite adds two gaussians on top
+    // of it, and the starburst laid a hot bar fifteen times wider than it was
+    // tall straight across the middle. That bar is what read as a white block
+    // shining through the iris. It is off here -- it belongs to Colossus, whose
+    // CRT beam earns a horizontal streak -- and the lobes now sit at the warm
+    // end, so the heart stays bright without leaving the orange.
+    passes.render(d, this.palette(), 0.12 + 0.16 * d.energy, 0.0);
   }
 
   // ------------------------------------------------------------------ internals

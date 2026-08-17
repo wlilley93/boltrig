@@ -194,7 +194,7 @@ export class UltronPasses {
     setUniforms(gl, vein, {
       ...shared,
       // Longer than Jarvis's streak: growth, not data in motion.
-      uStreak: 0.052 + 0.040 * d.energy,
+      uStreak: 0.110 + 0.085 * d.energy,
       uGain: 0.11 + 0.13 * d.energy,
     }, { uState: 0, uGrid: GRID });
     gl.drawArrays(gl.LINES, 0, PARTICLES * 2);

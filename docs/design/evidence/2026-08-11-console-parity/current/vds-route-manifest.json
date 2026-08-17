@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "generatedBy": "Boltrig deterministic seven-state current capture harness",
-  "takenAt": "2026-08-17T02:55:57Z",
-  "source": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json (sha256:5c4ce545bef6ce542ae0f6f2443365e4c007e16ef3992e194d951369371d4e6d) and metrics.json (sha256:45f6d2fabb8701aed3f3f6a9f628d81827e05b9bfdc14fef3ad82adc25015e6f)",
+  "takenAt": "2026-08-17T04:56:32Z",
+  "source": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json (sha256:5dbea010fc4905e79a9e83b029757c4bf2af12ba41ec9e6006312315f277bf4b) and metrics.json (sha256:24eed475d448cb74fd579073f73d347526d3238f28d850611fc560e32485f921)",
   "routes": [
     "apps/worker/src/components/ChatView.tsx",
     "apps/worker/src/components/CommandPalette.tsx",
@@ -17,5 +17,5 @@
     "This captured-unreviewed route manifest carries no frameDigest, sign-off, conformity verdict or visual-review authority.",
     "There is no signed full-frame target for New chat; routes without a 2026-08-11 Figma CURRENT SOURCE frame are outside this parity programme."
   ],
-  "contentDigest": "sha256:d8eebc2a6ef7359d974db99037b9cdf48830c35a89d13d0b1cc4d961b5d8beae"
+  "contentDigest": "sha256:1ae7480afba950cd42e8e04a8e3d6d7b229f24530b8d2d86aab6ab1d803edd92"
 }

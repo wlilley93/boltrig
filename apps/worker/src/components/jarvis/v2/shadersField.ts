@@ -33,7 +33,7 @@ void main() {
   vec4 st = texelFetch(uState, tc, 0);
 
   vec3 p = st.xyz;
-  vec3 v = curl(p, uTime) * (0.55 + 0.85 * uEnergy);
+  vec3 v = curl(p, uTime) * flowSpeed(uEnergy);
   vSpeed = clamp(length(v) * 0.55, 0.0, 1.0);
 
   // Fade in and out at the ends of life, so particles never pop.

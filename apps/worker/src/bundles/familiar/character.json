@@ -57,7 +57,8 @@
   },
   "voice": {
     "fallbackVoiceIds": {
-      "pocket-voice": "vera"
+      "fish": "c8f64deb39914cfca7f47ccfc3bca82f",
+      "pocket-voice": "familiar"
     }
   },
   "capabilities": {

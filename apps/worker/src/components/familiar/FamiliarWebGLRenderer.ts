@@ -7,6 +7,7 @@
 import fragSrc from "../../bundles/familiar/familiar.frag?raw";
 import type { FamiliarGenotype } from "@wlilley93/boltrig-web-sdk";
 import { packFamiliarGenotype } from "./FamiliarGenotype";
+import { VoiceEnvelope, dayWarmth, familiarDrive, type FamiliarDrive } from "./familiarDrive";
 import {
   clampStageState,
   RESTING_STAGE_STATE,
@@ -54,6 +55,17 @@ export function familiarCompositionForMode(mode: FamiliarPresentationMode): {
   return mode === "voice"
     ? { scaleDock: 0.45, fitScale: 0.62 }
     : { scaleDock: 0.34, fitScale: 0.5 };
+}
+
+/** One frame's worth of derived values, handed to the uniform push as a single
+ *  argument. A bag rather than five positional parameters: they are all numbers
+ *  of the same type, so a transposed pair would compile and simply draw wrong. */
+interface FrameShot {
+  w: number;
+  h: number;
+  t: number;
+  now: number;
+  drive: FamiliarDrive;
 }
 
 export class FamiliarWebGLRenderer {
@@ -276,6 +288,9 @@ export class FamiliarWebGLRenderer {
     } else if (!this.mood.tgt || now >= this.mood.nextSwitch) this.pickMood(now);
     const dt = Math.min(0.5, (now - this.mood.lastT) / 1000);
     this.mood.lastT = now;
+    // Published for the voice envelope: one frame delta, computed once, so the
+    // two smoothers cannot disagree about how long the frame was.
+    this.lastDt = dt;
     const k = 1 - Math.exp(-dt / this.mood.tau);
     const tgt = this.mood.tgt;
     if (!tgt) return;
@@ -301,6 +316,13 @@ export class FamiliarWebGLRenderer {
     g.amt = elapsed < rise ? elapsed / rise : 1 - (elapsed - rise) / (g.ttl - rise);
   }
 
+  /** The voice envelopes. See familiarDrive.ts for why they are asymmetric. */
+  private readonly voiceEnv = new VoiceEnvelope();
+
+  /** Seconds since the previous frame, published by the mood tick. Seeded to
+   *  a nominal 60fps so the first frame smooths rather than dividing by zero. */
+  private lastDt = 1 / 60;
+
   private apertureNow(_now: number): number {
     // Always fully open: there is no entrance to animate. This also removes the
     // timing dependence that made visual captures replay the aperture once per
@@ -318,16 +340,6 @@ export class FamiliarWebGLRenderer {
       canvas.width = size;
       canvas.height = size;
     }
-  }
-
-  /** 0..1 warmth from local time, peaking mid-afternoon. */
-  private dayWarmth(): number {
-    // Date.now is the existing visual-fixture clock seam. Passing it
-    // explicitly keeps captures fixed while remaining the live clock in
-    // production; `new Date()` alone ignores a frozen Date.now implementation.
-    const d = new Date(Date.now());
-    const h = d.getHours() + d.getMinutes() / 60;
-    return 0.15 + 0.85 * Math.max(0, Math.sin(((h - 9) / 12) * Math.PI));
   }
 
   private frame = (now: number): void => {
@@ -356,32 +368,26 @@ export class FamiliarWebGLRenderer {
       this.gestureTick(now);
     }
 
-    // Drive from Worker state: a working turn pulses the body; speaking
-    // articulates it harder, scaled by the reported level. This is the seam
-    // FamiliarState v2 (8-band voice features) will replace.
-    let ax = 0;
-    let ay = 0;
-    let az = 0;
-    let aw = 0;
-    let beat = 0;
-    const { working, speaking, level, bands, onset } = this.state;
-    if (speaking && bands && bands.length === 8) {
-      // Real voice embodiment (A4): lows pressurise the nucleus, mids move the
-      // interior, highs light the surface; onset is the beat channel.
-      ax = level;
-      ay = (bands[0] + bands[1]) / 2;
-      az = (bands[2] + bands[3] + bands[4]) / 3;
-      aw = (bands[5] + bands[6] + bands[7]) / 3;
-      beat = onset ?? 0;
-    } else if (speaking) {
-      const amp = 0.35 + 0.55 * (level || 0.5);
-      ax = amp * (0.75 + 0.25 * Math.sin(t * 3.1));
-      ay = amp * (0.6 + 0.4 * Math.sin(t * 2.2 + 1.3));
-    } else if (working) {
-      ax = 0.45 + 0.15 * Math.sin(t * 3.1);
-      ay = 0.4 + 0.2 * Math.sin(t * 2.2 + 1.3);
-    }
+    const drive = familiarDrive(this.state, this.voiceEnv, this.lastDt, t);
+    this.pushUniforms({ w, h, t, now, drive });
 
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    if (!this.painted) {
+      this.painted = true;
+      this.onFirstPaint?.();
+    }
+  };
+
+  /** Every uniform the shader reads, in one place.
+   *
+   * Separated from frame() because they are different jobs: frame decides
+   * WHETHER and WHEN to draw -- reduced motion, a hidden tab, a lost context --
+   * and this decides WHAT the shader is told. Reading a missing uniform's
+   * location as null is deliberate throughout: a shader recompiled without one
+   * should draw without it, not throw on the next frame. */
+  private pushUniforms({ w, h, t, now, drive }: FrameShot): void {
+    const gl = this.gl;
+    if (!gl) return;
     const u = this.uniforms;
     const f = (name: UniformName, value: number) => gl.uniform1f(u[name] ?? null, value);
     f("iTime", t);
@@ -406,11 +412,11 @@ export class FamiliarWebGLRenderer {
 
     gl.uniform2f(u.uMouse ?? null, 0.5, 0.5);
     f("uGaze", 0); // autonomous gaze; cursor tracking is a later, deliberate step
-    f("uDay", this.dayWarmth());
+    f("uDay", dayWarmth());
 
     const m = this.mood.cur;
     f("uValence", m.valence);
-    f("uArousal", Math.min(1, m.arousal + (working ? 0.25 : 0)));
+    f("uArousal", Math.min(1, m.arousal + (this.state.working ? 0.25 : 0)));
     f("uIrritation", m.irritation);
     f("uFatigue", m.fatigue);
     f("uAttention", m.attention);
@@ -421,15 +427,9 @@ export class FamiliarWebGLRenderer {
 
     f("uGesture", this.gesture.id);
     f("uGestureAmt", this.gesture.amt);
-    gl.uniform4f(u.uAudio ?? null, ax, ay, az, aw);
-    f("uBeat", beat);
+    gl.uniform4f(u.uAudio ?? null, drive.ax, drive.ay, drive.az, drive.aw);
+    f("uBeat", drive.beat);
     f("uPortWide", 0);
     f("uHover", 0);
-
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    if (!this.painted) {
-      this.painted = true;
-      this.onFirstPaint?.();
-    }
-  };
+  }
 }

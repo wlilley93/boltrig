@@ -131,7 +131,7 @@ describe("reply speech", () => {
     await waitFor(() => expect(api.invoke).toHaveBeenCalledWith({
       noun: "voice",
       verb: "voice.speak",
-      params: { text: "Hello there", voice: "vera" },
+      params: { text: "Hello there", voice: "familiar" },
     }));
     await waitFor(() => expect(FakeAudioContext.instances[0]?.sources[0]?.start)
       .toHaveBeenCalledOnce());

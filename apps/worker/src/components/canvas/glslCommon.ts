@@ -32,12 +32,27 @@ float noise(vec3 x) {
 // at that scale the filaments bundled into a few thick ropes instead of reading
 // as many fine fibres, which is most of why the first render looked like fog.
 vec3 potential(vec3 p, float time) {
-  float t = time * 0.08;
+  float t = time * 0.05;
   return vec3(
     noise(p * 2.3 + vec3(0.0, t, 0.0)) + 0.5 * noise(p * 5.2 + vec3(5.2, t * 1.7, 1.3)),
     noise(p * 2.3 + vec3(4.7, 2.1, t)) + 0.5 * noise(p * 5.2 + vec3(1.9, t * 1.3, 8.4)),
     noise(p * 2.3 + vec3(t, 9.2, 3.8)) + 0.5 * noise(p * 5.2 + vec3(t * 1.1, 6.6, 2.2)));
 }
+
+// THE ADVECTION RATE, in one place.
+//
+// It was written out four times -- the simulation and three draw passes -- and
+// they have to agree: SIM moves the particle by curl(p)*flowSpeed(e)*dt, and
+// each draw pass puts the streak's tail at p - curl(p)*flowSpeed(e)*uStreak. If
+// the copies drift, the motion blur points somewhere the particle is not going,
+// which is silent and looks like a bad noise field rather than like a bug.
+//
+// Roughly half the first cut's rate. At 0.55 + 0.85e the filaments whipped --
+// read as solar flares rather than as a mind thinking -- and the reference
+// hologram turns over slowly even while it is talking. The streaks keep their
+// LENGTH because every call site raises uStreak by the reciprocal; only the
+// pace changed.
+float flowSpeed(float energy) { return 0.26 + 0.40 * energy; }
 
 // Curl by central differences on the potential. e is a compromise: smaller and
 // the hash noise's own quantisation shows up as jitter in the curl.
