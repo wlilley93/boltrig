@@ -189,7 +189,13 @@ class BifrostUserGateway:
             await self._admin.revoke_metadata(previous)
         await self._admin.ensure_provider(provider)
         await self._admin.ensure_provider_key(
-            provider, provider_key_id, raw_model, provider_key
+            provider,
+            provider_key_id,
+            raw_model,
+            provider_key,
+            # Already on the resolution and already threaded to the spawner for
+            # routing; the Bifrost admin was the one caller that never saw it.
+            base_url=getattr(resolution, "base_url", None),
         )
         virtual_key_id, virtual_key = await self._admin.ensure_virtual_key(
             virtual_key_name, provider, provider_key_id, raw_model

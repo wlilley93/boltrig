@@ -999,6 +999,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/identity/auth.py:169		A missing/non-numeric 
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/auth.py:368		Unmapped / none / an unknown tier -> denied fail-closed (K-13),
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/auth.py:72		(HS*) algorithm are rejected outright - never inferred from the JWKS - so an
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/auth.py:78		request with a bogus kid must not amplify into an outbound IdP fetch per
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/bifrost_user_admin.py:206		"Bifrost refused the provider key" and cannot act on.
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/bifrost_user_binding.py:197		routing;
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/onboarding.py:36		but a missing marker is deliberately fail-closed in Worker: chat is not
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/password_reset_evidence.py:15		deliberately never called, so attributing it to provider failure would
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/passwords.py:33		always fails but costs the same as a genuine verify.

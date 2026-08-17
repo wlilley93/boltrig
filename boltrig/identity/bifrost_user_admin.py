@@ -43,6 +43,12 @@ BIFROST_PROVIDERS = frozenset(
     }
 )
 
+#: Providers whose key payload carries a server URL in a provider-specific
+#: block. Self-hosted providers only: the key is a placeholder and the address
+#: is the real configuration. A table rather than an `if`, because Bifrost names
+#: the block per provider and vllm will want its own when it is wired.
+_PROVIDER_URL_CONFIG = {"ollama": "ollama_key_config"}
+
 _MAX_MODEL_PAGES = 8
 
 
@@ -172,7 +178,12 @@ class BifrostUserAdmin:
             raise BifrostUserBindingUnavailable("Bifrost refused the selected provider")
 
     async def ensure_provider_key(
-        self, provider: str, key_id: str, raw_model: str, provider_key: str
+        self,
+        provider: str,
+        key_id: str,
+        raw_model: str,
+        provider_key: str,
+        base_url: str | None = None,
     ) -> None:
         key_path = (
             f"{self._http.base}api/providers/{quote(provider, safe='')}/keys/"
@@ -186,6 +197,22 @@ class BifrostUserAdmin:
             "models": [raw_model],
             "enabled": True,
         }
+        # A KEYED provider's whole configuration is its key. A self-hosted one's
+        # is its ADDRESS -- the key is a placeholder for a server that
+        # authenticates nothing (see _KEYLESS_PROVIDERS in kernel/ai_key_routes)
+        # and Bifrost asks for the URL in a provider-specific block instead.
+        # Without it the POST is refused with "ollama_key_config.url is
+        # required for Ollama keys", which is a 400 the operator sees as
+        # "Bifrost refused the provider key" and cannot act on.
+        config_field = _PROVIDER_URL_CONFIG.get(provider)
+        if config_field:
+            url = (base_url or "").strip()
+            if not url:
+                raise BifrostUserBindingUnavailable(
+                    f"{provider} needs the URL of its server; set the endpoint's "
+                    "base URL and try again"
+                )
+            payload[config_field] = {"url": url}
         if check_status == 404:
             status, _payload = await self._http.request(
                 "POST",
