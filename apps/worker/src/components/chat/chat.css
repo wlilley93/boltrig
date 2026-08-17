@@ -297,3 +297,95 @@ button.subagent-fan-row:hover .subagent-fan-name { color: var(--text); }
   background: transparent;
 }
 .m-pending-note { flex-basis: 100%; margin: 2px 0 0; padding-left: 18px; color: var(--text-3); font-size: 13px; }
+
+
+/* The compaction boundary: a quiet divider in the flow of the transcript.
+ *
+ * DELIBERATELY NOT A NOTICE. `.notice` is for something that wants attention --
+ * an error, a state the reader must act on. Compaction is neither: it is a fact
+ * about what the model receives, and it should read like a timestamp or a date
+ * separator, present and unobtrusive. Making it loud would train the eye to
+ * skip it.
+ *
+ * MOBILE: no breakpoint needed. It is a single flex row with no fixed widths
+ * that wraps like any other line, and the rule sits inside chat.css, which both
+ * the desktop transcript and the mobile chat shell already load. The disclosure
+ * body is prose and inherits the transcript's own measure. Verified against the
+ * two breakpoints at the foot of this file -- neither targets `.notice` or the
+ * transcript's direct children, so nothing there needs a counterpart.
+ */
+.compaction-line {
+  margin: 18px 0;
+  font-size: 0.82rem;
+  color: var(--muted, #8a8a94);
+}
+
+.compaction-line > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  padding: 2px 0;
+}
+
+/* Safari still paints its own marker without this. */
+.compaction-line > summary::-webkit-details-marker { display: none; }
+
+.compaction-line > summary:hover { color: var(--text, #d8d8de); }
+
+.compaction-line > summary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* The mark: a small stack of lines closing up, which is what compaction does
+ * to a transcript. Drawn in CSS rather than shipped as an icon -- one element,
+ * no asset, and it inherits the text colour on hover for free. */
+.compaction-line-mark {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 9px;
+  border-top: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  position: relative;
+  opacity: 0.85;
+}
+
+.compaction-line-mark::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 50%;
+  border-top: 1.5px solid currentColor;
+  transform: translateY(-50%);
+}
+
+/* The rule that carries the eye across, after the label rather than around it,
+ * so the text stays left-aligned with the transcript like every other row. */
+.compaction-line > summary::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.18;
+}
+
+.compaction-line-body {
+  margin: 8px 0 0 19px;
+  max-width: 62ch;
+}
+
+.compaction-line-body p { margin: 0 0 8px; }
+
+.compaction-line-body blockquote {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  background: rgb(255 255 255 / 3%);
+  border-radius: 0 4px 4px 0;
+  white-space: pre-wrap;
+  font-size: 0.95em;
+}

@@ -33,6 +33,8 @@ import { LiveTurn, Message } from "./chat/ChatMessages";
 import { ComposerRunStatus } from "./chat/QueuedMessages";
 import { RunSectionView } from "./chat/RunSectionView";
 import { RoutineRunBanner, useConversationProvenance } from "./chat/RoutineRunBanner";
+import { TranscriptBody } from "./chat/TranscriptBody";
+import { useCompactionBoundary } from "./chat/useCompactionBoundary";
 import { SubagentTabs } from "./chat/SubagentTabs";
 import { TaskInspector } from "./chat/TaskInspector";
 import type {
@@ -205,6 +207,7 @@ export function ChatView({
     messages,
     queuedMessageOrder: queue.order,
   });
+  const compactionBoundaryId = useCompactionBoundary(modelContext, transcriptMessages);
   const transcriptViewport = useTranscriptViewport({
     conversationKey: conversationId,
     contentRevision: transcriptRevision,
@@ -1216,28 +1219,19 @@ export function ChatView({
             </p>
           )}
           <RoutineRunBanner provenance={conversationProvenance.value} />
-          {transcriptMessages.map((message) => (
-            <Message
-              key={message.id}
-              message={message}
-              tech={tech}
-              onDecisionResolved={retryConversationLoad}
-              durationSeconds={message.run_id ? turnDurations[message.run_id] : undefined}
-            />
-          ))}
-          {modelContext?.compacted && (
-            <details className="notice model-context-notice">
-              <summary>
-                Model context uses a summary of {modelContext.covered_count} earlier
-                messages plus {modelContext.recent_exact_count} recent messages verbatim.
-              </summary>
-              <p>
-                The complete transcript remains visible here. The next model turn
-                receives this derived summary for the older portion:
-              </p>
-              <blockquote>{modelContext.summary}</blockquote>
-            </details>
-          )}
+          <TranscriptBody
+            boundaryId={compactionBoundaryId}
+            messages={transcriptMessages}
+            modelContext={modelContext}
+            renderMessage={(message) => (
+              <Message
+                message={message}
+                tech={tech}
+                onDecisionResolved={retryConversationLoad}
+                durationSeconds={message.run_id ? turnDurations[message.run_id] : undefined}
+              />
+            )}
+          />
           {events.length > 0 && (
             <LiveTurn
               events={events}
