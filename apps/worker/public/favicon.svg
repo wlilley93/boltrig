@@ -1,8 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Boltrig">
-  <rect width="100" height="100" fill="#04060D" />
-  <g fill="none" stroke="#F2F7FC" stroke-linecap="round" stroke-width="6">
-    <circle cx="50" cy="50" r="44" stroke-dasharray="230 46" />
-    <circle cx="50" cy="50" r="9" fill="#3DD3F0" stroke="none" />
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"
+ role="img" aria-label="Boltrig">
+<rect width="100" height="100" fill="#04060D"/>
+<g fill="none" stroke="#F2F7FC" stroke-linecap="round" stroke-width="2.8">
+<circle cx="50" cy="50" r="45" stroke-dasharray="234.6 48.1"/>
+<circle cx="50" cy="50" r="37" stroke-dasharray="193 40" transform="rotate(-72 50 50)"/>
+<circle cx="50" cy="50" r="29" stroke-dasharray="151 31" transform="rotate(72 50 50)"/>
+<circle cx="50" cy="50" r="21" stroke-dasharray="110 22" transform="rotate(-144 50 50)"/>
+<circle cx="50" cy="50" r="13" stroke-dasharray="68 14" transform="rotate(144 50 50)"/>
+</g>
+<circle cx="50" cy="50" r="5.0" fill="#3DD3F0"/>
 </svg>
-
