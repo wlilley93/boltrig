@@ -340,6 +340,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat.py:1	ChatQueueService	
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat_authority.py:42	on_behalf_adapter_id	Seal the caller's clamped external bearer for the adapter that claims it.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat_authority.py:73	resolve_run_scoped_credential	Carry the parent run's sealed bearer down to a delegated child run.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat_idempotency.py:1	IdempotencyCoordinator	Exactly once per user message, on the surface a human actually types into.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat_persona.py:1	compose_system_prompt	The chosen character's voice, resolved for one turn.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chief_of_staff.py:1	Runtime	The tier-1 permanent agent: the Chief of Staff (US-FLT-01).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/codex_runtime.py:1	CodexRuntime	Runtime-protocol adapter over a supervised read-only Codex phase.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/codex_trusted_wall.py:1	model_proxy_peer_ancestry._registration_matches_process	The dev/prod wall for the trusted Codex runtime ([2026] VJS-CC-VJS 2, D1; 7, J8).
@@ -727,6 +728,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_idempotency.py:44		their own name
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_idempotency.py:49		stream; short enough that a key is never a permanent reservation.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/chat_idempotency.py:73		True when THIS caller owns the turn; False when it is a replay.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_origin.py:37		canonicalised rather than trusted: an unusable value is dropped, never a reason
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_persona.py:64		Presentation, not authority.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_turn_execution.py:146		the untrusted envelope.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_turn_flow.py:73		A steer joins the already-running request and cannot alter the
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chief_of_staff.py:63		provider must never raise the routing path - it falls back to the
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/codex_model_selection.py:22		Return one bounded opaque endpoint id, never a caller model string.
@@ -951,6 +954,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/model_gateway.py:155		: boolean; the U
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/model_gateway.py:33		An in-memory, TTL-bounded ``conversation_id -> model`` binding.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/model_router.py:24		Choose an agent's governed endpoint for one input modality.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/permanent_runtime.py:1		Governed lazy runtime binding for permanent Chief/Department profiles.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/personas.py:36		The persona text for a character id, or None.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/authority.py:11		Resolve all current ceilings;
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/capability_attestations.py:31		The bounded attestation store cannot retain another immutable set.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/execution_ledger.py:1		Canonical execution-ledger persistence boundary.
@@ -1417,6 +1421,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/model_proxy_pee
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/model_proxy_peer_registry.py:115	max_cells	Bounded registry with durable logical-cell tombstones.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/model_proxy_tool_ceiling.py:367	name	The wire name of a Responses-API tool entry, or None if it has no name.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/model_gateway.py:162	disabled	The gateway's readiness `(status, reason)` when no probe is armed.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/personas.py:1	prompt_stack	Character personas, keyed by id.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/ports/grant_leases.py:17	expected_authority	Durable atomic operations; implementations must never persist raw bearers.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/fleet/prompt_stack.py:85	GOVERNANCE_FLOOR	is in ``GOVERNANCE_FLOOR``, which that lane never sent.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:657	hierarchy.tier2	Build the live org (CoS + heads + pump) from the manifest hierarchy (P7).
