@@ -142,11 +142,20 @@ class TestGeneratedTableMatchesTheBundles:
         assert "familiar" in PERSONAS
 
     def test_every_persona_is_prose_rather_than_a_document(self):
-        # The long constitutions live in docs/characters. What ships is the
-        # compact prompt each ends with, because it is paid for on every turn.
+        """The long constitutions live in docs/characters; a SECTION ships.
+
+        The cap was 4,000 characters until the supplied documents arrived and
+        Ultron's core prompt measured 4,343. A fixed cap set before the source
+        text existed is a proxy, and the honest options were to trim somebody
+        else's authored document to fit it or to raise it. The real property --
+        that the bundle carries its document's section verbatim -- is asserted
+        in tests/test_persona_layer.py, which is a stronger claim than any
+        length. This keeps a loose ceiling so a whole 45KB constitution cannot
+        be pasted in by accident.
+        """
         for character, entry in PERSONAS.items():
             assert entry["system"].strip(), character
-            assert len(entry["system"]) < 4000, character
+            assert len(entry["system"]) < 8000, character
 
 
 class TestPositionInTheRealTurnTask:

@@ -10,16 +10,31 @@ something and nobody can remember why, the answer is in the long document.
 | --- | --- | --- |
 | Familiar | [familiar.md](familiar.md) | `apps/worker/src/bundles/familiar/character.json` |
 | Colossus | [colossus.md](colossus.md) | `apps/worker/src/bundles/colossus/character.json` |
-| Jarvis | not in the repo | `apps/worker/src/bundles/jarvis/character.json` |
-| Ultron | not in the repo | `apps/worker/src/bundles/ultron/character.json` |
+| Jarvis | [jarvis.md](jarvis.md) | `apps/worker/src/bundles/jarvis/character.json` |
+| Ultron | [ultron.md](ultron.md) | `apps/worker/src/bundles/ultron/character.json` |
 
-**Jarvis's and Ultron's source documents are not here.** Their compact prompts
-were taken from constitutions supplied in the same shape as this one, and the
-originals were not committed at the time. The prompts in their bundles are the
-authority until the documents are restored; this row is a gap, recorded rather
-than papered over, because "the long documents live in docs/characters" is the
-claim `tests/test_persona_layer.py` makes about all of them and it is currently
-only true of one.
+**Every shipped character's document is now here, and the bundle is checked
+against it.** `test_the_bundle_carries_its_document_section_VERBATIM` asserts
+each bundle's `prompts.system` is exactly the fenced section its document names.
+That test exists because both ways of getting it wrong actually happened:
+
+- **Drift.** Jarvis's and Ultron's prompts were written from an earlier reading
+  of constitutions that were not committed at the time. When the documents
+  arrived on 2026-08-17 they did not match -- Jarvis at 0.37 similarity, Ultron
+  at **0.05**, which is not compression but a different text.
+- **Truncation.** Colossus's prompt was extracted with a fixed line slice that
+  stopped ten lines short of his section's end. The lines it dropped were the
+  safety tail: the list of things he may not do, and the closing "You may reason
+  as World Control. The runtime remains in control." The shipped character
+  carried the doctrine without the limit.
+
+Neither failed anything, and that is the point. A drifted prompt reads exactly
+like a faithful one; a truncated prompt reads exactly like a complete one.
+
+**Which section ships is data, not a convention.** The documents were authored
+separately and number their core prompt differently -- Familiar §45, Ultron §25,
+Jarvis §27, Colossus §48, and out-of-tree Maya §40 and Bella §46. The mapping
+lives in one dict per side rather than in a rule nobody can check.
 
 **A private character's constitution does NOT belong here.** `personas_shipped.py`
 is generated from the bundles in this table and travels inside the kernel

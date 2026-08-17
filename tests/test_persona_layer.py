@@ -82,18 +82,52 @@ class TestShippedConstitutions:
         assert prompts["system"].strip()
         assert prompts["persona"].strip()
 
+    #: Which section of each document is the shipped prompt. DATA, not a
+    #: convention: the four documents were authored separately and number their
+    #: core prompt differently.
+    SHIPPED_SECTION = {"familiar": 45, "colossus": 48, "jarvis": 27, "ultron": 25}
+
     @pytest.mark.parametrize("name", ["familiar", "jarvis", "ultron", "colossus"])
-    def test_the_prompt_is_the_compact_one(self, name):
+    def test_the_bundle_carries_its_document_section_VERBATIM(self, name):
+        """The document is the authority and the bundle is a copy of one section.
+
+        THIS TEST EXISTS BECAUSE BOTH FAILURE MODES HAPPENED. Jarvis's and
+        Ultron's prompts were written from an earlier reading of constitutions
+        that were not committed at the time, and when the documents arrived they
+        did not match -- Jarvis at 0.37 similarity, Ultron at 0.05. Colossus's
+        was extracted with a fixed line slice that stopped ten lines short of
+        the section's end, dropping its safety tail: the list of things he may
+        not do, and the closing "The runtime remains in control."
+
+        Neither failed anything. A prompt that has drifted from its design
+        document reads exactly like one that has not, and a truncated prompt
+        reads exactly like a complete one. This is the only thing that can tell
+        the difference.
+        """
+        import re
+
+        section = self.SHIPPED_SECTION[name]
+        doc = (ROOT / f"docs/characters/{name}.md").read_text()
+        block = re.search(
+            rf"# {section}\. [^\n]*\n+```text\n(.*?)\n```", doc, re.S
+        )
+        assert block, f"{name}.md section {section} is not a fenced text block"
+        bundle = json.loads((BUNDLES / name / "character.json").read_text())
+        assert bundle["prompts"]["system"] == block.group(1).strip()
+
+    @pytest.mark.parametrize("name", ["familiar", "jarvis", "ultron", "colossus"])
+    def test_what_ships_is_a_prompt_and_not_the_whole_document(self, name):
         """A constitution is design authority; a system prompt is a runtime cost.
 
-        What ships is the compact core prompt each constitution ends with,
-        because the bundle's text is paid for on every turn. The long documents
-        belong in docs/characters -- see the README there, which records that
-        only Colossus's is actually present and treats the other two as a gap
-        rather than pretending otherwise.
+        No fixed character cap -- the previous one was 4,000 and Ultron's
+        section is 4,343, so keeping it would have meant trimming an authored
+        document to satisfy a proxy. What matters is that the bundle carries a
+        SECTION rather than the file, and the documents are 45KB and up.
         """
-        prompts = json.loads((BUNDLES / name / "character.json").read_text())["prompts"]
-        assert len(prompts["system"]) < 4000, "the full constitution belongs in docs"
+        bundle = json.loads((BUNDLES / name / "character.json").read_text())
+        shipped = len(bundle["prompts"]["system"])
+        whole = len((ROOT / f"docs/characters/{name}.md").read_text())
+        assert shipped < whole / 4, f"{name} ships too much of its document"
 
     def test_a_persona_is_still_OPTIONAL_in_the_schema(self):
         """Familiar used to be the proof of this, and no longer can be.
