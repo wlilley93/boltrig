@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
     <title>Boltrig shader bench</title>
     <style>
       /* Dark and out of the way. Every judgement made here is about the thing in
@@ -16,9 +16,55 @@
         display: grid;
         grid-template-columns: minmax(0, 1fr) 380px;
         height: 100vh;
+        height: 100dvh;
         font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
         color: #d6d6dd;
         background: #08080b;
+        overscroll-behavior: none;
+      }
+      /* Desktop keeps the sidebar; the sheet handle is for touch only. */
+      #sheetToggle { display: none; }
+
+      @media (max-width: 900px) {
+        body {
+          grid-template-columns: 1fr;
+          /* Two ROWS: the stage takes what is left, the sheet takes what it needs.
+             minmax(0, 1fr) rather than 1fr so the stage is allowed to shrink below
+             its content's natural size instead of pushing the sheet off screen. */
+          grid-template-rows: minmax(0, 1fr) auto;
+        }
+        #sheetToggle {
+          display: block;
+          position: absolute;
+          left: 50%;
+          bottom: 8px;
+          transform: translateX(-50%);
+          width: auto;
+          padding: 0 18px;
+          height: 34px;
+          border-radius: 17px;
+          background: rgba(20, 20, 26, .82);
+          backdrop-filter: blur(8px);
+          z-index: 3;
+        }
+        aside {
+          border-left: 0;
+          border-top: 1px solid #1c1c22;
+          /* Capped, so the sheet can never take so much of a short screen that the
+             body has nowhere left to be. Half the viewport is the most it gets. */
+          max-height: 52dvh;
+          padding: 12px 14px calc(18px + env(safe-area-inset-bottom));
+          -webkit-overflow-scrolling: touch;
+        }
+        /* Shut: the sheet is a row of zero height, so the stage gets everything. */
+        body.sheet-shut aside { display: none; }
+        /* The readout would sit under the handle; lift it clear. */
+        #readout { bottom: 50px; }
+        /* Touch targets. A 4px slider thumb is unusable with a thumb. */
+        .row input[type="range"] { height: 26px; }
+        .lfo-bind { width: 30px; height: 26px; }
+        h1, p.lede { display: none; }
+        .top { grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
       }
       #stageWrap { position: relative; display: block; min-width: 0; overflow: hidden; }
       /* FULL BLEED. It was a 760px square box floating in the page, which meant the
@@ -156,6 +202,7 @@
     <div id="stageWrap">
       <div id="stage"></div>
       <div id="readout">starting…</div>
+      <button id="sheetToggle" type="button" aria-expanded="true">Controls</button>
     </div>
     <aside>
       <h1>Shader bench</h1>

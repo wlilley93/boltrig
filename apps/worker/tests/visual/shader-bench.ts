@@ -1188,6 +1188,57 @@ $("body").addEventListener("change", (event) => {
   body = (event.target as HTMLSelectElement).value as "jarvis" | "ultron";
   mount();
 });
+/**
+ * The controls as a sheet that PUSHES the stage rather than covering it.
+ *
+ * Both bodies are drawn at the centre of their canvas, so a panel that overlays the
+ * stage does not hide the bottom of the picture -- it hides the MIDDLE of the being,
+ * because the canvas still believes it owns the whole screen and centres him behind
+ * the panel. The sheet is a row of the same grid, so shutting it gives the stage the
+ * height back and the renderer re-centres in what it actually has.
+ *
+ * Shrinking him as the sheet opens is therefore not a side effect to be corrected;
+ * it is the point. On a phone the being should be small and central with the
+ * controls under him, and full-screen when they are away.
+ */
+const SHUT_KEY = storageKey("sheetShut");
+
+function paintSheet(): void {
+  const shut = document.body.classList.contains("sheet-shut");
+  const toggle = $("sheetToggle");
+  toggle.textContent = shut ? "Controls" : "Hide controls";
+  toggle.setAttribute("aria-expanded", String(!shut));
+  // The canvas is sized from its host's box, and that box has just changed. The
+  // renderer resizes on its own next frame, but telling the page explicitly means
+  // anything else listening for a resize (and the readout's own measurement) does
+  // not wait a frame to agree with what is on screen.
+  window.dispatchEvent(new Event("resize"));
+}
+
+$("sheetToggle").addEventListener("click", () => {
+  document.body.classList.toggle("sheet-shut");
+  try {
+    localStorage.setItem(SHUT_KEY, document.body.classList.contains("sheet-shut") ? "1" : "0");
+  } catch {
+    // A blocked store is not a reason to refuse to open a panel.
+  }
+  paintSheet();
+});
+
+// SHUT BY DEFAULT ON A PHONE, open on a desktop. Someone arriving on a small screen
+// should see the being first; someone on a desktop has room for both and came here
+// to move sliders.
+try {
+  const remembered = localStorage.getItem(SHUT_KEY);
+  const narrow = window.matchMedia("(max-width: 900px)").matches;
+  if (remembered === "1" || (remembered === null && narrow)) {
+    document.body.classList.add("sheet-shut");
+  }
+} catch {
+  // Ignore: the default is open, which is the safe way to be wrong.
+}
+paintSheet();
+
 $("mode").addEventListener("change", (event) => {
   // The mode select drives BOTH the render state and which preset is loaded.
   // Two controls for those would be two things to forget to line up.
