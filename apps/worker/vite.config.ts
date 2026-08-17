@@ -102,6 +102,31 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    // BOTH WAYS IN, named rather than wildcarded, and the private name is not
+    // committed.
+    //
+    // The dev server is reached two ways: over a direct cable by IP, and over a
+    // tailnet through `tailscale serve`, which proxies to that same address. The
+    // proxied request arrives carrying the TAILNET Host header, and vite's host
+    // check answers it with a 403 -- "this host is not allowed" -- which reads as a
+    // tailscale or firewall problem and is neither.
+    //
+    // Explicit rather than `true`, because that check is the DNS-rebinding defence:
+    // with it disabled, any page a browser on this network visits could script
+    // requests against this origin, and this server carries a write route
+    // (/__bench-presets). Naming the hosts keeps the defence and costs a line.
+    //
+    // From the ENVIRONMENT, because a tailnet hostname is infrastructure naming and
+    // this repo is on GitHub. It is not a credential -- reaching the tailnet needs
+    // auth regardless -- but it is a detail of someone's private network and there
+    // is no reason for it to be in a public history when a variable does the job.
+    allowedHosts: [
+      "localhost",
+      ...(process.env.BOLTRIG_DEV_ALLOWED_HOSTS ?? "")
+        .split(",")
+        .map((host) => host.trim())
+        .filter(Boolean),
+    ],
     proxy: {
       "/v1": { target: kernel, changeOrigin: true },
       "/healthz": { target: kernel, changeOrigin: true },
