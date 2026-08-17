@@ -123,6 +123,19 @@ void main() {
   // modulates the platters, it does not switch them on.
   vAmp = 0.55 + 0.45 * clamp(uBands[band], 0.0, 1.0);
 
+  // UP TO FOUR, COMING AND GOING. Rings that are all present all of the time
+  // read as a fixed cage bolted round the body; the reference has a few bands
+  // that arrive, sweep across and leave, which is what makes them feel like they
+  // are orbiting rather than mounted. Each ring gets its own slow phase, so how
+  // many are visible at once varies on its own.
+  //
+  // Tied to the PRECESSION rate rather than a knob of its own: both are the same
+  // judgement -- how slowly the arrangement changes -- and splitting them would
+  // let the crest crawl while the rings still blinked.
+  float lifePhase = fract(uTime * uRingSpin.y * 0.62
+                        + hash(vec3(fring * 7.7, 1.7, 0.0)));
+  vAmp *= smoothstep(0.0, 0.16, lifePhase) * smoothstep(1.0, 0.70, lifePhase);
+
   // Dropped sectors and radial striation -- the reel-to-reel read. Stable per
   // segment, so a gap stays a gap while the ring turns rather than strobing.
   float glitch = hash(vec3(float(seg) * 0.13, fring * 3.7, 0.0));

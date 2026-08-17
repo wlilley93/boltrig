@@ -145,7 +145,7 @@ export const JARVIS_TUNING: JarvisTuning = {
   ringGain: [0.30, 0.32],
   ringSpin: [0.045, 0.012],
   ringBeam: 0.025,
-  rings: 6,
+  rings: 4,
   swirl: [0.26, 0.40],
   linkGain: [0.30, 0.24],
   linkRange: 0.23,
