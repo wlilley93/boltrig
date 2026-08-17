@@ -57,6 +57,12 @@
 //   BLOOM            bright-pass then a separable Gaussian at half resolution.
 //                    Additive lines alone are thin and mean.
 
+import {
+  RESTING_PHENOTYPE,
+  jarvisEmotion,
+  readBodyPhenotype,
+  type BodyPhenotype,
+} from "../../canvas/bodyEmotion";
 import { JARVIS_TUNING, type JarvisTuning } from "../../canvas/bodyTuning";
 import type { JarvisStageState } from "../JarvisState";
 import type { FloatUniforms } from "../../canvas/glResources";
@@ -96,7 +102,7 @@ export class JarvisNeuralRenderer {
   private reducedMotion = false;
   private size: [number, number] = [0, 0];
   private state: JarvisStageState | null = null;
-  private pheno = { irritation: 0, arousal: 0, tension: 0 };
+  private pheno: BodyPhenotype = RESTING_PHENOTYPE;
   /** Seconds since the last speech onset, for the travelling wave. */
   private waveT = 10;
   private waveAmp = 0;
@@ -193,15 +199,10 @@ export class JarvisNeuralRenderer {
    * subject rather than a change of clothes.
    */
   applyPhenotype(pheno: Record<string, unknown> | null): void {
-    const read = (key: string): number => {
-      const v = pheno?.[key];
-      return typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
-    };
-    this.pheno = {
-      irritation: read("irritation"),
-      arousal: read("arousal"),
-      tension: read("tension"),
-    };
+    // ALL TEN, not the three this used to keep. See canvas/bodyEmotion: seven
+    // scalars were arriving and being dropped while the bundle claimed he read
+    // them, so a machine that was exhausted or unfocused showed neither.
+    this.pheno = readBodyPhenotype(pheno);
   }
 
   suspend(): void { this.suspended = true; }
@@ -224,7 +225,11 @@ export class JarvisNeuralRenderer {
     // shining through the iris. It is off here -- it belongs to Colossus, whose
     // CRT beam earns a horizontal streak -- and the lobes now sit at the warm
     // end, so the heart stays bright without leaving the orange.
-    passes.render(d, this.palette(), this.tuning);
+    // The mood is applied to a COPY per frame rather than stored, so `tuning`
+    // stays exactly what the bench set and what Copy settings would print. A
+    // phenotype folded into the stored value would slowly rewrite the look
+    // being tuned, which is the one thing a bench must not do.
+    passes.render(d, this.palette(), jarvisEmotion(this.tuning, this.pheno));
   }
 
   // ------------------------------------------------------------------ internals

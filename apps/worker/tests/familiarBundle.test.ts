@@ -26,13 +26,34 @@ const source: CharacterCanvasSource = {
 };
 
 describe("Familiar as a character bundle", () => {
-  // The format's proof. Familiar has no phenotype, so a format that only fits a
-  // richly specified character would have to be bent to hold her. She omits the
-  // field entirely; nothing invents an empty one on her behalf.
-  it("omits the phenotype field rather than carrying an empty one", () => {
-    expect("phenotype" in familiarBundle).toBe(false);
-    expect(parseCharacterBundle(familiarBundle).phenotype).toBeUndefined();
-    expect(characterFromBundle(familiarBundle, [source]).readsPhenotype).toBe(false);
+  // SHE READS THE PHENOTYPE, reversing the 2026-08-11 decision that she should
+  // not. The reasoning then was that handing a phenotype to a creature with no
+  // access to the appraisal engine attributes the machine's state to something
+  // that cannot know it -- and her renderer already wanders its own mood, so she
+  // was not lifeless without it.
+  //
+  // What that argument missed is that her SHADER was built for the whole
+  // spectrum all along: familiar.frag declares uValence, uArousal, uIrritation,
+  // uFatigue, uAttention, uSocial, uBuoyancy, uLuminosity and uTension, and her
+  // manifest has always listed all nine. So the choice was never "give her an
+  // inner life or not" -- it was whether nine uniforms built to carry a measured
+  // one were fed a measured one or a wander. They are fed the real thing now,
+  // and the wander remains the fallback when the relay is absent or stale.
+  //
+  // THE FORMAT'S PROOF MOVED TO COLOSSUS, which is a better subject for it: he
+  // omits the block by design and his constitution says why, where Familiar's
+  // omission was a decision that could be -- and now has been -- reversed. See
+  // colossusBundle.test.ts, "OMITS the phenotype block".
+  it("reads the phenotype her shader was always built to display", () => {
+    expect(parseCharacterBundle(familiarBundle).phenotype).toEqual({ reads: true });
+    expect(characterFromBundle(familiarBundle, [source]).readsPhenotype).toBe(true);
+    // Every scalar her shader takes is declared, or the Stage would feed a
+    // uniform that does not exist and the mood would silently not arrive.
+    const declared = new Set(familiarBundle.visual.uniforms as string[]);
+    for (const name of [
+      "uValence", "uArousal", "uIrritation", "uFatigue", "uAttention",
+      "uSocial", "uBuoyancy", "uLuminosity", "uTension",
+    ]) expect(declared.has(name), `${name} must be declared`).toBe(true);
   });
 
   it("produces exactly the registry entry the stock build used to hand-write", () => {

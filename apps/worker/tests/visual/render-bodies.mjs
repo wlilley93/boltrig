@@ -44,6 +44,15 @@
 //   --out <dir>                     PNGs; default work/body-renders
 //   --no-png                        numbers only, no files
 //   --json                          machine-readable, one object
+//   --tuning <json>                 override canvas/bodyTuning, in exactly the
+//                                   shape shader-bench.html's Copy settings
+//                                   prints, so a look judged by eye can be
+//                                   measured without the bench
+//   --phenotype <json>              a measured mood, e.g. '{"fatigue":1}'. The
+//                                   only way to check that a scalar the bundle
+//                                   claims to read actually moves anything --
+//                                   seven of the ten were being dropped while
+//                                   the claim stood.
 
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -102,9 +111,13 @@ async function main() {
     for (const body of options.bodies) {
       for (const mode of options.modes) {
         const result = await tab.evaluate(
-          ([bodyName, modeName, level, frames, width, height]) =>
-            window.__renderBody({ body: bodyName, mode: modeName, level, frames, width, height }),
-          [body, mode, options.level, options.frames, options.width, options.height],
+          ([bodyName, modeName, level, frames, width, height, tuning, phenotype]) =>
+            window.__renderBody({
+              body: bodyName, mode: modeName, level, frames, width, height,
+              tuning, phenotype,
+            }),
+          [body, mode, options.level, options.frames, options.width, options.height,
+            options.tuning, options.phenotype],
         );
         if (result.error) {
           rows.push({ body, mode, failed: result.error });
@@ -247,7 +260,14 @@ window.__renderBody = function (request) {
       return { error: status.reason ? status.state + ": " + status.reason : status.state };
     }
 
-    renderer.applyPhenotype(null);
+    // null unless asked, so an unmeasured body is the default and every figure
+    // this prints is comparable with every other run.
+    renderer.applyPhenotype(request.phenotype || null);
+    // Merged OVER what ships rather than replacing it, so a partial object
+    // cannot leave a field undefined and turn arithmetic into NaN.
+    if (request.tuning && typeof renderer.setTuning === "function") {
+      renderer.setTuning(Object.assign({}, renderer.currentTuning(), request.tuning));
+    }
     renderer.update({
       mode: request.mode,
       level: request.level,
@@ -323,6 +343,7 @@ function measure(pixels, width, height) {
     val: centre.val,
     white: centre.white,
     ink: centre.ink,
+    opaqueBlack: whole.opaqueBlack,
     frameSat: whole.sat,
     frameInk: whole.ink,
     edge: edgeColour(pixels, width, height),
@@ -403,6 +424,7 @@ function accumulate(pixels, width, x0, y0, x1, y1) {
   let val = 0;
   let white = 0;
   let ink = 0;
+  let opaqueBlack = 0;
   let n = 0;
   for (let y = y0; y < y1; y++) {
     for (let x = x0; x < x1; x++) {
@@ -417,6 +439,11 @@ function accumulate(pixels, width, x0, y0, x1, y1) {
       val += max;
       if (min >= 0.92) white += 1;
       if (max >= 0.02) ink += 1;
+      // OPAQUE AND UNLIT, which is an absence of light that still paints. These
+      // bodies write alpha that follows luminance so their dark parts let the
+      // page through; a region that is opaque AND black paints black OVER
+      // whatever is behind it, which reads as a square flashing across the body.
+      if (pixels[i + 3] >= 200 && max < 0.05) opaqueBlack += 1;
       n += 1;
     }
   }
@@ -425,6 +452,7 @@ function accumulate(pixels, width, x0, y0, x1, y1) {
     val: round(val / n),
     white: round(white / n),
     ink: round(ink / n),
+    opaqueBlack: round(opaqueBlack / n),
   };
 }
 
@@ -437,7 +465,7 @@ function report(results) {
     process.stdout.write(`${JSON.stringify({ level: options.level, frames: options.frames, size: [options.width, options.height], results }, null, 2)}\n`);
     return;
   }
-  const header = "body       mode        sat     val    white     ink   frameSat   edge          base";
+  const header = "body       mode        sat     val    white     ink  opqBlk   frameSat   edge          base";
   process.stdout.write(`${header}\n${"-".repeat(header.length)}\n`);
   for (const row of results) {
     if (row.failed) {
@@ -446,7 +474,7 @@ function report(results) {
     }
     process.stdout.write(
       `${pad(row.body, 10)} ${pad(row.mode, 11)}`
-      + `${num(row.sat)}${num(row.val)}${num(row.white)}${num(row.ink)}${num(row.frameSat)}`
+      + `${num(row.sat)}${num(row.val)}${num(row.white)}${num(row.ink)}${num(row.opaqueBlack)}${num(row.frameSat)}`
       + `   ${row.edge.hex} a${String(row.edge.alpha).padStart(3, " ")}   ${row.base}\n`,
     );
   }
@@ -585,6 +613,8 @@ function parseArguments(argv) {
     height: 512,
     outDir: resolve(repoRoot, "work/body-renders"),
     matte: [0, 0, 0],
+    tuning: null,
+    phenotype: null,
     playwrightModule: null,
     browserExecutable: null,
   };
@@ -600,6 +630,8 @@ function parseArguments(argv) {
       case "--json": parsed.json = true; break;
       case "--no-png": parsed.writePng = false; break;
       case "--no-matte": parsed.matte = null; break;
+      case "--tuning": parsed.tuning = JSON.parse(next()); break;
+      case "--phenotype": parsed.phenotype = JSON.parse(next()); break;
       case "--body": parsed.bodies.push(assertOneOf(next(), ALL_BODIES, "--body")); break;
       case "--mode": parsed.modes.push(assertOneOf(next(), ALL_MODES, "--mode")); break;
       case "--level": parsed.level = assertUnit(Number(next()), "--level"); break;

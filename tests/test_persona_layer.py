@@ -168,13 +168,31 @@ class TestShippedConstitutions:
         bundle = json.loads((BUNDLES / "familiar" / "character.json").read_text())
         assert bundle["prompts"]["system"] == block.group(1).strip()
 
-    def test_familiar_still_omits_the_phenotype_block(self):
-        """A voice is not an inner life, and acquiring one did not change that.
+    def test_familiar_reads_the_phenotype_her_shader_was_built_for(self):
+        """A VOICE is still not an inner life. This is not about the voice.
 
-        Her body wanders its own mood and is deliberately not wired to the
-        appraisal engine. The persona is a separate layer authored separately,
-        and nothing about having one implies she should start displaying the
-        machine's measured state.
+        The claim this replaces was that her body wanders its own mood and is
+        deliberately not wired to the appraisal engine, and that authoring a
+        persona implies nothing about displaying the machine's measured state.
+        The second half stands: the persona layer is unrelated, and nothing here
+        changed because she acquired a voice.
+
+        What the first half missed is that familiar.frag has declared uValence,
+        uArousal, uIrritation, uFatigue, uAttention, uSocial, uBuoyancy,
+        uLuminosity and uTension since it was written, and her manifest has
+        always listed all nine. The choice was never whether she has an inner
+        life -- it was whether nine uniforms built to show a MEASURED one were
+        shown a measured one or a wander. Reversed 2026-08-17, on request.
+
+        The wander remains the fallback when the relay is absent or stale, so a
+        body nobody has measured looks exactly as it always did.
+
+        COLOSSUS is the one that omits the block now, and his exclusion is the
+        durable kind: his constitution says his calm is not a performance, so
+        there is no irritated variant of a stability report to colour a panel
+        with.
         """
-        bundle = json.loads((BUNDLES / "familiar" / "character.json").read_text())
-        assert "phenotype" not in bundle
+        familiar = json.loads((BUNDLES / "familiar" / "character.json").read_text())
+        assert familiar["phenotype"] == {"reads": True}
+        colossus = json.loads((BUNDLES / "colossus" / "character.json").read_text())
+        assert "phenotype" not in colossus

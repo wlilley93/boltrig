@@ -21,6 +21,12 @@
 
 import { type FloatUniforms } from "../canvas/glResources";
 import { UltronPasses, type UltronDrive } from "./ultronPasses";
+import {
+  RESTING_PHENOTYPE,
+  readBodyPhenotype,
+  ultronEmotion,
+  type BodyPhenotype,
+} from "../canvas/bodyEmotion";
 import { ULTRON_TUNING, type UltronTuning } from "../canvas/bodyTuning";
 import type { UltronStageState } from "./UltronState";
 
@@ -56,7 +62,7 @@ export class UltronRenderer {
   private reducedMotion = false;
   private size: [number, number] = [0, 0];
   private state: UltronStageState | null = null;
-  private pheno = { irritation: 0, arousal: 0, tension: 0 };
+  private pheno: BodyPhenotype = RESTING_PHENOTYPE;
   private waveT = 10;
   private waveAmp = 0;
   private bands = new Float32Array(8);
@@ -142,15 +148,10 @@ export class UltronRenderer {
    * membrane come apart faster, which is what he does with a bad mood.
    */
   applyPhenotype(pheno: Record<string, unknown> | null): void {
-    const read = (key: string): number => {
-      const v = pheno?.[key];
-      return typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
-    };
-    this.pheno = {
-      irritation: read("irritation"),
-      arousal: read("arousal"),
-      tension: read("tension"),
-    };
+    // ALL TEN. Aggression is still where irritation and tension land -- that
+    // part of the note above holds -- but seven other scalars were arriving and
+    // being dropped while his bundle claimed he read them. See canvas/bodyEmotion.
+    this.pheno = readBodyPhenotype(pheno);
   }
 
   suspend(): void { this.suspended = true; }
@@ -166,7 +167,7 @@ export class UltronRenderer {
     if (!passes || !this.canvas) return;
     this.resize();
     const d = this.drive(nowMs);
-    passes.render(d, this.palette(), this.tuning);
+    passes.render(d, this.palette(), ultronEmotion(this.tuning, this.pheno));
   }
 
   // ------------------------------------------------------------------ internals

@@ -25,19 +25,30 @@ const READS_THE_MACHINE_MOOD = {
   jarvis: jarvisBundle,
   // Blue, organic, and it lands on how fast he comes apart rather than on hue.
   ultron: ultronBundle,
+  // MOVED HERE 2026-08-17, reversing the 2026-08-11 decision below.
+  //
+  // The argument for excluding her was that handing the appraisal engine's state
+  // to a creature with no access to it attributes the machine's feelings to
+  // something that cannot see the machine -- and that she was not lifeless
+  // without it, because her renderer wanders its own mood.
+  //
+  // Both halves of that are still true, and neither was the whole picture:
+  // familiar.frag has declared uValence, uArousal, uIrritation, uFatigue,
+  // uAttention, uSocial, uBuoyancy, uLuminosity and uTension since it was
+  // written, and her manifest has always listed all nine. So the real choice was
+  // never whether she has an inner life -- it was whether nine uniforms built to
+  // show a MEASURED one were shown a measured one or a wander. The wander is
+  // still the fallback when the relay is absent or stale, which is what makes
+  // this safe: nothing about her at rest changed.
+  familiar: familiarBundle,
 } as const;
 
 const HAS_ITS_OWN_INNER_LIFE = {
-  // She wanders her own mood and always did. Handing her the appraisal engine's
-  // state would attribute the machine's feelings to a creature that cannot see
-  // the machine.
-  familiar: familiarBundle,
-  // And he is excluded for the OPPOSITE reason, which is why the two sit in the
-  // same map and mean different things. She is excluded because she has an
-  // inner life the appraisal engine cannot see; he is excluded because he has
-  // one register. His constitution is explicit that his calm is not a
-  // performance and that he has no competing impulse to suppress, so there is
-  // no irritated variant of a stability report to colour a panel with.
+  // ONE left, and his exclusion is the durable kind. Familiar's was a decision
+  // that could be reversed and has been; his is written into his constitution --
+  // his calm is not a performance and he has no competing impulse to suppress,
+  // so there is no irritated variant of a stability report to colour a panel
+  // with. A phenotype would concede moods he does not have.
   colossus: colossusBundle,
 } as const;
 

@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-17T11:33:13.402Z",
+  "capturedAt": "2026-08-17T12:00:22.195Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "10f50a420320abb9434c9f52ebe94d5e8e2780542d5fba7531d558aa63232290",
-    "digestAfterCapture": "10f50a420320abb9434c9f52ebe94d5e8e2780542d5fba7531d558aa63232290",
+    "digestBeforeCapture": "14b67a6807b5ef2ce02b5e2b15303d8fbdb403d6fc11e2e77a7c79067506dd62",
+    "digestAfterCapture": "14b67a6807b5ef2ce02b5e2b15303d8fbdb403d6fc11e2e77a7c79067506dd62",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/real-brand-mark",
-    "head": "dceea02605b21ef4d7e58556bfd9f75f642a248d",
+    "head": "f91125ee73b2e1b95bc8e79ad4caf5af8e58f37a",
     "dirty": true
   },
   "runner": {
@@ -74,6 +74,7 @@
           "/v1/chat/model-choices",
           "/v1/chat/config",
           "/v1/me/settings",
+          "/v1/familiar/phenotype",
           "/v1/me/settings",
           "/v1/capabilities",
           "/v1/capabilities",

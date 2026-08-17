@@ -9,11 +9,19 @@ import {
 import "../src/characterPlugins";
 
 describe("the character registry", () => {
-  // The inversion this file exists for: emotion belongs to whoever is speaking,
-  // not to the installation.
-  it("gives the phenotype only to the character who can actually read it", () => {
+  // Emotion belongs to whoever is speaking rather than to the installation, and
+  // that is still the rule -- but it is a per-character DECLARATION, not a claim
+  // that only one character may have one. Three of the four now read it; the
+  // fourth refuses it in his constitution, which is the point.
+  it("gives the phenotype to every character that declares it, and no other", () => {
     expect(characterFor("jarvis").readsPhenotype).toBe(true);
-    expect(characterFor("familiar").readsPhenotype).toBe(false);
+    expect(characterFor("ultron").readsPhenotype).toBe(true);
+    // Reversed 2026-08-17: her shader was built for all nine scalars and was
+    // being fed a wander instead. See familiarBundle.test.ts for the argument.
+    expect(characterFor("familiar").readsPhenotype).toBe(true);
+    // Colossus has ONE register by design and no irritated variant of a
+    // stability report, so a phenotype would concede moods he does not have.
+    expect(characterFor("colossus").readsPhenotype).toBe(false);
   });
 
   it("ships exactly the four stock bodies through the production plugin join", () => {
