@@ -408,7 +408,7 @@ export const JARVIS_TUNING: JarvisTuning = {
 };
 
 export const ULTRON_TUNING: UltronTuning = {
-  dendriteGain: [1.35, 0.7],
+  dendriteGain: [4.86, 2.52],
   dendrite: [0.34, 0.52, 0.78, 0.035],
   dendriteTip: [0.9, 0.22],
   bead: [9.0, 0.16],
@@ -417,13 +417,13 @@ export const ULTRON_TUNING: UltronTuning = {
   outerShell: [1.45, 0.20, 0.30],
   facetSpin: [0.13, 0.40],
   swirl: [0.26, 0.40],
-  veinGain: [0.22, 0.20],
+  veinGain: [0.792, 0.72],
   veinStreak: [0.110, 0.085],
-  crackGain: [0.34, 0.26],
+  crackGain: [1.224, 0.936],
   crackRange: 0.19,
-  facetGain: [0.36, 0.26],
+  facetGain: [1.296, 0.936],
   facetSize: 0.020,
-  core: [0.13, 0.17],
+  core: [0.655, 0.857],
   eye: [1, 1, 0, 60],
   reverb: [1.7, 0.26, 0.8, 1.4],
   // Tighter than Jarvis's and dimmer: his is the subject of the frame, this is the

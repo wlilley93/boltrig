@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-17T18:46:07.583Z",
+  "capturedAt": "2026-08-17T19:36:47.243Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "e6e5f6d0dc46078893fea1f4ec44360cdcfc5b2283c771510e36083f38f30b55",
-    "digestAfterCapture": "e6e5f6d0dc46078893fea1f4ec44360cdcfc5b2283c771510e36083f38f30b55",
+    "digestBeforeCapture": "f24821d3bd6bbfb63f9023fa06a0ffdcb7dadead6d727c0476802607c918d94a",
+    "digestAfterCapture": "f24821d3bd6bbfb63f9023fa06a0ffdcb7dadead6d727c0476802607c918d94a",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/real-brand-mark",
-    "head": "d09de3b8eba0091970a9871d5737eb80417d81f4",
+    "head": "4de99b5fd10c9b8fd43dae8c580789f0663a9991",
     "dirty": true
   },
   "runner": {
