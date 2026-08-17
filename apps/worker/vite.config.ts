@@ -25,55 +25,82 @@ const PRESETS = path.resolve(__dirname, "tests/visual/presets.json");
  * so a malformed or hostile body cannot choose the filename.
  */
 /**
- * A password on the dev bench, for when the tailnet is not boundary enough.
+ * A TOKEN on the dev bench, handed over by the intranet rather than typed.
  *
- * THE TAILNET IS ALREADY THE REAL BOUNDARY: `tailscale serve` is tailnet-only, so
- * reaching this at all needs a device signed into the tailnet. This exists for the
- * belt-and-braces case, and because the bench carries a write route
- * (/__bench-presets) that will happily take a POST from anything that can reach it.
+ * This is the pattern FrameGraph Studio already uses on this box: the intranet at
+ * :3000 authenticates a person by their VERIFIED Tailscale identity against a
+ * root-owned allowlist, then builds a link to the service carrying that service's
+ * own token. One gate, one identity check, and the downstream services trust a
+ * secret rather than re-implementing a login each.
  *
- * THE SECRET IS NEVER IN THE REPO. It is a SHA-256 hash supplied through
- * BOLTRIG_BENCH_AUTH as `user:hexhash`, so the plaintext lives only wherever the
- * operator typed it -- a systemd Environment= line, or a shell. A password
- * committed to a git history is a password that has to be rotated, and this repo
- * is on GitHub.
+ * WHY A RANDOM TOKEN AND NOT A PASSWORD. Nobody ever types this: the link comes
+ * from the intranet card. So there is no reason for it to be memorable and every
+ * reason for it to be long and random -- and no reason for it to be a password that
+ * is reused anywhere else, which is the failure mode a human-chosen one invites.
  *
- * IT DOES NOT FAIL OPEN ONTO SPECIFIC ROUTES. This guard is registered before
- * every other middleware and covers ALL of them, rather than listing paths to
- * protect: a prefix denylist is what made every newly added FrameGraph route public
- * without anyone noticing, because the list only knew about the routes that existed
- * when it was written. If the variable is unset the guard is not installed at all
- * and the server behaves exactly as before -- which is stated here rather than
- * discovered, and is why the systemd unit sets it.
+ * THE SECRET IS NEVER IN THE REPO. BOLTRIG_BENCH_TOKEN comes from
+ * /etc/boltrig-bench.env, which the systemd unit reads through an OPTIONAL
+ * EnvironmentFile and the intranet reads at request time to build its link. One
+ * secret, one home: a copy in either would drift the first time it is rotated, and
+ * the card would then hand out a confidently wrong link.
+ *
+ * A COOKIE, because a query parameter only covers the first request. The bench
+ * pulls in dozens of module URLs, the audio clips and the shader sources; gating on
+ * ?token= alone would authorise the html and 401 everything it asks for next.
+ *
+ * IT DOES NOT FAIL OPEN ONTO NEW ROUTES. Registered before every other middleware
+ * and covering all of them, rather than naming paths to protect -- a prefix denylist
+ * is what quietly made every newly added FrameGraph route public, because the list
+ * only knew the routes that existed when it was written. If the variable is unset
+ * the guard is not installed and the bench behaves as it always has.
  */
 function benchAuth(): Plugin {
+  const COOKIE = "boltrig_bench";
   return {
     name: "boltrig-bench-auth",
     apply: "serve",
     configureServer(server) {
-      const configured = process.env.BOLTRIG_BENCH_AUTH ?? "";
-      const [user, hash] = configured.split(":");
-      if (!user || !hash) return;
+      const token = process.env.BOLTRIG_BENCH_TOKEN ?? "";
+      if (!token) return;
+      const expected = Buffer.from(token);
+      const matches = (given: string): boolean => {
+        const sent = Buffer.from(given);
+        // Length-checked first: timingSafeEqual THROWS on a length mismatch rather
+        // than returning false, which would turn a wrong-length token into a 500
+        // and a stack trace instead of a refusal.
+        return sent.length === expected.length && crypto.timingSafeEqual(sent, expected);
+      };
+
       server.middlewares.use((req, res, next) => {
-        const header = req.headers.authorization ?? "";
-        if (header.startsWith("Basic ")) {
-          const decoded = Buffer.from(header.slice(6), "base64").toString("utf8");
-          const at = decoded.indexOf(":");
-          const sent = crypto
-            .createHash("sha256")
-            .update(decoded.slice(at + 1))
-            .digest("hex");
-          // Length-checked before the timing-safe compare, because timingSafeEqual
-          // THROWS on a length mismatch rather than returning false -- which would
-          // turn a wrong-length password into a 500 and a stack trace.
-          const ok = decoded.slice(0, at) === user
-            && sent.length === hash.length
-            && crypto.timingSafeEqual(Buffer.from(sent), Buffer.from(hash));
-          if (ok) return next();
+        const url = new URL(req.url ?? "/", "http://x");
+        const fromQuery = url.searchParams.get("token");
+        if (fromQuery && matches(fromQuery)) {
+          // Set the cookie and REDIRECT to the same URL without the token, so it
+          // does not sit in the address bar, in history, or in a referer header.
+          url.searchParams.delete("token");
+          res.setHeader(
+            "Set-Cookie",
+            `${COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`,
+          );
+          res.statusCode = 302;
+          res.setHeader("Location", url.pathname + url.search);
+          res.end();
+          return;
         }
+
+        const cookie = (req.headers.cookie ?? "")
+          .split(";")
+          .map((part) => part.trim())
+          .find((part) => part.startsWith(`${COOKIE}=`));
+        const fromCookie = cookie ? decodeURIComponent(cookie.slice(COOKIE.length + 1)) : "";
+        const fromHeader = String(req.headers["x-token"] ?? "");
+        if ((fromCookie && matches(fromCookie)) || (fromHeader && matches(fromHeader))) {
+          return next();
+        }
+
         res.statusCode = 401;
-        res.setHeader("WWW-Authenticate", 'Basic realm="boltrig bench", charset="UTF-8"');
-        res.end("authentication required\n");
+        res.setHeader("content-type", "text/plain; charset=utf-8");
+        res.end("this bench is token-gated; open it from the intranet at :3000\n");
       });
     },
   };
