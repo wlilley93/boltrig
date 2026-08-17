@@ -170,5 +170,24 @@ void main() {
   // a tile pasted onto the step. The context is already premultipliedAlpha
   // false, and the composite runs with blending disabled, so this value reaches
   // the compositor intact and the dark parts of the body let the page through.
-  oColor = vec4(c, clamp(max(c.r, max(c.g, c.b)) * 1.35, 0.0, 1.0));
+  // PREMULTIPLIED, which is what familiar.frag has always done and what these two
+  // did not.
+  //
+  // The colour was written un-premultiplied with the canvas asking for
+  // premultipliedAlpha: false, which hands the final colour-times-alpha multiply to the
+  // BROWSER. On a conforming implementation that is arithmetically identical to doing
+  // it here -- and it is the step where implementations diverge, because
+  // un-premultiplied compositing needs a conversion that premultiplied does not.
+  // Safari on a wide-gamut display is the one that shows it: the same body renders
+  // with visibly different shading on an iPhone.
+  //
+  // So the multiply happens HERE, where it is one line of GLSL that every GPU agrees
+  // about, and the canvas is told the buffer is already premultiplied. familiar.frag
+  // ends with vec4(outCol*a, a) for exactly this reason and has never had the problem.
+  //
+  // Alpha still falls off with brightness, so the dark parts of the frame stay
+  // translucent and the being sits ON the page rather than in a black box. That was
+  // the intent of the alpha term and it is unchanged.
+  float a = clamp(max(c.r, max(c.g, c.b)) * 1.35, 0.0, 1.0);
+  oColor = vec4(c * a, a);
 }`;

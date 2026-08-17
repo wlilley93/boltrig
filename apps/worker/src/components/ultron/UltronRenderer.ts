@@ -164,7 +164,10 @@ export class UltronRenderer {
     this.canvas = canvas;
 
     const gl = canvas.getContext("webgl2", {
-      alpha: true, antialias: false, premultipliedAlpha: false,
+      // premultipliedAlpha TRUE, matching familiar's renderer, because the
+      // composite now premultiplies. Left false with a premultiplied buffer the
+      // browser would multiply a second time and the body would go dark.
+      alpha: true, antialias: false, premultipliedAlpha: true,
     }) as WebGL2RenderingContext | null;
     if (!gl) { this.fail("webgl2 unavailable"); return; }
     this.gl = gl;
