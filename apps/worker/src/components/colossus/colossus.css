@@ -26,6 +26,24 @@
 /* WebGL2 missing. Say so with a surface rather than leaving a hole -- and for
  * a panel specifically, a LATTICE rather than a glow: the fallback should still
  * read as a board of dark lamps, which is what the thing is when it is off. */
+/* MOBILE. The same rules serve both shells, which is why this is here and not in a
+ * phone-only stylesheet.
+ *
+ * Only a min-height, and deliberately not a change to the desktop floor: 160px is
+ * there so a host can embed this small, and raising it would break every slot that
+ * relies on that. On a phone the opposite problem applies -- the parent often gives
+ * no height at all, `height: 100%` resolves to auto, the 160px floor wins, and the
+ * being is a stamp in the middle of a tall empty screen.
+ *
+ * A vh bound rather than a px one, and bounded on the SHORT side, which is the
+ * lesson familiar.css paid for: a body bounded only by width grows taller than a
+ * short window and pushes the transcript, heading and composer out of view. The
+ * canvas centres the being inside whatever box it is given, so getting the box right
+ * is the whole job. */
+@media (max-width: 600px) {
+  .colossus-stage { min-height: min(62vh, 520px); }
+}
+
 .colossus-stage.fallback {
   background:
     radial-gradient(circle at 50% 50%, rgb(255 110 20 / 10%), transparent 70%),
