@@ -28,8 +28,13 @@ import { JARVIS_TUNING, ramp, type JarvisTuning } from "../../canvas/bodyTuning"
 import { BLOOM_FRAG, COMPOSITE_FRAG } from "../../canvas/shadersPost";
 import { DRAW_FRAG, DRAW_VERT, LINK_FRAG, LINK_VERT } from "./shadersField";
 import { QUAD_VERT, SIM_FRAG } from "../../canvas/shadersSim";
-// The RING half of shadersRing is deliberately not imported: see drawScene.
-import { SHARD_FRAG, SHARD_VERT } from "./shadersRing";
+import {
+  RING_FRAG,
+  RING_SEGMENTS,
+  RING_VERT,
+  SHARD_FRAG,
+  SHARD_VERT,
+} from "./shadersRing";
 
 /** 128x128 = 16384 particles. Chosen against the draw cost, not the sim: the
  *  simulation is one full-screen pass regardless, but every particle is two
@@ -84,6 +89,7 @@ export class NeuralPasses {
       sim: createProgram(gl, QUAD_VERT, SIM_FRAG),
       link: createProgram(gl, LINK_VERT, LINK_FRAG),
       draw: createProgram(gl, DRAW_VERT, DRAW_FRAG),
+      ring: createProgram(gl, RING_VERT, RING_FRAG),
       shard: createProgram(gl, SHARD_VERT, SHARD_FRAG),
       bloom: createProgram(gl, QUAD_VERT, BLOOM_FRAG),
       comp: createProgram(gl, QUAD_VERT, COMPOSITE_FRAG),
@@ -204,31 +210,34 @@ export class NeuralPasses {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.simTex[this.ping]);
 
-    // NO EXTERIOR RINGS. Both references ask for them -- Ebb's audio-reactive
-    // rings of data circumscribing the hologram, Territory's rings rotating
-    // around a spherical base -- and they were built and drawn here. They are
-    // off by decision, not by accident: bright arcs turning at the limb are
-    // what read as solar flares around the edge, and the body wanted is the
-    // node sphere alone. The shaders stay in shadersRing.ts so restoring them
-    // is one import, and this comment exists so nobody restores them thinking
-    // they found a missing pass.
-    // THE THREE GAINS ARE ONE DECISION, so they are set together and their
-    // RATIO is what was wrong. With the exterior rings off, the interior has to
-    // carry the whole structure, and it was carrying none of it: LINK ran at
-    // 0.10 + 0.10e, DRAW at 0.12 + 0.14e and SHARD at 0.42 + 0.30e -- so at
-    // speaking energy the circuit quads were three and a half times the
-    // filaments they are supposed to be riding, and the network under them was
-    // the dimmest thing on screen. The render was a cloud of orange rectangles
-    // with nothing between them, which is what "still a way off from the
-    // reference" was describing: the reference is a DENSE GLOBE OF LINES with
-    // blocky circuitry ON it, not a scatter of blocks.
+    // THE EXTERIOR WHEELS, DRAWN FIRST so the field lies over them.
     //
-    // So the order is inverted rather than everything being turned up: the web
-    // is now the brightest of the three and the shards the dimmest. Turning
-    // them all up is what saturates the centre to white, which has already cost
-    // three tuning rounds -- tests/visual/render-bodies.mjs prints the number
-    // that catches it (`white`, the fraction of the middle of the frame with
-    // every channel above 0.92) and it is 0.0000 at these values.
+    // They were off, and the note here gave the reason: bright arcs turning at
+    // the limb read as solar flares around the edge. That was true of their GAIN
+    // and their SPEED, and it was taken as a reason to have no crest at all --
+    // but the reference frame plainly has one. Side by side with this body, the
+    // difference that reads first is not colour or density: it is that the
+    // reference has SURFACES. Thick great-circle bands sweeping round a bright
+    // centre, with a feathered fan of them at the limb. That is this pass.
+    //
+    // Back at roughly a fifth of the field's brightness and a third of the old
+    // rate, both on sliders, so "orbiting slowly" is something you set rather
+    // than something you re-derive.
+    //
+    // Cheap, too: six rings of 420 elements is 5040 vertices against the field's
+    // 32768, and they are the part of the design a viewer actually recognises.
+    const ring = this.progs.ring;
+    gl.useProgram(ring);
+    setUniforms(gl, ring, {
+      ...shared,
+      uGain: ramp(tuning.ringGain, d.energy),
+      uRingSpin: tuning.ringSpin,
+      uBeam: tuning.ringBeam,
+      uRadius: d.radius,
+      uBands: d.bands,
+    }, { uSegments: RING_SEGMENTS, uRings: tuning.rings });
+    gl.drawArrays(gl.LINES, 0, tuning.rings * RING_SEGMENTS * 2);
+
     const link = this.progs.link;
     gl.useProgram(link);
     // Wider as well as brighter. The range is the distance under which a

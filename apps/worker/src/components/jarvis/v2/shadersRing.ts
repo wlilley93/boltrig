@@ -42,6 +42,10 @@ uniform int uSegments;
 uniform int uRings;
 uniform float uBeam;
 uniform float uBands[8];
+// x turns the wheels, y precesses the whole arrangement. Uniforms because "the
+// crest should orbit SLOWLY" is a judgement made while watching it, and the
+// rates were 0.16 + 0.09*ring with a 0.05 precession baked in.
+uniform vec2 uRingSpin;
 
 out float vAmp;
 ${FIELD_GLSL}
@@ -58,7 +62,8 @@ void main() {
 
   float tau = 6.28318530718;
   float span = tau / float(uSegments);
-  float spin = uTime * (0.16 + 0.09 * fring) * (mod(fring, 2.0) < 0.5 ? 1.0 : -1.0);
+  float spin = uTime * uRingSpin.x * (1.0 + 0.56 * fring)
+             * (mod(fring, 2.0) < 0.5 ? 1.0 : -1.0);
   // Each element is an OBLONG stretched along the tangent, not a tick: the beam
   // flows round the circle instead of being beads threaded on it. Length varies
   // per element so the wall never reads as a repeating pattern.
@@ -107,7 +112,7 @@ void main() {
   vec3 q = centre * radius + (cos(ta) * outward + sin(ta) * side) * tr;
 
   // A slow precession, so the arrangement never settles into a fixed lattice.
-  float pr = uTime * 0.05 * (0.6 + 0.3 * fring);
+  float pr = uTime * uRingSpin.y * (0.6 + 0.3 * fring);
   q = vec3(q.x * cos(pr) - q.z * sin(pr), q.y, q.x * sin(pr) + q.z * cos(pr));
 
   // AUDIO REACTIVITY, which is the adjective the reference uses. Segments map

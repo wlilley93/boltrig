@@ -29,6 +29,27 @@ export type LimbMix = readonly [base: number, rim: number];
 
 export interface JarvisTuning {
   /**
+   * THE EXTERIOR WHEELS, and they were switched off.
+   *
+   * Both references ask for them -- Ebb's "audio-reactive exterior rings of data
+   * that circumscribed the hologram, evoking spinning hard drive platters and
+   * reel to reel data tape", Territory's rings rotating around a spherical base
+   * with code moving between the layers -- and the reference frame reads them as
+   * a feathered crest sweeping around the outside of the eye.
+   *
+   * They came off because bright arcs turning at the limb read as solar flares.
+   * That was a GAIN and a SPEED problem, not a reason to have no crest: they are
+   * back at a fraction of the brightness the field carries, turning slowly
+   * enough to be an orbit rather than a spin.
+   */
+  ringGain: EnergyRamp;
+  /** x turns the wheels, y precesses the arrangement. Slow is the whole point. */
+  ringSpin: readonly [spin: number, precess: number];
+  /** Beam cross-section as a fraction of each ring's radius. */
+  ringBeam: number;
+  /** How many great circles. Six read as a sphere of wheels; three as a skirt. */
+  rings: number;
+  /**
    * How fast the field turns over: the resting rate, and what a voice adds.
    *
    * This is what reads as SWIRL. Too high and it stops looking like a body
@@ -76,6 +97,16 @@ export interface JarvisTuning {
 
 export interface UltronTuning {
   /**
+   * How fast each fracture sliver turns on its own axis: base, plus a per-shard
+   * spread.
+   *
+   * Shipped at a third of what it was. The slivers are two line segments meeting
+   * at a corner, and a large one turning at 1.6 rad/s reads as a clock hand
+   * sweeping the body rather than as glass catching light -- which is exactly
+   * what it was doing.
+   */
+  facetSpin: readonly [base: number, spread: number];
+  /**
    * How fast the field turns over: the resting rate, and what a voice adds.
    *
    * This is what reads as SWIRL. Too high and it stops looking like a body
@@ -111,6 +142,10 @@ export interface UltronTuning {
 
 /** What ships. The bench overrides a copy; nothing mutates this. */
 export const JARVIS_TUNING: JarvisTuning = {
+  ringGain: [0.30, 0.32],
+  ringSpin: [0.045, 0.012],
+  ringBeam: 0.025,
+  rings: 6,
   swirl: [0.26, 0.40],
   linkGain: [0.30, 0.24],
   linkRange: 0.23,
@@ -126,6 +161,7 @@ export const JARVIS_TUNING: JarvisTuning = {
 };
 
 export const ULTRON_TUNING: UltronTuning = {
+  facetSpin: [0.13, 0.40],
   swirl: [0.26, 0.40],
   veinGain: [0.22, 0.20],
   veinStreak: [0.110, 0.085],

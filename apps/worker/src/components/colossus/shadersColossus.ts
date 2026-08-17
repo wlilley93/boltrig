@@ -358,8 +358,13 @@ uniform float uTime;
 uniform float uVignette;
 
 void main() {
-  vec3 scene = texture(uScene, vUV).rgb;
-  vec3 bloom = texture(uBloom, vUV).rgb;
+  // The same finite ceiling the shared composite takes, and for the same reason:
+  // his scene target is RGBA16F, his lamps are additive, and his tone curve
+  // below is col / (col + 0.85) -- which is NaN for an infinite col. He is far
+  // less likely to reach it than a hologram with sixteen thousand particles, but
+  // "less likely" is not a guard.
+  vec3 scene = min(texture(uScene, vUV).rgb, vec3(1e3));
+  vec3 bloom = min(texture(uBloom, vUV).rgb, vec3(1e3));
   vec3 col = scene + bloom * uBloomGain;
 
   // Rectangular vignette -- a panel darkens toward its FRAME, and a radial one

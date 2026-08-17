@@ -48,6 +48,14 @@ const RANGE: Record<string, [number, number, number]> = {
   // Down to a standstill, because the complaint was that it is far too fast and
   // the shipped value is 0.26 -- a slider starting at 0.2 could not answer it.
   swirl: [0, 1.2, 0.005],
+  // The crests own pace, separate from the fields. It has to reach a crawl:
+  // "orbiting slowly" is the whole brief, and the old baked rate was 0.16.
+  ringSpin: [0, 0.4, 0.002],
+  ringBeam: [0.01, 0.3, 0.005],
+  rings: [1, 12, 1],
+  // Up to about 1.6 rad/s was what swept the fracture slivers around like clock
+  // hands, so this needs to go well below its old base of 0.4.
+  facetSpin: [0, 1.0, 0.005],
   starburst: [0, 1, 0.01],
   streak: [0, 0.4, 0.002],
   veinStreak: [0, 0.4, 0.002],

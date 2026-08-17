@@ -234,6 +234,12 @@ uniform int uGrid;
 uniform int uStride;
 uniform float uSize;
 uniform float uAggression;
+// x is the base rate, y how much a per-shard hash adds. It was 0.4 + 1.2*hash,
+// which is up to about 1.6 rad/s -- fifteen revolutions a minute. At that rate a
+// sliver that happens to be large and near the camera sweeps across the body
+// like a clock hand, and at a high facet gain it does it in white. A uniform,
+// because "moving slower" is a judgement made while watching it.
+uniform vec2 uFacetSpin;
 
 out float vFade;
 ${FIELD_GLSL}
@@ -263,7 +269,7 @@ void main() {
   vec3 p = st.xyz * (1.0 + phase * 0.22 * uAggression);
 
   vec4 head = project(p, uAspect);
-  float spin = uTime * (0.4 + hash(vec3(uv * 5.7, 1.0)) * 1.2);
+  float spin = uTime * (uFacetSpin.x + hash(vec3(uv * 5.7, 1.0)) * uFacetSpin.y);
   float c = cos(spin), sn = sin(spin);
   // Each shard is squashed on its own axis, so no two are the same triangle and
   // none of them is equilateral. Cheaper and more effective than more glyphs.

@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-17T12:00:22.195Z",
+  "capturedAt": "2026-08-17T12:41:43.449Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "14b67a6807b5ef2ce02b5e2b15303d8fbdb403d6fc11e2e77a7c79067506dd62",
-    "digestAfterCapture": "14b67a6807b5ef2ce02b5e2b15303d8fbdb403d6fc11e2e77a7c79067506dd62",
+    "digestBeforeCapture": "e9eef562c72727c36bd6e7f3d516dd498f6967c0923f9f44a4d0bb7ff2a8b7f6",
+    "digestAfterCapture": "e9eef562c72727c36bd6e7f3d516dd498f6967c0923f9f44a4d0bb7ff2a8b7f6",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/real-brand-mark",
-    "head": "f91125ee73b2e1b95bc8e79ad4caf5af8e58f37a",
+    "head": "01f9e8f2fde2f944d99a07188bfde66c665f8831",
     "dirty": true
   },
   "runner": {
@@ -56,7 +56,7 @@
         "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

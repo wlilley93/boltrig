@@ -244,6 +244,7 @@ export class UltronPasses {
       uSize: tuning.facetSize,
       uGain: ramp(tuning.facetGain, d.energy),
       uLimb: tuning.facetLimb,
+      uFacetSpin: tuning.facetSpin,
     },
       { uState: 0, uGrid: GRID, uStride: FACET_STRIDE });
     gl.drawArrays(gl.LINES, 0, FACETS * 4);
