@@ -64,9 +64,13 @@ uniform vec2 uRingArc;
 uniform float uRingWidth;
 
 out float vAmp;
-// -1..1 across the beam, so the fragment can round it off. Without this the quad
-// is a flat ribbon and reads as a sticker rather than as an object.
+// -1..1 across the beam, SIGNED. Signed because the two sides of a solid are not
+// the same: one faces the light and one faces away, and an absolute value cannot
+// tell them apart. Taking abs() here is what made these read as fat lines.
 out float vAcross;
+// 0..1 from one end of the beam to the other, for the end caps. A bar with no
+// ends is a stroke; the caps are what give it extent rather than direction.
+out float vAlong;
 ${FIELD_GLSL}
 ${PROJECT_GLSL}
 ${PULSE_GLSL}
@@ -126,9 +130,10 @@ void main() {
   }
 
   float seed = hash(vec3(float(seg) * 0.071, fring * 2.3, 0.0));
-  // Overlapping segments, so a beam is one continuous bar rather than a row of
-  // tiles with seams between them.
-  float lenScale = 1.35 + 0.5 * seed;
+  // Just enough overlap to hide the seams, no more. At 1.35 + 0.5 the segments
+  // piled up into one long smear and the arc read as a drawn stroke; a bar wants
+  // to be an OBJECT with a length you can see the end of.
+  float lenScale = 1.06 + 0.06 * seed;
   float a0 = float(seg) * span + spin + drift;
   float a1 = a0 + span * lenScale;
 
@@ -207,6 +212,8 @@ void main() {
   vAmp *= 1.0 + 4.5 * pulse(q) + 0.4 * uSwell;
 
   vAcross = across;
+  // Where this segment sits along its own beam, so the fragment can cap the ends.
+  vAlong = clamp(within / max(0.02, clamp(uRingArc.y, 0.0, 1.0)), 0.0, 1.0);
   gl_Position = clip;
 }`;
 
@@ -226,23 +233,48 @@ export const RING_FRAG = `#version 300 es
 precision highp float;
 in float vAmp;
 in float vAcross;
+// Every vertex-stage output needs its matching input here. A missing one is a LINK
+// error, and a pass whose program fails to build takes the whole renderer down --
+// so the symptom is a blank stage, not a beam without end caps.
+in float vAlong;
 out vec4 oColor;
 uniform vec3 uWarm;
 uniform vec3 uHot;
 uniform float uGain;
 
 void main() {
-  // ROUNDED ACROSS, which is the whole difference between a bar and a sticker.
-  // A quad shaded flat is a flat thing however thick it is drawn; falling off
-  // toward both edges gives it a lit near face and a dark silhouette, and that
-  // is what the eye reads as a solid object with a cross-section.
-  float across = clamp(abs(vAcross), 0.0, 1.0);
-  float round_ = 1.0 - across * across;
-  // A tighter hot filament inside the softer body of the beam, so it has a
-  // highlight rather than being uniformly bright.
-  float spine = pow(round_, 6.0);
-  float shape = round_ * 0.55 + spine * 0.75;
-  vec3 c = mix(uWarm, uHot, clamp(vAmp * vAmp * 0.6 + spine * 0.5, 0.0, 1.0));
+  // A SOLID, not a thick line, and the difference is four things.
+  //
+  // The previous version faded symmetrically from the centre to both edges. That
+  // is exactly what a soft line looks like -- the eye has nothing to tell it which
+  // way the object faces, so it reads the quad as a stroke however wide it is
+  // drawn. A bar needs a side that catches light and a side that does not.
+  float across = clamp(vAcross, -1.0, 1.0);
+  float a = abs(across);
+
+  // 1. A HARD SILHOUETTE. A feathered edge is a glow; an edge that arrives in the
+  //    last fifth of the width is a boundary, and a boundary is what makes a shape
+  //    look like it displaces space.
+  float edge = smoothstep(1.0, 0.80, a);
+
+  // 2. A LIT FACE AND A DARK FACE. Signed across, so one side of every beam is in
+  //    shadow. This is the term that does most of the work: it is the only one that
+  //    says the object has an orientation.
+  float face = mix(0.30, 1.0, 0.5 + 0.5 * across);
+
+  // 3. A SPECULAR BAND, offset toward the lit side rather than centred. Centred, it
+  //    is a spine and reads as a filament down the middle of a flat ribbon; offset,
+  //    it reads as light grazing a curved surface.
+  float spec = exp(-pow((across - 0.42) * 3.2, 2.0));
+
+  // 4. END CAPS. Without them a beam has direction but no extent, and the arc reads
+  //    as one continuous stroke rather than as several separate objects.
+  float cap = smoothstep(0.0, 0.05, vAlong) * smoothstep(1.0, 0.95, vAlong);
+
+  float shape = edge * cap * (face * 0.68 + spec * 0.85);
+  // The highlight runs hotter than the body, which is how a lit edge reads on a
+  // warm object.
+  vec3 c = mix(uWarm, uHot, clamp(vAmp * vAmp * 0.45 + spec * 0.75, 0.0, 1.0));
   oColor = vec4(c * vAmp * shape * uGain, 1.0);
 }`;
 

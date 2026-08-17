@@ -51,7 +51,10 @@ void main() {
     return;
   }
 
-  vec3 v = flow(p, uTime, uEnergy);
+  // The outer layer may drift at its own rate. Applied HERE, in the simulation,
+  // so the positions themselves are slower -- scaling it in the draw would move
+  // the streaks off the path the particle is actually taking.
+  vec3 v = flow(p, uTime, uEnergy) * layerPace(vUV);
 
   // Radial constraint toward this particle's own home radius. It was weak on
   // purpose, so particles overshoot and the surface stays broken rather than

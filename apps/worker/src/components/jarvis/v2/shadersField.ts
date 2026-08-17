@@ -31,6 +31,16 @@ uniform float uAspect;
 uniform float uEnergy;
 uniform float uStreak;
 uniform int uGrid;
+/**
+ * Which layer this draw call is for: 0 the inner cloud, 1 the outer shell.
+ *
+ * TWO PASSES OVER ONE POPULATION, not two simulations. The particles already know
+ * which layer they belong to -- onOuterShell derives it from the texel -- so the
+ * split costs one extra draw call and no extra state. What it buys is that the
+ * shell can have its own brightness, trail and silhouette, which is what makes it
+ * read as a distant surface rather than as the same cloud drawn further out.
+ */
+uniform float uLayer;
 
 out float vFade;
 out float vSpeed;
@@ -44,8 +54,20 @@ void main() {
   ivec2 tc = ivec2(id % uGrid, id / uGrid);
   vec4 st = texelFetch(uState, tc, 0);
 
+  // Not my layer: collapse to a degenerate vertex off-screen. Discarding in the
+  // vertex stage costs nothing and, unlike fading it out, leaves no dim ghost of
+  // the other layer sitting under this one.
+  vec2 uv = (vec2(tc) + 0.5) / float(uGrid);
+  if ((uLayer > 0.5) != onOuterShell(uv)) {
+    vFade = 0.0;
+    vSpeed = 0.0;
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+
   vec3 p = st.xyz;
-  vec3 v = flow(p, uTime, uEnergy);
+  // The same pace the simulation used, or the streak would lie off the path.
+  vec3 v = flow(p, uTime, uEnergy) * layerPace(uv);
   vSpeed = clamp(length(v) * 0.55, 0.0, 1.0);
 
   // Fade in and out at the ends of life, so particles never pop.

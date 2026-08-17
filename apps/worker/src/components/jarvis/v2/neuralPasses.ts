@@ -187,6 +187,7 @@ export class NeuralPasses {
       // along, so it has to be handed the same value or the motion blur points
       // where the particle is not going.
       uSwirl: tuning.swirl,
+      uLayerPace: [0, tuning.outerPace],
       uOuter: tuning.outerShell,
     }, { uState: 0 });
     this.fullscreen(prog);
@@ -303,15 +304,50 @@ export class NeuralPasses {
     }, { uState: 0, uGrid: GRID });
     gl.drawArrays(gl.LINES, 0, PARTICLES * LINK_SEGMENTS * 2);
 
+    // ------------------------------------------------------- TWO PARTICLE LAYERS
+    //
+    // The inner cloud and the outer shell are drawn separately so each can carry
+    // its own brightness, trail length and silhouette. They were one draw with one
+    // set of uniforms, and an outer sphere that shares the interior's gain and
+    // streak does not read as a distant surface -- it reads as the same cloud
+    // sprayed wider, which is exactly how it looked.
+    //
+    // The inner layer draws SECOND, so the near cloud composites over the shell
+    // rather than under it. Additive blending makes the order matter less than it
+    // would, but the fringe test is not additive and the shell would otherwise
+    // punch through the middle of the body.
     const draw = this.progs.draw;
     gl.useProgram(draw);
-    setUniforms(gl, draw, {
-      ...shared,
-      uStreak: ramp(tuning.streak, d.energy),
-      uGain: ramp(tuning.drawGain, d.energy),
-      uLimb: tuning.drawLimb,
-    }, { uState: 0, uGrid: GRID });
-    gl.drawArrays(gl.LINES, 0, PARTICLES * 2);
+    for (const layer of [1, 0]) {
+      const outer = layer === 1;
+      setUniforms(gl, draw, {
+        ...shared,
+        uLayer: layer,
+        uStreak: ramp(outer ? tuning.outerStreak : tuning.streak, d.energy),
+        uGain: ramp(outer ? tuning.outerGain : tuning.drawGain, d.energy),
+        uLimb: outer ? tuning.outerLimb : tuning.drawLimb,
+        // THE FRINGE FLOOR IS PER LAYER, and this is the third pass to be bitten
+        // by it not being.
+        //
+        // fringeShade zeroes anything below uInner / uFringeScale -- 0.52 / 2.4 =
+        // 0.217 -- and it exists for one reason: sixteen thousand additive
+        // particles overlapping in the middle of the frame climb one colour ramp
+        // together until the centre goes white. That is a STACKING defence.
+        //
+        // The outer layer does not stack. It is a thin shell, deliberately dim: a
+        // gain around 0.42 multiplied by outerFade's 0.28 puts almost every shell
+        // particle under the floor, so the entire layer was culled and drew
+        // NOTHING. Measured: the shell annulus read 0.00022 with the population at
+        // 0.6, and zeroing the INNER layer's gain took even that away -- because
+        // what was out there was inner-layer strays, not the shell.
+        //
+        // The rings and the dendrites each hit this same floor and each fixed it by
+        // dropping the fringe entirely. A shell of particles genuinely does want
+        // some, so it gets a floor proportionate to its brightness instead.
+        uInner: outer ? 0.12 : 0.52,
+      }, { uState: 0, uGrid: GRID });
+      gl.drawArrays(gl.LINES, 0, PARTICLES * 2);
+    }
 
     const shard = this.progs.shard;
     gl.useProgram(shard);

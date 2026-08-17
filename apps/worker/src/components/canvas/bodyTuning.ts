@@ -161,6 +161,13 @@ export interface JarvisTuning {
    */
   linkBow: readonly [amount: number, speed: number];
   /** The filaments. */
+  /**
+   * The INNER layer: brightness, trail and silhouette of the core cloud.
+   *
+   * `drawGain`, `streak` and `drawLimb` keep their names because renaming them
+   * would churn every preset and every saved bench state for no gain -- but they
+   * describe the inner layer only. The outer shell has its own four fields below.
+   */
   drawGain: EnergyRamp;
   /**
    * Streak length. Raised by the reciprocal when the advection rate was halved,
@@ -182,6 +189,26 @@ export interface JarvisTuning {
    * read as a white block shining through the iris. It belongs to Colossus,
    * whose CRT beam earns a horizontal streak.
    */
+  /**
+   * THE OUTER LAYER, as its own set rather than a fraction of the inner one.
+   *
+   * `outerShell` still says WHERE it is and how many particles are on it; these
+   * say what it LOOKS like. Sharing the interior's gain and streak was the reason
+   * the shell never read as a distant surface: a surface further away is dimmer,
+   * finer and shorter-trailed, and none of that was expressible.
+   */
+  outerGain: EnergyRamp;
+  outerStreak: EnergyRamp;
+  outerLimb: LimbMix;
+  /**
+   * How much slower the outer layer drifts, as an offset from 1.
+   *
+   * Negative is slower. It reaches the SIMULATION rather than the draw, because a
+   * distant thing moving at the same rate as a near thing is the single strongest
+   * cue that they are at the same distance -- and scaling it at draw time would
+   * put the streaks off the path the particles actually take.
+   */
+  outerPace: number;
   starburst: number;
   /**
    * The eye, after familiar.frag's heart -- pupil, iris, and the lens ring.
@@ -282,7 +309,7 @@ export interface UltronTuning {
 
 /** What ships. The bench overrides a copy; nothing mutates this. */
 export const JARVIS_TUNING: JarvisTuning = {
-  outerShell: [1.45, 0, 0.28],
+  outerShell: [1.45, 0.34, 0.62],
   ringGain: [0.62, 0.4],
   ringSpin: [0.045, 0.012],
   ringRadius: [0.9, 1.34],
@@ -312,6 +339,10 @@ export const JARVIS_TUNING: JarvisTuning = {
   shardSize: 0.003,
   shardStride: 12,
   core: [1, 1],
+  outerGain: [1.15, 0.55],
+  outerStreak: [0.0018, 0],
+  outerLimb: [2.4, 5.4],
+  outerPace: -0.55,
   starburst: 1,
   eye: [1, 1.5, 0.34, 15],
   drawLimb: [3, 3],

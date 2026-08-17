@@ -174,6 +174,10 @@ export class UltronPasses {
       // canvas/bodyTuning, so the bench can move it while you watch.
       uPetal: tuning.petal,
       uSwirl: tuning.swirl,
+      // Ultron has ONE particle layer. Zero is the no-change offset, set
+      // explicitly rather than left to default so the intent is on the page: he
+      // shares canvas/shadersSim.ts, so the uniform exists in his program too.
+      uLayerPace: [0, 0],
       uOuter: tuning.outerShell,
     }, { uState: 0 });
     this.fullscreen(prog);

@@ -87,6 +87,11 @@ const LEGEND: Record<string, readonly string[]> = {
   drawGain: ["particle brightness", "×voice"],
   streak: ["particle trail length", "×voice"],
   drawLimb: ["face-on keep", "rim boost"],
+  // ---- Jarvis: the outer particle layer -----------------------------------
+  outerGain: ["shell brightness", "×voice"],
+  outerStreak: ["shell trail length", "×voice"],
+  outerLimb: ["face-on keep", "rim boost"],
+  outerPace: ["drift vs the inner layer"],
   // ---- Jarvis: the pathways ----------------------------------------------
   linkGain: ["pathway brightness", "×voice"],
   linkBow: ["bow amount", "bow SPEED"],
@@ -168,6 +173,9 @@ const RANGE: Record<string, [number, number, number]> = {
   irisRadius: [0.02, 1.2, 0.01],
   irisFil: [0, 1, 0.02],
   irisFlow: [0, 0.8, 0.005],
+  // Negative is slower than the inner layer; -1 holds the shell still.
+  outerPace: [-1, 1, 0.02],
+  outerStreak: [0, 0.05, 0.0005],
   glyphRadius: [0.2, 2.0, 0.02],
   glyphSize: [0.002, 0.16, 0.002],
   glyphSpin: [0, 0.3, 0.002],
@@ -585,8 +593,11 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "4 · Veins and cracks", fields: [
     "veinGain", "veinStreak", "veinLimb", "crackGain", "crackRange", "crackLimb",
   ] },
-  { title: "4 · Particle field — the body", fields: [
-    "drawGain", "streak", "swirl", "outerShell", "drawLimb",
+  { title: "4 · Inner particle layer — the core cloud", fields: [
+    "drawGain", "streak", "swirl", "drawLimb",
+  ] },
+  { title: "4 · Outer particle layer — the distant shell", fields: [
+    "outerShell", "outerGain", "outerStreak", "outerLimb", "outerPace",
   ] },
   { title: "5 · Circuit shards", fields: ["shardGain", "shardSize", "shardStride"] },
   { title: "5 · Crystal facets", fields: [
@@ -639,8 +650,12 @@ const TITLES: Record<string, string> = {
   drawGain: "How bright the particles are",
   streak: "How long a particle's trail is",
   swirl: "How fast the field flows",
-  outerShell: "The faint outer sphere",
-  drawLimb: "How hard the body reads as a sphere",
+  outerShell: "Where the shell sits, and how many particles are on it",
+  drawLimb: "How hard the core reads as a sphere",
+  outerGain: "How bright the outer shell is",
+  outerStreak: "How long the shell particles' trails are",
+  outerLimb: "How hard the shell reads as a sphere",
+  outerPace: "How much slower the shell drifts",
   shardGain: "How bright the circuit shards are",
   shardSize: "How big a shard is",
   shardStride: "How many particles become shards",
@@ -665,6 +680,12 @@ function row(
   const fallback = RANGE[key] ?? [0, 1, 0.005];
   const wrap = document.createElement("div");
   wrap.className = "row";
+  // A STABLE HANDLE. Rows were addressed by their visible text, which stopped
+  // being unique the moment the titles became prose: "How hard the core reads as a
+  // sphere" belongs to drawLimb, so a probe looking for the row containing "core"
+  // silently adjusted the wrong slider and then reported that the field it thought
+  // it had changed had no effect. Wrong conclusions, not just a flaky selector.
+  wrap.dataset.field = key;
   const name = document.createElement("label");
   // A pair is `base + perEnergy * energy`, so the two sliders are not
   // interchangeable and the legend says which is which.

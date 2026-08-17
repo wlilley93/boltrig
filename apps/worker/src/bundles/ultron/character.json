@@ -50,7 +50,8 @@
       "uDend",
       "uDendTip",
       "uBead",
-      "uEye"
+      "uEye",
+      "uLayerPace"
     ]
   },
   "prompts": {

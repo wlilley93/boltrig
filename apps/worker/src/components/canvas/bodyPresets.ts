@@ -45,6 +45,12 @@ export const JARVIS_ARRIVAL: JarvisTuning = {
   shardSize: 0.003,
   shardStride: 12,
   core: [1, 1],
+  // ARRIVING, the shell is the whole body: outerShell population is 2.2, so every
+  // particle is out there and the outer layer is what you see.
+  outerGain: [1.1, 0.5],
+  outerStreak: [0.004, 0],
+  outerLimb: [3, 3],
+  outerPace: 0,
   starburst: 0.32,
   eye: [0.35, 1.8, 0.62, 9],
   drawLimb: [3, 3],
@@ -75,6 +81,8 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
     linkGain: [0, 0],
     core: [0.55, 0.30],
     shardGain: [0.55, 0.20],
+    outerGain: [0.7, 0.3],
+    outerPace: -0.68,
   },
   // Turned toward you: rings pick up, the network opens and reaches further,
   // but nothing is being computed yet so the shards stay down.
@@ -92,6 +100,8 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
     linkRange: 0.72,
     core: [0.78, 0.50],
     shardGain: [0.65, 0.30],
+    outerGain: [0.95, 0.45],
+    outerPace: -0.6,
   },
   // The network is the point. Pathways brighten and WANDER further -- the one
   // mode where the bow is doing visible work.
@@ -103,6 +113,8 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
     ringGain: [0.55, 0.32],
     ringSpin: [0.040, 0.012],
     ringLife: 0.10,
+    outerGain: [1.1, 0.5],
+    outerPace: -0.48,
     ringArc: [4, 0.48],
     irisGain: [0.72, 0.46],
     irisFil: [0.92, 0.006],
@@ -127,6 +139,8 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
     ringWidth: 0.072,
     shardGain: [1.18, 0.60],
     shardStride: 9,
+    outerGain: [1.25, 0.6],
+    outerPace: -0.4,
     linkGain: [0, 0],
   },
   // Everything present and the HEART is what moves: pulsedCore oscillates the
@@ -145,6 +159,8 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
     linkGain: [0, 0],
     core: [1, 1],
     shardGain: [1, 0.475],
+    outerGain: [1.2, 0.58],
+    outerPace: -0.5,
   },
 };
 

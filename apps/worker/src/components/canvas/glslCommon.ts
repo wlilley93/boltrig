@@ -63,6 +63,8 @@ vec3 potential(vec3 p, float time) {
 // draw pass multiplies the same rate by uStreak -- so slowing the swirl does not
 // shorten the trails, which is the coupling that made this hard to tune blind.
 uniform vec2 uSwirl;
+// x inner layer, y outer layer -- offsets from 1, so unset means unchanged.
+uniform vec2 uLayerPace;
 
 float flowSpeed(float energy) { return uSwirl.x + uSwirl.y * energy; }
 
@@ -140,6 +142,33 @@ vec3 flow(vec3 p, float time, float energy) {
 uniform vec3 uOuter;
 #endif
 
+/**
+ * IS THIS PARTICLE ON THE OUTER LAYER?
+ *
+ * Extracted so the simulation and every draw pass ask the SAME question. It was
+ * an inline hash inside homeRadius, which was fine while only the simulation
+ * cared -- but the moment the draws need to treat the two layers differently, an
+ * inline copy is two expressions that have to stay identical, and the failure
+ * mode is a particle the simulation puts on the shell and a draw pass colours as
+ * interior. Half of each layer wearing the other's clothes, with nothing to grep.
+ */
+bool onOuterShell(vec2 uv) {
+  return hash(vec3(uv * 91.3, 19.0)) < uOuter.y;
+}
+
+/**
+ * Per-layer pace, as an OFFSET from 1 rather than a multiplier.
+ *
+ * x adjusts the inner layer and y the outer. Offsets because an unset uniform is
+ * zero, and zero here means "no change" -- so a body that never sets this is
+ * byte-identical to one compiled before it existed. A multiplier would read as 0
+ * when unset and freeze the field solid, which is the same trap uEye sprang: a
+ * shared shader gaining a uniform must not change any body that ignores it.
+ */
+float layerPace(vec2 uv) {
+  return max(0.0, 1.0 + (onOuterShell(uv) ? uLayerPace.y : uLayerPace.x));
+}
+
 float homeRadius(vec2 uv, float time) {
   float role = hash(vec3(uv * 57.3, 11.0));
   float jitter = hash(vec3(uv * 23.9, 3.0));
@@ -151,7 +180,7 @@ float homeRadius(vec2 uv, float time) {
   // byte-identical -- a body that does not want an outer sphere must be
   // unchanged by this existing, or the uniform is a behaviour change disguised
   // as an option.
-  if (hash(vec3(uv * 91.3, 19.0)) < uOuter.y) {
+  if (onOuterShell(uv)) {
     return uOuter.x * (0.94 + 0.10 * jitter);
   }
   if (role > 0.92) {
