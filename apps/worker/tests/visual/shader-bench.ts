@@ -56,6 +56,9 @@ const RANGE: Record<string, [number, number, number]> = {
   // Up to about 1.6 rad/s was what swept the fracture slivers around like clock
   // hands, so this needs to go well below its old base of 0.4.
   facetSpin: [0, 1.0, 0.005],
+  // radius / population / brightness. The population reaching 0 matters: that is
+  // how a body says it does not want an outer sphere at all.
+  outerShell: [0, 2.2, 0.01],
   starburst: [0, 1, 0.01],
   streak: [0, 0.4, 0.002],
   veinStreak: [0, 0.4, 0.002],

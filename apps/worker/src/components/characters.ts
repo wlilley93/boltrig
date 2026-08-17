@@ -292,7 +292,7 @@ export const ULTRON_UNIFORMS: readonly string[] = [
   "uState", "uTime", "uDt", "uEnergy", "uRadius", "uWaveT", "uWaveAmp",
   "uAspect", "uStreak", "uGrid", "uSegments", "uStride", "uSize",
   "uLinkRange", "uAggression", "uBands", "uVoice", "uSwell", "uPetal", "uLimb",
-  "uSwirl", "uFacetSpin",
+  "uSwirl", "uFacetSpin", "uOuter",
   "uWarm", "uHot", "uFringe", "uInner", "uFringeScale", "uFringeGain", "uGain",
   "uSrc", "uDir", "uThreshold",
   "uScene", "uBloom", "uBloomGain", "uCore", "uStarburst",

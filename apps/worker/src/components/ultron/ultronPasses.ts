@@ -166,6 +166,7 @@ export class UltronPasses {
       // canvas/bodyTuning, so the bench can move it while you watch.
       uPetal: tuning.petal,
       uSwirl: tuning.swirl,
+      uOuter: tuning.outerShell,
     }, { uState: 0 });
     this.fullscreen(prog);
     this.ping = 1 - this.ping;
@@ -182,6 +183,7 @@ export class UltronPasses {
       // force, here it is light, and only the second one is visible.
       uWaveT: d.waveT, uWaveAmp: d.waveAmp, uSwell: d.swell,
       uSwirl: tuning.swirl,
+      uOuter: tuning.outerShell,
     };
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFbo);

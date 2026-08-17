@@ -128,9 +128,32 @@ vec3 flow(vec3 p, float time, float energy) {
 // strength of Ebb's "internal network within the spherical centre" and it read
 // as a dandelion: no silhouette, no limb, no globe. Both things are true, and
 // the shell is the one that carries the shape.
+#ifndef UOUTER_DECLARED
+#define UOUTER_DECLARED
+// THE DISTANT OUTER SPHERE. x its radius, y what fraction of the particles live
+// on it, z how bright it is against the body.
+//
+// Guarded, because homeRadius needs it in FIELD_GLSL for the simulation and
+// limbMix needs it in PROJECT_GLSL for the draws, and several shaders include
+// both. A duplicate uniform declaration is a compile error, and on these
+// SILENT -- the canvas is removed and the stage reads as a CSS problem.
+uniform vec3 uOuter;
+#endif
+
 float homeRadius(vec2 uv, float time) {
   float role = hash(vec3(uv * 57.3, 11.0));
   float jitter = hash(vec3(uv * 23.9, 3.0));
+  // THE OUTER SPHERE, taken from its OWN hash rather than from role.
+  //
+  // The reference builds one: the crystalline mass blooms and then "the outer
+  // circle takes shape" around it, much lighter and much further out. Its own
+  // hash so that setting the fraction to zero leaves the three bands below
+  // byte-identical -- a body that does not want an outer sphere must be
+  // unchanged by this existing, or the uniform is a behaviour change disguised
+  // as an option.
+  if (hash(vec3(uv * 91.3, 19.0)) < uOuter.y) {
+    return uOuter.x * (0.94 + 0.10 * jitter);
+  }
   if (role > 0.92) {
     float phase = hash(vec3(uv * 77.1, 5.0));
     // Cosine rather than a sawtooth: a migrating particle should ease out and
@@ -226,7 +249,29 @@ float limb(vec3 p) {
 // calls limbMix costs nothing.
 uniform vec2 uLimb;
 
-float limbMix(vec3 p) { return uLimb.x + uLimb.y * limb(p); }
+#ifndef UOUTER_DECLARED
+#define UOUTER_DECLARED
+// THE DISTANT OUTER SPHERE. x its radius, y what fraction of the particles live
+// on it, z how bright it is against the body.
+//
+// Guarded, because homeRadius needs it in FIELD_GLSL for the simulation and
+// limbMix needs it in PROJECT_GLSL for the draws, and several shaders include
+// both. A duplicate uniform declaration is a compile error, and on these
+// SILENT -- the canvas is removed and the stage reads as a CSS problem.
+uniform vec3 uOuter;
+#endif
+
+// FAR AND FAINT, read from WHERE a particle is rather than which one it is.
+//
+// Anything past the body's own shell is the outer sphere by definition, so
+// position is enough -- and taking it from position means this reaches every
+// draw pass through limbMix, instead of threading a texel coordinate into four
+// more shaders that never needed one.
+float outerFade(vec3 p) {
+  return mix(1.0, uOuter.z, smoothstep(1.02, max(1.05, uOuter.x * 0.92), length(p)));
+}
+
+float limbMix(vec3 p) { return (uLimb.x + uLimb.y * limb(p)) * outerFade(p); }
 
 
 // How far outside its home shell a particle has drifted, 0..1. Familiar spawns

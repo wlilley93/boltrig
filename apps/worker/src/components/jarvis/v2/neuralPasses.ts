@@ -182,6 +182,7 @@ export class NeuralPasses {
       // along, so it has to be handed the same value or the motion blur points
       // where the particle is not going.
       uSwirl: tuning.swirl,
+      uOuter: tuning.outerShell,
     }, { uState: 0 });
     this.fullscreen(prog);
     this.ping = 1 - this.ping;
@@ -198,6 +199,7 @@ export class NeuralPasses {
       // visible rather than merely real.
       uWaveT: d.waveT, uWaveAmp: d.waveAmp, uSwell: d.swell,
       uSwirl: tuning.swirl,
+      uOuter: tuning.outerShell,
     };
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFbo);

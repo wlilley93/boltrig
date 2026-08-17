@@ -45,7 +45,8 @@
       "uPetal",
       "uLimb",
       "uSwirl",
-      "uFacetSpin"
+      "uFacetSpin",
+      "uOuter"
     ]
   },
   "prompts": {

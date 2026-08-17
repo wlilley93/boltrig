@@ -29,6 +29,15 @@ export type LimbMix = readonly [base: number, rim: number];
 
 export interface JarvisTuning {
   /**
+   * The distant outer sphere: radius, population fraction, brightness.
+   *
+   * Ultron's birth builds one -- the crystalline mass blooms and then the outer
+   * circle takes shape around it, lighter and further out. Jarvis ships with the
+   * fraction at ZERO, so his look is untouched until somebody decides where his
+   * shells belong; the machinery is shared, the decision is not.
+   */
+  outerShell: readonly [radius: number, fraction: number, gain: number];
+  /**
    * THE EXTERIOR WHEELS, and they were switched off.
    *
    * Both references ask for them -- Ebb's "audio-reactive exterior rings of data
@@ -97,6 +106,15 @@ export interface JarvisTuning {
 
 export interface UltronTuning {
   /**
+   * The distant outer sphere: radius, population fraction, brightness.
+   *
+   * Ultron's birth builds one -- the crystalline mass blooms and then the outer
+   * circle takes shape around it, lighter and further out. Jarvis ships with the
+   * fraction at ZERO, so his look is untouched until somebody decides where his
+   * shells belong; the machinery is shared, the decision is not.
+   */
+  outerShell: readonly [radius: number, fraction: number, gain: number];
+  /**
    * How fast each fracture sliver turns on its own axis: base, plus a per-shard
    * spread.
    *
@@ -142,6 +160,7 @@ export interface UltronTuning {
 
 /** What ships. The bench overrides a copy; nothing mutates this. */
 export const JARVIS_TUNING: JarvisTuning = {
+  outerShell: [1.45, 0, 0.28],
   ringGain: [0.30, 0.32],
   ringSpin: [0.045, 0.012],
   ringBeam: 0.025,
@@ -161,6 +180,7 @@ export const JARVIS_TUNING: JarvisTuning = {
 };
 
 export const ULTRON_TUNING: UltronTuning = {
+  outerShell: [1.45, 0.20, 0.30],
   facetSpin: [0.13, 0.40],
   swirl: [0.26, 0.40],
   veinGain: [0.22, 0.20],
