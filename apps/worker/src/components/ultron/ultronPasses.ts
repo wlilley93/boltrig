@@ -165,6 +165,7 @@ export class UltronPasses {
       // and keeps the plain shell. The value and its reasoning now live in
       // canvas/bodyTuning, so the bench can move it while you watch.
       uPetal: tuning.petal,
+      uSwirl: tuning.swirl,
     }, { uState: 0 });
     this.fullscreen(prog);
     this.ping = 1 - this.ping;
@@ -180,6 +181,7 @@ export class UltronPasses {
       // The wavefront reaches the DRAW passes, not only SIM: there it is a
       // force, here it is light, and only the second one is visible.
       uWaveT: d.waveT, uWaveAmp: d.waveAmp, uSwell: d.swell,
+      uSwirl: tuning.swirl,
     };
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFbo);

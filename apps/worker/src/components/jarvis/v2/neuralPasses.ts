@@ -133,7 +133,7 @@ export class NeuralPasses {
    * the bench is the only thing that ever passes anything else.
    */
   render(d: Drive, palette: FloatUniforms, tuning: JarvisTuning = JARVIS_TUNING): void {
-    this.simulate(d);
+    this.simulate(d, tuning);
     this.drawScene(d, palette, tuning);
     this.bloom();
     this.composite(palette, ramp(tuning.core, d.energy), tuning.starburst);
@@ -160,7 +160,7 @@ export class NeuralPasses {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
-  private simulate(d: Drive): void {
+  private simulate(d: Drive, tuning: JarvisTuning): void {
     const gl = this.gl;
     const prog = this.progs.sim;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.simFbo[1 - this.ping]);
@@ -172,6 +172,10 @@ export class NeuralPasses {
     setUniforms(gl, prog, {
       uTime: d.time, uDt: d.dt, uEnergy: d.energy, uRadius: d.radius,
       uWaveT: d.waveT, uWaveAmp: d.waveAmp,
+      // The simulation integrates the same rate every draw pass walks backwards
+      // along, so it has to be handed the same value or the motion blur points
+      // where the particle is not going.
+      uSwirl: tuning.swirl,
     }, { uState: 0 });
     this.fullscreen(prog);
     this.ping = 1 - this.ping;
@@ -187,6 +191,7 @@ export class NeuralPasses {
       // as a force; the draws use them as light, which is what makes the pulse
       // visible rather than merely real.
       uWaveT: d.waveT, uWaveAmp: d.waveAmp, uSwell: d.swell,
+      uSwirl: tuning.swirl,
     };
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFbo);

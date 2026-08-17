@@ -43,7 +43,8 @@
       "uVoice",
       "uSwell",
       "uPetal",
-      "uLimb"
+      "uLimb",
+      "uSwirl"
     ]
   },
   "prompts": {

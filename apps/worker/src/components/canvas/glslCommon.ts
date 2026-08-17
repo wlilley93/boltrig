@@ -52,7 +52,19 @@ vec3 potential(vec3 p, float time) {
 // hologram turns over slowly even while it is talking. The streaks keep their
 // LENGTH because every call site raises uStreak by the reciprocal; only the
 // pace changed.
-float flowSpeed(float energy) { return 0.26 + 0.40 * energy; }
+// A UNIFORM, because "it is spinning far too fast" is a judgement nobody can
+// make from a source file. x is the resting rate and y is what a voice adds, so
+// a body that drifts at rest and boils while speaking is two numbers rather than
+// one -- and both are on a slider in tests/visual/shader-bench.html.
+//
+// Shipped at 0.26 + 0.40, which is itself roughly half the first cut: at
+// 0.55 + 0.85 the filaments whipped and read as solar flares rather than as a
+// mind thinking. The streaks keep their LENGTH when this moves, because every
+// draw pass multiplies the same rate by uStreak -- so slowing the swirl does not
+// shorten the trails, which is the coupling that made this hard to tune blind.
+uniform vec2 uSwirl;
+
+float flowSpeed(float energy) { return uSwirl.x + uSwirl.y * energy; }
 
 // Curl by central differences on the potential. e is a compromise: smaller and
 // the hash noise's own quantisation shows up as jitter in the curl.

@@ -45,6 +45,9 @@ const RANGE: Record<string, [number, number, number]> = {
   facetSize: [0.002, 0.06, 0.001],
   shardStride: [1, 64, 1],
   petal: [0, 1, 0.01],
+  // Down to a standstill, because the complaint was that it is far too fast and
+  // the shipped value is 0.26 -- a slider starting at 0.2 could not answer it.
+  swirl: [0, 1.2, 0.005],
   starburst: [0, 1, 0.01],
   streak: [0, 0.4, 0.002],
   veinStreak: [0, 0.4, 0.002],
@@ -59,6 +62,50 @@ const RANGE: Record<string, [number, number, number]> = {
 };
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
+
+/**
+ * A tuning survives a reload, and can be handed to someone else as a link.
+ *
+ * NOT A CONVENIENCE. A look arrived at by dragging twelve sliders for twenty
+ * minutes is real work, and losing it to a dev-server restart -- which is what
+ * happened -- is the same class of loss as a voice pick that was never written
+ * down. The mixer learned this too: its picks are saved.
+ *
+ * Merged OVER what ships rather than replacing it, so a state saved before a
+ * field existed still loads: `swirl` was added after the first states were
+ * saved, and a replace would have left it undefined and turned every arithmetic
+ * result into NaN.
+ */
+const storageKey = (name: string): string => `boltrig.shaderBench.${name}`;
+
+function saved(name: string, shipped: Tuning): Tuning {
+  const fromUrl = new URLSearchParams(location.search).get(name);
+  const raw = fromUrl ?? localStorage.getItem(storageKey(name));
+  if (!raw) return clone(shipped);
+  try {
+    return { ...clone(shipped), ...JSON.parse(raw) } as Tuning;
+  } catch {
+    return clone(shipped);
+  }
+}
+
+function remember(name: string, value: Tuning): void {
+  try {
+    localStorage.setItem(storageKey(name), JSON.stringify(value));
+  } catch {
+    // A full or blocked store is not a reason to stop rendering.
+  }
+}
+
+/** A link that reproduces exactly what is on screen. */
+function shareLink(): string {
+  const url = new URL(location.href);
+  url.search = "";
+  url.searchParams.set(body, JSON.stringify(tuning));
+  url.searchParams.set("mode", ($("mode") as HTMLSelectElement).value);
+  url.searchParams.set("level", ($("level") as HTMLInputElement).value);
+  return url.toString();
+}
 
 let renderer: JarvisNeuralRenderer | UltronRenderer | null = null;
 let tuning: Tuning = clone(JARVIS_TUNING);
@@ -100,7 +147,7 @@ function mount(): void {
   // — exactly the failure mode this whole session has been unpicking.
   $("export").textContent = "";
   shipped = body === "jarvis" ? JARVIS_TUNING : ULTRON_TUNING;
-  tuning = clone(renderer.currentTuning() as Tuning);
+  tuning = saved(body, shipped);
   buildControls();
   push();
   loop();
@@ -163,6 +210,7 @@ function assign(key: string, value: number | number[]): void {
 
 function push(): void {
   if (!renderer) return;
+  remember(body, tuning);
   // Cast at the seam: the page holds one union and each renderer takes its own
   // half of it, which the body switch above already guarantees.
   (renderer as { setTuning(next: never): void }).setTuning(clone(tuning) as never);
@@ -260,14 +308,31 @@ $("body").addEventListener("change", (event) => {
   mount();
 });
 $("reset").addEventListener("click", () => {
+  // Clear the store BEFORE pushing, since push() writes it back.
+  try { localStorage.removeItem(storageKey(body)); } catch { /* nothing to clear */ }
   tuning = clone(shipped);
   buildControls();
   push();
+});
+$("link").addEventListener("click", () => {
+  const url = shareLink();
+  void navigator.clipboard?.writeText(url).catch(() => undefined);
+  $("export").textContent = url;
 });
 $("copy").addEventListener("click", () => {
   const text = settingsText();
   void navigator.clipboard?.writeText(text).catch(() => undefined);
   $("export").textContent = text;
 });
+const params = new URLSearchParams(location.search);
+const startMode = params.get("mode");
+const startLevel = params.get("level");
+if (startMode) ($("mode") as HTMLSelectElement).value = startMode;
+if (startLevel) ($("level") as HTMLInputElement).value = startLevel;
+// A link naming the other body should open on it.
+if (params.has("ultron") && !params.has("jarvis")) {
+  body = "ultron";
+  ($("body") as HTMLSelectElement).value = "ultron";
+}
 $("export").textContent = "";
 mount();

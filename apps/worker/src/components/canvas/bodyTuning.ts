@@ -28,6 +28,14 @@ export type EnergyRamp = readonly [base: number, perEnergy: number];
 export type LimbMix = readonly [base: number, rim: number];
 
 export interface JarvisTuning {
+  /**
+   * How fast the field turns over: the resting rate, and what a voice adds.
+   *
+   * This is what reads as SWIRL. Too high and it stops looking like a body
+   * thinking and starts looking like a drink someone has stirred for a long
+   * time -- pinned on an axis at high velocity rather than moving naturally.
+   */
+  swirl: EnergyRamp;
   /** The network. The BRIGHTEST of the three, and that is the whole fix. */
   linkGain: EnergyRamp;
   /**
@@ -67,6 +75,14 @@ export interface JarvisTuning {
 }
 
 export interface UltronTuning {
+  /**
+   * How fast the field turns over: the resting rate, and what a voice adds.
+   *
+   * This is what reads as SWIRL. Too high and it stops looking like a body
+   * thinking and starts looking like a drink someone has stirred for a long
+   * time -- pinned on an axis at high velocity rather than moving naturally.
+   */
+  swirl: EnergyRamp;
   /** The body he is MADE of. It leads, like Jarvis's network. */
   veinGain: EnergyRamp;
   /** Longer than Jarvis's streak: growth, not data in motion. */
@@ -95,6 +111,7 @@ export interface UltronTuning {
 
 /** What ships. The bench overrides a copy; nothing mutates this. */
 export const JARVIS_TUNING: JarvisTuning = {
+  swirl: [0.26, 0.40],
   linkGain: [0.30, 0.24],
   linkRange: 0.23,
   drawGain: [0.21, 0.19],
@@ -109,6 +126,7 @@ export const JARVIS_TUNING: JarvisTuning = {
 };
 
 export const ULTRON_TUNING: UltronTuning = {
+  swirl: [0.26, 0.40],
   veinGain: [0.22, 0.20],
   veinStreak: [0.110, 0.085],
   crackGain: [0.34, 0.26],
