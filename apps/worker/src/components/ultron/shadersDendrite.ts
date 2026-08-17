@@ -1,4 +1,4 @@
-// Ultron's neurons: nine pathways out of the centre, each branching to clusters.
+// Ultron's neurons: four pathways out of the centre, each ending in an ARC.
 //
 // WHAT THE REFERENCE ACTUALLY DOES. His birth is not a cloud condensing. It is a
 // TREE growing: sparks, then long branching filaments reaching out of a point,
@@ -28,7 +28,7 @@
 import { FIELD_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../canvas/glslCommon";
 
 /** Core pathways out of the centre. Nine, from the reference. */
-export const DENDRITE_TRUNKS = 9;
+export const DENDRITE_TRUNKS = 4;
 
 /**
  * Branch levels. Five gives 31 segments a trunk, so 279 in total.
@@ -53,10 +53,30 @@ uniform float uRadius;
 uniform vec4 uDend;
 /** x cluster glow at the tips, y how much a voice grows the tree. */
 uniform vec2 uDendTip;
+/**
+ * The terminal arcs: x how far out the arc's hub sits, y how far round it sweeps
+ * in radians, z its radius, w how strongly the tips are pulled onto it.
+ *
+ * w at 0 leaves the old scattered knot exactly as it was, which is the property
+ * every uniform added to a shared shader here has had to have.
+ */
+uniform vec4 uArc;
 
 out float vFade;
 out float vAlong;
 out float vDepth;
+/**
+ * Distance from the SOMA along this filament, 0 at the centre and 1 at a tip.
+ *
+ * vAlong is position inside one segment and is useless for this: a signal has to
+ * travel the whole path, and a per-segment coordinate restarts at every fork, so
+ * a pulse driven from it would appear simultaneously at every depth. This
+ * accumulates the depth walked so far, which is what makes one pulse leave the
+ * centre and arrive at a tip.
+ */
+out float vPath;
+/** Per-trunk phase offset, so the four pathways do not fire in unison. */
+out float vSeed;
 ${FIELD_GLSL}
 ${PROJECT_GLSL}
 ${PULSE_GLSL}
@@ -129,8 +149,29 @@ void main() {
 
   vec3 p = end == 0 ? parent : pos;
 
+  // THE TERMINAL ARC. Each of the four pathways ends in a sweep rather than a
+  // point, which is what the reference shows: the branches do not simply stop,
+  // they run into a curved structure that the signals then travel along. The
+  // deepest ring of segments is bent onto a circle perpendicular to the trunk, so
+  // the same vertices that used to scatter into a knot now describe an arc.
+  if (d >= DEPTH) {
+    vec3 axis = trunkDir(trunk);
+    vec3 side = normalize(cross(axis, vec3(0.0, 0.0, 1.0)) + vec3(1e-4));
+    vec3 up = cross(axis, side);
+    // Where on the arc this node sits, from its own index rather than a hash, so
+    // neighbouring branches land next to each other and the arc reads as one
+    // continuous structure instead of a scatter.
+    float t = float(node - (1 << (DEPTH - 1))) / float(1 << (DEPTH - 1));
+    float sweep = (t - 0.5) * uArc.y;
+    vec3 hub = axis * uArc.x * uRadius;
+    p = mix(p, hub + (cos(sweep) * side + sin(sweep) * up) * uArc.z * uRadius, uArc.w);
+  }
+
   vAlong = float(end);
   vDepth = float(d) / float(DEPTH);
+  // (depth - 1) + where we are inside this segment, over the total depth.
+  vPath = (float(d) - 1.0 + float(end)) / float(DEPTH);
+  vSeed = hash(vec3(float(trunk) * 5.3, 2.0, 0.0));
   // Thinner and dimmer with depth, then a CLUSTER at the tips: the reference's
   // branches end in a bright knot, and without it the tree just fades out.
   vFade = mix(1.0, 0.45, vDepth);
@@ -154,6 +195,8 @@ precision highp float;
 in float vFade;
 in float vAlong;
 in float vDepth;
+in float vPath;
+in float vSeed;
 out vec4 oColor;
 
 uniform vec3 uWarm;
@@ -161,14 +204,35 @@ uniform vec3 uHot;
 uniform float uGain;
 /** x beads per segment, y how much of each bead is lit. */
 uniform vec2 uBead;
+uniform float uTime;
+/**
+ * The signals: x how fast they travel outward, y how many are on a filament at
+ * once, z how sharply each one decays behind its head.
+ *
+ * IN THE FRAGMENT, not the vertex. A travelling pulse is fract() of a position,
+ * and interpolating a fract across a segment wraps in the middle -- the pulse
+ * would tear at every vertex. Computing it per fragment costs three instructions
+ * and is the only place it is correct.
+ */
+uniform vec3 uSignal;
 
 void main() {
-  // BEADED, NOT SMOOTH. Close up, the reference's filaments are not lines: they
-  // are runs of small bright marks with brighter knots between them -- data on a
-  // wire. A solid line at this brightness reads as a laser, which is the one
-  // thing it must not look like.
-  float bead = step(fract(vAlong * uBead.x), uBead.y);
-  if (bead < 0.5) discard;
+  // SIGNALS TRAVELLING, not beads sitting still.
+  //
+  // This was a duty cycle on vAlong: a fixed pattern of marks that never moved,
+  // which reads as a beaded wire rather than as a nervous system. The brief is the
+  // movement of electrical signals THROUGH neurons, and movement is the whole
+  // difference -- a static filament is anatomy, a filament with something running
+  // along it is alive.
+  //
+  // The head is sharp and the tail decays behind it. That asymmetry is what gives
+  // the pulse a DIRECTION; a symmetric blob would travel just as fast and read as
+  // a bead sliding, not as a discharge.
+  float phase = fract(vPath * uBead.x - uTime * uSignal.x + vSeed * uSignal.y);
+  float signal = exp(-phase * uSignal.z);
+  // The filament stays faintly lit between signals, or the tree disappears
+  // whenever nothing is firing and the body has no anatomy at all.
+  float lit = uBead.y + (1.0 - uBead.y) * signal;
   // Tips run hot. The trunks are the deep blue he sits in; the far ends are where
   // the light is, which is what gives the tree a direction to grow in.
   // BIASED HOT FROM THE ROOT. uWarm is near-navy -- 0.02, 0.26, 0.98 -- so a
@@ -184,5 +248,8 @@ void main() {
   // outer threshold and draws them as NOTHING. That is not a theory: it is what
   // happened on the first render of this pass, and it is what happened to the
   // rings before it. Fix the defect where the defect is.
-  oColor = vec4(c * vFade * uGain, 1.0);
+  // The head of a signal runs hotter than the filament it is on, which is what
+  // makes it read as energy rather than as a bright patch of wire.
+  c = mix(c, uHot, clamp(signal * signal * 0.9, 0.0, 1.0));
+  oColor = vec4(c * vFade * lit * uGain, 1.0);
 }`;

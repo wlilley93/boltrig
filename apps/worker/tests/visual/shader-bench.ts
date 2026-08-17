@@ -110,7 +110,9 @@ const LEGEND: Record<string, readonly string[]> = {
   dendriteGain: ["pathway brightness", "×voice"],
   dendrite: ["root length", "fork angle", "taper", "wander"],
   dendriteTip: ["cluster size", "growth"],
-  bead: ["beads per segment", "bead duty"],
+  bead: ["signal marks", "resting glow"],
+  signal: ["travel SPEED", "phase spread", "tail decay"],
+  arc: ["hub distance", "sweep (rad)", "arc radius", "pull onto arc"],
   // ---- Ultron: the crystal ------------------------------------------------
   facetSpin: ["spin SPEED", "spread"],
   facetGain: ["facet brightness", "×voice"],
@@ -142,6 +144,10 @@ const RANGE_AT: Record<string, [number, number, number]> = {
   // stepped through the counts in between instead of gliding.
   "ringArc:0": [0.25, 9, 0.05],
   "ringArc:1": [0.04, 1, 0.02],
+  // The neurons are the point of this body, and a ceiling of 1 meant the
+  // gain that makes them lead was not reachable from the panel at all.
+  "dendriteGain:0": [0, 3, 0.05],
+  "dendriteGain:1": [0, 2, 0.05],
   "eye:2": [0, 1.2, 0.01],
   // An EXPONENT, not a gain: 60 is tight and 8 is broad, so it needs a range of
   // its own or the slider tops out an order of magnitude below anything useful.
@@ -198,6 +204,8 @@ const RANGE: Record<string, [number, number, number]> = {
   dendrite: [0, 1.2, 0.01],
   dendriteTip: [0, 2.0, 0.02],
   bead: [1, 24, 0.5],
+  signal: [0, 3, 0.02],
+  arc: [0, 3.2, 0.02],
   starburst: [0, 1, 0.01],
   streak: [0, 0.4, 0.002],
   veinStreak: [0, 0.4, 0.002],
@@ -600,8 +608,8 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "3 · Neural pathways — superseded by the iris", fields: [
     "linkGain", "linkBow", "linkRange", "linkLimb",
   ] },
-  { title: "3 · Dendrites — the neurons", fields: [
-    "dendriteGain", "dendrite", "dendriteTip", "bead",
+  { title: "3 · Dendrites — the neurons and their signals", fields: [
+    "dendriteGain", "dendrite", "dendriteTip", "bead", "signal", "arc",
   ] },
   { title: "4 · Veins and cracks", fields: [
     "veinGain", "veinStreak", "veinLimb", "crackGain", "crackRange", "crackLimb",
@@ -656,7 +664,9 @@ const TITLES: Record<string, string> = {
   dendriteGain: "How bright the neurons are",
   dendrite: "The shape of a neuron",
   dendriteTip: "The clusters at the ends",
-  bead: "The travelling beads along a neuron",
+  bead: "How many signal marks, and the resting glow",
+  signal: "How the electrical signals travel",
+  arc: "The four terminal arcs",
   veinGain: "How bright the veins are",
   veinStreak: "How long the veins are",
   veinLimb: "How much the veins favour the rim",

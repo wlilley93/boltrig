@@ -222,6 +222,8 @@ export class UltronPasses {
       uDend: tuning.dendrite,
       uDendTip: tuning.dendriteTip,
       uBead: tuning.bead,
+      uSignal: tuning.signal,
+      uArc: tuning.arc,
       uRadius: d.radius,
       // uLimb is set PER PASS, never in `shared` -- so a pass that forgets it
       // gets (0,0), limbMix returns zero, and the whole pass draws nothing while

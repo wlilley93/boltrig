@@ -116,21 +116,21 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
   // The inscriptions and the iris do the work: this is the mode that is reading
   // something. The flow through the iris quickens and more marks light.
   thinking: {
-    swirl: [0.105, 0],
-    ringGain: [0.72, 0.34],
-    ringSpin: [0.02, 0.006],
-    ringLife: 0.058,
-    irisGain: [1.05, 0.6],
-    irisFil: [0.96, 0.005],
-    irisFlow: [0.24, 0.78],
-    glyphGain: [0.48, 0.3],
-    glyphSpin: [0.05, 0.7],
-    glyphDensity: [0.92, 0.42],
-    outerGain: [1.0, 0.46],
-    outerPace: -0.5,
-    core: [0.86, 0.66],
-    shardGain: [0.72, 0.34],
-    reverb: [1.7, 0.28, 0.78, 1.34],
+    swirl: [0.115, 0],
+    ringGain: [0.92, 0.55],
+    ringSpin: [0.022, 0.007],
+    ringLife: 0.062,
+    ringArc: [1.35, 0.84],
+    ringWidth: 0.155,
+    irisGain: [1.1, 0.7],
+    irisFlow: [0.18, 0.72],
+    glyphGain: [0.4, 0.3],
+    glyphDensity: [0.78, 0.5],
+    outerGain: [1.2, 0.62],
+    outerPace: -0.44,
+    core: [1, 1],
+    shardGain: [1, 0.475],
+    reverb: [2.2, 0.26, 0.44, 1.52],
   },
   // Circuitry in transit. The shards lead, the rings turn like platters and come
   // and go fastest, and the outer shell keeps closer to the interior's pace.
@@ -173,7 +173,7 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
     outerPace: -0.44,
     core: [1, 1],
     shardGain: [1, 0.475],
-    reverb: [2.45, 0.15, 0.4, 1.52],
+    reverb: [2.2, 0.26, 0.44, 1.52],
   },
 };
 
@@ -249,6 +249,7 @@ export const JARVIS_PULSES: Record<BodyMode, readonly Pulse[]> = {
   // the REVERB is what moves the body, and a pulse table competing with it makes
   // both read as noise. These keep the parts the wavefront does not reach alive.
   speaking: [
+    { field: "outerPace", index: 0, depth: 0.16, rate: 0.041, phase: 0.13 },
     { field: "ringWidth", index: 0, depth: 0.08, rate: 0.073, phase: 0.00 },
     { field: "ringGain", index: 0, depth: 0.07, rate: 0.049, phase: 0.27 },
     { field: "irisGain", index: 0, depth: 0.09, rate: 0.061, phase: 0.48 },
@@ -280,7 +281,9 @@ export const ULTRON_ARRIVAL: UltronTuning = {
   dendriteTip: [1.50, 0.90],
   // Few, long beads. A dense bead train looks like a finished wire; a sparse one
   // looks like something travelling along it.
-  bead: [3.0, 0.85],
+  bead: [4.0, 0.04],
+  signal: [1.8, 3.4, 8.0],
+  arc: [0.82, 2.5, 0.42, 0.0],
   outerShell: [2.2, 0.90, 0.10],
   facetSpin: [0.05, 0.10],
   swirl: [0.05, 0],
@@ -315,9 +318,10 @@ export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
   // The crystal barely turns, the neurons are quiet, and the pulse table carries
   // eight shallow terms so that a body nobody is talking to is still plainly alive.
   standby: {
-    dendriteGain: [0.34, 0.2],
+    dendriteGain: [0.75, 0.3],
     dendrite: [0.30, 0.46, 0.78, 0.016],
-    bead: [6.0, 0.42],
+    bead: [7.0, 0.10],
+    signal: [0.22, 2.4, 7.0],
     swirl: [0.08, 0.1],
     facetSpin: [0.04, 0.12],
     veinGain: [0.11, 0.1],
@@ -328,9 +332,10 @@ export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
     reverb: [0.8, 0.44, 0.48, 1.34],
   },
   listening: {
-    dendriteGain: [0.52, 0.36],
+    dendriteGain: [1.05, 0.5],
     dendrite: [0.33, 0.5, 0.78, 0.024],
-    bead: [6.5, 0.5],
+    bead: [8.0, 0.13],
+    signal: [0.4, 2.4, 6.2],
     swirl: [0.15, 0.22],
     facetSpin: [0.08, 0.24],
     veinGain: [0.18, 0.16],
@@ -343,25 +348,24 @@ export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
   // THE BUSIEST STATE. Every pass is up, the crystal turns fastest, the pathways
   // reach furthest and wander widest, the fracture lines spread.
   thinking: {
-    dendriteGain: [0.86, 0.62],
-    dendrite: [0.42, 0.58, 0.72, 0.055],
-    dendriteTip: [1.1, 0.34],
-    bead: [8.5, 0.62],
-    swirl: [0.32, 0.5],
-    facetSpin: [0.18, 0.5],
-    veinGain: [0.3, 0.26],
-    veinStreak: [0.135, 0.1],
-    crackGain: [0.44, 0.32],
-    crackRange: 0.26,
-    facetGain: [0.46, 0.32],
-    core: [0.17, 0.22],
-    reverb: [1.65, 0.3, 0.76, 1.36],
+    dendriteGain: [1.35, 0.7],
+    dendrite: [0.34, 0.52, 0.78, 0.026],
+    bead: [9.0, 0.16],
+    signal: [0.6, 2.2, 5.2],
+    swirl: [0.19, 0.28],
+    facetSpin: [0.1, 0.32],
+    veinGain: [0.22, 0.2],
+    crackGain: [0.34, 0.26],
+    facetGain: [0.36, 0.26],
+    core: [0.16, 0.24],
+    reverb: [2.35, 0.16, 0.42, 1.54],
   },
   // Executing rather than searching: facets and fractures lead, the neurons hold.
   working: {
-    dendriteGain: [0.66, 0.46],
+    dendriteGain: [1.25, 0.62],
     dendrite: [0.36, 0.52, 0.76, 0.03],
-    bead: [9.5, 0.58],
+    bead: [11.0, 0.18],
+    signal: [0.85, 2.8, 4.8],
     swirl: [0.25, 0.38],
     facetSpin: [0.14, 0.42],
     veinGain: [0.26, 0.22],
@@ -376,9 +380,10 @@ export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
   // through the whole body. Something that thrashes while it talks reads as
   // agitated; Ultron talks like he already knows the answer.
   speaking: {
-    dendriteGain: [0.62, 0.48],
+    dendriteGain: [1.35, 0.7],
     dendrite: [0.34, 0.52, 0.78, 0.026],
-    bead: [7.0, 0.55],
+    bead: [9.0, 0.16],
+    signal: [0.6, 2.2, 5.2],
     swirl: [0.19, 0.28],
     facetSpin: [0.1, 0.32],
     veinGain: [0.22, 0.2],

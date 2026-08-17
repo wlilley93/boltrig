@@ -252,8 +252,32 @@ export interface UltronTuning {
   dendrite: readonly [rootLength: number, fork: number, taper: number, wander: number];
   /** Cluster glow at the tips, and how much a voice GROWS the tree. */
   dendriteTip: readonly [cluster: number, growth: number];
-  /** Beads per segment, and the lit fraction of each -- the glyph detailing. */
-  bead: readonly [perSegment: number, duty: number];
+  /**
+   * x signal marks along a whole filament, y how brightly the filament sits
+   * between signals.
+   *
+   * The second half used to be a duty cycle on a static bead pattern. Beads that
+   * never move are anatomy; what the brief asks for is the movement of signals
+   * THROUGH the neurons, so it is now the resting glow a filament keeps when
+   * nothing is firing along it -- at 0 the tree vanishes between pulses.
+   */
+  bead: readonly [marks: number, resting: number];
+  /**
+   * The travelling signals: speed outward, per-trunk phase spread, tail decay.
+   *
+   * Speed is in filament-lengths per second, so it does not have to be retuned
+   * when the tree grows. The spread is what stops four pathways firing in unison,
+   * which reads as one object flashing rather than as four carrying traffic.
+   */
+  signal: readonly [speed: number, spread: number, tail: number];
+  /**
+   * The four terminal arcs: hub distance, sweep in radians, radius, and how
+   * strongly the tips are pulled onto them.
+   *
+   * The last one at 0 restores the old scattered tip knot exactly, which is the
+   * property every addition to a shared shader in here has had to have.
+   */
+  arc: readonly [hub: number, sweep: number, radius: number, pull: number];
   /**
    * The distant outer sphere: radius, population fraction, brightness.
    *
@@ -369,10 +393,12 @@ export const JARVIS_TUNING: JarvisTuning = {
 };
 
 export const ULTRON_TUNING: UltronTuning = {
-  dendriteGain: [0.62, 0.48],
+  dendriteGain: [1.35, 0.7],
   dendrite: [0.34, 0.52, 0.78, 0.035],
   dendriteTip: [0.9, 0.22],
-  bead: [7.0, 0.55],
+  bead: [9.0, 0.16],
+  signal: [0.55, 2.4, 5.5],
+  arc: [0.82, 2.5, 0.42, 0.85],
   outerShell: [1.45, 0.20, 0.30],
   facetSpin: [0.13, 0.40],
   swirl: [0.26, 0.40],

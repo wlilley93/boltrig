@@ -52,7 +52,9 @@
       "uBead",
       "uEye",
       "uLayerPace",
-      "uReverb"
+      "uReverb",
+      "uSignal",
+      "uArc"
     ]
   },
   "prompts": {
