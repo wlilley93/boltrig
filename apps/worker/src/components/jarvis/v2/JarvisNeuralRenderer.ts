@@ -57,6 +57,7 @@
 //   BLOOM            bright-pass then a separable Gaussian at half resolution.
 //                    Additive lines alone are thin and mean.
 
+import { JARVIS_TUNING, type JarvisTuning } from "../../canvas/bodyTuning";
 import type { JarvisStageState } from "../JarvisState";
 import type { FloatUniforms } from "../../canvas/glResources";
 import { NeuralPasses, type Drive } from "./neuralPasses";
@@ -101,10 +102,24 @@ export class JarvisNeuralRenderer {
   private waveAmp = 0;
   private bands = new Float32Array(8);
   private _status: Status = { state: "idle" };
+  private tuning: JarvisTuning = JARVIS_TUNING;
 
   constructor(private readonly opts: NeuralRendererOptions = {}) {}
 
   status(): Status { return this._status; }
+
+  /**
+   * Replace the look, for tests/visual/shader-bench.html.
+   *
+   * Public for the same reason `frame` is: judging this body needs it driven
+   * from outside the rAF loop, and the alternative was a bench that rebuilt the
+   * pass sequence and drifted from it. Nothing in the product calls this, and
+   * the field defaults to what ships.
+   */
+  setTuning(next: JarvisTuning): void { this.tuning = next; }
+
+  /** What it is currently drawing with, so a bench can seed its own controls. */
+  currentTuning(): JarvisTuning { return this.tuning; }
 
   mount(host: HTMLElement): void {
     this.host = host;
@@ -209,7 +224,7 @@ export class JarvisNeuralRenderer {
     // shining through the iris. It is off here -- it belongs to Colossus, whose
     // CRT beam earns a horizontal streak -- and the lobes now sit at the warm
     // end, so the heart stays bright without leaving the orange.
-    passes.render(d, this.palette(), 0.12 + 0.16 * d.energy, 0.0);
+    passes.render(d, this.palette(), this.tuning);
   }
 
   // ------------------------------------------------------------------ internals

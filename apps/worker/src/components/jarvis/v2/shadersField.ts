@@ -52,7 +52,7 @@ void main() {
   // Cheaper and truer than adding geometry. The alternative on the table was
   // drawing actual great circles, which is a second body of code answering a
   // question this one line already answers.
-  vFade *= 0.12 + 1.30 * limb(p);
+  vFade *= limbMix(p);
   // Embers: what has left the body glints. Everything still in it does not.
   // What has LEFT the body fades out of it. This deliberately brightened
   // escapees, which made the few particles outside the shell the most
@@ -128,7 +128,7 @@ void main() {
   // was the one pass with no limb, so it filled the see-through middle that
   // every other pass had just been made to leave empty -- and a shell with a
   // solid interior is a ball, not a globe.
-  vFade *= 0.25 + 1.15 * limb(p);
+  vFade *= limbMix(p);
   vFade *= 1.0 + 3.6 * pulse(p) + 0.5 * uSwell;
   gl_Position = project(p, uAspect);
 }`;

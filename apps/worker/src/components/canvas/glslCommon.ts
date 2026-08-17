@@ -200,6 +200,22 @@ float limb(vec3 p) {
   return pow(1.0 - abs(n.z), 2.2);
 }
 
+// THE SILHOUETTE, as a uniform rather than two literals per pass.
+//
+// x is what a face-on particle keeps and y is what the rim adds, so the RATIO
+// between them is how hard the body reads as a sphere. It was 0.34 + 0.90 --
+// an edge only 3.6x the middle, which is not enough contrast to carve a sphere
+// out of sixteen thousand streaks, and the render was fur. It wants an order of
+// magnitude, and it wants to be adjustable while looking at it, which is why it
+// is a uniform now: see tests/visual/shader-bench.html.
+//
+// Declared here beside limb() so every pass that includes PROJECT_GLSL gets it.
+// setUniforms skips a uniform a program did not declare, so a pass that never
+// calls limbMix costs nothing.
+uniform vec2 uLimb;
+
+float limbMix(vec3 p) { return uLimb.x + uLimb.y * limb(p); }
+
 
 // How far outside its home shell a particle has drifted, 0..1. Familiar spawns
 // embers as their own pass; here they are DERIVED, so the things that glint are

@@ -90,7 +90,7 @@ void main() {
   vFade *= depthFade(p);
   // The same lit-normal body: a shell coming apart still needs to read as a
   // shell before it can read as coming apart.
-  vFade *= 0.30 + 0.95 * limb(p);
+  vFade *= limbMix(p);
   // Fades what has left the membrane, where it used to light it. See the
   // same inversion in Jarvis's field pass.
   vFade *= 1.0 - 0.85 * ember(p, 0.98);
@@ -186,7 +186,7 @@ void main() {
   vFade = smoothstep(uLinkRange, uLinkRange * 0.25, d);
   vFade *= 0.70 + 0.60 * band * uVoice;
   // Cracks brighten toward the silhouette too, so the fracture wraps a surface.
-  vFade *= 0.36 + 0.88 * limb(p);
+  vFade *= limbMix(p);
   // A crack lights up as the wave crosses it: the fracture transmits the voice.
   vFade *= 1.0 + 4.2 * pulse(p) + 0.5 * uSwell;
   vFade *= min(smoothstep(0.0, 0.2, a.w), smoothstep(0.0, 0.2, b.w));
@@ -284,7 +284,7 @@ void main() {
   vFade = smoothstep(0.0, 0.1, phase) * smoothstep(1.0, 0.45, phase);
   vFade *= smoothstep(0.0, 0.2, st.w) * depthFade(p);
   // Shards belong to the surface: bright at the limb, quiet through the middle.
-  vFade *= 0.28 + 0.95 * limb(p);
+  vFade *= limbMix(p);
   vFade *= 1.0 + 3.0 * pulse(p) + 0.5 * uSwell;
   gl_Position = vec4(head.xy + offset, 0.0, 1.0);
 }`;

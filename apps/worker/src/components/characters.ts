@@ -282,10 +282,16 @@ const JARVIS: Character = characterFromBundle(jarvisBundle, [JARVIS_SOURCE]);
  * are split across components/ultron and components/canvas, so no single module
  * over there owns the list.
  */
-const ULTRON_UNIFORMS: readonly string[] = [
+// Exported ONLY so tests/ultronBundle.test.ts can check this exact array
+// against the shaders. It used to derive its own copy of the list from the
+// shader sources and compare that to the manifest, which meant the one list
+// production actually passes to `supplies` was never in the comparison -- adding
+// `uLimb` to the shaders and the manifest left this array behind and the suite
+// stayed green while the bundle refused to build at runtime.
+export const ULTRON_UNIFORMS: readonly string[] = [
   "uState", "uTime", "uDt", "uEnergy", "uRadius", "uWaveT", "uWaveAmp",
   "uAspect", "uStreak", "uGrid", "uSegments", "uStride", "uSize",
-  "uLinkRange", "uAggression", "uBands", "uVoice", "uSwell", "uPetal",
+  "uLinkRange", "uAggression", "uBands", "uVoice", "uSwell", "uPetal", "uLimb",
   "uWarm", "uHot", "uFringe", "uInner", "uFringeScale", "uFringeGain", "uGain",
   "uSrc", "uDir", "uThreshold",
   "uScene", "uBloom", "uBloomGain", "uCore", "uStarburst",

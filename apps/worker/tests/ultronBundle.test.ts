@@ -6,6 +6,7 @@ import {
   characterFromBundle,
   type CharacterCanvasSource,
 } from "../src/components/characterBundle";
+import { ULTRON_UNIFORMS } from "../src/components/characters";
 import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL } from "../src/components/canvas/glslCommon";
 import { BLOOM_FRAG, COMPOSITE_FRAG } from "../src/components/canvas/shadersPost";
 import { QUAD_VERT, SIM_FRAG } from "../src/components/canvas/shadersSim";
@@ -56,11 +57,30 @@ function declaredUniforms(): Set<string> {
 const ultronSource: CharacterCanvasSource = {
   id: "boltrig.canvas.ultron",
   type: "shader",
-  supplies: [...declaredUniforms()],
+  // The list PRODUCTION passes, not one derived here. Deriving it made this
+  // file agree with itself: `uLimb` reached the shaders and the manifest while
+  // ULTRON_UNIFORMS was left behind, and every test passed while
+  // characterFromBundle threw "cannot supply uLimb" on the real page.
+  supplies: ULTRON_UNIFORMS,
   render: () => null,
 };
 
 describe("Ultron as a character bundle", () => {
+  // THREE LISTS HAVE TO AGREE, and the third is the one that was missing here.
+  // The shaders declare the uniforms; the manifest says which the bundle wants;
+  // and ULTRON_UNIFORMS says which the canvas source can drive. A uniform in the
+  // first two but not the third is refused at registration -- at runtime, on the
+  // real page, with the suite green.
+  it("has a canvas source that can drive every uniform his shaders declare", () => {
+    const declared = declaredUniforms();
+    const supplies = new Set(ULTRON_UNIFORMS);
+    const cannotSupply = [...declared].filter((name) => !supplies.has(name)).sort();
+    const suppliesNothing = [...supplies].filter((name) => !declared.has(name)).sort();
+    expect({ cannotSupply, suppliesNothing }).toEqual({
+      cannotSupply: [], suppliesNothing: [],
+    });
+  });
+
   it("declares exactly the uniforms his passes actually use", () => {
     const declared = declaredUniforms();
     const visual = ultronBundle.visual;

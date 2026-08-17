@@ -21,6 +21,7 @@
 
 import { type FloatUniforms } from "../canvas/glResources";
 import { UltronPasses, type UltronDrive } from "./ultronPasses";
+import { ULTRON_TUNING, type UltronTuning } from "../canvas/bodyTuning";
 import type { UltronStageState } from "./UltronState";
 
 const SILENT_BANDS = new Float32Array(8);
@@ -60,10 +61,17 @@ export class UltronRenderer {
   private waveAmp = 0;
   private bands = new Float32Array(8);
   private _status: Status = { state: "idle" };
+  private tuning: UltronTuning = ULTRON_TUNING;
 
   constructor(private readonly opts: UltronRendererOptions = {}) {}
 
   status(): Status { return this._status; }
+
+  /** Replace the look, for tests/visual/shader-bench.html. See Jarvis's note. */
+  setTuning(next: UltronTuning): void { this.tuning = next; }
+
+  /** What it is currently drawing with, so a bench can seed its own controls. */
+  currentTuning(): UltronTuning { return this.tuning; }
 
   mount(host: HTMLElement): void {
     this.host = host;
@@ -158,7 +166,7 @@ export class UltronRenderer {
     if (!passes || !this.canvas) return;
     this.resize();
     const d = this.drive(nowMs);
-    passes.render(d, this.palette(), 0.13 + 0.17 * d.energy, 0.0);
+    passes.render(d, this.palette(), this.tuning);
   }
 
   // ------------------------------------------------------------------ internals

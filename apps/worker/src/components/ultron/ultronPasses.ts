@@ -24,6 +24,7 @@ import {
   setUniforms,
   type FloatUniforms,
 } from "../canvas/glResources";
+import { ULTRON_TUNING, ramp, type UltronTuning } from "../canvas/bodyTuning";
 import { BLOOM_FRAG, COMPOSITE_FRAG } from "../canvas/shadersPost";
 import { QUAD_VERT, SIM_FRAG } from "../canvas/shadersSim";
 import {
@@ -121,11 +122,12 @@ export class UltronPasses {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
-  render(d: UltronDrive, palette: FloatUniforms, core: number, starburst: number): void {
-    this.simulate(d);
-    this.drawScene(d, palette);
+  /** One frame. `tuning` defaults to what ships; only the bench overrides it. */
+  render(d: UltronDrive, palette: FloatUniforms, tuning: UltronTuning = ULTRON_TUNING): void {
+    this.simulate(d, tuning);
+    this.drawScene(d, palette, tuning);
     this.bloom();
-    this.composite(palette, core, starburst);
+    this.composite(palette, ramp(tuning.core, d.energy), 0.0);
   }
 
   destroy(): void {
@@ -147,7 +149,7 @@ export class UltronPasses {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
-  private simulate(d: UltronDrive): void {
+  private simulate(d: UltronDrive, tuning: UltronTuning): void {
     const gl = this.gl;
     const prog = this.progs.sim;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.simFbo[1 - this.ping]);
@@ -159,19 +161,16 @@ export class UltronPasses {
     setUniforms(gl, prog, {
       uTime: d.time, uDt: d.dt, uEnergy: d.energy, uRadius: d.radius,
       uWaveT: d.waveT, uWaveAmp: d.waveAmp,
-      // Three concentric clouds reaching out in arms. Jarvis leaves this at 0
-      // and keeps the plain shell.
-      // 0.3, not 1.0. At 1.0 the arms reach far enough to read as flares
-      // around the edge; at 0 he is Jarvis in blue, and the references separate
-      // the two by silhouette as much as by colour. A lumpy sphere keeps the
-      // distinction without the reach.
-      uPetal: 0.3,
+      // Three concentric clouds reaching out in arms; Jarvis leaves this at 0
+      // and keeps the plain shell. The value and its reasoning now live in
+      // canvas/bodyTuning, so the bench can move it while you watch.
+      uPetal: tuning.petal,
     }, { uState: 0 });
     this.fullscreen(prog);
     this.ping = 1 - this.ping;
   }
 
-  private drawScene(d: UltronDrive, palette: FloatUniforms): void {
+  private drawScene(d: UltronDrive, palette: FloatUniforms, tuning: UltronTuning): void {
     const gl = this.gl;
     const [w, h] = this.size;
     const aspect = w / Math.max(1, h);
@@ -198,10 +197,9 @@ export class UltronPasses {
     setUniforms(gl, vein, {
       ...shared,
       // Longer than Jarvis's streak: growth, not data in motion.
-      uStreak: 0.110 + 0.085 * d.energy,
-      // THE BODY, and it was the faintest of his three passes. See the note on
-      // the crack gain below: the veins are what he is MADE of, so they lead.
-      uGain: 0.22 + 0.20 * d.energy,
+      uStreak: ramp(tuning.veinStreak, d.energy),
+      uGain: ramp(tuning.veinGain, d.energy),
+      uLimb: tuning.veinLimb,
     }, { uState: 0, uGrid: GRID });
     gl.drawArrays(gl.LINES, 0, PARTICLES * 2);
 
@@ -228,8 +226,9 @@ export class UltronPasses {
       // HE IS STILL NOT JARVIS IN BLUE. The separation is silhouette and
       // colour -- petals against a plain shell, cold against warm -- which is
       // how Animal Logic separated them. It was never brightness.
-      uLinkRange: 0.19,
-      uGain: 0.34 + 0.26 * d.energy,
+      uLinkRange: tuning.crackRange,
+      uGain: ramp(tuning.crackGain, d.energy),
+      uLimb: tuning.crackLimb,
     }, { uState: 0, uGrid: GRID, uSegments: CRACK_SEGMENTS });
     gl.drawArrays(gl.LINES, 0, PARTICLES * CRACK_SEGMENTS * 2);
 
@@ -238,7 +237,12 @@ export class UltronPasses {
     // Nearly twice Jarvis's shard at 0.030, and brighter than everything else
     // on screen. Both halves of that were why the facets read as the subject
     // rather than as fracture ON a subject.
-    setUniforms(gl, facet, { ...shared, uSize: 0.020, uGain: 0.36 + 0.26 * d.energy },
+    setUniforms(gl, facet, {
+      ...shared,
+      uSize: tuning.facetSize,
+      uGain: ramp(tuning.facetGain, d.energy),
+      uLimb: tuning.facetLimb,
+    },
       { uState: 0, uGrid: GRID, uStride: FACET_STRIDE });
     gl.drawArrays(gl.LINES, 0, FACETS * 4);
   }

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Boltrig shader bench</title>
+    <style>
+      /* Dark and out of the way. Every judgement made here is about the thing in
+         the middle, so the chrome is deliberately quiet — and the stage is black
+         because both bodies are light on black and neither can be judged over
+         anything else. */
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 380px;
+        height: 100vh;
+        font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
+        color: #d6d6dd;
+        background: #08080b;
+      }
+      #stageWrap { position: relative; display: grid; place-items: center; min-width: 0; }
+      #stage {
+        position: relative;
+        width: min(92%, 760px);
+        aspect-ratio: 1;
+        background: #000;
+      }
+      #stage canvas { display: block; width: 100%; height: 100%; }
+      #readout {
+        position: absolute; left: 0; right: 0; bottom: 10px;
+        text-align: center; font-variant-numeric: tabular-nums; color: #8b8b95;
+      }
+      #readout b { color: #e8e8ef; font-weight: 600; }
+      #readout b.bad { color: #ff6a4a; }
+      #readout b.good { color: #5cb87f; }
+      aside {
+        overflow: auto;
+        padding: 16px 18px 28px;
+        border-left: 1px solid #1c1c22;
+        background: #0b0b0f;
+      }
+      h1 { margin: 0 0 4px; font-size: 15px; letter-spacing: -.01em; }
+      p.lede { margin: 0 0 16px; color: #74747e; font-size: 12px; }
+      .top { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+      label { display: block; color: #8b8b95; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; }
+      select, button {
+        width: 100%; height: 30px; padding: 0 8px;
+        border: 1px solid #26262e; border-radius: 7px;
+        color: #e8e8ef; font: inherit; background: #14141a;
+      }
+      button { cursor: pointer; }
+      button:hover { border-color: #3a3a46; }
+      .row { display: grid; grid-template-columns: 1fr; gap: 3px; margin-bottom: 11px; }
+      .row label { margin-bottom: 1px; }
+      .row input[type="range"] { width: 100%; margin: 0; accent-color: #6f8cff; }
+      .row b { font-variant-numeric: tabular-nums; font-weight: 500; color: #9a9aa4; font-size: 11px; }
+      /* A pair lays its two sliders side by side so base and ×energy read as one
+         control rather than two unrelated ones. */
+      .row:has(input + b + input) {
+        grid-template-columns: 1fr auto 1fr auto;
+        align-items: center;
+        column-gap: 6px;
+      }
+      .row:has(input + b + input) label { grid-column: 1 / -1; }
+      #export {
+        margin-top: 14px; padding: 10px; min-height: 0;
+        border: 1px solid #1c1c22; border-radius: 7px;
+        color: #9a9aa4; font: 11px/1.5 ui-monospace, monospace;
+        white-space: pre; overflow-x: auto; background: #0d0d11;
+      }
+      #export:empty { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="stageWrap">
+      <div id="stage"></div>
+      <div id="readout">starting…</div>
+    </div>
+    <aside>
+      <h1>Shader bench</h1>
+      <p class="lede">
+        The real renderers, live. <code>white</code> is the centre-blowout number —
+        keep it at zero. Copy settings pastes straight into
+        <code>canvas/bodyTuning.ts</code>.
+      </p>
+      <div class="top">
+        <div>
+          <label for="body">Body</label>
+          <select id="body">
+            <option value="jarvis">Jarvis V2</option>
+            <option value="ultron">Ultron</option>
+          </select>
+        </div>
+        <div>
+          <label for="mode">Mode</label>
+          <select id="mode">
+            <option>standby</option>
+            <option>listening</option>
+            <option>thinking</option>
+            <option>working</option>
+            <option selected>speaking</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <label for="level">Voice level</label>
+        <input id="level" type="range" min="0" max="1" step="0.01" value="0.8" />
+      </div>
+      <div class="top">
+        <button id="reset" type="button">Reset to shipped</button>
+        <button id="copy" type="button">Copy settings</button>
+      </div>
+      <div id="controls"></div>
+      <div id="export"></div>
+    </aside>
+    <script type="module" src="/tests/visual/shader-bench.ts"></script>
+  </body>
+</html>

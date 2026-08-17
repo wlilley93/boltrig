@@ -42,7 +42,8 @@
       "uBands",
       "uVoice",
       "uSwell",
-      "uPetal"
+      "uPetal",
+      "uLimb"
     ]
   },
   "prompts": {

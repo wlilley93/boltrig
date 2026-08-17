@@ -24,6 +24,7 @@ import {
   setUniforms,
   type FloatUniforms,
 } from "../../canvas/glResources";
+import { JARVIS_TUNING, ramp, type JarvisTuning } from "../../canvas/bodyTuning";
 import { BLOOM_FRAG, COMPOSITE_FRAG } from "../../canvas/shadersPost";
 import { DRAW_FRAG, DRAW_VERT, LINK_FRAG, LINK_VERT } from "./shadersField";
 import { QUAD_VERT, SIM_FRAG } from "../../canvas/shadersSim";
@@ -37,10 +38,8 @@ import { SHARD_FRAG, SHARD_VERT } from "./shadersRing";
 export const GRID = 128;
 export const PARTICLES = GRID * GRID;
 
-/** One shard per 24 particles. Enough to read as circuitry, few enough that the
- *  quads do not bury the filaments they are supposed to be riding. */
-const SHARD_STRIDE = 11;
-const SHARDS = Math.floor(PARTICLES / SHARD_STRIDE);
+/** Shards for a given stride. The stride is tuning now, so the count is too. */
+const shardCount = (stride: number): number => Math.floor(PARTICLES / Math.max(1, stride));
 
 /** Half-resolution bloom. Quarter looked soft at the core; full res bought
  *  nothing visible for four times the bandwidth. */
@@ -127,11 +126,17 @@ export class NeuralPasses {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
-  render(d: Drive, palette: FloatUniforms, core: number, starburst: number): void {
+  /**
+   * One frame.
+   *
+   * `tuning` defaults to what ships, so every existing caller is unaffected and
+   * the bench is the only thing that ever passes anything else.
+   */
+  render(d: Drive, palette: FloatUniforms, tuning: JarvisTuning = JARVIS_TUNING): void {
     this.simulate(d);
-    this.drawScene(d, palette);
+    this.drawScene(d, palette, tuning);
     this.bloom();
-    this.composite(palette, core, starburst);
+    this.composite(palette, ramp(tuning.core, d.energy), tuning.starburst);
   }
 
   destroy(): void {
@@ -172,7 +177,7 @@ export class NeuralPasses {
     this.ping = 1 - this.ping;
   }
 
-  private drawScene(d: Drive, palette: FloatUniforms): void {
+  private drawScene(d: Drive, palette: FloatUniforms, tuning: JarvisTuning): void {
     const gl = this.gl;
     const [w, h] = this.size;
     const aspect = w / Math.max(1, h);
@@ -225,22 +230,33 @@ export class NeuralPasses {
     // texture-neighbour pair counts as connected at all, so widening it is what
     // makes the graph DENSE; brightening a sparse graph just gives brighter
     // gaps.
-    setUniforms(gl, link, { ...shared, uGain: 0.30 + 0.24 * d.energy, uLinkRange: 0.23 },
-      { uState: 0, uGrid: GRID });
+    setUniforms(gl, link, {
+      ...shared,
+      uGain: ramp(tuning.linkGain, d.energy),
+      uLinkRange: tuning.linkRange,
+      uLimb: tuning.linkLimb,
+    }, { uState: 0, uGrid: GRID });
     gl.drawArrays(gl.LINES, 0, PARTICLES * 2);
 
     const draw = this.progs.draw;
     gl.useProgram(draw);
     setUniforms(gl, draw, {
-      ...shared, uStreak: 0.051 + 0.042 * d.energy, uGain: 0.21 + 0.19 * d.energy,
+      ...shared,
+      uStreak: ramp(tuning.streak, d.energy),
+      uGain: ramp(tuning.drawGain, d.energy),
+      uLimb: tuning.drawLimb,
     }, { uState: 0, uGrid: GRID });
     gl.drawArrays(gl.LINES, 0, PARTICLES * 2);
 
     const shard = this.progs.shard;
     gl.useProgram(shard);
-    setUniforms(gl, shard, { ...shared, uSize: 0.014, uGain: 0.26 + 0.20 * d.energy },
-      { uState: 0, uGrid: GRID, uStride: SHARD_STRIDE });
-    gl.drawArrays(gl.TRIANGLES, 0, SHARDS * 6);
+    setUniforms(gl, shard, {
+      ...shared,
+      uSize: tuning.shardSize,
+      uGain: ramp(tuning.shardGain, d.energy),
+      uLimb: tuning.drawLimb,
+    }, { uState: 0, uGrid: GRID, uStride: tuning.shardStride });
+    gl.drawArrays(gl.TRIANGLES, 0, shardCount(tuning.shardStride) * 6);
   }
 
   private bloom(): void {
