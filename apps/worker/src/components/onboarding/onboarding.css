@@ -94,7 +94,12 @@
  * over the bottom, so the entity is inside the card rather than framed on it. */
 /* Tall enough to be the surface rather than a tile. Viewport-relative so it
  * grows with the step, with a floor for short windows. */
-.companion-card { grid-column: 2; position: relative; display: block; min-height: min(56vh, 520px); width: 100%; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 22px; color: inherit; text-align: left; background: color-mix(in srgb, var(--card-2) 58%, transparent); box-shadow: 0 1px 0 rgb(255 255 255 / 3%) inset, 0 24px 55px rgb(0 0 0 / 19%); }
+/* NO FRAME. A border, a 22px radius, a box-shadow and a lighter translucent
+ * background were four separate things each drawing an inner card inside the
+ * card that asks you to choose one. Widening it did not help: a wide framed
+ * card inside a card is still a card inside a card. The companion is now ON the
+ * step, not in a tile on it. */
+.companion-card { grid-column: 2; position: relative; display: block; min-height: min(56vh, 520px); width: 100%; padding: 0; overflow: hidden; border: 0; color: inherit; text-align: left; background: transparent; }
 .companion-chevron { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--border-2); border-radius: 50%; color: var(--text-2); background: color-mix(in srgb, var(--card-2) 70%, transparent); cursor: pointer; transition: color 160ms ease, border-color 160ms ease, transform 160ms ease; }
 .companion-chevron:hover { color: var(--text); border-color: var(--accent); transform: scale(1.06); }
 .companion-chevron:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -132,27 +137,19 @@
 .skin-pill.active { color: var(--text); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .skin-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Both companions share the card surface. Familiar used to override it with a
- * bright white treatment of its own, which read as a different surface pasted
- * onto a dark step -- and made the orb fight a light halo it was never drawn
- * for. Only the art wash differs now, and only to separate stage from copy. */
-.companion-card[data-companion="familiar"] {
-  background: linear-gradient(180deg,
-    color-mix(in srgb, var(--card-2) 70%, transparent),
-    color-mix(in srgb, var(--card-2) 58%, transparent));
-}
+/* NO CARD SURFACE AT ALL, for any of the four. Each used to paint its own
+ * background -- Familiar a light one, the three instruments near-black -- and
+ * every one of them was a rectangle of a slightly different darkness than the
+ * step behind it. That difference is the seam the eye reads as an edge, and it
+ * survives removing the border. Only the text colour is per-character now; the
+ * copy keeps its scrim, because that one exists to make words legible over the
+ * art rather than to frame the art. */
 
 .companion-card[data-companion="jarvis"] {
   color: #f7f7fa;
-  background: linear-gradient(180deg, #020205 0%, #07070a 100%);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 7%) inset, 0 20px 48px rgb(0 0 0 / 26%);
 }
-/* The two instrument bodies draw on near-black, and the card IS that black:
- * a lighter card behind a dark stage was the seam that made it look pasted on. */
 .companion-card[data-companion="ultron"] {
   color: #f2f6ff;
-  background: linear-gradient(180deg, #01030a 0%, #05070f 100%);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 7%) inset, 0 20px 48px rgb(0 0 0 / 30%);
 }
 .companion-card[data-companion="ultron"] .companion-copy {
   background: linear-gradient(180deg, transparent, rgb(1 3 10 / 92%) 46%);
@@ -176,8 +173,6 @@
  * aspect at every resize, so a narrower card simply shows fewer characters. */
 .companion-card[data-companion="colossus"] {
   color: #f8ede0;
-  background: linear-gradient(180deg, #000 0%, #060402 100%);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 5%) inset, 0 20px 48px rgb(0 0 0 / 34%);
 }
 .companion-card[data-companion="colossus"] .companion-copy {
   background: linear-gradient(180deg, transparent, rgb(0 0 0 / 94%) 46%);

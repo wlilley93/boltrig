@@ -53,12 +53,15 @@ void main() {
 
   vec3 v = curl(p, uTime) * flowSpeed(uEnergy);
 
-  // Soft radial constraint toward this particle's own home radius. Weak enough
-  // that particles overshoot, which is what keeps the surface broken rather
-  // than reading as a drawn sphere.
+  // Radial constraint toward this particle's own home radius. It was weak on
+  // purpose, so particles overshoot and the surface stays broken rather than
+  // reading as a drawn sphere -- but overshoot is also exactly what throws
+  // material past the silhouette, and a contained node sphere is what is
+  // wanted. Tightened, and the broken surface now comes from the curl field
+  // rather than from particles escaping.
   float d = length(p);
   vec3 outward = normalize(p + 1e-5);
-  v += outward * (shapedRadius(vUV, p, uTime, uRadius, uPetal) - d) * 3.0;
+  v += outward * (shapedRadius(vUV, p, uTime, uRadius, uPetal) - d) * 6.0;
 
   // THE SPEECH WAVE. An onset starts an impulse at the centre which travels
   // outward at a fixed speed, so a syllable visibly CROSSES the body instead of

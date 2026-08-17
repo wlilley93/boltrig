@@ -161,7 +161,11 @@ export class UltronPasses {
       uWaveT: d.waveT, uWaveAmp: d.waveAmp,
       // Three concentric clouds reaching out in arms. Jarvis leaves this at 0
       // and keeps the plain shell.
-      uPetal: 1.0,
+      // 0.3, not 1.0. At 1.0 the arms reach far enough to read as flares
+      // around the edge; at 0 he is Jarvis in blue, and the references separate
+      // the two by silhouette as much as by colour. A lumpy sphere keeps the
+      // distinction without the reach.
+      uPetal: 0.3,
     }, { uState: 0 });
     this.fullscreen(prog);
     this.ping = 1 - this.ping;

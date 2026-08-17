@@ -27,15 +27,8 @@ import {
 import { BLOOM_FRAG, COMPOSITE_FRAG } from "../../canvas/shadersPost";
 import { DRAW_FRAG, DRAW_VERT, LINK_FRAG, LINK_VERT } from "./shadersField";
 import { QUAD_VERT, SIM_FRAG } from "../../canvas/shadersSim";
-import {
-  BEAM_THICKNESS,
-  RING_FRAG,
-  RING_SEGMENTS,
-  RING_VERT,
-  RINGS,
-  SHARD_FRAG,
-  SHARD_VERT,
-} from "./shadersRing";
+// The RING half of shadersRing is deliberately not imported: see drawScene.
+import { SHARD_FRAG, SHARD_VERT } from "./shadersRing";
 
 /** 128x128 = 16384 particles. Chosen against the draw cost, not the sim: the
  *  simulation is one full-screen pass regardless, but every particle is two
@@ -90,7 +83,6 @@ export class NeuralPasses {
     const gl = this.gl;
     this.progs = {
       sim: createProgram(gl, QUAD_VERT, SIM_FRAG),
-      ring: createProgram(gl, RING_VERT, RING_FRAG),
       link: createProgram(gl, LINK_VERT, LINK_FRAG),
       draw: createProgram(gl, DRAW_VERT, DRAW_FRAG),
       shard: createProgram(gl, SHARD_VERT, SHARD_FRAG),
@@ -202,16 +194,14 @@ export class NeuralPasses {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.simTex[this.ping]);
 
-    const ring = this.progs.ring;
-    gl.useProgram(ring);
-    setUniforms(gl, ring, {
-      ...shared, uBands: d.bands, uRadius: d.radius, uBeam: BEAM_THICKNESS,
-      // Lower per-element gain than the old ticks: there are two and a half
-      // times as many of them and they overlap through the beam's depth.
-      uGain: 1.25 + 0.60 * d.energy,
-    }, { uSegments: RING_SEGMENTS, uRings: RINGS });
-    gl.drawArrays(gl.LINES, 0, RINGS * RING_SEGMENTS * 2);
-
+    // NO EXTERIOR RINGS. Both references ask for them -- Ebb's audio-reactive
+    // rings of data circumscribing the hologram, Territory's rings rotating
+    // around a spherical base -- and they were built and drawn here. They are
+    // off by decision, not by accident: bright arcs turning at the limb are
+    // what read as solar flares around the edge, and the body wanted is the
+    // node sphere alone. The shaders stay in shadersRing.ts so restoring them
+    // is one import, and this comment exists so nobody restores them thinking
+    // they found a missing pass.
     const link = this.progs.link;
     gl.useProgram(link);
     setUniforms(gl, link, { ...shared, uGain: 0.10 + 0.10 * d.energy, uLinkRange: 0.16 },

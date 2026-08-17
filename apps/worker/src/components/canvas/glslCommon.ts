@@ -94,7 +94,10 @@ float homeRadius(vec2 uv, float time) {
     // Cosine rather than a sawtooth: a migrating particle should ease out and
     // ease back, not snap home when its phase wraps.
     float s = 0.5 - 0.5 * cos(6.28318530718 * fract(time * 0.06 + phase));
-    return mix(0.32, 1.0, s);
+    // Capped INSIDE the shell. It used to reach 1.0, which put migrating
+    // particles out where the exterior rings were; with the rings gone that
+    // is simply a minority orbiting outside the body.
+    return mix(0.34, 0.90, s);
   }
   // The surface: a thin band, so the limb is a limb rather than a haze.
   if (role > 0.28) return 0.88 + 0.10 * jitter;

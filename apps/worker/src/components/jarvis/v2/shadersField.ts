@@ -43,7 +43,10 @@ void main() {
   // see-through middle. Without it the great circles floated in fur.
   vFade *= 0.34 + 0.90 * limb(p);
   // Embers: what has left the body glints. Everything still in it does not.
-  vFade *= 1.0 + 1.6 * ember(p, 0.98);
+  // What has LEFT the body fades out of it. This deliberately brightened
+  // escapees, which made the few particles outside the shell the most
+  // visible things on screen -- the flares around the edge.
+  vFade *= 1.0 - 0.85 * ember(p, 0.98);
   // The wavefront lights what it passes, and a held note keeps a low swell.
   vFade *= 1.0 + 3.2 * pulse(p) + 0.55 * uSwell;
 

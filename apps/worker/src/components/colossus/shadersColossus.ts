@@ -92,9 +92,15 @@ float hash21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 const float LAMP_R = 0.30;
 
 float lamp(vec2 cell) {
-  float d = length(cell - 0.5);
-  float core = 1.0 - smoothstep(LAMP_R * 0.55, LAMP_R, d);
-  float halo = exp(-d * d * 16.0) * 0.16;
+  vec2 q = abs(cell - 0.5);
+  // SQUARE, not a disc. Chebyshev distance -- the larger of the two axes --
+  // gives a square of the same size with the same soft edge, where length()
+  // gives a circle. The board is a grid of square elements.
+  float core = 1.0 - smoothstep(LAMP_R * 0.55, LAMP_R, max(q.x, q.y));
+  // The halo stays RADIAL. It is the glass and the bloom around the element
+  // rather than the element itself, and a square halo reads as a bad blur.
+  float r = length(q);
+  float halo = exp(-r * r * 16.0) * 0.16;
   return core + halo;
 }
 

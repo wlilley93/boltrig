@@ -75,5 +75,10 @@ void main() {
   // problem the fringe colour fixes the other half of.
   c = c / (c + vec3(1.5));
   c = pow(c, vec3(0.86));
-  oColor = vec4(c, 1.0);
+  // ALPHA FOLLOWS LUMINANCE. Writing 1.0 made every one of these bodies an
+  // opaque black rectangle, so no amount of CSS could stop the stage reading as
+  // a tile pasted onto the step. The context is already premultipliedAlpha
+  // false, and the composite runs with blending disabled, so this value reaches
+  // the compositor intact and the dark parts of the body let the page through.
+  oColor = vec4(c, clamp(max(c.r, max(c.g, c.b)) * 1.35, 0.0, 1.0));
 }`;

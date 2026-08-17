@@ -35,8 +35,14 @@ export function dayWarmth(): number {
 /** Attack and release, in seconds. Attack is short enough that a syllable
  *  still arrives on time; release is long enough that a held note decays
  *  rather than snapping back between analyser frames. */
-const VOICE_ATTACK = 0.045;
-const VOICE_RELEASE = 0.18;
+// Roughly doubled from 45/180ms. Those smoothed the analyser's frame-to-frame
+// noise but still tracked every syllable, and tracking every syllable is what
+// still read as jarring. The ASYMMETRY is kept -- release is over four times
+// the attack -- because a symmetric envelope slow enough to be calm also
+// arrives late, and a body moving after its own voice is worse than one moving
+// too much.
+const VOICE_ATTACK = 0.09;
+const VOICE_RELEASE = 0.40;
 
 /** What the shader is driven by. xyzw of uAudio, plus the impulse channel. */
 export interface FamiliarDrive {

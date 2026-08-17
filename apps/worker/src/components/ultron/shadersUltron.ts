@@ -91,7 +91,9 @@ void main() {
   // The same lit-normal body: a shell coming apart still needs to read as a
   // shell before it can read as coming apart.
   vFade *= 0.30 + 0.95 * limb(p);
-  vFade *= 1.0 + 1.4 * ember(p, 0.98);
+  // Fades what has left the membrane, where it used to light it. See the
+  // same inversion in Jarvis's field pass.
+  vFade *= 1.0 - 0.85 * ember(p, 0.98);
   // The wavefront lights what it passes; a held note keeps a low swell under it.
   vFade *= 1.0 + 3.4 * pulse(p) + 0.55 * uSwell;
 
