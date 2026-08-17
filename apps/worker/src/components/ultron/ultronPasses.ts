@@ -199,7 +199,9 @@ export class UltronPasses {
       ...shared,
       // Longer than Jarvis's streak: growth, not data in motion.
       uStreak: 0.110 + 0.085 * d.energy,
-      uGain: 0.11 + 0.13 * d.energy,
+      // THE BODY, and it was the faintest of his three passes. See the note on
+      // the crack gain below: the veins are what he is MADE of, so they lead.
+      uGain: 0.22 + 0.20 * d.energy,
     }, { uState: 0, uGrid: GRID });
     gl.drawArrays(gl.LINES, 0, PARTICLES * 2);
 
@@ -209,14 +211,34 @@ export class UltronPasses {
       ...shared,
       // Wider than LINK's range: a membrane wants a connected web, where a
       // neural interior wants sparse, flickering connections.
-      uLinkRange: 0.26,
-      uGain: 0.72 + 0.50 * d.energy,
+      // "VERY CHAOTIC AND NOT NICE TO LOOK AT" WAS A GAIN ORDER, not a petal
+      // count. The three passes ran at vein 0.11 + 0.13e, crack 0.72 + 0.50e
+      // and facet 0.78 + 0.55e -- so the jagged web and the loose shards were
+      // each roughly six times the body they were supposed to be cracking, and
+      // he read as a swarm of debris with nothing inside it. Reducing the
+      // petals addressed the reaching arms and could not have addressed this.
+      //
+      // The range matters as much as the gain, and separately. It is the
+      // distance under which a pair counts as connected, and at 0.26 -- against
+      // Jarvis's 0.16 at the time -- the web was drawing long wires straight
+      // across the volume, which is most of what "chaotic" was describing.
+      // Tightened, the cracks are local again: they run along the surface
+      // rather than through the middle.
+      //
+      // HE IS STILL NOT JARVIS IN BLUE. The separation is silhouette and
+      // colour -- petals against a plain shell, cold against warm -- which is
+      // how Animal Logic separated them. It was never brightness.
+      uLinkRange: 0.19,
+      uGain: 0.34 + 0.26 * d.energy,
     }, { uState: 0, uGrid: GRID, uSegments: CRACK_SEGMENTS });
     gl.drawArrays(gl.LINES, 0, PARTICLES * CRACK_SEGMENTS * 2);
 
     const facet = this.progs.facet;
     gl.useProgram(facet);
-    setUniforms(gl, facet, { ...shared, uSize: 0.030, uGain: 0.78 + 0.55 * d.energy },
+    // Nearly twice Jarvis's shard at 0.030, and brighter than everything else
+    // on screen. Both halves of that were why the facets read as the subject
+    // rather than as fracture ON a subject.
+    setUniforms(gl, facet, { ...shared, uSize: 0.020, uGain: 0.36 + 0.26 * d.energy },
       { uState: 0, uGrid: GRID, uStride: FACET_STRIDE });
     gl.drawArrays(gl.LINES, 0, FACETS * 4);
   }

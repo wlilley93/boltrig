@@ -96,6 +96,40 @@ afterEach(() => {
   localStorage.clear();
 });
 
+/**
+ * Click a control once it is BOTH there and usable.
+ *
+ * WHY EVERY CLICK IN THIS FILE GOES THROUGH IT. `await findByText("Add vision")`
+ * looks like it waits for the vision step, and it does not: that heading is
+ * painted by THREE different states -- the Suspense skeleton while the lazy
+ * chunk resolves, the real step before its readiness probe returns, and the
+ * loaded step. "Skip for now" exists only in the third. So the awaited line was
+ * satisfied by a loading state and the synchronous getByRole on the next line
+ * raced a dynamic import against one setTimeout(0).
+ *
+ * It passed because tests earlier in the file had already resolved the lazy()
+ * handles, leaving a margin of exactly one macrotask turn -- which is why the
+ * failure showed up once, in a full run, and never again in isolation.
+ * `--sequence.seed=7` reproduces it every time.
+ *
+ * The fix is applied to EVERY click rather than to the seven sites that were
+ * racing, because deciding per line which ones are safe is precisely the
+ * judgement that was wrong seven times. Waiting for a control that was already
+ * present and enabled costs nothing.
+ *
+ * Re-queried inside waitFor rather than captured once: a step transition can
+ * replace the node, and reading `disabled` off a detached element is a check
+ * that always passes.
+ */
+async function clickWhenReady(name: string): Promise<void> {
+  const control = await waitFor(() => {
+    const button = screen.getByRole("button", { name }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    return button;
+  });
+  fireEvent.click(control);
+}
+
 describe("first-run onboarding", () => {
   it("requires a name on the first page before showing both companion entities", () => {
     render(
@@ -166,7 +200,7 @@ describe("first-run onboarding", () => {
 
     fireEvent.keyDown(document.body, { key: "Enter" });
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
-    fireEvent.click(await screen.findByRole("button", { name: "OpenAI" }));
+    await clickWhenReady("OpenAI");
     const providerSearch = screen.getByRole("searchbox", { name: "Search providers" });
     fireEvent.change(providerSearch, { target: { value: "Llama" } });
     fireEvent.keyDown(providerSearch, { key: "Enter" });
@@ -236,14 +270,14 @@ describe("first-run onboarding", () => {
     fireEvent.change(screen.getByLabelText("Your name"), {
       target: { value: "William" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
     // ONE CARD AT A TIME. Familiar is slot one, so she is what the step opens
     // on and Jarvis is not rendered at all until the rail is walked.
     expect(screen.getByTestId("familiar-preview")).toBeTruthy();
     expect(screen.queryByTestId("jarvis-preview")).toBeNull();
     // No left chevron on the first companion: it is ABSENT, not disabled.
     expect(screen.queryByRole("button", { name: /Show Familiar/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Show Jarvis" }));
+    await clickWhenReady("Show Jarvis");
     expect(screen.getByTestId("jarvis-preview")).toBeTruthy();
     expect(screen.queryByTestId("familiar-preview")).toBeNull();
     // Jarvis is in the MIDDLE now that Ultron exists, so he has both chevrons.
@@ -251,28 +285,28 @@ describe("first-run onboarding", () => {
     expect(screen.queryByRole("button", { name: "Show Ultron" })).toBeTruthy();
     // The end of the rail is where the right chevron disappears -- that was
     // always the assertion, and the end has simply moved along again.
-    fireEvent.click(screen.getByRole("button", { name: "Show Ultron" }));
+    await clickWhenReady("Show Ultron");
     expect(document.querySelectorAll(".companion-chevron.right")).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "Show Colossus" }));
+    await clickWhenReady("Show Colossus");
     expect(document.querySelectorAll(".companion-chevron.right")).toHaveLength(0);
     expect(screen.queryByRole("button", { name: /Show / })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Show Ultron" }));
-    fireEvent.click(screen.getByRole("button", { name: "Show Jarvis" }));
+    await clickWhenReady("Show Ultron");
+    await clickWhenReady("Show Jarvis");
     // The dots carry the choice for anyone not using the picture.
     expect(screen.getByRole("radio", { name: "Jarvis" }).getAttribute("aria-checked"))
       .toBe("true");
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
     const secret = await screen.findByLabelText("Provider API key") as HTMLInputElement;
     fireEvent.change(secret, { target: { value: "secret-provider-value" } });
-    fireEvent.click(screen.getByRole("button", { name: "Choose a model" }));
+    await clickWhenReady("Choose a model");
     fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "GPT-5.4" } });
     fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
     expect(screen.getByText("Text and Vision")).toBeTruthy();
     expect(screen.getByText("Your model handles text and vision — you can skip the vision step.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Save provider" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     await waitFor(() => expect(api.setAiKey).toHaveBeenCalledWith(expect.objectContaining({
       level: "user",
@@ -283,14 +317,14 @@ describe("first-run onboarding", () => {
     })));
     expect(secret.value).toBe("");
     expect(await screen.findByText("Add vision")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("Add voice")).toBeTruthy();
-    fireEvent.click(await screen.findByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, William. Meet Jarvis.")).toBeTruthy();
     expect(screen.getByText(/run and take approved actions locally on your personal computer/i)).toBeTruthy();
     const download = screen.getByRole("link", { name: /Download Boltrig Desktop/ });
     expect(download.getAttribute("href")).toBe("https://downloads.boltrig.test/desktop");
-    fireEvent.click(screen.getByRole("button", { name: "Continue in browser" }));
+    await clickWhenReady("Continue in browser");
 
     await waitFor(() => expect(api.putMeSettings).toHaveBeenCalledWith({
       settings: {
@@ -314,19 +348,19 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
     expect((await screen.findByRole("button", { name: "Enter your API key first" }) as HTMLButtonElement).disabled)
       .toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
+    await clickWhenReady("OpenAI");
     fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "llama" } });
     fireEvent.click(screen.getByRole("option", { name: /Llama Meta’s Llama API/ }));
     expect(screen.getByRole("button", { name: "Llama" })).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Provider API key"), { target: { value: "llama-key" } });
-    fireEvent.click(screen.getByRole("button", { name: "Choose a model" }));
+    await clickWhenReady("Choose a model");
     fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "Maverick" } });
     expect(screen.getAllByRole("option").length).toBeGreaterThan(0);
   });
@@ -342,11 +376,11 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
+    await clickWhenReady("OpenAI");
     fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "ollama" } });
     expect(screen.getByRole("option", { name: /Ollama Cloud ollama-cloud/ })).toBeTruthy();
     const selfHosted = screen.getByRole("option", { name: /Ollama Self-hosted/ });
@@ -361,7 +395,7 @@ describe("first-run onboarding", () => {
       target: { value: "https://models.example.com/v1" },
     });
     fireEvent.change(screen.getByLabelText("Exact model"), { target: { value: "qwen3:8b" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     await waitFor(() => expect(api.setAiKey).toHaveBeenCalledWith(expect.objectContaining({
       provider: "ollama",
@@ -383,12 +417,12 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
     expect(screen.queryByRole("note")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
+    await clickWhenReady("OpenAI");
     fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "ollama" } });
     fireEvent.click(screen.getByRole("option", { name: /Ollama Self-hosted/ }));
 
@@ -408,7 +442,7 @@ describe("first-run onboarding", () => {
       target: { value: "http://mac-mini-m1:11434/v1" },
     });
     fireEvent.change(modelInput, { target: { value: "qwen3vl-abliterated" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     await waitFor(() => expect(api.setAiKey).toHaveBeenCalledWith(expect.objectContaining({
       provider: "ollama",
@@ -429,11 +463,11 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
     fireEvent.change(await screen.findByLabelText("Provider API key"), { target: { value: "partial-key" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     expect(await screen.findByText("Choose a provider, add its key and pick a model to continue."))
       .toBeTruthy();
@@ -466,27 +500,27 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     fireEvent.change(await screen.findByLabelText("Provider API key"), {
       target: { value: "provider-secret" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Choose a model" }));
+    await clickWhenReady("Choose a model");
     fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "GPT-5.4" } });
     fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     expect(await screen.findByText("Select Continue again to approve this provider and model."))
       .toBeTruthy();
     expect(screen.getByText("Choose your AI provider")).toBeTruthy();
     expect(api.approveAiKeyProposal).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     await waitFor(() => expect(api.approveAiKeyProposal).toHaveBeenCalledWith("proposal-1"));
     expect(await screen.findByText("Add vision")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("Add voice")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
   });
 
@@ -513,10 +547,10 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     await waitFor(() => expect(api.activateAiKey).toHaveBeenCalledWith({
       level: "user",
@@ -524,9 +558,9 @@ describe("first-run onboarding", () => {
       modality: "text",
     }));
     expect(await screen.findByText("Add vision")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("Add voice")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
   });
 
@@ -541,8 +575,8 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
     await screen.findByLabelText("Provider API key");
     expect(screen.queryByText("Connect a provider")).toBeNull();
@@ -552,11 +586,11 @@ describe("first-run onboarding", () => {
       /Bifrost|models\.dev|sealed|write-only|model route|key policy|safe configuration/i,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Add vision")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("Add voice")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
     expect(document.body.textContent).not.toMatch(
       /Bifrost|models\.dev|sealed|write-only|model route|key policy|safe configuration/i,
@@ -583,17 +617,17 @@ describe("first-run onboarding", () => {
     fireEvent.change(screen.getByLabelText("Your name"), {
       target: { value: "Alex" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
     expect(screen.getByText("Choose your companion")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Your organisation manages your AI.")).toBeTruthy();
     expect(screen.queryByLabelText("Provider API key")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Add vision")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Your organisation manages voice services.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Continue in browser" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue in browser");
     expect(await screen.findByText("Member workspace")).toBeTruthy();
   });
 
@@ -632,19 +666,19 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     await screen.findByText("Choose your AI provider");
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     expect(await screen.findByText("Add vision")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Add voice")).toBeTruthy();
     expect(await screen.findByText("Spoken replies")).toBeTruthy();
     expect(screen.getByText("Transcription")).toBeTruthy();
     const voiceKey = screen.getByLabelText("Deepgram API key") as HTMLInputElement;
     fireEvent.change(voiceKey, { target: { value: "deepgram-secret-value" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     await waitFor(() => expect(api.submitIntegrationSecret).toHaveBeenCalledWith(
       "deepgram-audio",
@@ -661,12 +695,12 @@ describe("first-run onboarding", () => {
       </OnboardingGate>,
     );
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     await screen.findByText("Choose your AI provider");
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Skip for now" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Skip for now");
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
     expect(api.submitIntegrationSecret).not.toHaveBeenCalled();
   });

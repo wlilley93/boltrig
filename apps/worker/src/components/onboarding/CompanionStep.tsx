@@ -56,6 +56,7 @@ export function CompanionStep({
         index={index}
         items={COMPANIONS}
         onIndex={(next) => onSelect(COMPANIONS[next].id)}
+        skin={skin}
       />
     </div>
   );

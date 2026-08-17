@@ -202,22 +202,43 @@ export class NeuralPasses {
     // node sphere alone. The shaders stay in shadersRing.ts so restoring them
     // is one import, and this comment exists so nobody restores them thinking
     // they found a missing pass.
+    // THE THREE GAINS ARE ONE DECISION, so they are set together and their
+    // RATIO is what was wrong. With the exterior rings off, the interior has to
+    // carry the whole structure, and it was carrying none of it: LINK ran at
+    // 0.10 + 0.10e, DRAW at 0.12 + 0.14e and SHARD at 0.42 + 0.30e -- so at
+    // speaking energy the circuit quads were three and a half times the
+    // filaments they are supposed to be riding, and the network under them was
+    // the dimmest thing on screen. The render was a cloud of orange rectangles
+    // with nothing between them, which is what "still a way off from the
+    // reference" was describing: the reference is a DENSE GLOBE OF LINES with
+    // blocky circuitry ON it, not a scatter of blocks.
+    //
+    // So the order is inverted rather than everything being turned up: the web
+    // is now the brightest of the three and the shards the dimmest. Turning
+    // them all up is what saturates the centre to white, which has already cost
+    // three tuning rounds -- tests/visual/render-bodies.mjs prints the number
+    // that catches it (`white`, the fraction of the middle of the frame with
+    // every channel above 0.92) and it is 0.0000 at these values.
     const link = this.progs.link;
     gl.useProgram(link);
-    setUniforms(gl, link, { ...shared, uGain: 0.10 + 0.10 * d.energy, uLinkRange: 0.16 },
+    // Wider as well as brighter. The range is the distance under which a
+    // texture-neighbour pair counts as connected at all, so widening it is what
+    // makes the graph DENSE; brightening a sparse graph just gives brighter
+    // gaps.
+    setUniforms(gl, link, { ...shared, uGain: 0.30 + 0.24 * d.energy, uLinkRange: 0.23 },
       { uState: 0, uGrid: GRID });
     gl.drawArrays(gl.LINES, 0, PARTICLES * 2);
 
     const draw = this.progs.draw;
     gl.useProgram(draw);
     setUniforms(gl, draw, {
-      ...shared, uStreak: 0.051 + 0.042 * d.energy, uGain: 0.12 + 0.14 * d.energy,
+      ...shared, uStreak: 0.051 + 0.042 * d.energy, uGain: 0.21 + 0.19 * d.energy,
     }, { uState: 0, uGrid: GRID });
     gl.drawArrays(gl.LINES, 0, PARTICLES * 2);
 
     const shard = this.progs.shard;
     gl.useProgram(shard);
-    setUniforms(gl, shard, { ...shared, uSize: 0.016, uGain: 0.42 + 0.30 * d.energy },
+    setUniforms(gl, shard, { ...shared, uSize: 0.014, uGain: 0.26 + 0.20 * d.energy },
       { uState: 0, uGrid: GRID, uStride: SHARD_STRIDE });
     gl.drawArrays(gl.TRIANGLES, 0, SHARDS * 6);
   }

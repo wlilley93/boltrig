@@ -51,7 +51,7 @@ void main() {
     return;
   }
 
-  vec3 v = curl(p, uTime) * flowSpeed(uEnergy);
+  vec3 v = flow(p, uTime, uEnergy);
 
   // Radial constraint toward this particle's own home radius. It was weak on
   // purpose, so particles overshoot and the surface stays broken rather than

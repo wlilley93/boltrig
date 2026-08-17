@@ -56,8 +56,27 @@ export interface TickerBuffer {
 
 const SPACE = glyphIds(" ")[0];
 
-export function tickerFor(mode: ColossusMode): TickerBuffer {
-  return compileTicker(LINES[mode] + SEP);
+/**
+ * The sentence for a mode, with what he is actually saying in front of it.
+ *
+ * THE MODE WORD STILL COMES FIRST. Territory’s rule is that a display
+ * communicates its plot point within seconds of being on camera, and the plot
+ * point is what the machine is doing -- so the quotation is elaboration in the
+ * slot the canned clause used to occupy, not a replacement for the read.
+ *
+ * UPPERCASED HERE, because the atlas is uppercase and this is his typography
+ * rather than the host’s. Anything outside the atlas becomes a space rather
+ * than an exception (see glyphAtlas), so a phrase with an em dash or an
+ * apostrophe in it degrades to a gap and never throws over a sign.
+ *
+ * A takeaway is only ever passed for `speaking`. With none -- a live call,
+ * where audio arrives with no text -- this is exactly what it always was.
+ */
+export function tickerFor(mode: ColossusMode, takeaway?: string | null): TickerBuffer {
+  const quoted = takeaway?.trim();
+  if (!quoted) return compileTicker(LINES[mode] + SEP);
+  const word = LINES[mode].split(SEP)[0];
+  return compileTicker(`${word}${SEP}${quoted.toUpperCase()}${SEP}`);
 }
 
 export function compileTicker(text: string): TickerBuffer {

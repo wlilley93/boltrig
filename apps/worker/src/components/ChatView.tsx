@@ -157,6 +157,8 @@ export function ChatView({
     level: number;
     bands?: number[];
     onset?: number;
+    /** See CharacterTurnInput.speechTakeaway: a phrase, never the reply. */
+    takeaway?: string | null;
   }>({ speaking: false, level: 0 });
   const [callActive, setCallActive] = useState(false);
   const selectedCharacterId = useFamiliarBody();
@@ -848,6 +850,7 @@ export function ChatView({
     voiceLevel: voiceActivity.level,
     voiceBands: voiceActivity.bands ?? null,
     voiceOnset: voiceActivity.onset,
+    speechTakeaway: voiceActivity.takeaway ?? null,
   };
   const stageState = familiarStateFromTurn(stageInput);
 

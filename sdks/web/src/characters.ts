@@ -45,6 +45,24 @@ export interface CharacterTurnInput {
   voiceOnset?: number;
   micActive?: boolean;
   micLevel?: number;
+  /**
+   * A short phrase from the reply being spoken aloud, for a body that displays
+   * WORDS. Absent for every body that does not.
+   *
+   * THE ONLY CONVERSATION CONTENT IN THIS INTERFACE, and it is deliberately a
+   * phrase rather than the reply. Everything else here is a FACT about the turn
+   * -- is it loading, is a voice speaking, how loud, which bands -- so that a
+   * character registered by a third party cannot read somebody’s conversation
+   * by declaring a stage and listening. A ticker has to show words, so one
+   * bounded phrase crosses, bounded by the host at the point it is made.
+   *
+   * NOT A SUMMARY. It is the opening clause of what is being said, so it cannot
+   * misreport the reply: it is a quotation. A host that has nothing to quote --
+   * a live call, where the audio arrives without text -- omits it, and a body
+   * that receives nothing must fall back to its own copy rather than showing an
+   * empty sign.
+   */
+  speechTakeaway?: string | null;
 }
 
 /** Short name used by character add-ins. */

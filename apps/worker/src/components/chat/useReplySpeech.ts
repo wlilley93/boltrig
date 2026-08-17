@@ -6,6 +6,7 @@ import {
   readRepliesFromSettings,
   resolveRegisteredVoiceId,
 } from "../../characterVoice";
+import { speechTakeaway } from "./speechTakeaway";
 import { normalisationGain } from "../voiceLoudness";
 import { useFamiliarBody } from "../StageBody";
 import { useCharacter } from "../characters";
@@ -16,6 +17,20 @@ const MAX_SPOKEN_REPLY_CHARS = 15_000;
 interface ReplySpeechActivity {
   speaking: boolean;
   level: number;
+  /**
+   * The phrase a sign may show while this reply is being read.
+   *
+   * PUBLISHED FROM HERE because this is the only layer that holds both halves:
+   * the text that was sent to the voice provider and the moment the audio
+   * actually starts. Deriving it at the render site would mean the phrase and
+   * the sound came from different places and could disagree about which reply
+   * is playing.
+   *
+   * Cleared, never left standing. An activity that stops speaking carries no
+   * takeaway, so the sign returns to its own copy instead of holding the last
+   * thing he said until the next thing he says.
+   */
+  takeaway?: string | null;
 }
 
 interface ReplySpeechState {
@@ -36,6 +51,7 @@ class ReplyAudioPlayer {
   // node per spoken reply for the lifetime of the conversation.
   private gain: GainNode | null = null;
   private generation = 0;
+  private takeaway = "";
 
   constructor(private readonly onActivity: (activity: ReplySpeechActivity) => void) {}
 
@@ -75,17 +91,30 @@ class ReplyAudioPlayer {
       // be released here too or it leaks on every reply that simply finished.
       this.gain = null;
       try { gain.disconnect(); } catch { /* Best-effort graph cleanup. */ }
-      this.onActivity({ speaking: false, level: 0 });
+      this.takeaway = "";
+      this.onActivity({ speaking: false, level: 0, takeaway: null });
     };
     this.source = source;
-    this.onActivity({ speaking: true, level: 0.6 });
+    this.onActivity({ speaking: true, level: 0.6, takeaway: this.takeaway });
     source.start();
+  }
+
+  /**
+   * What the next play() will announce.
+   *
+   * Set before play rather than passed into it, because play() takes decoded
+   * audio and knows nothing about text -- and threading the phrase through the
+   * decode would make an audio player carry a string it never reads.
+   */
+  say(takeaway: string): void {
+    this.takeaway = takeaway;
   }
 
   stop(): void {
     this.generation += 1;
     this.stopSource();
-    this.onActivity({ speaking: false, level: 0 });
+    this.takeaway = "";
+    this.onActivity({ speaking: false, level: 0, takeaway: null });
   }
 
   close(): void {
@@ -177,6 +206,7 @@ export function useReplySpeech({
         onErrorRef.current(replySpeechFailure(result));
         return;
       }
+      playerRef.current?.say(speechTakeaway(speech));
       await playerRef.current?.play(decodeAudio(output.audio_b64));
     } catch {
       onErrorRef.current("The reply could not be read aloud. Text chat is unaffected.");

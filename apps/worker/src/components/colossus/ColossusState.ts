@@ -25,6 +25,15 @@ export interface ColossusStageState {
   bands?: number[] | null;
   /** 0..1 spectral-flux onset; steps the counter, which is what a counter does. */
   onset?: number;
+  /**
+   * The phrase the sign shows while he is speaking, or null for his own copy.
+   *
+   * HE IS THE ONLY BODY THAT READS IT, because he is the only body made of
+   * words. Jarvis and Ultron are handed the same field by the same contract and
+   * ignore it -- a globe has nowhere to put a sentence, and inventing somewhere
+   * would make every character a caption.
+   */
+  takeaway?: string | null;
 }
 
 export const RESTING_COLOSSUS_STATE: ColossusStageState = {
@@ -32,6 +41,7 @@ export const RESTING_COLOSSUS_STATE: ColossusStageState = {
   level: 0,
   bands: null,
   onset: 0,
+  takeaway: null,
 };
 
 const clamp01 = (value: unknown): number =>
@@ -51,7 +61,25 @@ export function clampColossusState(next: Partial<ColossusStageState>): ColossusS
     level: clamp01(next.level),
     bands,
     onset: clamp01(next.onset),
+    // A phrase only counts while he is SPEAKING. Held across a mode change it
+    // would leave the last thing he said scrolling under EVALUATING, which
+    // reports something the machine is not doing.
+    takeaway: mode === "speaking" ? takeawayOf(next.takeaway) : null,
   };
+}
+
+/**
+ * A takeaway, or null.
+ *
+ * Length-capped a second time, here, even though the producer caps it. This is
+ * the boundary a third-party host crosses, and the sign compiles whatever it is
+ * handed into a fixed-size glyph buffer -- so the cap belongs on the side that
+ * would be damaged, not only on the side that is well behaved.
+ */
+function takeawayOf(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().slice(0, 80);
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 export function colossusStateFromTurn(input: {
@@ -64,6 +92,7 @@ export function colossusStateFromTurn(input: {
   voiceOnset?: number;
   micActive?: boolean;
   micLevel?: number;
+  speechTakeaway?: string | null;
 }): ColossusStageState {
   const streaming = input.hasLiveEvents && !input.liveEnded;
   let mode: ColossusMode = "standby";
@@ -77,5 +106,6 @@ export function colossusStateFromTurn(input: {
     level: input.voiceSpeaking ? input.voiceLevel : (input.micLevel ?? 0),
     bands: input.voiceBands ?? null,
     onset: input.voiceOnset,
+    takeaway: input.speechTakeaway ?? null,
   });
 }

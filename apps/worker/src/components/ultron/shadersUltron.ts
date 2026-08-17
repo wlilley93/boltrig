@@ -83,7 +83,7 @@ void main() {
   vec4 st = texelFetch(uState, tc, 0);
 
   vec3 p = st.xyz;
-  vec3 v = curl(p, uTime) * flowSpeed(uEnergy);
+  vec3 v = flow(p, uTime, uEnergy);
   vSpeed = clamp(length(v) * 0.55, 0.0, 1.0);
 
   vFade = smoothstep(0.0, 0.18, st.w) * smoothstep(1.0, 0.72, st.w);

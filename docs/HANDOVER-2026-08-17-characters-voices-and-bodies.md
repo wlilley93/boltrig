@@ -250,10 +250,17 @@ carrier. `voices/colossus.eq.npy` is deleted.
    `~/Desktop/colossus-audition/mixer.html` with its stems. It is the tool that
    decided the voice and will be wanted again for the next character; it
    currently exists in exactly one place with no backup.
-9. **One flaky test.** `tests/onboarding.test.tsx > keeps onboarding copy
-   focused on the user's choices` failed once in a full run and passed in
+9. **One flaky test.** `apps/worker/tests/onboarding.test.tsx > keeps onboarding
+   copy focused on the user's choices` failed once in a full run and passed in
    isolation and in every subsequent full run. Not investigated. Cross-file
    interaction rather than an ordering bug, most likely.
+
+   Since fixed, and it was not cross-file: vitest isolates by fork, so no other
+   file could reach it. `await findByText("Add vision")` was satisfied by a
+   LOADING state -- the Suspense skeleton and the pre-readiness step paint the
+   same heading -- and the synchronous `getByRole` on the next line then raced a
+   dynamic import against one macrotask turn. `--sequence.seed=7` reproduces it
+   every time.
 10. **Familiar's voice tests were rewritten, not renumbered.** Two carried a
     REASON in their name that went stale when she moved off `vera`: the
     licensing guard now names the CC-BY-NC voices (`cosette`, `jean`) it exists

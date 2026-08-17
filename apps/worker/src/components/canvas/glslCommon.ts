@@ -68,6 +68,36 @@ vec3 curl(vec3 p, float time) {
     (px1.y - px0.y) - (py1.x - py0.x)) / (2.0 * e);
 }
 
+// THE FLOW, and every pass must ask for it through this function.
+//
+// curl() alone pushes a particle straight THROUGH the shell, and the radial
+// spring in the simulation then hauls it back. So the net motion of a surface
+// particle is already tangential, while the streak drawn for it points off the
+// surface -- sixteen thousand tails all bristling outward, which is exactly why
+// the render read as fur, or as fire, and never as a globe. The tail was
+// pointing along a force rather than along the path.
+//
+// Removing the radial component for particles that are ON the shell is what
+// draws great circles without any geometry: each streak lies along the sphere
+// and wraps it. The reference frame is a globe of lines that go AROUND, and the
+// alternative on the table -- generating actual great-circle geometry -- is a
+// second body of code answering a question this projection already answers.
+//
+// The interior keeps the full 3D curl. The interior is a network rather than a
+// surface, and flattening it onto anything would make it a second, smaller
+// shell.
+//
+// SHARED, LIKE flowSpeed AND FOR THE SAME REASON. The simulation integrates
+// this and every draw pass walks backwards along it; if the two ever disagree
+// the motion blur points somewhere the particle is not going, which is silent
+// and reads as a bad noise field rather than as a bug.
+vec3 flow(vec3 p, float time, float energy) {
+  vec3 v = curl(p, time) * flowSpeed(energy);
+  vec3 n = normalize(p + 1e-5);
+  float onShell = smoothstep(0.52, 0.80, length(p));
+  return mix(v, v - n * dot(v, n), onShell);
+}
+
 // A particle's role and home radius, derived from its texel rather than stored.
 //
 // The simulation state is ONE RGBA32F texel per particle -- xyz position, w

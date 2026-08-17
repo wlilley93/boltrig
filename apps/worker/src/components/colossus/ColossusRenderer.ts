@@ -63,6 +63,7 @@ export class ColossusRenderer {
   private scroll = 0;
   private ticker = tickerFor("standby");
   private tickerMode: ColossusStageState["mode"] = "standby";
+  private tickerTakeaway: string | null = null;
   private counter = 0;
   private counterGlow = 0;
   private readout = new Int32Array(READOUT_LEN);
@@ -125,11 +126,19 @@ export class ColossusRenderer {
     } else {
       this.bands.set(SILENT_BANDS);
     }
-    // The sign changes its sentence when the mode changes, and NOT otherwise:
-    // recompiling every update would reset the scroll and make the text stutter.
-    if (state.mode !== this.tickerMode) {
-      this.ticker = tickerFor(state.mode);
+    // The sign changes its sentence when the mode changes OR when he starts
+    // saying something else, and NOT otherwise: recompiling every update would
+    // reset the scroll and make the text stutter.
+    //
+    // The takeaway is part of the key rather than a second branch, because the
+    // two change together on the frame a reply starts -- mode goes to speaking
+    // and the phrase arrives in the same update, and two separate checks would
+    // compile the sentence twice.
+    const takeaway = state.takeaway ?? null;
+    if (state.mode !== this.tickerMode || takeaway !== this.tickerTakeaway) {
+      this.ticker = tickerFor(state.mode, takeaway);
       this.tickerMode = state.mode;
+      this.tickerTakeaway = takeaway;
     }
     const onset = typeof state.onset === "number" ? state.onset : 0;
     if (onset > 0.35) {

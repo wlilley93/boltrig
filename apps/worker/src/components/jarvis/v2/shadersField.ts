@@ -33,15 +33,26 @@ void main() {
   vec4 st = texelFetch(uState, tc, 0);
 
   vec3 p = st.xyz;
-  vec3 v = curl(p, uTime) * flowSpeed(uEnergy);
+  vec3 v = flow(p, uTime, uEnergy);
   vSpeed = clamp(length(v) * 0.55, 0.0, 1.0);
 
   // Fade in and out at the ends of life, so particles never pop.
   vFade = smoothstep(0.0, 0.18, st.w) * smoothstep(1.0, 0.72, st.w);
   vFade *= depthFade(p);
-  // The limb, so the field has a silhouette for the wheels to go around and a
-  // see-through middle. Without it the great circles floated in fur.
-  vFade *= 0.34 + 0.90 * limb(p);
+  // THE LIMB IS THE SILHOUETTE, and it has to be a hard one.
+  //
+  // At 0.34 + 0.90 * limb the edge was only 3.6x the middle, which is not
+  // enough contrast to carve a sphere out of sixteen thousand streaks: the
+  // render read as fur, or as fire, and never as a globe. The reference frame
+  // is a shell -- bright all round its edge and see-through through its
+  // centre, because the line of sight crosses far more of a shell at the rim
+  // than at the middle -- so the ratio wants to be an order of magnitude, not a
+  // factor of three.
+  //
+  // Cheaper and truer than adding geometry. The alternative on the table was
+  // drawing actual great circles, which is a second body of code answering a
+  // question this one line already answers.
+  vFade *= 0.12 + 1.30 * limb(p);
   // Embers: what has left the body glints. Everything still in it does not.
   // What has LEFT the body fades out of it. This deliberately brightened
   // escapees, which made the few particles outside the shell the most
@@ -113,6 +124,11 @@ void main() {
   vFade = smoothstep(uLinkRange, uLinkRange * 0.25, d);
   vFade *= min(smoothstep(0.0, 0.2, a.w), smoothstep(0.0, 0.2, b.w));
   vFade *= depthFade(p);
+  // The network takes the same silhouette as the streaks. Without this the web
+  // was the one pass with no limb, so it filled the see-through middle that
+  // every other pass had just been made to leave empty -- and a shell with a
+  // solid interior is a ball, not a globe.
+  vFade *= 0.25 + 1.15 * limb(p);
   vFade *= 1.0 + 3.6 * pulse(p) + 0.5 * uSwell;
   gl_Position = project(p, uAspect);
 }`;
