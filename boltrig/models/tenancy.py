@@ -44,9 +44,14 @@ class Organisation:
     """An organisation - the tenant boundary (D1).
 
     ``id`` IS the ``tenant_id``: there is exactly one organisation per tenant_id,
-    so RLS stays keyed on tenant_id. ``allow_own_ai_keys`` and
-    ``require_two_factor`` are org-wide policy flags read by later phases; both
-    default to the fail-closed / opt-in setting.
+    so RLS stays keyed on tenant_id. ``allow_own_ai_keys``,
+    ``allow_own_integration_credentials`` and ``require_two_factor`` are org-wide
+    policy flags; all default to the fail-closed / opt-in setting.
+
+    The two ``allow_own_*`` flags are deliberately separate. Letting a member
+    bring their own Anthropic key is a spending decision; letting them connect
+    their own Jira is an attribution one, and an org may reasonably want either
+    without the other.
     """
 
     id: TenantId  # == tenant_id (one org per tenant_id)
@@ -54,6 +59,7 @@ class Organisation:
     slug: str  # unique, url-safe handle
     settings: dict[str, Any] = field(default_factory=dict)
     allow_own_ai_keys: bool = False
+    allow_own_integration_credentials: bool = False
     require_two_factor: bool = False
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)

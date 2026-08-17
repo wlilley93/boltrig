@@ -31,6 +31,12 @@ INTEGRATION_CERTIFICATIONS = (
     "suspended",
 )
 INTEGRATION_HEALTH = ("pending", "ok", "degraded", "down", "revoked")
+# Credential scope. ``org`` is the shared connection every member falls back to;
+# ``user`` is a member's own, which wins for their own calls. ``ai_configs`` also
+# carries ``workspace`` and this deliberately does not: a workspace row would need
+# a live membership re-check at resolve time, and ``Principal.context()`` does not
+# set ``workspace_id``, so the connect path has no workspace to offer.
+INTEGRATION_SCOPE_LEVELS = ("org", "user")
 
 
 @dataclass
@@ -78,7 +84,24 @@ class IntegrationConnection:
     revoked_at: datetime | None = None
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)
+    # Appended rather than slotted in beside credential_owned so that every
+    # existing positional construction keeps working untouched.
+    level: str = "org"
+    scope_id: str = ""
 
     def __post_init__(self) -> None:
         if self.health not in INTEGRATION_HEALTH:
             raise ValueError("unsupported integration health")
+        if self.level not in INTEGRATION_SCOPE_LEVELS:
+            raise ValueError("unsupported integration credential scope level")
+        if self.level == "org":
+            # An org row's scope_id IS the tenant id -- the convention
+            # ai_configs documents. DERIVED here rather than demanded, for two
+            # reasons: every caller that predates scoping keeps building a valid
+            # org connection with no change, and the pair can never drift into a
+            # row that no lookup can find.
+            self.scope_id = self.tenant_id
+        elif not self.scope_id:
+            raise ValueError("a user-scoped integration connection needs a scope_id")
+        if self.level == "user" and not self.credential_owned:
+            raise ValueError("a user-scoped integration connection must own its credential")

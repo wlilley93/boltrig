@@ -30,6 +30,7 @@ from boltrig.store import Store
 from .integration_credentials import (
     resolve_integration_credential,
 )
+from .integration_scope import pick_connection
 from .run_scoped_credentials import (
     ADAPTER_BEARER_KIND as _ADAPTER_BEARER_KIND,
     HELD_CALL_KIND as HELD_CALL_KIND,
@@ -102,8 +103,30 @@ class CredentialResolver:
             self._adapter_cred[key] = cred_id
         return previous
 
-    async def has_adapter_credential_reference(self, tenant_id: str, adapter_id: str) -> bool:
-        """Report configured reference state without resolving secret material."""
+    async def has_adapter_credential_reference(
+        self, tenant_id: str, adapter_id: str, level: str = "org", scope_id: str = ""
+    ) -> bool:
+        """Report configured reference state without resolving secret material.
+
+        SCOPED, because this answer becomes a setup refusal: asking it
+        adapter-wide would refuse a member connecting their own credential on the
+        grounds that the ORG already has one, which is the exact case per-user
+        credentials exist to allow. The env/manifest binding is org-wide by
+        construction, so it only answers for the org scope.
+        """
+        if level != "org":
+            applicable = await self._store.list_applicable_integration_connections_for_adapter(
+                tenant_id, adapter_id, scope_id
+            )
+            connection = next(
+                (row for row in applicable if row.level == level and row.scope_id == scope_id),
+                None,
+            )
+            return bool(
+                connection
+                and connection.credential_ref
+                and await self._store.has_credential_ref(tenant_id, connection.credential_ref)
+            )
         cred_id = self._adapter_cred.get((tenant_id, adapter_id))
         if cred_id:
             # An explicit binding remains authoritative even when its backing
@@ -118,35 +141,63 @@ class CredentialResolver:
             and await self._store.has_credential_ref(tenant_id, connection.credential_ref)
         )
 
-    def unbind_adapter_credential(self, tenant_id: str, adapter_id: str, cred_id: str) -> bool:
+    def unbind_adapter_credential(
+        self, tenant_id: str, adapter_id: str, cred_id: str, level: str = "org"
+    ) -> bool:
         """Use ``unbind_adapter_credential`` to drop exactly the owned binding.
 
         The expected reference is part of the comparison so revoking an older
         connection can never detach a newer credential rotation.
+
+        The map it drops from is keyed by adapter alone and holds the ORG-wide
+        env/manifest binding, so revoking a USER connection must not reach it --
+        otherwise one member disconnecting would unbind the credential everybody
+        else is using. Uuid-suffixed ids make that unreachable today; this makes
+        it unreachable by construction.
         """
+        if level != "org":
+            return False
         key = (tenant_id, adapter_id)
         if self._adapter_cred.get(key) != cred_id:
             return False
         del self._adapter_cred[key]
         return True
 
-    async def resolve_for_adapter(self, tenant_id: str, adapter_id: str) -> Credential | None:
-        """Resolve the credential an adapter needs, or ``None`` if it needs none."""
+    async def resolve_for_adapter(
+        self, tenant_id: str, adapter_id: str, owner: str | None = None
+    ) -> Credential | None:
+        """Resolve the credential an adapter needs, or ``None`` if it needs none.
+
+        ``owner`` is the acting human (``InvocationContext.on_behalf_of``). When
+        they have connected their own credential for this adapter and the org
+        allows it, theirs is used; otherwise the org's connection serves, and
+        failing that the env/manifest binding. ``owner=None`` reproduces the
+        pre-scoping behaviour exactly, which is what every non-dispatch caller
+        still wants.
+        """
         configured_id = self._adapter_cred.get((tenant_id, adapter_id))
-        connection = await self._store.get_active_integration_connection_for_adapter(
-            tenant_id, adapter_id
-        )
+        connection = await pick_connection(self._store, tenant_id, adapter_id, owner)
         durable_id = connection.credential_ref if connection is not None else None
         if connection is not None and durable_id is None:
             raise CredentialResolution(
                 f"active integration connection has no credential reference for adapter "
                 f"'{adapter_id}'"
             )
-        if configured_id is not None and durable_id is not None and configured_id != durable_id:
-            raise CredentialResolution(
-                f"adapter '{adapter_id}' has conflicting credential references"
-            )
-        cred_id = configured_id or durable_id
+        if connection is not None and connection.level == "user":
+            # A member's own credential deliberately OVERRIDES the env/manifest
+            # service account. Comparing the two would report a conflict where
+            # the entire point is that this call runs as them, not as the org.
+            cred_id: str | None = durable_id
+        else:
+            if (
+                configured_id is not None
+                and durable_id is not None
+                and configured_id != durable_id
+            ):
+                raise CredentialResolution(
+                    f"adapter '{adapter_id}' has conflicting credential references"
+                )
+            cred_id = configured_id or durable_id
         if cred_id is None:
             return None  # adapter requires no credential (e.g. a local script)
         ref = await self._store.get_credential_ref(tenant_id, cred_id)

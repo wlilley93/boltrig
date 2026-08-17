@@ -82,6 +82,7 @@ def _tenancy_specs() -> list[VerbSpec]:
                 "slug": _STRING,
                 "settings": _OBJ,
                 "allow_own_ai_keys": _BOOL,
+                "allow_own_integration_credentials": _BOOL,
                 "require_two_factor": _BOOL,
             },
             (),

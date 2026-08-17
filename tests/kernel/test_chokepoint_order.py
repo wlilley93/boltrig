@@ -111,9 +111,9 @@ class RecordingResolver:
         self._inner = inner
         self.resolutions = 0
 
-    async def resolve_for_adapter(self, tenant_id, adapter_id):
+    async def resolve_for_adapter(self, tenant_id, adapter_id, owner=None):
         self.resolutions += 1
-        return await self._inner.resolve_for_adapter(tenant_id, adapter_id)
+        return await self._inner.resolve_for_adapter(tenant_id, adapter_id, owner)
 
     async def resolve_run_scoped_params(self, tenant_id, params, *, run_id=None, owner=None):
         # SEC-181 run-scoped param references resolve at the same stage; they

@@ -111,6 +111,10 @@ DECLARE
     'device_enrollments','devices','device_roots','device_leases',
     'camera_bindings','camera_leases',
     'integration_catalogue','integration_connections',
+    -- The trajectory stream (0077). Verbatim prompts, tool payloads and results,
+    -- tenant_id-scoped like the rest; the migration created the table without a
+    -- policy and this is where that is corrected.
+    'trajectory_events',
     -- Org -> workspace tenancy ([2026] VJS-COUNTY 8). These three carry a real
     -- tenant_id column, so the generic tenant_id policy binds them. organisations
     -- is handled separately below (its isolation column is id, which IS tenant_id).

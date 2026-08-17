@@ -660,7 +660,7 @@ class Dispatcher:
         if adapter is None:
             return self._degrade_or_fail(verb_def, reason="adapter_not_loaded")
         credential = await self._creds.resolve_for_adapter(
-            context.tenant_id, binding.target_ref
+            context.tenant_id, binding.target_ref, context.on_behalf_of
         )
         # Permission-parity passthrough: when the chat turn sealed a per-run bearer
         # for THIS adapter (keyed by run id + target_ref), it overrides the static
