@@ -1,5 +1,13 @@
 # Handover — characters, voices and bodies, 2026-08-17
 
+> **Superseded by `4b392a21`, later the same day.** Everything under "Outstanding
+> work" below has been closed except two items, both waiting on something only
+> the account holder can supply — Familiar's register audio needs Fish Audio API
+> credit, and the deployed voice container needs its swap authorising. Each is
+> marked in place. The rest of the document is left as it was written: it is the
+> record of how the work got here, and the reasoning in it is still the reasoning.
+
+
 Branch `feat/real-brand-mark` in `~/boltrig-fixtree` on the beelink
 (`jellytot@192.168.50.2:24222`). Three commits landed and three static deploys
 went to `dev.boltrig.io`, each verified by digest match and three 200s.
@@ -105,6 +113,13 @@ the next session should do, because several of them interact.
 2. **`FACET_STRIDE` and `uSize: 0.030`** — nearly twice Jarvis's shard size,
    also untouched.
 
+> **CLOSED.** The harness exists (`apps/worker/tests/visual/render-bodies.mjs`),
+> both bodies were judged by eye against it, and both were retuned: the gain
+> ORDER was inverted in each, and `flow()` in the shared GLSL chunk now strips
+> the radial component for particles on the shell, so streaks lie along the
+> sphere instead of bristling off it. That is what turned Jarvis from fur into a
+> globe, and it was the reason neither body read as one.
+
 ### The gap that makes all of the above slow
 
 **There is no offscreen render harness in this tree.** The plan refers to
@@ -206,6 +221,8 @@ carrier. `voices/colossus.eq.npy` is deleted.
    `test_the_bundle_carries_its_document_section_VERBATIM` to need its expected
    text updated in the same change.
 
+   > **DONE.** 27 edits by judgement across Familiar, Jarvis and Ultron. Colossus is deliberately exempt: his own shipped prompt instructs the model to avoid contractions, so contracting it would break its own instruction on the same page, and his formality is the character. The VERBATIM test needed no expected-text update — it derives the expectation from the document, so re-syncing each bundle from its section was the whole change.
+
 ### Asked for, partly done
 
 2. **Bella's ASMR voice.** Joi v2 is installed as
@@ -233,6 +250,14 @@ carrier. `voices/colossus.eq.npy` is deleted.
 5. **Joi v2 into the me-lora voicebox.** Cloned; voicebox reads
    `~/me-lora-voice-refs/<name>/<register>/` and the entry was never created.
 
+   > **DONE.** Filed as `bella/asmr` — the only directory name that clones to `bella-asmr` — with a hand-written manifest, because `make_manifests.py` has no LINES for a register that is really a second clone. The stale `joi` tree was byte-identical to `bella` across all eight registers and pointed at clone targets that do not exist, so it is retired rather than left to be trusted.
+
+   > **BLOCKED, on billing.** All 48 lines are written and committed in pocket-voice's `make_registers.py`, in her own register rather than Jarvis's — hers are about the person's work, his report kernel load, and a clone inherits the subject matter permanently. Fish Audio answers 402 "Insufficient API credit" on every model including the free tier, with the key authenticating, so it is a billing state. With credit: `./make_registers.py --char familiar`, then `./make_manifests.py --char familiar`, then audition and clone the picks.
+
+   > **DONE.** `CharacterTurnInput.speechTakeaway` carries one bounded phrase, and it is a QUOTATION rather than a summary — the opening clause of what he is saying, which cannot misreport the reply. Every other field in that interface stays a fact about the turn.
+
+   > **DONE.** `bella-asmr` is recorded in her constitution as the secondary voice, with its register and the mechanism that reaches it, and it is deliberately NOT declared in `register.ts` — a declared voice is one the host may choose, and this one is chosen by the user. Both clip characters gained a `voiceIds` passthrough on the way: Maya's blurb had claimed a voice since she was written and eight clones sat where nothing could reach them.
+
 ### Found on the way
 
 6. **The desktop app icons are a THIRD variant of the mark.**
@@ -254,6 +279,14 @@ carrier. `voices/colossus.eq.npy` is deleted.
    copy focused on the user's choices` failed once in a full run and passed in
    isolation and in every subsequent full run. Not investigated. Cross-file
    interaction rather than an ordering bug, most likely.
+
+   > **FIXED**, and the mechanism is written into the entry above.
+
+   > **DONE.** `me-lora/tools/voice-mixer`, pushed. Its DSP was worse off than the mixer: `octave.py`, `vocoder.py`, `matcheq.py` and `wire_eq.py` existed only in an ephemeral `/private/tmp` session scratchpad and nowhere else on any machine.
+
+   > **CHECKED, AND IT WAS WORSE THAN THAT.** She 404'd, and so did Ultron and Colossus — only Jarvis spoke. The image predated the manifest change that moved her off the `vera` catalog voice, and its `server.py` predated the chain entirely, so Colossus's whole voice would not have run either. `boltrig/pocket-voice:1.2` is built and on jellytot-prod with all four voices, ffmpeg, scipy and `chain.py`; verified by a throwaway container serving all four and logging the chain. **The container swap itself is still owed.**
+
+   > **DONE.** Regenerated from `public/favicon.svg`, so they cannot drift from it. Not release work after all: they are source assets that take effect at the next desktop build, and the inset geometry of the replaced set was kept — measured off it, because a full-bleed icon reads as oversized on an application grid.
 
    Since fixed, and it was not cross-file: vitest isolates by fork, so no other
    file could reach it. `await findByText("Add vision")` was satisfied by a
