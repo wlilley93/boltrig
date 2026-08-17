@@ -98,7 +98,12 @@ The preview unit is `boltrig-dev-preview.service`, serving
 `/home/jellytot/boltrig-dev/dist` on `127.0.0.1:1420` behind Caddy. Do not move
 this workload to `beelink-prod`, CV/opbox, or a personal Ollama/M1 host. The
 public-product gate must remain green: provider configuration is BYO Bifrost,
-and only Familiar and Jarvis ship as companions.
+and every character the stock path registers is a bundle in this repository
+declaring `ships: true`. That is now four -- Familiar, Jarvis, Ultron and
+Colossus. The gate no longer holds a hardcoded list, because the hardcoded one
+went stale twice without anyone noticing and a gate that is always red protects
+nothing; what it refuses is a registration with no shipping bundle behind it,
+which is the leak the list existed to catch.
 
 Build locally, transfer into a new timestamped `dist.candidate-*` directory,
 and compare a deterministic relative-path/content digest before promotion. A
