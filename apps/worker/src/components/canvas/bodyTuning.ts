@@ -336,6 +336,11 @@ export interface UltronTuning {
    */
   /** How the voice reverberates. See JarvisTuning.reverb. */
   reverb: readonly [speed: number, spacing: number, decay: number, reach: number];
+  /** The iris at the heart of the cloud. See JarvisTuning.irisGain. */
+  irisGain: EnergyRamp;
+  irisRadius: readonly [inner: number, outer: number];
+  irisFil: readonly [lit: number, width: number];
+  irisFlow: readonly [speed: number, contrast: number];
   /**
    * How far the three bands reach along their own axes.
    *
@@ -344,6 +349,16 @@ export interface UltronTuning {
    * silhouette as much as by colour.
    */
   petal: number;
+  /**
+   * How far the mass departs from a sphere, and how fast that shape churns.
+   *
+   * The reference is not an orb: it is a sprawling irregular cloud with lobes and
+   * voids, and a spherical silhouette is the single thing that most makes a body
+   * read as a ball of particles rather than as a mind. Held apart from `petal`
+   * because they are different shapes -- petal grows regular arms round an iris,
+   * this makes the outline itself irregular.
+   */
+  cloud: readonly [amount: number, churn: number];
   veinLimb: LimbMix;
   crackLimb: LimbMix;
   facetLimb: LimbMix;
@@ -411,7 +426,14 @@ export const ULTRON_TUNING: UltronTuning = {
   core: [0.13, 0.17],
   eye: [1, 1, 0, 60],
   reverb: [1.7, 0.26, 0.8, 1.4],
+  // Tighter than Jarvis's and dimmer: his is the subject of the frame, this is the
+  // thing at the middle of a much larger mass.
+  irisGain: [0.5, 0.32],
+  irisRadius: [0.04, 0.19],
+  irisFil: [0.8, 0.004],
+  irisFlow: [0.16, 0.7],
   petal: 0.3,
+  cloud: [0.34, 1.0],
   veinLimb: [0.30, 0.95],
   crackLimb: [0.36, 0.88],
   facetLimb: [0.28, 0.95],

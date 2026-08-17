@@ -214,8 +214,43 @@ bool isMigrating(vec2 uv) {
 // sphere. The high power on |cos| is what makes the arms narrow -- a low one
 // gives a bumpy ball, which is the failure this exists to avoid. The bands are
 // phase-offset from each other so the arms interleave instead of stacking.
+/**
+ * x how far the surface departs from a sphere, y how fast the shape churns.
+ *
+ * Zero leaves shapedRadius byte-identical, which is what keeps a body that wants
+ * a sphere unchanged by this existing -- the same rule uOuter and uLayerPace were
+ * added under.
+ */
+uniform vec2 uCloud;
+
+/**
+ * A CLOUD IS NOT A SPHERE WITH BUMPS, and the difference is where the noise is
+ * sampled.
+ *
+ * Sampling on the particle's POSITION displaces each particle independently and
+ * gives a fuzzy ball -- the silhouette stays round and only the surface gets
+ * noisy. Sampling on the DIRECTION makes the displacement a property of where on
+ * the surface you are, so every particle along one bearing moves together and the
+ * outline itself grows lobes and hollows. That is the whole trick.
+ *
+ * Two octaves: the first carries the large lobes that give the mass its shape, the
+ * second breaks their edges up so they do not read as three smooth balloons. The
+ * clocks differ so the shape churns rather than rotating rigidly.
+ */
+float cloudy(vec3 n, float time) {
+  vec3 broad = curl(n * 1.9, time * 0.05);
+  vec3 fine = curl(n * 4.7 + vec3(11.0, 3.0, 7.0), time * 0.09);
+  return clamp(broad.x * 0.72 + fine.y * 0.38, -1.0, 1.0);
+}
+
 float shapedRadius(vec2 uv, vec3 p, float time, float scale, float petal) {
   float base = homeRadius(uv, time) * scale;
+  // Applied to the BASE, before the petal branch, so a cloud-formed body does not
+  // have to take the petal arms as well: the two are independent shapes and a body
+  // may want either, both or neither.
+  if (uCloud.x > 0.0) {
+    base *= 1.0 + uCloud.x * cloudy(normalize(p + 1e-5), time * uCloud.y);
+  }
   if (petal <= 0.0) return base;
 
   float band = floor(hash(vec3(uv * 33.7, 4.0)) * 3.0);      // 0, 1 or 2

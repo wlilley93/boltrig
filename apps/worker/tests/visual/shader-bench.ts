@@ -126,6 +126,7 @@ const LEGEND: Record<string, readonly string[]> = {
   crackRange: ["max crack length"],
   crackLimb: ["face-on keep", "rim boost"],
   petal: ["bloom lobes"],
+  cloud: ["how un-spherical", "shape churn SPEED"],
   ...Object.fromEntries(PHENOTYPE_SCALARS
     .map((k) => [`pheno.${k}`, ["0 = none, 1 = full"]])),
 };
@@ -166,6 +167,7 @@ const RANGE: Record<string, [number, number, number]> = {
   facetSize: [0.002, 0.06, 0.001],
   shardStride: [1, 64, 1],
   petal: [0, 1, 0.01],
+  cloud: [0, 1.2, 0.02],
   // Down to a standstill, because the complaint was that it is far too fast and
   // the shipped value is 0.26 -- a slider starting at 0.2 could not answer it.
   swirl: [0, 1.2, 0.005],
@@ -625,7 +627,7 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
     "facetGain", "facetSize", "facetSpin", "facetLimb",
   ] },
   { title: "6 · The eye — core and composite", fields: [
-    "core", "eye", "starburst", "petal",
+    "core", "eye", "starburst", "petal", "cloud",
   ] },
   { title: "6 · Voice reverberation — how speech crosses the body", fields: [
     "reverb",
@@ -694,6 +696,7 @@ const TITLES: Record<string, string> = {
   reverb: "How the voice rings through the body",
   starburst: "Horizontal flare across the middle",
   petal: "How many bloom lobes",
+  cloud: "How cloud-formed the mass is",
   ...Object.fromEntries(Object.entries(PHENO_TITLES)
     .map(([k, v]) => [`pheno.${k}`, v])),
 };

@@ -30,7 +30,7 @@ import { DRAW_FRAG, DRAW_VERT, LINK_FRAG, LINK_VERT } from "./shadersField";
 import { QUAD_VERT, SIM_FRAG } from "../../canvas/shadersSim";
 import { LINK_SEGMENTS } from "./shadersField";
 import { GLYPH_FRAG, GLYPH_VERT, GLYPH_VERTS } from "./shadersGlyph";
-import { IRIS_FRAG, IRIS_VERT, IRIS_VERTS } from "./shadersIris";
+import { IRIS_FRAG, IRIS_VERT, IRIS_VERTS } from "../../canvas/shadersIris";
 import {
   RING_FRAG,
   RING_SEGMENTS,

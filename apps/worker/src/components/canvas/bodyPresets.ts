@@ -298,6 +298,11 @@ export const ULTRON_ARRIVAL: UltronTuning = {
   // value, so his centre is exactly what it was.
   eye: [1, 1, 0, 60],
   reverb: [0.9, 0.4, 1.2, 1.4],
+  irisGain: [0, 0],
+  irisRadius: [0.04, 0.19],
+  irisFil: [0.8, 0.004],
+  irisFlow: [0.16, 0.7],
+  cloud: [0.62, 1.6],
   petal: 0.3,
   veinLimb: [0.30, 0.95],
   crackLimb: [0.36, 0.88],
@@ -330,6 +335,9 @@ export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
     core: [0.07, 0.09],
     outerShell: [1.45, 0.2, 0.2],
     reverb: [0.8, 0.44, 0.48, 1.34],
+    irisGain: [0.3, 0.14],
+    irisFlow: [0.06, 0.5],
+    cloud: [0.3, 0.7],
   },
   listening: {
     dendriteGain: [1.05, 0.5],
@@ -344,6 +352,9 @@ export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
     core: [0.1, 0.13],
     outerShell: [1.45, 0.22, 0.34],
     reverb: [1.2, 0.36, 0.66, 1.36],
+    irisGain: [0.46, 0.28],
+    irisFlow: [0.12, 0.62],
+    cloud: [0.32, 0.9],
   },
   // THE BUSIEST STATE. Every pass is up, the crystal turns fastest, the pathways
   // reach furthest and wander widest, the fracture lines spread.
@@ -359,6 +370,9 @@ export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
     facetGain: [0.36, 0.26],
     core: [0.16, 0.24],
     reverb: [2.35, 0.16, 0.42, 1.54],
+    irisGain: [0.6, 0.4],
+    irisFlow: [0.18, 0.7],
+    cloud: [0.36, 1.1],
   },
   // Executing rather than searching: facets and fractures lead, the neurons hold.
   working: {
@@ -374,6 +388,9 @@ export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
     facetSize: 0.024,
     core: [0.14, 0.18],
     reverb: [2.05, 0.26, 0.86, 1.38],
+    irisGain: [0.55, 0.34],
+    irisFlow: [0.2, 0.72],
+    cloud: [0.38, 1.2],
   },
   // STRUCTURED, AND RINGING. Calmer in its parts than thinking -- an even bead
   // train, a steady crystal -- while the reverb's slow decay carries the voice

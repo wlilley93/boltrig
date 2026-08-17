@@ -1,4 +1,4 @@
-import { FIELD_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../../canvas/glslCommon";
+import { FIELD_GLSL, PROJECT_GLSL, PULSE_GLSL } from "./glslCommon";
 
 /**
  * THE IRIS, which replaces the neural pathways at the centre.
@@ -19,6 +19,11 @@ import { FIELD_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../../canvas/glslCommon";
  * Screen-polar on purpose, like the glyph layers and unlike the wheels: an iris
  * belongs to the plane you look at it in. Filaments tumbling through 3D
  * orientations would read as spokes on a wheel, which is the wheels' job.
+ *
+ * IN canvas/ RATHER THAN UNDER A BODY. It takes uWarm and uHot and knows nothing
+ * about whose palette they are, so both Jarvis and Ultron drive it. Leaving it
+ * under jarvis/v2 and importing across would have asserted a dependency between
+ * two characters that does not exist.
  */
 
 /** Filaments. Enough that the eye reads texture rather than counting spokes. */

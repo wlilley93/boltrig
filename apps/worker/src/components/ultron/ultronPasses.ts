@@ -25,6 +25,7 @@ import {
   type FloatUniforms,
 } from "../canvas/glResources";
 import { ULTRON_TUNING, pulsedCore, ramp, type UltronTuning } from "../canvas/bodyTuning";
+import { IRIS_FRAG, IRIS_VERT, IRIS_VERTS } from "../canvas/shadersIris";
 import { BLOOM_FRAG, COMPOSITE_FRAG } from "../canvas/shadersPost";
 import { QUAD_VERT, SIM_FRAG } from "../canvas/shadersSim";
 import {
@@ -94,6 +95,7 @@ export class UltronPasses {
       facet: createProgram(gl, FACET_VERT, FACET_FRAG),
       bloom: createProgram(gl, QUAD_VERT, BLOOM_FRAG),
       comp: createProgram(gl, QUAD_VERT, COMPOSITE_FRAG),
+      iris: createProgram(gl, IRIS_VERT, IRIS_FRAG),
     };
 
     const seed = seedParticles(PARTICLES);
@@ -173,6 +175,7 @@ export class UltronPasses {
       // and keeps the plain shell. The value and its reasoning now live in
       // canvas/bodyTuning, so the bench can move it while you watch.
       uPetal: tuning.petal,
+      uCloud: tuning.cloud,
       uSwirl: tuning.swirl,
       // Ultron has ONE particle layer. Zero is the no-change offset, set
       // explicitly rather than left to default so the intent is on the page: he
@@ -231,6 +234,29 @@ export class UltronPasses {
       uLimb: tuning.veinLimb,
     }, {});
     gl.drawArrays(gl.LINES, 0, DENDRITE_TRUNKS * DENDRITE_SEGMENTS * 2);
+
+    // ------------------------------------------------------------- THE IRIS
+    //
+    // He has one for the same reason Jarvis does: filaments running radially out
+    // of the middle say "this is the centre" from any angle, and without that the
+    // dendrites leave the soma in four directions and the eye has nothing to fix
+    // on. Concentrated and small -- his brief is a crystalline cloud, so the iris
+    // is the thing at the heart of the cloud, not the subject.
+    //
+    // Drawn FIRST, so the neurons and the crystal composite over it rather than
+    // being hidden behind it.
+    const iris = this.progs.iris;
+    gl.useProgram(iris);
+    setUniforms(gl, iris, {
+      ...shared,
+      uGain: ramp(tuning.irisGain, d.energy),
+      uIrisRadius: tuning.irisRadius,
+      uIrisFil: tuning.irisFil,
+      uIrisFlow: tuning.irisFlow,
+      uRadius: d.radius,
+      uBands: d.bands,
+    });
+    gl.drawArrays(gl.TRIANGLES, 0, IRIS_VERTS);
 
     const vein = this.progs.vein;
     gl.useProgram(vein);
