@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-16T20:51:43.463Z",
+  "capturedAt": "2026-08-17T01:04:18.666Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,12 +16,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "942645a8434218365f5f758122fdcf0fa316a6baceab24a07891a257e52c77e7",
-    "digestAfterCapture": "942645a8434218365f5f758122fdcf0fa316a6baceab24a07891a257e52c77e7",
+    "digestBeforeCapture": "ce03f07529960aeaa43eec9766866d2697612ba2634b7ce098ad5b56e3d471c3",
+    "digestAfterCapture": "ce03f07529960aeaa43eec9766866d2697612ba2634b7ce098ad5b56e3d471c3",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/real-brand-mark",
-    "head": "ed41b79162736f1600d5c3869a7393da6b818634",
-    "dirty": false
+    "head": "e6de38037bbe2d0a67af1457fa14822a5d1e6950",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
@@ -103,7 +103,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -195,7 +195,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

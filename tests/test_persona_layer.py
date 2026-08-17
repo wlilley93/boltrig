@@ -73,7 +73,7 @@ class TestOrdering:
 class TestShippedConstitutions:
     """The bundles carry a runtime prompt, not a design document."""
 
-    @pytest.mark.parametrize("name", ["jarvis", "ultron"])
+    @pytest.mark.parametrize("name", ["jarvis", "ultron", "colossus"])
     def test_the_bundle_carries_a_system_prompt(self, name):
         bundle = json.loads((BUNDLES / name / "character.json").read_text())
         prompts = bundle.get("prompts")
@@ -81,13 +81,15 @@ class TestShippedConstitutions:
         assert prompts["system"].strip()
         assert prompts["persona"].strip()
 
-    @pytest.mark.parametrize("name", ["jarvis", "ultron"])
+    @pytest.mark.parametrize("name", ["jarvis", "ultron", "colossus"])
     def test_the_prompt_is_the_compact_one(self, name):
         """A constitution is design authority; a system prompt is a runtime cost.
 
-        The long documents live in docs/characters. What ships is the compact
-        core prompt each of them ends with, because the bundle's text is paid
-        for on every turn.
+        What ships is the compact core prompt each constitution ends with,
+        because the bundle's text is paid for on every turn. The long documents
+        belong in docs/characters -- see the README there, which records that
+        only Colossus's is actually present and treats the other two as a gap
+        rather than pretending otherwise.
         """
         prompts = json.loads((BUNDLES / name / "character.json").read_text())["prompts"]
         assert len(prompts["system"]) < 4000, "the full constitution belongs in docs"

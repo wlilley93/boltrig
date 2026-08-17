@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import colossusBundle from "../src/bundles/colossus/character.json";
 import familiarBundle from "../src/bundles/familiar/character.json";
 import jarvisBundle from "../src/bundles/jarvis/character.json";
 import ultronBundle from "../src/bundles/ultron/character.json";
@@ -31,6 +32,13 @@ const HAS_ITS_OWN_INNER_LIFE = {
   // state would attribute the machine's feelings to a creature that cannot see
   // the machine.
   familiar: familiarBundle,
+  // And he is excluded for the OPPOSITE reason, which is why the two sit in the
+  // same map and mean different things. She is excluded because she has an
+  // inner life the appraisal engine cannot see; he is excluded because he has
+  // one register. His constitution is explicit that his calm is not a
+  // performance and that he has no competing impulse to suppress, so there is
+  // no irritated variant of a stability report to colour a panel with.
+  colossus: colossusBundle,
 } as const;
 
 describe("the phenotype contract, per character", () => {
@@ -56,7 +64,7 @@ describe("the phenotype contract, per character", () => {
       ...Object.keys(READS_THE_MACHINE_MOOD),
       ...Object.keys(HAS_ITS_OWN_INNER_LIFE),
     ]);
-    const shipped = [familiarBundle, jarvisBundle, ultronBundle]
+    const shipped = [familiarBundle, jarvisBundle, ultronBundle, colossusBundle]
       .map((bundle) => (bundle as { id: string }).id);
     expect([...shipped].sort()).toEqual([...decided].sort());
   });

@@ -44,6 +44,7 @@ import {
   DEFAULT_SKIN,
   loadSkin,
 } from "../character";
+import colossusBundle from "../bundles/colossus/character.json";
 import familiarBundle from "../bundles/familiar/character.json";
 import ultronBundle from "../bundles/ultron/character.json";
 import jarvisBundle from "../bundles/jarvis/character.json";
@@ -60,6 +61,9 @@ import { UNIFORMS as SHADER_UNIFORMS } from "./familiar/FamiliarWebGLRenderer";
 import { UNIFORMS as JARVIS_UNIFORMS } from "./jarvis/JarvisRenderer";
 import { JarvisStage } from "./jarvis/JarvisStage";
 import { jarvisStateFromTurn } from "./jarvis/JarvisState";
+import { UNIFORMS as COLOSSUS_UNIFORMS } from "./colossus/ColossusRenderer";
+import { ColossusStage } from "./colossus/ColossusStage";
+import { colossusStateFromTurn } from "./colossus/ColossusState";
 import { UltronStage } from "./ultron/UltronStage";
 import { ultronStateFromTurn } from "./ultron/UltronState";
 
@@ -307,13 +311,47 @@ const ULTRON_SOURCE: CharacterCanvasSource = {
  */
 const ULTRON: Character = characterFromBundle(ultronBundle, [ULTRON_SOURCE]);
 
+/**
+ * Colossus's canvas source -- a FOURTH, and the first that is not a sphere.
+ *
+ * The other three sources differ in which channels they drive; this one differs
+ * in what it draws at all. There is no particle simulation behind it and no
+ * float extension: a lamp's brightness is a closed-form function of position
+ * and time, so his body is one fullscreen pass, a glyph atlas and a bloom.
+ *
+ * He drives no phenotype, no budgets, no work board and no readout of the
+ * machine's state. What he drives is TEXT -- a ticker buffer of glyph ids and a
+ * scroll offset -- which no other source here can supply, and pointing his
+ * manifest at one of theirs would be refused by assertUniforms.
+ */
+const COLOSSUS_SOURCE: CharacterCanvasSource = {
+  id: "boltrig.canvas.colossus",
+  type: "shader",
+  supplies: COLOSSUS_UNIFORMS,
+  render: ({ input, mode }) =>
+    createElement(ColossusStage, {
+      highResolution: mode === "voice",
+      state: colossusStateFromTurn(input),
+      suspended: mode === "minimised",
+    }),
+};
+
+/**
+ * Colossus, from his bundle like the other three. His manifest OMITS the
+ * phenotype block, which is the same encoding Familiar uses and the opposite
+ * reason: she has an inner life the appraisal engine cannot see, and he has one
+ * register. He ships, so the stock path registers him.
+ */
+const COLOSSUS: Character = characterFromBundle(colossusBundle, [COLOSSUS_SOURCE]);
+
 registerCharacter(FAMILIAR);
 registerCharacter(JARVIS);
 registerCharacter(ULTRON);
+registerCharacter(COLOSSUS);
 
-// Published web and desktop builds contain exactly the two supported bodies
+// Published web and desktop builds contain exactly the four supported bodies
 // above. Do not use a bundler directory glob here: Vite emits every matched companion
 // as a production chunk even when the surrounding branch is DEV-only. A local
 // developer can import a companion's register.ts explicitly in a dev harness
 // and call registerCharacter, while the stock product never discovers or
-// bundles a third body.
+// bundles a body it does not ship.

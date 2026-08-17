@@ -63,7 +63,9 @@ def _looks_secret(key: str) -> bool:
 
 
 def bound_payload(value: Any, *, depth: int = 0) -> Any:
-    """Cap and redact, recursively. Total function: never raises on odd input.
+    """``bound_payload`` caps and redacts, recursively.
+
+    Total function: it never raises on odd input.
 
     Depth-limited because a tool result can be arbitrarily nested and a
     recorder that blows the stack has failed at its one job.
@@ -111,7 +113,7 @@ class TrajectoryRecorder:
         kind: TrajectoryKind,
         payload: dict[str, Any],
     ) -> None:
-        """Append one row. Never raises into the caller.
+        """``record`` appends one row, and never raises into the caller.
 
         A run with no id is not recorded rather than being filed under a
         placeholder: a trajectory is per run, and rows that belong to "unknown"

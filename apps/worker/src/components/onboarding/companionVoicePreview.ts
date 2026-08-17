@@ -29,6 +29,11 @@ const CLIPS: Record<string, readonly string[]> = {
     "/companion/ultron-2.wav",
     "/companion/ultron-3.wav",
   ],
+  colossus: [
+    "/companion/colossus-1.wav",
+    "/companion/colossus-2.wav",
+    "/companion/colossus-3.wav",
+  ],
 };
 
 /** Per-companion, so walking to Jarvis and back does not replay Familiar's first line. */

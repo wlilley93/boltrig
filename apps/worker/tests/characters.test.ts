@@ -16,9 +16,9 @@ describe("the character registry", () => {
     expect(characterFor("familiar").readsPhenotype).toBe(false);
   });
 
-  it("ships exactly the three stock bodies through the production plugin join", () => {
+  it("ships exactly the four stock bodies through the production plugin join", () => {
     expect(listCharacters().map((c) => c.id).sort())
-      .toEqual(["familiar", "jarvis", "ultron"]);
+      .toEqual(["colossus", "familiar", "jarvis", "ultron"]);
   });
 
   // Jarvis and Ultron are SEPARATE CHARACTERS, not one with two skins, and the

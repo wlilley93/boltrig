@@ -97,6 +97,7 @@
 .companion-art { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; background: transparent; }
 .companion-card[data-companion="familiar"] .familiar-stage { width: min(300px, 62%); margin-bottom: 84px; }
 .companion-card[data-companion="jarvis"] .jarvis-stage,
+.companion-card[data-companion="colossus"] .colossus-stage,
 .companion-card[data-companion="ultron"] .ultron-stage { position: absolute; inset: 0; width: 100%; height: 100%; animation: none; }
 .companion-copy { position: absolute; inset: auto 0 0 0; display: grid; gap: 6px; padding: 40px 20px 20px; border: 0; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--card-2) 88%, transparent) 46%); }
 .companion-copy strong { font-size: 18px; letter-spacing: -.025em; }
@@ -149,6 +150,26 @@
 }
 .companion-card[data-companion="jarvis"] .companion-copy > span { color: #b8b8c1; }
 .companion-card[data-companion="jarvis"] .companion-copy small { color: #85858f; }
+
+/* The darkest card of the four, because his panel is the darkest body: the
+ * reference frames are near-black with a scatter of lamps, and any lift behind
+ * them shows as a grey rectangle around the sign. The copy warms toward amber
+ * so the text belongs to the same instrument rather than sitting on top of it.
+ *
+ * MOBILE: identical, and it needs no breakpoint. The two rules below are colour
+ * only, and the stage rule above is the same absolute fill both shells already
+ * give Jarvis and Ultron -- the panel derives its lattice from the host's
+ * aspect at every resize, so a narrower card simply shows fewer characters. */
+.companion-card[data-companion="colossus"] {
+  color: #f8ede0;
+  background: linear-gradient(180deg, #000 0%, #060402 100%);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 5%) inset, 0 20px 48px rgb(0 0 0 / 34%);
+}
+.companion-card[data-companion="colossus"] .companion-copy {
+  background: linear-gradient(180deg, transparent, rgb(0 0 0 / 94%) 46%);
+}
+.companion-card[data-companion="colossus"] .companion-copy > span { color: #d9c2a4; }
+.companion-card[data-companion="colossus"] .companion-copy small { color: #93795c; }
 
 /* The card on screen IS the selection, so there is no selected/unselected pair
  * left to distinguish -- the accent ring that used to mark the chosen card of
