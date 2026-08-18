@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T13:48:50.119Z",
+  "capturedAt": "2026-08-18T14:42:30.485Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,12 +16,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "0fbbfcb4679254564e91cbaa9634db100fbcf90c19d491a8ff488b85bb9862c0",
-    "digestAfterCapture": "0fbbfcb4679254564e91cbaa9634db100fbcf90c19d491a8ff488b85bb9862c0",
+    "digestBeforeCapture": "ae1f86c107d262d4cd590075d9d2e0cb34a18eb19081fcb27c9319852c3ada2e",
+    "digestAfterCapture": "ae1f86c107d262d4cd590075d9d2e0cb34a18eb19081fcb27c9319852c3ada2e",
     "sourceUnchangedDuringCapture": true,
-    "branch": "fix/bifrost-provider-picker",
-    "head": "1e9c305d921f4f77155db9988743dcac79276ef3",
-    "dirty": false
+    "branch": "salvage/voice-tone",
+    "head": "97dee81468986aed63d67204a83891289f77d349",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
@@ -290,7 +290,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
