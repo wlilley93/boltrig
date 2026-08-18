@@ -4,7 +4,8 @@
 aiohttp==3.14.3
 # 6.13.3 was itself an override, and upstream has since disclosed four more
 # advisories against it (CVE-2026-59935-59938 fixed across 6.14.0-6.14.2, then
-# CVE-2026-71852/71870 fixed in 6.15.0). Taking the highest fixed release.
+# CVE-2026-71852/71870 fixed in 6.15.0). Taking the highest fixed release, now
+# 6.16.1; the CVEs listed are the reason the override exists, not its ceiling.
 pypdf==6.16.1
 click==8.4.2
 pillow==12.3.0
