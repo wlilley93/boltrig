@@ -222,6 +222,35 @@ def test_an_org_and_a_user_connection_coexist_but_a_scope_cannot_duplicate():
 
 
 @pytest.mark.invariant("FR-INTCRED-02")
+def test_the_model_refuses_a_user_row_that_could_alias_or_borrow():
+    """Two model invariants the layers above quietly rely on.
+
+    The store's applicable-connections query passes `owner or ""` and so asks
+    for scope_id='' when there is no owner; that is safe only because a user row
+    can never HAVE an empty scope_id. And a user row pointing at a credential it
+    does not own would let a member borrow the org's under their own
+    attribution -- the audit would record the call as theirs.
+    """
+    with pytest.raises(ValueError):
+        IntegrationConnection(
+            id="c", tenant_id=T, integration_id="i", adapter_id=ADAPTER,
+            label="l", credential_ref="r", credential_owned=True,
+            level="user", scope_id="",
+        )
+    with pytest.raises(ValueError):
+        IntegrationConnection(
+            id="c", tenant_id=T, integration_id="i", adapter_id=ADAPTER,
+            label="l", credential_ref="r", credential_owned=False,
+            level="user", scope_id="alice",
+        )
+    # An org row still derives its scope rather than demanding one, so every
+    # caller predating scoping keeps constructing a valid connection untouched.
+    assert IntegrationConnection(
+        id="c", tenant_id=T, integration_id="i", adapter_id=ADAPTER, label="l",
+    ).scope_id == T
+
+
+@pytest.mark.invariant("FR-INTCRED-02")
 def test_the_env_manifest_binding_answers_for_the_org():
     """scope_of maps "no connection row" onto the org, because a manifest
     binding is org-wide by construction and has no other scope to be."""

@@ -1664,6 +1664,7 @@ invariants:
     description: 'One active integration connection per adapter PER SCOPE: an org connection and a member own connection coexist for the same adapter and each resolves for the right caller, while a second active row at the same level and scope fails closed. The env/manifest binding answers for the org, because it is org-wide by construction and has no other scope to be, and the applicable-connections read promises no ordering so selection is by level rather than by position.'
     tests:
       - tests/security/test_integration_scope.py::test_an_org_and_a_user_connection_coexist_but_a_scope_cannot_duplicate
+      - tests/security/test_integration_scope.py::test_the_model_refuses_a_user_row_that_could_alias_or_borrow
       - tests/security/test_integration_scope.py::test_the_env_manifest_binding_answers_for_the_org
       - tests/security/test_integration_scope.py::test_pick_connection_prefers_the_owner_row_by_level_not_by_order
   FR-AGENT-MODEL-OVERRIDE-01:
