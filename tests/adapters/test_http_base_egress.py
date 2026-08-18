@@ -182,9 +182,13 @@ def test_a_proxied_config_builds_an_unpinned_proxied_client(monkeypatch):
     import httpx
 
     monkeypatch.setattr(httpx, "AsyncClient", _RecordingClient)
+    # Hermetic: the guard vets the LOCAL resolution even in proxy mode, so hand
+    # it a public IP rather than resolving example.com live (a DNS blip once
+    # failed this test in the full suite - the test is about the proxy branch
+    # of client construction, not about connectivity).
+    monkeypatch.setattr(egress, "resolve_host", lambda host: [_PUBLIC_IP])
 
     config = {"https_proxy": "http://proxy.corp:3128"}
-    # The URL resolves publicly (example.com); the guard must not refuse it.
     client = egress.pinned_async_client("https://example.com/spec.json", config, timeout=5.0)
     assert captured.get("proxy") == "http://proxy.corp:3128"
     assert captured.get("follow_redirects") is False
