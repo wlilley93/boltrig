@@ -1,0 +1,40 @@
+/* Ultron's stage. Sized by its container like Jarvis's, and NOT square: the
+ * membrane wants the whole viewport rather than a portrait box. */
+.ultron-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 160px;
+}
+
+/* The renderer sizes the backing store itself from the host's client box and
+ * the device pixel ratio, so this must NOT set a width in pixels. */
+.ultron-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* WebGL2 or the float extension missing. Say so with a surface rather than
+ * leaving a hole -- a blank area reads as a layout bug, not as a refusal. */
+/* MOBILE. The same rules serve both shells, which is why this is here and not in a
+ * phone-only stylesheet.
+ *
+ * Only a min-height, and deliberately not a change to the desktop floor: 160px is
+ * there so a host can embed this small, and raising it would break every slot that
+ * relies on that. On a phone the opposite problem applies -- the parent often gives
+ * no height at all, `height: 100%` resolves to auto, the 160px floor wins, and the
+ * being is a stamp in the middle of a tall empty screen.
+ *
+ * A vh bound rather than a px one, and bounded on the SHORT side, which is the
+ * lesson familiar.css paid for: a body bounded only by width grows taller than a
+ * short window and pushes the transcript, heading and composer out of view. The
+ * canvas centres the being inside whatever box it is given, so getting the box right
+ * is the whole job. */
+@media (max-width: 600px) {
+  .ultron-stage { min-height: min(62vh, 520px); }
+}
+
+.ultron-stage.fallback {
+  background: radial-gradient(circle at 50% 45%, rgb(20 60 150 / 28%), transparent 62%);
+}

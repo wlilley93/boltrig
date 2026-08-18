@@ -723,24 +723,24 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/ChatView.tsx": {
-      "file_lines": 1337,
-      "max_function_lines": 1258,
+      "file_lines": 1325,
+      "max_function_lines": 1243,
       "max_parameters": 3,
-      "max_complexity": 102,
+      "max_complexity": 100,
       "max_nesting_depth": 4,
       "over_limit_functions": [
         {
           "name": "ChatView",
-          "line": 80,
+          "line": 83,
           "column": 1,
-          "lines": 1258,
+          "lines": 1243,
           "parameters": 1,
-          "complexity": 102,
+          "complexity": 100,
           "nesting_depth": 4
         },
         {
           "name": "ChatView.send",
-          "line": 343,
+          "line": 344,
           "column": 3,
           "lines": 111,
           "parameters": 2,
@@ -749,7 +749,7 @@
         },
         {
           "name": "ChatView.reattach",
-          "line": 659,
+          "line": 660,
           "column": 3,
           "lines": 67,
           "parameters": 3,
@@ -758,7 +758,7 @@
         },
         {
           "name": "ChatView.acceptLiveEvent",
-          "line": 727,
+          "line": 728,
           "column": 3,
           "lines": 61,
           "parameters": 2,
@@ -919,21 +919,11 @@
     },
     "apps/worker/src/components/familiar/FamiliarWebGLRenderer.ts": {
       "file_lines": 435,
-      "max_function_lines": 102,
+      "max_function_lines": 49,
       "max_parameters": 2,
-      "max_complexity": 24,
+      "max_complexity": 12,
       "max_nesting_depth": 3,
-      "over_limit_functions": [
-        {
-          "name": "FamiliarWebGLRenderer.frame",
-          "line": 333,
-          "column": 19,
-          "lines": 102,
-          "parameters": 1,
-          "complexity": 24,
-          "nesting_depth": 2
-        }
-      ],
+      "over_limit_functions": [],
       "owner": "worker-maintainers",
       "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"
@@ -981,24 +971,24 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/IntegrationsView.tsx": {
-      "file_lines": 1596,
-      "max_function_lines": 711,
+      "file_lines": 1533,
+      "max_function_lines": 707,
       "max_parameters": 4,
-      "max_complexity": 38,
+      "max_complexity": 37,
       "max_nesting_depth": 3,
       "over_limit_functions": [
         {
           "name": "IntegrationsView",
-          "line": 98,
+          "line": 100,
           "column": 1,
-          "lines": 711,
+          "lines": 707,
           "parameters": 0,
           "complexity": 22,
           "nesting_depth": 2
         },
         {
           "name": "IntegrationsView.connect",
-          "line": 373,
+          "line": 375,
           "column": 3,
           "lines": 60,
           "parameters": 1,
@@ -1007,11 +997,11 @@
         },
         {
           "name": "IntegrationRow",
-          "line": 810,
+          "line": 808,
           "column": 1,
-          "lines": 174,
+          "lines": 172,
           "parameters": 1,
-          "complexity": 38,
+          "complexity": 37,
           "nesting_depth": 3
         }
       ],
@@ -1034,27 +1024,6 @@
           "parameters": 1,
           "complexity": 37,
           "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/jarvis/JarvisStage.tsx": {
-      "file_lines": 132,
-      "max_function_lines": 116,
-      "max_parameters": 1,
-      "max_complexity": 8,
-      "max_nesting_depth": 1,
-      "over_limit_functions": [
-        {
-          "name": "JarvisStage",
-          "line": 17,
-          "column": 1,
-          "lines": 116,
-          "parameters": 1,
-          "complexity": 8,
-          "nesting_depth": 1
         }
       ],
       "owner": "worker-maintainers",
@@ -1596,24 +1565,24 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/settings/CompactSections.tsx": {
-      "file_lines": 641,
-      "max_function_lines": 154,
+      "file_lines": 632,
+      "max_function_lines": 144,
       "max_parameters": 3,
       "max_complexity": 23,
       "max_nesting_depth": 2,
       "over_limit_functions": [
         {
           "name": "AppearanceGroup",
-          "line": 82,
+          "line": 83,
           "column": 1,
-          "lines": 154,
+          "lines": 144,
           "parameters": 1,
           "complexity": 23,
           "nesting_depth": 1
         },
         {
           "name": "useAppearanceSettings",
-          "line": 237,
+          "line": 228,
           "column": 1,
           "lines": 91,
           "parameters": 0,
@@ -1622,7 +1591,7 @@
         },
         {
           "name": "CompactReachingYouSection",
-          "line": 379,
+          "line": 370,
           "column": 1,
           "lines": 95,
           "parameters": 0,
@@ -1876,3 +1845,4 @@
     }
   }
 }
+

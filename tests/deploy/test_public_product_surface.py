@@ -17,8 +17,11 @@ _INPUTS = (
     "apps/worker/package.json",
     "apps/worker/pnpm-lock.yaml",
     "apps/worker/src/characterPlugins.ts",
+    "apps/worker/src/bundles/colossus/character.json",
     "apps/worker/src/bundles/familiar/character.json",
     "apps/worker/src/bundles/familiar/familiar.frag",
+    "apps/worker/src/bundles/jarvis/character.json",
+    "apps/worker/src/bundles/ultron/character.json",
     "apps/worker/src/components/characters.ts",
     "apps/worker/src/main.tsx",
 )

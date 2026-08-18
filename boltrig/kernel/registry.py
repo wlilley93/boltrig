@@ -8,6 +8,8 @@ verbs a caller is scoped to see (P4, role-scoped).
 
 from __future__ import annotations
 
+import logging
+from functools import partial
 from typing import Any
 
 from boltrig.adapters.base import Adapter
@@ -25,42 +27,150 @@ from boltrig.models import (
 )
 from boltrig.store import Store
 
+from .revertible import EffectLog
+
+log = logging.getLogger("boltrig.kernel.registry")
+
 
 class KernelRegistry:
     def __init__(self, store: Store) -> None:
         self._store = store
 
-    async def register_adapter_verbs(self, tenant_id: str, adapter: Adapter) -> list[str]:
-        """Register every verb an adapter provides. Returns the registered ids."""
+    async def register_adapter_verbs(
+        self,
+        tenant_id: str,
+        adapter: Adapter,
+        *,
+        effects: EffectLog | None = None,
+    ) -> list[str]:
+        """Register every verb an adapter provides. Returns the registered ids.
+
+        DOES NOT OVERWRITE A BINDING IT DOES NOT OWN. Re-registration happens on
+        every startup, and it used to upsert an ADAPTER binding unconditionally
+        -- so a verb deliberately re-pointed at a reasoning agent by
+        `bind_verb_to_agent` silently reverted the next time the process came
+        up. Deactivation already declined to touch other people's bindings
+        (VerbBinding.owned_by); this now declines on the way in too.
+
+        Pass ``effects`` to receive an inverse for everything this call changes,
+        built while what was displaced is still known. Absent, the behaviour is
+        exactly as before minus the clobbering, so existing callers need no
+        change.
+        """
         registered: list[str] = []
         for spec in adapter.describe():
-            if await self._store.get_noun(tenant_id, spec.noun_id) is None:
-                await self._store.upsert_noun(Noun(id=spec.noun_id, tenant_id=tenant_id))
-            await self._store.upsert_verb(
-                Verb(
-                    id=spec.verb_id,
-                    tenant_id=tenant_id,
-                    noun_id=spec.noun_id,
-                    input_schema=spec.input_schema,
-                    output_schema=spec.output_schema,
-                    description=spec.description,
-                    consequence=Consequence(spec.consequence),
-                    degraded_mode=spec.degraded_mode,
-                    idempotency_mode=IdempotencyMode(spec.idempotency_mode),
-                )
-            )
-            rl = spec.rate_limit
-            await self._store.upsert_binding(
-                VerbBinding(
-                    verb_id=spec.verb_id,
-                    tenant_id=tenant_id,
-                    target_type=TargetType.ADAPTER,
-                    target_ref=adapter.id,
-                    rate_limit=RateLimit(**rl) if rl else None,
-                )
-            )
+            await self._register_spec(tenant_id, adapter, spec, effects)
             registered.append(spec.verb_id)
         return registered
+
+    async def _register_spec(
+        self, tenant_id: str, adapter: Adapter, spec: Any, effects: EffectLog | None
+    ) -> None:
+        """Noun, verb and binding for ONE spec, plus the inverse of each.
+
+        Extracted because the caller was a loop around exactly this, and at 86
+        lines it broke the structural floor. Nothing here changed in the move.
+        """
+        if await self._store.get_noun(tenant_id, spec.noun_id) is None:
+            await self._store.upsert_noun(Noun(id=spec.noun_id, tenant_id=tenant_id))
+            if effects is not None:
+                noun_id = spec.noun_id
+                effects.record(
+                    f"noun {noun_id}",
+                    partial(self._store.delete_noun, tenant_id, noun_id),
+                )
+        previous_verb = await self._store.get_verb(tenant_id, spec.verb_id)
+        await self._store.upsert_verb(
+            Verb(
+                id=spec.verb_id,
+                tenant_id=tenant_id,
+                noun_id=spec.noun_id,
+                input_schema=spec.input_schema,
+                output_schema=spec.output_schema,
+                description=spec.description,
+                consequence=Consequence(spec.consequence),
+                degraded_mode=spec.degraded_mode,
+                idempotency_mode=IdempotencyMode(spec.idempotency_mode),
+            )
+        )
+        if effects is not None:
+            self._record_verb_inverse(effects, tenant_id, spec.verb_id, previous_verb)
+
+        existing = await self._store.get_binding(tenant_id, spec.verb_id)
+        if existing is not None and existing.target_type is TargetType.AGENT:
+            # AN AGENT BINDING IS NEVER AN ADAPTER'S TO REPLACE.
+            #
+            # Two things produce one, and an adapter must not undo either: a
+            # deliberate `bind_verb_to_agent` re-point, which used to revert
+            # on the next restart because this loop upserted over it; and
+            # `questions.py`'s `native:questions`, which the chokepoint
+            # intercepts in-kernel, so overwriting it would quietly disable
+            # the human-question pause.
+            #
+            # ADAPTER-over-ADAPTER is deliberately still allowed. Several
+            # adapters publish the same verb on purpose -- jira and
+            # memory-tickets both publish ticket.create, five audio adapters
+            # publish voice.speak -- and last-registration-wins is how
+            # manifest order picks the provider. Refusing that too booted
+            # the stack onto whichever adapter happened to register first.
+            log.info(
+                "adapter %s left verb %s bound to agent:%s",
+                adapter.id, spec.verb_id, existing.target_ref,
+            )
+            return
+
+        rl = spec.rate_limit
+        await self._store.upsert_binding(
+            VerbBinding(
+                verb_id=spec.verb_id,
+                tenant_id=tenant_id,
+                target_type=TargetType.ADAPTER,
+                target_ref=adapter.id,
+                rate_limit=RateLimit(**rl) if rl else None,
+            )
+        )
+        if effects is not None:
+            self._record_binding_inverse(effects, tenant_id, spec.verb_id, existing)
+
+    def _record_verb_inverse(
+        self, effects: EffectLog, tenant_id: str, verb_id: str, previous: Verb | None
+    ) -> None:
+        """Put back the verb that was there, or remove the one we added."""
+        if previous is None:
+            effects.record(
+                f"verb {verb_id}",
+                lambda: self._store.delete_verb(tenant_id, verb_id),
+            )
+        else:
+            effects.record(
+                f"verb {verb_id} (restore)",
+                partial(self._store.upsert_verb, previous),
+            )
+
+    def _record_binding_inverse(
+        self,
+        effects: EffectLog,
+        tenant_id: str,
+        verb_id: str,
+        previous: VerbBinding | None,
+    ) -> None:
+        """Put back the binding that was there, INCLUDING when there was none.
+
+        The distinction is the reason the inverse is built here rather than
+        written out somewhere else later: only this call site knows whether it
+        created a binding or replaced one, and "delete it" is wrong in the
+        second case.
+        """
+        if previous is None:
+            effects.record(
+                f"binding {verb_id}",
+                lambda: self._store.delete_binding(tenant_id, verb_id),
+            )
+        else:
+            effects.record(
+                f"binding {verb_id} (restore)",
+                partial(self._store.upsert_binding, previous),
+            )
 
     async def bind_verb_to_agent(self, tenant_id: str, verb_id: str, agent_capability: str) -> None:
         """Re-point a verb at a reasoning agent instead of an adapter (US-KER-02).

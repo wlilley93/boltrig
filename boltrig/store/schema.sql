@@ -108,6 +108,9 @@ CREATE TABLE IF NOT EXISTS integration_connections (
                          'pending','ok','degraded','down','revoked')),
     credential_ref     TEXT,
     credential_owned   BOOLEAN NOT NULL DEFAULT false,
+    level              TEXT NOT NULL DEFAULT 'org'    -- org | user
+                       CHECK (level IN ('org', 'user')),
+    scope_id           TEXT NOT NULL DEFAULT '',      -- org: tenant_id; user: user_id
     accounts           JSONB NOT NULL DEFAULT '[]'::jsonb,
     last_checked_at    TIMESTAMPTZ,
     revoked_at         TIMESTAMPTZ,
@@ -119,8 +122,12 @@ CREATE TABLE IF NOT EXISTS integration_connections (
 );
 CREATE INDEX IF NOT EXISTS integration_connections_integration_idx
   ON integration_connections(tenant_id, integration_id, created_at);
-CREATE UNIQUE INDEX IF NOT EXISTS integration_connections_one_active_adapter_idx
-  ON integration_connections(tenant_id, adapter_id)
+-- One active connection per adapter PER SCOPE, not per tenant: that is what
+-- lets a member hold their own credential alongside the org's. Resolution reads
+-- user-then-org (see boltrig/kernel/credentials.py), so both rows coexisting is
+-- the intended state rather than the conflict the narrower index treated it as.
+CREATE UNIQUE INDEX IF NOT EXISTS integration_connections_one_active_scope_idx
+  ON integration_connections(tenant_id, adapter_id, level, scope_id)
   WHERE health <> 'revoked';
 
 CREATE TABLE IF NOT EXISTS skills (
@@ -1478,6 +1485,7 @@ CREATE TABLE IF NOT EXISTS organisations (
     slug               TEXT NOT NULL,
     settings           JSONB NOT NULL DEFAULT '{}'::jsonb,
     allow_own_ai_keys  BOOLEAN NOT NULL DEFAULT false,
+    allow_own_integration_credentials BOOLEAN NOT NULL DEFAULT false,
     require_two_factor  BOOLEAN NOT NULL DEFAULT false,
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -2472,3 +2480,38 @@ CREATE TABLE IF NOT EXISTS camera_leases (
     FOREIGN KEY (tenant_id,approval_id) REFERENCES hitl_requests(tenant_id,id) ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS camera_leases_pending_idx ON camera_leases(tenant_id,device_id,status,issued_at);
+
+
+-- ===========================================================================
+-- The trajectory stream (migration 0077, decision TRJ-01). Verbatim turn
+-- records: opt-in, expiring, purgeable, and deliberately NOT part of the audit
+-- hash chain. Mirrored here from 0077_trajectory.py, which is also why there is
+-- no tenant_isolation policy below -- the migration does not create one.
+-- ===========================================================================
+CREATE TABLE IF NOT EXISTS trajectory_events (
+    tenant_id      TEXT        NOT NULL,
+    run_id         TEXT        NOT NULL,
+    seq            INTEGER     NOT NULL,
+    kind           TEXT        NOT NULL,
+    payload        JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    actor          TEXT        NOT NULL DEFAULT 'unknown',
+    parent_run_id  TEXT,
+    depth          INTEGER     NOT NULL DEFAULT 0,
+    at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at     TIMESTAMPTZ,
+    PRIMARY KEY (tenant_id, run_id, seq),
+    CONSTRAINT trajectory_events_kind_check CHECK (kind IN (
+        'prompt', 'context', 'reasoning', 'message',
+        'tool_call', 'tool_result', 'error'
+    ))
+);
+
+-- Reading a run is always (tenant, run) ordered by seq, which the primary key
+-- already serves. These two cover the other two accesses: listing recent runs,
+-- and the expiry sweep.
+CREATE INDEX IF NOT EXISTS trajectory_events_recent
+    ON trajectory_events (tenant_id, at DESC);
+
+CREATE INDEX IF NOT EXISTS trajectory_events_expiry
+    ON trajectory_events (expires_at)
+    WHERE expires_at IS NOT NULL;

@@ -376,8 +376,18 @@ describe("Worker realtime voice continuity", () => {
     expect((await screen.findByText(approvalCopy)).closest("article")?.getAttribute(
       "data-urgent",
     )).toBe("true");
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss call notice" }));
-    expect(screen.queryByText(approvalCopy)?.closest("article")).toBeNull();
+    // AWAITED. findByText above resolves when the approval copy appears, which is
+    // not necessarily the render that also produced this button -- a synchronous
+    // getByRole here races one commit, and that is how this test failed once under
+    // full-suite parallelism and then passed twice on its own. findBy resolves
+    // immediately when the element is already there, so it costs nothing.
+    //
+    // Note for anyone tempted to apply this to the whole file: three tests here run
+    // under vi.useFakeTimers(), and findBy polls on REAL timers, so it can never
+    // resolve inside them. Their synchronous getBy calls are load-bearing.
+    fireEvent.click(await screen.findByRole("button", { name: "Dismiss call notice" }));
+    await waitFor(() =>
+      expect(screen.queryByText(approvalCopy)?.closest("article")).toBeNull());
   });
 
   it("does not reopen a stale recovered call after navigating from conversation A to B", async () => {

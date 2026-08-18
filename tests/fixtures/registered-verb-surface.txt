@@ -92,6 +92,7 @@ control.invitation.create	control	script
 control.invitation.revoke	control	script
 control.integration.connect	control	script
 control.integration.revoke	control	script
+control.integration.revoke_member	control	script
 control.mcp_server.activate	control	script
 control.mcp_server.deactivate	control	script
 control.mcp_server.delete	control	script

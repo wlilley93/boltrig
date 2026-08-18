@@ -79,4 +79,26 @@ def test_worker_structure_debt_is_owned_reasoned_expiring_and_exactly_shaped() -
         assert exemption["reason"].strip() == exemption["reason"]
         assert exemption["owner"] and exemption["reason"]
         assert date.fromisoformat(exemption["expires"]) >= today
-        assert exemption["over_limit_functions"]
+        # An exemption must EXEMPT something, and an over-limit function is
+        # only one of the five ways to need one.
+        #
+        # This used to demand a named over-limit function, which made the
+        # ratchet unlowerable at its last step: when FamiliarWebGLRenderer's
+        # frame() was extracted to familiarDrive.ts the file went from one
+        # over-limit function to none, and correctly lowering the entry to
+        # an empty list failed this assertion. The file is still 435 lines
+        # against a 400 limit, so the exemption is still owed -- it is owed
+        # for its SIZE now rather than for a function, and refusing that
+        # state would mean either keeping a stale entry or deleting a real
+        # one.
+        over_limits = (
+            exemption["file_lines"] > document["limits"]["max_file_lines"]
+            or exemption["max_function_lines"] > document["limits"]["max_function_lines"]
+            or exemption["max_parameters"] > document["limits"]["max_parameters"]
+            or exemption["max_complexity"] > document["limits"]["max_complexity"]
+            or exemption["max_nesting_depth"] > document["limits"]["max_nesting_depth"]
+        )
+        assert over_limits, (
+            f"{path} exempts nothing: every measurement is inside its limit, "
+            "so the entry should be deleted rather than carried"
+        )

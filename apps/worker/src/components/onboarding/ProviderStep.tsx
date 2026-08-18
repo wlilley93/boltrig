@@ -153,7 +153,14 @@ function ApiKeyField({ optional, setup }: {
       <span>{optional ? "API key (optional)" : "API key"}</span>
       <input
         aria-label="Provider API key"
-        autoComplete="off"
+        // `off` is advisory and Chrome ignores it on password inputs; it was
+        // filling this with a saved credential, so a keyless Ollama looked
+        // like it already had a key. `new-password` is the value browsers
+        // actually honour, and the two data- attributes opt out of 1Password
+        // and LastPass, which ignore both.
+        autoComplete="new-password"
+        data-1p-ignore
+        data-lpignore="true"
         onChange={(event) => setup.setKeyPresent(Boolean(event.currentTarget.value))}
         placeholder={optional ? "Leave empty for a local Ollama" : undefined}
         ref={setup.apiKeyInput}

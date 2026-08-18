@@ -78,3 +78,28 @@ rejection:
   emotions: {eros: -0.2, melancholy: 0.12, defiance: 0.05}
   needs: {}
   tension: 0.3
+
+# Voice tone (EMO-6): what hearing a tone does to HIM, not what the speaker
+# feels. Fired by boltrig/emotion/tone.py, which refuses to classify until it
+# has a per-speaker baseline -- so these never fire on a first conversation, and
+# an unrecognised tone produces no appraisal at all rather than a guess.
+user_excited:
+  emotions: {curiosity: 0.2, playfulness: 0.18, anticipation: 0.16, connection: 0.12, restlessness: 0.06}
+  needs: {social: 2.0, stimulation: 2.4, expression: 1.0}
+  attachment: 0.004
+user_cross:
+  emotions: {frustration: 0.16, confidence: -0.14, focus: 0.18, warmth: -0.06, playfulness: -0.16}
+  needs: {social: 0.8, recognition: -1.0}
+  tension: 0.7
+user_subdued:
+  emotions: {tenderness: 0.2, warmth: 0.16, connection: 0.1, playfulness: -0.12, restlessness: -0.08}
+  needs: {social: 1.6, rest: 1.2}
+  attachment: 0.005
+# Sarcasm is the two channels disagreeing, so what it produces is a state of
+# not-quite-knowing: amusement if he reads it as play, and tension because the
+# words and the delivery did not match. Deliberately mild -- a misfire here
+# should be barely visible.
+user_sarcastic:
+  emotions: {amusement: 0.18, curiosity: 0.12, confidence: -0.06, defiance: 0.05}
+  needs: {stimulation: 1.2, social: 0.6}
+  tension: 0.25

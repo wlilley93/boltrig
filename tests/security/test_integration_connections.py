@@ -271,8 +271,12 @@ def test_certified_manual_contract_seals_once_and_projects_only_account_metadata
         and event.status == "ok"
         and event.detail["params"]
         == {
-            "keys": ["integration_id", "label", "secret"],
-            "count": 3,
+            # level joins the keys-only audit projection: it is routing,
+            # not secret, and only NAMES are recorded here anyway. scope_id
+            # is deliberately absent -- it never crosses the wire, because the
+            # kernel derives the owner from the authenticated caller.
+            "keys": ["integration_id", "label", "level", "secret"],
+            "count": 4,
         }
         for event in asyncio.run(store.audit_query(T))
     )
@@ -430,6 +434,8 @@ async def test_atomic_setup_failure_leaves_neither_connection_nor_credential(
         "api_key",
         "tickets_v1",
         {"opaque": "MUST-NOT-PERSIST"},
+        level="org",
+        scope_id="acme",
     )
 
     def fail_seal(_credential):

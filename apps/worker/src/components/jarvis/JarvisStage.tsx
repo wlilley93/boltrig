@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from "react";
 import type { BudgetItem, FamiliarPhenotypeResponse, NormalizedTurn } from "@wlilley93/boltrig-web-sdk";
 import { JarvisLabels } from "./JarvisLabels";
-import { JarvisWebGLRenderer, type JarvisRendererOptions } from "./JarvisRenderer";
+import type { JarvisRendererOptions } from "./JarvisRenderer";
 import type { JarvisStageState } from "./JarvisState";
 import { NO_TELEMETRY, telemetryFromBudgets } from "./JarvisTelemetry";
-import { workFromTurn } from "./JarvisWork";
+import { useJarvisRenderer } from "./useJarvisRenderer";
 import "./jarvis.css";
 
 // The HUD instrument stage. Same contract as FamiliarStage — it owns its
@@ -14,18 +13,7 @@ import "./jarvis.css";
 //
 // Unlike the Familiar's, this stage is NOT square: the circuit field wants the
 // whole viewport, so the host element should be sized by its container.
-export function JarvisStage({
-  state,
-  phenotype,
-  budgets,
-  turn,
-  suspended = false,
-  accent,
-  scale,
-  labels = "svg",
-  highResolution = false,
-  className,
-}: {
+interface JarvisStageProps {
   state: JarvisStageState;
   /**
    * The server phenotype from GET /v1/familiar/phenotype. Absent or stale and
@@ -59,68 +47,59 @@ export function JarvisStage({
   labels?: "shader" | "svg";
   highResolution?: boolean;
   className?: string;
-}) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const rendererRef = useRef<JarvisWebGLRenderer | null>(null);
-  const [fallback, setFallback] = useState(false);
-  // accent/scale are construction-time identity, not per-frame state: changing
-  // them rebuilds the renderer rather than being smuggled in through update().
-  const accentKey = accent ? accent.join(",") : "";
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    const renderer = new JarvisWebGLRenderer({
-      accent,
-      scale,
-      labels: labels === "svg" ? "none" : "shader",
-      maxDevicePixelRatio: highResolution ? 2 : 1.25,
-    });
-    rendererRef.current = renderer;
-    renderer.mount(host);
-    setFallback(renderer.status().state === "failed");
-    return () => {
-      renderer.destroy();
-      rendererRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accentKey, scale, labels, highResolution]);
-  useEffect(() => {
-    rendererRef.current?.update(state);
-  }, [state]);
-  useEffect(() => {
-    rendererRef.current?.applyWork(turn ? workFromTurn(turn) : null);
-  }, [turn]);
+  /**
+   * Which body to draw. "ultron" is the neural field (components/jarvis/v2) --
+   * Jarvis's own look in Age of Ultron, not Ultron's; anything else, including
+   * absent, is the instrument dial.
+   *
+   * Construction-time identity, like accent and scale: changing it rebuilds the
+   * renderer rather than being smuggled through update(), because the two
+   * bodies share no GL state at all.
+   */
+  skin?: string;
+}
 
+export function JarvisStage({
+  state,
+  phenotype,
+  budgets,
+  turn,
+  suspended = false,
+  accent,
+  scale,
+  labels = "svg",
+  highResolution = false,
+  className,
+  skin,
+}: JarvisStageProps) {
+  const neural = skin === "ultron";
   // Derived once and shared: the renderer draws the tracks from it and the
   // overlay decides which legends are honest to show.
   const telemetry = budgets ? telemetryFromBudgets(budgets) : NO_TELEMETRY;
-  const telemetryKey = JSON.stringify(telemetry);
-  useEffect(() => {
-    rendererRef.current?.applyTelemetry(telemetry);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [telemetryKey]);
-
-  useEffect(() => {
-    rendererRef.current?.applyPhenotype(
-      phenotype?.fresh && phenotype.phenotype ? phenotype.phenotype : null,
-    );
-  }, [phenotype]);
-
-  useEffect(() => {
-    if (suspended) rendererRef.current?.suspend();
-    else rendererRef.current?.resume();
-  }, [suspended]);
+  const { hostRef, fallback } = useJarvisRenderer({
+    accent,
+    highResolution,
+    labels,
+    neural,
+    phenotype,
+    scale,
+    state,
+    suspended,
+    telemetry,
+    turn,
+  });
 
   return (
     <div
       ref={hostRef}
-      className={`jarvis-stage${fallback ? " fallback" : ""}${className ? ` ${className}` : ""}`}
+      className={`jarvis-stage${neural ? " neural" : ""}${fallback ? " fallback" : ""}${className ? ` ${className}` : ""}`}
+      data-skin={neural ? "ultron" : "default"}
       role="img"
       aria-label={`Boltrig · ${state.mode}`}
       data-renderer={fallback ? "none" : "webgl2"}
       data-mode={state.mode}
     >
-      {labels === "svg" && !fallback && (
+      {labels === "svg" && !fallback && !neural && (
         <JarvisLabels
           mode={state.mode}
           readout={state.readout}

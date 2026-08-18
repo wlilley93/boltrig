@@ -115,16 +115,49 @@ def validate(root: Path = ROOT) -> None:
             if value:
                 raise ValueError(".env.example bundles a webhook value")
 
-    # The production registry is deliberately closed: Familiar and Jarvis are
-    # first-party. A private distribution can own a separate entrypoint, but the
-    # public package graph, lockfile, and stock plugin join must be hermetic.
+    # The production registry is deliberately closed. A private distribution can
+    # own a separate entrypoint, but the public package graph, lockfile and stock
+    # plugin join must be hermetic.
+    #
+    # THE LIST IS NO LONGER HARDCODED, and the reason is that the hardcoded one
+    # went stale twice without anyone noticing: it still read Familiar-then-
+    # Jarvis two characters after Ultron shipped, so the gate failed on every
+    # run and stopped being read. A gate that is always red protects nothing.
+    #
+    # What it checks instead is the property that actually matters: every
+    # character the stock path registers must be a bundle in this repository
+    # that DECLARES it ships. That refuses the thing the closed list existed to
+    # refuse -- a private character registered on the public path -- and it
+    # keeps working when a fifth first-party body is added, because adding one
+    # means committing a bundle that says ships=true.
     registrations = re.findall(
         r"(?m)^\s*registerCharacter\(([A-Z][A-Z0-9_]*)\);\s*$", characters
     )
-    if registrations != ["FAMILIAR", "JARVIS"]:
-        raise ValueError(
-            "character registry must register exactly Familiar then Jarvis"
+    if not registrations:
+        raise ValueError("character registry registers no character")
+    if len(set(registrations)) != len(registrations):
+        raise ValueError("character registry registers the same character twice")
+    for symbol in registrations:
+        bundle_id = symbol.lower()
+        bundle_path = (
+            root / "apps/worker/src/bundles" / bundle_id / "character.json"
         )
+        if not bundle_path.is_file():
+            raise ValueError(
+                f"stock registry registers {bundle_id} with no in-repo bundle"
+            )
+        bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+        if bundle.get("id") != bundle_id:
+            raise ValueError(f"stock bundle {bundle_id} does not own its id")
+        if bundle.get("provenance", {}).get("ships") is not True:
+            raise ValueError(
+                f"stock registry registers {bundle_id}, whose bundle does not "
+                "declare ships=true"
+            )
+    # Familiar stays first: she is the default character, and `characterFor`
+    # falls back to whatever DEFAULT_CHARACTER resolves to.
+    if registrations[0] != "FAMILIAR":
+        raise ValueError("character registry must register Familiar first")
     if familiar_manifest.get("id") != "familiar":
         raise ValueError("stock Familiar bundle must keep the familiar id")
     if familiar_manifest.get("provenance", {}).get("ships") is not True:

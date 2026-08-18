@@ -401,8 +401,8 @@ def _org(r):
         return None
     return Organisation(
         id=r["id"], name=r["name"], slug=r["slug"], settings=r["settings"] or {},
-        allow_own_ai_keys=r["allow_own_ai_keys"],
-        require_two_factor=r["require_two_factor"],
+        allow_own_ai_keys=r["allow_own_ai_keys"], require_two_factor=r["require_two_factor"],
+        allow_own_integration_credentials=r["allow_own_integration_credentials"],
         created_at=r["created_at"], updated_at=r["updated_at"],
     )
 

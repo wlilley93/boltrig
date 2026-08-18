@@ -102,7 +102,12 @@ describe("normalisationGain", () => {
     // cannot take it. The peak guard must win.
     const s = tone(dbToAmp(-40), 1);
     s[100] = 0.95;
-    const out = s.map((v) => v * normalisationGain(s)) as Float32Array;
+    // Hoisted out of the map: it was recomputing the gain over the whole
+    // buffer once PER SAMPLE, which is the same answer (map does not mutate s)
+    // at 48000x the cost -- it fitted in the 5s timeout on an idle machine and
+    // timed out on a loaded one, which read as a flaky assertion.
+    const gain = normalisationGain(s);
+    const out = s.map((v) => v * gain) as Float32Array;
     expect(peakDb(out)).toBeLessThanOrEqual(PEAK_CEILING_DBFS + 0.01);
   });
 

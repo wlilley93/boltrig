@@ -349,6 +349,30 @@ invariants:
     tests:
       - tests/security/test_mcp_consumer_activation.py::test_activation_discovers_and_publishes_the_servers_tools
       - tests/unit/test_prompt_stack.py::test_tool_prompt_has_a_complete_static_operating_method
+  SEC-200:
+    description: 'An integration credential resolves with precedence own -> org -> env/manifest binding, gated by the org allow_own_integration_credentials flag: when the org forbids member-owned credentials a user-scoped connection is SKIPPED ENTIRELY and the org connection serves, so revoking the policy is sufficient on its own and no rows have to be deleted; flipping it back restores the personal credential immediately. A caller that passes no owner reproduces the pre-scoping behaviour exactly.'
+    tests:
+      - tests/security/test_integration_scope.py::test_own_credential_wins_only_when_the_org_allows_it
+      - tests/security/test_integration_scope.py::test_a_user_without_their_own_connection_gets_the_org_one
+      - tests/security/test_integration_scope.py::test_no_owner_reproduces_the_pre_scoping_behaviour_exactly
+      - tests/security/test_integration_scope.py::test_the_route_refuses_a_personal_connection_the_org_has_not_allowed
+  SEC-201:
+    description: 'A sealed integration credential resolves ONLY for the scope it was sealed for, and a personal connection is visible only to its owner. A reference sealed for one user fails closed for another and for the org; a reference sealed BEFORE scoping existed carries no level, is treated as the org row it necessarily was, and keeps resolving - a strict comparison there would raise on every pre-existing production row, which is an outage rather than a fence, and cannot be migrated because the value sits inside a Fernet envelope.'
+    tests:
+      - tests/security/test_integration_scope.py::test_a_sealed_credential_refuses_a_different_scope
+      - tests/security/test_integration_scope.py::test_a_credential_sealed_before_scoping_still_resolves_for_the_org
+      - tests/security/test_integration_scope.py::test_a_personal_connection_is_visible_only_to_its_owner
+      - tests/security/test_integration_scope.py::test_an_org_and_a_personal_connection_coexist_and_only_the_owner_sees_theirs
+  SEC-203:
+    description: 'Whoever may CONNECT a personal integration credential may also disconnect it. control.integration.connect is low consequence, so any member may seal one, while control.integration.revoke is high consequence and every high-consequence control.integration.* verb is gated on an author role - which made connecting a one-way door, leaving a member holding a live third-party token that nothing they could reach would destroy. The pre-authorisation exempts exactly one case: the caller''s OWN user-scoped connection, which is operating their own seat rather than administering the organisation. The organisation''s shared row stays author-only, and another member''s row is reachable only through control.integration.revoke_member.'
+    tests:
+      - tests/security/test_integration_scope.py::test_a_member_can_disconnect_the_credential_a_member_may_connect
+  SEC-202:
+    description: 'An organisation administrator has a path to destroy a departed member''s personal integration credential, and that path does not widen what they may READ. Without it a member who leaves takes a live third-party token with them that nothing can reach: control.integration.revoke refuses a row that is not the caller''s, and the connection list hides a personal row from everyone but its owner. The administrator projection omits accounts entirely, because that field carries the member''s identity AT THE PROVIDER and administering a row is not a reason to read it. The list is author-role only and excludes the caller''s own rows. Revoking destroys that member''s sealed material and leaves the organisation''s shared connection serving every other member unchanged.'
+    tests:
+      - tests/security/test_integration_scope.py::test_an_administrator_sees_a_members_connection_without_their_provider_identity
+      - tests/security/test_integration_scope.py::test_the_member_connection_list_is_author_only_and_excludes_your_own
+      - tests/security/test_integration_scope.py::test_revoking_a_members_connection_destroys_only_their_credential
   SEC-185:
     description: 'The trusted-Codex wall admits exactly two postures and both refuse any production signal and require the explicit BOLTRIG_CODEX_TRUSTED flag - (a) the legacy single-operator dev posture (BOLTRIG_DEV_AUTH=1, no real ingress) and (b) the kernel-attested posture, where per-cell uids are verifiably in force (the dropped API holds the live spawner socket) and cell identity is kernel-attested end to end (SO_PEERCRED uid must equal the registered cell uid, J8; privilege re-proved at issuance, J5). Under (b) a real ingress posture - session login included - may coexist because the edge authenticates users, not cells; without per-cell uids the same session-auth env is still refused BEFORE any admit or bearer mint. This is not a production flip: production_ready stays False and the runtime remains test-gated. The SEC-184 kernel-tools lane runs under (b): a run mints its run-scoped token over the real MCP face, tools/list shows only granted verbs, a grant-denied verb is refused at the chokepoint, and the token is revoked at run end.'
     tests:
@@ -1642,6 +1666,21 @@ invariants:
       - tests/security/test_ai_keys.py::test_resolve_precedence_user_workspace_org_default
       - tests/security/test_ai_keys.py::test_no_config_tenant_does_not_use_an_ambient_provider_key
       - tests/security/test_ai_keys.py::test_runtime_resolver_loads_the_scoped_sealed_key
+  FR-INTCRED-01:
+    description: 'Integration setup and adapter dispatch derive the SAME acting identity (on_behalf_of when an agent runs for somebody, otherwise actor), so a credential is looked up under the id it was filed under. Reading on_behalf_of alone would be None for a person logged in directly, and the personal credential would be sealed under their user id and fetched under nothing - resolution would fall through to the org credential with no error raised anywhere.'
+    tests:
+      - tests/security/test_integration_scope.py::test_setup_and_dispatch_derive_the_same_acting_identity
+  FR-INTCRED-02:
+    description: 'One active integration connection per adapter PER SCOPE: an org connection and a member own connection coexist for the same adapter and each resolves for the right caller, while a second active row at the same level and scope fails closed. The env/manifest binding answers for the org, because it is org-wide by construction and has no other scope to be, and the applicable-connections read promises no ordering so selection is by level rather than by position.'
+    tests:
+      - tests/security/test_integration_scope.py::test_an_org_and_a_user_connection_coexist_but_a_scope_cannot_duplicate
+      - tests/security/test_integration_scope.py::test_the_model_refuses_a_user_row_that_could_alias_or_borrow
+      - tests/security/test_integration_scope.py::test_the_env_manifest_binding_answers_for_the_org
+      - tests/security/test_integration_scope.py::test_pick_connection_prefers_the_owner_row_by_level_not_by_order
+  FR-INTCRED-03:
+    description: 'The administrator revoke verb serves exactly one case and says so in the audit trail: control.integration.revoke_member refuses the organisation''s shared row and refuses the caller''s own, each of which control.integration.revoke already serves. Two verbs rather than one verb with a role branch inside it, because the kernel invocation context carries GRANTS and not a role - reaching the verb IS the authority - and because one verb could never tell an auditor whether a member disconnected their own credential or an administrator cleaned up after them. Both verbs make the same single write, so the two paths cannot drift.'
+    tests:
+      - tests/security/test_integration_scope.py::test_the_administrator_verb_refuses_the_org_row_and_your_own
   FR-AGENT-MODEL-OVERRIDE-01:
     description: 'An agent capability model endpoint may select the exact Bifrost model but can never replace the Codex execution host with a provider-native runtime.'
     tests:
@@ -2385,7 +2424,7 @@ invariants:
       - tests/security/test_realtime_call_routes.py::test_voice_usage_is_content_free_owner_scoped_and_explicitly_priced
       - tests/security/test_channel_xai_voice_roundtrip.py::test_voice_usage_meter_and_exact_hitl_provider_call
   SEC-WRK-06:
-    description: 'The integration surface is tenant-scoped reviewed data over the canonical adapter/verb registry, not a frontend-owned connector claim. Default and manifest boot deterministically reconcile only three reviewed first-party definitions (Jira, Runpod and xAI Voice) with closed manual-secret contracts, without upgrading or replacing unrelated preview rows; certification covers shipped adapter/contract shape while actual connectability still derives from that tenant''s registered, activated and acceptably healthy adapter. Public catalogue tools, connection projections, health and author-only revocation remain registry/store derived. A certified setup route accepts exactly its bounded string fields and delegates to control.integration.connect; only that dispatched operation derives account labels from declared non-secret fields and atomically creates one envelope-sealed credential plus at most one active connection per adapter. Dynamic resolution reads that active persisted reference kernel-side on every call, so fresh processes and replicas require no local rebind; a missing credential or ambiguous active state fails closed. Revocation atomically clears the active connection and deletes only material it owns. The submitted fields remain beneath one secret-shaped dispatcher parameter, so provider-specific names and values never reach event, approval, response or audit projections. Uncertified, undeclared, OAuth-without-provider-contract, and arbitrary-field setup still fail closed.'
+    description: 'The integration surface is tenant-scoped reviewed data over the canonical adapter/verb registry, not a frontend-owned connector claim. Default and manifest boot deterministically reconcile only three reviewed first-party definitions (Jira, Runpod and xAI Voice) with closed manual-secret contracts, without upgrading or replacing unrelated preview rows; certification covers shipped adapter/contract shape while actual connectability still derives from that tenant''s registered, activated and acceptably healthy adapter. Public catalogue tools, connection projections, health and author-only revocation remain registry/store derived. A certified setup route accepts exactly its bounded string fields and delegates to control.integration.connect; only that dispatched operation derives account labels from declared non-secret fields and atomically creates one envelope-sealed credential plus at most one active connection per adapter PER SCOPE. Dynamic resolution reads that active persisted reference kernel-side on every call, so fresh processes and replicas require no local rebind; a missing credential or ambiguous active state fails closed. Revocation atomically clears the active connection and deletes only material it owns. The submitted fields remain beneath one secret-shaped dispatcher parameter, so provider-specific names and values never reach event, approval, response or audit projections. Uncertified, undeclared, OAuth-without-provider-contract, and arbitrary-field setup still fail closed.'
     tests:
       - tests/unit/test_integration_catalogue_provisioning.py::test_certified_builtin_catalogue_provisioning_is_deterministic_and_scoped
       - tests/unit/test_integration_catalogue_provisioning.py::test_certified_builtin_contracts_are_closed_and_match_shipped_credentials

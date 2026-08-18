@@ -22,6 +22,9 @@ from .cost import AlertFn, CostAccountant
 from .security_events import AuditAnchorer, SecurityWriter
 from .credentials import CredentialResolver, SecretStore
 from .dispatch import AgentInvoker, Dispatcher
+from boltrig.store.trajectory import InMemoryTrajectoryStore
+from boltrig.store.trajectory_postgres import PostgresTrajectoryStore
+from .trajectory import RecordingDispatcher, TrajectoryRecorder
 from .grants import GrantChecker
 from .hitl import HITLManager
 from .events import EventRelay
@@ -79,6 +82,19 @@ class Kernel:
         self.adapter_provider = AuthoritativeAdapterProvider(
             store, self.loader, self.credentials
         )
+        # The verbatim turn record (Decision TRJ-01), on its own store because it
+        # is a different stream with a different posture from the audit chain the
+        # main Store carries. Postgres when there is a pool, memory otherwise --
+        # the same choice the main store already made, read off it rather than
+        # configured twice.
+        pool = getattr(store, "_pool", None)
+        self.trajectory_store = (
+            PostgresTrajectoryStore(pool) if pool is not None else InMemoryTrajectoryStore()
+        )
+        # ENABLED only when the tenant asked. A recorder that is off is a live
+        # object whose record() returns immediately, so no call site carries a
+        # None check. Reads BOLTRIG_TRAJECTORY itself.
+        self.trajectory = TrajectoryRecorder(self.trajectory_store)
         self.dispatcher = Dispatcher(
             store,
             grants=self.grants,
@@ -92,6 +108,10 @@ class Kernel:
             events=self.events,
             security=self.security,
         )
+        # Recording wraps the chokepoint rather than living inside it: the
+        # dispatch decision, its ordering and its audit are untouched, and a
+        # recorder that is off delegates with one attribute lookup.
+        self.dispatcher = RecordingDispatcher(self.dispatcher, self.trajectory)
 
     # --- wiring ---
     def set_agent_invoker(self, invoker: AgentInvoker) -> None:

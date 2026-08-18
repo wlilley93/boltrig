@@ -1973,12 +1973,20 @@ export interface IntegrationAccount {
   selected: boolean;
 }
 
+/** Whose credential a connection is: the org's shared one, or a member's own. */
+export type IntegrationConnectionLevel = "org" | "user";
+
 export interface IntegrationConnection {
   id: string;
   integration_id: string;
   label: string;
   health: IntegrationConnectionHealth;
   credential_ref_present: boolean;
+  level: IntegrationConnectionLevel;
+  /** Opaque to the client: the tenant for an org row, the owning user for a personal one. */
+  scope_id: string;
+  /** True when this row belongs to the caller, so the UI can say "yours" without comparing ids. */
+  is_own: boolean;
   accounts: IntegrationAccount[];
   enabled_tools: string[];
   last_checked_at?: string | null;
@@ -1993,9 +2001,43 @@ export interface IntegrationConnectionResponse {
   connection: IntegrationConnection;
 }
 
+/**
+ * Another member's personal connection, as an ADMINISTRATOR sees it while
+ * offboarding them.
+ *
+ * Deliberately not an IntegrationConnection: `accounts` is absent, because it
+ * carries the member's identity at the provider and administering a row is not a
+ * reason to read it. `owner` is the same value `scope_id` holds on the fuller
+ * type, named for what it means on this one.
+ */
+export interface MemberIntegrationConnection {
+  id: string;
+  integration_id: string;
+  label: string;
+  health: IntegrationConnectionHealth;
+  credential_ref_present: boolean;
+  level: IntegrationConnectionLevel;
+  owner: string;
+  last_checked_at?: string | null;
+  created_at: string;
+}
+
+export interface MemberIntegrationConnectionsResponse {
+  connections: MemberIntegrationConnection[];
+}
+
 export interface IntegrationSecretSubmission {
   fields: Record<string, string>;
   label?: string;
+  /**
+   * Which scope to connect at. Omitted means "org", which is what every caller
+   * predating per-user credentials meant.
+   *
+   * There is deliberately NO scope_id here. The server derives it from the
+   * authenticated principal, so a caller cannot name another member's scope and
+   * have a credential recorded against them.
+   */
+  level?: IntegrationConnectionLevel;
 }
 
 export interface IntegrationSetupResponse {

@@ -53,7 +53,10 @@
    wordmark drops to 13px on narrow screens (see the media query below) and a
    px mark would have stayed large and unbalanced there. */
 .onboarding-lockup { display: inline-flex; align-items: center; gap: 0.55em; }
-.onboarding-mark { width: 1.35em; height: 1.35em; flex: none; color: var(--text); }
+/* 1.9em, not 1.35: five concentric rings need the room or the gaps close
+   up and it reads as a filled disc. Still sized in em off the wordmark, so
+   it tracks the 13px mobile drop. */
+.onboarding-mark { width: 2.2em; height: 2.2em; flex: none; color: var(--text); }
 .onboarding-progress { display: flex; gap: 7px; }
 .onboarding-progress i { width: 22px; height: 3px; border-radius: 99px; background: var(--border-2); transition: background 280ms ease, transform 280ms ease; }
 .onboarding-progress i.active { background: var(--text); transform: scaleX(1.08); }
@@ -73,59 +76,194 @@
 .onboarding-name { display: grid; gap: 8px; max-width: 460px; margin: -8px 0 22px; color: var(--text-2); font-size: 12px; }
 .onboarding-name input { height: 48px; padding: 0 14px; border: 1px solid var(--border-2); border-radius: 13px; color: var(--text); font-size: 16px; outline: none; background: color-mix(in srgb, var(--inset) 78%, transparent); }
 .onboarding-name input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
-.companion-prompt { margin: 0 0 12px; color: var(--text-3); font-size: 12px; }
 
 .onboarding-rise { opacity: 0; transform: translateY(18px); animation: onboarding-rise 520ms cubic-bezier(.2,.8,.2,1) forwards; animation-delay: var(--onboarding-delay, 0ms); }
-.companion-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.companion-card { position: relative; display: grid; grid-template-rows: minmax(210px, 1fr) auto; min-height: 365px; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 22px; color: inherit; text-align: left; background: color-mix(in srgb, var(--card-2) 58%, transparent); box-shadow: 0 1px 0 rgb(255 255 255 / 3%) inset; transition: border-color 220ms ease, transform 220ms ease, box-shadow 220ms ease, background 220ms ease; }
-.companion-card:hover { transform: translateY(-4px); border-color: var(--border-2); box-shadow: 0 18px 40px rgb(0 0 0 / 16%); }
-.companion-card.selected { border-color: color-mix(in srgb, var(--accent) 70%, var(--border)); background: color-mix(in srgb, var(--accent) 7%, var(--card-2)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent), 0 24px 55px rgb(0 0 0 / 19%); }
-.companion-art { position: relative; display: grid; place-items: center; min-height: 210px; overflow: hidden; background: radial-gradient(circle at 50% 44%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 58%); }
-.companion-art.familiar .familiar-stage { width: min(190px, 28vw, 23vh); }
-.companion-art.jarvis .jarvis-stage { width: 100%; min-height: 220px; height: 220px; animation: none; }
-.companion-copy { display: grid; gap: 6px; padding: 18px 20px 20px; border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent); }
+/* The rail: one companion at a time, chevrons either side of the card. The
+ * chevrons sit OUTSIDE the card rather than over the art, so they never cover
+ * the thing they are asking you to look at. */
+.companion-rail { display: grid; gap: 16px; justify-items: center; }
+/* NO max-width. The rail is the step: capping it at 460px is what made the
+ * companion a small card floating inside the much wider panel that asks you
+ * to choose one. The chevrons keep their own columns so the card still holds
+ * its position when one of them is absent at either end of the rail. */
+.companion-viewport { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 12px; width: 100%; }
+/* The card is always the middle column, whether or not a chevron is present --
+ * without this it slides sideways on the first and last companion, and walking
+ * the rail makes the whole layout lurch. */
+/* companion-card-surface: ONE surface. The art fills it and the copy floats
+ * over the bottom, so the entity is inside the card rather than framed on it. */
+/* Tall enough to be the surface rather than a tile. Viewport-relative so it
+ * grows with the step, with a floor for short windows. */
+/* NO FRAME. A border, a 22px radius, a box-shadow and a lighter translucent
+ * background were four separate things each drawing an inner card inside the
+ * card that asks you to choose one. Widening it did not help: a wide framed
+ * card inside a card is still a card inside a card. The companion is now ON the
+ * step, not in a tile on it. */
+.companion-card { grid-column: 2; position: relative; display: block; min-height: min(56vh, 520px); width: 100%; padding: 0; overflow: hidden; border: 0; color: inherit; text-align: left; background: transparent; }
+.companion-chevron { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--border-2); border-radius: 50%; color: var(--text-2); background: color-mix(in srgb, var(--card-2) 70%, transparent); cursor: pointer; transition: color 160ms ease, border-color 160ms ease, transform 160ms ease; }
+.companion-chevron:hover { color: var(--text); border-color: var(--accent); transform: scale(1.06); }
+.companion-chevron:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.companion-chevron.left { grid-column: 1; }
+.companion-chevron.right { grid-column: 3; }
+.companion-art { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; background: transparent; }
+.companion-card[data-companion="familiar"] .familiar-stage { width: min(300px, 62%); margin-bottom: 84px; }
+/* min-height: 0 is load-bearing, not tidiness. Each stage carries its own
+ * min-height for standalone use -- jarvis.css asks for min(70vh, 620px) -- and
+ * min-height beats height, so without this reset the stage box resolves TALLER
+ * than the card and is clipped by its overflow. The body then sits in a box
+ * that is not the card (reads as windowed), and the renderer sizes its backing
+ * store from a height the user cannot see, reallocating on every viewport
+ * change (reads as glitching). The override claims this stage IS the card, so
+ * it has to say so in every dimension. */
+.companion-card[data-companion="jarvis"] .jarvis-stage,
+.companion-card[data-companion="colossus"] .colossus-stage,
+.companion-card[data-companion="ultron"] .ultron-stage { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; animation: none; }
+/* NO SCRIM. This gradient was the last surviving edge of the inner card: it
+ * darkened the bottom of the art to near-opaque, so whatever the card itself
+ * was doing, that band still read as the card’s footer. The copy sits directly
+ * on the step now, and legibility became the PANEL’s job instead -- either the
+ * panel has taken the body’s own colour (see the block further down) or the
+ * body is transparent and has no colour of its own to fight with. */
+.companion-copy { position: absolute; inset: auto 0 0 0; display: grid; gap: 6px; padding: 40px 20px 20px; border: 0; background: none; }
 .companion-copy strong { font-size: 18px; letter-spacing: -.025em; }
 .companion-copy > span { color: var(--text-2); line-height: 1.35; }
 .companion-copy small { color: var(--text-3); line-height: 1.4; }
-.companion-check { position: absolute; top: 15px; right: 15px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: white; background: var(--accent); animation: onboarding-check-in 180ms ease both; }
 
-/* Each companion owns the complete card surface. Familiar stays bright and
- * organic; Jarvis keeps the renderer's near-black field through the copy. */
-.companion-card[data-companion="familiar"] {
-  color: #17202b;
-  background:
-    radial-gradient(circle at 50% 28%, rgb(255 255 255 / 96%), transparent 46%),
-    linear-gradient(155deg, #fbfaf6 0%, #eef1f4 58%, #e4e9ef 100%);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 90%) inset, 0 18px 42px rgb(9 20 34 / 10%);
-}
-.companion-card[data-companion="familiar"] .companion-art {
-  background: radial-gradient(circle at 50% 44%, rgb(62 135 225 / 15%), transparent 60%);
-}
-.companion-card[data-companion="familiar"] .companion-copy {
-  border-color: rgb(23 32 43 / 11%);
-}
-.companion-card[data-companion="familiar"] .companion-copy > span { color: #485463; }
-.companion-card[data-companion="familiar"] .companion-copy small { color: #697482; }
+.companion-dots { display: flex; gap: 9px; }
+.companion-dot { width: 9px; height: 9px; padding: 0; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--text-3) 45%, transparent); cursor: pointer; transition: background 160ms ease, transform 160ms ease; }
+.companion-dot:hover { background: color-mix(in srgb, var(--text-2) 70%, transparent); }
+.companion-dot.active { background: var(--accent); transform: scale(1.25); }
+.companion-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
-.companion-card[data-companion="jarvis"] {
-  color: #f7f7fa;
-  background: linear-gradient(180deg, #020205 0%, #07070a 100%);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 7%) inset, 0 20px 48px rgb(0 0 0 / 26%);
-}
-.companion-card[data-companion="jarvis"] .companion-art {
-  background: radial-gradient(circle at 50% 44%, rgb(121 98 226 / 10%), transparent 62%);
-}
-.companion-card[data-companion="jarvis"] .companion-copy {
-  border-color: rgb(255 255 255 / 10%);
-}
-.companion-card[data-companion="jarvis"] .companion-copy > span { color: #b8b8c1; }
-.companion-card[data-companion="jarvis"] .companion-copy small { color: #85858f; }
+/* Skin pills, inside the card. Sized to sit under the copy without competing
+ * with it: this is a secondary choice about one companion, not a second rail. */
+.skin-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.skin-pill { padding: 5px 11px; border: 1px solid var(--border-2); border-radius: 999px; color: var(--text-2); font-size: 11px; background: transparent; cursor: pointer; transition: color 160ms ease, border-color 160ms ease, background 160ms ease; }
+.skin-pill:hover { color: var(--text); border-color: var(--text-3); }
+.skin-pill.active { color: var(--text); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.skin-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.companion-card.selected[data-companion="familiar"],
-.companion-card.selected[data-companion="jarvis"] {
-  border-color: color-mix(in srgb, var(--accent) 78%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 24px 55px rgb(0 0 0 / 19%);
+/* THE PANEL TAKES AN OPAQUE BODY’S OWN COLOUR, and only an opaque body’s.
+ *
+ * Two of the four bodies composite with alpha and two paint a solid rectangle.
+ * That split is measured rather than assumed -- tests/visual/render-bodies.mjs
+ * renders each body offscreen and reports its alpha, the colour of its rim and
+ * the colour it MOSTLY is:
+ *
+ *     body       edge      base      alpha
+ *     jarvis-v1  #050508   #050508     255
+ *     colossus   #040303   #060504     255
+ *     jarvis-v2  --        --            0
+ *     ultron     --        --            0
+ *
+ * MATCH BASE, NOT EDGE, and Colossus is why the two columns are both here. He
+ * ends in a rectangular vignette of 1 - q^6, which is nearly flat across the
+ * panel and then falls off a cliff in the last few percent. Painting the host
+ * his rim colour therefore fixes nothing: the other 97% of him still stands
+ * proud as a brighter rectangle with a hard edge, which is the exact defect
+ * being chased. On his board colour instead, the vignette stops being a seam
+ * and goes back to being what it is -- the body shading its own corners.
+ * Jarvis’s dial is flat to the pixel, so for him the two agree.
+ *
+ * An alpha-255 body IS a rectangle. Stand it on a surface of any other colour
+ * and the difference between the two is an inner card -- which is why deleting
+ * the border, then the radius, then the shadow, then the per-card tint each
+ * failed to get rid of one. There was no framing left to remove; there is a
+ * colour to match. So the whole setup panel becomes the body’s own colour, and
+ * the seam has nowhere left to be.
+ *
+ * The transparent pair need the exact opposite, and get it by this rule NOT
+ * firing: nothing to seam against, so they float on the same glass every other
+ * step uses. Adding them here would paint the panel for a body that does not
+ * fill it.
+ *
+ * KEYED ON THE SKIN, NOT THE CHARACTER. Jarvis is one character wearing two
+ * bodies and they fall on opposite sides of this: the dial is opaque, the
+ * neural field is not. [data-skin="default"] is load-bearing -- without it,
+ * changing skin inside the card leaves the panel painted for the body it has
+ * stopped showing.
+ *
+ * TOKENS, NOT COLOURS. The panel also carries the brand lockup, the progress
+ * dots, the back button, the chevrons and the primary action, none of which
+ * know a companion is being chosen. Re-pointing --text and its neighbours on
+ * the panel makes every one of them adapt -- and it is what makes this work in
+ * the LIGHT theme, where the old per-card text colours were near-white chosen
+ * against a scrim that has now gone.
+ *
+ * MOBILE: no breakpoint, and it improves there. These are colour declarations
+ * only, and the narrow shell already drops the panel’s border and radius for a
+ * full-bleed surface -- so on a phone the body’s colour becomes the whole
+ * screen and there is not even a panel edge for a seam to sit on. The sticky
+ * action bar’s fade is written against var(--card), which is re-pointed here,
+ * so it follows without being named. */
+.onboarding-panel:has(.companion-card[data-companion="jarvis"][data-skin="default"]) {
+  --companion-surface: #050508;
 }
+.onboarding-panel:has(.companion-card[data-companion="colossus"]) {
+  --companion-surface: #060504;
+}
+.onboarding-panel:has(.companion-card[data-companion="jarvis"][data-skin="default"]),
+.onboarding-panel:has(.companion-card[data-companion="colossus"]) {
+  --card: var(--companion-surface);
+  --card-2: color-mix(in srgb, var(--companion-surface) 84%, #fff);
+  --inset: color-mix(in srgb, var(--companion-surface) 90%, #fff);
+  --border: rgb(255 255 255 / 9%);
+  --border-2: rgb(255 255 255 / 17%);
+  --text: #f2f2f5;
+  --text-2: #b5b5bf;
+  --text-3: #83838d;
+  --text-4: #6b6b75;
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--companion-surface);
+  /* Opaque now, so there is nothing behind it left to blur -- and a
+   * backdrop-filter sampling nothing still costs a compositor layer on every
+   * frame the body draws, which here is all of them. */
+  backdrop-filter: none;
+  box-shadow: 0 34px 100px rgb(0 0 0 / 46%);
+}
+
+/* AND THEN FEATHER THE PLATE INTO IT, because matching one colour is not
+ * enough on its own.
+ *
+ * Colossus does not HAVE one background colour. He ends in a rectangular
+ * vignette and a drifting diagonal glass sheen, so his board runs from about 10
+ * at the top left to 0 at the bottom right on a 0-255 scale. Whatever flat
+ * value the panel is given, some part of his rectangle is brighter than it and
+ * some part darker, and the border between them is an edge. Measured on the
+ * composited page: with the panel on his median colour, the step across his
+ * right edge was 5.7 and across his top 3.5 -- which is small, and still
+ * perfectly legible as a rectangle, and is the thing that keeps being reported
+ * as an inner card.
+ *
+ * The feather removes the step by construction rather than by tuning: the last
+ * 64px of the plate fade to nothing, so the body meets the panel at the panel’s
+ * own colour whatever the body is doing there. 64px is wide enough that the
+ * body’s own gradient moves by about a unit across it -- narrower and the fade
+ * itself becomes the edge.
+ *
+ * ONLY THE OPAQUE PAIR. The transparent bodies have no plate to feather, and
+ * masking them would dim their outermost particles to buy nothing.
+ *
+ * Two syntaxes: `mask-composite: intersect` is the standard one Chromium takes,
+ * `-webkit-mask-composite: source-in` is what WebKit needs, and the desktop app
+ * runs on whichever webview the platform provides. */
+.onboarding-panel:has(.companion-card[data-companion="jarvis"][data-skin="default"]) .companion-art,
+.onboarding-panel:has(.companion-card[data-companion="colossus"]) .companion-art {
+  --companion-feather: 64px;
+  -webkit-mask-image:
+    linear-gradient(to bottom, transparent, #000 var(--companion-feather), #000 calc(100% - var(--companion-feather)), transparent),
+    linear-gradient(to right, transparent, #000 var(--companion-feather), #000 calc(100% - var(--companion-feather)), transparent);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to bottom, transparent, #000 var(--companion-feather), #000 calc(100% - var(--companion-feather)), transparent),
+    linear-gradient(to right, transparent, #000 var(--companion-feather), #000 calc(100% - var(--companion-feather)), transparent);
+  mask-composite: intersect;
+}
+
+/* The card on screen IS the selection, so there is no selected/unselected pair
+ * left to distinguish -- the accent ring that used to mark the chosen card of
+ * two would now be on the only card there is, which tells you nothing. */
 
 .provider-step { max-width: 700px; }
 .voice-step { max-width: 700px; }
@@ -232,12 +370,10 @@
   .onboarding-heading { margin-bottom: 18px; }
   .onboarding-heading h1 { font-size: 36px; }
   .onboarding-name { height: auto; margin-bottom: 14px; }
-  .companion-prompt { margin-bottom: 8px; }
-  .companion-card { grid-template-rows: minmax(150px, 1fr) auto; min-height: 285px; }
-  .companion-art { min-height: 150px; }
-  .companion-art.familiar .familiar-stage { width: min(145px, 21vh); }
-  .companion-art.jarvis .jarvis-stage { min-height: 156px; height: 156px; }
+  .companion-card { min-height: 340px; }
+  .companion-card[data-companion="familiar"] .familiar-stage { width: min(230px, 58%); margin-bottom: 72px; }
   .companion-copy { gap: 4px; padding: 13px 17px 15px; }
+  .companion-rail { gap: 12px; }
   .onboarding-actions { padding-top: 14px; }
 }
 
@@ -248,12 +384,15 @@
   .onboarding-content { padding: 30px 18px 22px; }
   .onboarding-heading { margin-bottom: 22px; }
   .onboarding-heading h1 { font-size: 32px; }
-  .companion-grid { grid-template-columns: 1fr; }
-  .companion-card { grid-template-columns: 128px 1fr; grid-template-rows: 1fr; min-height: 160px; }
-  .companion-art { min-height: 160px; }
-  .companion-art.familiar .familiar-stage { width: 120px; }
-  .companion-art.jarvis .jarvis-stage { min-height: 160px; height: 160px; }
-  .companion-copy { align-content: center; border-top: 0; border-left: 1px solid var(--border); }
+  /* Narrow: the chevrons shrink and hug the card rather than reserving a full
+   * 44px gutter each, which on a 320px screen was a fifth of the width spent on
+   * two arrows. The card keeps the portrait layout here -- the side-by-side
+   * shape this rule used to switch to existed to fit two cards in a column, and
+   * there is only one card now. */
+  .companion-viewport { grid-template-columns: 34px minmax(0, 1fr) 34px; gap: 6px; }
+  .companion-chevron { width: 34px; height: 34px; }
+  .companion-card { min-height: 360px; }
+  .companion-card[data-companion="familiar"] .familiar-stage { width: min(210px, 56%); margin-bottom: 76px; }
   .onboarding-provider-stack, .onboarding-custom-fields, .voice-key-form, .voice-secret-fields { grid-template-columns: 1fr; }
   .onboarding-provider-stack > :nth-child(3), .onboarding-custom-fields { grid-column: auto; }
   .onboarding-picker-menu { min-width: 100%; }

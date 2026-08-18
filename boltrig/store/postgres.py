@@ -1600,11 +1600,12 @@ class PostgresStore(
         await self._pool.execute(
             """INSERT INTO organisations
                (id, name, slug, settings, allow_own_ai_keys, require_two_factor,
-                created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                created_at, updated_at, allow_own_integration_credentials)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
                ON CONFLICT (id) DO NOTHING""",
             org.id, org.name, org.slug, org.settings,
             org.allow_own_ai_keys, org.require_two_factor, org.created_at, org.updated_at,
+            org.allow_own_integration_credentials,
         )
 
     async def get_org(self, tenant_id):
@@ -1619,10 +1620,12 @@ class PostgresStore(
     async def update_org(self, org: Organisation):
         await self._pool.execute(
             """UPDATE organisations SET name=$2, slug=$3, settings=$4,
-                   allow_own_ai_keys=$5, require_two_factor=$6, updated_at=now()
+                   allow_own_ai_keys=$5, require_two_factor=$6, updated_at=now(),
+                   allow_own_integration_credentials=$7
                WHERE id=$1""",
             org.id, org.name, org.slug, org.settings,
             org.allow_own_ai_keys, org.require_two_factor,
+            org.allow_own_integration_credentials,
         )
 
     async def create_workspace(self, workspace: Workspace):

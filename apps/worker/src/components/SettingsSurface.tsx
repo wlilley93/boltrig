@@ -19,6 +19,7 @@ import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { SpendingSection } from "./settings/SpendingSection";
 import { SettingsGroup, SettingsRow } from "./settings/rowKit";
 import { ApprovalPostureSettings } from "./ApprovalPostureControl";
+import { MemberIntegrationConnections } from "./integrations/MemberConnections";
 import "./settings/settings-you.css";
 
 // The settings pane, recast onto the typed row-control kit in
@@ -116,7 +117,16 @@ function YouSettingsPane({ head = true }: { head?: boolean }) {
 }
 
 function OrganisationSettingsPane({ head = true }: { head?: boolean }) {
-  return <>{head && <SectionHead section="organisation" />}<CompactOrganisationSection /></>;
+  // Offboarding sits with the organisation rather than with Plugins: a member
+  // removes their own connection where they made it, and an administrator
+  // destroys a departed member's where they administer that member.
+  return (
+    <>
+      {head && <SectionHead section="organisation" />}
+      <CompactOrganisationSection />
+      <MemberIntegrationConnections />
+    </>
+  );
 }
 
 function BehaviourSettingsPane({ head = true }: { head?: boolean }) {

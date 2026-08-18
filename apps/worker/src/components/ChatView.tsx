@@ -23,7 +23,8 @@ import {
   revealMaterializedArtifact,
 } from "../desktop";
 import { FamiliarBadge } from "./familiar/FamiliarBadge";
-import { StageBody, useFamiliarBody, type StageTurnInput } from "./StageBody";
+import { StageBody, useFamiliarBody } from "./StageBody";
+import { stageTurnInput, type StageVoiceActivity } from "./chat/stageTurnInput";
 import { useCharacter } from "./characters";
 import { familiarStateFromTurn } from "./familiar/FamiliarState";
 import { MobileChat } from "./MobileChat";
@@ -33,6 +34,8 @@ import { LiveTurn, Message } from "./chat/ChatMessages";
 import { ComposerRunStatus } from "./chat/QueuedMessages";
 import { RunSectionView } from "./chat/RunSectionView";
 import { RoutineRunBanner, useConversationProvenance } from "./chat/RoutineRunBanner";
+import { TranscriptBody } from "./chat/TranscriptBody";
+import { useCompactionBoundary } from "./chat/useCompactionBoundary";
 import { SubagentTabs } from "./chat/SubagentTabs";
 import { TaskInspector } from "./chat/TaskInspector";
 import type {
@@ -150,12 +153,9 @@ export function ChatView({
   const draftInputRef = useRef<HTMLTextAreaElement>(null);
   const voiceDockRef = useRef<HTMLSpanElement>(null);
   const tech = useTechDetails();
-  const [voiceActivity, setVoiceActivity] = useState<{
-    speaking: boolean;
-    level: number;
-    bands?: number[];
-    onset?: number;
-  }>({ speaking: false, level: 0 });
+  const [voiceActivity, setVoiceActivity] = useState<StageVoiceActivity>(
+    { speaking: false, level: 0 },
+  );
   const [callActive, setCallActive] = useState(false);
   const selectedCharacterId = useFamiliarBody();
   const selectedCharacter = useCharacter(selectedCharacterId);
@@ -205,6 +205,7 @@ export function ChatView({
     messages,
     queuedMessageOrder: queue.order,
   });
+  const compactionBoundaryId = useCompactionBoundary(modelContext, transcriptMessages);
   const transcriptViewport = useTranscriptViewport({
     conversationKey: conversationId,
     contentRevision: transcriptRevision,
@@ -836,16 +837,12 @@ export function ChatView({
   // one full-resolution Stage. Chat must not leave a second WebGL renderer
   // running invisibly behind that modal.
   const stageIsHero = messages.length === 0 && events.length === 0;
-  // The turn facts both bodies read. StageBody picks which one depicts them.
-  const stageInput: StageTurnInput = {
+  const stageInput = stageTurnInput({
     loading,
-    hasLiveEvents: events.length > 0,
+    liveEventCount: events.length,
     liveEnded: live.ended,
-    voiceSpeaking: voiceActivity.speaking,
-    voiceLevel: voiceActivity.level,
-    voiceBands: voiceActivity.bands ?? null,
-    voiceOnset: voiceActivity.onset,
-  };
+    voice: voiceActivity,
+  });
   const stageState = familiarStateFromTurn(stageInput);
 
   // The decided target's New screen is chrome-free: no header row, the glyph
@@ -1216,28 +1213,19 @@ export function ChatView({
             </p>
           )}
           <RoutineRunBanner provenance={conversationProvenance.value} />
-          {transcriptMessages.map((message) => (
-            <Message
-              key={message.id}
-              message={message}
-              tech={tech}
-              onDecisionResolved={retryConversationLoad}
-              durationSeconds={message.run_id ? turnDurations[message.run_id] : undefined}
-            />
-          ))}
-          {modelContext?.compacted && (
-            <details className="notice model-context-notice">
-              <summary>
-                Model context uses a summary of {modelContext.covered_count} earlier
-                messages plus {modelContext.recent_exact_count} recent messages verbatim.
-              </summary>
-              <p>
-                The complete transcript remains visible here. The next model turn
-                receives this derived summary for the older portion:
-              </p>
-              <blockquote>{modelContext.summary}</blockquote>
-            </details>
-          )}
+          <TranscriptBody
+            boundaryId={compactionBoundaryId}
+            messages={transcriptMessages}
+            modelContext={modelContext}
+            renderMessage={(message) => (
+              <Message
+                message={message}
+                tech={tech}
+                onDecisionResolved={retryConversationLoad}
+                durationSeconds={message.run_id ? turnDurations[message.run_id] : undefined}
+              />
+            )}
+          />
           {events.length > 0 && (
             <LiveTurn
               events={events}

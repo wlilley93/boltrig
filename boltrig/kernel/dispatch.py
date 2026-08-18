@@ -71,7 +71,7 @@ from .idempotency import (
 from .questions import QUESTIONS_VERB
 from .run_event_projection import (
     _event_safe,
-    _summarise_output,
+    result_frames,
     _summarise_params,
 )
 from .ratelimit import RateLimiter
@@ -424,15 +424,11 @@ class Dispatcher:
             # chat stream forwards only the bounded ``call_id``/``status``/
             # ``result_summary`` keys (K-20), never the raw output.
             if status != "pending_human":
-                self._emit_run_and_parent(context, {
-                    "type": "tool_result", "verb": verb, "status": status,
-                    "output": _event_safe(output) if status == "ok" else None,
-                    "run_id": context.run_id, "call_id": call_id,
-                    "result_summary": (
-                        _summarise_output(output) if status == "ok"
-                        else {"status": status}
-                    ),
-                })
+                for frame in result_frames(
+                    verb=verb, status=status, output=output,
+                    run_id=context.run_id, call_id=call_id,
+                ):
+                    self._emit_run_and_parent(context, frame)
             latency_ms = int((time.monotonic() - started) * 1000)
             target_adapter = meta.get("target_adapter")
             resource, resource_id = _resource_ref(noun, params)
@@ -664,7 +660,7 @@ class Dispatcher:
         if adapter is None:
             return self._degrade_or_fail(verb_def, reason="adapter_not_loaded")
         credential = await self._creds.resolve_for_adapter(
-            context.tenant_id, binding.target_ref
+            context.tenant_id, binding.target_ref, context.on_behalf_of or context.actor
         )
         # Permission-parity passthrough: when the chat turn sealed a per-run bearer
         # for THIS adapter (keyed by run id + target_ref), it overrides the static

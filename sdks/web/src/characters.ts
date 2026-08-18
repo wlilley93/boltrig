@@ -45,6 +45,24 @@ export interface CharacterTurnInput {
   voiceOnset?: number;
   micActive?: boolean;
   micLevel?: number;
+  /**
+   * A short phrase from the reply being spoken aloud, for a body that displays
+   * WORDS. Absent for every body that does not.
+   *
+   * THE ONLY CONVERSATION CONTENT IN THIS INTERFACE, and it is deliberately a
+   * phrase rather than the reply. Everything else here is a FACT about the turn
+   * -- is it loading, is a voice speaking, how loud, which bands -- so that a
+   * character registered by a third party cannot read somebody’s conversation
+   * by declaring a stage and listening. A ticker has to show words, so one
+   * bounded phrase crosses, bounded by the host at the point it is made.
+   *
+   * NOT A SUMMARY. It is the opening clause of what is being said, so it cannot
+   * misreport the reply: it is a quotation. A host that has nothing to quote --
+   * a live call, where the audio arrives without text -- omits it, and a body
+   * that receives nothing must fall back to its own copy rather than showing an
+   * empty sign.
+   */
+  speechTakeaway?: string | null;
 }
 
 /** Short name used by character add-ins. */
@@ -92,6 +110,12 @@ export interface CharacterRenderProps<TPhenotype = unknown, TGenotype = unknown>
   turn?: Pick<NormalizedTurn, "tools" | "subagents" | "steps"> | null;
   genotype?: TGenotype | null;
   label?: string;
+  /**
+   * Which of the character's skins to draw. Absent, or naming one the character
+   * does not offer, means the first -- a stored skin from an uninstalled
+   * variant costs the Stage a look, never a render.
+   */
+  skin?: string;
 }
 
 /** Short name used by character add-ins. */
@@ -99,6 +123,19 @@ export type StageRenderProps<TPhenotype = unknown, TGenotype = unknown> =
   CharacterRenderProps<TPhenotype, TGenotype>;
 
 export type CharacterId = string;
+
+/**
+ * One selectable LOOK for a character -- structurally the bundle's skin entry.
+ *
+ * Declared on the character rather than discovered from its bundle so that a
+ * picker can ask any registered character what looks it offers. A plugin that
+ * registers directly, with no manifest at all, can still have skins.
+ */
+export interface CharacterSkin {
+  id: string;
+  name?: string;
+  blurb?: string;
+}
 
 export interface Character<TNode = unknown, TPhenotype = unknown, TGenotype = unknown> {
   id: CharacterId;
@@ -130,6 +167,15 @@ export interface Character<TNode = unknown, TPhenotype = unknown, TGenotype = un
    */
   voiceIds?: Readonly<Record<string, string>>;
   blurb: string;
+  /**
+   * Looks this character offers, FIRST IS DEFAULT. Absent means one look --
+   * the honest encoding, because an array of one implies a choice that does not
+   * exist and every picker would have to special-case it.
+   *
+   * Presentation only. A skin never changes prompts, dispatch or voice, so the
+   * character you are talking to is the same character either way.
+   */
+  skins?: readonly CharacterSkin[];
   render(props: CharacterRenderProps<TPhenotype, TGenotype>): TNode;
 }
 

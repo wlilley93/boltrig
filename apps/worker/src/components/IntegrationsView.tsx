@@ -6,6 +6,7 @@ import {
   type IntegrationAuthKind,
   type IntegrationCatalogueEntry,
   type IntegrationConnection,
+  type IntegrationSecretSubmission,
   type IntegrationManualSecretContract,
   type McpServerSummary,
   type RuntimeAddon,
@@ -23,6 +24,7 @@ import {
   governedResultReason,
   useExactApprovalFinalizer,
 } from "./ExactApprovalFinalizer";
+import { ManualSecretSetup } from "./integrations/ManualSecretSetup";
 import {
   AddPluginModal,
   PluginInventoryStatus,
@@ -433,18 +435,14 @@ export function IntegrationsView() {
 
   async function submitManualSecret(
     entry: IntegrationCatalogueEntry,
-    label: string,
-    fields: Record<string, string>,
+    submission: IntegrationSecretSubmission,
   ): Promise<boolean> {
     revocationFinalizer.invalidate();
     setDisconnectArmed(false);
     setSetupBusy(true);
     setMessage("");
     try {
-      const result = await client.submitIntegrationSecret(entry.id, {
-        fields,
-        ...(label.trim() ? { label: label.trim() } : {}),
-      });
+      const result = await client.submitIntegrationSecret(entry.id, submission);
       setConnections((current) => [
         ...current.filter((item) => item.id !== result.connection.id),
         result.connection,
@@ -759,7 +757,7 @@ export function IntegrationsView() {
                         onConnect={() => void connect(item.entry)}
                         onDisconnect={(connection) => void disconnect(connection)}
                         onHealth={(connection) => void refreshHealth(connection)}
-                        onSubmit={(label, fields) => submitManualSecret(item.entry, label, fields)}
+                        onSubmit={(s) => submitManualSecret(item.entry, s)}
                         onToggle={() => toggleIntegration(item.entry.id)}
                         open={selectedKey === item.key}
                         revocationBusy={revocationFinalizer.busy || revocationApprovalOpen}
@@ -839,7 +837,7 @@ function IntegrationRow({
   onConnect(): void;
   onDisconnect(connection: IntegrationConnection): void;
   onHealth(connection: IntegrationConnection): void;
-  onSubmit(label: string, fields: Record<string, string>): Promise<boolean>;
+  onSubmit(submission: IntegrationSecretSubmission): Promise<boolean>;
   onToggle(): void;
   open: boolean;
   revocationBusy: boolean;
@@ -915,9 +913,7 @@ function IntegrationRow({
             {connection && (
               <Fact
                 label="credential"
-                value={connection.credential_ref_present
-                  ? "reference present · custody not exposed"
-                  : "no reference reported"}
+                value={credentialScopeFact(connection)}
               />
             )}
             {!connection && <Fact label="auth" value={method.label} />}
@@ -1098,76 +1094,6 @@ function Fact({
   );
 }
 
-function ManualSecretSetup({
-  contract,
-  defaultLabel,
-  busy,
-  onSubmit,
-}: {
-  contract: IntegrationManualSecretContract;
-  defaultLabel: string;
-  busy: boolean;
-  onSubmit(label: string, fields: Record<string, string>): Promise<boolean>;
-}) {
-  const blank = () => Object.fromEntries(contract.fields.map((field) => [field.name, ""]));
-  const [label, setLabel] = useState(defaultLabel);
-  const [fields, setFields] = useState<Record<string, string>>(blank);
-
-  useEffect(() => {
-    setLabel(defaultLabel);
-    setFields(blank());
-  }, [contract.version, defaultLabel]);
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (busy) return;
-    const submitted = { ...fields };
-    setFields(blank());
-    await onSubmit(label, submitted);
-    for (const name of Object.keys(submitted)) submitted[name] = "";
-  }
-
-  return (
-    <form className="plugins-secret-form" aria-label={`Connect ${defaultLabel}`} onSubmit={(event) => void submit(event)}>
-      <p className="plugins-guard">
-        Contract <code>{contract.version}</code> accepts only the fields below.
-        Secret values are sealed once and never shown again.
-      </p>
-      <label>
-        <span>Connection label</span>
-        <input
-          value={label}
-          maxLength={200}
-          required
-          disabled={busy}
-          onChange={(event) => setLabel(event.target.value)}
-        />
-      </label>
-      {contract.fields.map((field) => (
-        <label key={field.name}>
-          <span>{field.label}</span>
-          <input
-            type={field.secret ? "password" : "text"}
-            autoComplete="off"
-            value={fields[field.name] ?? ""}
-            minLength={field.min_length}
-            maxLength={field.max_length}
-            required={field.required}
-            disabled={busy}
-            onChange={(event) => setFields((current) => ({
-              ...current,
-              [field.name]: event.target.value,
-            }))}
-          />
-        </label>
-      ))}
-      <button className="plugins-primary-action" disabled={busy || !label.trim()}>
-        {busy ? "Sealing…" : "Seal and connect"}
-      </button>
-    </form>
-  );
-}
-
 function RuntimeAddons({
   addons,
   state,
@@ -1317,6 +1243,17 @@ function errorReason(error: unknown): string | null {
     return body.reason;
   }
   return null;
+}
+
+function credentialScopeFact(connection: IntegrationConnection): string {
+  if (!connection.credential_ref_present) return "no reference reported";
+  // Whose credential this is, said plainly. A member looking at the plugins page
+  // needs to know whether a call runs as them or as the organisation, and the
+  // custody phrasing stays because the reference is never exposed either way.
+  if (connection.level !== "user") return "the organisation's · custody not exposed";
+  return connection.is_own
+    ? "yours · custody not exposed"
+    : "another member's · custody not exposed";
 }
 
 function integrationHealthPresentation(health: string): HealthPresentation {

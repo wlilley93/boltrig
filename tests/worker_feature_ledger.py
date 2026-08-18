@@ -898,6 +898,11 @@ _governed_controls(
     "The chat surface renders HITL requests raised BY a turn: it shows the question and the options the kernel supplied, and replays the operator's decision through the same respondHitl method. Its explicitly opened tool disclosure reads only the caller-visible, server-redacted run snapshot and settles nothing. It composes no approval of its own, retains only bounded display state or the request id, and a decision that never reaches the kernel leaves the turn parked, which is the correct failure.",
 )
 _governed_controls(
+    "integrations/MemberConnections.tsx",
+    ("worker", "worker", "worker", "worker", "worker"),
+    "Offboarding: an administrator destroys a departed member's personal integration credential. It retains only the connection id it sent plus the internal approval id, replays the same SDK method through the exact-approval finalizer, and reports a pending_human receipt as waiting rather than as done. Its projection is deliberately narrower than the member's own view of the same row - the server omits the provider accounts, so administering a connection never becomes a way to read whose account it is - and the whole section is absent for a caller the author-only route refuses.",
+)
+_governed_controls(
     "settings/KnowledgeToggle.tsx",
     ("worker", "worker", "worker", "worker", "worker"),
     "The knowledge provider rows mutate governed configuration and surface the kernel's pending_human receipt rather than reporting success: the row keeps its prior value until the change is approved, so a person cannot read a queued change as a made one. It retains no request body beyond the exact typed inputs it sent. This governed control was CompactSections.tsx until the settings surface was split into one component per row; the behaviour did not change, only the file that carries it, and CompactSections.tsx now composes rows and settles nothing.",

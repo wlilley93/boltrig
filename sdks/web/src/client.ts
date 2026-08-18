@@ -118,6 +118,7 @@ import type {
   KnowledgeAssetsResponse,
   KnowledgeAssetDetailResponse,
   KnowledgeMutationResponse,
+  MemberIntegrationConnectionsResponse,
   KnowledgeProvidersResponse,
   KnowledgeSearchResponse,
   KnowledgeUploadResponse,
@@ -2360,6 +2361,23 @@ export class BoltrigClient {
   ): Promise<GovernedRouteResponse<StatusAck>> {
     return this.governedJson(
       `/v1/integrations/connections/${encodeURIComponent(id)}`,
+      "DELETE",
+      undefined,
+      approvalId,
+    );
+  }
+
+  /** Every OTHER member's personal connections. Author roles only; 403 otherwise. */
+  memberIntegrationConnections(): Promise<MemberIntegrationConnectionsResponse> {
+    return this.request("/v1/integrations/member-connections");
+  }
+
+  revokeMemberIntegrationConnection(
+    id: string,
+    approvalId?: string,
+  ): Promise<GovernedRouteResponse<StatusAck>> {
+    return this.governedJson(
+      `/v1/integrations/member-connections/${encodeURIComponent(id)}`,
       "DELETE",
       undefined,
       approvalId,

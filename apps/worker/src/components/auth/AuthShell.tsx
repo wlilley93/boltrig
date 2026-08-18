@@ -1,3 +1,4 @@
+import { BrandMark } from "../BrandMark";
 import { BrandWordmark } from "../BrandWordmark";
 
 export function AuthSplash() {
@@ -40,7 +41,19 @@ export function AuthCard({
   return (
     <main className="auth-surface">
       <section className="auth-card">
+        {/* Mark AND wordmark, on every auth surface. AuthCard is the single
+            seam all of them pass through -- sign-in, the 2FA prompt and its
+            setup, both password resets, invite acceptance, the desktop bridge
+            -- so putting it here is what stops one of the nine growing a
+            different header from the other eight.
+
+            NOT BrandLockup, deliberately. That component's contract is the two
+            ONBOARDING headers, which must stay identical to each other; widening
+            it to a third surface with its own chrome is a design decision to
+            take on its own, not a side effect of putting a logo on a login box.
+            The sizing here is the lockup's, in em, so the two already match. */}
         <div className="auth-brand">
+          <BrandMark className="auth-mark" />
           <BrandWordmark />
         </div>
         <p className="eyebrow">Your workspace</p>

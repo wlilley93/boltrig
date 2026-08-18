@@ -38,8 +38,15 @@ import {
   subscribeCharacters as sdkSubscribeCharacters,
 } from "@wlilley93/boltrig-web-sdk";
 import type { CharacterId } from "../character";
-import { DEFAULT_CHARACTER } from "../character";
+import {
+  CHARACTER_CHANGE_EVENT,
+  DEFAULT_CHARACTER,
+  DEFAULT_SKIN,
+  loadSkin,
+} from "../character";
+import colossusBundle from "../bundles/colossus/character.json";
 import familiarBundle from "../bundles/familiar/character.json";
+import ultronBundle from "../bundles/ultron/character.json";
 import jarvisBundle from "../bundles/jarvis/character.json";
 import {
   characterFromBundle,
@@ -54,6 +61,11 @@ import { UNIFORMS as SHADER_UNIFORMS } from "./familiar/FamiliarWebGLRenderer";
 import { UNIFORMS as JARVIS_UNIFORMS } from "./jarvis/JarvisRenderer";
 import { JarvisStage } from "./jarvis/JarvisStage";
 import { jarvisStateFromTurn } from "./jarvis/JarvisState";
+import { UNIFORMS as COLOSSUS_UNIFORMS } from "./colossus/ColossusRenderer";
+import { ColossusStage } from "./colossus/ColossusStage";
+import { colossusStateFromTurn } from "./colossus/ColossusState";
+import { UltronStage } from "./ultron/UltronStage";
+import { ultronStateFromTurn } from "./ultron/UltronState";
 
 export type StageTurnInput = import("@wlilley93/boltrig-web-sdk").CharacterTurnInput;
 export type StageRenderProps = SdkCharacterRenderProps<FamiliarPhenotypeResponse, FamiliarGenotype>;
@@ -86,6 +98,39 @@ function useCharacterRegistry(): void {
 export function useCharacter(id: CharacterId): Character {
   useCharacterRegistry();
   return characterFor(id);
+}
+
+/**
+ * The chosen skin, kept current with the change event.
+ *
+ * Returns the raw stored value; RESOLVING it against what the character
+ * actually offers is `skinFor`'s job, below, because only the character knows
+ * which looks exist.
+ */
+export function useSkin(): string {
+  return useSyncExternalStore(
+    (listener) => {
+      if (typeof document === "undefined") return () => undefined;
+      document.addEventListener(CHARACTER_CHANGE_EVENT, listener);
+      return () => document.removeEventListener(CHARACTER_CHANGE_EVENT, listener);
+    },
+    loadSkin,
+    () => DEFAULT_SKIN,
+  );
+}
+
+/**
+ * The skin this character will actually draw.
+ *
+ * A stored skin naming a look the character does not offer -- an uninstalled
+ * variant, or a build that never shipped it -- resolves to its FIRST skin
+ * rather than being drawn as nothing. Same rule as `characterFor`: a missing
+ * variant costs the Stage a look and nothing else.
+ */
+export function skinFor(character: Character, stored: string): string {
+  const offered = character.skins;
+  if (!offered || offered.length === 0) return DEFAULT_SKIN;
+  return offered.some((skin) => skin.id === stored) ? stored : offered[0].id;
 }
 
 export function useCharacterOptions(): {
@@ -188,11 +233,22 @@ const JARVIS_SOURCE: CharacterCanvasSource = {
   id: "boltrig.canvas.jarvis",
   type: "shader",
   supplies: [...JARVIS_UNIFORMS, "uGene"],
-  render: ({ input, mode, phenotype, budgets, turn }) =>
+  /**
+   * Two bodies, one character. "default" is the instrument dial; "ultron" is the
+   * neural field of components/jarvis/v2 -- the Age of Ultron hologram, which is
+   * Jarvis's own look in that film and NOT Ultron's. Animal Logic coded JARVIS
+   * orange and angular and ULTRON blue and organic, so an actual Ultron would be
+   * a different character with a different body, not a third skin here.
+   *
+   * Declared so characterFromBundle can refuse a manifest naming a third.
+   */
+  skins: ["default", "ultron"],
+  render: ({ input, mode, phenotype, budgets, turn, skin }) =>
     createElement(JarvisStage, {
       budgets: budgets as never,
       highResolution: mode === "voice",
       phenotype,
+      skin,
       state: jarvisStateFromTurn(input),
       suspended: mode === "minimised",
       turn,
@@ -207,12 +263,102 @@ const JARVIS_SOURCE: CharacterCanvasSource = {
  */
 const JARVIS: Character = characterFromBundle(jarvisBundle, [JARVIS_SOURCE]);
 
+/**
+ * Ultron's canvas source -- a THIRD one, and for the same reason the second
+ * exists: he needs a different set of channels again. He drives aggression,
+ * crack range and facet separation, and drives no budgets, no work board and no
+ * readout, because he has nowhere to put a number.
+ *
+ * He is NOT a skin of Jarvis. Animal Logic built both consciousnesses for the
+ * Birth of Ultron sequence and coded them as opposites -- JARVIS orange and
+ * angular and circuit-like, ULTRON blue and organic -- so the gold hologram is
+ * Jarvis's own look in that film and this is a different being. Pointing his
+ * manifest at Jarvis's source would be refused by assertUniforms, which is the
+ * format working rather than fighting us.
+ */
+/**
+ * Every uniform Ultron's four passes set. Kept here beside the source because
+ * `supplies` describes what the SOURCE can drive; the shaders that consume them
+ * are split across components/ultron and components/canvas, so no single module
+ * over there owns the list.
+ */
+// Exported ONLY so tests/ultronBundle.test.ts can check this exact array
+// against the shaders. It used to derive its own copy of the list from the
+// shader sources and compare that to the manifest, which meant the one list
+// production actually passes to `supplies` was never in the comparison -- adding
+// `uLimb` to the shaders and the manifest left this array behind and the suite
+// stayed green while the bundle refused to build at runtime.
+export const ULTRON_UNIFORMS: readonly string[] = [
+  "uState", "uTime", "uDt", "uEnergy", "uRadius", "uWaveT", "uWaveAmp",
+  "uAspect", "uStreak", "uGrid", "uSegments", "uStride", "uSize",
+  "uLinkRange", "uAggression", "uBands", "uVoice", "uSwell", "uPetal", "uLimb",
+  "uSwirl", "uFacetSpin", "uOuter", "uDend", "uDendTip", "uBead", "uEye", "uLayerPace", "uReverb", "uSignal", "uArc", "uCloud",
+  "uWarm", "uHot", "uFringe", "uInner", "uFringeScale", "uFringeGain", "uGain",
+  "uSrc", "uDir", "uThreshold",
+  "uScene", "uBloom", "uBloomGain", "uCore", "uStarburst",
+];
+
+const ULTRON_SOURCE: CharacterCanvasSource = {
+  id: "boltrig.canvas.ultron",
+  type: "shader",
+  supplies: ULTRON_UNIFORMS,
+  render: ({ input, mode, phenotype }) =>
+    createElement(UltronStage, {
+      highResolution: mode === "voice",
+      phenotype,
+      state: ultronStateFromTurn(input),
+      suspended: mode === "minimised",
+    }),
+};
+
+/**
+ * Ultron, from his bundle like the other two. He ships, so the stock path
+ * registers him: characterPlugins.ts, package.json and manifest.yaml stay
+ * untouched, which is the rule intact rather than bent.
+ */
+const ULTRON: Character = characterFromBundle(ultronBundle, [ULTRON_SOURCE]);
+
+/**
+ * Colossus's canvas source -- a FOURTH, and the first that is not a sphere.
+ *
+ * The other three sources differ in which channels they drive; this one differs
+ * in what it draws at all. There is no particle simulation behind it and no
+ * float extension: a lamp's brightness is a closed-form function of position
+ * and time, so his body is one fullscreen pass, a glyph atlas and a bloom.
+ *
+ * He drives no phenotype, no budgets, no work board and no readout of the
+ * machine's state. What he drives is TEXT -- a ticker buffer of glyph ids and a
+ * scroll offset -- which no other source here can supply, and pointing his
+ * manifest at one of theirs would be refused by assertUniforms.
+ */
+const COLOSSUS_SOURCE: CharacterCanvasSource = {
+  id: "boltrig.canvas.colossus",
+  type: "shader",
+  supplies: COLOSSUS_UNIFORMS,
+  render: ({ input, mode }) =>
+    createElement(ColossusStage, {
+      highResolution: mode === "voice",
+      state: colossusStateFromTurn(input),
+      suspended: mode === "minimised",
+    }),
+};
+
+/**
+ * Colossus, from his bundle like the other three. His manifest OMITS the
+ * phenotype block, which is the same encoding Familiar uses and the opposite
+ * reason: she has an inner life the appraisal engine cannot see, and he has one
+ * register. He ships, so the stock path registers him.
+ */
+const COLOSSUS: Character = characterFromBundle(colossusBundle, [COLOSSUS_SOURCE]);
+
 registerCharacter(FAMILIAR);
 registerCharacter(JARVIS);
+registerCharacter(ULTRON);
+registerCharacter(COLOSSUS);
 
-// Published web and desktop builds contain exactly the two supported bodies
+// Published web and desktop builds contain exactly the four supported bodies
 // above. Do not use a bundler directory glob here: Vite emits every matched companion
 // as a production chunk even when the surrounding branch is DEV-only. A local
 // developer can import a companion's register.ts explicitly in a dev harness
 // and call registerCharacter, while the stock product never discovers or
-// bundles a third body.
+// bundles a body it does not ship.

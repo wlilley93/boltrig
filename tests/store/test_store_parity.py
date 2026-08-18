@@ -2125,6 +2125,8 @@ async def test_atomic_integration_credential_lifecycle_matches_on_both_stores(st
         "api_key",
         "tickets_v1",
         {"opaque": "replica-visible-secret"},
+        level="org",
+        scope_id="acme",
     )
     connection = IntegrationConnection(
         id="conn-durable-tickets",

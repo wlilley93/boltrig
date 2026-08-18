@@ -19,6 +19,10 @@ const jarvisSource: CharacterCanvasSource = {
   id: "boltrig.canvas.jarvis",
   type: "shader",
   supplies: [...JARVIS_UNIFORMS, "uGene"],
+  // Both bodies the real source can draw: the instrument dial and the neural
+  // field. A source that named neither would now be refused, which is the
+  // point of declaring them.
+  skins: ["default", "ultron"],
   render: () => null,
 };
 
@@ -39,6 +43,28 @@ describe("Jarvis as a character bundle", () => {
     // The two he DID ask for, unlike Familiar.
     expect(jarvis.readsPhenotype).toBe(true);
     expect(jarvis.wantsBudgets).toBe(true);
+    // Two bodies, one character. The default is FIRST, so an install that has
+    // never heard of skins keeps rendering what it always rendered.
+    expect(jarvis.skins?.map((skin) => skin.id)).toEqual(["default", "ultron"]);
+    expect(jarvis.skins?.[0].name).toBe("Instrument");
+  });
+
+  // A skin the canvas cannot draw must be refused BY NAME. Collapsing it to the
+  // default would offer a look in the picker and then silently not draw it,
+  // which is indistinguishable from the feature being broken.
+  it("refuses a skin the bound canvas source cannot draw", () => {
+    const oneBody = { ...jarvisSource, skins: ["default"] };
+    expect(() => characterFromBundle(jarvisBundle, [oneBody]))
+      .toThrow(CharacterBundleUnsupported);
+    expect(() => characterFromBundle(jarvisBundle, [oneBody]))
+      .toThrow(/cannot draw skin ultron/);
+  });
+
+  // Familiar has one body and says so by SAYING NOTHING. An array of one would
+  // imply a choice, and every picker would have to special-case it.
+  it("leaves a character with one look carrying no skins at all", () => {
+    const familiar = characterFromBundle(familiarBundle, [familiarSource]);
+    expect(familiar.skins).toBeUndefined();
   });
 
   // The manifest names the shader by digest. If the vendored .frag moves under
@@ -48,6 +74,12 @@ describe("Jarvis as a character bundle", () => {
     const visual = parseCharacterBundle(jarvisBundle).visual;
     expect(visual.type).toBe("shader");
     if (visual.type !== "shader") return;
+    // PRESENT, not merely correct. `fragment` became optional so a character
+    // drawn by host machinery could ship no shader file; this one DOES ship
+    // one, and asserting its presence is what stops "optional" turning into
+    // "absent everywhere" and the digest check covering nothing.
+    expect(visual.fragment).toBeDefined();
+    if (!visual.fragment) return;
     expect(visual.fragment.file).toBe("jarvis.frag");
     expect(visual.fragment.sha256).toBe(digest);
   });
@@ -101,8 +133,14 @@ describe("Jarvis's voice", () => {
     expect(bundleVoiceId(manifest, "xai")).toBeUndefined();
   });
 
-  it("says nothing for the Familiar, who declares no voice at all", () => {
+  it("reads the Familiar's own fish id rather than Jarvis's", () => {
+    // She declares one now, where she used to declare nothing. The point of the
+    // assertion is unchanged: bundleVoiceId must answer from the manifest it was
+    // handed. Returning Jarvis's id here would be the failure, and it is a live
+    // possibility precisely because both bundles now name the same provider.
     const manifest = parseCharacterBundle(familiarBundle);
-    expect(bundleVoiceId(manifest, "fish")).toBeUndefined();
+    const jarvis = parseCharacterBundle(jarvisBundle);
+    expect(bundleVoiceId(manifest, "fish")).toBe("c8f64deb39914cfca7f47ccfc3bca82f");
+    expect(bundleVoiceId(manifest, "fish")).not.toBe(bundleVoiceId(jarvis, "fish"));
   });
 });
