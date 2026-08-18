@@ -8,5 +8,5 @@
 <circle cx="50" cy="50" r="21" stroke-dasharray="110 22" transform="rotate(-144 50 50)"/>
 <circle cx="50" cy="50" r="13" stroke-dasharray="68 14" transform="rotate(144 50 50)"/>
 </g>
-<circle cx="50" cy="50" r="5.0" fill="#3DD3F0"/>
+<circle cx="50" cy="50" r="5.0" fill="#0066FF"/>
 </svg>

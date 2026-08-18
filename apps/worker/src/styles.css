@@ -216,6 +216,55 @@ h1, h2, h3, p { margin-top: 0; }
   letter-spacing: .06em;
   text-transform: uppercase;
 }
+/* The mark's core, and the pulse it carries.
+ *
+ * TIMINGS COPIED FROM OPBOX, NOT RE-INVENTED: 2.6s, the same easings, the same
+ * 0.92 trough and the same 3.4x radar ping as `.opbox-dot` in that product's
+ * globals.css, so the two marks breathe at one rate rather than nearly one.
+ *
+ * The one thing that could NOT be copied is what the transform turns about. A
+ * CSS box scales about its own centre by default; an SVG circle scales about
+ * the USER-SPACE origin, which here is the mark's top-left corner -- so a
+ * straight copy would have made the core swing diagonally instead of breathe.
+ * `transform-box: fill-box` puts the origin back on the shape.
+ *
+ * The ping's stroke scales with it, which is deliberate and is what Opbox does
+ * too: a scaled CSS box scales its border, so the ring thickens as it goes out.
+ */
+.boltrig-mark__core,
+.boltrig-mark__ping {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.boltrig-mark__ping { fill: none; stroke-width: 1.6; }
+
+.boltrig-mark[data-pulse="true"] .boltrig-mark__core {
+  animation: boltrig-mark-pulse 2.6s ease-in-out infinite;
+}
+.boltrig-mark[data-pulse="true"] .boltrig-mark__ping {
+  animation: boltrig-mark-ping 2.6s cubic-bezier(0, 0, .2, 1) infinite;
+}
+
+@keyframes boltrig-mark-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(.92); }
+}
+@keyframes boltrig-mark-ping {
+  0% { opacity: .62; transform: scale(1); }
+  80%, 100% { opacity: 0; transform: scale(3.4); }
+}
+
+/* Reduced motion stops the animation AND hides the ping outright. Pausing it
+ * alone would freeze the ring at whatever frame it stopped on, leaving a
+ * permanent halo round the core that no static design ever asked for. This is
+ * also what keeps the visual-evidence captures deterministic: the rig runs with
+ * reducedMotion "reduce" (tests/visual/capture-current.mjs), so the mark it
+ * photographs is the still one. */
+@media (prefers-reduced-motion: reduce) {
+  .boltrig-mark[data-pulse="true"] .boltrig-mark__core { animation: none; }
+  .boltrig-mark__ping { display: none; }
+}
+
 .boltrig-wordmark {
   display: inline-block;
   font-family: "Boltrig Archivo", Archivo, Arial, sans-serif;
@@ -246,7 +295,12 @@ h1, h2, h3, p { margin-top: 0; }
   border-radius: 12px;
   background: var(--card);
 }
-.auth-brand { display: flex; align-items: center; margin-bottom: 30px; font-size: 17px; }
+.auth-brand { display: flex; align-items: center; gap: .55em; margin-bottom: 30px; font-size: 17px; }
+/* Sized off the auth card's own 17px in em, and 2.2em rather than 1.35: five
+ * concentric rings need the room or the gaps close up and it reads as a
+ * filled disc. Same figures as .onboarding-mark, so the two headers are the
+ * same lockup at the same size even though they are declared apart. */
+.auth-mark { width: 2.2em; height: 2.2em; flex: none; color: var(--text); }
 .auth-card h1 { margin-bottom: 7px; font-size: 26px; font-weight: 500; letter-spacing: -.3px; }
 .auth-lead { margin-bottom: 26px; color: var(--text-3); font-size: 14px; line-height: 1.55; }
 .auth-form { display: grid; gap: 14px; }
