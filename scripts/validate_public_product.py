@@ -60,6 +60,9 @@ def validate(root: Path = ROOT) -> None:
     familiar_manifest_text = familiar_manifest_path.read_text(encoding="utf-8")
     familiar_manifest = json.loads(familiar_manifest_text)
     familiar_shader = familiar_manifest_path.parent / "familiar.frag"
+    ultron_manifest_path = root / "apps/worker/src/bundles/ultron/character.json"
+    ultron_manifest_text = ultron_manifest_path.read_text(encoding="utf-8")
+    ultron_manifest = json.loads(ultron_manifest_text)
 
     # These are known values from the local deployment history. A public
     # template must not make them part of another operator's installation.
@@ -84,6 +87,7 @@ def validate(root: Path = ROOT) -> None:
         _forbid(manifest, marker, label="manifest.example.yaml")
         _forbid(env, marker, label=".env.example")
         _forbid(familiar_manifest_text, marker, label="Familiar stock bundle")
+        _forbid(ultron_manifest_text, marker, label="Ultron stock bundle")
     _forbid(
         familiar_manifest_text,
         "wlilley93/beelink-desktop",
@@ -115,15 +119,18 @@ def validate(root: Path = ROOT) -> None:
             if value:
                 raise ValueError(".env.example bundles a webhook value")
 
-    # The production registry is deliberately closed: Familiar and Jarvis are
-    # first-party. A private distribution can own a separate entrypoint, but the
-    # public package graph, lockfile, and stock plugin join must be hermetic.
+    # The production registry is deliberately closed: Familiar, Jarvis and Ultron
+    # are first-party. A private distribution can own a separate entrypoint, but
+    # the public package graph, lockfile, and stock plugin join must be hermetic.
+    # Widening the set is the easy half; the point of a closed list is that each
+    # member carries the same guarantee, so Ultron's bundle is checked below the
+    # way Familiar's is.
     registrations = re.findall(
         r"(?m)^\s*registerCharacter\(([A-Z][A-Z0-9_]*)\);\s*$", characters
     )
-    if registrations != ["FAMILIAR", "JARVIS"]:
+    if registrations != ["FAMILIAR", "JARVIS", "ULTRON"]:
         raise ValueError(
-            "character registry must register exactly Familiar then Jarvis"
+            "character registry must register exactly Familiar, Jarvis then Ultron"
         )
     if familiar_manifest.get("id") != "familiar":
         raise ValueError("stock Familiar bundle must keep the familiar id")
@@ -137,6 +144,22 @@ def validate(root: Path = ROOT) -> None:
     shader_digest = hashlib.sha256(familiar_shader.read_bytes()).hexdigest()
     if fragment.get("sha256") != shader_digest:
         raise ValueError("stock Familiar bundle shader digest does not match its file")
+    if ultron_manifest.get("id") != "ultron":
+        raise ValueError("stock Ultron bundle must keep the ultron id")
+    if ultron_manifest.get("provenance", {}).get("ships") is not True:
+        raise ValueError("stock Ultron bundle must declare ships=true")
+    if ultron_manifest.get("provenance", {}).get("upstream") != "boltrig-stock:ultron":
+        raise ValueError("stock Ultron bundle must declare the stock upstream")
+    # Deliberately NO shader-digest check, and the absence is the assertion:
+    # Ultron carries no .frag because he is a simulation and four passes rather
+    # than one shader (his manifest says so). Demanding a fragment here would
+    # refuse a body the product ships; pinning nothing at all would let one
+    # appear unnoticed. So the manifest must keep saying it has none.
+    if ultron_manifest.get("visual", {}).get("fragment") is not None:
+        raise ValueError(
+            "stock Ultron bundle declares a fragment - pin its digest the way "
+            "Familiar's is, or drop it"
+        )
     if "import.meta.glob" in characters:
         raise ValueError("character registry uses a bundler glob that ships external companions")
     if _typescript_without_comments(character_plugins) != "export {};":

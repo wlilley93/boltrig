@@ -992,10 +992,26 @@ per-account labels, `enabled_tools` and now `enabled_capabilities`. So the exact
 list the routing refusal was hardened to withhold is available, by label, to any
 authenticated member of the tenant.
 
-This is NOT closed here, and the reason is worth stating rather than leaving as
-an omission: hardening a read the console depends on is a decision about who may
-see a tenant's connected systems, not a bug fix, and guessing it would either
-break the Connections page for ordinary members or leave a half-measure that
-reads as protection. What the capability work adds is that the same view now
-also lists capabilities, so the decision is slightly more consequential than it
-was, not less.
+**Disposition, 2026-08-18 — CLOSED by filtering rather than by a role gate.**
+Requiring `require_author` on the read would have been consistent with the
+DELETE beside it and would also have taken the Connections page away from every
+ordinary member; leaving it open would have kept the asymmetry the
+`route_required` fix was hardened against. Neither is the answer, because the
+question the page should answer is not "what has this tenant wired up" but
+"what can I use".
+
+So the projection is narrowed and the list is filtered from what survives:
+
+- `_permitted_tools` returns the whole tool list to an author — administering
+  integrations is the job — and to anyone else only the verbs their grants
+  reach.
+- `_may_see` keeps a CONNECTION when something survived that narrowing, with
+  one exception: an author still sees a connection whose tool list is empty,
+  which is how a revoked one stays visible to the person who has to manage it.
+- The CATALOGUE stays visible to everyone and only its `enabled_tools`
+  narrows. Knowing that Slack is supported discloses nothing about this tenant;
+  knowing which of its verbs are bound here does.
+
+A member with no integration grants now gets an empty list. That is the true
+answer rather than an outage, and the test says so explicitly so nobody later
+reads it as a bug.

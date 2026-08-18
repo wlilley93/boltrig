@@ -31,12 +31,17 @@ from tests.approval import approved_request
 T = "integration-tenant"
 
 
-def _headers(tenant: str = T, subject: str = "alice", role: str = "org-admin") -> dict[str, str]:
+def _headers(
+    tenant: str = T,
+    subject: str = "alice",
+    role: str = "org-admin",
+    grants: str = "*",
+) -> dict[str, str]:
     return {
         "x-boltrig-tenant": tenant,
         "x-boltrig-subject": subject,
         "x-boltrig-role": role,
-        "x-boltrig-grants": "*",
+        "x-boltrig-grants": grants,
     }
 
 
@@ -593,3 +598,58 @@ def test_health_probe_cannot_resurrect_a_connection_revoked_while_refreshing(
     assert asyncio.run(
         store.get_credential_ref(T, "integration:tickets:credential")
     ) is None
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-06")
+def test_a_connection_is_listed_only_to_someone_who_can_use_it():
+    """The list answers "what can I use", not "what has this tenant wired up".
+
+    Hardening `route_required` so an ungranted caller could not enumerate the
+    tenant's connected systems left this door open one module over: the same
+    labels, accounts and tool lists were readable by any authenticated member,
+    with no grant or role check at all (SPEC 11.11). An author still sees
+    everything, because administering connections is the job.
+    """
+    kernel, _ = asyncio.run(_kernel())
+    client = TestClient(create_app(kernel))
+
+    author = client.get("/v1/integrations/connections", headers=_headers()).json()
+    assert [row["label"] for row in author["connections"]] == ["Operations tickets"]
+
+    granted = client.get(
+        "/v1/integrations/connections",
+        headers=_headers(role="member", grants="ticket.read"),
+    ).json()
+    assert [row["label"] for row in granted["connections"]] == ["Operations tickets"]
+
+    stranger = client.get(
+        "/v1/integrations/connections",
+        headers=_headers(role="member", grants="unrelated.verb"),
+    ).json()
+    assert stranger["connections"] == []
+    # ... and the refusal is a true empty answer, not an error the console has
+    # to special-case.
+    assert "Operations tickets" not in repr(stranger)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-06")
+def test_the_catalogue_stays_a_shelf_but_stops_naming_tools_you_cannot_call():
+    """Knowing an integration is SUPPORTED discloses nothing about this tenant,
+    so the shelf stays visible to a member. Which tools it has bound does, so
+    that field narrows to what the caller may actually call."""
+    kernel, _ = asyncio.run(_kernel())
+    client = TestClient(create_app(kernel))
+
+    author = client.get("/v1/integrations/catalogue", headers=_headers()).json()
+    assert author["integrations"][0]["enabled_tools"] == ["ticket.create", "ticket.read"]
+
+    member = client.get(
+        "/v1/integrations/catalogue",
+        headers=_headers(role="member", grants="ticket.read"),
+    ).json()
+    # The shelf entry is still there - "Reviewed tickets" is the CATALOGUE label,
+    # not the connection's - and only its tool list narrowed.
+    assert [row["label"] for row in member["integrations"]] == ["Reviewed tickets"]
+    assert member["integrations"][0]["enabled_tools"] == ["ticket.read"]
