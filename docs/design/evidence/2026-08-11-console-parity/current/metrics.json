@@ -1,13 +1,13 @@
 {
   "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-  "captureManifestSha256": "d4d7c643f8ecc5b867d630de0eeedc0c86ba7c7ff4bdc0b7ffe1604f5779aaeb",
+  "captureManifestSha256": "7b55b5fb6fddc787c1e263885fbf2bd4804e23b40e9c7395b7c6fc57d543ca28",
   "captureSourceBinding": {
-    "branch": "fix/bifrost-provider-picker",
-    "digestAfterCapture": "0fbbfcb4679254564e91cbaa9634db100fbcf90c19d491a8ff488b85bb9862c0",
+    "branch": "salvage/voice-tone",
+    "digestAfterCapture": "284b61f7edc345fcee88a363a47d9673690097a5b4792e3c3679927a58317869",
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "0fbbfcb4679254564e91cbaa9634db100fbcf90c19d491a8ff488b85bb9862c0",
+    "digestBeforeCapture": "284b61f7edc345fcee88a363a47d9673690097a5b4792e3c3679927a58317869",
     "dirty": false,
-    "head": "1e9c305d921f4f77155db9988743dcac79276ef3",
+    "head": "6cf22854d350c2cdb86a1bf15cc8871455103ca3",
     "scope": [
       "apps/worker/src",
       "apps/worker/tests/visual"

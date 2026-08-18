@@ -49,6 +49,7 @@ export {
   CharacterBundleError,
   bundleReadsPhenotype,
   bundleSkins,
+  bundleTone,
   bundleVoiceId,
   bundleWantsBudgets,
   bundleWantsCamera,
@@ -67,6 +68,7 @@ export type {
   CharacterBundlePrompts,
   CharacterBundleShaderVisual,
   CharacterBundleSkin,
+  CharacterBundleToneFilter,
   CharacterBundleType,
   CharacterBundleVisual,
 } from "./characterBundle.js";
