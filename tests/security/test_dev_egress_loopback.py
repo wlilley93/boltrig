@@ -33,6 +33,26 @@ NOW = datetime(2026, 7, 31, 12, 0, tzinfo=timezone.utc)
 LOOPBACK = "https://kernel.internal/v1/channels/loopback"
 
 
+def _recording_client(posted: list[str], *, status: int = 202):
+    """A pinned-client stand-in backed by a REAL httpx transport.
+
+    These were hand-written objects with an `async def post(self, url, ...)`, and
+    that shape is a trap: it stands in for `egress.pinned_async_client`, so the
+    day production reads a response differently - streaming it through
+    `bounded_http_response`, say - the double silently stops resembling the
+    thing it replaces and the test passes against a seam that no longer exists.
+    Four files learned that the hard way in one afternoon. A MockTransport
+    cannot drift, because it IS httpx.
+    """
+    import httpx
+
+    def handler(request: "httpx.Request") -> "httpx.Response":
+        posted.append(str(request.url))
+        return httpx.Response(status)
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
 def _posture(**over) -> DevEgressPosture:
     base = dict(
         enabled=True,
@@ -325,24 +345,10 @@ async def test_c4_a_diverted_send_reports_diverted_and_never_sent() -> None:
 
     posted: list[str] = []
 
-    class _Resp:
-        status_code = 202
-
-    class _Client:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_a):
-            return False
-
-        async def post(self, url, json=None):
-            posted.append(url)
-            return _Resp()
-
     import boltrig.adapters.egress as egress
 
     original = egress.pinned_async_client
-    egress.pinned_async_client = lambda url, timeout=10: _Client()
+    egress.pinned_async_client = lambda url, timeout=10: _recording_client(posted)
     try:
         channel = _channel(config={"outbound_url": "https://real.example/hook"})
         out = await _default_deliver(
@@ -372,23 +378,12 @@ async def test_c4_the_diversion_beats_the_socket_outbox_branch() -> None:
         async def enqueue_channel_outbox(self, message):
             enqueued.append(message)
 
-    class _Resp:
-        status_code = 202
-
-    class _Client:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_a):
-            return False
-
-        async def post(self, url, json=None):
-            return _Resp()
+    posted: list[str] = []
 
     import boltrig.adapters.egress as egress
 
     original = egress.pinned_async_client
-    egress.pinned_async_client = lambda url, timeout=10: _Client()
+    egress.pinned_async_client = lambda url, timeout=10: _recording_client(posted)
     try:
         channel = _channel(transport="socket")
         out = await _default_deliver(
@@ -407,23 +402,12 @@ async def test_an_undiverted_send_still_reports_sent() -> None:
     unconditionally would pass both tests above and break every real send."""
     from boltrig.adapters.builtin.channel_send import _default_deliver
 
-    class _Resp:
-        status_code = 200
-
-    class _Client:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_a):
-            return False
-
-        async def post(self, url, json=None):
-            return _Resp()
+    posted: list[str] = []
 
     import boltrig.adapters.egress as egress
 
     original = egress.pinned_async_client
-    egress.pinned_async_client = lambda url, timeout=10: _Client()
+    egress.pinned_async_client = lambda url, timeout=10: _recording_client(posted, status=200)
     try:
         channel = _channel(config={"outbound_url": "https://real.example/hook"})
         out = await _default_deliver(None, channel, "hello", "someone", None)

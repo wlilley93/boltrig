@@ -179,6 +179,7 @@ from .errors import (
     NetworkPolicyViolation as NetworkPolicyViolation,
     PendingHuman as PendingHuman,
     RateLimited as RateLimited,
+    RouteRequired as RouteRequired,
     SchemaValidationError as SchemaValidationError,
     SensingCapabilityUnavailable as SensingCapabilityUnavailable,
     SensitiveDataMisrouted as SensitiveDataMisrouted,

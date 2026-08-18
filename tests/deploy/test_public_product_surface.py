@@ -35,8 +35,14 @@ def _public_fixture(root: Path) -> None:
 
 
 @pytest.mark.security
-def test_public_product_template_is_byo_and_familiar_jarvis_only() -> None:
-    """Keep personal deployment values and third-party companion chunks out."""
+def test_public_product_template_is_byo_and_first_party_only() -> None:
+    """Keep personal deployment values and third-party companion chunks out.
+
+    The closed set is Familiar, Jarvis and Ultron. Ultron joined it when he was
+    built (base branch 51f79c7f) without this gate being told, which is why it
+    was red: the gate is the record of what the public package contains, so
+    adding a body is not finished until it says so.
+    """
     validate()
 
 

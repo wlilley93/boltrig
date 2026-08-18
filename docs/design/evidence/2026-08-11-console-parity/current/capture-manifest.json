@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T16:02:23.750Z",
+  "capturedAt": "2026-08-18T16:24:18.239Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,11 +16,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "48b3181f9439ed3ce8b1cbf34fbe53cd850e0c9f434d99403da5ef72055fa51e",
-    "digestAfterCapture": "48b3181f9439ed3ce8b1cbf34fbe53cd850e0c9f434d99403da5ef72055fa51e",
+    "digestBeforeCapture": "7ffcaf59620e210c6ab1136b0896f797b1404f69758d8103c66807af1244b46b",
+    "digestAfterCapture": "7ffcaf59620e210c6ab1136b0896f797b1404f69758d8103c66807af1244b46b",
     "sourceUnchangedDuringCapture": true,
-    "branch": "infra/boltrig-ai-domains",
-    "head": "a4c7e1fe32f980de0393cd790e36616723ae08fe",
+    "branch": "integrate/capability-doctrine",
+    "head": "d6f702b52d81aebfef6ef713b1f12cd9403d097e",
     "dirty": false
   },
   "runner": {
@@ -57,7 +57,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -181,7 +181,7 @@
       "hash": "#/integrations",
       "settledSelector": "html[data-visual-ready=\"plugins\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
-      "sha256": "536d74139264fb187fa29c3abdd32c4dea058e1fcdb2452df256457b6d8e0855",
+      "sha256": "7b76c0865ef6f65dbb236fe3c3563d571f001367b6b83ed11142bbfd7b276a27",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -290,7 +290,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -327,7 +327,7 @@
       "hash": "#/settings/you",
       "settledSelector": "html[data-visual-ready=\"settings-you\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png",
-      "sha256": "db963e55be441a5f9520fe754d9c2a334499059e07b621011cb8a4c9cd88f45e",
+      "sha256": "26f26522462797baf4ced4394057308efdb1b9f92c935921d289a75b95b5e2db",
       "width": 1440,
       "height": 900,
       "captureContract": {

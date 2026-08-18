@@ -70,7 +70,17 @@ per-transaction `app.tenant_id` GUC (a null GUC yields zero rows, fail-closed).
 
 - **Registry**: `nouns`, `verbs` (input/output schema, consequence,
   identity_mode, degraded_mode), `verb_bindings` (target_type adapter|agent,
-  target_ref, rate_limit).
+  target_ref, rate_limit) — one binding per verb, because a verb is a SOURCE
+  OPERATION and exactly one adapter executes it.
+- **Capability routing** (`docs/SPEC-capability-doctrine.md`, decision 0036):
+  `provider_connections` (an authenticated instance, with the label a
+  confirmation prompt says out loud), `source_operations` (what a provider
+  exposes, with a schema digest), `capability_bindings` (which operations
+  implement `crm.contact.search@1` — MANY per capability, keyed by
+  `binding_id`), `routing_policies` (which binding wins, per workspace or
+  tenant and per operation class). `kernel/routing.py` collapses the eligible
+  set to ONE execution plan or refuses with `route_required`; the model never
+  chooses an adapter.
 - **Libraries**: `adapters`, `skills` (prompt_fragment, tool_grants,
   context_requirements, extends), `agent_capabilities`, `workflow_definitions`,
   `model_endpoints` (data_class standard|sensitive).

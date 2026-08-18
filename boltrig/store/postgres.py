@@ -35,6 +35,7 @@ from .work_items import WorkItemReadsPG, work_item_from_row
 from .workflow_triggers import WorkflowTriggerStorePG
 from .workflow_schedules import WorkflowScheduleStorePG
 from .authored_definitions_postgres import AuthoredDefinitionStorePG
+from .capability_routing import CapabilityRoutingStorePG
 from .eval_cases import EvalCaseStorePG
 from .credential_references import CredentialReferencePresencePG
 from .ai_key_proposals import AiKeyProposalStorePG
@@ -138,7 +139,7 @@ class PostgresStore(
     ChannelStorePG, CapabilityStorePG, ObservabilityReadsPG,
     ChannelDedupStorePG, ChannelOutboxStorePG, PasswordResetStorePG,
     WorkflowTriggerStorePG, WorkflowScheduleStorePG,
-    AuthoredDefinitionStorePG,
+    AuthoredDefinitionStorePG, CapabilityRoutingStorePG,
     EvalCaseStorePG,
     CredentialReferencePresencePG,
     AiKeyProposalStorePG,
@@ -422,6 +423,21 @@ class PostgresStore(
         )
         return row is not None
 
+    async def transition_work_item_settled(
+        self, tenant_id, item_id, *, expected, new_status, result
+    ):
+        # The payload-carrying twin: status CAS + lease clear + result stamp in
+        # ONE conditional UPDATE, so a sweeper's settle carries its reason
+        # without a read-then-write window a concurrent re-queue can slip into.
+        row = await self._pool.fetchrow(
+            """UPDATE work_items
+                  SET status=$4, lease_owner=NULL, lease_expires_at=NULL,
+                      result=$5, updated_at=now()
+               WHERE tenant_id=$1 AND id=$2 AND status=$3 RETURNING id""",
+            tenant_id, item_id, expected.value, new_status.value, result,
+        )
+        return row is not None
+
     async def claim_work_item(self, tenant_id, worker_id, lease_seconds):
         # atomic pending -> in_flight claim with a lease (US-FLT-05): one
         # statement, FOR UPDATE SKIP LOCKED so concurrent claimers never block
@@ -550,6 +566,13 @@ class PostgresStore(
         )
         return [_hitl_req(r) for r in rows]
 
+    async def list_answered_hitl(self, tenant_id):
+        rows = await self._pool.fetch(
+            "SELECT * FROM hitl_requests WHERE tenant_id=$1 AND status=$2",
+            tenant_id, HITLStatus.ANSWERED.value,
+        )
+        return [_hitl_req(r) for r in rows]
+
     async def list_hitl_requests_for_requester(
         self, tenant_id, requested_by, statuses, *, limit=20
     ):
@@ -623,6 +646,42 @@ class PostgresStore(
             e.latency_ms, e.tokens_used, e.cost_micros, e.skills_loaded, e.detail,
             e.ip_address, e.user_agent, e.resource, e.resource_id, e.workspace_id,
             e.prev_hash, e.hash,
+        )
+
+    async def audit_outbox_enqueue(self, tenant_id, payload, append_error):
+        # Rides the same tenant-scoped connection the faulted append was using
+        # (the dispatch path binds the tenant before invoke), so the deferred
+        # row lands inside the caller's own RLS fence.
+        await self._pool.execute(
+            """INSERT INTO audit_outbox (tenant_id, payload, append_error)
+               VALUES ($1, $2::jsonb, $3)""",
+            tenant_id, json.dumps(payload), append_error,
+        )
+
+    async def audit_outbox_due(self, tenant_id, now, limit=100):
+        rows = await self._pool.fetch(
+            """SELECT * FROM audit_outbox
+                WHERE tenant_id=$1 AND next_retry_at <= $2
+                ORDER BY id LIMIT $3""",
+            tenant_id, now, limit,
+        )
+        # JSONB arrives as a str through this pool: decode to the dict the
+        # memory twin returns, so the drain side is backend-agnostic.
+        return [
+            {**dict(row), "payload": json.loads(row["payload"])}
+            if isinstance(row["payload"], str) else dict(row)
+            for row in rows
+        ]
+
+    async def audit_outbox_delete(self, outbox_id):
+        await self._pool.execute("DELETE FROM audit_outbox WHERE id=$1", outbox_id)
+
+    async def audit_outbox_mark_failed(self, outbox_id, append_error, next_retry_at):
+        await self._pool.execute(
+            """UPDATE audit_outbox
+                  SET attempts = attempts + 1, append_error=$2, next_retry_at=$3
+                WHERE id=$1""",
+            outbox_id, append_error, next_retry_at,
         )
 
     async def audit_query(self, tenant_id, run_id=None, limit=200):

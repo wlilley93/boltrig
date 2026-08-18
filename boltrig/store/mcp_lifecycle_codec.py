@@ -23,6 +23,10 @@ _TRANSITIONS = {
 _TOOL_KEYS = frozenset(
     {"name", "description", "consequence", "input_schema", "output_schema"}
 )
+# The two shapes a persisted entry may have: the historical five, and those plus
+# a capability claim. Enumerated rather than tested as a subset, so an unknown
+# field is still refused.
+_ACCEPTED_TOOL_KEYS = (_TOOL_KEYS, _TOOL_KEYS | {"implements"})
 
 
 def aware(value: datetime, field_name: str) -> None:
@@ -44,6 +48,10 @@ def tool_payload(tools: tuple[McpToolSnapshot, ...]) -> list[dict[str, Any]]:
             "consequence": tool.consequence,
             "input_schema": tool.input_schema,
             "output_schema": tool.output_schema,
+            # Written only when the server actually claimed one, so a snapshot
+            # of tools that declare nothing keeps its historical shape byte for
+            # byte and no stored row changes without a reason.
+            **({"implements": tool.implements} if tool.implements else {}),
         }
         for tool in validated.last_known_tools
     ]
@@ -57,7 +65,11 @@ def tools(value: Any) -> tuple[McpToolSnapshot, ...]:
         raise ValueError("persisted MCP tool snapshot must be an array")
     if any(not isinstance(item, dict) for item in value):
         raise ValueError("persisted MCP tool snapshot entries must be objects")
-    if any(frozenset(item) != _TOOL_KEYS for item in value):
+    # Both shapes, and only these two. Every row written before capability
+    # claims existed carries the five base keys; a row for a tool that claimed
+    # one carries six. Relaxing this to a subset test would let an unknown field
+    # through, which is the opposite of what a strict codec is for.
+    if any(frozenset(item) not in _ACCEPTED_TOOL_KEYS for item in value):
         raise ValueError("persisted MCP tool snapshot fields are invalid")
     return tuple(
         McpToolSnapshot(
@@ -66,6 +78,7 @@ def tools(value: Any) -> tuple[McpToolSnapshot, ...]:
             consequence=item["consequence"],
             input_schema=item["input_schema"],
             output_schema=item["output_schema"],
+            implements=item.get("implements"),
         )
         for item in value
     )

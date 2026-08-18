@@ -80,7 +80,15 @@ async def _verified_candidate(kernel, channel, body, request):
     if not secret:
         return JSONResponse({"error": "channel_misconfigured"}, status_code=503)
     try:
-        return verify_and_normalise(body, dict(request.headers), secret)
+        # Platform signature schemes (GitHub x-hub-signature-256, Stripe
+        # stripe-signature - anything in _SIGNATURE_HEADERS besides our own)
+        # sign the RAW wire bytes, so the exact body must reach the HMAC
+        # (SEC-01). Starlette caches the body FastAPI already parsed, so this
+        # is a buffer access, not a second stream read.
+        raw_body = await request.body()
+        return verify_and_normalise(
+            body, dict(request.headers), secret, raw_body=raw_body
+        )
     except WebhookAuthError:
         return JSONResponse({"status": "denied", "reason": "signature"}, status_code=401)
     except WebhookValidationError as exc:

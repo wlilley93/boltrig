@@ -35,6 +35,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from boltrig.adapters.http_response import (
+    MAX_JSON_RESPONSE_BYTES,
+    bounded_http_response,
+)
+
 # The protocol revision offered in `initialize`. A server answers with the
 # revision IT speaks; the methods used here (initialize, tools/list, tools/call)
 # are stable across the dated revisions, so the answer is not negotiated further.
@@ -91,14 +96,24 @@ class StreamableHttp:
     SEC-22 review gate): it is forwarded to the egress guard, which otherwise
     refuses any internal target (SEC-61). It must never be set for an
     agent-influenced URL.
+
+    ``network_config`` is the manifest NetworkConfig (air-gap / allow/block
+    lists, SEC-52): the operator's egress posture binds the MCP server leg,
+    which is ordinary outbound HTTP, not just web.fetch.
     """
 
     def __init__(
-        self, url: str, *, client_version: str, allow_internal: bool = False
+        self,
+        url: str,
+        *,
+        client_version: str,
+        allow_internal: bool = False,
+        network_config: dict[str, Any] | None = None,
     ) -> None:
         self._url = url
         self._client_version = client_version
         self._allow_internal = allow_internal
+        self._network_config = dict(network_config) if network_config else None
         self._session_id: str | None = None
 
     @property
@@ -110,13 +125,16 @@ class StreamableHttp:
         """The SSRF-pinned client for this server (H2/SEC-61): vetted and pinned
         to the audited IP, ``follow_redirects=False``. Raise
         ``egress.EgressBlocked`` when the guard refuses the target. The config
-        kwarg is passed ONLY when allow_internal is set, so the plain call
-        signature (and the guard's defaults) is unchanged for every other
-        consumer."""
+        kwarg is passed ONLY when one is in effect (the manifest posture, the
+        ``allow_internal`` opt-in, or both), so the plain call signature (and
+        the guard's defaults) is unchanged for every other consumer."""
         from boltrig.adapters.egress import pinned_async_client
 
+        config = dict(self._network_config or {})
         if self._allow_internal:
-            return pinned_async_client(self._url, {"allow_internal": True}, timeout=30.0)
+            config["allow_internal"] = True
+        if config:
+            return pinned_async_client(self._url, config, timeout=30.0)
         return pinned_async_client(self._url, timeout=30.0)
 
     async def call(self, client: Any, request: dict, bearer: str) -> dict:
@@ -138,7 +156,24 @@ class StreamableHttp:
         return headers
 
     async def _post(self, client: Any, request: dict, bearer: str, *, retried: bool = False) -> dict:
-        r = await client.post(self._url, json=request, headers=self._headers(bearer))
+        """One round trip, with the body bounded before it is buffered.
+
+        ``bounded_http_response`` streams, forces ``Accept-Encoding: identity``
+        and refuses a server that ignores it - a compressed body allocates its
+        DECODED size inside httpx before any application-level check could see
+        it, so a megabyte on the wire can cost gigabytes of memory, and the
+        discovery page loop would multiply that by the page ceiling. The bound
+        is the shared JSON ceiling every other adapter uses; a tool snapshot is
+        separately capped at 2MB, so it sits comfortably underneath.
+        """
+        r, _truncated = await bounded_http_response(
+            client,
+            "POST",
+            self._url,
+            max_bytes=MAX_JSON_RESPONSE_BYTES,
+            json=request,
+            headers=self._headers(bearer),
+        )
         if r.status_code < 400:
             session = r.headers.get(_SESSION_HEADER)
             if session:
@@ -164,8 +199,11 @@ class StreamableHttp:
         catch-all) and never logs - the bearer is on the wire here too.
         """
         try:
-            r = await client.post(
+            r, _truncated = await bounded_http_response(
+                client,
+                "POST",
                 self._url,
+                max_bytes=MAX_JSON_RESPONSE_BYTES,
                 json={
                     "jsonrpc": "2.0", "id": 0, "method": "initialize",
                     "params": {
@@ -188,8 +226,11 @@ class StreamableHttp:
         if session:
             self._session_id = session
         try:  # best-effort: strict servers 202 it; a plain door may refuse it
-            await client.post(
+            await bounded_http_response(
+                client,
+                "POST",
                 self._url,
+                max_bytes=MAX_JSON_RESPONSE_BYTES,
                 json={"jsonrpc": "2.0", "method": "notifications/initialized"},
                 headers=self._headers(bearer),
             )

@@ -199,6 +199,17 @@ class NetworkConfig:
     allowed_domains: tuple[str, ...] = ()
     blocked_domains: tuple[str, ...] = ()
 
+    def as_egress_config(self) -> dict[str, Any]:
+        """The dict shape the shared egress guard consumes (SEC-52): one place
+        so every adapter family threads the identical posture."""
+        return {
+            "air_gapped": self.air_gapped,
+            "https_proxy": self.https_proxy,
+            "ca_bundle": self.ca_bundle,
+            "allowed_domains": self.allowed_domains,
+            "blocked_domains": self.blocked_domains,
+        }
+
 
 @dataclass(frozen=True)
 class PrivacyConfig:

@@ -15,6 +15,7 @@ Binds the genuinely-missing code controls from the Batch 1/2 specs:
 
 from __future__ import annotations
 
+import json
 import time
 
 import logging
@@ -342,28 +343,30 @@ def test_confusable_verb_id_never_matches_a_grant():
 @pytest.mark.invariant("SEC-63")
 def test_webhook_replay_window():
     from boltrig.adapters.builtin.inbound_webhook import (
-        canonical_body,
         expected_signature,
         signed_content,
     )
 
     secret = "whsec"
     payload = {"type": "issue.opened", "id": "e1"}
+    # ``x-signature`` is a PLATFORM header (SEC-01): it signs the RAW request
+    # bytes with the timestamp bound in, Stripe-style - not our canonical
+    # re-serialisation - so the raw body must be supplied and signed.
+    raw = json.dumps(payload).encode("utf-8")
     fresh = int(time.time())
-    # the timestamp is bound into the signed content (M3/SEC-66); a fresh, signed
-    # request with a current timestamp is accepted
-    sig = expected_signature(secret, signed_content(fresh, canonical_body(payload)))
+    # a fresh, signed request with a current timestamp is accepted
+    sig = expected_signature(secret, signed_content(fresh, raw))
     ok = verify_and_normalise(payload, {"x-signature": f"t={fresh},v1={sig}"},
-                              secret, now=fresh)
+                              secret, now=fresh, raw_body=raw)
     assert ok["authenticated"] is True
-    # a captured request whose (bound) timestamp is far in the past is rejected as
-    # a replay: sign at the stale time, then present it now.
+    # a captured request whose (bound) timestamp is far in the past is rejected as a
+    # replay: sign at the stale time, then present it now.
     stale = fresh - 10_000
-    stale_sig = expected_signature(secret, signed_content(stale, canonical_body(payload)))
+    stale_sig = expected_signature(secret, signed_content(stale, raw))
     with pytest.raises(WebhookAuthError):
         verify_and_normalise(
             payload, {"x-signature": f"t={stale},v1={stale_sig}"},
-            secret, now=fresh,
+            secret, now=fresh, raw_body=raw,
         )
 
 

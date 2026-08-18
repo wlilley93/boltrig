@@ -10,9 +10,12 @@ prompt_fragment: |
   Apply decomposition to a tracker ticket. Read the ticket and its links, then
   produce child tickets each sized to a single owner and a single acceptance
   check. Preserve a link from every child back to the parent ticket.
+# The verbs, not the provider (see integration/jira-writer): read the parent,
+# create each child, and update to preserve the link back.
 tool_grants:
-  - jira.read
-  - jira.write
+  - ticket.read
+  - ticket.create
+  - ticket.update
 context_requirements:
   type: object
   properties:

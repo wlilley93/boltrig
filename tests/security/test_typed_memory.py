@@ -173,7 +173,8 @@ def test_unapproved_procedures_never_govern_and_selection_is_deterministic():
     # After explicit review it governs - selected by role/workflow, with a
     # query that shares none of its wording (deterministic, not similarity).
     approved = _review(c, k, proposed["candidate_id"], "approve").json()
-    assert approved["status"] == "active"
+    assert approved["status"] == "ok"
+    assert approved["candidate_status"] == "active"
     after = c.post("/v1/memory/bundle", json=bundle_body, headers=_h("alice")).json()
     assert len(after["procedures"]) == 1
     assert after["procedures"][0]["payload"]["procedure_key"] == \
@@ -285,7 +286,7 @@ def test_review_is_the_only_activation_path():
     row = asyncio.run(store.get_memory_fact(T, proposed["candidate_id"]))
     assert row.status == "candidate"  # confidence alone never activates
     rejected = _review(c, k, proposed["candidate_id"], "reject").json()
-    assert rejected["status"] == "rejected"
+    assert rejected["candidate_status"] == "rejected"
     # A rejected candidate cannot be re-activated by reviewing it again.
     rereview = _review(c, k, proposed["candidate_id"], "approve")
     assert rereview.status_code == 400

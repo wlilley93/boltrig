@@ -101,6 +101,13 @@ class VerbSpec:
     # persisted for replay (for example an invitation token).  It is declarative
     # adapter data, not a kernel hard-coded verb list.
     idempotency_mode: str = "cacheable"
+    # Capability doctrine level-1 matching (SPEC §5): the canonical capability
+    # this operation IMPLEMENTS, e.g. "crm.contact.search". Declared by the
+    # adapter, so no structural guessing is involved and the binding is created
+    # at registration. None (the default) leaves the verb exactly as it is today:
+    # a source operation with no canonical face.
+    implements: str | None = None
+    capability_version: int = 1
 
 
 @dataclass(frozen=True)

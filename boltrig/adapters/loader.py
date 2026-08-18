@@ -49,7 +49,11 @@ class AdapterLoader:
 
     def load_module(self, tenant_id: str, module_ref: str) -> Adapter | None:
         """Load an adapter from ``module:factory``. Never raises - returns None
-        and records ``down`` on failure (US-ADP-06)."""
+        and records ``down`` on failure (US-ADP-06). The health row is keyed by
+        ``module_ref`` (the same string a module-sourced binding carries as its
+        target_ref), so a verb pointing at a dead module reads ``down`` rather
+        than the fail-closed ``unknown`` it fell back to when the except branch
+        recorded nothing."""
         try:
             mod_name, _, factory_name = module_ref.partition(":")
             module = importlib.import_module(mod_name)
@@ -59,6 +63,7 @@ class AdapterLoader:
             return adapter
         except Exception as exc:  # a bad adapter must not take down the kernel
             log.warning("adapter load failed for %s: %s", module_ref, exc)
+            self._health[(tenant_id, module_ref)] = "down"
             return None
 
     async def get(self, tenant_id: str, adapter_id: str) -> Adapter | None:

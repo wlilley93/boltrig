@@ -12,6 +12,9 @@ carries the kernel-resolved credential like any dispatch call.
 
 from __future__ import annotations
 
+import json
+
+import httpx
 import pytest
 
 from boltrig.config.control_plane import build_control_plane_adapter
@@ -42,8 +45,10 @@ _TOOLS = [
     {
         "name": "ticket.read",
         "description": "read a ticket",
+        "annotations": {"readOnlyHint": True},
         "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}},
-        # no hint: defaults to low
+        # a positive low signal reads low; ABSENCE of any hint now fails
+        # closed high (owner-approved 2026-08-16)
     },
     {
         "name": "ticket.purge",
@@ -54,41 +59,50 @@ _TOOLS = [
 ]
 
 
-class _Resp:
-    """The httpx response shape the consumer now reads: a status (typed error
-    mapping), headers (session id / content type), and the JSON payload."""
-
-    def __init__(self, payload: dict) -> None:
-        self._payload = payload
-        self.status_code = 200
-        self.headers: dict = {}
-
-    def json(self) -> dict:
-        return self._payload
-
-
 class _FakeMcpServer:
     """Stands in for the external MCP server at the pinned-HTTP seam: records the
     bearer each POST sent and answers the MCP methods a consumer issues.
 
     It speaks the PLAIN convention (plain JSON 200 answers, no session), so the
     consumer's lazy handshake never fires here; the strict Streamable-HTTP door
-    is exercised in tests/adapters/test_mcp_consumer_adapter.py."""
+    is exercised in tests/adapters/test_mcp_consumer_adapter.py.
+
+    It answers a real ``httpx.MockTransport`` rather than hand-implementing
+    httpx's surface. The hand-rolled version could only express
+    ``post(url, json, headers)``, and the transport now reads its body through
+    ``bounded_http_response``, which streams via ``build_request``/``send`` - a
+    bound a fake with only ``post`` cannot exercise at all.
+    """
 
     def __init__(self, tools: list[dict]) -> None:
         self.tools = tools
         self.bearers: list[str | None] = []
+        self._client = httpx.AsyncClient(transport=httpx.MockTransport(self._handle))
 
-    async def post(self, url, json, headers):  # noqa: ANN001 - httpx-shaped stub
-        self.bearers.append(headers.get("x-boltrig-mcp-token"))
-        if json.get("method") == "tools/list":
-            return _Resp({"result": {"tools": self.tools}})
-        return _Resp({"result": {"content": [{"type": "text", "text": "done"}]}})
+    def _handle(self, request: httpx.Request) -> httpx.Response:
+        self.bearers.append(request.headers.get("x-boltrig-mcp-token"))
+        body = json.loads(request.content)
+        if body.get("method") == "tools/list":
+            return httpx.Response(200, json={"result": {"tools": self.tools}})
+        return httpx.Response(
+            200, json={"result": {"content": [{"type": "text", "text": "done"}]}}
+        )
+
+    def build_request(self, *args, **kwargs):
+        return self._client.build_request(*args, **kwargs)
+
+    async def send(self, *args, **kwargs):
+        return await self._client.send(*args, **kwargs)
+
+    async def post(self, *args, **kwargs):
+        return await self._client.post(*args, **kwargs)
 
     async def __aenter__(self) -> "_FakeMcpServer":
         return self
 
     async def __aexit__(self, *exc) -> bool:
+        # Deliberately does not close: the pinned_client seam hands back this
+        # same server for every call, and a MockTransport holds no socket.
         return False
 
 

@@ -27,6 +27,7 @@ from boltrig.models import (
 )
 from boltrig.store import Store
 
+from .capability_records import capability_connection, declare_capability
 from .revertible import EffectLog
 
 log = logging.getLogger("boltrig.kernel.registry")
@@ -56,11 +57,23 @@ class KernelRegistry:
         built while what was displaced is still known. Absent, the behaviour is
         exactly as before minus the clobbering, so existing callers need no
         change.
+
+        A spec declaring ``implements`` ALSO records the doctrine's three routing
+        records - a provider connection, the source operation, and the binding
+        that claims a canonical capability (SPEC-capability-doctrine.md §5 level
+        1). An adapter that declares nothing behaves exactly as before.
         """
         registered: list[str] = []
+        declared = [spec for spec in adapter.describe() if spec.implements]
+        connection = (
+            await capability_connection(self._store, tenant_id, adapter) if declared else None
+        )
         for spec in adapter.describe():
             await self._register_spec(tenant_id, adapter, spec, effects)
             registered.append(spec.verb_id)
+        for spec in declared:
+            assert connection is not None
+            await declare_capability(self._store, tenant_id, connection, spec)
         return registered
 
     async def _register_spec(
