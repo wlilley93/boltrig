@@ -1311,8 +1311,6 @@ export function AutomationsView() {
         <div
           aria-hidden={draft && discardDialogOpen ? true : undefined}
           className={draft ? "automation-editor-feedback" : "automation-list-feedback"}
-          // Boolean(): draft is object-or-null, so `draft && ...` is
-          // boolean|null; React 19 types inert as boolean|undefined.
           inert={Boolean(draft && discardDialogOpen)}
         >
           {listNotice && <p className="notice" role="status">{listNotice}</p>}
