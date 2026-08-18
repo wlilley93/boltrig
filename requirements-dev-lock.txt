@@ -2739,9 +2739,9 @@ types-jsonschema==4.26.0.20260518 \
     --hash=sha256:30b30a518c7fe335df85c919fcbcc631b69c03d4a4b5b632fa916bea03065307 \
     --hash=sha256:e1dd53dc97a64f5eccdd6fa9839666e09bb500a8ebba2db6fdaf1789faea81a6
     # via boltrig (pyproject.toml:dev)
-types-pyyaml==6.0.12.20260724 \
-    --hash=sha256:3c1ce1bb73cd5ec02e90390c2b1f00e810d241d8825fd73ff359696839271b6b \
-    --hash=sha256:d57db930a4b2efbc57cf430ec8882765d246929432fa253092f383902329a453
+types-pyyaml==6.0.12.20260815 \
+    --hash=sha256:28764110c9cf35846e733da32d8d734df7473c5dde9ef67c3b7332ec0e819858 \
+    --hash=sha256:6f332212b7e191f3afd5016a713c510b6340593b7ebec573c7d5d20aa5386d3b
     # via boltrig (pyproject.toml:dev)
 typing-extensions==4.16.0 \
     --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8 \
