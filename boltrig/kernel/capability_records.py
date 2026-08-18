@@ -141,3 +141,47 @@ store: Store, tenant_id: str, connection: ProviderConnection, spec: Any
             created_from="declared",
         )
     )
+
+
+async def apply_mapping_pack(
+store: Store, tenant_id: str, connection: ProviderConnection, specs, pack
+) -> int:
+    """Bind a curated pack's mappings to this connection's operations (SPEC §5 level 2).
+
+    Returns how many bindings were written.
+
+    ALWAYS ``proposed``, whatever the connection's trust. A first-party
+    connection's own ``implements`` is the provider speaking about itself and is
+    already a governed act; a pack is a curator's opinion about somebody else's
+    API, shipped as data. Approving that automatically would publish a
+    model-callable verb on the strength of a file nobody reviewed.
+
+    Applied BEFORE the declared claims, and sharing their ``binding_id``, so a
+    level-1 declaration overwrites the level-2 guess for the same operation.
+    That is the doctrine's precedence expressed as write order rather than as a
+    comparison nobody would run.
+
+    An operation the pack names but the provider does not expose is skipped in
+    silence: a pack outlives the catalogue it maps, and a stale entry should
+    map nothing rather than mint a binding onto an operation that is not there.
+    """
+    available = {spec.verb_id for spec in specs}
+    written = 0
+    for mapping in pack.mappings:
+        if mapping.operation_id not in available:
+            continue
+        await store.upsert_capability_binding(
+            CapabilityBinding(
+                binding_id=f"cb:{connection.id}:{mapping.operation_id}",
+                tenant_id=tenant_id,
+                capability_id=mapping.capability_id,
+                capability_version=mapping.capability_version,
+                source_operation_id=mapping.operation_id,
+                connection_id=connection.id,
+                status="proposed",
+                trust_level=connection.trust_level,
+                created_from="mapping_pack",
+            )
+        )
+        written += 1
+    return written

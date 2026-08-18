@@ -28,10 +28,13 @@ from boltrig.models import (
 from boltrig.store import Store
 
 from .capability_records import (
+    apply_mapping_pack,
     capability_connection,
     declare_capability,
     record_source_operation,
 )
+from boltrig.capabilities.mapping_packs import load_packs
+
 from .revertible import EffectLog
 
 log = logging.getLogger("boltrig.kernel.registry")
@@ -109,6 +112,10 @@ class KernelRegistry:
         for spec in catalogue:
             assert connection is not None
             await record_source_operation(self._store, tenant_id, connection, spec)
+        if connection is not None:
+            pack = load_packs().get(connection.provider)
+            if pack is not None:
+                await apply_mapping_pack(self._store, tenant_id, connection, specs, pack)
         for spec in declared:
             assert connection is not None
             await declare_capability(self._store, tenant_id, connection, spec)

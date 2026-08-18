@@ -684,6 +684,9 @@ ORDINARY	NO-SUBJECT	comment	boltrig/camera/discovery.py:87		Current focus/PTZ/ex
 ORDINARY	NO-SUBJECT	docstring	boltrig/camera/platform.py:14		One safe native observation;
 ORDINARY	NO-SUBJECT	docstring	boltrig/camera/profiles.py:1		Declarative, local-only camera profile metadata.
 ORDINARY	NO-SUBJECT	docstring	boltrig/camera/profiles.py:224		Load only local TOML metadata;
+ORDINARY	NO-SUBJECT	docstring	boltrig/capabilities/mapping_packs.py:103		Every shipped pack, keyed by the provider it maps.
+ORDINARY	NO-SUBJECT	docstring	boltrig/capabilities/mapping_packs.py:64		Validate one pack document.
+ORDINARY	NO-SUBJECT	comment	boltrig/capabilities/mapping_packs.py:92		contract it has never seen.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/birth_profile.py:138		workers cannot publish the same boot identity.
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/birth_profile.py:152		Bound startup evidence freshness;
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/birth_profile.py:77		Digest only stable add-on names and versions, never harness/config data.
@@ -1222,9 +1225,9 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/personal.py:11		Runti
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/workflows.py:278		a bare ValueError never leaks internal text as the client reason.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/ratelimit.py:71		are window-scoped, so the counts were right but the keys never left.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/realtime_call_bridge.py:18		Best-effort observation;
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:152		AN AGENT BINDING IS NEVER AN ADAPTER'S TO REPLACE.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:154		Two things produce one, and an adapter must not undo either: a
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:311		With no caller context, fall back to the ceiling (internal callers).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:159		AN AGENT BINDING IS NEVER AN ADAPTER'S TO REPLACE.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:161		Two things produce one, and an adapter must not undo either: a
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:318		With no caller context, fall back to the ceiling (internal callers).
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/revertible.py:69		Undo everything, newest first.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/routing.py:165		Unpinned addressing means the newest live version, never a mixture: a plan
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/routing.py:200		The dispatcher's step 1: the verb definition, its binding, and the route.
@@ -1475,6 +1478,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/api/bootstrap.py:390	codex_config	Co
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/api/logging_config.py:48	force	Install a root handler + formatter for this process.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/api/worker.py:64	kernel	Start the HITL expiry janitor (SEC-14), or None when disabled.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/camera/cache.py:61	hardware_key	Return a local opaque binding, replacing it on hardware change.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/capabilities/mapping_packs.py:1	proposed	Curated mapping packs: level 2 of capability matching (SPEC §5).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/control_workflows.py:91	GENERATED	Save a non-runnable draft under the reserved id prefix (low-consequence).
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/config/manifest.py:177	APPROVAL_TIMEOUT_SECONDS_FLOOR	``APPROVAL_TIMEOUT_SECONDS_FLOOR`` and cannot resolve differently.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/spawn_rules.py:337	capability	Resolve one policy snapshot into effective skills/routing.
@@ -1514,6 +1518,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/identity/password_reset.py:42	False	
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/app.py:146	id	The streamable-HTTP answer for one JSON-RPC message.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/audit.py:75	seq	The ONE key a row at ``seq`` is allowed to verify under.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/capability_records.py:117	proposed	Record one declared implementation claim, and the operation behind it.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/capability_records.py:146	proposed	Bind a curated pack's mappings to this connection's operations (SPEC §5 level 2).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_notify.py:71	source_route	Enqueue one outbox row per (matching pref, resolved subject, bound channel).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_policy.py:1	allowed_chats	Opt-in policy controls for channel intake.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/channel_principal.py:26	self_onboard	channel's ``self_onboard`` config naming any other role is rejected fail-closed
