@@ -204,6 +204,85 @@ class KernelRegistry:
                 partial(self._store.upsert_binding, previous),
             )
 
+    async def _capability_connection(
+        self, tenant_id: str, adapter: Adapter
+    ) -> ProviderConnection:
+        """The routing identity for this adapter's operations.
+
+        Its LABEL is the authoritative one from the catalogue connection when the
+        tenant has configured one, because that is the name a confirmation prompt
+        has to be able to say out loud ("Archive Alice Morgan in HubSpot - UK
+        Sales?"). Absent a catalogue row the adapter id is the honest fallback.
+        """
+        label = adapter.id
+        integration_connection_id = None
+        for row in await self._store.list_integration_connections(tenant_id):
+            if row.adapter_id == adapter.id and row.health != "revoked":
+                label, integration_connection_id = row.label, row.id
+                break
+        connection = ProviderConnection(
+            id=f"pconn:{adapter.id}",
+            tenant_id=tenant_id,
+            label=label,
+            provider=adapter.id,
+            source_type=getattr(adapter, "source_type", "native"),
+            adapter_id=adapter.id,
+            integration_connection_id=integration_connection_id,
+            # An adapter that SHIPS INSIDE THE IMAGE is first-party; anything
+            # generated, consumed or hand-authored is merely reviewed, and its
+            # declared claims stay proposed until someone approves them.
+            trust_level=(
+                "first_party"
+                if getattr(adapter, "source", "builtin") == "builtin"
+                else "reviewed"
+            ),
+        )
+        await self._store.upsert_provider_connection(connection)
+        return connection
+
+    async def _declare_capability(
+        self, tenant_id: str, connection: ProviderConnection, spec: Any
+    ) -> None:
+        """Record one declared implementation claim.
+
+        A FIRST-PARTY adapter's claim binds approved: it ships inside the image
+        and its registration is already the governed act. Anything generated,
+        consumed or hand-authored lands ``proposed`` - a declaration is evidence,
+        never the authority to publish itself (SPEC §5, approval policy). An
+        unapproved binding is not eligible for any route.
+        """
+        digest = _schema_digest(spec)
+        await self._store.upsert_source_operation(
+            SourceOperation(
+                id=spec.verb_id,
+                tenant_id=tenant_id,
+                provider=connection.provider,
+                source_type=connection.source_type,
+                connection_id=connection.id,
+                title=spec.verb_id,
+                description=spec.description,
+                input_schema=spec.input_schema,
+                output_schema=spec.output_schema,
+                schema_digest=digest,
+                consequence_hint=spec.consequence,
+            )
+        )
+        first_party = connection.trust_level == "first_party"
+        await self._store.upsert_capability_binding(
+            CapabilityBinding(
+                binding_id=f"cb:{connection.id}:{spec.verb_id}",
+                tenant_id=tenant_id,
+                capability_id=spec.implements,
+                capability_version=spec.capability_version,
+                source_operation_id=spec.verb_id,
+                connection_id=connection.id,
+                status="approved" if first_party else "proposed",
+                trust_level=connection.trust_level,
+                source_schema_digest=digest,
+                created_from="declared",
+            )
+        )
+
     async def bind_verb_to_agent(self, tenant_id: str, verb_id: str, agent_capability: str) -> None:
         """Re-point a verb at a reasoning agent instead of an adapter (US-KER-02).
         The caller's interface is unchanged (P4)."""
