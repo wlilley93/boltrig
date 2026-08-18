@@ -133,11 +133,11 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:231		Resolve one
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:362		Delete every run-scoped secure-input credential of a finished run.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/desktop_routes.py:1		Desktop-hands pull surface (decision 0016, DH-1).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/desktop_routes.py:82		was never issued): refuse, and do not audit a no-op as execution
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:203		observability side-channel - like audit, it never affects the dispatch
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:211		Record a security signal on the distinct stream (D3), at the same field depth as the audit row.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:248		Announce the pause AND make it durable (decision 0018, Order 2).
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:328		scoped credential reference (the value never enters the run) and
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:407		audit row (actor / workspace / ip / ua).
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:204		observability side-channel - like audit, it never affects the dispatch
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:212		Record a security signal on the distinct stream (D3), at the same field depth as the audit row.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:249		Announce the pause AND make it durable (decision 0018, Order 2).
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:329		scoped credential reference (the value never enters the run) and
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:408		audit row (actor / workspace / ip / ua).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:700		minted straight into the credential arg, never into params/events/audit.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/events.py:39		A tenant-bound relay view for trusted turn-executor integrations.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/held_call.py:54		without guessing.
@@ -258,7 +258,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/audit.py:179	id	Bring the
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_policy.py:58	None	Resolve an opt-in thread ceiling, failing closed on malformed policy data.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_principal.py:1	unpaired_behavior	Channel gateway: the ChannelPrincipalResolver (decision 0003).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/cost.py:158	tokens	Cost in micros for a run of ``tokens`` tokens (FR-COST-04, audit M14).
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:87	schema_path	Validate, and return findings whose provenance is WHOLLY THE SCHEMA AND NAME-ONLY.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:88	schema_path	Validate, and return findings whose provenance is WHOLLY THE SCHEMA AND NAME-ONLY.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/events.py:1	backlog	The run/conversation event stream relay (Round Two, US-CONV-03/07).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/hitl.py:318	approval_id	The gate's authorisation check (SEC-14).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/run_event_projection.py:18	schema_invalid	A bounded, VALUE-FREE description of a verb's params for the chat stream (K-20 bounded observability): the sorted top-level KEY NAMES and their count, never the values (which can carry secrets or untrusted content).
@@ -449,7 +449,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:294	_execut
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:331	Credential	Resolve a per-run adapter bearer to a ``Credential`` for this adapter, or ``None`` when none is sealed (so dispatch falls back to the adapter's static credential - the fail-safe that keeps dev/non-passthrough tenants unc
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/dev_egress_runtime.py:1	diversion_block	Resolving the dev-egress loopback at runtime: the one place that reads the environment, so ``boltrig.config.dev_egress`` stays a pure decision.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/dispatch.py:1	Dispatcher.invoke	The dispatch chokepoint (P2, US-KER-01, K-1).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/dispatch.py:285	_emit_pause	Publish to THIS run and to the run that delegated to it.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/dispatch.py:286	_emit_pause	Publish to THIS run and to the run that delegated to it.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/grants.py:1	GrantSet.permits	Grant enforcement (P8, SEC-07, US-IAM-04, K-2).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/grants.py:15	GrantMissing	Raise ``GrantMissing`` unless the verb is authorised.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/held_call.py:1	approval_gate._approval_display_context	The HELD CALL record: what a paused write is resumed FROM (decision 0018).
@@ -586,11 +586,11 @@ ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/xai_voice.py:192		unverifie
 ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/builtin/xai_voice.py:270		One POST whose body/response the base's JSON ``request()`` cannot carry (raw audio bytes back from TTS, multipart upload to STT).
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/xai_voice.py:58		Bounds (DoS/cost bounding, fail-closed): the xAI TTS endpoint caps input at
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/builtin/xai_voice.py:60		chars) so an agent cannot stream unbounded payloads through the verb.
-ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/egress.py:118		True if an address is a link-local / cloud-metadata address (169.254.0.0/16 incl.
-ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/egress.py:203		Resolve a host to its addresses (an IP literal resolves to itself, no DNS).
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/egress.py:85		wins), read at adapter construction, and ALWAYS superseded by an explicit
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/egress.py:86		config passed to a constructor - never by an agent-influenced value.
-ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/egress.py:97		The process-wide egress posture, or None when no manifest installed one (bare boots and tests: egress then behaves exactly as pre-manifest).
+ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/egress.py:120		True if an address is a link-local / cloud-metadata address (169.254.0.0/16 incl.
+ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/egress.py:205		Resolve a host to its addresses (an IP literal resolves to itself, no DNS).
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/egress.py:87		wins), read at adapter construction, and ALWAYS superseded by an explicit
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/egress.py:88		config passed to a constructor - never by an agent-influenced value.
+ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/egress.py:99		The process-wide egress posture, or None when no manifest installed one (bare boots and tests: egress then behaves exactly as pre-manifest).
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/generator.py:326		string must not silently double as a file read.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/generator.py:347		pinned to the audited IP, and redirects are never followed into internal
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/http_base.py:177		of the base host so httpx cannot re-resolve to internal space at connect
@@ -1153,20 +1153,20 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/credentials.py:106		row is broken.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/desktop_routes.py:48		kernel on the serving loop, AFTER routes are registered, so it cannot
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/dev_egress_runtime.py:75		Read the declared posture off a loaded manifest.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/device_routes.py:40		request.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:148		the caller's hint is built where it cannot contaminate a row.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:154		a short scalar is taken - never free text, never a secret-bearing value.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:204		decision and a relay failure never breaks a call (P9).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:208		fail-safe (like the event relay) and never changes the dispatch outcome.
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:300		Publish a run event, fail-safe.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:373		attributes which adapter serviced the call (it was always None before).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:383		keys (K-20), never the raw input (see fleet/chat._project_chat_event).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:471		taken effect (or already failed), so an append fault cannot
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:474		(an unaudited action is a governance incident), never void the
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:497		so route_required cannot name connections to an ungranted caller.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:526		call the adapter provably never saw, and the retry that retry_after
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:566		invalid output) must release the claim like the gate above, never park
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:573		raises PendingHuman - it never touches an adapter/agent.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:599		COMPLETED, so a failure to write the 1<->2 crossing row must not
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:149		the caller's hint is built where it cannot contaminate a row.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:155		a short scalar is taken - never free text, never a secret-bearing value.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:205		decision and a relay failure never breaks a call (P9).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:209		fail-safe (like the event relay) and never changes the dispatch outcome.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:301		Publish a run event, fail-safe.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:374		attributes which adapter serviced the call (it was always None before).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:384		keys (K-20), never the raw input (see fleet/chat._project_chat_event).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:472		taken effect (or already failed), so an append fault cannot
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:475		(an unaudited action is a governance incident), never void the
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:498		so route_required cannot name connections to an ungranted caller.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:527		call the adapter provably never saw, and the retry that retry_after
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:567		invalid output) must release the claim like the gate above, never park
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:574		raises PendingHuman - it never touches an adapter/agent.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:600		COMPLETED, so a failure to write the 1<->2 crossing row must not
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:711		reference fails closed (CredentialResolution).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/events.py:100		resumed run never re-uses a seq a live cursor already passed.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/events.py:319		Select the relay explicitly;
@@ -1460,8 +1460,8 @@ ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/adapters/base.py:100	disabled	``disabl
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/channel_send.py:153	approval_notice	What the approver must be told before they approve (C3).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/channel_send.py:47	diversion	Kernel-side outbound delivery.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/script_base.py:66	argv	Run ``argv`` with an output cap and timeout termination.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/egress.py:326	httpx.AsyncClient	Return an ``httpx.AsyncClient`` whose TCP connections are pinned to an already-vetted IP (H2/SEC-61).
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/egress.py:53	ca_bundle	The TLS verifier a manifest NetworkConfig asks for: an operator-supplied ``ca_bundle`` builds a context that trusts ONLY those roots (a missing or malformed bundle FAILS CLOSED rather than silently falling back to public
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/egress.py:329	httpx.AsyncClient	Return an ``httpx.AsyncClient`` whose TCP connections are pinned to an already-vetted IP (H2/SEC-61).
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/egress.py:55	ca_bundle	The TLS verifier a manifest NetworkConfig asks for: an operator-supplied ``ca_bundle`` builds a context that trusts ONLY those roots (a missing or malformed bundle FAILS CLOSED rather than silently falling back to public
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/loader.py:50	down	Load an adapter from ``module:factory``.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/mcp_discovery.py:119	seen	Parse one page, sharing ``seen`` so a duplicate ACROSS pages still fails.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/voice_tone/prosody.py:1	audioop	Prosody from a spoken utterance: the half of tone that words cannot carry.
@@ -1512,9 +1512,9 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_notify.py:71	source_r
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_policy.py:1	allowed_chats	Opt-in policy controls for channel intake.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/channel_principal.py:26	self_onboard	channel's ``self_onboard`` config naming any other role is rejected fail-closed
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_routes.py:194	subject	The EXACTLY-ONE pending HITL request addressed to ``subject`` whose work item's reply route is this channel+thread, else None: zero matches (nothing to answer) or several (ambiguous) both fall back to normal intake.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:231	context.run_id	Publish a HITL pause to this run AND to the run that delegated to it.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:311	question	Create a QUESTION HITL, emit a ``question`` run event, and pause the run (US-CHAT-12).
-ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/dispatch.py:429	result_summary	``result_summary`` keys (K-20), never the raw output.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:232	context.run_id	Publish a HITL pause to this run AND to the run that delegated to it.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:312	question	Create a QUESTION HITL, emit a ``question`` run event, and pause the run (US-CHAT-12).
+ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/dispatch.py:430	result_summary	``result_summary`` keys (K-20), never the raw output.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/events.py:220	since	Yield events for a stream: the backlog first (re-attach), then live events until the stream is closed.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/familiar_phenotype_routes.py:1	boltrig.emotion	GET /v1/familiar/phenotype - the Worker surface's read of the emotion add-on.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/hands_registry.py:1	asyncio.Event	The pending desktop-command registry (decision 0016, DH-1).
@@ -1559,12 +1559,12 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/local_whisper.py:1	a
 ORDINARY	SUBJECT-REACHED	comment	boltrig/adapters/builtin/local_whisper.py:146	bearer_token	Requiring `bearer_token` here would fail closed on the one provider that is
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/local_whisper.py:267	allow_internal	Multipart upload the base's JSON ``request()`` cannot carry.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/pocket_voice.py:203	allow_internal	The same raw path the vendor siblings use: the base's JSON ``request()`` cannot carry raw audio bytes back from TTS.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:160	allow_internal	Return a refusal reason if the fetch is not permitted, else ``None``.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:228	pinned_async_client	Resolve the URL's host and refuse it (raise) if the egress guard says so.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:244	EgressBlocked	Resolve ``url``'s host ONCE, run the full egress policy over every returned IPv4/IPv6 address, and return ``(host, vetted_ip)`` - the IP the connection must be pinned to.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:294	proxy_from_config	Vet ``url`` and return an ``httpx.AsyncHTTPTransport`` pinned to the audited IP (H2/SEC-61).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:344	proxy_from_config	Vet ``url`` and return an ``httpx.AsyncClient`` pinned to the audited IP so httpx cannot re-resolve to a different (internal) address (H2/SEC-61).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:404	proxy_from_config	Vet ``url`` and return a synchronous ``httpx.Client`` pinned to the audited IP - the sync counterpart of :func:`pinned_async_client` (H2/SEC-61).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:162	allow_internal	Return a refusal reason if the fetch is not permitted, else ``None``.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:230	pinned_async_client	Resolve the URL's host and refuse it (raise) if the egress guard says so.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:246	EgressBlocked	Resolve ``url``'s host ONCE, run the full egress policy over every returned IPv4/IPv6 address, and return ``(host, vetted_ip)`` - the IP the connection must be pinned to.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:297	proxy_from_config	Vet ``url`` and return an ``httpx.AsyncHTTPTransport`` pinned to the audited IP (H2/SEC-61).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:347	proxy_from_config	Vet ``url`` and return an ``httpx.AsyncClient`` pinned to the audited IP so httpx cannot re-resolve to a different (internal) address (H2/SEC-61).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:407	proxy_from_config	Vet ``url`` and return a synchronous ``httpx.Client`` pinned to the audited IP - the sync counterpart of :func:`pinned_async_client` (H2/SEC-61).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/generator.py:1	GeneratedAdapter.render_source	Deterministic OpenAPI -> adapter generator (US-ADP-01, SEC-22).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:124	egress.EgressBlocked	The SSRF-pinned client for this server (H2/SEC-61): vetted and pinned to the audited IP, ``follow_redirects=False``.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:158	bounded_http_response	One round trip, with the body bounded before it is buffered.
