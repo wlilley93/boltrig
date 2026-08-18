@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T19:27:18.905Z",
+  "capturedAt": "2026-08-18T19:50:37.536Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,11 +16,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "343c15d52d750aa5c13ccae8ba463332b967235c8a088c6e3a4bd2b5b7b827d0",
-    "digestAfterCapture": "343c15d52d750aa5c13ccae8ba463332b967235c8a088c6e3a4bd2b5b7b827d0",
+    "digestBeforeCapture": "5864078320fe32e1ebdffe6058b3de2e94a7328c7a1e6a5caa2f7d4358e051f7",
+    "digestAfterCapture": "5864078320fe32e1ebdffe6058b3de2e94a7328c7a1e6a5caa2f7d4358e051f7",
     "sourceUnchangedDuringCapture": true,
-    "branch": "build-react19",
-    "head": "282fab2dd69e444c4db4dca8738905e2f5c91e19",
+    "branch": "feat/dark-default-and-site-mark",
+    "head": "eded767cfae216e950e409d04a69bad58b20a33b",
     "dirty": false
   },
   "runner": {
@@ -104,7 +104,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -290,7 +290,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 5,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
