@@ -42,9 +42,63 @@ client/transport are the thin network-touching helpers.
 from __future__ import annotations
 
 import ipaddress
+import logging
 import socket
 from typing import Any
 from urllib.parse import urlparse
+
+_egress_log = logging.getLogger("boltrig.egress")
+
+
+def tls_verify_from_config(config: dict[str, Any] | None) -> Any:
+    """The TLS verifier a manifest NetworkConfig asks for: an operator-supplied
+    ``ca_bundle`` builds a context that trusts ONLY those roots (a missing or
+    malformed bundle FAILS CLOSED rather than silently falling back to public
+    roots); absent a bundle, httpx's default verification. Shared by web_fetch
+    and - since 2026-08-16 - the pinned-client family, so one doctrine answers
+    for every egress path."""
+    import ssl
+
+    ca_bundle = (config or {}).get("ca_bundle")
+    if not ca_bundle:
+        return True
+    return ssl.create_default_context(cafile=str(ca_bundle))
+
+
+def proxy_from_config(config: dict[str, Any] | None) -> str | None:
+    """The egress proxy a manifest NetworkConfig asks for, or None.
+
+    PROXY MODE DOCTRINE (mirrors web_fetch, the reference implementation): with
+    a proxy the PROXY performs resolution, so local IP pinning does not apply -
+    the guard over the LOCAL resolution still runs (advisory there, enforced
+    where resolution is local), and the proxy itself must refuse internal space
+    from its network position. Pinned-client helpers take this branch
+    automatically when the config carries ``https_proxy``."""
+    return (config or {}).get("https_proxy") or None
+
+# The process-wide default NetworkConfig (SEC-52): the composition root
+# installs the manifest's ``network`` section once at boot, because the
+# module-ref factories the loader calls as plain ``build()`` have no
+# construction seam to receive it - without this, an operator's air-gap /
+# allow-list policy is silently void for every adapter built that way. Global
+# mutable state, bounded: written at composition (last projected manifest
+# wins), read at adapter construction, and ALWAYS superseded by an explicit
+# config passed to a constructor - never by an agent-influenced value.
+_default_network_config: dict[str, Any] | None = None
+
+
+def set_default_network_config(config: dict[str, Any] | None) -> None:
+    """Install the process-wide egress posture (the manifest ``network``
+    section). Call only from the composition root; pass None to withdraw."""
+    global _default_network_config
+    _default_network_config = dict(config) if config else None
+
+
+def default_network_config() -> dict[str, Any] | None:
+    """The process-wide egress posture, or None when no manifest installed
+    one (bare boots and tests: egress then behaves exactly as pre-manifest).
+    A copy: a reader must not be able to amend the operator's posture."""
+    return dict(_default_network_config) if _default_network_config else None
 
 
 def is_blocked_ip(ip: str) -> bool:
@@ -136,7 +190,13 @@ def check_network_policy(
         if not config.get("allow_internal"):
             for ip in resolved_ips:
                 if is_blocked_ip(ip):
-                    return f"target resolves to a non-routable/internal address ({ip})"
+                    # The resolved address is deliberately NOT in the reason: the
+                    # message rides EgressBlocked into agent-visible AdapterErrors,
+                    # and an internal hostname probe then read back the internal
+                    # network topology (which ranges live on 10.x here) from the
+                    # error text. Operators get the addresses from the kernel log
+                    # at the raise site instead.
+                    return "target resolves to a non-routable/internal address"
     return None
 
 
@@ -177,6 +237,7 @@ def assert_egress_allowed(url: str, config: dict[str, Any] | None = None) -> Non
     host = urlparse(url).hostname or ""
     reason = check_network_policy(url, config, resolved_ips=resolve_host(host))
     if reason:
+        _egress_log.warning("egress refused for %s: %s", url, reason)
         raise EgressBlocked(f"egress refused: {reason}")
 
 
@@ -190,6 +251,9 @@ def resolve_and_vet(url: str, config: dict[str, Any] | None = None) -> tuple[str
     ips = resolve_host(host)
     reason = check_network_policy(url, config, resolved_ips=ips)
     if reason:
+        # The refusal itself is operator evidence; the resolved addresses stay
+        # here (kernel log) and out of the exception, whose text agents can read.
+        _egress_log.warning("egress refused for %s: %s (resolved=%s)", url, reason, ips)
         raise EgressBlocked(f"egress refused: {reason}")
     return host, ips[0]  # every ip in ips passed is_blocked_ip; pin the first
 
@@ -227,15 +291,34 @@ def _pinned_backend(pinned_ip: str, inner: Any | None = None) -> Any:
     return _PinnedBackend()
 
 
-def pinned_transport(url: str, config: dict[str, Any] | None = None, *, inner_backend: Any | None = None) -> Any:
-    """Vet ``url`` and return an ``httpx.AsyncHTTPTransport`` pinned to the audited
-    IP (H2/SEC-61). For callers that build the ``httpx.AsyncClient`` themselves
-    (e.g. a client with its own base_url/auth/timeout) and just need the pinned
-    transport. Raise :class:`EgressBlocked` if the guard refuses."""
+def pinned_transport(
+    url: str,
+    config: dict[str, Any] | None = None,
+    *,
+    inner_backend: Any | None = None,
+    verify: Any = None,
+) -> Any:
+    """Vet ``url`` and return an ``httpx.AsyncHTTPTransport`` pinned to the
+    audited IP (H2/SEC-61). For callers that build the ``httpx.AsyncClient``
+    themselves (e.g. a client with its own base_url/auth/timeout) and just need
+    the pinned transport. Raise :class:`EgressBlocked` if the guard refuses.
+
+    With ``https_proxy`` in the config the proxy performs resolution, so the
+    transport is built PROXIED and unpinned (see ``proxy_from_config``); with a
+    ``ca_bundle`` the transport trusts only those roots (``verify`` kwarg, or
+    derived from the config when not given)."""
     import httpx
 
-    _host, vetted_ip = resolve_and_vet(url, config)
-    transport = httpx.AsyncHTTPTransport()
+    if verify is None:
+        verify = tls_verify_from_config(config)
+    _host, vetted_ip = resolve_and_vet(url, config)  # the guard stands in proxy mode too
+    proxy = proxy_from_config(config)
+    if proxy is not None:
+        return httpx.AsyncHTTPTransport(
+            proxy=proxy,
+            verify=verify,
+        )
+    transport = httpx.AsyncHTTPTransport(verify=verify)
     transport._pool._network_backend = _pinned_backend(vetted_ip, inner_backend)
     return transport
 
@@ -264,9 +347,27 @@ def pinned_async_client(
     """Vet ``url`` and return an ``httpx.AsyncClient`` pinned to the audited IP so
     httpx cannot re-resolve to a different (internal) address (H2/SEC-61). Raise
     :class:`EgressBlocked` if the egress guard refuses. Call the client with the
-    original URL (host preserved) - only the TCP target is pinned."""
+    original URL (host preserved) - only the TCP target is pinned.
+
+    With ``https_proxy`` in the config the proxy performs resolution, so the
+    client is PROXIED and unpinned (see ``proxy_from_config``); a ``ca_bundle``
+    yields a transport that trusts only those roots."""
+    import httpx
+
+    verify = client_kwargs.pop("verify", None)
+    if verify is None:
+        verify = tls_verify_from_config(config)
+    proxy = proxy_from_config(config)
+    if proxy is not None:
+        _host, _ip = resolve_and_vet(url, config)  # the guard stands
+        client_kwargs["follow_redirects"] = False
+        client_kwargs["proxy"] = proxy
+        client_kwargs["verify"] = verify
+        return httpx.AsyncClient(**client_kwargs)
     _host, vetted_ip = resolve_and_vet(url, config)
-    return pinned_async_client_for_ip(vetted_ip, inner_backend=inner_backend, **client_kwargs)
+    return pinned_async_client_for_ip(
+        vetted_ip, inner_backend=inner_backend, verify=verify, **client_kwargs
+    )
 
 
 def _pinned_sync_backend(pinned_ip: str, inner: Any | None = None) -> Any:
@@ -306,12 +407,22 @@ def pinned_sync_client(
     """Vet ``url`` and return a synchronous ``httpx.Client`` pinned to the audited
     IP - the sync counterpart of :func:`pinned_async_client` (H2/SEC-61).
     ``follow_redirects`` is forced False (a 30x must not be chased into internal
-    space). Raise :class:`EgressBlocked` if the egress guard refuses."""
+    space). Raise :class:`EgressBlocked` if the egress guard refuses.
+
+    With ``https_proxy`` in the config the proxy performs resolution, so the
+    client is PROXIED and unpinned (see ``proxy_from_config``); a ``ca_bundle``
+    yields a transport that trusts only those roots."""
     import httpx
 
-    _host, vetted_ip = resolve_and_vet(url, config)
-    transport = httpx.HTTPTransport()
-    transport._pool._network_backend = _pinned_sync_backend(vetted_ip, inner_backend)
+    verify = client_kwargs.pop("verify", None)
+    if verify is None:
+        verify = tls_verify_from_config(config)
+    _host, vetted_ip = resolve_and_vet(url, config)  # the guard stands in proxy mode too
+    transport = httpx.HTTPTransport(
+        verify=verify, **({"proxy": p} if (p := proxy_from_config(config)) else {})
+    )
+    if proxy_from_config(config) is None:
+        transport._pool._network_backend = _pinned_sync_backend(vetted_ip, inner_backend)
     client_kwargs["follow_redirects"] = False
     client_kwargs["transport"] = transport
     return httpx.Client(**client_kwargs)

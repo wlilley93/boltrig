@@ -82,6 +82,10 @@ DECLARE
     -- anchors. Both carry a real tenant_id, so the generic tenant_id policy fences
     -- them (a null GUC -> zero rows, fail-closed) exactly like audit_log.
     'security_log','audit_rollup_anchors',
+    -- The audit outbox (SEC-16 durable deferral): tenant-scoped like audit_log
+    -- itself; its rows are DELETED by the drain, so unlike the append-only
+    -- chains it keeps the app role's full grant set.
+    'audit_outbox',
     'budgets','budget_usage','credential_refs','tenant_permissions','conversations',
     'config_revisions','permanent_fleet_observations','birth_profile_receipts',
     'background_job_receipts',
@@ -115,6 +119,14 @@ DECLARE
     -- tenant_id-scoped like the rest; the migration created the table without a
     -- policy and this is where that is corrected.
     'trajectory_events',
+    -- Capability doctrine step 2 (migration 0079): the canonical routing
+    -- layer. Every row carries a real tenant_id - a connection label, a
+    -- provider operation, an implementation claim and a routing rule are all
+    -- tenant data, and a route read outside the fence would pick a
+    -- destination belonging to someone else. Same generic tenant_id policy,
+    -- fail-closed on a null GUC.
+    'provider_connections','source_operations','capability_bindings',
+    'routing_policies',
     -- Org -> workspace tenancy ([2026] VJS-COUNTY 8). These three carry a real
     -- tenant_id column, so the generic tenant_id policy binds them. organisations
     -- is handled separately below (its isolation column is id, which IS tenant_id).

@@ -29,6 +29,14 @@
       "reason": "Decompose the Microsoft Graph capability description by resource while preserving its existing verb schemas.",
       "expires": "2026-12-31"
     },
+    "boltrig/adapters/egress.py": {
+      "max_file_lines": 428,
+      "max_function_lines": 41,
+      "over_limit_functions": [],
+      "owner": "adapter-maintainers",
+      "reason": "2026-08-16 third wave: +28 - tls_verify_from_config / proxy_from_config and the proxied branches of the pinned-client family, sharing web_fetch proxy/CA doctrine.",
+      "expires": "2026-12-31"
+    },
     "boltrig/adapters/generator.py": {
       "max_file_lines": 553,
       "max_function_lines": 50,
@@ -99,6 +107,28 @@
       "reason": "Extract initiation orchestration phases without changing request validation or execution semantics. 2026-07-26: +11 lines recording a KNOWN LIMIT in the module docstring - the \"refusing to run twice\" guard is a read-then-write with no uniqueness on one owner per tenant, so two concurrent runs with different emails both seat a superadmin. Placed in the docstring rather than inside _run precisely so the note does not grow the function it describes; _run is unchanged at 91 lines and only its line number moved. 2026-07-26: +5 lines to flag the seeded account for forced rotation ([2026] VJS-COUNTY 8, D7) - the seeding path is the flag's only producer. 2026-07-30 (merge with origin/main): +14 lines from #171/#173, the operator-seat order's D1-D7 discharge and the declared development posture. `_run` crosses the function floor at 96 because the seed path now records WHICH credential kind authenticated the caller, which is the distinction [2026] VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001 D4 proved by execution had been conflated with authority. 2026-08-14: +3 lines, the same onboarding requirement reaching initiate.",
       "expires": "2026-12-31"
     },
+    "boltrig/api/worker.py": {
+      "max_file_lines": 445,
+      "max_function_lines": 73,
+      "over_limit_functions": [],
+      "owner": "platform-maintainers",
+      "reason": "2026-08-16: +9 over the default 400 - the worker passes its kernel to the hitl-expiry janitor and wires a worker-side resume notifier so the ANSWERED-reconciliation pass has something to re-fire. 2026-08-16 third wave: audit-outbox seams / proxy-CA threading growth, re-measured.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/config/control_compat_specs.py": {
+      "max_file_lines": 279,
+      "max_function_lines": 83,
+      "over_limit_functions": [
+        {
+          "name": "_tenancy_specs",
+          "line": 43,
+          "lines": 83
+        }
+      ],
+      "owner": "configuration-maintainers",
+      "reason": "_tenancy_specs is a single declarative table of tenancy compatibility specs. 2026-08-11: recorded when per-model modality specs were added. It reads as data, not logic, and breaking it up would hide which specs exist behind indirection. 2026-08-17 (per-user integration credentials): +1 for the allow_own_integration_credentials org spec entry. It is one key in the control.org.update table and belongs beside allow_own_ai_keys, which is the flag it deliberately parallels; extracting to reclaim the line would separate two policies a reader needs to compare. The same change then added the connect verb its 'level' property and the note saying why there is no scope_id beside it: identity is authenticated-by-construction, so the kernel derives the owner from the caller rather than believing the request, and a reader of a credential spec needs to know that without leaving the file. 2026-08-18 (member connection offboarding): +7 for the control.integration.revoke_member spec. It is one declarative entry in the same list as control.integration.revoke and has to sit beside it to be read as the pair it is.",
+      "expires": "2026-12-31"
+    },
     "boltrig/config/manifest.py": {
       "max_file_lines": 877,
       "max_function_lines": 54,
@@ -123,12 +153,28 @@
       "reason": "File-length only. The read-only Codex cutover adds read_turn_output, which returns the agentMessage text the event translator captures from the lifecycle stream (thread/read is not served in the App Server's exec mode); the module was already at the 399-line floor. Audit fix: start_thread now also threads the API-owned cell root into thread state / failed-start cleanup so per-run cell trees are removed. Split the lifecycle from the read-back/terminal helpers into a sibling module when the runtime family is next refactored. Kernel-tools lane: start_thread passes the lane-aware benign-invalidation predicate to the actor. +2 lines (435->437) for one import and one call: this module had NO logger and raises `from None`, which severs __cause__, so a model-proxy 401, a turn-spec schema mismatch, an App Server timeout and a cell that died mid-RPC were byte-identical - one fixed string, no cause - and a tenant's agent failed every turn for an hour on that. The diagnostic itself was extracted to codex_diagnostics.py precisely so this file would not buy the debt; the two lines left are the import and the call, and neither can be removed without removing the cause again.",
       "expires": "2026-12-31"
     },
+    "boltrig/fleet/infrastructure/codex_app_server.py": {
+      "max_file_lines": 461,
+      "max_function_lines": 49,
+      "over_limit_functions": [],
+      "owner": "fleet-maintainers",
+      "reason": "Answer codex server-initiated requests ([2026] VJS-COUNTY 12): a ServerRequestHandler seam, _dispatch_server_request + _answer_server_request (side-task, never crashes the pump), and _drain_server_request_tasks on close. No function exceeds the limit; the file crosses 400 by the new response path.",
+      "expires": "2026-12-31"
+    },
     "boltrig/fleet/infrastructure/codex_cell_supervisor.py": {
       "max_file_lines": 478,
       "max_function_lines": 75,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
       "reason": "Gap 5 adds the per-cell slot seam (acquire_slot/release_slot/provision_cell_tree) and the per-cell workspace-attest + require_local_ownership branch, plus the earlier cell-startup diagnostic logging. Audit fix: _claimed_cells is now FIFO-bounded (4096) instead of growing one entry per historical cell. Follow-up: extract the slot seam and lower back toward 408. Kernel-tools lane: start/_spawn accept validated per-cell environment additions (the run-scoped MCP bearer delivery); validation runs before any provisioning side effect. [2026] VJS-COUNTY 12: the App Server client is constructed with the server_request_handler (codex approval -> admit-to-kernel).",
+      "expires": "2026-12-31"
+    },
+    "boltrig/fleet/infrastructure/codex_client_support.py": {
+      "max_file_lines": 422,
+      "max_function_lines": 31,
+      "over_limit_functions": [],
+      "owner": "fleet-maintainers",
+      "reason": "Add BoundedWriter.send_response so the App Server client can ANSWER a server-initiated request (codex item/tool/requestUserInput MCP-tool approval), deduped with send_notification via _send_untracked. No function exceeds the limit; the file crosses 400 by the new tracker-free response path.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_runtime_events.py": {
@@ -237,6 +283,14 @@
       "reason": "Extract application middleware and route-family wiring while preserving dependency ownership and ordering. Parity passthrough (2026): ChatBody carries the optional on_behalf_bearer forwarded to the spawner. SEC-186 (2026-07-25): the /v1/invoke door refuses a body-supplied run id belonging to another user; the predicate itself lives in run_access.py, so only the 5-line guard is here. 2026-07-28 (exactly once): 860->817 and create_app 592->587, both LOWERED while ADDING ChatBody.idempotency_key. The chat door was the only caller surface with no replay defence - InvokeBody has carried a key since SEC-15 - and a client retry loop on the live tenant turned one message into seven agent_spawn rows. The room came from moving the four request models into kernel/app_bodies.py: they are the door's PUBLIC CONTRACT, they grow whenever the product does, and reading them should not mean paging through route wiring. 2026-07-29 (Worker continuity): 817->793 and create_app 587->563, both LOWERED by extracting conversation detail and browser-safe projected follow routes into kernel/conversation_live_routes.py. The safe chat configuration projection now uses that same registrar, lowering the facade again. 2026-07-30: health and readiness registration moved to health_routes.py, lowering the facade while retaining the same lazy service lock and public paths. 2026-07-30 (merge with origin/main): +14 lines from #175 (the caller-facing schema hint, so a failed verb call says which field was wrong instead of the bare word schema_invalid) and #179 (Principal.credential_kind). create_app measures 546 here rather than origin/main's 587 because the local decision-0021 tree had already extracted health, readiness, conversation-detail and projected-follow route registration out of it; the merge adds to the SMALLER function. 2026-08-14: the conversation-list and search response projection moved into kernel/conversation_list_views.py while adding only the active-run boolean, lowering app.py 794->771 and create_app 546->545 instead of raising either debt limit.",
       "expires": "2026-12-31"
     },
+    "boltrig/kernel/audit.py": {
+      "max_file_lines": 412,
+      "max_function_lines": 51,
+      "over_limit_functions": [],
+      "owner": "kernel-maintainers",
+      "reason": "2026-08-16 third wave: audit-outbox seams and janitor wiring (SEC-16 durable deferral), proxy/CA threading.",
+      "expires": "2026-12-31"
+    },
     "boltrig/kernel/channel_routes.py": {
       "max_file_lines": 668,
       "max_function_lines": 258,
@@ -328,36 +382,6 @@
       ],
       "owner": "workflow-maintainers",
       "reason": "Decompose workflow execution by step type while preserving checkpoint, retry, and governance semantics.",
-      "expires": "2026-12-31"
-    },
-    "boltrig/fleet/infrastructure/codex_client_support.py": {
-      "max_file_lines": 422,
-      "max_function_lines": 31,
-      "over_limit_functions": [],
-      "owner": "fleet-maintainers",
-      "reason": "Add BoundedWriter.send_response so the App Server client can ANSWER a server-initiated request (codex item/tool/requestUserInput MCP-tool approval), deduped with send_notification via _send_untracked. No function exceeds the limit; the file crosses 400 by the new tracker-free response path.",
-      "expires": "2026-12-31"
-    },
-    "boltrig/fleet/infrastructure/codex_app_server.py": {
-      "max_file_lines": 461,
-      "max_function_lines": 49,
-      "over_limit_functions": [],
-      "owner": "fleet-maintainers",
-      "reason": "Answer codex server-initiated requests ([2026] VJS-COUNTY 12): a ServerRequestHandler seam, _dispatch_server_request + _answer_server_request (side-task, never crashes the pump), and _drain_server_request_tasks on close. No function exceeds the limit; the file crosses 400 by the new response path.",
-      "expires": "2026-12-31"
-    },
-    "boltrig/config/control_compat_specs.py": {
-      "max_file_lines": 279,
-      "max_function_lines": 83,
-      "over_limit_functions": [
-        {
-          "name": "_tenancy_specs",
-          "line": 43,
-          "lines": 83
-        }
-      ],
-      "owner": "configuration-maintainers",
-      "reason": "_tenancy_specs is a single declarative table of tenancy compatibility specs. 2026-08-11: recorded when per-model modality specs were added. It reads as data, not logic, and breaking it up would hide which specs exist behind indirection. 2026-08-17 (per-user integration credentials): +1 for the allow_own_integration_credentials org spec entry. It is one key in the control.org.update table and belongs beside allow_own_ai_keys, which is the flag it deliberately parallels; extracting to reclaim the line would separate two policies a reader needs to compare. The same change then added the connect verb its 'level' property and the note saying why there is no scope_id beside it: identity is authenticated-by-construction, so the kernel derives the owner from the caller rather than believing the request, and a reader of a credential spec needs to know that without leaving the file. 2026-08-18 (member connection offboarding): +7 for the control.integration.revoke_member spec. It is one declarative entry in the same list as control.integration.revoke and has to sit beside it to be read as the pair it is.",
       "expires": "2026-12-31"
     }
   }

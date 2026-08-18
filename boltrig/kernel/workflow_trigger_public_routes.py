@@ -63,14 +63,6 @@ def register_public_workflow_trigger_routes(app, K) -> None:
         from boltrig.store.postgres import set_current_tenant
 
         set_current_tenant(tenant_id)
-        trigger = await k.store.get_workflow_trigger(tenant_id, trigger_id)
-        supplied = request.headers.get("x-boltrig-trigger-secret") or ""
-        valid = _authenticated(trigger, supplied)
-        if trigger is None or not valid:
-            return JSONResponse(
-                {"status": "denied", "reason": "webhook_authentication"},
-                status_code=401,
-            )
         source_event_id = str(
             request.headers.get("x-boltrig-delivery-id") or ""
         ).strip()
@@ -84,17 +76,33 @@ def register_public_workflow_trigger_routes(app, K) -> None:
                 {"status": "error", "reason": "event_too_large"},
                 status_code=413,
             )
-        digest = event_digest(f"webhook:{trigger.id}", source_event_id)
+        # Dedup BEFORE the throttle (a platform's retry of a delivery that
+        # already landed is a duplicate receipt, not rate-limit spend) and
+        # throttle BEFORE the trigger lookup: the lookup is an unauthenticated
+        # indexed DB read, and an anonymous requester varying tenant_id /
+        # trigger_id drove unbounded reads ahead of the limit that used to sit
+        # here. The path trigger_id IS the stored trigger id, so the digest is
+        # identical either way; a dedup hit for an unknown trigger is
+        # impossible (no deliveries exist to hit).
+        digest = event_digest(f"webhook:{trigger_id}", source_event_id)
         existing = await k.store.get_workflow_trigger_delivery(
-            tenant_id, trigger.id, digest
+            tenant_id, trigger_id, digest
         )
         if existing is not None:
             return JSONResponse(
                 {"status": "duplicate", "receipt": delivery_view(existing)}
             )
-        throttled = await _enforce_rate_limit(k, tenant_id, trigger.id)
+        throttled = await _enforce_rate_limit(k, tenant_id, trigger_id)
         if throttled is not None:
             return throttled
+        trigger = await k.store.get_workflow_trigger(tenant_id, trigger_id)
+        supplied = request.headers.get("x-boltrig-trigger-secret") or ""
+        valid = _authenticated(trigger, supplied)
+        if trigger is None or not valid:
+            return JSONResponse(
+                {"status": "denied", "reason": "webhook_authentication"},
+                status_code=401,
+            )
         principal = await webhook_principal(k.store, trigger)
         payload, status_code = await deliver_trigger(
             k, trigger, principal, body, digest, request

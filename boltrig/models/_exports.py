@@ -155,6 +155,7 @@ PUBLIC_MODEL_EXPORTS = [
     "HITLStateConflict",
     "TenantIsolation",
     "RateLimited",
+    "RouteRequired",
     "BudgetExceeded",
     "BudgetWindowUnavailable",
     "DepthExceeded",

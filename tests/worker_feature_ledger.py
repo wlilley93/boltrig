@@ -499,6 +499,11 @@ BACKGROUND_FEATURES: dict[str, FeatureCoverage] = {
         ("worker", "deployment", "deployment", "worker", "operator"),
         "Anchor evidence is visible; interval/manual forcing stays operational.",
     ),
+    "audit-outbox-janitor": _coverage(
+        "boltrig/kernel/audit_outbox.py:run_audit_outbox_forever",
+        ("worker", "deployment", "worker", "worker", "operator"),
+        "Deferred audit rows re-chain once the fault clears; the chain stays contiguous and verify() passes over drained rows.",
+    ),
     "hitl-expiry-janitor": _coverage(
         "boltrig/kernel/hitl_expiry.py:run_hitl_expiry_forever",
         ("worker", "deployment", "worker", "worker", "operator"),

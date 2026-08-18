@@ -80,3 +80,5 @@ _migration/
 # porting them into bodyPresets.ts, not a source of truth. Committing it would put
 # two copies of every look in the tree and make the stale one look authoritative.
 apps/worker/tests/visual/presets.json
+# a pnpm install tree for linux docker builds; materialised by the Dockerfile install, never source
+apps/worker/node_modules.linux/

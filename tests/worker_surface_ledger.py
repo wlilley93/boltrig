@@ -339,6 +339,9 @@ POST /v1/memory/improve memoryImprove
 POST /v1/memory/forget memoryForget
 POST /v1/memory/ingest memoryIngest
 GET /v1/memory/ingestions memoryIngestions
+GET /v1/memory/candidates memoryCandidates
+GET /v1/memory/timeline memoryTimeline
+POST /v1/memory/candidates/{candidate_id}/review memoryCandidateReview
 """,
 )
 _surface(
@@ -687,18 +690,16 @@ GET /v1/model-profiles
 """,
 )
 _non_ui("advanced-compatibility", "POST /v1/spawn")
-# Typed memory planes (decision 0029): headless, governed agent/operator surface.
-# The Worker has no typed-memory UI yet (candidates queue + slot timeline are
-# future work per the decision's honesty section).
+# Typed memory planes (decision 0029): the agent/operator API surface with no
+# Worker UI yet (the LLM-side propose lane and the bundle/resolve recall
+# contracts). The candidate queue, slot timeline and review live on the Memory
+# route's Review tab.
 _non_ui(
     "governed-agent-surface",
     """
 POST /v1/memory/propose
 POST /v1/memory/bundle
 GET /v1/memory/resolve
-GET /v1/memory/candidates
-GET /v1/memory/timeline
-POST /v1/memory/candidates/{candidate_id}/review
 """,
 )
 
@@ -715,22 +716,6 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
     "getCall": (
         "superseded-read",
         "calls/currentCall already return the complete call projection.",
-    ),
-    # Typed memory planes (decision 0029). The kernel routes and the web SDK
-    # both carry the candidate queue, the slot timeline and the review call; the
-    # Worker has no UI for any of them yet, which the decision's own honesty
-    # section states outright.
-    "memoryCandidateReview": (
-        "advanced-compatibility",
-        "Governed agent/operator surface; no typed-memory review UI in the Worker yet.",
-    ),
-    "memoryCandidates": (
-        "advanced-compatibility",
-        "Governed agent/operator surface; no typed-memory queue UI in the Worker yet.",
-    ),
-    "memoryTimeline": (
-        "advanced-compatibility",
-        "Governed agent/operator surface; no slot-timeline UI in the Worker yet.",
     ),
     "refreshCallMedia": (
         "compatibility-helper",

@@ -222,12 +222,15 @@ class PermanentAgentRuntime:
     ) -> AgentResult:
         model_route: dict[str, Any] | None = None
         try:
+            # The prompt is the egress payload; the routing seam scans it for
+            # PII classification before the destination is decided (SEC-13).
             runtime = await self._spawner._runtime_resolver.runtime_for(
                 context.tenant_id,
                 self.capability,
                 phase_context,
                 pinned_policy=True,
                 allow_kernel_tools=False,
+                outbound_text=prompt,
             )
             model_route = getattr(runtime, "model_route", None)
             result = await runtime.run(prompt, phase_context, tools=list(tools))

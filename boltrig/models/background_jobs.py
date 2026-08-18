@@ -37,6 +37,10 @@ BACKGROUND_JOB_NAMES = (
     # receipts with item_count=0 = idle (no terminal items); succeeded=False =
     # broken, with the WARNING log saying why.
     "reflection",
+    # The audit-outbox drain (SEC-16 durable deferral): a receipt per sweep,
+    # item_count = rows re-chained. No receipts = disabled (interval<=0) or a
+    # boot before the janitor existed; item_count=0 = empty outbox.
+    "audit_outbox",
 )
 BACKGROUND_JOB_OUTCOMES = ("succeeded", "failed")
 BACKGROUND_JOB_RECEIPTS_PER_JOB = 4

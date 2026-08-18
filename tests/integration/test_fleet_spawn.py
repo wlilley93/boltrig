@@ -169,7 +169,10 @@ async def test_spawn_audit_records_latency_for_model_telemetry(monkeypatch):
                 {"ok": True}, summary="done", tokens_used=7, cost_micros=7
             )
 
-    async def runtime_for(tenant_id, capability, context=None):
+    # The seam gained ``outbound_text`` (SEC-13 PII classification at the
+    # routing decision); a stub stands in for the resolver, so it takes what
+    # the real one takes.
+    async def runtime_for(tenant_id, capability, context=None, *, outbound_text=None):
         return _Runtime()
 
     monkeypatch.setattr(spawner, "_runtime_for", runtime_for)

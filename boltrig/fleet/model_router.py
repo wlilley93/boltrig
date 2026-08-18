@@ -5,12 +5,19 @@ endpoint. The guard resolves the endpoint for a capability and, when the data is
 sensitive, refuses any non-local endpoint: it raises ``SensitiveDataMisrouted``
 and audits the attempt, so sensitive content never leaves the boundary on a
 hosted model call. Standard data is unconstrained.
+
+"Sensitive" is not trusted from the caller alone at this seam (SEC-13): the
+kernel's deterministic PII scanner runs over the outbound text payload and a
+detection forces the sensitive route, so unclassified PII reaches hosted
+endpoints never. The scan CLASSIFIES, it never mutates - see
+:func:`outbound_text_classifies_sensitive`.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from boltrig.kernel import pii
 from boltrig.models import (
     ActionType,
     AuditEvent,
@@ -19,6 +26,24 @@ from boltrig.models import (
     SensitiveDataMisrouted,
     utcnow,
 )
+
+
+def outbound_text_classifies_sensitive(text: str | None) -> bool:
+    """True when the kernel's deterministic scanner flags ``text`` as PII-bearing.
+
+    The model-gateway seam consults this so a payload nobody classified still
+    routes sensitive (SEC-13): ``pii.redact`` finding anything, or an identity
+    pattern via ``contains_identity``, forces the local route. Classification
+    ONLY - the text is never rewritten here (redaction at egress is a separate,
+    unapproved behaviour change); this answers "where may these bytes go", not
+    "which bytes go out". Cheap by construction: one pass of the catalogued
+    patterns over a string, nothing binary, nothing recursive. The patterns are
+    conservative (a build number can read as an ipv4), so the failure mode of a
+    false positive is a routed-local call, never a leak.
+    """
+    if not text:
+        return False
+    return pii.redact(text).has_pii or pii.contains_identity(text) is not None
 
 
 def endpoint_id_for_modality(capability: Any, modality: str) -> str | None:

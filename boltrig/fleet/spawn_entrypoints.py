@@ -114,7 +114,11 @@ async def _run_bound_agent(
     micros_est: int,
 ) -> AgentResult:
     try:
-        runtime = await spawner._runtime_for(context.tenant_id, cap, context)
+        # The prompt is the egress payload; the routing seam scans it for PII
+        # classification before the destination is decided (SEC-13).
+        runtime = await spawner._runtime_for(
+            context.tenant_id, cap, context, outbound_text=prompt
+        )
         result = await runtime.run(prompt, context, tools=list(context.grants.allow))
     except Exception:
         with contextlib.suppress(Exception):

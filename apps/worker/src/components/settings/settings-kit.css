@@ -37,8 +37,11 @@
   border-radius: 7px;
   font-family: inherit;
   font-size: 12.5px;
-  /* pinned: `normal` is derived from font metrics and rounds per platform;
-     see IntegrationsView.css. Measured 1px shorter on Linux than macOS. */
+  /* PINNED (2026-08-16): the segmented control is the tallest child of a
+     settings row, and 12.5px at `normal` gave its buttons a 25px box on macOS
+     against 24px on Linux - every Look row sat 1px short off-platform and the
+     contracted table landed at 204 instead of 208. 15px is the macOS `normal`
+     line box; see the .console-section-title pin in styles.css. */
   line-height: 15px;
   cursor: pointer;
   white-space: nowrap;
@@ -196,8 +199,10 @@
   color: var(--text-3);
   font-family: inherit;
   font-size: 13px;
-  /* pinned: `normal` is derived from font metrics and rounds per platform;
-     see IntegrationsView.css. Measured 1px shorter on Linux than macOS. */
+  /* PINNED (2026-08-16): 13px at `normal` is 16px on macOS and 15px on Linux,
+     leaving the disclose row - the last row inside the contracted settings-you
+     Look table - 1px short off-platform. 16px is the macOS value; see the
+     .console-section-title pin in styles.css for the doctrine. */
   line-height: 16px;
   cursor: pointer;
   text-align: left;

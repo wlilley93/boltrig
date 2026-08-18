@@ -8,6 +8,8 @@ verbs a caller is scoped to see (P4, role-scoped).
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from functools import partial
 from typing import Any
@@ -25,11 +27,29 @@ from boltrig.models import (
     Verb,
     VerbBinding,
 )
+from boltrig.models.capability_routing import (
+    CapabilityBinding,
+    ProviderConnection,
+    SourceOperation,
+)
 from boltrig.store import Store
 
 from .revertible import EffectLog
 
 log = logging.getLogger("boltrig.kernel.registry")
+
+
+def _schema_digest(spec: Any) -> str:
+    """A stable fingerprint of the operation's contract.
+
+    Recorded on both the source operation and the binding that claims it, so a
+    provider changing a schema under a published capability is detectable rather
+    than silent - the failure mode the doctrine's catalogue revisions exist for.
+    """
+    payload = json.dumps(
+        [spec.input_schema, spec.output_schema], sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 class KernelRegistry:
@@ -56,11 +76,23 @@ class KernelRegistry:
         built while what was displaced is still known. Absent, the behaviour is
         exactly as before minus the clobbering, so existing callers need no
         change.
+
+        A spec declaring ``implements`` ALSO records the doctrine's three routing
+        records - a provider connection, the source operation, and the binding
+        that claims a canonical capability (SPEC-capability-doctrine.md §5 level
+        1). An adapter that declares nothing behaves exactly as before.
         """
         registered: list[str] = []
+        declared = [spec for spec in adapter.describe() if spec.implements]
+        connection = (
+            await self._capability_connection(tenant_id, adapter) if declared else None
+        )
         for spec in adapter.describe():
             await self._register_spec(tenant_id, adapter, spec, effects)
             registered.append(spec.verb_id)
+        for spec in declared:
+            assert connection is not None
+            await self._declare_capability(tenant_id, connection, spec)
         return registered
 
     async def _register_spec(
