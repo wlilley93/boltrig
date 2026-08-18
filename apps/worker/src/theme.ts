@@ -29,7 +29,12 @@ export const APPEARANCE_KEYS = {
 } as const;
 
 export const DEFAULT_APPEARANCE: Appearance = {
-  theme: "system",
+  // DARK, not "system". Boltrig is a dark product - every surface, the brand
+  // mark's ground and the captured design targets are all built dark - so
+  // following the OS meant a first-run visitor on a light Mac got the light
+  // palette as their introduction to it. "system" remains a choice a person can
+  // make in Settings; it is no longer what they get without choosing.
+  theme: "dark",
   density: "comfortable",
   fontScale: "1",
   reducedMotion: false,
@@ -120,7 +125,10 @@ function resolvedTheme(preference: ThemePreference): WorkerTheme {
   try {
     return matchMedia(DARK_QUERY).matches ? "dark" : "light";
   } catch {
-    return "light";
+    // matchMedia is unavailable, so "follow the system" has no system to
+    // follow. Fall back to the product default rather than a second hardcoded
+    // "light" that would quietly disagree with it.
+    return DEFAULT_APPEARANCE.theme === "light" ? "light" : "dark";
   }
 }
 
