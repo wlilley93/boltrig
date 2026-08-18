@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T20:01:58.407Z",
+  "capturedAt": "2026-08-18T21:33:47.939Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,16 +16,16 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "c04e14bfe6d821c893c691b83cadebfc4f166fad174a90c335a2c6755c330d15",
-    "digestAfterCapture": "c04e14bfe6d821c893c691b83cadebfc4f166fad174a90c335a2c6755c330d15",
+    "digestBeforeCapture": "2ba38318e76374389505e587d6e69be73fb8dac4460d1f5dbafa3fad4ab1d92d",
+    "digestAfterCapture": "2ba38318e76374389505e587d6e69be73fb8dac4460d1f5dbafa3fad4ab1d92d",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/dark-default-and-site-mark",
-    "head": "8b175c7a5d4cfb5451e8ada65404cdee0c0c5af4",
-    "dirty": false
+    "branch": "feat/capability-step3-transforms",
+    "head": "ca7c5f43ce8a1299ec7397567d8e55b25fe6aa8b",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
-    "node": "v24.15.0",
+    "node": "v22.23.1",
     "browser": "chromium",
     "browserVersion": "151.0.7922.34",
     "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
@@ -290,7 +290,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 5,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

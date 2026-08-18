@@ -74,16 +74,26 @@ store: Store, tenant_id: str, adapter: Adapter
     await store.upsert_provider_connection(connection)
     return connection
 
-async def declare_capability(
+async def record_source_operation(
 store: Store, tenant_id: str, connection: ProviderConnection, spec: Any
-) -> None:
-    """Record one declared implementation claim.
+) -> str:
+    """Record WHAT A PROVIDER EXPOSES, whether or not it claims a capability.
 
-    A FIRST-PARTY adapter's claim binds approved: it ships inside the image
-    and its registration is already the governed act. Anything generated,
-    consumed or hand-authored lands ``proposed`` - a declaration is evidence,
-    never the authority to publish itself (SPEC §5, approval policy). An
-    unapproved binding is not eligible for any route.
+    Split out of :func:`declare_capability`, and the split is the point. The
+    two records answer different questions - "what does this provider have"
+    and "what canonical capability does this operation implement" - and fusing
+    them meant the first could only ever be answered for operations that had
+    already answered the second. A provider's operation was invisible to the
+    capability layer until someone had already mapped it, so the layer whose
+    job is to GET things mapped could not see the things needing mapping.
+
+    Measured: the Opbox door publishes 633 verbs and none of them declares
+    ``implements``, so before this split it contributed exactly zero source
+    operations and no compiler, review queue or mapping pack had anything to
+    work on (SPEC §10 step 4).
+
+    Returns the schema digest, so the caller can bind against the same value
+    rather than recomputing it.
     """
     digest = schema_digest(spec)
     await store.upsert_source_operation(
@@ -101,6 +111,21 @@ store: Store, tenant_id: str, connection: ProviderConnection, spec: Any
             consequence_hint=spec.consequence,
         )
     )
+    return digest
+
+
+async def declare_capability(
+store: Store, tenant_id: str, connection: ProviderConnection, spec: Any
+) -> None:
+    """Record one declared implementation claim, and the operation behind it.
+
+    A FIRST-PARTY adapter's claim binds approved: it ships inside the image
+    and its registration is already the governed act. Anything generated,
+    consumed or hand-authored lands ``proposed`` - a declaration is evidence,
+    never the authority to publish itself (SPEC §5, approval policy). An
+    unapproved binding is not eligible for any route.
+    """
+    digest = await record_source_operation(store, tenant_id, connection, spec)
     first_party = connection.trust_level == "first_party"
     await store.upsert_capability_binding(
         CapabilityBinding(

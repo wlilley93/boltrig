@@ -5,6 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 afterEach(cleanup);
 
+// Mocked at the SDK client, which is the real boundary: productName asks
+// client.branding(), so stubbing raw fetch would be testing the SDK's request
+// plumbing rather than this module's behaviour.
+const branding = vi.fn();
+vi.mock("../src/client", () => ({ client: { branding: () => branding() } }));
+
 // Each case re-imports the module so the once-per-load memo and the cache are
 // fresh. A shared module here would make the tests order-dependent, and the
 // first one to run would decide what the rest observed.
@@ -16,14 +22,11 @@ async function load() {
   };
 }
 
-function respond(body: unknown, ok = true) {
-  return vi.fn().mockResolvedValue({ ok, json: async () => body });
-}
-
 describe("the name this deployment presents under", () => {
   beforeEach(() => {
     window.localStorage.clear();
-    vi.restoreAllMocks();
+    branding.mockReset();
+    branding.mockResolvedValue({ product_name: "Boltrig", pulse: true });
   });
 
   it("shows Boltrig before the kernel has answered", async () => {
@@ -33,7 +36,7 @@ describe("the name this deployment presents under", () => {
   });
 
   it("renames the wordmark to Opbox Agents when the kernel says so", async () => {
-    vi.stubGlobal("fetch", respond({ product_name: "Opbox Agents", pulse: true }));
+    branding.mockResolvedValue({ product_name: "Opbox Agents", pulse: true });
     const { productName, BrandWordmark } = await load();
     render(<BrandWordmark />);
     productName.bootstrapProductName();
@@ -44,8 +47,7 @@ describe("the name this deployment presents under", () => {
   });
 
   it("asks the kernel once however many wordmarks are mounted", async () => {
-    const fetchMock = respond({ product_name: "Opbox Agents" });
-    vi.stubGlobal("fetch", fetchMock);
+    branding.mockResolvedValue({ product_name: "Opbox Agents" });
     const { productName, BrandWordmark } = await load();
     render(
       <>
@@ -57,7 +59,7 @@ describe("the name this deployment presents under", () => {
     productName.bootstrapProductName();
     productName.bootstrapProductName();
     await waitFor(() => expect(screen.getAllByText("Opbox Agents")).toHaveLength(3));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(branding).toHaveBeenCalledTimes(1);
   });
 
   it("serves the cached name first, so only a first visit can show the wrong one", async () => {
@@ -79,7 +81,7 @@ describe("the name this deployment presents under", () => {
 
   it("keeps the last good name when the kernel is unreachable", async () => {
     window.localStorage.setItem("boltrig.product-name", "Opbox Agents");
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+    branding.mockRejectedValue(new Error("ECONNREFUSED"));
     const { productName, BrandWordmark } = await load();
     render(<BrandWordmark />);
     productName.bootstrapProductName();
@@ -87,7 +89,7 @@ describe("the name this deployment presents under", () => {
   });
 
   it("falls back to Boltrig when the kernel answers with something unexpected", async () => {
-    vi.stubGlobal("fetch", respond({ product_name: "Totally Other Product" }));
+    branding.mockResolvedValue({ product_name: "Totally Other Product" });
     const { productName, BrandWordmark } = await load();
     render(<BrandWordmark />);
     productName.bootstrapProductName();

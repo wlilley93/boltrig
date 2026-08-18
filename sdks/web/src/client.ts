@@ -7,6 +7,7 @@ import type {
   AdminInvitationsResponse,
   AdminUsersResponse,
   AddonsResponse,
+  BrandingResponse,
   AdapterInventoryResponse,
   AdapterSourceResponse,
   Artifact,
@@ -2330,6 +2331,11 @@ export class BoltrigClient {
 
   addons(): Promise<AddonsResponse> {
     return this.request("/v1/addons");
+  }
+
+  /** Unauthenticated: the sign-in screen renders before anyone has a session. */
+  branding(): Promise<BrandingResponse> {
+    return this.request("/v1/branding");
   }
 
   integrationCatalogue(): Promise<IntegrationCatalogueResponse> {

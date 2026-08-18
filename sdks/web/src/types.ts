@@ -1880,6 +1880,18 @@ export interface AddonRequirement {
   evidence: AddonRequirementEvidence;
 }
 
+/**
+ * What this deployment calls itself. "Boltrig" alone, "Opbox Agents" where the
+ * Opbox addon is active. Unauthenticated, because the sign-in screen is the
+ * first surface that needs it.
+ */
+export interface BrandingResponse {
+  product_name: string;
+  /** The mark's core breathes on either setup. Reported so the client keeps no
+   *  second copy of the policy. */
+  pulse: boolean;
+}
+
 export interface RuntimeAddon {
   id: string;
   version: string;

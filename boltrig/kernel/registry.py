@@ -27,10 +27,27 @@ from boltrig.models import (
 )
 from boltrig.store import Store
 
-from .capability_records import capability_connection, declare_capability
+from .capability_records import (
+    capability_connection,
+    declare_capability,
+    record_source_operation,
+)
 from .revertible import EffectLog
 
 log = logging.getLogger("boltrig.kernel.registry")
+
+
+def _is_external_provider(adapter) -> bool:
+    """Whether this adapter's operations are somebody else's API catalogue.
+
+    ``source`` is ``builtin`` for the adapters that ship inside the image and
+    ``generated`` or ``manual`` for everything consumed or hand-authored, which
+    is the same attribute :func:`capability_connection` already reads to decide
+    trust. Reading it here too keeps one definition of "external" rather than
+    two that can disagree, and defaults to builtin so an adapter that declares
+    nothing about itself is treated as ours and ingests nothing.
+    """
+    return getattr(adapter, "source", "builtin") != "builtin"
 
 
 class KernelRegistry:
@@ -58,19 +75,40 @@ class KernelRegistry:
         exactly as before minus the clobbering, so existing callers need no
         change.
 
-        A spec declaring ``implements`` ALSO records the doctrine's three routing
+        A spec declaring ``implements`` records the doctrine's three routing
         records - a provider connection, the source operation, and the binding
         that claims a canonical capability (SPEC-capability-doctrine.md §5 level
-        1). An adapter that declares nothing behaves exactly as before.
+        1).
+
+        An EXTERNAL provider's operations are recorded as source operations even
+        when they claim nothing (SPEC §10 step 4). Until they were, an operation
+        was invisible to the capability layer until somebody had already mapped
+        it, which left the compiler, the review queue and every mapping pack
+        with nothing to work on: the Opbox door publishes 633 verbs and declares
+        ``implements`` on none of them.
+
+        BUILTINS ARE DELIBERATELY EXCLUDED. They are Boltrig's own verbs rather
+        than a provider's catalogue, they are already first-class, and ingesting
+        all thirty adapters' operations on every tenant at every startup is a
+        cost with no reader today. Their declared specs still record, exactly as
+        before, so this only ever adds rows for adapters that represent someone
+        else's API.
         """
         registered: list[str] = []
-        declared = [spec for spec in adapter.describe() if spec.implements]
+        specs = list(adapter.describe())
+        declared = [spec for spec in specs if spec.implements]
+        catalogue = specs if _is_external_provider(adapter) else declared
         connection = (
-            await capability_connection(self._store, tenant_id, adapter) if declared else None
+            await capability_connection(self._store, tenant_id, adapter)
+            if (declared or catalogue)
+            else None
         )
-        for spec in adapter.describe():
+        for spec in specs:
             await self._register_spec(tenant_id, adapter, spec, effects)
             registered.append(spec.verb_id)
+        for spec in catalogue:
+            assert connection is not None
+            await record_source_operation(self._store, tenant_id, connection, spec)
         for spec in declared:
             assert connection is not None
             await declare_capability(self._store, tenant_id, connection, spec)

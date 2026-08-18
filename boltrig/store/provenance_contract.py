@@ -11,16 +11,16 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
-from boltrig.models.provenance import EntityProvenance
+from boltrig.models.provenance import EntityObservation, EntityProvenance
 
 
 class ProvenanceStoreContract(Protocol):
     # Idempotent on the RECORD's identity, not on the ref: re-observing a record
     # returns the ref already minted for it, which is what lets a model act on a
-    # ref it was handed in an earlier turn. The candidate's own ``ref`` is only a
-    # proposal, so callers must use the RETURNED rows.
+    # ref it was handed in an earlier turn. THE STORE MINTS: an observation has
+    # no ref, so a caller cannot hold one the store discarded on conflict.
     async def observe_entities(
-        self, tenant_id: str, candidates: Sequence[EntityProvenance]
+        self, tenant_id: str, observations: Sequence[EntityObservation]
     ) -> list[EntityProvenance]: ...
 
     # Scoped by tenant AND workspace. A ref from elsewhere resolves to None

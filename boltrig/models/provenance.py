@@ -78,9 +78,11 @@ def mint_ref(entity_type: str) -> str:
 def is_ref(value: object) -> bool:
     """Whether a value LOOKS like a kernel-issued reference.
 
-    Shape only. It says nothing about whether the ref exists, belongs to this
-    tenant, or points anywhere - only the store can answer that, and callers
-    must not treat a True here as authorisation to skip the lookup.
+    Shape only, and the distinction is load-bearing: this says nothing about
+    whether the ref exists, belongs to this tenant, or points anywhere.
+    ``ProvenanceStoreContract.resolve_entity_ref`` is the only thing that
+    answers those, and it is what a caller must reach for. A True here is never
+    authorisation to skip that lookup.
     """
     return isinstance(value, str) and _REF.match(value) is not None
 
@@ -89,6 +91,43 @@ def ref_entity_type(value: str) -> str | None:
     """The canonical entity type carried by a well-formed ref, else None."""
     match = _REF.match(value or "")
     return match.group(1) if match else None
+
+
+@dataclass(frozen=True)
+class EntityObservation:
+    """A record a read just returned, BEFORE it has a name.
+
+    Separate from :class:`EntityProvenance` so a caller cannot hold a ref the
+    store did not issue. The store mints on insert and returns the effective
+    row, so where a record was seen before the caller gets the ref already in
+    play rather than a fresh one it proposed and the store discarded.
+    """
+
+    entity_type: str
+    connection_id: str
+    provider: str
+    remote_object_type: str
+    remote_record_id: str
+    capability_id: str
+    capability_version: int = 1
+    binding_id: str | None = None
+    workspace_id: str | None = None
+
+    def issue(self, tenant_id: str) -> "EntityProvenance":
+        """Mint this observation a ref. Called by the store, not by callers."""
+        return EntityProvenance(
+            ref=mint_ref(self.entity_type),
+            tenant_id=tenant_id,
+            entity_type=self.entity_type,
+            connection_id=self.connection_id,
+            provider=self.provider,
+            remote_object_type=self.remote_object_type,
+            remote_record_id=self.remote_record_id,
+            capability_id=self.capability_id,
+            capability_version=self.capability_version,
+            binding_id=self.binding_id,
+            workspace_id=self.workspace_id,
+        )
 
 
 @dataclass

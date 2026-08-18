@@ -39,6 +39,17 @@ def _surface(source: str, declarations: str) -> None:
         WORKER_ROUTES[route] = WorkerSurface(sdk_method=sdk_method, source=source)
 
 
+# Unauthenticated, and read at bootstrap rather than by a component: the
+# sign-in screen is the first surface that needs the product's name and it
+# renders before anyone has a session.
+_surface(
+    "apps/worker/src/productName.ts",
+    """
+GET /v1/branding branding
+""",
+)
+
+
 _surface(
     "apps/worker/src/components/shell/useConversationDirectory.ts",
     """
@@ -749,4 +760,7 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 }
 
 
-EXPECTED_ROUTE_COUNT = 292
+# 293 since GET /v1/branding (the product's own name, read unauthenticated by
+# the sign-in screen). An exact census, not a ratchet: it must equal the
+# routes the app actually serves, so it moves when the surface does.
+EXPECTED_ROUTE_COUNT = 293

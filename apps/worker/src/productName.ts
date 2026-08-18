@@ -14,7 +14,7 @@
 // name is therefore cached, so only the very first visit to a given origin can
 // show the default. Nothing here is a trust decision - it is a word - so a
 // stale or tampered cache costs a wrong label until the fetch lands.
-import { configuredApiOrigin } from "./apiOrigin";
+import { client } from "./client";
 
 export const DEFAULT_PRODUCT_NAME = "Boltrig";
 
@@ -75,25 +75,19 @@ export function subscribeProductName(listener: (name: string) => void): () => vo
 }
 
 async function resolveProductName(): Promise<string> {
-  return await (async () => {
-    try {
-      const response = await fetch(`${configuredApiOrigin()}/v1/branding`, {
-        headers: { accept: "application/json" },
-      });
-      if (!response.ok) return cached() ?? DEFAULT_PRODUCT_NAME;
-      const body = (await response.json()) as { product_name?: unknown };
-      const name = body.product_name;
-      if (typeof name !== "string" || !KNOWN.has(name)) {
-        return cached() ?? DEFAULT_PRODUCT_NAME;
-      }
-      remember(name);
-      return name;
-    } catch {
-      // Offline, or the kernel is not up yet. The sign-in screen still renders.
+  try {
+    const { product_name: name } = await client.branding();
+    if (typeof name !== "string" || !KNOWN.has(name)) {
       return cached() ?? DEFAULT_PRODUCT_NAME;
     }
-  })();
+    remember(name);
+    return name;
+  } catch {
+    // Offline, or the kernel is not up yet. The sign-in screen still renders.
+    return cached() ?? DEFAULT_PRODUCT_NAME;
+  }
 }
+
 
 function initialProductName(): string {
   return cached() ?? DEFAULT_PRODUCT_NAME;
