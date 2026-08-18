@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T13:48:24.084Z",
+  "capturedAt": "2026-08-18T14:30:48.178Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "0fbbfcb4679254564e91cbaa9634db100fbcf90c19d491a8ff488b85bb9862c0",
-    "digestAfterCapture": "0fbbfcb4679254564e91cbaa9634db100fbcf90c19d491a8ff488b85bb9862c0",
+    "digestBeforeCapture": "abbd284f97c11c085ae1f26c83a05d3be1b2797349b916a94447f6a63b0f6e5b",
+    "digestAfterCapture": "abbd284f97c11c085ae1f26c83a05d3be1b2797349b916a94447f6a63b0f6e5b",
     "sourceUnchangedDuringCapture": true,
-    "branch": "fix/bifrost-provider-picker",
-    "head": "1e9c305d921f4f77155db9988743dcac79276ef3",
+    "branch": "integrate/capability-doctrine",
+    "head": "a5f7d925073651a3a5cd7b5067f75289b7cd92a4",
     "dirty": false
   },
   "runner": {
