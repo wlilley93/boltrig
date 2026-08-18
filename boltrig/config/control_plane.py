@@ -32,6 +32,7 @@ from .control_notifications import (
 )
 from .control_profiles import execute_profile_operation
 from .permanent_fleet import execute_permanent_fleet_operation
+from .control_capability_bindings import execute_capability_binding_operation
 from .control_registry_operations import execute_registry_operation
 from .control_mcp import register_mcp_consumer
 from .control_mcp_lifecycle import execute_mcp_lifecycle_operation
@@ -163,9 +164,14 @@ class ControlPlaneAdapter:
     async def _registry_records(
         self, verb: str, params: dict[str, Any], context: InvocationContext
     ) -> Result | None:
-        return await execute_registry_operation(
-            self._store, self._loader, verb, params, context
-        )
+        # Capability-binding review shares this seam rather than taking its own:
+        # identical (store, loader) shape, and a binding IS a registry record, so
+        # a second handler would be a second name for the same thing.
+        for run in (execute_registry_operation, execute_capability_binding_operation):
+            result = await run(self._store, self._loader, verb, params, context)
+            if result is not None:
+                return result
+        return None
 
     async def _adapters(
         self, verb: str, params: dict[str, Any], context: InvocationContext

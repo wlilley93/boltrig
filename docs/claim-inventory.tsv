@@ -1479,6 +1479,8 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/api/logging_config.py:48	force	Insta
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/api/worker.py:64	kernel	Start the HITL expiry janitor (SEC-14), or None when disabled.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/camera/cache.py:61	hardware_key	Return a local opaque binding, replacing it on hardware change.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/capabilities/mapping_packs.py:1	proposed	Curated mapping packs: level 2 of capability matching (SPEC §5).
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/control_capability_binding_specs.py:1	control_compat_specs	Verb specs for capability-binding review (SPEC §5, doctrine step 4).
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/control_capability_bindings.py:1	proposed	Governed review of capability bindings (SPEC §5, doctrine step 4).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/control_workflows.py:91	GENERATED	Save a non-runnable draft under the reserved id prefix (low-consequence).
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/config/manifest.py:177	APPROVAL_TIMEOUT_SECONDS_FLOOR	``APPROVAL_TIMEOUT_SECONDS_FLOOR`` and cannot resolve differently.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/spawn_rules.py:337	capability	Resolve one policy snapshot into effective skills/routing.

@@ -346,6 +346,7 @@ def _budget_specs() -> list[VerbSpec]:
 
 def control_specs() -> list[VerbSpec]:
     """Return the complete caller-discoverable control-plane verb catalogue."""
+    from .control_capability_binding_specs import capability_binding_specs
     from .control_compat_specs import compatibility_specs
     from .control_work_specs import work_specs
 
@@ -358,5 +359,6 @@ def control_specs() -> list[VerbSpec]:
         *_administration_specs(),
         *_budget_specs(),
         *work_specs(),
+        *capability_binding_specs(),
         *compatibility_specs(),
     ]

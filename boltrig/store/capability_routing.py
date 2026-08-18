@@ -120,6 +120,14 @@ class CapabilityRoutingStoreMem(ProvenanceStoreMem):
         # capability coexists rather than replacing (SPEC §8, §11.1 site 2).
         self._capability_bindings[(binding.tenant_id, binding.binding_id)] = replace(binding)
 
+    async def set_capability_binding_status(self, tenant_id, binding_id, status, reviewed_by):
+        binding = self._capability_bindings.get((tenant_id, binding_id))
+        if binding is None:
+            return None
+        updated = replace(binding, status=status, reviewed_by=reviewed_by)
+        self._capability_bindings[(tenant_id, binding_id)] = updated
+        return replace(updated)
+
     async def list_capability_bindings(
         self, tenant_id, capability_id=None, *, source_operation_id=None
     ):
@@ -255,6 +263,15 @@ class CapabilityRoutingStorePG(ProvenanceStorePG):
             binding.health, binding.fallback_policy, binding.created_from,
             binding.reviewed_by,
         )
+
+    async def set_capability_binding_status(self, tenant_id, binding_id, status, reviewed_by):
+        return _capability_binding(await self._pool.fetchrow(
+            """UPDATE capability_bindings
+                 SET status=$3, reviewed_by=$4, updated_at=now()
+               WHERE tenant_id=$1 AND binding_id=$2
+               RETURNING *""",
+            tenant_id, binding_id, status, reviewed_by,
+        ))
 
     async def list_capability_bindings(
         self, tenant_id, capability_id=None, *, source_operation_id=None
