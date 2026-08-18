@@ -49,10 +49,21 @@ CREATE TABLE IF NOT EXISTS verb_bindings (
     target_type TEXT NOT NULL,                          -- 'adapter' | 'agent'
     target_ref  TEXT NOT NULL,                          -- adapter id or agent type
     rate_limit  JSONB,                                  -- {per, max, scope}
+    -- capability doctrine step 1 (docs/SPEC-capability-doctrine.md §10):
+    -- presentation/mapping fields; nullable, unread by enforcement until the
+    -- multi-binding shard. Authoritative connection label stays on
+    -- integration_connections.label.
+    internal_source_operation_id TEXT,
+    canonical_capability_id       TEXT,
+    model_display_name            TEXT,
+    connection_label              TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (verb_id, tenant_id)
 );
+CREATE INDEX IF NOT EXISTS verb_bindings_canonical_capability_idx
+  ON verb_bindings (tenant_id, canonical_capability_id)
+  WHERE canonical_capability_id IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
 -- 6.2 Adapters, skills, capabilities, workflows, endpoints
