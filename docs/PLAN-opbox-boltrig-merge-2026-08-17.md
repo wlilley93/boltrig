@@ -480,6 +480,20 @@ Pure boltrig work, ships independently, no client-visible change:
 - Gate: existing suites green; parity tests for single-binding behaviour
   unchanged; alembic head bump rides the normal 2–3/week cadence.
 
+**Landed 2026-08-18.** Step 1 as migration 0078 (presentation columns). Step 2
+as migration 0079: `provider_connections`, `source_operations`,
+`capability_bindings`, `routing_policies`, the deterministic resolver
+(`boltrig/kernel/routing.py`) and capability-addressed dispatch, with the CRM
+domain declared by the reference adapter through the new `VerbSpec.implements`.
+Two departures from the wording above, both recorded rather than quietly taken:
+the six enforcement sites were DISPOSED OF individually rather than all
+rewritten, because only the capability is plural and `verb_bindings` was never
+the wrong table (decision 0036); and the one-active-adapter index was not
+reshaped, because routing identity moved to a table that never carried it
+(SPEC §11.2 disposition). What that leaves open — fan-out reads, canonical
+transforms, an explicit destination channel, multi-account provisioning — is
+SPEC §11.9.
+
 ### Phase 2 — Opbox as first-party plugin (doctrine steps 4–5, partial 3)
 - Node SDK manifest v2: opbox-kernel's `/mcp` door declares source
   operations + `implements:` for the corporate-services canonicals, with

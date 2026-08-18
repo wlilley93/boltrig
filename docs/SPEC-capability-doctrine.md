@@ -746,6 +746,25 @@ A multi-binding change must land at all six together:
 Authoritative for dispatch is `boltrig/kernel/dispatch.py` reading the store
 directly — neither registry file.
 
+**Disposition, migration 0079 (decision 0036).** "All six together" was read
+literally as "widen `verb_bindings`". That conflates the two things §1
+separates: a SOURCE OPERATION is executed by exactly one adapter, and only the
+CAPABILITY is plural. So the plural layer became a new table and the six sites
+were each settled rather than each rewritten:
+
+1. PK `(verb_id, tenant_id)` — KEPT. Capability identity is
+   `capability_bindings.binding_id`.
+2. `ON CONFLICT` replace — `upsert_capability_binding` conflicts on
+   `binding_id`, so a sibling binding is never overwritten. Test:
+   `test_a_second_binding_coexists_rather_than_replacing`.
+3. `get_binding` singular — KEPT. `list_capability_bindings` is the plural read;
+   `kernel/routing.py::resolve_execution_plan` collapses it to ONE target.
+4. `bind_verb_to_agent` — UNCHANGED; it re-points one source operation.
+5. `ensure_activation_safe` — UNCHANGED, deliberately. Two adapters may
+   implement one capability; they may not both own one verb id.
+6. `_enabled_tools` — joined by `_enabled_capabilities` in the connection
+   projection, because "12 verbs" stops being the honest answer here (§6).
+
 ### 11.2 A second structural blocker: one live connection per adapter
 
 `integration_connections_one_active_adapter_idx` is
@@ -753,6 +772,15 @@ directly — neither registry file.
 connection per adapter. The three-CRM worked example collides with this index
 exactly as it collides with the single-binding PK. The multi-binding shard
 must reshape both.
+
+**Disposition, migration 0079.** The blocker MOVED rather than being reshaped,
+which §11.3 had already decided: routing identity is `provider_connections`,
+and that table deliberately carries no uniqueness on `(tenant_id, adapter_id)`.
+`integration_connections` keeps its index as the CATALOGUE setup flow's own
+rule. The index was not the only thing binding there anyway — the connect path
+also refuses on `adapter_credential_already_bound`, so a second live credential
+for one adapter is a credential-model change, not an index change. Multi-account
+PROVISIONING through the catalogue UI therefore remains unavailable; see §11.9.
 
 ### 11.3 Live name collisions — the doctrine's new names must dodge them
 
@@ -820,3 +848,34 @@ protocol version is a fixed 2024-11-05 reply (not a negotiation).
 provider grant degrades every turn with a typed error. Per-run capability
 projection plus `kernel.capabilities.search` (§7.E) is the systematic fix;
 until it lands, hand-curated skill verb lists are the only workaround.
+
+### 11.9 What migration 0079 deliberately left open
+
+The multi-binding shard landed the data model, the deterministic resolver and
+capability-addressed dispatch. Four things it did NOT do, each with the step
+that owns it:
+
+- **Fan-out reads.** Two eligible bindings for a read refuse with
+  `route_required` instead of merging. Merging needs canonical output
+  transforms and opaque record refs — step 3. The refusal is the honest
+  interim answer, and `test_a_read_is_ambiguous_too_until_fan_out_exists` is
+  the marker that must change when step 3 lands.
+- **Canonical transforms.** With no input/output mapping, a capability's
+  contract IS the contract of the binding selected, and dispatch validates
+  against the source operation's own schema. Two bindings with different
+  schemas under one capability is therefore a real hazard until step 3;
+  `source_schema_digest` is recorded on both records so the divergence is at
+  least detectable.
+- **An explicit destination in the request.** The doctrine's top precedence
+  level has no channel yet, because route information must not travel in the
+  business arguments (§7.B). Precedence today starts at the workspace policy.
+  When the channel lands it goes ABOVE that, and nothing else moves.
+- **Multi-account provisioning.** A tenant can hold many
+  `provider_connections`, but the catalogue setup flow still creates only one
+  live connection per adapter (§11.2). Three live HubSpots are expressible in
+  routing and not yet creatable through the UI.
+
+Two mechanisms now describe bindings: `verb_bindings` (which adapter executes a
+source operation) and `capability_bindings` (which operations implement a
+capability). That is a layering, not a duplication, but it is a real cost until
+every model-facing name is a capability. Decision 0036 records why.
