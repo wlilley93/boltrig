@@ -10,12 +10,14 @@ It is derived from a tree state measured on 2026-08-18, and the measurements are
 named where they matter. Anything measured will drift, so re-measure before
 acting on a number: the derivation is given each time so you can.
 
-> **Revised the same day.** `56e78baa` landed on `feat/real-brand-mark` between
-> the first and second drafts and closed two of Phase 2's four items. Phase 0.1's
-> merge was re-probed against the moved tip rather than left resting on the
-> earlier probe. Both changes are marked in place. This document went stale in
-> hours, which is the case for reading it as an order of work rather than as a
-> status report.
+> **Revised twice on the day it was written**, because the tree moved under it
+> three times. Phase 0.1's merge has since **landed** at `abbc8c6a`, and the job
+> it was aimed at is green. Phase 2 lost two of its four items to `56e78baa`.
+> Phase 1.1's advice was replaced outright: it recommended re-parenting a
+> migration chain that is already published. Phase 0 gained the second red check
+> the first draft missed. Each change is marked in place, and each correction
+> says what disproved it. Read this as an order of work, never as a status
+> report: it went stale in hours, twice.
 
 ## How to read the phases
 
@@ -84,6 +86,51 @@ reads `PASS`, `files=279 functions=4790 debt_files=63`,
 passes 11 of 11, which is the exact CI step that is failing. Re-probe again if the
 tip moves once more, because `56e78baa` itself touches two files under
 `apps/worker/src` and so is inside the gate's scope.
+
+**Landed.** The merge is done, at `abbc8c6a`, and `worker-build` reports **PASS**
+on it. The six-run red streak is closed and `Security gate`, one of only two
+required checks, is green on the same commit.
+
+### 0.1a The second red check, which the first draft missed
+
+`worker-build` was not #284's only failure. `CodeQL` was red too, at the very
+first measurement, and this document attributed the whole redness to one job.
+The check reports **6 new high-severity alerts**, and its three sub-jobs all
+pass, so it is the check itself and not a rollup artefact.
+
+They are genuinely new code rather than the "diff too large" hedge the summary
+offers: two of the three files do not exist on `main` at all, which is also why
+the first two rows below are named rather than pathed. This document lives on a
+branch off `main`, and a path that resolves only on `feat/real-brand-mark` is a
+reference that rots the moment anyone follows it from here.
+
+| Site | Rule | Verdict |
+| --- | --- | --- |
+| `bodyModes.ts` under the Worker canvas components, 3 alerts | `js/remote-property-injection` | unreachable **today** |
+| `shader-bench.ts` under the Worker visual tests, 2 alerts | `js/remote-property-injection` | dev bench, never shipped |
+| `apps/worker/vite.config.ts`, 1 alert | `js/file-system-race` | dev-server middleware only |
+
+**None of it blocks.** The only required checks on `main` are `quality` and
+`Security gate`; `CodeQL` is advisory here. What #284 waits on is a review.
+
+The bench file is out of scope by construction: the Worker Dockerfile copies
+`sdks/web/src`, `apps/worker/src` and three token files, so `apps/worker/tests`
+never enters the image. The Vite one is dev-server only, though the race the rule
+names is the less interesting half of that block, which also writes a
+request-controlled key into a JSON file.
+
+**The canvas one is the alert with a date on it, and it belongs to Phase 3.**
+`easeTuning` assigns `out[key]` over `Object.entries(to)`, where `out` is a
+spread of a plain object, so a `__proto__` key sets a prototype. Traced, `to`
+reaches it only from the two renderers out of module constants, and nothing under
+the canvas, Jarvis or Ultron trees parses JSON or fetches, so the rule is wrong
+about today. It is right about the day after Phase 3, whose entire purpose is to
+make a character's inner life arrive **as bundle configuration** from a source the
+spec expects third parties to ship. Guard the key before that lands, not after:
+
+```ts
+if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
+```
 
 ### 0.2 The visual receipt is not a CI blocker
 
@@ -165,16 +212,28 @@ one merge from landing, but it is now a judgement about landing order rather tha
 about which side is private, and the branch has grown from two migrations to
 four.
 
-Concretely: set `0077_audit_outbox`'s `down_revision` to
-`0078_scoped_integration_connections`, renumber its four files, and update
-`EXPECTED_ALEMBIC_HEAD` in `boltrig/api/readiness.py`. That constant is a strict
-equality check, so a merge that leaves it naming the wrong revision makes
-readiness report **unhealthy** rather than failing loudly.
+**Do not re-parent. Write a merge revision.** The first two drafts of this
+document recommended re-parenting `0077_audit_outbox` onto
+`0078_scoped_integration_connections` and renumbering. That advice was wrong on
+its premise both times: `capability-doctrine-001` is on origin, so re-parenting
+rewrites history somebody may already have pulled. A single Alembic merge
+revision naming both heads produces exactly one head and rewrites nothing, and
+that was verified in a throwaway worktree via `ScriptDirectory.get_heads()`
+rather than reasoned about.
 
-`boltrig/store/schema.sql` was edited on both sides and will conflict textually.
-`make migration-parity` is the check that the merged result is coherent: it
-compares the Alembic head against `schema.sql` on a disposable Postgres and runs
-in seconds.
+Either way, update `EXPECTED_ALEMBIC_HEAD` in `boltrig/api/readiness.py` to the
+resulting head. That constant is a strict equality check, so a merge leaving it
+naming the wrong revision makes readiness report **unhealthy** rather than
+failing loudly.
+
+Two further claims inherited from the source handover were disproven by that
+same dry run, and are corrected here rather than left to be rediscovered:
+`boltrig/store/schema.sql` does **not** conflict, and of the fourteen conflicts
+only three are semantic. Eight are generated files, which have to be regenerated
+against the merged tree rather than merged, because their content binds to a
+digest of that tree and neither parent carries it. `make migration-parity` is
+still the check that the merged result is coherent: it compares the Alembic head
+against `schema.sql` on a disposable Postgres and runs in seconds.
 
 ### 1.2 Pick one capability doctrine
 
@@ -581,6 +640,17 @@ changes.
 **A bounded search is a claim about where you looked, not a fact about the
 corpus.** Search by the full identifier, never by the short form that appears
 only in prose citing it.
+
+**GitHub Actions is NOT billing-blocked on this repository, and saying so
+inverts what to do about a red gate.** The claim keeps resurfacing, and it is
+imported from a private repository where it was true. Measured 2026-08-18: the
+repo is `visibility=public`, so its Actions minutes are free; sixteen runs
+started in three hours; the last thirty runs conclude 17 success, 10 failure, 1
+cancelled, 2 in flight, and not one is billing-blocked. This matters because the
+inference drawn from it is backwards. The worker floor did not stay red for a day
+because nothing ran, it stayed red because CI **did** run, six times, and nobody
+read it. The gap is a reader, not a runner, and the fix is the pre-push hook in
+0.4 rather than a local-gates-are-the-only-net posture.
 
 ---
 
