@@ -460,7 +460,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/org_discovery_routes.py:18
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/pii.py:1	contains_identity	PII detection and redaction at the kernel boundary (US-PRIV-02, SEC-13).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/questions.py:1	apply_manifest	The governed "ask the user a question" built-in verb (US-CHAT-12).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/routing.py:1	RouteRequired	Deterministic capability routing (docs/SPEC-capability-doctrine.md §2, §8).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/routing.py:215	TenantPermissions	Every grant a routed call must hold: the capability AND the source operation behind it, each checked by ``GrantChecker.check``.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/routing.py:241	TenantPermissions	Every grant a routed call must hold: the capability AND the source operation behind it, each checked by ``GrantChecker.check``.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/run_event_projection.py:1	_summarise_params	Where ``_summarise_params``, ``_summarise_output`` and ``_event_safe`` live.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/schema_diagnosis.py:1	contains_secret	What may be recorded about a schema-validation failure, and how it is read back.
 LOAD-BEARING	SUBJECT-REACHED	comment	boltrig/kernel/schema_diagnosis.py:137	audit_detail	append-only ledger, and ``audit_detail`` is what implements it.
@@ -1128,8 +1128,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:373		attributes which ada
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:383		keys (K-20), never the raw input (see fleet/chat._project_chat_event).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:475		taken effect (or already failed), so an append fault cannot
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:478		(an unaudited action is a governance incident), never void the
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:499		execution plan (tenant-scoped; fail-closed).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:500		path it always took;
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:501		so route_required cannot name connections to an ungranted caller.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:530		call the adapter provably never saw, and the retry that retry_after
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:570		invalid output) must release the claim like the gate above, never park
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:577		raises PendingHuman - it never touches an adapter/agent.
@@ -1184,8 +1183,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/workflows.py:278		a b
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/ratelimit.py:71		are window-scoped, so the counts were right but the keys never left.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/realtime_call_bridge.py:18		Best-effort observation;
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:262		With no caller context, fall back to the ceiling (internal callers).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/routing.py:143		Unpinned addressing means the newest live version, never a mixture: a plan
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/routing.py:177		The dispatcher's step 1: the verb definition, its binding, and the route.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/routing.py:165		Unpinned addressing means the newest live version, never a mixture: a plan
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/routing.py:200		The dispatcher's step 1: the verb definition, its binding, and the route.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/run_access.py:224		Preserve legitimate child-only trees, but never let a visible child revive a
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/run_access.py:243		Guarantee the root is present even if a clamp dropped it from the slice.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/run_event_projection.py:32		guarantee it is never itself sensitive;
@@ -1577,7 +1576,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:90	HITLRequest	Attach 
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_expiry.py:1	run_hitl_expiry_forever	Periodic HITL timeout enforcement (SEC-14) - the expiry sweep janitor.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:250	_notify_request	The users who may lawfully answer this APPROVAL request right now.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/ratelimit.py:1	RedisCounter	Rate limiting (FR-KER-05, US-KER-04).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/routing.py:47	update	Classify a capability by its final segment.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/routing.py:48	update	Classify a capability by its final segment.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/sensing_capability.py:158	status	Answer a request for a sensing capability, with a REASON.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/sensing_capability.py:210	capabilities	The owner-facing projection.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/sensing_policy.py:215	approval_posture_for	Every sensing setting for one user, parsed and defaulted.

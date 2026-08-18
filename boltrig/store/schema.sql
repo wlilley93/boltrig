@@ -1346,7 +1346,9 @@ CREATE TABLE IF NOT EXISTS mcp_probe_receipts (
       )
     ),
     observed_at TIMESTAMPTZ NOT NULL,
-    tool_count  INTEGER NOT NULL CHECK (tool_count BETWEEN 0 AND 500),
+    tool_count  INTEGER NOT NULL
+                CONSTRAINT mcp_probe_receipts_tool_count_check
+                CHECK (tool_count BETWEEN 0 AND 5000),
     receipt_kind TEXT NOT NULL DEFAULT 'content_free_probe_attempt'
                  CHECK (receipt_kind = 'content_free_probe_attempt'),
     CHECK (
