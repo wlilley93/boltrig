@@ -17,9 +17,9 @@ import wave
 
 import pytest
 
-from boltrig.emotion.prosody import Prosody, analyse_prosody, decode_wav
-from boltrig.emotion.tone import MIN_UTTERANCES, Baseline, classify
-from boltrig.emotion.valence import warmth
+from boltrig.adapters.voice_tone.prosody import Prosody, analyse_prosody, decode_wav
+from boltrig.adapters.voice_tone.tone import MIN_UTTERANCES, Baseline, classify
+from boltrig.adapters.voice_tone.valence import warmth
 
 
 def tone_wav(

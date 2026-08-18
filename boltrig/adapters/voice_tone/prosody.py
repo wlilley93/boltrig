@@ -19,7 +19,7 @@ WHAT IS AND IS NOT MEASURED HERE. Pitch is a real autocorrelation estimate.
 Spectral tilt is approximated by the zero-crossing rate, which correlates with
 where the energy sits without needing an FFT; it is named as a proxy everywhere
 it appears because it is one. Nothing here decides what a speaker FEELS -- that
-is :mod:`boltrig.emotion.tone`, which needs a per-speaker baseline before it
+is :mod:`boltrig.adapters.voice_tone.tone`, which needs a per-speaker baseline before it
 will say anything at all.
 """
 

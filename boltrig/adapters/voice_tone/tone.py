@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from boltrig.emotion.prosody import Prosody
+from .prosody import Prosody
 
 #: Utterances of one speaker needed before any tone is reported. Six is a
 #: judgement: enough that one unusually loud sentence cannot define "normal",

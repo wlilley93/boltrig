@@ -9,6 +9,7 @@ verbs a caller is scoped to see (P4, role-scoped).
 from __future__ import annotations
 
 import logging
+from functools import partial
 from typing import Any
 
 from boltrig.adapters.base import Adapter
@@ -76,7 +77,7 @@ class KernelRegistry:
                 noun_id = spec.noun_id
                 effects.record(
                     f"noun {noun_id}",
-                    lambda n=noun_id: self._store.delete_noun(tenant_id, n),
+                    partial(self._store.delete_noun, tenant_id, noun_id),
                 )
         previous_verb = await self._store.get_verb(tenant_id, spec.verb_id)
         await self._store.upsert_verb(
@@ -143,7 +144,7 @@ class KernelRegistry:
         else:
             effects.record(
                 f"verb {verb_id} (restore)",
-                lambda p=previous: self._store.upsert_verb(p),
+                partial(self._store.upsert_verb, previous),
             )
 
     def _record_binding_inverse(
@@ -168,7 +169,7 @@ class KernelRegistry:
         else:
             effects.record(
                 f"binding {verb_id} (restore)",
-                lambda p=previous: self._store.upsert_binding(p),
+                partial(self._store.upsert_binding, previous),
             )
 
     async def bind_verb_to_agent(self, tenant_id: str, verb_id: str, agent_capability: str) -> None:

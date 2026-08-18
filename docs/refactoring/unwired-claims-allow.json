@@ -10,7 +10,8 @@
     "(sweep_run_scoped and consume_if_approved's prose, and run_retention_forever,",
     "which nothing had ever started). These five are the remainder.",
     "2026-07-26: entries gained owner/expires, matching structural-exemptions.json and health-claim-exemptions.json. They had neither, which made every one an ETERNAL SILENT waiver - the shape this whole programme exists to remove, in the file that waives its own gate.",
-    "2026-07-30: the gate gained PART 3, manifest knobs - a config key the record offers that no Python reads. It found on_session_end's four siblings. They are waived to a NEAR expiry, not the file's usual year-end, because two of them are live UI switches and a lying switch should not sit behind a twelve-month waiver."
+    "2026-07-30: the gate gained PART 3, manifest knobs - a config key the record offers that no Python reads. It found on_session_end's four siblings. They are waived to a NEAR expiry, not the file's usual year-end, because two of them are live UI switches and a lying switch should not sit behind a twelve-month waiver.",
+    "2026-08-18: three names the gate had been reporting on the default branch. None is a false claim - two are inversion points with no in-tree caller by design, and the third is a documented deferral the source itself states in prose. Waived rather than deleted because each is exercised by tests that pin real behaviour."
   ],
   "allow": {
     "accept_once": {
@@ -90,6 +91,24 @@
       "expires": "2026-09-30",
       "reason": "memory.ingest:529 'process only new/changed content'. SURFACED IN THE UI, so an operator can toggle it and it does nothing. Sits beside on_session_end, and the MemoryIngestion receipt built for session distillation (424302f) already carries what it needs: distil only messages after the last receipt. Tracked on task #40.",
       "blocker": "design:flag-meaning-undecided"
+    },
+    "bind_verb_to_agent": {
+      "owner": "kernel-maintainers",
+      "expires": "2026-12-31",
+      "reason": "The Python re-point API (US-KER-02). Production re-points travel the governed route instead: control.binding.set -> config/control_registry_operations.py -> control_operations.py:set_binding_record, which writes the same VerbBinding row through the approval gate. This entry point exists for in-process callers and is exercised by tests/test_verb_binding_ownership.py:59, which pins the defect that an adapter re-registering at boot must NOT silently take a verb back off a reasoning agent. BLOCKER design: two doors onto one write is the intended shape - the governed one for operators, this one in-process - so nothing is waiting for a production caller to attach here.",
+      "blocker": "design:governed-door-is-control-binding-set"
+    },
+    "compose_system_prompt": {
+      "owner": "fleet-maintainers",
+      "expires": "2026-12-31",
+      "reason": "The layered system-prompt composition, with adversarial tests pinning that the governance floor cannot be overridden by a persona. The lane that runs today resolves a character's voice per turn instead - fleet/chat_persona.py:chosen_persona -> personas.persona_for - and sends pinned birth instructions resolved once at import. prompt_stack's other exports ARE wired (wrap_untrusted in chat_turn_execution.py, compose_tool_harness at fleet/infrastructure/codex_kernel_tools_phase.py:54); only this one is not. The source says so in its own prose at prompt_stack.py:81 and chat_persona.py:5, so the record does not claim otherwise, and the remaining wiring is recorded as SOUL-1 (DEPENDS-BACKEND) in docs/design/surfaces/agent-builder.md.",
+      "blocker": "caller:boltrig/fleet/chat_persona.py:71"
+    },
+    "register_persona": {
+      "owner": "fleet-maintainers",
+      "expires": "2026-12-31",
+      "reason": "The out-of-tree character hook, called at import by a private bundle that is not in this repository - the same inversion as a manifest module_ref resolving an adapter's build() factory, which reachability-roots.json already records for the cloud_audio builders. It lives in the hand-written personas.py precisely so a regeneration of the GENERATED personas_shipped.py cannot destroy it (personas_shipped.py:7-9). Its refusals - a blank id, a blank system prompt, and overwriting a shipped character - are pinned by tests/test_chat_persona.py:244-257. BLOCKER design: an in-tree caller would defeat the point, since the hook exists so a private character need not be shipped inside the kernel container.",
+      "blocker": "design:out-of-tree-character-inversion"
     }
   }
 }

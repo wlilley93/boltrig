@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type {
   IntegrationConnectionLevel,
   IntegrationManualSecretContract,
+  IntegrationSecretFieldContract,
   IntegrationSecretSubmission,
 } from "@wlilley93/boltrig-web-sdk";
 
@@ -67,23 +68,7 @@ export function ManualSecretSetup({
         Contract <code>{contract.version}</code> accepts only the fields below.
         Secret values are sealed once and never shown again.
       </p>
-      <fieldset className="plugins-scope-choice">
-        <legend>Whose credential is this?</legend>
-        {SCOPES.map((scope) => (
-          <label key={scope.value}>
-            <input
-              type="radio"
-              name="integration-scope"
-              value={scope.value}
-              checked={level === scope.value}
-              disabled={busy}
-              onChange={() => setLevel(scope.value)}
-            />
-            <span>{scope.label}</span>
-            <small>{scope.hint}</small>
-          </label>
-        ))}
-      </fieldset>
+      <ScopeChoice level={level} busy={busy} onChange={setLevel} />
       <label>
         <span>Connection label</span>
         <input
@@ -95,27 +80,76 @@ export function ManualSecretSetup({
         />
       </label>
       {contract.fields.map((field) => (
-        <label key={field.name}>
-          <span>{field.label}</span>
-          <input
-            type={field.secret ? "password" : "text"}
-            autoComplete="off"
-            value={fields[field.name] ?? ""}
-            minLength={field.min_length}
-            maxLength={field.max_length}
-            required={field.required}
-            disabled={busy}
-            onChange={(event) => setFields((current) => ({
-              ...current,
-              [field.name]: event.target.value,
-            }))}
-          />
-        </label>
+        <SecretField
+          key={field.name}
+          field={field}
+          value={fields[field.name] ?? ""}
+          busy={busy}
+          onChange={(value) => setFields((current) => ({ ...current, [field.name]: value }))}
+        />
       ))}
       <button className="plugins-primary-action" disabled={busy || !label.trim()}>
         {busy ? "Sealing…" : "Seal and connect"}
       </button>
     </form>
+  );
+}
+
+function ScopeChoice({
+  level,
+  busy,
+  onChange,
+}: {
+  level: IntegrationConnectionLevel;
+  busy: boolean;
+  onChange(level: IntegrationConnectionLevel): void;
+}) {
+  return (
+    <fieldset className="plugins-scope-choice">
+      <legend>Whose credential is this?</legend>
+      {SCOPES.map((scope) => (
+        <label key={scope.value}>
+          <input
+            type="radio"
+            name="integration-scope"
+            value={scope.value}
+            checked={level === scope.value}
+            disabled={busy}
+            onChange={() => onChange(scope.value)}
+          />
+          <span>{scope.label}</span>
+          <small>{scope.hint}</small>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+function SecretField({
+  field,
+  value,
+  busy,
+  onChange,
+}: {
+  field: IntegrationSecretFieldContract;
+  value: string;
+  busy: boolean;
+  onChange(value: string): void;
+}) {
+  return (
+    <label>
+      <span>{field.label}</span>
+      <input
+        type={field.secret ? "password" : "text"}
+        autoComplete="off"
+        value={value}
+        minLength={field.min_length}
+        maxLength={field.max_length}
+        required={field.required}
+        disabled={busy}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
   );
 }
 

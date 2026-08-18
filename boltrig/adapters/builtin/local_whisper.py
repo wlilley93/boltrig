@@ -51,10 +51,8 @@ from boltrig.adapters.base import (
     VerbSpec,
 )
 from boltrig.adapters.egress import EgressBlocked, assert_egress_allowed
-from boltrig.emotion.prosody import analyse_prosody
-from boltrig.emotion.tone import Baseline, classify
-from boltrig.emotion.valence import warmth
 from boltrig.adapters.http_base import Handler, HttpAdapter
+from boltrig.adapters.voice_tone import Baseline, analyse_prosody, classify, warmth
 from boltrig.adapters.http_response import (
     MAX_JSON_RESPONSE_BYTES,
     ResponseBoundaryError,

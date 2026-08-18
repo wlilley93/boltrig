@@ -1,7 +1,7 @@
 """A lexical warmth gate -- the text half of the sarcasm test, and no more.
 
 THIS IS NOT A SENTIMENT ANALYSER and must not be used as one. It exists for
-exactly one job: :func:`boltrig.emotion.tone.classify` needs to know whether the
+exactly one job: :func:`boltrig.adapters.voice_tone.tone.classify` needs to know whether the
 WORDS were warm, so that flat or drawled delivery of warm words can be read as
 sarcasm. Sarcasm is the two channels disagreeing, so the text side only has to
 answer "were these words positive", which a word list can do.
