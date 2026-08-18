@@ -339,6 +339,15 @@ POST /v1/memory/improve memoryImprove
 POST /v1/memory/forget memoryForget
 POST /v1/memory/ingest memoryIngest
 GET /v1/memory/ingestions memoryIngestions
+""",
+)
+_surface(
+    # The candidate review queue was extracted out of `ParityViews` when the
+    # capability-doctrine merge pushed `MemoryView` past the Worker structural
+    # ratchet. Exactly these three routes moved with it and nothing else did:
+    # the rest of the memory surface still reads and writes from `ParityViews`.
+    "apps/worker/src/components/MemorySurface.tsx",
+    """
 GET /v1/memory/candidates memoryCandidates
 GET /v1/memory/timeline memoryTimeline
 POST /v1/memory/candidates/{candidate_id}/review memoryCandidateReview
