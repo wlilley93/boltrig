@@ -35,6 +35,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from boltrig.adapters.http_response import (
+    MAX_JSON_RESPONSE_BYTES,
+    bounded_http_response,
+)
+
 # The protocol revision offered in `initialize`. A server answers with the
 # revision IT speaks; the methods used here (initialize, tools/list, tools/call)
 # are stable across the dated revisions, so the answer is not negotiated further.
@@ -143,13 +148,6 @@ class StreamableHttp:
         # bearer form. The token never enters a log line or an error message.
         headers = {
             "Accept": _ACCEPT,
-            # A compressed body allocates its DECODED size inside httpx before
-            # any application-level bound can see it, so a small response can
-            # cost gigabytes of memory. ``http_response.bounded_http_response``
-            # forces identity for every other outbound adapter for exactly this
-            # reason; the MCP transport did not, and a page loop would multiply
-            # the exposure by the page ceiling.
-            "Accept-Encoding": "identity",
             "Authorization": f"Bearer {bearer}",
             "x-boltrig-mcp-token": bearer,
         }
@@ -158,7 +156,24 @@ class StreamableHttp:
         return headers
 
     async def _post(self, client: Any, request: dict, bearer: str, *, retried: bool = False) -> dict:
-        r = await client.post(self._url, json=request, headers=self._headers(bearer))
+        """One round trip, with the body bounded before it is buffered.
+
+        ``bounded_http_response`` streams, forces ``Accept-Encoding: identity``
+        and refuses a server that ignores it - a compressed body allocates its
+        DECODED size inside httpx before any application-level check could see
+        it, so a megabyte on the wire can cost gigabytes of memory, and the
+        discovery page loop would multiply that by the page ceiling. The bound
+        is the shared JSON ceiling every other adapter uses; a tool snapshot is
+        separately capped at 2MB, so it sits comfortably underneath.
+        """
+        r, _truncated = await bounded_http_response(
+            client,
+            "POST",
+            self._url,
+            max_bytes=MAX_JSON_RESPONSE_BYTES,
+            json=request,
+            headers=self._headers(bearer),
+        )
         if r.status_code < 400:
             session = r.headers.get(_SESSION_HEADER)
             if session:
@@ -184,8 +199,11 @@ class StreamableHttp:
         catch-all) and never logs - the bearer is on the wire here too.
         """
         try:
-            r = await client.post(
+            r, _truncated = await bounded_http_response(
+                client,
+                "POST",
                 self._url,
+                max_bytes=MAX_JSON_RESPONSE_BYTES,
                 json={
                     "jsonrpc": "2.0", "id": 0, "method": "initialize",
                     "params": {
@@ -208,8 +226,11 @@ class StreamableHttp:
         if session:
             self._session_id = session
         try:  # best-effort: strict servers 202 it; a plain door may refuse it
-            await client.post(
+            await bounded_http_response(
+                client,
+                "POST",
                 self._url,
+                max_bytes=MAX_JSON_RESPONSE_BYTES,
                 json={"jsonrpc": "2.0", "method": "notifications/initialized"},
                 headers=self._headers(bearer),
             )

@@ -10,9 +10,9 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/http_base.py:208		Turn creden
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/http_base.py:261		cannot reach internal services or steal a managed-identity token.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:264		The kernel-resolved credential is the ONLY bearer source: no instance
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:266		credential fails closed rather than posting an empty bearer.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_transport.py:141		server reads Authorization (it is the only header the Opbox /mcp door
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_transport.py:143		bearer form.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/mcp_transport.py:52		A final (post-retry) HTTP refusal, carrying ONLY the status code: the body can echo the request back, credential headers included, so it never crosses this boundary.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_transport.py:146		server reads Authorization (it is the only header the Opbox /mcp door
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_transport.py:148		bearer form.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/mcp_transport.py:57		A final (post-retry) HTTP refusal, carrying ONLY the status code: the body can echo the request back, credential headers included, so it never crosses this boundary.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/sql_base.py:148		A DSN may ride in on the credential (per-tenant database) or be the adapter default.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/auth_password_routes.py:104		Keys-only ([2026] VJS-COUNTY 7, D8): the fact of the rotation, never a password.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/auth_password_routes.py:34		The caller, ONLY if they proved the credential they are asking to retire.
@@ -297,7 +297,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:144	kern
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:158	probe	``probe`` runs bounded discovery without publishing live tool state.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:335	pinned_async_client	One SSRF-vetted, IP-pinned client.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:1	McpHttpRefusal	The MCP Streamable-HTTP client transport the consumer speaks (US-MCP-03).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:177	initialize	The MCP handshake, run lazily when a server demands a session.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:192	initialize	The MCP handshake, run lazily when a server demands a session.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/sql_base.py:1	db.execute_write	Reusable SQL adapter base for ``runtime='sql'`` integrations (US-ADP-03, SEC-09).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/addons/__init__.py:1	composed_version	Addons: integration-specific behaviour that ships only where it is provisioned.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/addons/__init__.py:53	ref	One declarative, kernel-evaluated add-on readiness requirement.
@@ -584,7 +584,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:270		server never s
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:330		Fail closed behind execute's own check and the connect() guard: never
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:70		an empty name can never publish.
 ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/mcp_tool_policy.py:1		Fail-closed policy for translating external MCP metadata into Boltrig verbs.
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_transport.py:169		retry the call once.
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_transport.py:184		retry the call once.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/sql_base.py:183		parts separately - it refuses, it refuses early, and it does NOT refuse a
 ORDINARY	NO-SUBJECT	comment	boltrig/addons/__init__.py:105		produce a profile version the policy layer refuses at compile time -
 ORDINARY	NO-SUBJECT	docstring	boltrig/addons/__init__.py:187		The on-behalf adapter id contributed by the active addons, if exactly one is.
@@ -1517,8 +1517,9 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:294	proxy_from_con
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:344	proxy_from_config	Vet ``url`` and return an ``httpx.AsyncClient`` pinned to the audited IP so httpx cannot re-resolve to a different (internal) address (H2/SEC-61).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:404	proxy_from_config	Vet ``url`` and return a synchronous ``httpx.Client`` pinned to the audited IP - the sync counterpart of :func:`pinned_async_client` (H2/SEC-61).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/generator.py:1	GeneratedAdapter.render_source	Deterministic OpenAPI -> adapter generator (US-ADP-01, SEC-22).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:119	egress.EgressBlocked	The SSRF-pinned client for this server (H2/SEC-61): vetted and pinned to the audited IP, ``follow_redirects=False``.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:85	allow_internal	One MCP server's HTTP transport: the pinned client, header conventions, the lazy handshake, the server-issued session id, and SSE decoding.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:124	egress.EgressBlocked	The SSRF-pinned client for this server (H2/SEC-61): vetted and pinned to the audited IP, ``follow_redirects=False``.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:158	bounded_http_response	One round trip, with the body bounded before it is buffered.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:90	allow_internal	One MCP server's HTTP transport: the pinned client, header conventions, the lazy handshake, the server-issued session id, and SSE decoding.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/api/codex_execution.py:1	shadow_admit	Flag-gated composition of the Codex read-only execution stack.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/api/codex_trusted.py:111	assert_cell_isolation_boundary	Prove the read-only sandbox ENGAGES here, before composing anything on it.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/control_rehydrate.py:1	api.bootstrap._rehydrate_store_adapters	Rebuilding a live adapter instance from its persisted store row.

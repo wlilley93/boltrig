@@ -865,12 +865,13 @@ What is NOT closed:
 - `capabilities.tools.listChanged` is still `false` with no notification
   channel, so a mechanism that GROWS a run's tool table has no way to say so —
   a live constraint on §7.E rather than a detail (see §11.10);
-- the MCP transport has NO response-byte bound. Every other outbound adapter
-  reads through `bounded_http_response` (4MB cap); this one calls
-  `client.post` and `response.json()` directly. Compression is now refused
-  (`Accept-Encoding: identity`), which removes the decompression-bomb
-  amplification, but a server willing to actually send the bytes is still
-  unbounded. A streaming bound is the complete fix and is its own change.
+- ~~the MCP transport has no response-byte bound~~ — CLOSED 2026-08-18. It now
+  reads through the same `bounded_http_response` every other outbound adapter
+  uses: streamed, `Accept-Encoding: identity` forced, a declared over-length
+  refused before a chunk moves, and a server that ignores the identity request
+  refused rather than decompressed. Reusing that helper rather than writing a
+  second ceiling was the point — two implementations of one safety bound is how
+  the weaker one survives.
 
 ### 11.7 What already exists and is reused, not rebuilt
 
