@@ -50,7 +50,7 @@ from boltrig.store import Store
 
 from .audit import AuditWriter
 from .adapter_errors import adapter_failure
-from .approval_posture import posture_requires_approval
+from .approval_posture import requires_approval
 from .schema_diagnosis import (
     MAX_SCHEMA_ERRORS,
     MAX_SCHEMA_PATH_DEPTH,
@@ -495,19 +495,19 @@ class Dispatcher:
         meta: dict[str, Any],
     ) -> dict[str, Any]:
         tenant = context.tenant_id
-        # 1. resolve the verb + its binding, or a canonical capability's ONE
-        # execution plan (tenant-scoped; fail-closed). A stored verb id takes the
-        # path it always took; only a name that is NOT a stored verb reaches the
-        # router, so this adds routes where there was a 404 and changes none.
+        perms = await self._store.get_tenant_permissions(tenant)
+        # 1. resolve the verb + binding, or a canonical capability's ONE plan.
+        # ``authorize`` runs the CAPABILITY grant check INSIDE that resolution,
+        # so route_required cannot name connections to an ungranted caller.
         verb_def, binding, plan = await resolve_invocation_target(
-            self._store, tenant, verb, meta, workspace_id=context.workspace_id
+            self._store, tenant, verb, meta, workspace_id=context.workspace_id,
+            authorize=lambda name: self._grants.check(context, name, perms),
         )
 
         # 2. validate params (SEC-21)
         _reject_if_invalid("params", verb, verb_def.input_schema, params)
 
-        # 3. grant check (SEC-07)
-        perms = await self._store.get_tenant_permissions(tenant)
+        # 3. grant check (SEC-07); the capability half already ran above
         for granted in grant_verbs(verb, verb_def, plan):
             self._grants.check(context, granted, perms)
 
@@ -520,8 +520,8 @@ class Dispatcher:
             return idempotency.result
         run = idempotency if isinstance(idempotency, IdempotencyRun) else None
 
-        gated = verb in self._blocking_verbs or await posture_requires_approval(
-            self._store, verb, verb_def, binding, context
+        gated = await requires_approval(
+            self._store, self._blocking_verbs, verb, verb_def, binding, plan, context
         )
         # 6. rate limit (FR-KER-05). The gate SPENDS the approval it is handed
         # (atomic ANSWERED -> CONSUMED, single-use) and nothing can hand it back,

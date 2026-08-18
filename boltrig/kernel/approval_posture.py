@@ -13,6 +13,8 @@ from typing import Any
 
 from boltrig.models import Consequence, InvocationContext, TargetType, UserSetting, Verb, VerbBinding
 
+from .routing import blocking_names
+
 APPROVAL_POSTURE_SETTING = "agentic.approval_posture"
 
 
@@ -59,6 +61,33 @@ async def persist_approval_posture(
 
 def is_delegated_agent_call(context: InvocationContext) -> bool:
     return bool(context.on_behalf_of) and context.actor_tier != "human"
+
+
+async def requires_approval(
+    store: Any,
+    blocking_verbs: Any,
+    verb: str,
+    verb_def: Verb,
+    binding: VerbBinding,
+    plan: Any,
+    context: InvocationContext,
+) -> bool:
+    """Every reason one invocation must pause for a human, in one place.
+
+    Three, in order of bluntness. The operator's always-ask list is matched
+    against EVERY name the call answers to - what the caller typed, the
+    canonical capability, the source operation actually executed - because an
+    operator who blocked an action meant that action however it is addressed
+    (``routing.blocking_names``). A selected binding may then RAISE the
+    consequence of the operation it routes to (SPEC §8 step 5): only upwards,
+    since a mapping able to lower it would let a route quietly downgrade a
+    governed action. Everything else remains the established posture gate.
+    """
+    if not blocking_verbs.isdisjoint(blocking_names(verb, verb_def, plan)):
+        return True
+    if plan is not None and plan.target.consequence_override == "high":
+        return True
+    return await posture_requires_approval(store, verb, verb_def, binding, context)
 
 
 async def posture_requires_approval(
@@ -116,4 +145,5 @@ __all__ = [
     "parse_approval_posture",
     "persist_approval_posture",
     "posture_requires_approval",
+    "requires_approval",
 ]

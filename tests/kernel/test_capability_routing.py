@@ -19,6 +19,7 @@ from boltrig.models import (
     BindingNotFound,
     GrantMissing,
     GrantSet,
+    PendingHuman,
     RouteRequired,
     TenantPermissions,
 )
@@ -77,12 +78,14 @@ class _Crm:
         return "ok"
 
 
-async def _kernel(*adapter_ids: str) -> tuple[Kernel, InMemoryStore]:
+async def _kernel(
+    *adapter_ids: str, blocking_verbs: set[str] | None = None
+) -> tuple[Kernel, InMemoryStore]:
     store = InMemoryStore()
     store.set_tenant_permissions(
         TenantPermissions(TENANT, GrantSet.of(["crm.*", "hubspot.*", "pipedrive.*"]))
     )
-    kernel = Kernel(store)
+    kernel = Kernel(store, blocking_verbs=blocking_verbs or set())
     for adapter_id in adapter_ids:
         await kernel.register_adapter(TENANT, _Crm(adapter_id))
     return kernel, store
@@ -298,3 +301,73 @@ async def test_the_plan_records_why_it_chose():
     assert plan.selected_by == "only_eligible"
     assert plan.ref == "crm.contact.search@1"
     assert plan.target.connection_label == "hubspot"
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-07")
+async def test_route_required_never_reaches_an_ungranted_caller():
+    """route_required NAMES the tenant's connections, so it must sit behind the
+    grant check rather than in front of it.
+
+    The first cut resolved the route at dispatch step 1 and checked grants at
+    step 3, which made an unauthorised /v1/invoke a way to enumerate every CRM a
+    tenant had connected, by label. The doctrine's own dispatch order (grant at
+    step 3, resolve at step 4) is the fix, and this is why that order is not
+    cosmetic.
+    """
+    kernel, _ = await _kernel("hubspot", "pipedrive")
+    ungranted = make_ctx(["hubspot.contact.create", "pipedrive.contact.create"])
+    with pytest.raises(GrantMissing) as caught:
+        await kernel.invoke("contact", "crm.contact.create", {"email": "a@b"}, ungranted)
+    # The refusal must not carry the destinations - the whole point.
+    assert not hasattr(caught.value, "destinations")
+    assert "hubspot" not in str(caught.value) and "pipedrive" not in str(caught.value)
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-07")
+async def test_an_unknown_capability_is_refused_before_the_grant_check():
+    """Existence is disclosed, authority is not - the same profile an unknown
+    verb id already had, so the capability layer adds no new probe."""
+    kernel, _ = await _kernel("hubspot")
+    with pytest.raises(BindingNotFound):
+        await kernel.invoke("contact", "crm.deal.create", {"email": "a@b"}, make_ctx([]))
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("US-HIL-01")
+async def test_the_always_block_list_cannot_be_walked_past_by_canonical_name():
+    """An operator who blocks hubspot.contact.create means that ACTION, however
+    it is addressed. Membership on the typed name alone let the canonical
+    spelling skip a deliberate human gate."""
+    kernel, _ = await _kernel("hubspot", blocking_verbs={"hubspot.contact.create"})
+    with pytest.raises(PendingHuman):
+        await kernel.invoke("contact", "crm.contact.create", {"email": "a@b"}, _ctx())
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("US-HIL-01")
+async def test_the_always_block_list_also_takes_the_capability_name():
+    """The other direction: blocking the capability blocks every binding under
+    it, including a source operation the operator has never heard of."""
+    kernel, _ = await _kernel("hubspot", blocking_verbs={"crm.contact.create"})
+    with pytest.raises(PendingHuman):
+        await kernel.invoke("contact", "crm.contact.create", {"email": "a@b"}, _ctx())
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("US-HIL-01")
+async def test_a_binding_consequence_override_raises_the_gate():
+    """SPEC §8 step 5: effective consequence comes from the capability AND the
+    selected binding. The column was written by the shard and read by nothing,
+    so a mapping that declared a route more dangerous than its source operation
+    was silently ignored."""
+    kernel, store = await _kernel("hubspot")
+    binding = (await store.list_capability_bindings(TENANT, "crm.contact.create"))[0]
+    binding.consequence_override = "high"
+    await store.upsert_capability_binding(binding)
+    with pytest.raises(PendingHuman):
+        await kernel.invoke("contact", "crm.contact.create", {"email": "a@b"}, _ctx())
+    # ... and the un-overridden sibling capability stays ungated.
+    out = await kernel.invoke("contact", "crm.contact.search", {"query": "a"}, _ctx())
+    assert out["served_by"] == "hubspot"

@@ -22,6 +22,7 @@ silently answering from one of two CRMs.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -69,6 +70,11 @@ class PlanTarget:
     source_operation_id: str
     connection_id: str
     connection_label: str
+    # SPEC §8 dispatch step 5: effective consequence comes from the capability
+    # AND the selected binding. A binding may only ever RAISE it - a mapping
+    # that could lower a source operation's consequence would let a route
+    # downgrade a governed action, which is the wrong direction to fail.
+    consequence_override: str | None = None
 
 
 @dataclass(frozen=True)
@@ -127,15 +133,31 @@ def _policy_choice(policies, pairs, version: int, operation_class: str, workspac
 
 
 async def resolve_execution_plan(
-    store: Any, tenant_id: str, name: str, *, workspace_id: str | None = None
+    store: Any,
+    tenant_id: str,
+    name: str,
+    *,
+    workspace_id: str | None = None,
+    authorize: Callable[[str], None] | None = None,
 ) -> ExecutionPlan:
-    """Resolve ``crm.contact.search`` (or ``...@1``) to one execution plan."""
+    """Resolve ``crm.contact.search`` (or ``...@1``) to one execution plan.
+
+    ``authorize`` is called with the capability id AFTER the capability is known
+    to exist and BEFORE any destination is read. That order is the doctrine's
+    own (§8 dispatch steps 3 then 4) and it is load-bearing rather than tidy:
+    ``route_required`` names the tenant's connections by their human-readable
+    labels, so resolving the route first hands an ungranted caller a list of
+    every CRM the tenant has connected. The caller learns only whether the
+    capability exists - exactly what an unknown verb id already discloses.
+    """
     capability_id, pinned = parse_capability_ref(name)
     bindings = await store.list_capability_bindings(tenant_id, capability_id)
     if pinned is not None:
         bindings = [b for b in bindings if b.capability_version == pinned]
     if not bindings:
         raise BindingNotFound(f"unknown verb '{name}'")
+    if authorize is not None:
+        authorize(capability_id)
     connections = {c.id: c for c in await store.list_provider_connections(tenant_id)}
     pairs = _eligible(bindings, connections, workspace_id)
     if not pairs:
@@ -169,6 +191,7 @@ async def resolve_execution_plan(
             source_operation_id=binding.source_operation_id,
             connection_id=connection.id,
             connection_label=connection.label,
+            consequence_override=binding.consequence_override,
         ),
         selected_by=selected_by,
     )
@@ -181,6 +204,7 @@ async def resolve_invocation_target(
     meta: dict[str, Any],
     *,
     workspace_id: str | None = None,
+    authorize: Callable[[str], None] | None = None,
 ) -> tuple[Any, Any, ExecutionPlan | None]:
     """The dispatcher's step 1: the verb definition, its binding, and the route.
 
@@ -192,7 +216,9 @@ async def resolve_invocation_target(
     verb_def = await store.get_verb(tenant_id, verb)
     plan = None
     if verb_def is None:
-        plan = await resolve_execution_plan(store, tenant_id, verb, workspace_id=workspace_id)
+        plan = await resolve_execution_plan(
+            store, tenant_id, verb, workspace_id=workspace_id, authorize=authorize
+        )
         verb_def = await store.get_verb(tenant_id, plan.target.source_operation_id)
     if verb_def is None:
         raise BindingNotFound(f"unknown verb '{verb}'")
@@ -229,3 +255,19 @@ def grant_verbs(verb: str, verb_def: Any, plan: ExecutionPlan | None) -> tuple[s
     happened to spell the name.
     """
     return (verb,) if plan is None else (plan.capability_id, verb_def.id)
+
+
+def blocking_names(verb: str, verb_def: Any, plan: ExecutionPlan | None) -> tuple[str, ...]:
+    """Every name an operator's always-ask list could reasonably have meant.
+
+    The always-block list is matched by plain set membership on the invoked
+    name. Before the capability layer that was the whole truth, because there
+    was one name. Now a call has up to three - what the caller typed, the
+    canonical capability, and the source operation actually executed - and an
+    operator who blocked ``hubspot.contact.create`` means that action, however
+    it is addressed. Testing only the typed name let the canonical spelling walk
+    straight past a deliberate human gate.
+    """
+    if plan is None:
+        return (verb,)
+    return (verb, plan.capability_id, plan.ref, verb_def.id)
