@@ -30,6 +30,7 @@ interface ProviderCompletionContext {
   proposal: AiKeyProposalView | null;
   provider: string;
   readiness: ProviderReadiness | null;
+  userId: string;
   setBusy: Dispatch<SetStateAction<boolean>>;
   setKeyPresent: Dispatch<SetStateAction<boolean>>;
   setMessage: Dispatch<SetStateAction<string>>;
@@ -64,6 +65,7 @@ export function useProviderSetup(
 
   const completionContext: ProviderCompletionContext = {
     apiKeyInput, baseUrl, keyPresent, level, modality, model, proposal, provider, readiness,
+    userId: profile.id,
     setBusy, setKeyPresent, setMessage, setProposal, setReadiness,
   };
 
@@ -119,16 +121,59 @@ function providerInputIsComplete(context: ProviderCompletionContext): boolean {
     );
 }
 
-function applyIntakeResult(context: ProviderCompletionContext, result: {
+/**
+ * Confirm the key the kernel just accepted can actually reach its provider.
+ *
+ * A WRITE THAT SUCCEEDED IS NOT A PROVIDER THAT WORKS, and this step exists
+ * because we shipped the version that assumed otherwise. Intake returning `ok`
+ * means the secret was sealed, approved and stored - it says nothing about the
+ * endpoint answering. A key saved on 2026-08-18 with base_url
+ * `https://mac-mini-m1:11434` reported "Provider connected." and was dead:
+ * Ollama serves plain HTTP on that port, so every request died in the TLS
+ * handshake. The onboarding said connected, the model list stayed empty, and
+ * nothing anywhere named the scheme.
+ *
+ * `gateway_ready` on /v1/ai-keys is the kernel asking Bifrost whether the
+ * binding is usable, which is the question the user is actually asking. Read it
+ * back and say which of the two things happened.
+ *
+ * A failed re-read is NOT reported as a dead provider: not knowing and knowing
+ * it is broken are different answers, and only one of them should send someone
+ * to check their endpoint. So an unreachable re-read lets the step pass, and
+ * only a kernel that positively says `gateway_ready: false` holds it.
+ *
+ * Holding the step is the point. Returning true here would advance the wizard,
+ * and OnboardingGate only renders this message while the step is on screen, so
+ * a warning on the success path is a warning nobody reads. The instruction is
+ * spelled out because the recovery needs the key typed again: the address is
+ * part of the sealed intake, so changing it is a resubmit, not a retry.
+ */
+async function confirmGatewayReady(context: ProviderCompletionContext): Promise<boolean> {
+  const refreshed = await loadProviderReadiness(context.userId, context.modality)
+    .catch(() => null);
+  if (!refreshed) {
+    context.setMessage("Provider saved. We couldn't confirm it is reachable.");
+    return true;
+  }
+  context.setReadiness(refreshed);
+  if (refreshed.existingKey && !refreshed.existingKey.gateway_ready) {
+    context.setMessage(
+      "Provider saved, but it did not answer. Check the API address - a "
+      + "self-hosted endpoint is usually http, not https - then re-enter your "
+      + "key and select Continue.",
+    );
+    return false;
+  }
+  context.setMessage("Provider connected.");
+  return true;
+}
+
+async function applyIntakeResult(context: ProviderCompletionContext, result: {
   status: string;
   reason?: string;
   proposal?: AiKeyProposalView;
-}): boolean {
-  if (result.status === "ok") {
-    context.setReadiness((current) => current && { ...current, keyCount: current.keyCount + 1 });
-    context.setMessage("Provider connected.");
-    return true;
-  }
+}): Promise<boolean> {
+  if (result.status === "ok") return confirmGatewayReady(context);
   if (result.status === "pending_human" && result.proposal) {
     context.setProposal(result.proposal);
     context.setMessage("Select Continue again to approve this provider and model.");
@@ -148,9 +193,7 @@ async function approveAndConnect(
     const result = await client.approveAiKeyProposal(current.id);
     if (result.status === "ok") {
       context.setProposal(null);
-      context.setReadiness((value) => value && { ...value, keyCount: value.keyCount + 1 });
-      context.setMessage("Provider connected.");
-      return true;
+      return await confirmGatewayReady(context);
     }
     if (result.proposal) context.setProposal(result.proposal);
     context.setMessage(result.reason ?? "This provider connection still needs approval.");
@@ -179,12 +222,9 @@ async function activateExisting(
       context.setMessage(result.reason ?? "We couldn't connect the saved provider.");
       return false;
     }
-    context.setReadiness((value) => value && {
-      ...value,
-      existingKey: value.existingKey && { ...value.existingKey, gateway_ready: true },
-    });
-    context.setMessage("Provider connected.");
-    return true;
+    // Was `setReadiness(... gateway_ready: true)`: the client asserting the very
+    // fact it is supposed to be reading. Ask the kernel instead.
+    return await confirmGatewayReady(context);
   } catch {
     context.setMessage("We couldn't connect the saved provider. Try again.");
     return false;

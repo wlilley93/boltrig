@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T15:52:10.523Z",
+  "capturedAt": "2026-08-18T16:01:20.006Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "c07abad1a5bbe773d1e661c1fad6195c50ee00dcbce2fb1e49b7e596ee50c587",
-    "digestAfterCapture": "c07abad1a5bbe773d1e661c1fad6195c50ee00dcbce2fb1e49b7e596ee50c587",
+    "digestBeforeCapture": "48b3181f9439ed3ce8b1cbf34fbe53cd850e0c9f434d99403da5ef72055fa51e",
+    "digestAfterCapture": "48b3181f9439ed3ce8b1cbf34fbe53cd850e0c9f434d99403da5ef72055fa51e",
     "sourceUnchangedDuringCapture": true,
-    "branch": "integrate/capability-doctrine",
-    "head": "cbb8e27eca465e39a2a75bdb8c5b2a346a2a28d4",
+    "branch": "infra/boltrig-ai-domains",
+    "head": "a4c7e1fe32f980de0393cd790e36616723ae08fe",
     "dirty": false
   },
   "runner": {
