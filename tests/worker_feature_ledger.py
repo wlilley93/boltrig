@@ -890,7 +890,7 @@ _governed_controls(
         "OrganisationDirectorySections.tsx OrganisationWorkspaceSections.tsx "
         "OperationsView.tsx AgentProfileEditor.tsx PermanentFleetTopology.tsx "
         "build/ModelEndpointsBuild.tsx build/RegistryBuild.tsx "
-        "build/SkillsBuild.tsx ParityViews.tsx "
+        "build/SkillsBuild.tsx ParityViews.tsx MemorySurface.tsx "
         "knowledge/KnowledgeView.tsx knowledge/RemembersTab.tsx "
         "settings/ModelSettingsSection.tsx"
     ),
