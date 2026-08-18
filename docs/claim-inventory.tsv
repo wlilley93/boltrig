@@ -128,9 +128,9 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/audit.py:39		argues for never rot
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/channel_notify.py:50		The recipient subjects a matching pref addresses (SEC-179).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/channel_routes.py:213		SEC-181 adjacency: a SECURE question's answer is sealed as a run/purpose-scoped credential reference by the secure-input surface;
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/cost.py:115		Apply ``(input_rate, output_rate)`` to one run's reported usage.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:239		Fetch the material behind a stored credential REFERENCE ({store, ref}) through the SecretStore seam.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:279		Resolve one parsed reference to its material, FAIL CLOSED: only the SAME run AND the SAME owner may resolve it, only a genuine secure-answer row whose embedded run/purpose match the reference exactly qualifies (a tampere
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:410		Delete every run-scoped secure-input credential of a finished run.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:191		Fetch the material behind a stored credential REFERENCE ({store, ref}) through the SecretStore seam.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:231		Resolve one parsed reference to its material, FAIL CLOSED: only the SAME run AND the SAME owner may resolve it, only a genuine secure-answer row whose embedded run/purpose match the reference exactly qualifies (a tampere
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:362		Delete every run-scoped secure-input credential of a finished run.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/desktop_routes.py:1		Desktop-hands pull surface (decision 0016, DH-1).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/desktop_routes.py:82		was never issued): refuse, and do not audit a no-op as execution
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:203		observability side-channel - like audit, it never affects the dispatch
@@ -442,11 +442,11 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/channel_routes.py:313	Rate
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/cost.py:1	_rate_pair	Cost accounting and budget enforcement (US-COST-01/02, FR-COST-02/03/04).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/cost.py:329	reserve	Post-run cost true-up across every reserved scope (FR-COST-03, audit M14).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:1	resolve_run_scoped_params	Credential resolution (P3, US-KER-03, SEC-04/05, K-20).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:165	unbind_adapter_credential	Use ``unbind_adapter_credential`` to drop exactly the owned binding.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:247	owner_matches	Seal a secure question's answer as a run+purpose-scoped credential and return the REFERENCE string the run carries in its place.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:312	CredentialResolution	Return a copy of ``params`` with every run-scoped credential REFERENCE string replaced by its material (SEC-181).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:342	_execute_adapter	Seal a caller-supplied external bearer for ONE adapter for the life of ONE run (the permission-parity passthrough).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:379	Credential	Resolve a per-run adapter bearer to a ``Credential`` for this adapter, or ``None`` when none is sealed (so dispatch falls back to the adapter's static credential - the fail-safe that keeps dev/non-passthrough tenants unc
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:117	unbind_adapter_credential	Use ``unbind_adapter_credential`` to drop exactly the owned binding.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:199	owner_matches	Seal a secure question's answer as a run+purpose-scoped credential and return the REFERENCE string the run carries in its place.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:264	CredentialResolution	Return a copy of ``params`` with every run-scoped credential REFERENCE string replaced by its material (SEC-181).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:294	_execute_adapter	Seal a caller-supplied external bearer for ONE adapter for the life of ONE run (the permission-parity passthrough).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:331	Credential	Resolve a per-run adapter bearer to a ``Credential`` for this adapter, or ``None`` when none is sealed (so dispatch falls back to the adapter's static credential - the fail-safe that keeps dev/non-passthrough tenants unc
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/dev_egress_runtime.py:1	diversion_block	Resolving the dev-egress loopback at runtime: the one place that reads the environment, so ``boltrig.config.dev_egress`` stays a pure decision.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/dispatch.py:1	Dispatcher.invoke	The dispatch chokepoint (P2, US-KER-01, K-1).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/dispatch.py:285	_emit_pause	Publish to THIS run and to the run that delegated to it.
@@ -1149,8 +1149,7 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/conversation_list_views.py:42		Retu
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:292		raising callback must never abort a metered reservation, matching every
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:315		charged for a call that never ran).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:45		policy-as-data price table (FR-COST-04) - a configured price always wins - and
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/credentials.py:154		row is broken.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/credentials.py:62		Process-critical names an env REF must NEVER resolve: a control-plane
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/credentials.py:106		row is broken.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/desktop_routes.py:48		kernel on the serving loop, AFTER routes are registered, so it cannot
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/dev_egress_runtime.py:75		Read the declared posture off a loaded manifest.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/device_routes.py:40		request.
@@ -1220,9 +1219,9 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/personal.py:11		Runti
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/workflows.py:278		a bare ValueError never leaks internal text as the client reason.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/ratelimit.py:71		are window-scoped, so the counts were right but the keys never left.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/realtime_call_bridge.py:18		Best-effort observation;
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:133		AN AGENT BINDING IS NEVER AN ADAPTER'S TO REPLACE.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:135		Two things produce one, and an adapter must not undo either: a
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:292		With no caller context, fall back to the ceiling (internal callers).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:114		AN AGENT BINDING IS NEVER AN ADAPTER'S TO REPLACE.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:116		Two things produce one, and an adapter must not undo either: a
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:273		With no caller context, fall back to the ceiling (internal callers).
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/revertible.py:69		Undo everything, newest first.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/routing.py:165		Unpinned addressing means the newest live version, never a mixture: a plan
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/routing.py:200		The dispatcher's step 1: the verb definition, its binding, and the route.
@@ -1235,6 +1234,7 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/run_event_projection.py:40		A bound
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/run_scoped_credentials.py:30		Fail closed unless the sealed row belongs to the current identity.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/schema_diagnosis.py:145		row it must never join would put the two provenances one typo apart.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/schema_diagnosis.py:148		schema_path back into the schema document.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/secret_stores.py:33		Process-critical names an env REF must NEVER resolve: a control-plane
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/security_events.py:35		Dropped-signal counter (D3): a security_append failure must not break the
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/sensing_capability.py:125		never asked for that capability" -- described a check nobody runs.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/sensing_capability.py:141		: capability name at Settings would send them looking for a control that cannot
@@ -1507,6 +1507,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:73	KeyError	Run the
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/identity/password_reset.py:42	False	Run a sync or async notifier and make an explicit ``False`` fail closed.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/app.py:146	id	The streamable-HTTP answer for one JSON-RPC message.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/audit.py:75	seq	The ONE key a row at ``seq`` is allowed to verify under.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/capability_records.py:77	proposed	Record one declared implementation claim.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_notify.py:71	source_route	Enqueue one outbox row per (matching pref, resolved subject, bound channel).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_policy.py:1	allowed_chats	Opt-in policy controls for channel intake.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/channel_principal.py:26	self_onboard	channel's ``self_onboard`` config naming any other role is rejected fail-closed
