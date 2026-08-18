@@ -155,6 +155,39 @@ updates:
     # itself the moment cognee raises its own cryptography ceiling.
       - dependency-name: cognee
         versions: [">=1.4.1"]
+    #
+    # A FOURTH round, 2026-08-18, and this one is worth recording for HOW it
+    # failed rather than that it failed. #295 was a group of 22 whose lock could
+    # not install at all, and pip names only the FIRST conflict, so the second
+    # appeared only after the first was reverted:
+    #
+    #   pwdlib>=0.3.1   fastapi-users 15.0.5 depends on pwdlib[argon2,bcrypt]==0.3.0
+    #   mpmath>=1.4     sympy 1.14.0 depends on mpmath>=1.1.0,<1.4
+    #
+    # Two more the same week, closed as #277 and #278, both transitive and both
+    # a major past what their parents allow. Neither is imported anywhere in this
+    # repository; each exists only as a `# via` line in a compiled lock:
+    #
+    #   pylance>=1      # via cognee, and cognee decides it
+    #   openai>=3       # via cognee, instructor, litellm
+    #
+    # THE TRIAGE RULE, since this is now four rounds of one shape: read the
+    # `# via` comment under the pinned line. No `# via` means direct, and the
+    # bump is a real decision. A `# via` means the bump is a claim about a
+    # package the PR does not touch, and the fix is to raise the PARENT and
+    # recompile, never the child alone.
+    #
+    # Bounds are upstream's, not round numbers. pwdlib is pinned with `==`, so
+    # anything above 0.3.0 is refused; mpmath's ceiling is <1.4, so 1.3.x
+    # patches still arrive.
+      - dependency-name: pwdlib
+        versions: [">=0.3.1"]
+      - dependency-name: mpmath
+        versions: [">=1.4"]
+      - dependency-name: pylance
+        versions: [">=1"]
+      - dependency-name: openai
+        versions: [">=3"]
     labels:
       - dependencies
       - python
