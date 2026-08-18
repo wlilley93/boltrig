@@ -8,6 +8,8 @@ from fastapi import HTTPException
 
 from boltrig.models import GrantMissing, HITLRequest, HITLType
 
+from .routing import governed_aliases
+
 
 def _principal_ids(principal: Any) -> set[str]:
     return {
@@ -80,6 +82,25 @@ async def authorize_hitl_scope(
     return item
 
 
+async def _granted_any_alias(
+    store: Any, grants: Any, context: Any, tenant_id: str, verb: str, permissions: Any
+) -> bool:
+    """Whether this caller holds authority over the ACTION, by any of its names.
+
+    A routed call is recorded under the capability the caller typed, while the
+    people who administer the system it touches hold grants on the source
+    operation. Checking the recorded spelling alone left such a call held for a
+    human who was not permitted to see it (``routing.governed_aliases``).
+    """
+    for name in await governed_aliases(store, tenant_id, verb):
+        try:
+            grants.check(context, name, permissions)
+        except GrantMissing:
+            continue
+        return True
+    return False
+
+
 async def _approval_visible(
     kernel: Any, principal: Any, request: HITLRequest
 ) -> bool:
@@ -92,11 +113,10 @@ async def _approval_visible(
     if not request.verb:
         return True
     permissions = await kernel.store.get_tenant_permissions(principal.tenant_id)
-    try:
-        kernel.grants.check(principal.context(), request.verb, permissions)
-    except GrantMissing:
-        return False
-    return True
+    return await _granted_any_alias(
+        kernel.store, kernel.grants, principal.context(), principal.tenant_id,
+        request.verb, permissions,
+    )
 
 
 async def hitl_request_visible(
@@ -193,9 +213,9 @@ async def approval_response_block(
                 return "cannot approve your own request", None
             relief = "development_posture"
     permissions = await store.get_tenant_permissions(tenant_id)
-    try:
-        grants.check(context, request.verb, permissions)
-    except GrantMissing:
+    if not await _granted_any_alias(
+        store, grants, context, tenant_id, request.verb, permissions
+    ):
         # AFTER the relief, never before: dev_posture.posture_block lifts
         # INDEPENDENCE and never authority, so a superadmin without the verb's
         # grant is refused under a posture exactly as without one.

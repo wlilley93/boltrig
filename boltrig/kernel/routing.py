@@ -285,6 +285,34 @@ def blocking_names(verb: str, verb_def: Any, plan: ExecutionPlan | None) -> tupl
     return (verb, plan.capability_id, verb_def.id)
 
 
+async def governed_aliases(store: Any, tenant_id: str, verb: str) -> tuple[str, ...]:
+    """Every name one recorded action answers to, resolved from stored bindings.
+
+    A held call records the name the CALLER typed. For a routed call that is the
+    canonical capability, so an approver granted `hubspot.contact.create` - the
+    person who administers the system the call will actually touch, and who could
+    perform the action themselves - could neither see the request nor answer it.
+    The call then sits waiting for a human who does not exist.
+
+    Symmetric on purpose, because the asymmetry is what made it a bug: given a
+    capability this returns the source operations that implement it, and given a
+    source operation it returns the capabilities that route to it. Only APPROVED
+    bindings count, exactly as routing counts them - an unapproved mapping serves
+    nothing, so it confers nothing.
+    """
+    names = {verb}
+    capability_id, _pinned = parse_capability_ref(verb)
+    for binding in await store.list_capability_bindings(tenant_id, capability_id):
+        if binding.status == "approved":
+            names.add(binding.source_operation_id)
+    for binding in await store.list_capability_bindings(
+        tenant_id, source_operation_id=verb
+    ):
+        if binding.status == "approved":
+            names.add(binding.capability_id)
+    return tuple(sorted(names))
+
+
 def unpinned(names: Any) -> frozenset[str]:
     """An operator's always-ask entries with any version pin removed.
 

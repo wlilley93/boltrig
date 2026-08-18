@@ -452,8 +452,8 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_expiry.py:159	answer_
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_expiry.py:92	transition_work_item_settled	Settle the expired request's AWAITING_HUMAN work item at CANCELLED.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_http.py:138	SecurityWriter	THE RECORD THE POSTURE DOES NOT REMOVE: a ``SecurityWriter`` row.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_http.py:96	_approval_display_context	Is this exempted approval the one that ends the exemption? ([2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001, D4.) The sole-author exemption exists because a one-author tenant cannot satisfy four-eyes.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:142	authorize_approval_response	ONE definition of who may lawfully answer an APPROVAL request.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:301	approval_response_block	Require an independent, assigned human with the live action grant.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:162	authorize_approval_response	ONE definition of who may lawfully answer an APPROVAL request.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:321	approval_response_block	Require an independent, assigned human with the live action grant.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp.py:1	initialize	The kernel's MCP server face (Round Two, Epic MCP).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp_errors.py:1	_call_tool	The MCP wire envelopes: the JSON-RPC frames, and the result a model reads.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/org_discovery_routes.py:18	list_orgs_for_email	List session switch candidates only from ``list_orgs_for_email`` for the caller identity.
@@ -1158,11 +1158,11 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:127		the gate (it refuse
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:193		Either relief (sole_author / development_posture) always leaves a
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:253		Owner = the run's owning work item's on_behalf_of;
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:254		write when ownership cannot be confirmed.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_response_auth.py:199		AFTER the relief, never before: dev_posture.posture_block lifts
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_response_auth.py:200		INDEPENDENCE and never authority, so a superadmin without the verb's
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_response_auth.py:286		the route admitted a user the notice never told.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_response_auth.py:322		HOW this caller authenticated, which is the only fact here the store
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_response_auth.py:323		cannot answer.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_response_auth.py:219		AFTER the relief, never before: dev_posture.posture_block lifts
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_response_auth.py:220		INDEPENDENCE and never authority, so a superadmin without the verb's
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_response_auth.py:306		the route admitted a user the notice never told.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_response_auth.py:342		HOW this caller authenticated, which is the only fact here the store
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_response_auth.py:343		cannot answer.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/invoke_finalization.py:12		Return only the state needed to resume an exact caller-held invocation.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:209		(list_verbs, get_tenant_permissions, get_verb).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:211		would see a null GUC and fail closed on every tool list/call.
@@ -1186,7 +1186,7 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/realtime_call_bridge.py:18		Best-ef
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:262		With no caller context, fall back to the ceiling (internal callers).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/routing.py:165		Unpinned addressing means the newest live version, never a mixture: a plan
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/routing.py:200		The dispatcher's step 1: the verb definition, its binding, and the route.
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/routing.py:288		An operator's always-ask entries with any version pin removed.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/routing.py:316		An operator's always-ask entries with any version pin removed.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/run_access.py:224		Preserve legitimate child-only trees, but never let a visible child revive a
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/run_access.py:243		Guarantee the root is present even if a clamp dropped it from the slice.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/run_event_projection.py:32		guarantee it is never itself sensitive;
@@ -1582,9 +1582,9 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:155	enqueue_approval_f
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:247	consume_approved_by	Fire the resume notifier with the answered request, fail-safe (P9): the recorded answer is the truth; a notifier fault never voids it.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:90	HITLRequest	Attach the answer -> resume bridge (NFR-REL-03): a callable (sync or async) fired with the answered :class:`HITLRequest`.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_expiry.py:1	run_hitl_expiry_forever	Periodic HITL timeout enforcement (SEC-14) - the expiry sweep janitor.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:250	_notify_request	The users who may lawfully answer this APPROVAL request right now.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:270	_notify_request	The users who may lawfully answer this APPROVAL request right now.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/ratelimit.py:1	RedisCounter	Rate limiting (FR-KER-05, US-KER-04).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/routing.py:301	crm.contact.create	The capabilities this call answers to, and the strongest override on the binding that serves it - resolved from STORED bindings when the caller addressed the source operation directly.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/routing.py:329	crm.contact.create	The capabilities this call answers to, and the strongest override on the binding that serves it - resolved from STORED bindings when the caller addressed the source operation directly.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/routing.py:48	update	Classify a capability by its final segment.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/sensing_capability.py:158	status	Answer a request for a sensing capability, with a REASON.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/sensing_capability.py:210	capabilities	The owner-facing projection.
