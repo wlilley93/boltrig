@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T19:50:41.868Z",
+  "capturedAt": "2026-08-18T20:02:02.769Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "5864078320fe32e1ebdffe6058b3de2e94a7328c7a1e6a5caa2f7d4358e051f7",
-    "digestAfterCapture": "5864078320fe32e1ebdffe6058b3de2e94a7328c7a1e6a5caa2f7d4358e051f7",
+    "digestBeforeCapture": "c04e14bfe6d821c893c691b83cadebfc4f166fad174a90c335a2c6755c330d15",
+    "digestAfterCapture": "c04e14bfe6d821c893c691b83cadebfc4f166fad174a90c335a2c6755c330d15",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/dark-default-and-site-mark",
-    "head": "eded767cfae216e950e409d04a69bad58b20a33b",
+    "head": "8b175c7a5d4cfb5451e8ada65404cdee0c0c5af4",
     "dirty": false
   },
   "runner": {
