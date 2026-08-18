@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, type ReactElement } from "react";
 import type { ConversationModelContext } from "@wlilley93/boltrig-web-sdk";
 
 import { CompactionLine } from "./CompactionLine";
@@ -22,7 +22,7 @@ export function TranscriptBody<T extends { id: string; run_id?: string | null }>
   modelContext: ConversationModelContext | null;
   /** The rendered message the boundary follows, or null -- see ChatView. */
   boundaryId: string | null;
-  renderMessage: (message: T) => JSX.Element;
+  renderMessage: (message: T) => ReactElement;
 }) {
   const line = modelContext?.compacted
     ? (

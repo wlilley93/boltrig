@@ -19,8 +19,8 @@
   },
   "dependencies": {
     "@wlilley93/boltrig-web-sdk": "file:../../sdks/web",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "react-markdown": "10.1.0",
     "remark-gfm": "4.0.1"
   },
@@ -28,7 +28,7 @@
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/cli": "2.11.4",
     "@testing-library/react": "16.3.2",
-    "@types/react": "18.3.28",
+    "@types/react": "19.2.18",
     "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "5.2.0",
     "happy-dom": "20.11.2",

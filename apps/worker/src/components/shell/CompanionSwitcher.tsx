@@ -18,7 +18,7 @@ interface CompanionSwitcherProps { route: WorkerRoute }
 interface CompanionMenuProps {
   busy: boolean;
   installed: Character[];
-  menuRef: RefObject<HTMLDivElement>;
+  menuRef: RefObject<HTMLDivElement | null>;
   message: string;
   onChoose(id: string): void;
   onClose(): void;
@@ -26,12 +26,12 @@ interface CompanionMenuProps {
   selectedId: string;
 }
 interface CompanionMenuEffects {
-  menuRef: RefObject<HTMLDivElement>;
+  menuRef: RefObject<HTMLDivElement | null>;
   open: boolean;
   route: WorkerRoute;
   setMessage: Dispatch<SetStateAction<string>>;
   setOpen: Dispatch<SetStateAction<boolean>>;
-  triggerRef: RefObject<HTMLButtonElement>;
+  triggerRef: RefObject<HTMLButtonElement | null>;
 }
 
 async function persistCharacter(id: string): Promise<string | null> {
@@ -68,7 +68,7 @@ function useCompanionMenuEffects({
 function moveMenuFocus(
   event: ReactKeyboardEvent<HTMLDivElement>,
   setOpen: Dispatch<SetStateAction<boolean>>,
-  triggerRef: RefObject<HTMLButtonElement>,
+  triggerRef: RefObject<HTMLButtonElement | null>,
 ) {
   if (event.key === "Tab") {
     event.preventDefault();

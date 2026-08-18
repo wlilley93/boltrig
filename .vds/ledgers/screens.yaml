@@ -1,5 +1,5 @@
 schema_version: 1
-generated_at: 2026-08-18T14:50:06Z
+generated_at: 2026-08-18T18:41:35Z
 generated_by: vds ledger screens
 source_globs:
 - apps/worker/src/components/*View.tsx
@@ -7,8 +7,8 @@ source_globs:
 - apps/worker/src/components/PermanentFleetTopology.tsx
 - apps/worker/src/components/SettingsSurface.tsx
 - apps/worker/src/components/VoiceCall.tsx
-source_digest: sha256:2960501368ca7790b3381646a5d9e84c092f4d141488ff7c46205820d6adbbd9
-content_digest: sha256:54e42f3fbc5baa21d7fe909184612b0b2b2e875ab41d3f8eea7a204067a18b34
+source_digest: sha256:72c39fb6f16876fc13b6299072ea663e24bca694a39bdbe61080c70a7f5aded9
+content_digest: sha256:918b8ff3688bfdaa6d3c4e9278be6849f161f65b3a0de8af93f4673f2c8a73af
 screens:
 - route: apps/worker/src/components/AccountView.tsx
   digest: sha256:de974d81b5f02bd734d36b61476d72dbe60a8c12931d6b3084f396dd446825ac
@@ -217,7 +217,7 @@ screens:
     import_path: null
     line: 93
 - route: apps/worker/src/components/AutomationView.tsx
-  digest: sha256:8fb098cbb6bcad595108b9061f7fc92137d53925b027dae8361a678d21ab16cd
+  digest: sha256:cf8941e50a7a0f747b6ac99871be76dcbcee62275bd033a2650495e12c65eb1a
   references:
   - name: div
     root: div
@@ -9467,7 +9467,7 @@ screens:
     resolved_path: apps/worker/src/components/Shell
     line: 90
 - route: apps/worker/src/components/PermanentFleetTopology.tsx
-  digest: sha256:1e0570b6e4e92281a3466e894cc55c0ebe370a6030434b40d111eab9323d4e11
+  digest: sha256:11adb4356a8d323b92893f4a08281cfbfd6f0d28e8d15f778b9a9e50505561e2
   references:
   - name: div
     root: div
