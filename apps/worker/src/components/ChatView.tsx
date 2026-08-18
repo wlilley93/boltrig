@@ -23,7 +23,8 @@ import {
   revealMaterializedArtifact,
 } from "../desktop";
 import { FamiliarBadge } from "./familiar/FamiliarBadge";
-import { StageBody, useFamiliarBody, type StageTurnInput } from "./StageBody";
+import { StageBody, useFamiliarBody } from "./StageBody";
+import { stageTurnInput, type StageVoiceActivity } from "./chat/stageTurnInput";
 import { useCharacter } from "./characters";
 import { familiarStateFromTurn } from "./familiar/FamiliarState";
 import { MobileChat } from "./MobileChat";
@@ -152,14 +153,9 @@ export function ChatView({
   const draftInputRef = useRef<HTMLTextAreaElement>(null);
   const voiceDockRef = useRef<HTMLSpanElement>(null);
   const tech = useTechDetails();
-  const [voiceActivity, setVoiceActivity] = useState<{
-    speaking: boolean;
-    level: number;
-    bands?: number[];
-    onset?: number;
-    /** See CharacterTurnInput.speechTakeaway: a phrase, never the reply. */
-    takeaway?: string | null;
-  }>({ speaking: false, level: 0 });
+  const [voiceActivity, setVoiceActivity] = useState<StageVoiceActivity>(
+    { speaking: false, level: 0 },
+  );
   const [callActive, setCallActive] = useState(false);
   const selectedCharacterId = useFamiliarBody();
   const selectedCharacter = useCharacter(selectedCharacterId);
@@ -841,17 +837,12 @@ export function ChatView({
   // one full-resolution Stage. Chat must not leave a second WebGL renderer
   // running invisibly behind that modal.
   const stageIsHero = messages.length === 0 && events.length === 0;
-  // The turn facts both bodies read. StageBody picks which one depicts them.
-  const stageInput: StageTurnInput = {
+  const stageInput = stageTurnInput({
     loading,
-    hasLiveEvents: events.length > 0,
+    liveEventCount: events.length,
     liveEnded: live.ended,
-    voiceSpeaking: voiceActivity.speaking,
-    voiceLevel: voiceActivity.level,
-    voiceBands: voiceActivity.bands ?? null,
-    voiceOnset: voiceActivity.onset,
-    speechTakeaway: voiceActivity.takeaway ?? null,
-  };
+    voice: voiceActivity,
+  });
   const stageState = familiarStateFromTurn(stageInput);
 
   // The decided target's New screen is chrome-free: no header row, the glyph

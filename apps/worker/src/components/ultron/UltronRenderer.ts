@@ -20,7 +20,9 @@
 // Jarvis; what reads as menace is a surface that will not hold together.
 
 import { type FloatUniforms } from "../canvas/glResources";
-import { UltronPasses, type UltronDrive } from "./ultronPasses";
+import { UltronPasses } from "./ultronPasses";
+import { BodyClock } from "../canvas/bodyClock";
+import { ULTRON_ONSET, ultronDrive, ultronPalette } from "./ultronDrive";
 import {
   RESTING_PHENOTYPE,
   readBodyPhenotype,
@@ -64,22 +66,14 @@ export class UltronRenderer {
   private gl: WebGL2RenderingContext | null = null;
   private passes: UltronPasses | null = null;
   private raf = 0;
-  private lastFrameAt = 0;
-  /** Animation seconds, summed from CLAMPED frame deltas -- never wall clock.
-   *
-   * A background tab stops delivering frames, so a wall-clock time advances by
-   * the whole hidden duration in one frame and the field lurches on return. All
-   * three of the other renderers carried this bug; it is not being written a
-   * fourth time. */
-  private animClock = 0;
+  /** The frame clock and the speech ring, shared with JarvisNeuralRenderer. */
+  private readonly clock = new BodyClock();
   private suspended = false;
-  private reducedMotion = false;
+  reducedMotion = false;
   private size: [number, number] = [0, 0];
-  private state: UltronStageState | null = null;
-  private pheno: BodyPhenotype = RESTING_PHENOTYPE;
-  private waveT = 10;
-  private waveAmp = 0;
-  private bands = new Float32Array(8);
+  state: UltronStageState | null = null;
+  pheno: BodyPhenotype = RESTING_PHENOTYPE;
+  readonly bands = new Float32Array(8);
   private _status: Status = { state: "idle" };
   /**
    * What is being DRAWN, which is not the same as what the mode asks for.
@@ -88,8 +82,6 @@ export class UltronRenderer {
    * so the body draws itself in on first load and then travels between modes by
    * the same arithmetic. Two behaviours, one mechanism, one place to be wrong.
    */
-  /** Unclamped wall-clock seconds since the last frame, for the tuning ease. */
-  private easeDt = 0;
   /**
    * Seconds of draw-in still to run.
    *
@@ -192,7 +184,7 @@ export class UltronRenderer {
 
     this.resize();
     this._status = { state: "running" };
-    this.lastFrameAt = performance.now();
+    this.clock.markIdle();
     this.loop();
   }
 
@@ -208,20 +200,9 @@ export class UltronRenderer {
   }
 
   update(state: UltronStageState): void {
-    // AN ONSET TOPS THE RING UP; it only restarts it once the ring has died. See
-    // the same block in JarvisNeuralRenderer for why: resetting the clock on every
-    // syllable puts the front back at the centre before it has reached the shell,
-    // so it never completes a round trip and speech pings once per syllable however
-    // long the reverb tail is set to.
-    const onset = typeof state.onset === "number" ? state.onset : 0;
-    if (onset > 0.35) {
-      if (this.waveAmp < 0.25) {
-        this.waveT = 0;
-        this.waveAmp = Math.min(1, onset);
-      } else if (this.waveT > 0.12) {
-        this.waveAmp = Math.min(1, this.waveAmp + onset * 0.6);
-      }
-    }
+    this.clock.onset(
+      typeof state.onset === "number" ? state.onset : 0, ULTRON_ONSET,
+    );
     const bands = state.bands;
     if (bands && bands.length === 8) {
       for (let i = 0; i < 8; i++) this.bands[i] = Math.min(1, Math.max(0, bands[i]));
@@ -247,7 +228,7 @@ export class UltronRenderer {
   resume(): void {
     if (!this.suspended) return;
     this.suspended = false;
-    this.lastFrameAt = performance.now();
+    this.clock.markIdle();
   }
 
   /** Render one frame. Public so a still can be taken without a rAF loop. */
@@ -255,7 +236,7 @@ export class UltronRenderer {
     const passes = this.passes;
     if (!passes || !this.canvas) return;
     this.resize();
-    const d = this.drive(nowMs);
+    const d = ultronDrive(this.clock, nowMs, this);
     // The mode is the target and `live` chases it; the pulses then ride on top.
     // An explicit bench override replaces the target outright, which is why
     // dragging a slider is instant.
@@ -265,9 +246,9 @@ export class UltronRenderer {
       // THE DRAW-IN, and it outranks a pinned tuning for as long as it lasts. The
       // destination is the pin when there is one, so a bench with a saved look
       // animates to that look rather than to the shipped preset.
-      this.introLeft = Math.max(0, this.introLeft - this.easeDt);
+      this.introLeft = Math.max(0, this.introLeft - this.clock.easeDt);
       const target = this.tuning ?? ultronModeTuning(mode);
-      this.live = easeTuning(this.live, target, easeFactor(this.easeDt));
+      this.live = easeTuning(this.live, target, easeFactor(this.clock.easeDt));
       shown = this.live;
     } else if (this.tuning) {
       shown = this.tuning;
@@ -282,12 +263,12 @@ export class UltronRenderer {
       // animation and the pulses are both motion, and neither is information.
       this.live = this.reducedMotion
         ? target
-        : easeTuning(this.live, target, easeFactor(this.easeDt));
+        : easeTuning(this.live, target, easeFactor(this.clock.easeDt));
       shown = this.reducedMotion
         ? this.live
-        : applyPulses(this.live, ULTRON_PULSES[mode], this.animClock);
+        : applyPulses(this.live, ULTRON_PULSES[mode], this.clock.animClock);
     }
-    passes.render(d, this.palette(), ultronEmotion(shown, this.pheno));
+    passes.render(d, ultronPalette(this.opts, this.pheno), ultronEmotion(shown, this.pheno));
   }
 
   // ------------------------------------------------------------------ internals
@@ -313,91 +294,12 @@ export class UltronRenderer {
     this.passes.resize(w, h);
   }
 
-  private drive(nowMs: number): UltronDrive {
-    // TWO dt's, and conflating them made the ease frame-rate-dependent again.
-    //
-    // The simulation's dt is clamped to 50ms because a longer step makes the
-    // particle integrator overshoot and the field explodes -- on a slow frame the
-    // right move is to advance the physics LESS than real time. The tuning ease
-    // wants the opposite: it is a wall-clock animation, and clamping its dt on a
-    // machine managing 7fps stretched a 1.6s ease into about 5s. Measured on
-    // swiftshader, where the draw-in had not finished after eight seconds.
-    const wall = Math.max(0.001, (nowMs - this.lastFrameAt) / 1000);
-    const dt = Math.min(0.05, wall);
-    this.easeDt = wall;
-    this.lastFrameAt = nowMs;
-    if (!this.reducedMotion) this.animClock += dt;
 
-    this.waveT += dt;
-    // SLOW, so the shader's reverb decay is what governs the ring.
-    //
-    // At 2.2 per second this envelope was down to 11% within a second, which killed
-    // every front before it could reach the shell and come back -- so the
-    // reverberation existed in the arithmetic and was never seen. There are two
-    // decays in this system and only one of them should be doing the shaping: this
-    // one keeps the excitation alive, uReverb.z decides how long it rings.
-    this.waveAmp *= Math.exp(-dt * 0.5);
-
-    const mode = this.state?.mode ?? "standby";
-    const level = Math.min(1, Math.max(0, this.state?.level ?? 0));
-    // A HIGHER FLOOR THAN JARVIS. Standby for an instrument is idling; standby
-    // for Ultron is waiting, and waiting is not the same as resting.
-    const base = mode === "speaking" ? 0.92 : mode === "working" ? 0.72
-      : mode === "thinking" ? 0.58 : mode === "listening" ? 0.46 : 0.34;
-    const energy = Math.min(1, base + level * 0.35 + this.pheno.arousal * 0.15);
-    const aggression = Math.min(1,
-      0.25 + level * 0.3 + this.pheno.irritation * 0.5 + this.pheno.tension * 0.25);
-
-    return {
-      time: this.animClock,
-      dt,
-      energy,
-      aggression,
-      bands: this.bands,
-      // Speaking is when the voice should move him. Idle drift stays idle drift
-      // -- a body that pulsed to silence would be pulsing to nothing.
-      voice: mode === "speaking" ? Math.max(0.35, level) : level * 0.35,
-      waveT: this.waveT,
-      waveAmp: this.waveAmp,
-      radius: 1.0 - this.pheno.tension * 0.10,
-      // Speaking breathes between onsets; a body that only moved on a hard
-      // consonant reads as flinching rather than talking.
-      swell: mode === "speaking" ? Math.max(0.25, level) : 0,
-    };
-  }
-
-  /**
-   * Blue, and it stays blue. The palette is the character's identity here, not
-   * a theme: the whole reason he is a separate body from Jarvis's gold one is
-   * that the two were deliberately coded as opposites. Irritation pushes him
-   * COLDER and harder rather than toward red, because red is the other one.
-   */
-  private palette(): FloatUniforms {
-    const warm = this.opts.warm ?? [0.02, 0.26, 0.98];
-    const hot = this.opts.hot ?? [0.30, 0.86, 1.0];
-    const fringe = this.opts.fringe ?? [0.03, 0.08, 0.34];
-    // The WHOLE register. His colour answered to irritation alone, the same gap
-    // Jarvis had -- nine scalars that could only make him brighter or dimmer.
-    const c = emotionColour(this.pheno);
-    const irr = this.pheno.irritation;
-    void irr;
-    return {
-      // His channels are reversed against Jarvis's -- irritation eats the BLUE end
-      // of a blue body, where it eats the blue end of an orange one too. Same
-      // register, applied to a palette that starts somewhere else.
-      uWarm: tint(warm, [c.warm[2], c.warm[1], c.warm[0]], c.desaturate),
-      uHot: tint(hot, [c.hot[2], c.hot[1], c.hot[0]], c.desaturate),
-      uFringe: tint(fringe, [c.fringe[2], c.fringe[1], c.fringe[0]], c.desaturate),
-      uInner: 0.50,
-      uFringeScale: 2.2,
-      uFringeGain: 1.2,
-    };
-  }
 
   private loop = (): void => {
     this.raf = requestAnimationFrame(this.loop);
     if (this.suspended || (typeof document !== "undefined" && document.hidden)) {
-      this.lastFrameAt = performance.now();
+      this.clock.markIdle();
       return;
     }
     this.frame(performance.now());
