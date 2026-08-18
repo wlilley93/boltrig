@@ -273,6 +273,66 @@ calls `.venv/bin/python`, which a fresh worktree does not have; run
 
 ---
 
+## The cross-repo check, added after the fact
+
+Answering "which repo does this work go in" (boltrig only, and that is right) surfaced what
+that answer costs. `#0066FF` now exists as a hardcoded constant in TWO repositories with
+nothing binding them. The vitest pins `BrandMark.tsx` to `public/favicon.svg` INSIDE this
+repo, which matters because the desktop icons are rasterised from the favicon. Nothing
+pinned Boltrig's core to the Opbox asset it was copied from, so an Opbox rebrand would have
+been discovered by someone looking at two screenshots.
+
+`scripts/check_brand_core.sh` closes it, modelled on `scripts/check_familiar_shader.sh`
+because that script solves the identical problem for the vendored familiar shader: a copy
+whose source is in a repo CI has never checked out.
+
+Four decisions in it are worth knowing, because each is a trap avoided rather than a
+preference:
+
+**It defaults to `~/Projects/opbox-build-main`, not to the tree the colour was read from.**
+There are nine checkouts on this box carrying an `opbox-mark.svg`: build dirs, demo dirs,
+security-scan copies. The colour was originally read from `opbox-tailwind4`, which is on
+branch `deps/tailwind4`. Defaulting there would have pinned Boltrig to a feature branch.
+`opbox-build-main` is on `main`; both were checked and agree at `#0066ff`, so nothing had to
+move, but the default matters for every future run. Override with `OPBOX_UPSTREAM_DIR`.
+
+**It reports Opbox's `--accent` and never asserts it.** Opbox's in-app dot renders
+`var(--accent)`, whose default-theme value is `#006bff`, five units of green from the logo
+asset. The two have disagreed since before Boltrig copied either, and its themes redefine
+`--accent` five times over. Asserting equality there would have produced a check that was red
+on the day it was written, which is not a finding.
+
+**It does not re-check the in-repo pairing.** `apps/worker/tests/brandWordmark.test.tsx`
+already binds `BrandMark.tsx` to `public/favicon.svg` and runs in CI. A second, weaker copy
+of an existing check is how two gates come to disagree about one artefact, so this one names
+that test in its PASS output instead and stops there.
+
+**It is wired to no make target and no hook, deliberately.** It cannot pass in an environment
+holding only this repo, so wiring it into a gate would fail for everyone not on the machine
+with both trees. Its sibling is unwired for the same reason. That is stated in the script's
+own header so it does not read as a forgotten wiring.
+
+### The bug the negative control found
+
+Every path was exercised before the script was believed, and the second one was wrong:
+
+| case | expected | first result |
+| --- | --- | --- |
+| no Opbox tree | NOT CHECKED, exit 2 | correct |
+| upstream mark has no `<circle>` | NOT CHECKED, exit 2 | **bare exit 1, no message** |
+| Opbox rebranded | DRIFT, exit 1 | correct |
+| `const CORE` renamed or inlined | FAIL, exit 1 | correct |
+| upstream hex in uppercase | PASS, exit 0 | correct |
+
+`grep` exits 1 when it matches nothing, and `head` can SIGPIPE it. Under `set -euo pipefail`
+either killed the script one line ABOVE the branch written to report that exact situation, so
+it died silently in precisely the case the NOT-CHECKED rule exists to cover. Fixed with
+`|| true` on the two extractions where no-match is a legitimate outcome handled explicitly
+below, and commented as load-bearing so nobody tidies it away. All six cases pass now.
+
+The general lesson is the one this estate keeps paying for: the check that had never been
+seen to fail was the one that could not.
+
 ## Outstanding
 
 1. **The favicon is stale at Cloudflare's edge.** The origin serves `#0066FF`;
@@ -295,6 +355,9 @@ calls `.venv/bin/python`, which a fresh worktree does not have; run
    calls it, and genuinely a design decision rather than a patch.
 4. **The branch merge**, as above. The largest of the four and the one nobody
    owns.
+5. **Running the cross-repo check is manual.** `scripts/check_brand_core.sh` closes
+   the DETECTION of brand drift, not the drift itself. Nothing invokes it, by
+   design, so someone has to run it when either mark moves.
 
 Still owed from the 2026-08-17 handover and unchanged by this session: Familiar's
 register audio needs Fish Audio API credit, which is a billing state only the
