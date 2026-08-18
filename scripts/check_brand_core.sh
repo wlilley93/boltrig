@@ -72,6 +72,20 @@ if [ -z "$theirs" ]; then
 fi
 echo "opbox    : $theirs  $UPSTREAM_MARK"
 
+# WHICH REF that tree is on, reported and never asserted, for the same reason as the
+# --accent note below. The default directory is named for a branch; nothing measures that
+# it is still on one, and this very checkout contains three round-35 worktrees on feature
+# branches. A run against a branch nobody ships is otherwise indistinguishable from a run
+# against main - same colour, same path shape, same exit 0 - which is the trap the default
+# was chosen to avoid, left visible in the output rather than assumed away by a directory
+# name. `|| true` for the same pipefail reason as above: a plain directory copy with no
+# .git is a legitimate upstream here, and several on this box are exactly that.
+upstream_ref="$(git -C "$UPSTREAM_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [ "$upstream_ref" = "HEAD" ]; then
+  upstream_ref="detached at $(git -C "$UPSTREAM_DIR" rev-parse --short HEAD 2>/dev/null || echo "an unknown commit")"
+fi
+echo "ref      : that tree is on ${upstream_ref:-no git checkout}; reported, not asserted"
+
 # Reported, NEVER asserted. Opbox's in-app dot renders var(--accent), and its default theme
 # value is five units of green from the logo asset - the two have disagreed since before
 # Boltrig copied either. Failing on that difference would have made this check red on the day
