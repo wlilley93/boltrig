@@ -92,12 +92,20 @@ def test_log_safe_passes_an_ordinary_value_through_untouched() -> None:
 
 @pytest.mark.security
 def test_the_egress_refusal_record_cannot_be_forged(caplog) -> None:
-    from boltrig.adapters.egress import EgressBlocked, vet_url
+    # assert_egress_allowed, not a name I remembered: the first draft imported
+    # `vet_url`, which does not exist in this module, and the test failed on the
+    # import rather than on the behaviour. Read off the module.
+    from boltrig.adapters.egress import EgressBlocked, assert_egress_allowed
 
-    hostile = "http://127.0.0.1\nJan 01 00:00:00 boltrig.egress: egress allowed for x"
+    # The newline goes in the PATH, not straight after the host. urlsplit folds
+    # a trailing newline into the hostname - "127.0.0.1\\njan..." parses as host
+    # "127.0.0.1jan 01 00" - which still refuses, but as an unresolvable name
+    # rather than as loopback. This way the refusal reason is the one the test
+    # means, and the url the log formats still carries the newline.
+    hostile = "http://127.0.0.1/x\nJan 01 00:00:00 boltrig.egress: egress allowed for x"
     with caplog.at_level(logging.WARNING, logger="boltrig.egress"):
         with pytest.raises(EgressBlocked):
-            vet_url(hostile)
+            assert_egress_allowed(hostile)
 
     assert caplog.records, "the refusal must still be logged"
     for record in caplog.records:
