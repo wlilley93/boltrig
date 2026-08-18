@@ -28,6 +28,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from boltrig.adapters.base import Adapter, ErrorClass, Result
+from boltrig.log_safety import log_safe
 from boltrig.models import (
     ActionType,
     AuditEvent,
@@ -474,10 +475,10 @@ class Dispatcher:
                 # (an unaudited action is a governance incident), never void the
                 # original outcome. A durable outbox remains the full fix; this
                 # is the bounded half that stops the silent masquerade.
-                log.exception(
+                log.exception(  # log_safe: caller-chosen, see boltrig.log_safety
                     "AUDIT APPEND FAILED after %s.%s (status=%s) - the action is "
-                    "effectful but UNAUDITED (SEC-16)",
-                    noun, verb, status,
+                    "effectful but UNAUDITED (SEC-16)", log_safe(noun), log_safe(verb),
+                    log_safe(status),
                 )
 
     async def _invoke_inner(
@@ -605,8 +606,7 @@ class Dispatcher:
             except Exception:
                 log.warning(
                     "author-crossing announcement failed for %s (action completed)",
-                    verb,
-                    exc_info=True,
+                    log_safe(verb), exc_info=True,
                 )
         return output
 

@@ -47,6 +47,8 @@ import socket
 from typing import Any
 from urllib.parse import urlparse
 
+from boltrig.log_safety import log_safe
+
 _egress_log = logging.getLogger("boltrig.egress")
 
 
@@ -237,7 +239,7 @@ def assert_egress_allowed(url: str, config: dict[str, Any] | None = None) -> Non
     host = urlparse(url).hostname or ""
     reason = check_network_policy(url, config, resolved_ips=resolve_host(host))
     if reason:
-        _egress_log.warning("egress refused for %s: %s", url, reason)
+        _egress_log.warning("egress refused for %s: %s", log_safe(url), log_safe(reason))
         raise EgressBlocked(f"egress refused: {reason}")
 
 
@@ -253,7 +255,8 @@ def resolve_and_vet(url: str, config: dict[str, Any] | None = None) -> tuple[str
     if reason:
         # The refusal itself is operator evidence; the resolved addresses stay
         # here (kernel log) and out of the exception, whose text agents can read.
-        _egress_log.warning("egress refused for %s: %s (resolved=%s)", url, reason, ips)
+        _egress_log.warning("egress refused for %s: %s (resolved=%s)",
+                            log_safe(url), log_safe(reason), log_safe(ips))
         raise EgressBlocked(f"egress refused: {reason}")
     return host, ips[0]  # every ip in ips passed is_blocked_ip; pin the first
 

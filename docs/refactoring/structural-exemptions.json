@@ -30,7 +30,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/adapters/egress.py": {
-      "max_file_lines": 428,
+      "max_file_lines": 431,
       "max_function_lines": 41,
       "over_limit_functions": [],
       "owner": "adapter-maintainers",
@@ -307,17 +307,17 @@
     },
     "boltrig/kernel/dispatch.py": {
       "max_file_lines": 746,
-      "max_function_lines": 129,
+      "max_function_lines": 128,
       "over_limit_functions": [
         {
           "name": "Dispatcher.invoke",
-          "line": 358,
+          "line": 359,
           "lines": 124
         },
         {
           "name": "Dispatcher._invoke_inner",
-          "line": 483,
-          "lines": 129
+          "line": 484,
+          "lines": 128
         }
       ],
       "owner": "kernel-maintainers",
