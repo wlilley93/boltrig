@@ -38,19 +38,45 @@ feat/real-brand-mark      0076 -> 0077_trajectory
 capability-doctrine-001   0076 -> 0077_audit_outbox
                                   -> 0078_capability_presentation_fields
                                   -> 0079_capability_routing_shard
+                                  -> 0080_probe_tool_count_bound
 ```
 
 Both first migrations carry `down_revision = "0076_typed_memory_ledger"`.
 
-**`capability-doctrine-001` is the side that should re-parent**, because this
-branch is already on origin and that one is local and unpushed. Concretely: set
-`0077_audit_outbox`'s `down_revision` to `0078_scoped_integration_connections`,
-renumber its three files, and set `EXPECTED_ALEMBIC_HEAD` in
-`boltrig/api/readiness.py` to the new head. That constant is a strict equality
-check, so a merge that leaves it naming the wrong revision makes readiness
-report unhealthy rather than failing loudly.
+**Do not re-parent either side.** An earlier version of this section said
+`capability-doctrine-001` should, on the grounds that it was local and unpushed.
+That stopped being true: it is on origin too, so re-parenting it now means
+rewriting history somebody has already pulled.
 
-`boltrig/store/schema.sql` was edited on both sides and will conflict textually.
+**The answer is a merge revision**, which rewrites nothing. Add one file to the
+merge commit whose `down_revision` is the pair
+`("0078_scoped_integration_connections", "0080_probe_tool_count_bound")`, with an
+empty `upgrade` and `downgrade` -- it exists to join two lines, not to change a
+schema, and the two lines touch disjoint tables. Then point
+`EXPECTED_ALEMBIC_HEAD` in `boltrig/api/readiness.py` at it. That constant is a
+strict equality check, so a merge that leaves it naming either branch's old head
+makes readiness report unhealthy rather than failing loudly.
+
+Verified rather than assumed, in a throwaway worktree that was then removed:
+with that revision present, `ScriptDirectory.get_heads()` returns exactly one
+head and both `0077`s keep `0076_typed_memory_ledger` as their parent.
+
+The rest of the merge, from the same dry run. `boltrig/store/schema.sql` does
+NOT conflict -- it auto-merged, contrary to what this section used to warn. What
+does conflict is fourteen files, of which only three are semantic:
+
+- `boltrig/kernel/registry.py` and `boltrig/models/registry.py` -- the binding
+  ownership convention on this side against the capability routing work on that
+  one.
+- `boltrig/kernel/platform_routes/integrations.py` -- `visible_to` and the
+  viewer-scoped `_connection_view` here against their `_connection_view`.
+
+Three more take both sides verbatim (`.gitignore`, `boltrig/store/rls.sql`, and
+`boltrig/api/readiness.py` once the head constant is settled). The remaining
+eight are generated and must be REGENERATED rather than merged: the two VDS
+ledgers, the four evidence manifests, `docs/claim-inventory.tsv`, and
+`docs/refactoring/structural-exemptions.json`.
+
 `make migration-parity` is the check that the merged result is coherent; it
 compares the Alembic head against `schema.sql` on a disposable Postgres and runs
 in a few seconds.
