@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T18:41:10.065Z",
+  "capturedAt": "2026-08-18T20:01:58.407Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,11 +16,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "e17d2bcefd8b6e00b11b27f5023ff42fc0ae4b3106289a4545d9020a246217fe",
-    "digestAfterCapture": "e17d2bcefd8b6e00b11b27f5023ff42fc0ae4b3106289a4545d9020a246217fe",
+    "digestBeforeCapture": "c04e14bfe6d821c893c691b83cadebfc4f166fad174a90c335a2c6755c330d15",
+    "digestAfterCapture": "c04e14bfe6d821c893c691b83cadebfc4f166fad174a90c335a2c6755c330d15",
     "sourceUnchangedDuringCapture": true,
-    "branch": "react19-fixes",
-    "head": "13007ec7abf913db190f68f9fd5ce4c3616f05bd",
+    "branch": "feat/dark-default-and-site-mark",
+    "head": "8b175c7a5d4cfb5451e8ada65404cdee0c0c5af4",
     "dirty": false
   },
   "runner": {
@@ -290,7 +290,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

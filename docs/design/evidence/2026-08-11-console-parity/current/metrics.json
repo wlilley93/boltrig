@@ -1,13 +1,13 @@
 {
   "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-  "captureManifestSha256": "a154e43596fcf8f3278ed79e6486c7a9544265f0256b4ee9a4d50891cdd7ade6",
+  "captureManifestSha256": "017c1463def4f62956ccf78b2b6ec2ccac38a3065e7c4f28f50366a67e93d43d",
   "captureSourceBinding": {
-    "branch": "react19-fixes",
-    "digestAfterCapture": "e17d2bcefd8b6e00b11b27f5023ff42fc0ae4b3106289a4545d9020a246217fe",
+    "branch": "feat/dark-default-and-site-mark",
+    "digestAfterCapture": "c04e14bfe6d821c893c691b83cadebfc4f166fad174a90c335a2c6755c330d15",
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "e17d2bcefd8b6e00b11b27f5023ff42fc0ae4b3106289a4545d9020a246217fe",
+    "digestBeforeCapture": "c04e14bfe6d821c893c691b83cadebfc4f166fad174a90c335a2c6755c330d15",
     "dirty": false,
-    "head": "13007ec7abf913db190f68f9fd5ce4c3616f05bd",
+    "head": "8b175c7a5d4cfb5451e8ada65404cdee0c0c5af4",
     "scope": [
       "apps/worker/src",
       "apps/worker/tests/visual"
