@@ -30,7 +30,7 @@ from boltrig.store import Store
 from .integration_credentials import (
     resolve_integration_credential,
 )
-from .integration_scope import pick_connection
+from .integration_scope import pick_connection, scope_of
 from .run_scoped_credentials import (
     ADAPTER_BEARER_KIND as _ADAPTER_BEARER_KIND,
     HELD_CALL_KIND as HELD_CALL_KIND,
@@ -168,7 +168,10 @@ class CredentialResolver:
     ) -> Credential | None:
         """Resolve the credential an adapter needs, or ``None`` if it needs none.
 
-        ``owner`` is the acting human (``InvocationContext.on_behalf_of``). When
+        ``owner`` is the acting identity -- ``on_behalf_of`` when an agent is
+        running for somebody, otherwise ``actor``, because ``on_behalf_of`` is
+        None for a person logged in directly and reading it alone would silently
+        serve the ORG credential to every console user. When
         they have connected their own credential for this adapter and the org
         allows it, theirs is used; otherwise the org's connection serves, and
         failing that the env/manifest binding. ``owner=None`` reproduces the
@@ -205,7 +208,8 @@ class CredentialResolver:
             raise CredentialResolution(
                 f"no credential reference '{cred_id}' for tenant '{tenant_id}'"
             )
-        integration = resolve_integration_credential(ref, cred_id, adapter_id)
+        level, scope = scope_of(connection, tenant_id)
+        integration = resolve_integration_credential(ref, cred_id, adapter_id, level, scope)
         if integration is not None:
             return integration
         material = await self.fetch_material(ref)

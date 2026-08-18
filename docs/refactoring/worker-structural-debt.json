@@ -971,24 +971,24 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/IntegrationsView.tsx": {
-      "file_lines": 1596,
-      "max_function_lines": 711,
+      "file_lines": 1533,
+      "max_function_lines": 707,
       "max_parameters": 4,
-      "max_complexity": 38,
+      "max_complexity": 37,
       "max_nesting_depth": 3,
       "over_limit_functions": [
         {
           "name": "IntegrationsView",
-          "line": 98,
+          "line": 100,
           "column": 1,
-          "lines": 711,
+          "lines": 707,
           "parameters": 0,
           "complexity": 22,
           "nesting_depth": 2
         },
         {
           "name": "IntegrationsView.connect",
-          "line": 373,
+          "line": 375,
           "column": 3,
           "lines": 60,
           "parameters": 1,
@@ -997,11 +997,11 @@
         },
         {
           "name": "IntegrationRow",
-          "line": 810,
+          "line": 808,
           "column": 1,
-          "lines": 174,
+          "lines": 172,
           "parameters": 1,
-          "complexity": 38,
+          "complexity": 37,
           "nesting_depth": 3
         }
       ],

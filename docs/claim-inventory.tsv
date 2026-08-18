@@ -125,9 +125,9 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/audit.py:36		argues for never rot
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/channel_notify.py:50		The recipient subjects a matching pref addresses (SEC-179).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/channel_routes.py:212		SEC-181 adjacency: a SECURE question's answer is sealed as a run/purpose-scoped credential reference by the secure-input surface;
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/cost.py:115		Apply ``(input_rate, output_rate)`` to one run's reported usage.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:214		Fetch the material behind a stored credential REFERENCE ({store, ref}) through the SecretStore seam.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:254		Resolve one parsed reference to its material, FAIL CLOSED: only the SAME run AND the SAME owner may resolve it, only a genuine secure-answer row whose embedded run/purpose match the reference exactly qualifies (a tampere
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:385		Delete every run-scoped secure-input credential of a finished run.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:218		Fetch the material behind a stored credential REFERENCE ({store, ref}) through the SecretStore seam.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:258		Resolve one parsed reference to its material, FAIL CLOSED: only the SAME run AND the SAME owner may resolve it, only a genuine secure-answer row whose embedded run/purpose match the reference exactly qualifies (a tampere
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:389		Delete every run-scoped secure-input credential of a finished run.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/desktop_routes.py:1		Desktop-hands pull surface (decision 0016, DH-1).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/desktop_routes.py:82		was never issued): refuse, and do not audit a no-op as execution
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:199		observability side-channel - like audit, it never affects the dispatch
@@ -257,6 +257,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/cost.py:158	tokens	Cost i
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:83	schema_path	Validate, and return findings whose provenance is WHOLLY THE SCHEMA AND NAME-ONLY.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/events.py:1	backlog	The run/conversation event stream relay (Round Two, US-CONV-03/07).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/hitl.py:307	approval_id	The gate's authorisation check (SEC-14).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/platform_routes/integrations.py:78	viewer	May ``viewer`` see this connection at all? Org connections are shared and visible to everyone in the tenant.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/run_event_projection.py:18	schema_invalid	A bounded, VALUE-FREE description of a verb's params for the chat stream (K-20 bounded observability): the sorted top-level KEY NAMES and their count, never the values (which can carry secrets or untrusted content).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/security_events.py:146	key	The deterministic rollup root over a contiguous audit-chain segment (D4).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/sensing_policy.py:243	capture_policy.py	The effective capture policy for one device's daemons.
@@ -430,10 +431,10 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/cost.py:1	_rate_pair	Cost 
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/cost.py:329	reserve	Post-run cost true-up across every reserved scope (FR-COST-03, audit M14).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:1	resolve_run_scoped_params	Credential resolution (P3, US-KER-03, SEC-04/05, K-20).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:144	unbind_adapter_credential	Use ``unbind_adapter_credential`` to drop exactly the owned binding.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:222	owner_matches	Seal a secure question's answer as a run+purpose-scoped credential and return the REFERENCE string the run carries in its place.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:287	CredentialResolution	Return a copy of ``params`` with every run-scoped credential REFERENCE string replaced by its material (SEC-181).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:317	_execute_adapter	Seal a caller-supplied external bearer for ONE adapter for the life of ONE run (the permission-parity passthrough).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:354	Credential	Resolve a per-run adapter bearer to a ``Credential`` for this adapter, or ``None`` when none is sealed (so dispatch falls back to the adapter's static credential - the fail-safe that keeps dev/non-passthrough tenants unc
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:226	owner_matches	Seal a secure question's answer as a run+purpose-scoped credential and return the REFERENCE string the run carries in its place.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:291	CredentialResolution	Return a copy of ``params`` with every run-scoped credential REFERENCE string replaced by its material (SEC-181).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:321	_execute_adapter	Seal a caller-supplied external bearer for ONE adapter for the life of ONE run (the permission-parity passthrough).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:358	Credential	Resolve a per-run adapter bearer to a ``Credential`` for this adapter, or ``None`` when none is sealed (so dispatch falls back to the adapter's static credential - the fail-safe that keeps dev/non-passthrough tenants unc
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/dev_egress_runtime.py:1	diversion_block	Resolving the dev-egress loopback at runtime: the one place that reads the environment, so ``boltrig.config.dev_egress`` stays a pure decision.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/dispatch.py:1	Dispatcher.invoke	The dispatch chokepoint (P2, US-KER-01, K-1).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/dispatch.py:281	_emit_pause	Publish to THIS run and to the run that delegated to it.
@@ -447,6 +448,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_http.py:138	SecurityW
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_http.py:96	_approval_display_context	Is this exempted approval the one that ends the exemption? ([2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001, D4.) The sole-author exemption exists because a one-author tenant cannot satisfy four-eyes.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:142	authorize_approval_response	ONE definition of who may lawfully answer an APPROVAL request.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:301	approval_response_block	Require an independent, assigned human with the live action grant.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/integration_scope.py:57	_execute_adapter	Who this call is really being made by.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp.py:1	initialize	The kernel's MCP server face (Round Two, Epic MCP).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp_errors.py:1	_call_tool	Turning a kernel exception into the MCP result envelope a model actually reads.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/org_discovery_routes.py:18	list_orgs_for_email	List session switch candidates only from ``list_orgs_for_email`` for the caller identity.
@@ -651,7 +653,8 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/config/channel_addressing.py:143		Reject t
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_approval_adapters.py:140		Bind the reviewed endpoint/SEC-61 waiver so approval cannot be replayed
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/control_channel_approval.py:13		Public metadata-only delivery receipt;
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_generated_adapter.py:106		prevents accepting a generator extension this version cannot reconstruct.
-ORDINARY	NO-SUBJECT	docstring	boltrig/config/control_integrations.py:80		Return the exact fail-closed reason for one provider-declared setup.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/control_integrations.py:213		Fail-closed and checked HERE, not only at the route: the control verb
+ORDINARY	NO-SUBJECT	docstring	boltrig/config/control_integrations.py:81		Return the exact fail-closed reason for one provider-declared setup.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_lifecycle.py:51		The same predicate registration now applies, so the two cannot drift.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_lifecycle.py:90		stale reference cannot execute (SEC-22, mirrors review_and_activate).
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_mcp.py:103		can never be rehydrated.
@@ -1165,6 +1168,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/admin.py:50		a bare V
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/bifrost_models.py:41		Re-project even an injected provider so extra upstream fields cannot escape.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/chat_model_choices.py:201		Project exact model names, never endpoint topology or credentials.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/eval_routes.py:34		creation;
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/integration_setup.py:94		principal.subject, never principal.on_behalf_of: on_behalf_of names the
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/integrations.py:157		not_found rather than forbidden for somebody else's row: a 403 would
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/model_endpoints.py:153		of this record and is never returned.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/model_endpoints.py:182		Project process-start model policy without provider topology or secrets.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/observability.py:250		so it cannot be the roster source).
@@ -1461,6 +1466,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/familiar_phenotype_routes.py:
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/hands_registry.py:1	asyncio.Event	The pending desktop-command registry (decision 0016, DH-1).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/held_call.py:117	hitl_requests	Name the lane that will redeem an approval minted for THIS call, else None.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/held_call.py:359	paused	Retire a held call: drop the seal and mark its checkpoints spent.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/integration_credentials.py:15	level	Build the kernel-only value that the store envelope-seals atomically.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/platform_routes/observability.py:212	external_ref	never widen visibility.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/questions.py:42	secure	``secure`` + ``purpose`` ask for a value the AGENT never sees (SEC-181): the
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/run_access.py:283	max_nodes	Reconstruct the durable subagent topology under a root run, or None.

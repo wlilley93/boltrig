@@ -40,3 +40,32 @@ async def pick_connection(
     if org is not None and org.allow_own_integration_credentials:
         return own_row
     return org_row
+
+
+def scope_of(connection: IntegrationConnection | None, tenant_id: str) -> tuple[str, str]:
+    """The scope a credential read should be fenced against.
+
+    ``None`` means the id came from the env/manifest binding rather than a
+    connection row, and that binding is org-wide by construction -- so it answers
+    for the org, whose scope_id is the tenant id.
+    """
+    if connection is None:
+        return "org", tenant_id
+    return connection.level, connection.scope_id
+
+
+def acting_owner(context: Any) -> str:
+    """Who this call is really being made by.
+
+    ``on_behalf_of`` names the human an AGENT is acting for and is None when a
+    person is acting for themselves, so reading it alone would attribute every
+    console click to nobody. ``actor`` carries the user id in that case.
+
+    THIS MUST MATCH what dispatch hands to ``resolve_for_adapter`` as ``owner``
+    (boltrig/kernel/dispatch.py, in ``_execute_adapter``). If setup seals a
+    credential under one identity and dispatch looks it up under another, the
+    connection simply never resolves and the org credential serves instead --
+    silently. ``tests/security/test_integration_scope.py`` pins the two together
+    so the pair cannot drift.
+    """
+    return str(context.on_behalf_of or context.actor or "")

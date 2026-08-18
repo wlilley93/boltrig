@@ -2512,7 +2512,12 @@ describe("Worker integration honesty", () => {
     await waitFor(() => expect(api.submitIntegrationSecret).toHaveBeenCalledWith(
       "tickets",
       {
+        // The scope rides with the submission and defaults to the org's shared
+        // connection, which is what every caller predating per-user credentials
+        // meant. There is no scope_id: the kernel derives the owner from the
+        // authenticated caller rather than believing the request.
         label: "Tickets",
+        level: "org",
         fields: { token: "write-only-token", account_id: "support" },
       },
     ));
@@ -2649,7 +2654,10 @@ describe("Worker integration honesty", () => {
     expect(screen.getByText(/vendor-portal's last probe failed \(egress denied\)/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Open Tickets details" }));
-    expect(screen.getByText("reference present · custody not exposed")).toBeTruthy();
+    // The custody claim now also says WHOSE credential it is, because a member
+    // needs to know whether a call runs as them or as the organisation. The
+    // custody half is unchanged: the reference is never exposed either way.
+    expect(screen.getByText("the organisation's · custody not exposed")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open vendor-portal server details" }));
     expect(screen.getByText("egress_denied")).toBeTruthy();
     expect(screen.getByText("configured · contents unavailable")).toBeTruthy();

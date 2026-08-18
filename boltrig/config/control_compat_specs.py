@@ -216,6 +216,11 @@ def compatibility_specs() -> list[VerbSpec]:
                 # the adapter. This secret-shaped key makes the dispatcher
                 # redact the entire submitted contract from projections.
                 "secret": _OBJ,
+                # Whose credential this is: "org" (default) or "user". There is
+                # deliberately no scope_id here -- identity is
+                # authenticated-by-construction (K-3), so the kernel derives the
+                # owner from the caller rather than believing the request.
+                "level": _STRING,
             },
             ("integration_id", "label", "secret"),
             "Seal a certified provider contract and bind one integration connection",
