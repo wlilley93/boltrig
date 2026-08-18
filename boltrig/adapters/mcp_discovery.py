@@ -9,7 +9,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from boltrig.models import MCP_MAX_TOOL_SNAPSHOT, McpToolSnapshot
-from boltrig.models.mcp_lifecycle import validate_mcp_tool_snapshot
+from boltrig.models.mcp_lifecycle import (
+    MCP_MAX_CURSOR_BYTES,
+    validate_mcp_tool_snapshot,
+)
 
 from .mcp_tool_policy import external_description
 
@@ -34,21 +37,61 @@ class McpProbeResult:
     tools: tuple[McpToolSnapshot, ...]
 
 
-def snapshot_from_response(
+def finalise_snapshot(tools: list[McpToolSnapshot]) -> tuple[McpToolSnapshot, ...]:
+    """Sort and re-validate an assembled snapshot.
+
+    The byte cap runs HERE, on everything collected, because a per-page check is
+    exactly what pagination walks around.
+    """
+    discovered = tuple(sorted(tools, key=lambda item: item.name))
+    try:
+        validate_mcp_tool_snapshot(discovered)
+    except ValueError as exc:
+        raise McpDiscoveryInvalid from exc
+    return discovered
+
+
+def _next_cursor(result: dict[str, Any]) -> str | None:
+    """The server's continuation token, or None at the last page.
+
+    Anything that is not a bounded non-empty string is a protocol violation
+    rather than a quiet end-of-list: silently treating a malformed cursor as
+    "no more pages" is how the original single-request bug would come back
+    wearing a loop.
+    """
+    raw = result.get("nextCursor")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw:
+        raise McpDiscoveryInvalid
+    if len(raw.encode("utf-8")) > MCP_MAX_CURSOR_BYTES:
+        raise McpDiscoveryInvalid
+    return raw
+
+
+def page_from_response(
     adapter_id: str,
     response: Any,
     consequence_for: Callable[[dict[str, Any]], str],
-) -> tuple[McpToolSnapshot, ...]:
+    seen: set[str],
+    *,
+    accumulated: int = 0,
+) -> tuple[list[McpToolSnapshot], str | None]:
+    """Parse one page, sharing ``seen`` so a duplicate ACROSS pages still fails.
+
+    ``accumulated`` is what previous pages already yielded: the snapshot cap is
+    tested against the running total, because a per-response cap is no cap at
+    all once a server can paginate.
+    """
     if not isinstance(response, dict):
         raise McpProtocolInvalid
     result = response.get("result")
     if not isinstance(result, dict) or not isinstance(result.get("tools"), list):
         raise McpProtocolInvalid
     tools = result["tools"]
-    if len(tools) > MCP_MAX_TOOL_SNAPSHOT:
+    if accumulated + len(tools) > MCP_MAX_TOOL_SNAPSHOT:
         raise McpDiscoveryInvalid
     snapshot: list[McpToolSnapshot] = []
-    seen: set[str] = set()
     for tool in tools:
         if not isinstance(tool, dict):
             raise McpDiscoveryInvalid
@@ -79,9 +122,4 @@ def snapshot_from_response(
             )
         except ValueError as exc:
             raise McpDiscoveryInvalid from exc
-    discovered = tuple(sorted(snapshot, key=lambda item: item.name))
-    try:
-        validate_mcp_tool_snapshot(discovered)
-    except ValueError as exc:
-        raise McpDiscoveryInvalid from exc
-    return discovered
+    return snapshot, _next_cursor(result)

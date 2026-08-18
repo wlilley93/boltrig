@@ -231,7 +231,7 @@ class McpFace:
         if method in ("notifications/initialized", "ping"):
             return _ok(rid, {})
         if method == "tools/list":
-            return _ok(rid, {"tools": await self._list_tools(rt)})
+            return _ok(rid, await self._list_tools(rt, params.get("cursor")))
         if method == "tools/call":
             return _ok(rid, await self._call_tool(
                 rt, params, ip_address=ip_address, user_agent=user_agent
@@ -355,12 +355,14 @@ class McpFace:
             return [{"uri": uri, "mimeType": media_type, "blob": blob}]
         raise ValueError("resource not found")
 
-    async def _list_tools(self, rt: RunToken) -> list[dict]:
-        """Granted-only and RANKED: tenant ceiling ∩ run grants (SEC-23, FR-MCP-02)."""
+    async def _list_tools(self, rt: RunToken, cursor: object = None) -> dict:
+        """Granted-only, RANKED and PAGED: tenant ceiling ∩ run grants (SEC-23,
+        FR-MCP-02). Returns the whole ``tools/list`` result, so the continuation
+        token travels with the page that produced it."""
         perms = await self._kernel.store.get_tenant_permissions(rt.tenant_id)
         verbs = await self._kernel.store.list_verbs(rt.tenant_id)
-        return tool_disclosure.offer_payload(
-            [v for v in verbs if perms.grants.permits(v.id)], rt.grants, rt.skills
+        return tool_disclosure.offer_page(
+            [v for v in verbs if perms.grants.permits(v.id)], rt.grants, rt.skills, cursor
         )
 
     async def _call_tool(

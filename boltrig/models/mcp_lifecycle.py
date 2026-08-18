@@ -26,6 +26,14 @@ MCP_MAX_RETURNED_PROBE_RECEIPTS = 100
 # 2MB already bounds the payload whatever the count. Kept as a sanity ceiling, set
 # above any plausible real registry rather than below the one we ship.
 MCP_MAX_TOOL_SNAPSHOT = 5000
+# Pagination bounds (SPEC §11.6). MCP_MAX_TOOL_PAGES is deliberately the
+# snapshot cap divided by a conventional page size rather than a round number:
+# a server that needs more pages than that to deliver 5000 tools is paginating
+# so finely that the round trips, not the tools, are the problem. The cursor is
+# untrusted text this process echoes straight back to the server, so it carries
+# its own length bound.
+MCP_MAX_TOOL_PAGES = 50
+MCP_MAX_CURSOR_BYTES = 2 * 1024
 MCP_MAX_TOOL_DESCRIPTION_BYTES = 8 * 1024
 MCP_MAX_TOOL_SCHEMA_BYTES = 256 * 1024
 MCP_MAX_TOOL_SNAPSHOT_BYTES = 2 * 1024 * 1024

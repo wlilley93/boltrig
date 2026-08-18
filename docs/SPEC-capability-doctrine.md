@@ -822,6 +822,31 @@ own server face returns `tools/list` in one unpaginated payload
 (`boltrig/kernel/mcp.py`). Any cursor work covers both faces. The negotiated
 protocol version is a fixed 2024-11-05 reply (not a negotiation).
 
+**Disposition, 2026-08-18. Both faces now paginate; the version is still not
+negotiated.** The consumer follows `nextCursor` to the last page under four
+bounds — a page ceiling, the ACCUMULATED snapshot cap (a per-response cap is no
+cap once a server can paginate), a cursor length bound, and a repeat-cursor
+check, because a server that returns its own cursor forever is otherwise an
+infinite loop inside the 5s probe timeout. A malformed cursor is a protocol
+violation rather than a quiet end-of-list, since reading it as "no more pages"
+is the original defect wearing a loop.
+
+Boltrig's own face accepts `params.cursor` and emits `nextCursor`, paging OVER
+`offer_payload` rather than replacing it: every row the ranked offer produces is
+still delivered, in the same order, across the pages a client walks. That
+matters because [2026] VJS-CC-VJS 10 D4 reserves the choice of a truncation
+SIZE as a policy question — pagination changes the number of round trips and not
+the membership, so the reserved question stays reserved and a dropping budget is
+still passed to `compute_tool_offer` and nowhere else. The default page size is
+above every measured surface (293 committed verb rows, 633 for the widest
+consumed server), so no client alive sees a different answer today.
+
+What is NOT closed: the protocol version is still a fixed reply on the server
+face (2024-11-05) while the consumer transport pins 2025-06-18, and
+`capabilities.tools.listChanged` is still `false` with no notification channel —
+so a mechanism that GROWS a run's tool table has no way to say so, which is a
+live constraint on §7.E rather than a detail.
+
 ### 11.7 What already exists and is reused, not rebuilt
 
 - The grants/HITL substrate is deep: `tenant_permissions` ceilings,
@@ -879,3 +904,52 @@ Two mechanisms now describe bindings: `verb_bindings` (which adapter executes a
 source operation) and `capability_bindings` (which operations implement a
 capability). That is a layering, not a duplication, but it is a real cost until
 every model-facing name is a capability. Decision 0036 records why.
+
+### 11.10 §7.E does not fit the runtime it would have to run in [verified 2026-08-18]
+
+Six parallel readers over the MCP face, the tool ceiling, the consumer, the chat
+surface, grants and prior art established that §7.E — "project only relevant
+capabilities into each run", with `kernel.capabilities.search` able to "add the
+relevant capability to the current worker's tool table" — cannot be built as
+written. Three independent mechanisms refuse it, each confirmed against code:
+
+1. **The tool set is frozen at admission.** `CodexPhaseAdmission.kernel_tools`
+   is fixed before the turn and the proxy's `allowed_tools` is a frozenset, so
+   nothing can grow a live run's tool table. A search verb that returns a
+   capability the model then cannot call is worse than no search verb.
+2. **Projecting at the MCP face fixes nothing.** `validated_kernel_tool_names`
+   is applied to a ceiling compiled independently in
+   `fleet/runtime_resolver.py`, BEFORE any `tools/list` happens. The 128-tool
+   cliff lives in that compile, not in the face, so narrowing the face narrows
+   what the model reads and not what the ceiling admits.
+3. **A capability name cannot appear in either derivation today.** Both iterate
+   `store.list_verbs()` and test `grants.permits(verb.id)`. A capability is not
+   a verb row, and grants are verb-id shaped: `grant_verbs` requires the
+   capability grant AND the source operation's, while every shipped skill's
+   `tool_grants` enumerates exact verb ids. Renaming the offer without moving
+   grants makes every projected tool uncallable; renaming one derivation and not
+   the other fails the cell closed at preflight.
+
+So the ordering §10 implies — project, then search, then grow — is not available.
+Two shapes are, and choosing between them is a product decision rather than an
+implementation detail:
+
+- **Compile the projection, keep the set fixed.** Select the run's capabilities
+  at ceiling-compile time from skills, role, workspace and connected systems.
+  Fits the frozen-at-admission model exactly and needs no protocol change. The
+  cost is that discovery cannot expand a run: a capability not chosen before the
+  turn is unreachable within it.
+- **Two stable tools instead of many.** Admit `kernel.capabilities.search` and a
+  single canonical dispatch tool into the ceiling permanently, so the model
+  discovers capabilities and invokes them without the ceiling ever changing.
+  This is NOT the `mcp.call(server, tool, arguments)` escape hatch §7.E warns
+  about: search returns the canonical schema and every call still traverses the
+  dispatcher's grant, HITL and audit path. What it does lose is per-tool schemas
+  in the tool list itself, which is a real cost to planning quality.
+
+Either way `capabilities.tools.listChanged` is `false` and there is no
+server-to-client notification channel (`POST /v1/mcp` only, no SSE), so "the
+tool list changed mid-run" has no way to be said even if it could happen.
+
+Whichever is chosen, capability-shaped grants come first: until a grant token can
+name a capability, a projected capability name is a tool nobody can call.

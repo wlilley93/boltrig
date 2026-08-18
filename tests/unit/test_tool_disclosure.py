@@ -22,9 +22,11 @@ from __future__ import annotations
 
 import pytest
 
+from boltrig.kernel import tool_disclosure
 from boltrig.kernel.tool_disclosure import (
     ToolDisclosureError,
     compute_tool_offer,
+    offer_page,
     offer_payload,
 )
 from boltrig.models import Consequence, GrantSet, Verb
@@ -235,3 +237,76 @@ def test_the_function_mutates_nothing_it_is_handed() -> None:
     assert _ids(tuple(verbs)) == order_before
     assert grants == GrantSet.of(["doc.*"], ["doc.purge"])
     assert skills == ["ops/doc"]
+
+
+def _walk(rows, grants, skills):
+    """Every page a conforming client would fetch, and the requests it took."""
+    collected: list[dict] = []
+    cursor = None
+    for _guard in range(20):
+        page = offer_page(rows, grants, skills, cursor)
+        collected.extend(page["tools"])
+        cursor = page.get("nextCursor")
+        if cursor is None:
+            return collected
+    raise AssertionError("offer_page did not terminate")
+
+
+def test_paging_delivers_the_whole_offer_in_the_same_order(monkeypatch):
+    """The property that makes pagination NOT the truncation D4 reserves:
+    walking the pages reproduces the unpaged offer exactly - same members, same
+    ranked order. A pager that dropped or reordered a row would be adopting the
+    reserved policy question by accident."""
+    monkeypatch.setattr(tool_disclosure, "MCP_TOOLS_PAGE_SIZE", 2)
+    rows = [_verb(f"doc.op{index}") for index in range(5)]
+    grants = GrantSet.of(["doc.*"])
+    assert _walk(rows, grants, ()) == offer_payload(rows, grants, ())
+
+
+def test_the_last_page_carries_no_cursor(monkeypatch):
+    monkeypatch.setattr(tool_disclosure, "MCP_TOOLS_PAGE_SIZE", 2)
+    rows = [_verb(f"doc.op{index}") for index in range(4)]
+    first = offer_page(rows, GrantSet.of(["doc.*"]), ())
+    assert "nextCursor" in first
+    second = offer_page(rows, GrantSet.of(["doc.*"]), (), first["nextCursor"])
+    assert len(second["tools"]) == 2 and "nextCursor" not in second
+
+
+def test_an_exactly_full_single_page_does_not_promise_another(monkeypatch):
+    """The off-by-one that makes a client fetch one empty page forever."""
+    monkeypatch.setattr(tool_disclosure, "MCP_TOOLS_PAGE_SIZE", 3)
+    rows = [_verb(f"doc.op{index}") for index in range(3)]
+    page = offer_page(rows, GrantSet.of(["doc.*"]), ())
+    assert len(page["tools"]) == 3 and "nextCursor" not in page
+
+
+def test_todays_surfaces_are_one_page_and_unchanged():
+    """No client alive sees a different answer: the default page size is above
+    every measured surface, so an un-cursored call is byte-identical to what
+    offer_payload returned before pagination existed."""
+    rows = [_verb(f"doc.op{index}") for index in range(300)]
+    grants = GrantSet.of(["doc.*"])
+    page = offer_page(rows, grants, ())
+    assert page == {"tools": offer_payload(rows, grants, ())}
+
+
+@pytest.mark.parametrize("cursor", ["not-base64-!!", "", 17, {"a": 1}])
+def test_an_unusable_cursor_stops_the_client_instead_of_restarting_it(cursor):
+    """Restarting at zero on a stale cursor is an infinite client loop; an empty
+    final page is a clean stop. Both are wrong answers to a bad cursor, and this
+    is the one that terminates."""
+    rows = [_verb(f"doc.op{index}") for index in range(4)]
+    page = offer_page(rows, GrantSet.of(["doc.*"]), (), cursor)
+    assert page["tools"] == [] and "nextCursor" not in page
+
+
+def test_a_cursor_naming_a_vanished_tool_stops_rather_than_skipping(monkeypatch):
+    """The offer can shrink between a client's pages. Anchoring on a NAME means
+    the worst case is a clean stop; an index cursor would have silently skipped
+    whatever slid into that position."""
+    monkeypatch.setattr(tool_disclosure, "MCP_TOOLS_PAGE_SIZE", 2)
+    rows = [_verb(f"doc.op{index}") for index in range(4)]
+    first = offer_page(rows, GrantSet.of(["doc.*"]), ())
+    shrunk = [row for row in rows if row.id != first["tools"][-1]["name"]]
+    page = offer_page(shrunk, GrantSet.of(["doc.*"]), (), first["nextCursor"])
+    assert page["tools"] == [] and "nextCursor" not in page

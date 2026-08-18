@@ -40,7 +40,9 @@ deny-dominance and the terminal-wildcard rule stay in one place.
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Iterable
+from typing import Any
 
 from boltrig.models import Consequence, GrantSet, Verb
 from boltrig.models.grants import normalize_identifier
@@ -204,6 +206,66 @@ def offer_payload(
         }
         for verb in ranked
     ]
+
+
+# One page of the offer. Above every measured tenant surface on purpose: the
+# committed registered-verb surface is 293 rows and the widest known consumed
+# server is 633, so no client alive sees its answer change today.
+MCP_TOOLS_PAGE_SIZE = 1000
+
+
+def _encode_cursor(name: str) -> str:
+    """Opaque to the client, and deliberately NOT an index.
+
+    An index cursor silently skips a tool when the offer shrinks between pages,
+    which is the failure a client cannot detect. Anchored to the last name
+    emitted, a changed offer costs at worst a repeat or a clean stop.
+    """
+    return base64.urlsafe_b64encode(name.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _resume_index(rows: list[dict], cursor: Any) -> int:
+    """Where the next page starts, fail-CLOSED on anything unusable.
+
+    An unresolvable cursor yields the END of the list: one empty final page and
+    the client stops. Restarting at zero would turn a stale cursor into a client
+    that pages forever.
+    """
+    if cursor is None:
+        return 0
+    if not isinstance(cursor, str) or not cursor:
+        return len(rows)
+    try:
+        anchor = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)).decode("utf-8")
+    except Exception:
+        return len(rows)
+    for index, row in enumerate(rows):
+        if row["name"] == anchor:
+            return index + 1
+    return len(rows)
+
+
+def offer_page(
+    candidates: Iterable[Verb],
+    grants: GrantSet,
+    skills: Iterable[str],
+    cursor: Any = None,
+) -> dict[str, Any]:
+    """One PAGE of ``offer_payload``, plus the MCP continuation token (SPEC 11.6).
+
+    PAGING IS NOT THE TRUNCATION D4 RESERVES. Every row ``offer_payload``
+    produces is still delivered, in the same ranked order, across the pages a
+    client walks - membership is untouched and only the number of round trips
+    changes. A budget that DROPS rows remains unadopted, and when one is adopted
+    it is still passed to ``compute_tool_offer`` and nowhere else.
+    """
+    rows = offer_payload(candidates, grants, skills)
+    start = _resume_index(rows, cursor)
+    page = rows[start : start + MCP_TOOLS_PAGE_SIZE]
+    payload: dict[str, Any] = {"tools": page}
+    if page and start + len(page) < len(rows):
+        payload["nextCursor"] = _encode_cursor(page[-1]["name"])
+    return payload
 
 
 def _model_description(verb: Verb) -> str:

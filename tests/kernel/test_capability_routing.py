@@ -335,7 +335,7 @@ async def test_an_unknown_capability_is_refused_before_the_grant_check():
 
 
 @pytest.mark.kernel
-@pytest.mark.invariant("US-HIL-01")
+@pytest.mark.invariant("SEC-14")
 async def test_the_always_block_list_cannot_be_walked_past_by_canonical_name():
     """An operator who blocks hubspot.contact.create means that ACTION, however
     it is addressed. Membership on the typed name alone let the canonical
@@ -346,7 +346,7 @@ async def test_the_always_block_list_cannot_be_walked_past_by_canonical_name():
 
 
 @pytest.mark.kernel
-@pytest.mark.invariant("US-HIL-01")
+@pytest.mark.invariant("SEC-14")
 async def test_the_always_block_list_also_takes_the_capability_name():
     """The other direction: blocking the capability blocks every binding under
     it, including a source operation the operator has never heard of."""
@@ -356,7 +356,7 @@ async def test_the_always_block_list_also_takes_the_capability_name():
 
 
 @pytest.mark.kernel
-@pytest.mark.invariant("US-HIL-01")
+@pytest.mark.invariant("SEC-14")
 async def test_a_binding_consequence_override_raises_the_gate():
     """SPEC §8 step 5: effective consequence comes from the capability AND the
     selected binding. The column was written by the shard and read by nothing,

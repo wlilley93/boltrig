@@ -46,13 +46,17 @@ from boltrig.models import (
     InvocationContext,
     McpToolSnapshot,
 )
-from boltrig.models.mcp_lifecycle import validate_mcp_tool_snapshot
+from boltrig.models.mcp_lifecycle import (
+    MCP_MAX_TOOL_PAGES,
+    validate_mcp_tool_snapshot,
+)
 
 from .mcp_discovery import (
     McpDiscoveryInvalid,
     McpProbeResult,
     McpProtocolInvalid,
-    snapshot_from_response,
+    finalise_snapshot,
+    page_from_response,
 )
 from .mcp_tool_policy import consequence_hint as _consequence_hint
 from .mcp_tool_policy import external_description
@@ -184,11 +188,39 @@ class McpConsumerAdapter:
         return McpProbeResult(False, code, ())
 
     async def _discover(self, credential: Credential | None) -> tuple[McpToolSnapshot, ...]:
-        resp = await self._call(
-            {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
-            bearer_token(credential),
-        )
-        return snapshot_from_response(self.id, resp, _consequence_hint)
+        """Follow ``tools/list`` to its last page (SPEC §11.6).
+
+        One request WAS the whole of discovery, so every page after the first
+        was invisible: a paginating server's later tools did not exist as far as
+        Boltrig was concerned, silently and with nothing to notice. Four bounds
+        stop the loop becoming its own hazard - a page ceiling, the ACCUMULATED
+        snapshot cap (per-page is no cap once a server can paginate), the cursor
+        length bound, and a repeat-cursor check, because a server that hands
+        back its own cursor forever is otherwise an infinite loop burning the
+        probe timeout. Note each page is a fresh pinned client and a fresh
+        egress resolution (``_call``), which is what the page ceiling is really
+        bounding.
+        """
+        tools: list[McpToolSnapshot] = []
+        seen: set[str] = set()
+        cursors: set[str] = set()
+        cursor: str | None = None
+        for _page in range(MCP_MAX_TOOL_PAGES):
+            params: dict[str, Any] = {} if cursor is None else {"cursor": cursor}
+            resp = await self._call(
+                {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": params},
+                bearer_token(credential),
+            )
+            page, cursor = page_from_response(
+                self.id, resp, _consequence_hint, seen, accumulated=len(tools)
+            )
+            tools.extend(page)
+            if cursor is None:
+                return finalise_snapshot(tools)
+            if cursor in cursors:
+                raise McpDiscoveryInvalid
+            cursors.add(cursor)
+        raise McpDiscoveryInvalid
 
     def apply_tool_snapshot(self, snapshot: tuple[McpToolSnapshot, ...]) -> list[VerbSpec]:
         """Load an already-vetted snapshot into this in-process adapter only."""

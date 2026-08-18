@@ -8,9 +8,9 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/builtin/xai_voice.py:154		Fail 
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/http_base.py:135		Best-effort reachability probe.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/http_base.py:208		Turn credential material into request auth.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/http_base.py:261		cannot reach internal services or steal a managed-identity token.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:246		The kernel-resolved credential is the ONLY bearer source: no instance
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:248		credential fails closed rather than posting an empty bearer.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:307		guard for connect()): never post an empty bearer, which would be an
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:278		The kernel-resolved credential is the ONLY bearer source: no instance
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:280		credential fails closed rather than posting an empty bearer.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:339		guard for connect()): never post an empty bearer, which would be an
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_transport.py:141		server reads Authorization (it is the only header the Opbox /mcp door
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_transport.py:143		bearer form.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/mcp_transport.py:52		A final (post-retry) HTTP refusal, carrying ONLY the status code: the body can echo the request back, credential headers included, so it never crosses this boundary.
@@ -264,7 +264,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/hitl.py:318	approval_id	T
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/run_event_projection.py:18	schema_invalid	A bounded, VALUE-FREE description of a verb's params for the chat stream (K-20 bounded observability): the sorted top-level KEY NAMES and their count, never the values (which can carry secrets or untrusted content).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/security_events.py:168	key	The deterministic rollup root over a contiguous audit-chain segment (D4).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/sensing_policy.py:243	capture_policy.py	The effective capture policy for one device's daemons.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/tool_disclosure.py:176	candidates	The ``tools/list`` payload for one run, in ranked order.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/tool_disclosure.py:178	candidates	The ``tools/list`` payload for one run, in ranked order.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/web_security.py:49	BOLTRIG_TRUST_CF_CONNECTING_IP	The caller's client IP for audit provenance and per-IP rate limits.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/knowledge/service.py:38	extra	Scopes derived from the authenticated principal (SEC-KNO-01) - never from caller-supplied ``extra`` keys;
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/memory/session_distillation.py:54	memory.ingest.on_session_end	Read ``memory.ingest.on_session_end`` out of the raw manifest section.
@@ -293,10 +293,10 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/ms_graph.py:1	Ht
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/web_fetch.py:1	check_network_policy	The web.fetch adapter: internet access as a governed verb (Round Eight, S4).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/xai_voice.py:1	HttpAdapter	xAI voice (TTS / STT) as governed Boltrig verbs.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:1	pinned_async_client_for_ip	The shared outbound-egress guard (Batch 1 INJ-02, Batch 2 CLOUD-03, H2/SEC-61).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/http_base.py:1	paginate	Reusable HTTP adapter base for ``runtime='http'`` integrations (S7.3).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/http_base.py:1	paginate_offset	Reusable HTTP adapter base for ``runtime='http'`` integrations (S7.3).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:1	review_and_activate	Consume an external MCP server as a Boltrig adapter (Round Two, US-MCP-03).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:142	kernel.credentials.resolve_for_adapter	Discover the external server's tools and map them to VerbSpecs.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:156	probe	``probe`` runs bounded discovery without publishing live tool state.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:146	kernel.credentials.resolve_for_adapter	Discover the external server's tools and map them to VerbSpecs.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:160	probe	``probe`` runs bounded discovery without publishing live tool state.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:1	McpHttpRefusal	The MCP Streamable-HTTP client transport the consumer speaks (US-MCP-03).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:170	initialize	The MCP handshake, run lazily when a server demands a session.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/sql_base.py:1	db.execute_write	Reusable SQL adapter base for ``runtime='sql'`` integrations (US-ADP-03, SEC-09).
@@ -471,8 +471,8 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/sensing_capability.py:1	Pr
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/sensing_policy.py:1	parse_approval_posture	Camera and presence as first-class Boltrig services, governed in one place.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/sensing_routes.py:190	sensing_capability	What a caller asking for this capability right now is told.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/tool_disclosure.py:1	_ranking_key	Progressive tool disclosure: the ordered OFFER, computed away from authority.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/tool_disclosure.py:126	permits	Rank the granted verbs and return the first ``budget`` of them.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/tool_disclosure.py:58	normalize_identifier	The lowercase segment set of the run's loaded skill ids.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/tool_disclosure.py:128	permits	Rank the granted verbs and return the first ``budget`` of them.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/tool_disclosure.py:60	normalize_identifier	The lowercase segment set of the run's loaded skill ids.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/__init__.py:1	PgVectorMemoryEngine	Round Five memory subsystem (Epic MEM).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/adapter.py:1	MemoryEngine	The MemoryAdapter: memory.* verbs behind the kernel chokepoint, and the kernel-side isolation boundary (Epic MEM, SEC-40..45).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/bundle.py:1	build_memory_bundle	The typed memory bundle: what an agent run is allowed to see, in what order.
@@ -576,12 +576,12 @@ ORDINARY	NO-SUBJECT	comment	boltrig/adapters/http_base.py:201		SSRF: never auto-
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/http_base.py:89		explicit config always wins;
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/loader.py:40		health claim.
 ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/loader.py:92		The cached posture, refreshed in the background when stale.
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:121		never leave a stale mapping.
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:131		is the default;
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:252		server never sees the namespace.
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:306		Fail closed (defence in depth behind execute's own check, and the
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:316		reviewed registration opt-in) is the ONLY waiver, for an
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:68		an empty name can never publish.
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:125		never leave a stale mapping.
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:135		is the default;
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:284		server never sees the namespace.
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:338		Fail closed (defence in depth behind execute's own check, and the
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:348		reviewed registration opt-in) is the ONLY waiver, for an
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:72		an empty name can never publish.
 ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/mcp_tool_policy.py:1		Fail-closed policy for translating external MCP metadata into Boltrig verbs.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_transport.py:162		retry the call once.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/sql_base.py:183		parts separately - it refuses, it refuses early, and it does NOT refuse a
@@ -1204,7 +1204,9 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/sensing_policy.py:49		: Every key thi
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/sensing_policy.py:61		: THE ENROLLED FACE IS KERNEL DATA, NEVER BUNDLE DATA.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/sensing_policy.py:65		: character must not carry someone's biometrics.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/sensing_routes.py:214		as "you may not", which is a different and untrue statement.
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/tool_disclosure.py:99		0 for a low-consequence verb, 1 for a high-consequence one.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/tool_disclosure.py:101		0 for a low-consequence verb, 1 for a high-consequence one.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/tool_disclosure.py:217		Opaque to the client, and deliberately NOT an index.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/tool_disclosure.py:227		Where the next page starts, fail-CLOSED on anything unusable.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/web_security.py:1		Edge/web hardening for the kernel FastAPI app (Batch 1 WEB-* + RES-01).
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/web_security.py:285		Install the edge/web hardening middleware (WEB-02/03/05/06, RES-01).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/web_security.py:314		Explicit allowlist only - never '*' with credentials, never reflect.
