@@ -94,6 +94,12 @@
   --green-line: rgb(47 138 87 / 30%);
   --magenta: #a3418a;
   --shadow: 0 16px 48px rgb(0 0 0 / 14%);
+  /* The card lift, taken from Opbox's .opbox-card so a Boltrig card and an
+     Opbox modal sit off the page by the same amount. TWO layers, not one:
+     the 1px contact shadow is what stops the edge looking pasted on, and
+     the 18px spread is the float. --shadow above is a different job - a
+     heavy 48px drop for menus that overlay content. */
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 4%), 0 6px 18px rgb(15 23 42 / 6%);
 
   /* Legacy aliases for pre-console surfaces. */
   --paper: var(--card);
@@ -182,6 +188,10 @@
   --green-line: rgb(92 184 127 / 32%);
   --magenta: #c86fb0;
   --shadow: 0 16px 48px rgb(0 0 0 / 50%);
+  /* Same geometry, more opacity. Opbox's slate-tinted alphas are tuned for a
+     paper ground and are simply invisible on this one, so copying the light
+     values here would have shipped a shadow that renders as nothing. */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 30%), 0 6px 18px rgb(0 0 0 / 45%);
   --blue: #57a3ff;
   background: #1a1a1a;
   color: var(--text);
@@ -288,12 +298,22 @@ h1, h2, h3, p { margin-top: 0; }
   padding: 28px;
   background: var(--bg);
 }
+/* Aligned to the Opbox modal surface (.opbox-card): 12px radius, a 1px hairline
+   border and the two-layer lift. Radius and border already matched; the shadow
+   was missing, which is why the card read as pasted onto the page rather than
+   sitting above it.
+   NOT aligned on type scale, deliberately. Opbox's --text-h2 is 16px, the step
+   for a dense dialog's card title; this is a full-page auth heading and 26px is
+   the right size for it. Copying the number would have matched the token name
+   and lost the hierarchy. Padding stays 32px for the same reason - p-5 pairs
+   with a dialog's packed rows, not with one centred form. */
 .auth-card {
   width: min(430px, 100%);
   padding: 32px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--card);
+  box-shadow: var(--shadow-card);
 }
 .auth-brand { display: flex; align-items: center; gap: .55em; margin-bottom: 30px; font-size: 17px; }
 /* Sized off the auth card's own 17px in em, and 2.2em rather than 1.35: five
@@ -301,7 +321,8 @@ h1, h2, h3, p { margin-top: 0; }
  * filled disc. Same figures as .onboarding-mark, so the two headers are the
  * same lockup at the same size even though they are declared apart. */
 .auth-mark { width: 2.2em; height: 2.2em; flex: none; color: var(--text); }
-.auth-card h1 { margin-bottom: 7px; font-size: 26px; font-weight: 500; letter-spacing: -.3px; }
+/* 600 to match Opbox's DialogTitle weight; the size is this surface's own. */
+.auth-card h1 { margin-bottom: 7px; font-size: 26px; font-weight: 600; letter-spacing: -.3px; }
 .auth-lead { margin-bottom: 26px; color: var(--text-3); font-size: 14px; line-height: 1.55; }
 .auth-form { display: grid; gap: 14px; }
 .auth-form label { display: grid; gap: 6px; color: var(--text-3); font-size: 12px; }
