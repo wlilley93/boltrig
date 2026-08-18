@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T14:30:48.178Z",
+  "capturedAt": "2026-08-18T14:49:46.908Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "abbd284f97c11c085ae1f26c83a05d3be1b2797349b916a94447f6a63b0f6e5b",
-    "digestAfterCapture": "abbd284f97c11c085ae1f26c83a05d3be1b2797349b916a94447f6a63b0f6e5b",
+    "digestBeforeCapture": "284b61f7edc345fcee88a363a47d9673690097a5b4792e3c3679927a58317869",
+    "digestAfterCapture": "284b61f7edc345fcee88a363a47d9673690097a5b4792e3c3679927a58317869",
     "sourceUnchangedDuringCapture": true,
-    "branch": "integrate/capability-doctrine",
-    "head": "a5f7d925073651a3a5cd7b5067f75289b7cd92a4",
+    "branch": "salvage/voice-tone",
+    "head": "6cf22854d350c2cdb86a1bf15cc8871455103ca3",
     "dirty": false
   },
   "runner": {
@@ -56,7 +56,7 @@
         "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
