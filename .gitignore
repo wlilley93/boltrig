@@ -66,6 +66,9 @@ sdks/web/node_modules
 
 # Local per-box compose override (desktop orb phenotype handoff etc.) - never committed.
 docker-compose.override.yml
+# Retag/rollback copies are named <file>.bak-retag-<stamp>, which docker-compose.override.*.yml*
+# below does NOT match (it wants .<name>.yml). One of those sat untracked in the tree for two days.
+docker-compose.override.yml.*
 backups/
 .secrets/
 deploy/wheelhouse/
