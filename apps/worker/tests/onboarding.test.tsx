@@ -337,7 +337,7 @@ describe("first-run onboarding", () => {
     expect(localStorage.getItem("boltrig.character")).toBe("jarvis");
   });
 
-  it("searches the full provider catalogue, includes Llama, and gates model choice on a key", async () => {
+  it("searches the bindable provider catalogue and gates model choice on a key", async () => {
     render(
       <OnboardingGate initialAccount={{
         profile,
@@ -354,18 +354,47 @@ describe("first-run onboarding", () => {
     expect((await screen.findByRole("button", { name: "Enter your API key first" }) as HTMLButtonElement).disabled)
       .toBe(true);
 
+    // Was Llama. Meta's Llama API is in the models.dev snapshot but is not one
+    // of the providers Bifrost binds, so offering it produced a picker entry
+    // that failed at submit. The search is exercised with a provider that can
+    // actually complete.
     await clickWhenReady("OpenAI");
-    fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "llama" } });
-    fireEvent.click(screen.getByRole("option", { name: /Llama Meta’s Llama API/ }));
-    expect(screen.getByRole("button", { name: "Llama" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "groq" } });
+    fireEvent.click(screen.getByRole("option", { name: /Groq/ }));
+    expect(screen.getByRole("button", { name: "Groq" })).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("Provider API key"), { target: { value: "llama-key" } });
+    fireEvent.change(screen.getByLabelText("Provider API key"), { target: { value: "groq-key" } });
     await clickWhenReady("Choose a model");
-    fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "Maverick" } });
     expect(screen.getAllByRole("option").length).toBeGreaterThan(0);
   });
 
-  it("offers Ollama Cloud and secured self-hosted Ollama without exposing localhost", async () => {
+  it("does not offer a provider Bifrost cannot bind", async () => {
+    // The picker was generated from the whole 190-provider models.dev snapshot
+    // while the kernel binds 23. Choosing any of the rest reached
+    // "the selected provider is not supported by Bifrost" only after the key
+    // had been typed. An option that cannot complete is worse than no option.
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
+    expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
+
+    await clickWhenReady("OpenAI");
+    for (const absent of ["deepseek", "togetherai", "moonshotai"]) {
+      fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: absent } });
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+    }
+  });
+
+  it("offers secured self-hosted Ollama, and no Ollama Cloud, without exposing localhost", async () => {
     render(
       <OnboardingGate initialAccount={{
         profile,
@@ -382,7 +411,11 @@ describe("first-run onboarding", () => {
 
     await clickWhenReady("OpenAI");
     fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "ollama" } });
-    expect(screen.getByRole("option", { name: /Ollama Cloud ollama-cloud/ })).toBeTruthy();
+    // Ollama Cloud is deliberately absent. It is a hosted API with its own base
+    // URL and a real key, and the kernel has no binding for `ollama-cloud`, so
+    // it failed at submit. Aliasing it onto self-hosted `ollama` without a live
+    // binding to prove it would put the same lie back in a different place.
+    expect(screen.queryByRole("option", { name: /Ollama Cloud/ })).toBeNull();
     const selfHosted = screen.getByRole("option", { name: /Ollama Self-hosted/ });
     const guidance = "Hosted Boltrig can use Ollama through a secured public HTTPS endpoint. Never expose an unauthenticated Ollama port. Use Boltrig Desktop to keep Ollama local to your computer.";
     expect(screen.getByTitle(guidance)).toBeTruthy();
