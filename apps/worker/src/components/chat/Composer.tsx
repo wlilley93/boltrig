@@ -52,7 +52,7 @@ export interface ComposerProps {
   /** The draft lives with the caller so starter cards can fill it. */
   value: string;
   onChange: Dispatch<SetStateAction<string>>;
-  inputRef?: RefObject<HTMLTextAreaElement>;
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
   /** When live voice is verified reachable, an empty draft turns the primary
       button into "Start a voice call". */
   voicePrimary?: { onStart(): void };
@@ -190,7 +190,7 @@ function ComposerDropTarget() {
 
 type ComposerToolsProps = ComposerProps & {
   addFiles(list: FileList | readonly File[] | null): Promise<boolean>;
-  fileInputRef: RefObject<HTMLInputElement>;
+  fileInputRef: RefObject<HTMLInputElement | null>;
   modelReady: boolean;
   voicePrimaryVisible: boolean;
 };

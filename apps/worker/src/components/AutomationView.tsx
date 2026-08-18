@@ -1311,7 +1311,9 @@ export function AutomationsView() {
         <div
           aria-hidden={draft && discardDialogOpen ? true : undefined}
           className={draft ? "automation-editor-feedback" : "automation-list-feedback"}
-          {...(draft && discardDialogOpen ? { inert: "" } : {})}
+          // Boolean(): draft is object-or-null, so `draft && ...` is
+          // boolean|null; React 19 types inert as boolean|undefined.
+          inert={Boolean(draft && discardDialogOpen)}
         >
           {listNotice && <p className="notice" role="status">{listNotice}</p>}
           {detailError && <p className="notice" role="alert">{detailError}</p>}
@@ -1338,7 +1340,7 @@ export function AutomationsView() {
             aria-hidden={discardDialogOpen ? true : undefined}
             className="automation-editor-stage"
             role="region"
-            {...(discardDialogOpen ? { inert: "" } : {})}
+            inert={discardDialogOpen}
           >
             <WorkflowEditor
               draft={draft}
