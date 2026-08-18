@@ -107,8 +107,13 @@ extension.
 Seams / not built: LLM-side extraction contracts (the caller of
 `memory.propose` is responsible for candidates - no model does this
 automatically today); the Codex runtime does not yet CONSUME
-`memory.bundle` in its prompt assembly; no ablation harness or scorecard; the
-Worker/inspector has no candidate-queue or timeline UI yet; per-plane token
-budgets are character approximations; Cognee typed projections ride the
-existing optional projection config, which ships disabled
+`memory.bundle` in its prompt assembly; no ablation harness or scorecard;
+per-plane token budgets are character approximations; Cognee typed projections
+ride the existing optional projection config, which ships disabled
 (`memory.projections: []`).
+
+The Worker now has a Review tab with one-click approve/reject via
+HITL-gated `respondHitl` + replay (candidates queue, slot timeline),
+plus `memoryCandidates`/`memoryCandidateReview`/`memoryTimeline` SDK
+methods. Reflection auto-proposes terminal-run episodes (deterministic
+template, no LLM), surfaced via the same REFLECT_GRANTS grants.

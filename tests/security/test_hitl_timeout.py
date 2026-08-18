@@ -304,3 +304,56 @@ async def test_a_sweep_with_tenants_and_nothing_overdue_stays_quiet(caplog):
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING], (
         "an idle sweep over a real tenant list has nothing to warn about"
     )
+
+
+# --- reconciliation: an ANSWERED request whose resume notification was lost ----
+@pytest.mark.security
+@pytest.mark.invariant("SEC-14")
+async def test_a_lost_answer_resume_is_re_fired_by_the_sweep(monkeypatch):
+    """The repair arm of the sweep. answer() commits the ANSWERED status and only
+    then fires the resume notifier, fail-safe - so a process death between the two
+    left the answer durable but NOTHING ever re-examined it: the approval sat
+    ANSWERED forever and the approved write never executed. The sweep now re-fires
+    the resume for every ANSWERED request past a grace window; the CAS on
+    ANSWERED -> CONSUMED makes that idempotent, and a fresh answer (inside the
+    window) is left alone so the sweep cannot race a merely-slow notifier."""
+    from boltrig.kernel.hitl_expiry import (
+        _RECONCILE_GRACE_SECONDS,
+        reconcile_answered_tenant_once,
+    )
+
+    k, _ = await _build_kernel(blocking_verbs={"ticket.create"})
+    await k.store.create_org(Organisation(id=TENANT, name=TENANT, slug=TENANT))
+    request = await _raise_approval(k)
+
+    fired: list[str] = []
+
+    async def _notifier(req):
+        fired.append(req.id)
+
+    k.hitl.set_resume_notifier(_notifier)
+
+    # The answer's own notification is simulated LOST: commit the answer with
+    # the notifier absent, then install the notifier afterwards.
+    k.hitl.set_resume_notifier(None)
+    await k.hitl.answer(TENANT, request.id, "approve", "human")
+    assert fired == []
+    assert (await k.hitl.get(TENANT, request.id)).status == HITLStatus.ANSWERED
+
+    # Inside the grace window: the reconcile pass must not fire yet.
+    assert await reconcile_answered_tenant_once(k, k.store, TENANT) == 0
+    assert fired == []
+
+    # Age the answer past the window (responded_at is authoritative; the
+    # in-memory store hands back the live row, so this is the durable record).
+    resp = await k.store.get_hitl_response(TENANT, request.id)
+    resp.responded_at -= timedelta(seconds=_RECONCILE_GRACE_SECONDS + 30)
+    k.hitl.set_resume_notifier(_notifier)
+    assert await reconcile_answered_tenant_once(k, k.store, TENANT) == 1
+    assert fired == [request.id]
+
+    # Idempotent: a second pass re-fires the notifier (safe by the CAS), and a
+    # CONSUMED request leaves the answered list entirely.
+    assert await reconcile_answered_tenant_once(k, k.store, TENANT) == 1
+    assert await k.store.consume_hitl(TENANT, request.id)
+    assert await reconcile_answered_tenant_once(k, k.store, TENANT) == 0

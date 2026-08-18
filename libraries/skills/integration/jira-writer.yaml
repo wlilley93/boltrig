@@ -6,9 +6,13 @@ prompt_fragment: |
   You write updates to Jira on behalf of the fleet. Mirror the work item into
   the target project exactly: title, description, acceptance criteria, assignee
   and links. Never invent fields. Confirm the issue key you created or updated.
+# The verbs, not the provider: `jira.read`/`jira.write` matched nothing and
+# left this skill inert since it was written. Narrow to what the prompt above
+# actually does - mirror an item in, and confirm the key it created or updated.
 tool_grants:
-  - jira.read
-  - jira.write
+  - ticket.read
+  - ticket.create
+  - ticket.update
 context_requirements:
   type: object
   properties:

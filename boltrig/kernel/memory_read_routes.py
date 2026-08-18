@@ -76,7 +76,18 @@ def _register_core_read_routes(app, *, P, K, scopes) -> None:
         rows = await k.store.list_memory_candidates(
             p.tenant_id, scopes(p), limit=clamp_memory_list(limit)
         )
-        return {"candidates": [_fact_view(fact) for fact in rows]}
+        return {
+            "candidates": [
+                {
+                    **_fact_view(fact),
+                    "memory_key": fact.memory_key,
+                    "status": fact.status,
+                    "version": fact.version,
+                    "confidence": fact.confidence,
+                }
+                for fact in rows
+            ]
+        }
 
     @app.get("/v1/memory/resolve")
     async def resolve(
@@ -97,10 +108,11 @@ def _register_core_read_routes(app, *, P, K, scopes) -> None:
 def _register_slot_timeline_route(app, *, P, K, scopes) -> None:
     @app.get("/v1/memory/timeline")
     async def slot_timeline(
-        subject_type: str,
-        subject_id: str,
-        predicate: str,
+        subject_type: str | None = None,
+        subject_id: str | None = None,
+        predicate: str | None = None,
         owner_scope: str | None = None,
+        memory_key: str | None = None,
         limit: int = 50,
         k=K,
         p=P,
@@ -108,15 +120,25 @@ def _register_slot_timeline_route(app, *, P, K, scopes) -> None:
         from boltrig.memory.typology import semantic_memory_key
 
         permitted = scopes(p)
-        # Default to the caller's own scope (the `memory_owner_scopes` head).
-        scope = owner_scope or permitted[0]
-        if scope not in set(permitted):
-            return JSONResponse({"error": "not_found"}, status_code=404)
-        key = semantic_memory_key(subject_type, subject_id, predicate, scope)
+        allowed = set(permitted)
+        if memory_key:
+            # A direct slot key (the candidate queue's shape): the versions
+            # filter below is the scope guard; the key only narrows the query.
+            key = memory_key
+        else:
+            if not (subject_type and subject_id and predicate):
+                return JSONResponse(
+                    {"error": "subject_type, subject_id and predicate are required"},
+                    status_code=400,
+                )
+            # Default to the caller's own scope (the `memory_owner_scopes` head).
+            scope = owner_scope or permitted[0]
+            if scope not in allowed:
+                return JSONResponse({"error": "not_found"}, status_code=404)
+            key = semantic_memory_key(subject_type, subject_id, predicate, scope)
         rows = await k.store.list_memory_slot_history(
             p.tenant_id, key, limit=clamp_memory_list(limit)
         )
-        allowed = set(permitted)
         versions = [fact for fact in rows if fact.owner_scope in allowed]
         return {
             "memory_key": key,

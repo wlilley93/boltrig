@@ -101,24 +101,23 @@ async def _park_expired_item(store: Store, req: Any) -> None:
     that parked it, and fencing on a value this caller would have to re-read is
     the defeated shape, not a fence.
 
-    Its real predicate is the status check above, and that check is a read-then-
-    write, so it is not a fence either. The residual race is narrow and worth
-    stating rather than implying away: a human who re-queues an item in the same
-    instant this sweeper fires can have it cancelled underneath them. Closing it
-    needs the status CAS (``transition_work_item_status``) to carry the cancel
-    ``result`` too, which it cannot today.
-    """
+    Its predicate is the payload-carrying status CAS
+    (``transition_work_item_settled``), so a human who re-queues the item in the
+    same instant this sweeper fires wins or loses the CAS cleanly - the old
+    read-then-write could cancel a freshly re-queued item underneath them."""
     item = await _linked_work_item(store, req)
     if item is None or item.status != WorkStatus.AWAITING_HUMAN:
         return
-    item.status = WorkStatus.CANCELLED
-    item.lease_owner = None
-    item.lease_expires_at = None
-    item.result = {
-        "cancel_reason": "hitl_request_expired",
-        "hitl_request_id": req.id,
-    }
-    await store.update_work_item(item)
+    await store.transition_work_item_settled(
+        req.tenant_id,
+        item.id,
+        expected=WorkStatus.AWAITING_HUMAN,
+        new_status=WorkStatus.CANCELLED,
+        result={
+            "cancel_reason": "hitl_request_expired",
+            "hitl_request_id": req.id,
+        },
+    )
 
 
 async def _retire_held_call(store: Store, req: Any) -> None:
@@ -152,6 +151,44 @@ async def _notify_expired(store: Store, req: Any) -> None:
         )
     except Exception:  # noqa: BLE001 - delivery is a side channel
         pass
+
+
+_RECONCILE_GRACE_SECONDS = 90
+
+
+async def reconcile_answered_tenant_once(kernel: Any, store: Store, tenant_id: str) -> int:
+    """Re-fire the resume for ANSWERED requests whose notification was lost.
+
+    The answer path is commit-then-notify: ``answer_hitl`` persists the ANSWERED
+    status and only then fires the resume notifier, fail-safe. That fail-safe
+    has a cost nobody priced - if the process dies (or the notifier faults)
+    between the two, the answer is durable but NOTHING ever re-examines it: the
+    approval sits ANSWERED forever, the held checkpoint stays paused forever,
+    and the human saw their answer accepted. This pass is the repair arm: every
+    ANSWERED request older than a grace window gets its resume re-fired. Safe
+    by NFR-REL-03 - each resume leg is CAS-guarded (ANSWERED -> CONSUMED) or
+    idempotent - and a no-op for anything already consumed. The grace window
+    exists so the sweep cannot race a notifier that is merely slow, not dead.
+
+    One tenant's fault is caught by the caller's P9 bracket, like expiry."""
+    refired = 0
+    for req in await store.list_answered_hitl(tenant_id):
+        response = await store.get_hitl_response(tenant_id, req.id)
+        answered_at = getattr(response, "responded_at", None) if response is not None else None
+        if (
+            answered_at is None
+            or (utcnow() - answered_at).total_seconds() < _RECONCILE_GRACE_SECONDS
+        ):
+            continue
+        await kernel.hitl.refire_resume(tenant_id, req.id)
+        refired += 1
+        log.info(
+            "hitl reconcile: re-fired resume for answered request=%s tenant=%s "
+            "(verb=%s, age=%.0fs)",
+            req.id, tenant_id, req.verb,
+            (utcnow() - answered_at).total_seconds(),
+        )
+    return refired
 
 
 async def expire_tenant_once(store: Store, tenant_id: str) -> int:
@@ -191,12 +228,17 @@ async def run_hitl_expiry_sweep(
     *,
     process_instance_identity: str | None = None,
     interval: float = DEFAULT_INTERVAL_SECONDS,
+    kernel: Any = None,
 ) -> int:
     """Expire overdue PENDING HITL requests for EVERY tenant once.
 
     Enumerates tenants via ``store.list_orgs`` (an org's id IS its tenant_id),
     mirroring the anchor sweep. One tenant's failure is logged and the sweep
     continues (P9). Returns the number of requests expired.
+
+    With ``kernel`` the same pass also reconciles lost ANSWER-resume
+    notifications (see :func:`reconcile_answered_tenant_once`); the kernel is
+    optional so store-only callers (tests, offline tooling) keep the old shape.
     """
     expired = 0
     orgs = await store.list_orgs()
@@ -213,6 +255,12 @@ async def run_hitl_expiry_sweep(
         attempted_at = utcnow()
         try:
             tenant_expired = await expire_tenant_once(store, org.id)
+            if kernel is not None:
+                # The reconcile pass shares the expiry pass's P9 bracket: one
+                # tenant's resume fault is logged, never the sweep's death.
+                tenant_expired += await reconcile_answered_tenant_once(
+                    kernel, store, org.id
+                )
         except asyncio.CancelledError:
             raise
         except Exception:  # one tenant's fault never stops the sweep (P9)
@@ -249,6 +297,7 @@ async def run_hitl_expiry_forever(
     *,
     interval: float = DEFAULT_INTERVAL_SECONDS,
     process_instance_identity: str | None = None,
+    kernel: Any = None,
 ) -> None:
     """Loop :func:`run_hitl_expiry_sweep` forever; cancellable, idle-sleeping.
 
@@ -262,6 +311,7 @@ async def run_hitl_expiry_forever(
                 store,
                 process_instance_identity=identity,
                 interval=interval,
+                kernel=kernel,
             )
         except asyncio.CancelledError:
             raise

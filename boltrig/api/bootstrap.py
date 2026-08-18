@@ -184,12 +184,20 @@ async def _register_channel_send(kernel: Kernel, tenant_id: str, manifest=None) 
     runs the chokepoint like any verb: consequence=high (HITL by default, SEC-39),
     grant-checked, audited; the kernel executes the outbound send directly. A
     registration with no manifest gets no diversion resolver, so the demo tenant
-    and every bare boot send normally (``announced_diversion_fn``)."""
+    and every bare boot send normally (``announced_diversion_fn``). The
+    manifest's network posture rides the adapter (SEC-52): the outbound webhook
+    leg is ordinary egress and honours the operator's air-gap / allow-list."""
     from boltrig.adapters.builtin.channel_send import build_channel_send
     from boltrig.kernel.dev_egress_runtime import announced_diversion_fn
 
     diversion = announced_diversion_fn(manifest)
-    await kernel.register_adapter(tenant_id, build_channel_send(kernel.store, diversion=diversion))
+    network_cfg = manifest.network.as_egress_config() if manifest is not None else None
+    await kernel.register_adapter(
+        tenant_id,
+        build_channel_send(
+            kernel.store, diversion=diversion, network_config=network_cfg
+        ),
+    )
     log.info("channel.send verb registered (governed outbound, HITL by default)")
 
 
@@ -281,17 +289,7 @@ async def _seed_from_manifest(kernel: Kernel, manifest, *, model_catalogue: Any 
     await _register_consumed_mcp(kernel, manifest.tenant_id, manifest.section("mcp"))
     await _rehydrate_store_adapters(kernel, manifest.tenant_id)
     net = manifest.network
-    await _register_web_fetch(
-        kernel,
-        manifest.tenant_id,
-        {
-            "air_gapped": net.air_gapped,
-            "https_proxy": net.https_proxy,
-            "ca_bundle": net.ca_bundle,
-            "allowed_domains": net.allowed_domains,
-            "blocked_domains": net.blocked_domains,
-        },
-    )
+    await _register_web_fetch(kernel, manifest.tenant_id, net.as_egress_config())
     skills_dir = _find(_SKILLS_DIR_CANDIDATES)
     if skills_dir:
         from boltrig.skills import load_skills_dir

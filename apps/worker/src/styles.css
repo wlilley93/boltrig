@@ -2989,6 +2989,11 @@ button.console-row-main { border: 0; background: transparent; color: inherit; cu
 .console-row-title > span:first-child {
   overflow: hidden;
   font-size: 13.5px;
+  /* PINNED (2026-08-16): 13.5px at `normal` rounds to 16px on macOS and 15px
+     on Linux; the row title is the tallest text box in a settings row, so the
+     row - and the contracted settings-you Look table - came out short
+     off-platform. 16px is the macOS value; see the .console-section-title pin. */
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3026,7 +3031,15 @@ button.console-row-main { border: 0; background: transparent; color: inherit; cu
   color: var(--text-4);
   font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
 }
-.console-section-title { color: var(--text-2); font-size: 13.5px; }
+/* PINNED (2026-08-16), and it has to be. 13.5px at `normal` is a 16px box on
+   macOS and a 15px box on Linux, so every settings group title - and the table
+   below it - sat 1px high off-platform, and the settings-you Look table came
+   out 204 against its contracted 208 (the commit that pinned the plugins
+   heading left exactly this defect open, naming this rule as one it could not
+   verify). 16px is the macOS `normal` value: pinning it moves macOS nothing
+   and brings Linux onto the contract. Same doctrine as the plugins-heading
+   pin in IntegrationsView.css. */
+.console-section-title { color: var(--text-2); font-size: 13.5px; line-height: 16px; }
 .console-mark { display: flex; flex: 0 0 auto; }
 
 /* The routine picker: a card per routine, its thumbnail drawn from the saved

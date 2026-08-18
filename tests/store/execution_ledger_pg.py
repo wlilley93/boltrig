@@ -128,20 +128,51 @@ def _revision_chain() -> list[str]:
     omits each new migration by default and only a human notices, which is exactly
     how 0032 shipped with its own round-trip test red: `make check` is offline and
     skips this whole leg, so nothing else was watching.
+
+    THE CHAIN IS A DAG, NOT A LINE, and this used to assume otherwise. It walked
+    ``{down_revision: revision}`` from ``None``, which silently cannot represent
+    two things Alembic allows and this repo now contains: two revisions sharing a
+    parent (the dict keeps only the last one, so a whole branch vanishes), and a
+    merge revision whose ``down_revision`` is a TUPLE of both heads (never equal
+    to the string being looked up, so the walk simply stops). Both showed up the
+    moment the capability and scoped-integration lines were merged at
+    0081_merge_capability_and_integration_scope, and the failure was
+    indistinguishable from a genuinely broken chain.
+
+    So it is a topological sort now, tie-broken by revision id, which is the order
+    Alembic itself would apply. The assertions still catch what the old walk was
+    there to catch: a cycle or an orphan leaves revisions unemitted, and a fork
+    that never rejoins leaves more than one head.
     """
 
     versions = ROOT / "migrations" / "versions"
-    down_of: dict[str, str | None] = {}
+    parents_of: dict[str, tuple[str, ...]] = {}
     for path in sorted(versions.glob("[0-9]*.py")):
         module = _load_migration(path)
-        down_of[str(module.revision)] = module.down_revision
+        down = module.down_revision
+        if down is None:
+            parents = ()
+        elif isinstance(down, str):
+            parents = (down,)
+        else:  # a merge revision names every head it joins
+            parents = tuple(str(d) for d in down)
+        parents_of[str(module.revision)] = parents
+
     ordered: list[str] = []
-    by_down = {down: rev for rev, down in down_of.items()}
-    current: str | None = None
-    while (nxt := by_down.get(current)) is not None:
-        ordered.append(nxt)
-        current = nxt
-    assert len(ordered) == len(down_of), "migration chain is broken or forked"
+    done: set[str] = set()
+    while len(ordered) < len(parents_of):
+        ready = sorted(
+            rev
+            for rev, parents in parents_of.items()
+            if rev not in done and all(p in done for p in parents)
+        )
+        assert ready, "migration chain is broken or forked"
+        ordered.extend(ready)
+        done.update(ready)
+
+    referenced = {p for parents in parents_of.values() for p in parents}
+    heads = sorted(set(parents_of) - referenced)
+    assert len(heads) == 1, f"migration chain is broken or forked: heads {heads}"
     return ordered
 
 

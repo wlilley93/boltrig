@@ -80,12 +80,6 @@
       "blocker": "principal:PRINCIPAL-2026-07-27-ROUTE-BY-INTENT",
       "reason": "Intent-based retrieval. The whole chain below it is unreached: this function has no production caller, `WorkflowLibrary.match` has only this one, and `learn_from_success` is gated on GENERATED_WORKFLOW_KEY, which nothing writes. Production selects a workflow by explicit id. Waived expressly by [2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001, whose exceptions clause names it, against the Principal question at docs/decisions/0019-route-by-intent-is-the-principals.md: should the pump route an unaddressed item by intent at all? That changes what runs for a tenant, so it is not an engineering call. On expiry without an answer the order's ratio applies with no further order: retire."
     },
-    "redact": {
-      "owner": "kernel-maintainers",
-      "expires": "2026-10-31",
-      "reason": "`pii.redact` has NO caller in boltrig/ - found by the transitive reachability gate, which was the first thing to look past the first hop. It is not dead code in the ordinary sense: it works, it is unit-tested, and SEC-13 advertised it as \"PII is detected and redacted before it leaves the boundary\", which no path enforced. SEC-13's description has been corrected to what is true rather than the function deleted, because WHICH boundary should redact is a genuine design question and not a gap to close on the way past: `manifest.privacy.pii_redaction` and `redact_fields` are already parsed and stored, so the operator-facing knob exists and reads as live. Note the audit path is separately and really scrubbed by `redact_identity` (SEC-42), so this is an unapplied capability, not an unprotected one.",
-      "blocker": "design:which-outbound-boundary-redacts"
-    },
     "incremental": {
       "owner": "memory-maintainers",
       "expires": "2026-09-30",

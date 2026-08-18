@@ -55,6 +55,10 @@ def _binding(r):
         verb_id=r["verb_id"], tenant_id=r["tenant_id"],
         target_type=TargetType(r["target_type"]), target_ref=r["target_ref"],
         rate_limit=RateLimit(**rl) if rl else None,
+        internal_source_operation_id=r["internal_source_operation_id"],
+        canonical_capability_id=r["canonical_capability_id"],
+        model_display_name=r["model_display_name"],
+        connection_label=r["connection_label"],
     )
 
 

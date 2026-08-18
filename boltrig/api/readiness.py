@@ -24,7 +24,7 @@ from .background_readiness import read_background_job_readiness
 from .codex_readiness import codex_runtime_check
 from .readiness_dependencies import database_checks, password_reset_check
 
-EXPECTED_ALEMBIC_HEAD = "0078_scoped_integration_connections"
+EXPECTED_ALEMBIC_HEAD = "0081_merge_capability_and_integration_scope"
 
 _PRODUCTION_NAMES = {"prod", "production", "staging"}
 # Browser automation is the only separately shipped stack tool. Codex has its

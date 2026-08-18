@@ -19,6 +19,7 @@ and audited at the end regardless of outcome:
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -27,6 +28,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from boltrig.adapters.base import Adapter, ErrorClass, Result
+from boltrig.log_safety import log_safe
 from boltrig.models import (
     ActionType,
     AuditEvent,
@@ -49,7 +51,7 @@ from boltrig.store import Store
 
 from .audit import AuditWriter
 from .adapter_errors import adapter_failure
-from .approval_posture import posture_requires_approval
+from .approval_posture import requires_approval
 from .schema_diagnosis import (
     MAX_SCHEMA_ERRORS,
     MAX_SCHEMA_PATH_DEPTH,
@@ -75,6 +77,9 @@ from .run_event_projection import (
     _summarise_params,
 )
 from .ratelimit import RateLimiter
+from .routing import grant_verbs, resolve_invocation_target
+
+log = logging.getLogger("boltrig.kernel")
 
 AdapterProvider = Callable[[str, str], Awaitable[Adapter | None]]
 AgentInvoker = Callable[[str, dict[str, Any], InvocationContext, str], Awaitable[Result]]
@@ -433,34 +438,48 @@ class Dispatcher:
             target_adapter = meta.get("target_adapter")
             resource, resource_id = _resource_ref(noun, params)
             detail.setdefault("params", _summarise_params(params))   # D1, schema-ledger order
-            await self._audit.write(
-                AuditEvent(
-                    tenant_id=context.tenant_id,
-                    ts=utcnow(),
-                    run_id=context.run_id,
-                    parent_run_id=context.parent_run_id,
-                    actor=context.actor,
-                    actor_tier=context.actor_tier,
-                    depth=context.depth,
-                    action_type=ActionType.TOOL_CALL,
-                    noun=noun,
-                    verb=verb,
-                    target_adapter=target_adapter,
-                    on_behalf_of=context.on_behalf_of,
-                    status=status,
-                    latency_ms=latency_ms,
-                    skills_loaded=list(context.skills_loaded),
-                    detail=detail,
-                    # Opbox-depth enrichment (D1). ip/ua ride on the context from the
-                    # door (None off the HTTP path); workspace_id from the active
-                    # workspace; resource/resource_id name the acted-on object.
-                    ip_address=context.ip_address,
-                    user_agent=context.user_agent,
-                    resource=resource,
-                    resource_id=resource_id,
-                    workspace_id=context.workspace_id,
+            try:
+                await self._audit.write(
+                    AuditEvent(
+                        tenant_id=context.tenant_id,
+                        ts=utcnow(),
+                        run_id=context.run_id,
+                        parent_run_id=context.parent_run_id,
+                        actor=context.actor,
+                        actor_tier=context.actor_tier,
+                        depth=context.depth,
+                        action_type=ActionType.TOOL_CALL,
+                        noun=noun,
+                        verb=verb,
+                        target_adapter=target_adapter,
+                        on_behalf_of=context.on_behalf_of,
+                        status=status,
+                        latency_ms=latency_ms,
+                        skills_loaded=list(context.skills_loaded),
+                        detail=detail,
+                        # Opbox-depth enrichment (D1). ip/ua ride on the context from the
+                        # door (None off the HTTP path); workspace_id from the active
+                        # workspace; resource/resource_id name the acted-on object.
+                        ip_address=context.ip_address,
+                        user_agent=context.user_agent,
+                        resource=resource,
+                        resource_id=resource_id,
+                        workspace_id=context.workspace_id,
+                    )
                 )
-            )
+            except Exception:
+                # SEC-16's audit-always, honestly stated: the action has already
+                # taken effect (or already failed), so an append fault cannot
+                # un-execute it - and re-raising from ``finally`` would MASK the
+                # caller's real exception with a bookkeeping one. Log loudly
+                # (an unaudited action is a governance incident), never void the
+                # original outcome. A durable outbox remains the full fix; this
+                # is the bounded half that stops the silent masquerade.
+                log.exception(  # log_safe: caller-chosen, see boltrig.log_safety
+                    "AUDIT APPEND FAILED after %s.%s (status=%s) - the action is "
+                    "effectful but UNAUDITED (SEC-16)", log_safe(noun), log_safe(verb),
+                    log_safe(status),
+                )
 
     async def _invoke_inner(
         self,
@@ -473,22 +492,21 @@ class Dispatcher:
         meta: dict[str, Any],
     ) -> dict[str, Any]:
         tenant = context.tenant_id
-        # 1. resolve verb + binding (tenant-scoped; fail-closed)
-        verb_def = await self._store.get_verb(tenant, verb)
-        if verb_def is None:
-            raise BindingNotFound(f"unknown verb '{verb}'")
-        binding = await self._store.get_binding(tenant, verb)
-        if binding is None:
-            raise BindingNotFound(f"verb '{verb}' has no binding")
-        # record which adapter/agent services this call so the audit can attribute it.
-        meta["target_adapter"] = binding.target_ref
-
-        # 2. validate params (SEC-21)
-        _reject_if_invalid("params", verb, verb_def.input_schema, params)
-
-        # 3. grant check (SEC-07)
         perms = await self._store.get_tenant_permissions(tenant)
-        self._grants.check(context, verb, perms)
+        # 1. resolve the verb + binding, or a canonical capability's ONE plan.
+        # ``authorize`` runs the CAPABILITY grant check INSIDE that resolution,
+        # so route_required cannot name connections to an ungranted caller.
+        verb_def, binding, plan = await resolve_invocation_target(
+            self._store, tenant, verb, meta, workspace_id=context.workspace_id,
+            authorize=lambda name: self._grants.check(context, name, perms),
+        )
+
+        # 2. grant check (SEC-07) BEFORE validation - see routing.grant_verbs.
+        for granted in grant_verbs(verb, verb_def, plan):
+            self._grants.check(context, granted, perms)
+
+        # 3. validate params (SEC-21)
+        _reject_if_invalid("params", verb, verb_def.input_schema, params)
 
         # 4. atomically bind/claim the key after authorization. Completed results
         # replay before execution-side approval/rate-limit gates (SEC-15).
@@ -499,8 +517,8 @@ class Dispatcher:
             return idempotency.result
         run = idempotency if isinstance(idempotency, IdempotencyRun) else None
 
-        gated = verb in self._blocking_verbs or await posture_requires_approval(
-            self._store, verb, verb_def, binding, context
+        gated = await requires_approval(
+            self._store, self._blocking_verbs, verb, verb_def, binding, plan, context
         )
         # 6. rate limit (FR-KER-05). The gate SPENDS the approval it is handed
         # (atomic ANSWERED -> CONSUMED, single-use) and nothing can hand it back,
@@ -578,7 +596,18 @@ class Dispatcher:
         # 9. complete atomically; secret-shaped output becomes uncacheable.
         await self._idempotency.complete(run, output)
         if authors_before is not None:
-            await self._announce_author_crossing(verb, noun, context, authors_before)
+            # Observability, not correctness: the action ran and the key is
+            # COMPLETED, so a failure to write the 1<->2 crossing row must not
+            # mislabel a succeeded action as 'error' in the audit trail (a
+            # replay would then hand back the output this same row calls a
+            # failure).
+            try:
+                await self._announce_author_crossing(verb, noun, context, authors_before)
+            except Exception:
+                log.warning(
+                    "author-crossing announcement failed for %s (action completed)",
+                    log_safe(verb), exc_info=True,
+                )
         return output
 
     async def _active_author_count(self, tenant_id: str) -> int:

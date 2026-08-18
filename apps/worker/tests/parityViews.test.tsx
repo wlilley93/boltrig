@@ -34,6 +34,10 @@ const api = vi.hoisted(() => ({
   memoryImprove: vi.fn(),
   memoryIngest: vi.fn(),
   memoryIngestions: vi.fn(),
+  memoryCandidates: vi.fn(),
+  memoryCandidateReview: vi.fn(),
+  memoryTimeline: vi.fn(),
+  respondHitl: vi.fn(),
   memoryRecall: vi.fn(),
   memoryRemember: vi.fn(),
   mcpServers: vi.fn(),
@@ -400,6 +404,74 @@ describe("Worker memory feedback", () => {
       signal: "up",
     }));
     expect(await screen.findByText(/Marked as useful/)).toBeTruthy();
+  });
+});
+
+describe("Worker typed memory candidate review", () => {
+  it("approves a candidate in one flow: pend, answer the canonical request, replay", async () => {
+    api.memoryFacts.mockResolvedValue({ scopes: ["user:alice"], facts: [] });
+    api.memoryCandidates
+      .mockResolvedValueOnce({
+        candidates: [{
+          id: "cand-1",
+          owner_scope: "user:alice",
+          kind: "procedural",
+          content: "Repository change completion",
+          data_class: "standard",
+          status: "candidate",
+          memory_key: "procedure::platform::coding-agent::repository-change::user:alice",
+          confidence: 0.9,
+          provenance: { source_kind: "feedback", source_ref: "run-1" },
+        }],
+      })
+      .mockResolvedValue({ candidates: [] });
+    // High-consequence review: the first call pends; the operator's click
+    // answers it; the exact review replays with the approval id.
+    api.memoryCandidateReview
+      .mockResolvedValueOnce({
+        status: "pending_human",
+        hitl_request_id: "approval-review",
+      })
+      .mockResolvedValueOnce({
+        status: "ok",
+        decision: "REVIEW_APPROVED",
+        memory_id: "cand-1",
+        candidate_status: "active",
+        version: 1,
+      });
+    api.respondHitl.mockResolvedValue({ status: "ok" });
+    api.memoryTimeline.mockResolvedValue({
+      memory_key: "procedure::platform::coding-agent::repository-change::user:alice",
+      versions: [{
+        id: "cand-1",
+        owner_scope: "user:alice",
+        kind: "procedural",
+        content: "Repository change completion",
+        data_class: "standard",
+        status: "active",
+        version: 1,
+        provenance: { source_kind: "feedback" },
+      }],
+    });
+
+    render(<MemoryView />);
+    fireEvent.click(await screen.findByRole("button", { name: /Review/ }));
+    expect(await screen.findByText("Repository change completion")).toBeTruthy();
+
+    const approve = await screen.findByRole("button", { name: "Approve" });
+    fireEvent.click(approve); // arm
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm approve" }));
+
+    await waitFor(() => expect(api.respondHitl).toHaveBeenCalledWith(
+      "approval-review",
+      "approve",
+    ));
+    expect(api.memoryCandidateReview).toHaveBeenLastCalledWith(
+      "cand-1",
+      { decision: "approve" },
+      "approval-review",
+    );
+    expect(await screen.findByText(/Candidate approved and active/)).toBeTruthy();
   });
 });
 

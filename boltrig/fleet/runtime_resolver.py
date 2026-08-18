@@ -60,6 +60,7 @@ class RuntimeResolver:
         *,
         pinned_policy: bool = False,
         allow_kernel_tools: bool = True,
+        outbound_text: str | None = None,
     ) -> Runtime:
         """Resolve one runtime under either caller-routing or pinned profile policy.
 
@@ -74,13 +75,17 @@ class RuntimeResolver:
         read-only Codex phase; permanent routing/decomposition uses that posture
         because its authored skills govern child selection, not side effects in
         the routing call itself.
-        """
+
+        ``outbound_text`` is the egress payload text; the PII scanner classifies
+        it before the destination is decided (SEC-13), so a detection forces the
+        sensitive route exactly as a caller classification would."""
         endpoint, model_route, gateway_virtual_key = (
             await self._resolve_runtime_policy_with_binding(
                 tenant_id,
                 capability,
                 context,
                 pinned_policy=pinned_policy,
+                outbound_text=outbound_text,
             )
         )
         self._require_pinned_codex_model(
@@ -105,6 +110,7 @@ class RuntimeResolver:
         context: InvocationContext | None,
         *,
         pinned_policy: bool,
+        outbound_text: str | None = None,
     ) -> tuple[ModelEndpoint | None, dict[str, str] | None, str | None]:
         (
             sensitive,
@@ -119,6 +125,7 @@ class RuntimeResolver:
             context=context,
             pinned_policy=pinned_policy,
             sensitive_endpoint_id=self._sensitive_endpoint_id,
+            outbound_text=outbound_text,
         )
         model_route: dict[str, str] | None = None
         gateway_virtual_key: str | None = None

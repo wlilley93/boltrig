@@ -188,8 +188,12 @@ class Spawner:
         tenant_id: str,
         capability: AgentCapability,
         context: InvocationContext | None = None,
+        *,
+        outbound_text: str | None = None,
     ):
-        return await self._runtime_resolver.runtime_for(tenant_id, capability, context)
+        return await self._runtime_resolver.runtime_for(
+            tenant_id, capability, context, outbound_text=outbound_text
+        )
 
     async def _invoke_runtime(
         self,
@@ -226,7 +230,15 @@ class Spawner:
         # the chat turn wrote against the ROOT run id.
         await self._inherit_adapter_bearer(tenant_id, context.run_id, run_id, context.on_behalf_of)
         try:
-            runtime = await self._runtime_for(tenant_id, capability, context)
+            # The composed prompt IS the egress payload: hand it to the routing
+            # seam so the PII scanner classifies it before the destination is
+            # decided (SEC-13). Detection reroutes; it never rewrites.
+            runtime = await self._runtime_for(
+                tenant_id,
+                capability,
+                context,
+                outbound_text=self._compose_prompt(merged_prompt, task),
+            )
             model_route = getattr(runtime, "model_route", None)
             if context.run_id and announce_child:
                 self._publish_subagent_event(context, task, skills, run_id, capability, spawn_rule)

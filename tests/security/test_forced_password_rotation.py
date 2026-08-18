@@ -193,3 +193,30 @@ def test_initiate_flags_the_account_it_seeds() -> None:
         "boltrig initiate no longer flags the account it seeds; COUNTY 8 D7's "
         "forced rotation is inert"
     )
+
+
+def test_rotating_kills_every_other_session_but_keeps_the_callers(monkeypatch):
+    """The rotation retires the OLD credential, so sessions minted against it must
+    die with it: an attacker's session from a phished password otherwise survived
+    the victim's own rotation for the full session lifetime. The reset path
+    already revoked everything; this is the authenticated twin, keeping only the
+    session that just proved knowledge of the old password."""
+    _, client, store, csrf = _logged_in(monkeypatch, must_change=False)
+
+    # A second, independent session for the same identity (the "attacker").
+    other = TestClient(client.app)
+    assert other.post(
+        "/v1/auth/login", json={"email": SEEDED, "password": SEED_PW}
+    ).status_code == 200
+    assert other.get("/v1/me/sessions").status_code == 200
+
+    done = client.post(
+        "/v1/auth/change-password",
+        headers={"x-boltrig-csrf": csrf},
+        json={"current_password": SEED_PW, "new_password": NEW_PW},
+    )
+    assert done.status_code == 200, done.text
+
+    # The caller keeps working; the other session is revoked.
+    assert client.get("/v1/me/sessions").status_code == 200
+    assert other.get("/v1/me/sessions").status_code == 401

@@ -22,6 +22,72 @@ async def _enabled_tools(kernel, tenant_id: str, adapter_id: str) -> list[str]:
     return sorted(enabled)
 
 
+async def _enabled_capabilities(kernel, tenant_id: str, adapter_id: str) -> list[str]:
+    """The canonical capabilities this connection actually serves.
+
+    ``enabled_tools`` above counts raw verb ids bound to the adapter - the
+    SOURCE OPERATIONS. Once a capability layer exists that stops being the
+    honest answer to "what can this connection do": two connections can serve
+    one capability, and a provider-prefixed verb id is not what the model ever
+    sees (SPEC §11.1 site 6). Only APPROVED bindings count, so a proposed
+    mapping is invisible here exactly as it is invisible to routing.
+    """
+    connection_ids = {
+        connection.id
+        for connection in await kernel.store.list_provider_connections(tenant_id)
+        if connection.adapter_id == adapter_id
+    }
+    if not connection_ids:
+        return []
+    # UNPINNED, deliberately. `binding.ref` is `crm.contact.search@1`, and every
+    # governance path reads the unpinned id: grant_verbs checks it, blocking_names
+    # drops the pin, governed_aliases resolves it. Publishing the pinned form made
+    # this page's most copyable string the one that matches nothing - paste it
+    # into a role scope or a skill's tool_grants and the grant is legal, silent
+    # and inert. The version is an addressing detail of one call, not an identity
+    # a person acts on.
+    return sorted(
+        {
+            binding.capability_id
+            for binding in await kernel.store.list_capability_bindings(tenant_id)
+            if binding.connection_id in connection_ids and binding.status == "approved"
+        }
+    )
+
+
+def _permitted_tools(principal, tools: list[str]) -> list[str]:
+    """The subset of a projection's tools this caller may actually call.
+
+    An author administers integrations and sees the whole list - that is the
+    job. For anyone else the projection is narrowed to what their grants reach,
+    so the page answers "what can I use" rather than "what has this tenant
+    wired up".
+    """
+    from boltrig.identity.rbac import can_author
+
+    if can_author(principal.role):
+        return list(tools)
+    return [verb for verb in tools if principal.grants.permits(verb)]
+
+
+def _may_see(principal, permitted: list[str]) -> bool:
+    """Whether a CONNECTION belongs in this caller's list at all.
+
+    Decided from what survived the narrowing, with one exception: an author
+    still sees a connection whose tool list is empty, which is how a revoked one
+    stays visible to the person who has to manage it.
+
+    This closes the door that made the route_required hardening half a measure.
+    Resolving a capability no longer names the tenant's connected systems to an
+    ungranted caller, and now neither does asking this route for the list. A
+    member with no integration grants sees an empty list, which is the true
+    answer rather than an outage (SPEC 11.11).
+    """
+    from boltrig.identity.rbac import can_author
+
+    return bool(permitted) or can_author(principal.role)
+
+
 async def _catalogue_view(kernel, tenant_id: str, item) -> dict:
     adapter = (
         await kernel.store.get_adapter(tenant_id, item.adapter_id)
@@ -84,15 +150,24 @@ def visible_to(connection, viewer: str) -> bool:
     kind of row rather than a tightening of an old surface -- but it is load
     bearing: accounts[].id is routinely an email address, so an unfenced list
     would hand every member every other member's provider identity.
+
+    This is the OWNERSHIP half of the fence. `_may_see` below is the CAPABILITY
+    half, and the two are complementary rather than alternatives: ownership
+    keeps one member's provider identity from another, grants keep the tenant's
+    wiring from a caller who can use none of it. The list route applies both.
     """
     return connection.level == "org" or connection.scope_id == viewer
 
 
 async def _connection_view(kernel, tenant_id: str, connection, viewer: str = "") -> dict:
+    revoked = connection.health == "revoked"
     enabled = (
+        [] if revoked else await _enabled_tools(kernel, tenant_id, connection.adapter_id)
+    )
+    capabilities = (
         []
-        if connection.health == "revoked"
-        else await _enabled_tools(kernel, tenant_id, connection.adapter_id)
+        if revoked
+        else await _enabled_capabilities(kernel, tenant_id, connection.adapter_id)
     )
     accounts = [
         {
@@ -114,6 +189,7 @@ async def _connection_view(kernel, tenant_id: str, connection, viewer: str = "")
         "is_own": connection.level == "user" and connection.scope_id == viewer,
         "accounts": accounts,
         "enabled_tools": enabled,
+        "enabled_capabilities": capabilities,
         "last_checked_at": (
             connection.last_checked_at.isoformat()
             if connection.last_checked_at
@@ -126,25 +202,36 @@ async def _connection_view(kernel, tenant_id: str, connection, viewer: str = "")
 def _register_reads(app, P, K) -> None:
     @app.get("/v1/integrations/catalogue")
     async def catalogue(k=K, p=P) -> dict:
+        # The catalogue is a SHELF - which integrations exist and whether they
+        # are available - and stays visible to every member, because knowing
+        # Slack is supported discloses nothing about this tenant. Its
+        # enabled_tools does, so that field is narrowed to what the caller may
+        # actually call.
         k.loader.health_snapshot()
         items = await k.store.list_integration_catalogue(p.tenant_id)
-        return {
-            "integrations": [
-                await _catalogue_view(k, p.tenant_id, item) for item in items
-            ]
-        }
+        views = [await _catalogue_view(k, p.tenant_id, item) for item in items]
+        for view in views:
+            view["enabled_tools"] = _permitted_tools(p, view["enabled_tools"])
+        return {"integrations": views}
 
     @app.get("/v1/integrations/connections")
     async def connections(k=K, p=P) -> dict:
+        # BOTH fences, because they refuse different things. `visible_to`
+        # is ownership: a personal connection is its owner's, and accounts[].id
+        # is routinely an email address. `_may_see` over the narrowed tool list
+        # is capability: a caller who can use none of it has no reason to learn
+        # it is there (SPEC 11.11). Dropping either one reopens a door.
         viewer = str(getattr(p, "subject", "") or "")
         rows = await k.store.list_integration_connections(p.tenant_id)
-        return {
-            "connections": [
-                await _connection_view(k, p.tenant_id, row, viewer)
-                for row in rows
-                if visible_to(row, viewer)
-            ]
-        }
+        listed = []
+        for row in rows:
+            if not visible_to(row, viewer):
+                continue
+            view = await _connection_view(k, p.tenant_id, row, viewer)
+            view["enabled_tools"] = _permitted_tools(p, view["enabled_tools"])
+            if _may_see(p, view["enabled_tools"]):
+                listed.append(view)
+        return {"connections": listed}
 
 
 def _member_connection_view(connection) -> dict:

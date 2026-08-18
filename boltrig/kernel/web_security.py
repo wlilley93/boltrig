@@ -54,6 +54,14 @@ def client_ip(request: Request) -> str | None:
     where CF sets the header and strips any client-supplied copy); otherwise the
     header is client-spoofable and the TCP peer is used. X-Forwarded-For is
     deliberately NEVER trusted (spoofable unless behind a known trusted proxy).
+
+    DEPLOYMENT NOTE (rate-limit blast radius, 2026-08-16): behind a tunnel or
+    reverse proxy WITHOUT the CF opt-in, every caller shares the proxy's TCP
+    peer address, so a per-IP bound like the login limiter's 30/min collapses
+    to ONE global bucket - 31 sprayed logins for distinct emails then 429 every
+    legitimate user for the window. Tunnel deployments MUST set
+    BOLTRIG_TRUST_CF_CONNECTING_IP (Cloudflare) or accept that the per-IP bound
+    is effectively org-wide; the per-identity bound is unaffected either way.
     """
     # Lazy: boltrig.config pulls in identity, which imports kernel.app - a
     # module-level import here would close a cycle.

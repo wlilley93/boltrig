@@ -27,6 +27,7 @@ from .work_items import WorkItemReadsMem
 from .workflow_triggers import WorkflowTriggerStoreMem
 from .workflow_schedules import WorkflowScheduleStoreMem
 from .authored_definitions_memory import AuthoredDefinitionStoreMem
+from .capability_routing import CapabilityRoutingStoreMem
 from .eval_cases import EvalCaseStoreMem
 from .credential_references import CredentialReferencePresenceMem
 from .ai_key_proposals import AiKeyProposalStoreMem
@@ -104,7 +105,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
                     ObservabilityReadsMem, ChannelDedupStoreMem,
                     ChannelOutboxStoreMem, PasswordResetStoreMem,
                     WorkflowTriggerStoreMem, WorkflowScheduleStoreMem,
-                    AuthoredDefinitionStoreMem,
+                    AuthoredDefinitionStoreMem, CapabilityRoutingStoreMem,
                     EvalCaseStoreMem, CredentialReferencePresenceMem,
                     AiKeyProposalStoreMem, McpLifecycleStoreMem,
                     ModelEndpointStoreMem, ConversationQueueStoreMem):
@@ -112,6 +113,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
 
     def __init__(self) -> None:
         self._init_authored_definition_state()
+        self._init_capability_routing_state()
         self._init_ai_key_proposal_state()
         self._init_background_job_state()
         self._init_mcp_lifecycle_state()
@@ -354,6 +356,20 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         item.status = new_status
         return True
 
+    async def transition_work_item_settled(
+        self, tenant_id, item_id, *, expected, new_status, result
+    ):
+        # The payload-carrying twin: status CAS + lease clear + result stamp in
+        # one conditional write (same event-loop-atomicity argument as above).
+        item = self._work.get((tenant_id, item_id))
+        if item is None or item.status != expected:
+            return False
+        item.status = new_status
+        item.lease_owner = None
+        item.lease_expires_at = None
+        item.result = result
+        return True
+
     async def claim_work_item(self, tenant_id, worker_id, lease_seconds):
         # atomic pending -> in_flight claim with a lease (US-FLT-05): no await between
         # scan and write (mirrors consume_hitl); insertion order stands in for the
@@ -434,6 +450,10 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         pending = HITLStatus.PENDING
         return [r for (t, _), r in self._hitl.items() if t == tenant_id and r.status == pending]
 
+    async def list_answered_hitl(self, tenant_id):
+        answered = HITLStatus.ANSWERED
+        return [r for (t, _), r in self._hitl.items() if t == tenant_id and r.status == answered]
+
     async def list_hitl_requests_for_requester(
         self, tenant_id, requested_by, statuses, *, limit=20
     ):
@@ -493,6 +513,41 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
             return (0, None)
         last = chain[-1]
         return (last.seq or 0, last.hash)
+
+    async def audit_outbox_enqueue(self, tenant_id, payload, append_error):
+        if not hasattr(self, "_audit_outbox"):
+            self._audit_outbox: list[dict] = []
+        self._audit_outbox.append(
+            {
+                "id": len(self._audit_outbox) + 1,
+                "tenant_id": tenant_id,
+                "payload": payload,
+                "append_error": append_error,
+                "attempts": 0,
+                "next_retry_at": utcnow(),
+                "created_at": utcnow(),
+            }
+        )
+
+    async def audit_outbox_due(self, tenant_id, now, limit=100):
+        rows = [
+            r for r in getattr(self, "_audit_outbox", [])
+            if r["next_retry_at"] <= now and r["tenant_id"] == tenant_id
+        ]
+        return rows[:limit]
+
+    async def audit_outbox_delete(self, outbox_id):
+        self._audit_outbox = [
+            r for r in getattr(self, "_audit_outbox", []) if r["id"] != outbox_id
+        ]
+
+    async def audit_outbox_mark_failed(self, outbox_id, append_error, next_retry_at):
+        for r in getattr(self, "_audit_outbox", []):
+            if r["id"] == outbox_id:
+                r["attempts"] += 1
+                r["append_error"] = append_error
+                r["next_retry_at"] = next_retry_at
+                return
 
     async def audit_append(self, event):
         self._audit.setdefault(event.tenant_id, []).append(event)
