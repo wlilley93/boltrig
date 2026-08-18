@@ -363,6 +363,16 @@ invariants:
       - tests/security/test_integration_scope.py::test_a_credential_sealed_before_scoping_still_resolves_for_the_org
       - tests/security/test_integration_scope.py::test_a_personal_connection_is_visible_only_to_its_owner
       - tests/security/test_integration_scope.py::test_an_org_and_a_personal_connection_coexist_and_only_the_owner_sees_theirs
+  SEC-203:
+    description: 'Whoever may CONNECT a personal integration credential may also disconnect it. control.integration.connect is low consequence, so any member may seal one, while control.integration.revoke is high consequence and every high-consequence control.integration.* verb is gated on an author role - which made connecting a one-way door, leaving a member holding a live third-party token that nothing they could reach would destroy. The pre-authorisation exempts exactly one case: the caller''s OWN user-scoped connection, which is operating their own seat rather than administering the organisation. The organisation''s shared row stays author-only, and another member''s row is reachable only through control.integration.revoke_member.'
+    tests:
+      - tests/security/test_integration_scope.py::test_a_member_can_disconnect_the_credential_a_member_may_connect
+  SEC-202:
+    description: 'An organisation administrator has a path to destroy a departed member''s personal integration credential, and that path does not widen what they may READ. Without it a member who leaves takes a live third-party token with them that nothing can reach: control.integration.revoke refuses a row that is not the caller''s, and the connection list hides a personal row from everyone but its owner. The administrator projection omits accounts entirely, because that field carries the member''s identity AT THE PROVIDER and administering a row is not a reason to read it. The list is author-role only and excludes the caller''s own rows. Revoking destroys that member''s sealed material and leaves the organisation''s shared connection serving every other member unchanged.'
+    tests:
+      - tests/security/test_integration_scope.py::test_an_administrator_sees_a_members_connection_without_their_provider_identity
+      - tests/security/test_integration_scope.py::test_the_member_connection_list_is_author_only_and_excludes_your_own
+      - tests/security/test_integration_scope.py::test_revoking_a_members_connection_destroys_only_their_credential
   SEC-185:
     description: 'The trusted-Codex wall admits exactly two postures and both refuse any production signal and require the explicit BOLTRIG_CODEX_TRUSTED flag - (a) the legacy single-operator dev posture (BOLTRIG_DEV_AUTH=1, no real ingress) and (b) the kernel-attested posture, where per-cell uids are verifiably in force (the dropped API holds the live spawner socket) and cell identity is kernel-attested end to end (SO_PEERCRED uid must equal the registered cell uid, J8; privilege re-proved at issuance, J5). Under (b) a real ingress posture - session login included - may coexist because the edge authenticates users, not cells; without per-cell uids the same session-auth env is still refused BEFORE any admit or bearer mint. This is not a production flip: production_ready stays False and the runtime remains test-gated. The SEC-184 kernel-tools lane runs under (b): a run mints its run-scoped token over the real MCP face, tools/list shows only granted verbs, a grant-denied verb is refused at the chokepoint, and the token is revoked at run end.'
     tests:
@@ -1667,6 +1677,10 @@ invariants:
       - tests/security/test_integration_scope.py::test_the_model_refuses_a_user_row_that_could_alias_or_borrow
       - tests/security/test_integration_scope.py::test_the_env_manifest_binding_answers_for_the_org
       - tests/security/test_integration_scope.py::test_pick_connection_prefers_the_owner_row_by_level_not_by_order
+  FR-INTCRED-03:
+    description: 'The administrator revoke verb serves exactly one case and says so in the audit trail: control.integration.revoke_member refuses the organisation''s shared row and refuses the caller''s own, each of which control.integration.revoke already serves. Two verbs rather than one verb with a role branch inside it, because the kernel invocation context carries GRANTS and not a role - reaching the verb IS the authority - and because one verb could never tell an auditor whether a member disconnected their own credential or an administrator cleaned up after them. Both verbs make the same single write, so the two paths cannot drift.'
+    tests:
+      - tests/security/test_integration_scope.py::test_the_administrator_verb_refuses_the_org_row_and_your_own
   FR-AGENT-MODEL-OVERRIDE-01:
     description: 'An agent capability model endpoint may select the exact Bifrost model but can never replace the Codex execution host with a provider-native runtime.'
     tests:

@@ -236,6 +236,13 @@ def compatibility_specs() -> list[VerbSpec]:
             additional=False,
         ),
         _spec(
+            "control.integration.revoke_member",
+            {"connection_id": _STRING},
+            ("connection_id",),
+            "Revoke another member's personal integration connection as an administrator",
+            additional=False,
+        ),
+        _spec(
             "control.eval_case.archive",
             {"id": _STRING},
             ("id",),

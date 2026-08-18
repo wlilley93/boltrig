@@ -316,6 +316,8 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/mint_token.py:1	resolve_pat_p
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/readiness.py:35	browser_automation_wanted	The stack tools THIS tenant's readiness may require.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/worker.py:118	purge_closed_conversations	Start the retention janitor (M11 / SEC-74), or None when disabled.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/config/admin.py:1	ConfigRevision	AdminConfig - the Admin Console service (Round Three, Epic ADM).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/config/control_approval.py:68	can_author	Whether this revocation is the caller disconnecting their OWN personal integration credential -- which is operating their own seat, not administering the organisation, and so does not need an author role.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/config/control_integrations.py:260	_revoke	Revoke ANOTHER member's personal connection, as an administrator.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/config/control_lifecycle.py:1	control.adapter.activate	Governed adapter suspension and removal - the inverse of activation (SEC-22).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/config/dev_egress.py:1	require_codex_trusted_posture	DEV-MODE EGRESS LOOPBACK: governed outbound sends diverted back into the stack that raised them, so nothing reaches a real recipient during development.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/config/dev_egress.py:114	dev_posture.posture_block	Return why the diversion does NOT apply, or None when it does.
@@ -377,7 +379,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/linux_peer_p
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/model_proxy_peer_listener.py:1	accept_once	Supervisor-ownable AF_UNIX ingress that attests each connecting peer.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/model_proxy_peer_listener.py:162	aclose	Accept, attest, and deliver a scoped bearer to each peer, forever.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/model_proxy_peer_registry.py:1	authorize	Atomic supervisor-owned registry for live Codex App Server identities.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/model_proxy_peer_registry.py:233	revoke	Run ``issue`` only while ``scope`` is registered LIVE, under the lock.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/model_proxy_peer_registry.py:233	issue	Run ``issue`` only while ``scope`` is registered LIVE, under the lock.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/model_proxy_tool_ceiling.py:1	CodexResponseStreamProcessor	Enforce a cell's tool ceiling on the model-call wire, and bridge Codex's MCP tool namespace across a gateway that cannot carry it (the one chokepoint).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/postgres_execution_ledger.py:97	MemoryLedgerState	Durable execution ledger backed by PostgreSQL.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/postgres_model_proxy_grants.py:44	MemoryModelProxyGrantStore	Durable model-proxy grant store backed by PostgreSQL.
@@ -448,7 +450,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_http.py:138	SecurityW
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_http.py:96	_approval_display_context	Is this exempted approval the one that ends the exemption? ([2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001, D4.) The sole-author exemption exists because a one-author tenant cannot satisfy four-eyes.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:142	authorize_approval_response	ONE definition of who may lawfully answer an APPROVAL request.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:301	approval_response_block	Require an independent, assigned human with the live action grant.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/integration_scope.py:57	_execute_adapter	Who this call is really being made by.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/integration_scope.py:75	_execute_adapter	Who this call is really being made by.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp.py:1	initialize	The kernel's MCP server face (Round Two, Epic MCP).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp_errors.py:1	_call_tool	Turning a kernel exception into the MCP result envelope a model actually reads.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/org_discovery_routes.py:18	list_orgs_for_email	List session switch candidates only from ``list_orgs_for_email`` for the caller identity.
@@ -658,7 +660,8 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/config/channel_addressing.py:143		Reject t
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_approval_adapters.py:140		Bind the reviewed endpoint/SEC-61 waiver so approval cannot be replayed
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/control_channel_approval.py:13		Public metadata-only delivery receipt;
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_generated_adapter.py:106		prevents accepting a generator extension this version cannot reconstruct.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/control_integrations.py:213		Fail-closed and checked HERE, not only at the route: the control verb
+ORDINARY	NO-SUBJECT	docstring	boltrig/config/control_integrations.py:208		The one write both revoke verbs make, so a second entry point cannot drift.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/control_integrations.py:252		Fail-closed and checked HERE, not only at the route: the control verb
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/control_integrations.py:81		Return the exact fail-closed reason for one provider-declared setup.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_lifecycle.py:51		The same predicate registration now applies, so the two cannot drift.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_lifecycle.py:90		stale reference cannot execute (SEC-22, mirrors review_and_activate).
@@ -1169,7 +1172,8 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/bifrost_models.py:4
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/chat_model_choices.py:201		Project exact model names, never endpoint topology or credentials.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/eval_routes.py:34		creation;
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/integration_setup.py:94		principal.subject, never principal.on_behalf_of: on_behalf_of names the
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/integrations.py:157		not_found rather than forbidden for somebody else's row: a 403 would
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/integrations.py:179		Every OTHER member's personal connections, for offboarding.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/integrations.py:224		not_found rather than forbidden for somebody else's row: a 403 would
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/model_endpoints.py:153		of this record and is never returned.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/model_endpoints.py:182		Project process-start model policy without provider topology or secrets.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/observability.py:250		so it cannot be the roster source).
@@ -1577,6 +1581,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:247	consume_approved_b
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:90	HITLRequest	Attach the answer -> resume bridge (NFR-REL-03): a callable (sync or async) fired with the answered :class:`HITLRequest`.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_expiry.py:1	run_hitl_expiry_forever	Periodic HITL timeout enforcement (SEC-14) - the expiry sweep janitor.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:250	_notify_request	The users who may lawfully answer this APPROVAL request right now.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/platform_routes/integrations.py:150	visible_to	The deliberately thin projection an administrator sees of somebody else's connection: enough to know it exists and to revoke it, and nothing more.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/ratelimit.py:1	RedisCounter	Rate limiting (FR-KER-05, US-KER-04).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/revertible.py:1	_unpublish_owned_verbs	Effects that carry their own inverse (K-1 companion, after Cordis).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/sensing_capability.py:158	status	Answer a request for a sensing capability, with a REASON.

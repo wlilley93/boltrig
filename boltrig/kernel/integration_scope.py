@@ -54,6 +54,24 @@ def scope_of(connection: IntegrationConnection | None, tenant_id: str) -> tuple[
     return connection.level, connection.scope_id
 
 
+async def is_own_personal_connection(store, params, context) -> bool:
+    """Whether the connection named in ``params`` is the caller's OWN personal one.
+
+    Read by the high-consequence pre-authorisation, which otherwise requires an
+    author role for every ``control.integration.*`` verb. It deliberately answers
+    False for a missing row: an unknown id is not something to relax a gate for,
+    and the handler raises the LookupError a moment later.
+    """
+    connection = await store.get_integration_connection(
+        context.tenant_id, str(params.get("connection_id") or "")
+    )
+    return (
+        connection is not None
+        and connection.level == "user"
+        and connection.scope_id == acting_owner(context)
+    )
+
+
 def acting_owner(context: Any) -> str:
     """Who this call is really being made by.
 

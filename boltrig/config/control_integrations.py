@@ -195,30 +195,27 @@ async def _connect(
     )
 
 
-async def _revoke(
-    store: Any,
-    loader: Any,
-    credentials: Any,
-    params: dict[str, Any],
-    context: Any,
-) -> Result:
-    await require_unchanged_approval_context(
-        store, loader, "control.integration.revoke", params, context
-    )
+async def _load_for_revocation(store, loader, verb: str, params, context):
+    """Re-check the approval context and return the row both revoke verbs act on."""
+    await require_unchanged_approval_context(store, loader, verb, params, context)
     connection_id = str(params["connection_id"])
     previous = await store.get_integration_connection(context.tenant_id, connection_id)
     if previous is None:
         raise LookupError("integration connection not found")
-    if previous.level != "org" and previous.scope_id != acting_owner(context):
-        # Fail-closed and checked HERE, not only at the route: the control verb
-        # is reachable directly, so a route-only check is bypassable. An org
-        # admin cleaning up after a departing member is not covered yet and
-        # would need its own path rather than a hole in this one.
-        raise ControlConflict("not_your_integration_connection")
+    return connection_id, previous
+
+
+async def _perform_revoke(store, credentials, connection_id: str, previous) -> Result:
+    """The one write both revoke verbs make, so a second entry point cannot drift.
+
+    Reached only after each verb has applied its own authority check. Revoking an
+    already-revoked row is a success rather than a conflict: a departed member's
+    connection is exactly the kind an administrator may find already dealt with.
+    """
     if previous.health == "revoked":
         return Result.success({"connection_id": connection_id})
     revoked, credential_ref, deleted = await store.revoke_integration_connection_with_credential(
-        context.tenant_id, connection_id
+        previous.tenant_id, connection_id
     )
     if revoked is None:
         return Result.success({"connection_id": connection_id})
@@ -226,17 +223,67 @@ async def _revoke(
         credential_ref
         and credentials is not None
         and credentials.unbind_adapter_credential(
-            context.tenant_id, previous.adapter_id, credential_ref, previous.level
+            previous.tenant_id, previous.adapter_id, credential_ref, previous.level
         )
     )
     return Result.success(
         {
             "connection_id": connection_id,
             "integration_id": previous.integration_id,
+            "level": previous.level,
+            "scope_id": previous.scope_id,
             "credential_detached": detached,
             "owned_credential_deleted": deleted,
         }
     )
+
+
+async def _revoke(
+    store: Any,
+    loader: Any,
+    credentials: Any,
+    params: dict[str, Any],
+    context: Any,
+) -> Result:
+    connection_id, previous = await _load_for_revocation(
+        store, loader, "control.integration.revoke", params, context
+    )
+    if previous.level != "org" and previous.scope_id != acting_owner(context):
+        # Fail-closed and checked HERE, not only at the route: the control verb
+        # is reachable directly, so a route-only check is bypassable. An org
+        # admin cleaning up after a departing member goes through
+        # control.integration.revoke_member instead of a hole in this one.
+        raise ControlConflict("not_your_integration_connection")
+    return await _perform_revoke(store, credentials, connection_id, previous)
+
+
+async def _revoke_member(
+    store: Any,
+    loader: Any,
+    credentials: Any,
+    params: dict[str, Any],
+    context: Any,
+) -> Result:
+    """Revoke ANOTHER member's personal connection, as an administrator.
+
+    Without this a departed member's sealed third-party credential outlives them
+    with nothing able to reach it: ``_revoke`` refuses a row that is not the
+    caller's, and the connection routes hide it from everyone but its owner.
+
+    It deliberately refuses the caller's OWN row and the org's shared one. Each is
+    reachable through ``control.integration.revoke``, and letting one verb serve
+    both cases would leave the audit trail unable to say which of the two things
+    happened. No role is consulted: reaching this verb at all is the authority,
+    granted by the lattice exactly as every other ``control.*`` verb is.
+    """
+    connection_id, previous = await _load_for_revocation(
+        store, loader, "control.integration.revoke_member", params, context
+    )
+    if previous.level == "org":
+        raise ControlConflict("not_a_member_integration_connection")
+    if previous.scope_id == acting_owner(context):
+        raise ControlConflict("use_integration_revoke_for_your_own_connection")
+    return await _perform_revoke(store, credentials, connection_id, previous)
 
 
 async def execute_integration_operation(
@@ -251,4 +298,6 @@ async def execute_integration_operation(
         return await _connect(store, loader, credentials, params, context)
     if verb == "control.integration.revoke":
         return await _revoke(store, loader, credentials, params, context)
+    if verb == "control.integration.revoke_member":
+        return await _revoke_member(store, loader, credentials, params, context)
     return None

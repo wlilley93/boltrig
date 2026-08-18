@@ -10,6 +10,10 @@ FR-INTCRED-01: setup and dispatch derive the SAME acting identity, so a personal
               credential is looked up under the id it was filed under.
 FR-INTCRED-02: one active connection per adapter PER SCOPE - an org row and a
               user row coexist; two rows at one scope fail closed.
+SEC-202     : an administrator can destroy a departed member's personal
+              credential, and cannot read their provider identity doing it.
+FR-INTCRED-03: the administrator verb serves exactly one case - it refuses the
+              org's shared row and refuses the caller's own.
 """
 
 from __future__ import annotations
@@ -36,6 +40,11 @@ from boltrig.kernel.app import create_app
 # The catalogue + adapter + contract fixture is 60 lines and already exists next
 # door; duplicating it to reach the routes would be worse than importing it, and
 # tests/approval is already imported across test modules the same way.
+from boltrig.config.control_approval import control_approval_context
+from boltrig.config.control_integrations import execute_integration_operation
+from boltrig.config.control_safety import ControlConflict
+from boltrig.kernel.hitl import canonical_approval_value
+from tests.approval import approved_request
 from tests.security.test_integration_connections import _headers, _kernel
 
 T = "acme"
@@ -357,3 +366,241 @@ def test_an_org_and_a_personal_connection_coexist_and_only_the_owner_sees_theirs
     assert asyncio.run(
         kernel.credentials.resolve_for_adapter(tenant, "memory-tickets", "bob")
     ).material["token"] == "org-token-000"
+
+
+# --- offboarding: an administrator reaching a departed member's credential ---
+
+
+def _offboarding_kernel():
+    """An org that allows personal credentials, with alice's own already sealed."""
+    tenant = "integration-tenant"
+    kernel, store = asyncio.run(_kernel(with_connection=False, manual_contract=True))
+    asyncio.run(
+        store.create_org(
+            Organisation(
+                id=tenant,
+                name="Integration",
+                slug="integration",
+                allow_own_integration_credentials=True,
+            )
+        )
+    )
+    client = TestClient(create_app(kernel))
+
+    def connect(level: str, subject: str, token: str):
+        return client.post(
+            "/v1/integrations/tickets/secrets",
+            json={
+                "fields": {
+                    "token": token,
+                    "account_id": f"{subject}@example.com",
+                    "account_label": subject.title(),
+                },
+                "level": level,
+            },
+            headers=_headers(subject=subject),
+        )
+
+    assert connect("org", "admin", "org-token-000").status_code == 201
+    assert connect("user", "alice", "alice-token-11").status_code == 201
+    return kernel, store, client, tenant
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-202")
+def test_an_administrator_sees_a_members_connection_without_their_provider_identity():
+    _, _, client, _ = _offboarding_kernel()
+    rows = client.get(
+        "/v1/integrations/member-connections", headers=_headers(subject="admin")
+    ).json()["connections"]
+    assert [row["owner"] for row in rows] == ["alice"]
+    # The whole point of the reduced projection: accounts[].id is alice's address
+    # at the provider, and administering her row is not a reason to read it.
+    assert "accounts" not in rows[0]
+    assert "alice@example.com" not in repr(rows)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-202")
+def test_the_member_connection_list_is_author_only_and_excludes_your_own():
+    _, _, client, _ = _offboarding_kernel()
+    denied = client.get(
+        "/v1/integrations/member-connections",
+        headers=_headers(subject="bob", role="member"),
+    )
+    assert denied.status_code == 403
+    # And an author sees only OTHER members' rows: alice administering asks about
+    # everyone but herself, so the revoke below can refuse a self-revocation as a
+    # fail-closed guard rather than as a dead end the console walks her into.
+    own = client.get(
+        "/v1/integrations/member-connections", headers=_headers(subject="alice")
+    ).json()["connections"]
+    assert own == []
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-202")
+def test_revoking_a_members_connection_destroys_only_their_credential():
+    kernel, store, client, tenant = _offboarding_kernel()
+    rows = client.get(
+        "/v1/integrations/member-connections", headers=_headers(subject="admin")
+    ).json()["connections"]
+    response = approved_request(
+        client,
+        kernel,
+        tenant,
+        "DELETE",
+        f"/v1/integrations/member-connections/{rows[0]['id']}",
+        headers=_headers(subject="admin"),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "revoked"
+    assert (body["level"], body["scope_id"]) == ("user", "alice")
+
+    # Alice now falls back to the org credential, and the org's is untouched.
+    for subject in ("alice", "bob"):
+        assert asyncio.run(
+            kernel.credentials.resolve_for_adapter(tenant, "memory-tickets", subject)
+        ).material["token"] == "org-token-000"
+    # And her sealed material is gone rather than merely unreachable.
+    assert "alice-token-11" not in repr(store._creds)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("FR-INTCRED-03")
+def test_the_administrator_verb_refuses_the_org_row_and_your_own():
+    kernel, store, client, tenant = _offboarding_kernel()
+    rows = asyncio.run(store.list_integration_connections(tenant))
+    by_level = {row.level: row.id for row in rows}
+
+    # Both refusals are raised by the handler, which runs only on the approved
+    # replay: revocation is high consequence, so the first call is always held.
+    org = approved_request(
+        client,
+        kernel,
+        tenant,
+        "DELETE",
+        f"/v1/integrations/member-connections/{by_level['org']}",
+        headers=_headers(subject="admin"),
+    )
+    assert org.status_code == 409  # the wire reports the CLASS, not the message
+
+    # Alice may disconnect her own -- through control.integration.revoke, not
+    # this verb. One verb per case is what keeps the audit able to say which of
+    # the two things happened.
+    own = approved_request(
+        client,
+        kernel,
+        tenant,
+        "DELETE",
+        f"/v1/integrations/member-connections/{by_level['user']}",
+        headers=_headers(subject="alice"),
+    )
+    assert own.status_code == 409
+    # Neither refusal touched anything: both credentials still resolve.
+    assert asyncio.run(
+        kernel.credentials.resolve_for_adapter(tenant, "memory-tickets", "alice")
+    ).material["token"] == "alice-token-11"
+    assert asyncio.run(
+        kernel.credentials.resolve_for_adapter(tenant, "memory-tickets", "bob")
+    ).material["token"] == "org-token-000"
+
+    # And the two refusals ARE distinct, which only the verb can show: the
+    # transport collapses every ControlConflict onto one reason string.
+    for level, subject, expected in (
+        ("org", "admin", "not_a_member_integration_connection"),
+        ("user", "alice", "use_integration_revoke_for_your_own_connection"),
+    ):
+        with pytest.raises(ControlConflict) as raised:
+            asyncio.run(
+                _revoke_member_directly(kernel, store, tenant, by_level[level], subject)
+            )
+        assert str(raised.value) == expected
+
+
+async def _revoke_member_directly(kernel, store, tenant, connection_id, subject):
+    """Call the verb past the HTTP layer, carrying the approval evidence the
+    handler demands, so a ControlConflict surfaces with its own message."""
+    params = {"connection_id": connection_id}
+    context = InvocationContext(tenant_id=tenant, actor=subject)
+    # The role the HTTP door stamps on; the pre-authorisation reads it from here.
+    context.extra["principal_role"] = "org-admin"
+    resolved = await control_approval_context(
+        store, kernel.loader, "control.integration.revoke_member", params, context
+    )
+    context.extra["approval_request_fingerprint"] = "f" * 64
+    context.extra["approval_resource_context"] = canonical_approval_value(resolved)
+    return await execute_integration_operation(
+        store,
+        kernel.loader,
+        kernel.credentials,
+        "control.integration.revoke_member",
+        params,
+        context,
+    )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-203")
+def test_a_member_can_disconnect_the_credential_a_member_may_connect():
+    """Connecting is low consequence and revoking is high, and every
+    high-consequence control.integration.* verb was gated on an author role -- so
+    a member could seal a personal token and never destroy it."""
+    tenant = "integration-tenant"
+    kernel, store = asyncio.run(_kernel(with_connection=False, manual_contract=True))
+    asyncio.run(
+        store.create_org(
+            Organisation(
+                id=tenant,
+                name="Integration",
+                slug="integration",
+                allow_own_integration_credentials=True,
+            )
+        )
+    )
+    client = TestClient(create_app(kernel))
+    member = _headers(subject="carol", role="member")
+
+    created = client.post(
+        "/v1/integrations/tickets/secrets",
+        json={
+            "fields": {
+                "token": "carol-token-999",
+                "account_id": "carol@example.com",
+                "account_label": "Carol",
+            },
+            "level": "user",
+        },
+        headers=member,
+    )
+    assert created.status_code == 201
+    connection_id = created.json()["connection"]["id"]
+
+    revoked = approved_request(
+        client, kernel, tenant, "DELETE",
+        f"/v1/integrations/connections/{connection_id}", headers=member,
+    )
+    assert revoked.status_code == 200 and revoked.json()["status"] == "revoked"
+    assert "carol-token-999" not in repr(store._creds)
+
+    # The relaxation is exactly this one case: the org's shared row is still
+    # administration, and a member is still refused it.
+    org = client.post(
+        "/v1/integrations/tickets/secrets",
+        json={
+            "fields": {
+                "token": "org-token-0000",
+                "account_id": "ops@example.com",
+                "account_label": "Ops",
+            },
+            "level": "org",
+        },
+        headers=_headers(subject="admin"),
+    )
+    assert org.status_code == 201
+    denied = client.delete(
+        f"/v1/integrations/connections/{org.json()['connection']['id']}",
+        headers=member,
+    )
+    assert denied.status_code == 403

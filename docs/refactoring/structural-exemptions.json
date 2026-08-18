@@ -347,7 +347,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/config/control_compat_specs.py": {
-      "max_file_lines": 272,
+      "max_file_lines": 279,
       "max_function_lines": 83,
       "over_limit_functions": [
         {
@@ -357,7 +357,7 @@
         }
       ],
       "owner": "configuration-maintainers",
-      "reason": "_tenancy_specs is a single declarative table of tenancy compatibility specs. 2026-08-11: recorded when per-model modality specs were added. It reads as data, not logic, and breaking it up would hide which specs exist behind indirection. 2026-08-17 (per-user integration credentials): +1 for the allow_own_integration_credentials org spec entry. It is one key in the control.org.update table and belongs beside allow_own_ai_keys, which is the flag it deliberately parallels; extracting to reclaim the line would separate two policies a reader needs to compare. The same change then added the connect verb its 'level' property and the note saying why there is no scope_id beside it: identity is authenticated-by-construction, so the kernel derives the owner from the caller rather than believing the request, and a reader of a credential spec needs to know that without leaving the file.",
+      "reason": "_tenancy_specs is a single declarative table of tenancy compatibility specs. 2026-08-11: recorded when per-model modality specs were added. It reads as data, not logic, and breaking it up would hide which specs exist behind indirection. 2026-08-17 (per-user integration credentials): +1 for the allow_own_integration_credentials org spec entry. It is one key in the control.org.update table and belongs beside allow_own_ai_keys, which is the flag it deliberately parallels; extracting to reclaim the line would separate two policies a reader needs to compare. The same change then added the connect verb its 'level' property and the note saying why there is no scope_id beside it: identity is authenticated-by-construction, so the kernel derives the owner from the caller rather than believing the request, and a reader of a credential spec needs to know that without leaving the file. 2026-08-18 (member connection offboarding): +7 for the control.integration.revoke_member spec. It is one declarative entry in the same list as control.integration.revoke and has to sit beside it to be read as the pair it is.",
       "expires": "2026-12-31"
     }
   }

@@ -147,6 +147,73 @@ def _register_reads(app, P, K) -> None:
         }
 
 
+def _member_connection_view(connection) -> dict:
+    """The deliberately thin projection an administrator sees of somebody else's
+    connection: enough to know it exists and to revoke it, and nothing more.
+
+    ``accounts`` is the omission that matters. It carries the member's identity AT
+    THE PROVIDER -- routinely a personal email address -- which is why
+    :func:`visible_to` hides these rows from everyone but their owner. Offboarding
+    needs to know THAT a member connected a provider, never which account they
+    used, so widening the fence to administer these rows must not widen it to read
+    them. ``enabled_tools`` is left out for a duller reason: it is a property of
+    the adapter, identical on every row, and costs a verb scan each time.
+    """
+    return {
+        "id": connection.id,
+        "integration_id": connection.integration_id,
+        "label": connection.label,
+        "health": connection.health,
+        "credential_ref_present": bool(connection.credential_ref),
+        "level": connection.level,
+        "owner": connection.scope_id,
+        "last_checked_at": (
+            connection.last_checked_at.isoformat() if connection.last_checked_at else None
+        ),
+        "created_at": connection.created_at.isoformat(),
+    }
+
+
+def _register_member_connections(app, P, K) -> None:
+    @app.get("/v1/integrations/member-connections")
+    async def member_connections(k=K, p=P) -> dict:
+        """Every OTHER member's personal connections, for offboarding.
+
+        The caller's own are excluded rather than merged in: they already appear
+        on /v1/integrations/connections, and keeping them out means the revoke
+        below can refuse a self-revocation as the fail-closed guard it is instead
+        of as a dead end the console can walk a user into.
+        """
+        require_author(p)
+        viewer = str(getattr(p, "subject", "") or "")
+        rows = await k.store.list_integration_connections(p.tenant_id)
+        return {
+            "connections": [
+                _member_connection_view(row)
+                for row in rows
+                if row.level != "org" and row.scope_id != viewer
+            ]
+        }
+
+    @app.delete("/v1/integrations/member-connections/{connection_id}")
+    async def revoke_member_connection(
+        connection_id: str, request: Request, k=K, p=P
+    ) -> JSONResponse:
+        """Destroy a departing member's sealed credential. Author roles only, and
+        the control verb re-checks everything: this route is not the fence."""
+        require_author(p)
+        output, pending = await dispatch_control_route(
+            k,
+            p,
+            "control.integration.revoke_member",
+            {"connection_id": connection_id},
+            request=request,
+        )
+        if pending is not None:
+            return pending
+        return JSONResponse({"status": "revoked", **(output or {})})
+
+
 def _register_connection_lifecycle(app, P, K) -> None:
     @app.get("/v1/integrations/connections/{connection_id}/health")
     async def connection_health(connection_id: str, k=K, p=P) -> JSONResponse:
@@ -217,3 +284,4 @@ def register(app, P, K) -> None:
     _register_reads(app, P, K)
     register_integration_setup(app, P, K, connection_view=_connection_view)
     _register_connection_lifecycle(app, P, K)
+    _register_member_connections(app, P, K)

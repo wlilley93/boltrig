@@ -2001,6 +2001,31 @@ export interface IntegrationConnectionResponse {
   connection: IntegrationConnection;
 }
 
+/**
+ * Another member's personal connection, as an ADMINISTRATOR sees it while
+ * offboarding them.
+ *
+ * Deliberately not an IntegrationConnection: `accounts` is absent, because it
+ * carries the member's identity at the provider and administering a row is not a
+ * reason to read it. `owner` is the same value `scope_id` holds on the fuller
+ * type, named for what it means on this one.
+ */
+export interface MemberIntegrationConnection {
+  id: string;
+  integration_id: string;
+  label: string;
+  health: IntegrationConnectionHealth;
+  credential_ref_present: boolean;
+  level: IntegrationConnectionLevel;
+  owner: string;
+  last_checked_at?: string | null;
+  created_at: string;
+}
+
+export interface MemberIntegrationConnectionsResponse {
+  connections: MemberIntegrationConnection[];
+}
+
 export interface IntegrationSecretSubmission {
   fields: Record<string, string>;
   label?: string;

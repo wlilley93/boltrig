@@ -103,5 +103,10 @@ class IntegrationConnection:
             self.scope_id = self.tenant_id
         elif not self.scope_id:
             raise ValueError("a user-scoped integration connection needs a scope_id")
-        if self.level == "user" and not self.credential_owned:
-            raise ValueError("a user-scoped integration connection must own its credential")
+        if self.level == "user" and self.credential_ref and not self.credential_owned:
+            # BORROWING is what this forbids: a member's row pointing at the
+            # org's sealed credential would have the audit record the call as
+            # theirs. A revoked row points at nothing, owns nothing, and is
+            # rebuilt through here -- so keying on credential_ref rather than on
+            # credential_owned alone is what lets a member disconnect at all.
+            raise ValueError("a user-scoped integration connection may not borrow a credential")

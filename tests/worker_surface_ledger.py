@@ -533,6 +533,13 @@ DELETE /v1/integrations/connections/{connection_id} disconnectIntegration
 """,
 )
 _surface(
+    "apps/worker/src/components/integrations/MemberConnections.tsx",
+    """
+GET /v1/integrations/member-connections memberIntegrationConnections
+DELETE /v1/integrations/member-connections/{connection_id} revokeMemberIntegrationConnection
+""",
+)
+_surface(
     "apps/worker/src/components/DeviceSettings.tsx",
     """
 GET /v1/devices devices
@@ -748,4 +755,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 }
 
 
-EXPECTED_ROUTE_COUNT = 290
+EXPECTED_ROUTE_COUNT = 292
