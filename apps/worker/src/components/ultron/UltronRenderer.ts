@@ -21,6 +21,7 @@
 
 import { type FloatUniforms } from "../canvas/glResources";
 import { UltronPasses, type UltronDrive } from "./ultronPasses";
+import { ULTRON_WAVE, VoiceWave } from "../canvas/voiceWave";
 import {
   RESTING_PHENOTYPE,
   readBodyPhenotype,
@@ -44,7 +45,6 @@ import {
 } from "../canvas/bodyPresets";
 import type { UltronStageState } from "./UltronState";
 
-const SILENT_BANDS = new Float32Array(8);
 
 export interface UltronRendererOptions {
   /** Deep blue base. */
@@ -77,9 +77,7 @@ export class UltronRenderer {
   private size: [number, number] = [0, 0];
   private state: UltronStageState | null = null;
   private pheno: BodyPhenotype = RESTING_PHENOTYPE;
-  private waveT = 10;
-  private waveAmp = 0;
-  private bands = new Float32Array(8);
+  private readonly wave = new VoiceWave(ULTRON_WAVE);
   private _status: Status = { state: "idle" };
   /**
    * What is being DRAWN, which is not the same as what the mode asks for.
@@ -208,26 +206,10 @@ export class UltronRenderer {
   }
 
   update(state: UltronStageState): void {
-    // AN ONSET TOPS THE RING UP; it only restarts it once the ring has died. See
-    // the same block in JarvisNeuralRenderer for why: resetting the clock on every
-    // syllable puts the front back at the centre before it has reached the shell,
-    // so it never completes a round trip and speech pings once per syllable however
-    // long the reverb tail is set to.
-    const onset = typeof state.onset === "number" ? state.onset : 0;
-    if (onset > 0.35) {
-      if (this.waveAmp < 0.25) {
-        this.waveT = 0;
-        this.waveAmp = Math.min(1, onset);
-      } else if (this.waveT > 0.12) {
-        this.waveAmp = Math.min(1, this.waveAmp + onset * 0.6);
-      }
-    }
-    const bands = state.bands;
-    if (bands && bands.length === 8) {
-      for (let i = 0; i < 8; i++) this.bands[i] = Math.min(1, Math.max(0, bands[i]));
-    } else {
-      this.bands.set(SILENT_BANDS);
-    }
+    // See canvas/voiceWave for why an onset tops the ring up rather than
+    // restarting it, and why only silence starts a fresh front.
+    this.wave.onset(state.onset);
+    this.wave.setBands(state.bands);
     this.state = state;
   }
 
@@ -328,15 +310,7 @@ export class UltronRenderer {
     this.lastFrameAt = nowMs;
     if (!this.reducedMotion) this.animClock += dt;
 
-    this.waveT += dt;
-    // SLOW, so the shader's reverb decay is what governs the ring.
-    //
-    // At 2.2 per second this envelope was down to 11% within a second, which killed
-    // every front before it could reach the shell and come back -- so the
-    // reverberation existed in the arithmetic and was never seen. There are two
-    // decays in this system and only one of them should be doing the shaping: this
-    // one keeps the excitation alive, uReverb.z decides how long it rings.
-    this.waveAmp *= Math.exp(-dt * 0.5);
+    this.wave.advance(dt);
 
     const mode = this.state?.mode ?? "standby";
     const level = Math.min(1, Math.max(0, this.state?.level ?? 0));
@@ -353,12 +327,12 @@ export class UltronRenderer {
       dt,
       energy,
       aggression,
-      bands: this.bands,
+      bands: this.wave.bands,
       // Speaking is when the voice should move him. Idle drift stays idle drift
       // -- a body that pulsed to silence would be pulsing to nothing.
       voice: mode === "speaking" ? Math.max(0.35, level) : level * 0.35,
-      waveT: this.waveT,
-      waveAmp: this.waveAmp,
+      waveT: this.wave.t,
+      waveAmp: this.wave.amp,
       radius: 1.0 - this.pheno.tension * 0.10,
       // Speaking breathes between onsets; a body that only moved on a hard
       // consonant reads as flinching rather than talking.

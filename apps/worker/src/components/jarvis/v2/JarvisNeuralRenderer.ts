@@ -81,19 +81,14 @@ import {
 import type { JarvisStageState } from "../JarvisState";
 import type { FloatUniforms } from "../../canvas/glResources";
 import { NeuralPasses, type Drive } from "./neuralPasses";
+import { JARVIS_WAVE, VoiceWave } from "../../canvas/voiceWave";
+import {
+  jarvisPalette,
+  selectShownTuning,
+  type NeuralRendererOptions,
+} from "./jarvisFrame";
 
-/** Eight zeroes, reused rather than reallocated every frame. */
-const SILENT_BANDS = new Float32Array(8);
-
-export interface NeuralRendererOptions {
-  /** Base warm colour. Defaults to the JARVIS orange. */
-  warm?: [number, number, number];
-  /** Hot core colour. */
-  hot?: [number, number, number];
-  /** The fringe band's colour -- see FRINGE_GLSL in glslCommon.ts. */
-  fringe?: [number, number, number];
-  maxDevicePixelRatio?: number;
-}
+export type { NeuralRendererOptions } from "./jarvisFrame";
 
 type Status = { state: "idle" | "running" | "failed"; reason?: string };
 
@@ -117,10 +112,7 @@ export class JarvisNeuralRenderer {
   private size: [number, number] = [0, 0];
   private state: JarvisStageState | null = null;
   private pheno: BodyPhenotype = RESTING_PHENOTYPE;
-  /** Seconds since the last speech onset, for the travelling wave. */
-  private waveT = 10;
-  private waveAmp = 0;
-  private bands = new Float32Array(8);
+  private readonly wave = new VoiceWave(JARVIS_WAVE);
   private _status: Status = { state: "idle" };
   /**
    * What is being DRAWN, which is not the same as what the mode asks for.
@@ -265,38 +257,10 @@ export class JarvisNeuralRenderer {
   }
 
   update(state: JarvisStageState): void {
-    // AN ONSET TOPS THE RING UP; it only restarts it once the ring has died.
-    //
-    // It used to reset waveT to 0 on every onset, on the reasoning that two
-    // syllables should send two waves rather than one twice as strong. That is
-    // right for a single travelling front and wrong now that the front REFLECTS:
-    // resetting the clock puts it back at the centre before it has reached the
-    // shell, so it never completes a round trip and speech pings once per syllable
-    // however long the reverb tail is set to. Measured as a val trace that was flat
-    // between a handful of large spikes -- the shape of a ping, not a ring.
-    //
-    // So a syllable arriving into a live ring re-excites it in place: the clock
-    // keeps running, the front keeps bouncing, and the amplitude is topped up
-    // rather than replaced. Only silence long enough for the ring to fade below a
-    // quarter starts a fresh front, which is what makes the first word of a
-    // sentence land differently from the fifth.
-    const onset = typeof state.onset === "number" ? state.onset : 0;
-    if (onset > 0.35) {
-      if (this.waveAmp < 0.25) {
-        this.waveT = 0;
-        this.waveAmp = Math.min(0.85, onset);
-      } else if (this.waveT > 0.12) {
-        // Capped below full: a fast run of syllables kept topping this to 1 and
-        // held it there, which is the heave rather than the ring.
-        this.waveAmp = Math.min(0.72, this.waveAmp + onset * 0.4);
-      }
-    }
-    const bands = state.bands;
-    if (bands && bands.length === 8) {
-      for (let i = 0; i < 8; i++) this.bands[i] = Math.min(1, Math.max(0, bands[i]));
-    } else {
-      this.bands.set(SILENT_BANDS);
-    }
+    // See canvas/voiceWave for why an onset tops the ring up rather than
+    // restarting it, and why only silence starts a fresh front.
+    this.wave.onset(state.onset);
+    this.wave.setBands(state.bands);
     this.state = state;
   }
 
@@ -325,49 +289,22 @@ export class JarvisNeuralRenderer {
     if (!passes || !this.canvas) return;
     this.resize();
     const d = this.drive(nowMs);
-    // NO LENS FLARE ON A HOLOGRAM, AND A WARM HEART. Three things stacked at the
-    // centre: the field converges there, the composite adds two gaussians on top
-    // of it, and the starburst laid a hot bar fifteen times wider than it was
-    // tall straight across the middle. That bar is what read as a white block
-    // shining through the iris. It is off here -- it belongs to Colossus, whose
-    // CRT beam earns a horizontal streak -- and the lobes now sit at the warm
-    // end, so the heart stays bright without leaving the orange.
+    const picked = selectShownTuning({
+      live: this.live,
+      pinned: this.tuning,
+      mode: this.state?.mode ?? "standby",
+      introLeft: this.introLeft,
+      reducedMotion: this.reducedMotion,
+      easeDt: this.easeDt,
+      animClock: this.animClock,
+    });
+    this.live = picked.live;
+    this.introLeft = picked.introLeft;
     // The mood is applied to a COPY per frame rather than stored, so `tuning`
     // stays exactly what the bench set and what Copy settings would print. A
     // phenotype folded into the stored value would slowly rewrite the look
     // being tuned, which is the one thing a bench must not do.
-    // The mode is the target and `live` chases it; the pulses then ride on top.
-    // An explicit bench override replaces the target outright, which is why
-    // dragging a slider is instant.
-    const mode = this.state?.mode ?? "standby";
-    let shown = this.live;
-    if (this.introLeft > 0 && !this.reducedMotion) {
-      // THE DRAW-IN, and it outranks a pinned tuning for as long as it lasts. The
-      // destination is the pin when there is one, so a bench with a saved look
-      // animates to that look rather than to the shipped preset.
-      this.introLeft = Math.max(0, this.introLeft - this.easeDt);
-      const target = this.tuning ?? jarvisModeTuning(mode);
-      this.live = easeTuning(this.live, target, easeFactor(this.easeDt));
-      shown = this.live;
-    } else if (this.tuning) {
-      shown = this.tuning;
-      // KEEP `live` ON WHAT IS ACTUALLY DRAWN while pinned. Otherwise it holds
-      // whatever it was when the last ease finished, and the next transition starts
-      // from that stale value rather than from the look on screen -- so a change of
-      // mode would jump backwards before travelling forwards.
-      this.live = this.tuning;
-    } else {
-      const target = jarvisModeTuning(mode);
-      // Reduced motion gets the destination and none of the journey: the entry
-      // animation and the pulses are both motion, and neither is information.
-      this.live = this.reducedMotion
-        ? target
-        : easeTuning(this.live, target, easeFactor(this.easeDt));
-      shown = this.reducedMotion
-        ? this.live
-        : applyPulses(this.live, JARVIS_PULSES[mode], this.animClock);
-    }
-    passes.render(d, this.palette(), jarvisEmotion(shown, this.pheno));
+    passes.render(d, jarvisPalette(this.opts, this.pheno), jarvisEmotion(picked.shown, this.pheno));
   }
 
   // ------------------------------------------------------------------ internals
@@ -409,17 +346,7 @@ export class JarvisNeuralRenderer {
     this.lastFrameAt = nowMs;
     if (!this.reducedMotion) this.animClock += dt;
 
-    this.waveT += dt;
-    // The wave decays rather than being switched off, so the last syllable of a
-    // sentence finishes crossing the body.
-    // SLOW, so the shader's reverb decay is what governs the ring.
-    //
-    // At 2.2 per second this envelope was down to 11% within a second, which killed
-    // every front before it could reach the shell and come back -- so the
-    // reverberation existed in the arithmetic and was never seen. There are two
-    // decays in this system and only one of them should be doing the shaping: this
-    // one keeps the excitation alive, uReverb.z decides how long it rings.
-    this.waveAmp *= Math.exp(-dt * 0.5);
+    this.wave.advance(dt);
 
     const mode = this.state?.mode ?? "standby";
     const level = Math.min(1, Math.max(0, this.state?.level ?? 0));
@@ -432,9 +359,9 @@ export class JarvisNeuralRenderer {
       time: this.animClock,
       dt,
       energy,
-      bands: this.bands,
-      waveT: this.waveT,
-      waveAmp: this.waveAmp,
+      bands: this.wave.bands,
+      waveT: this.wave.t,
+      waveAmp: this.wave.amp,
       // Tension tightens the whole field toward its centre.
       radius: 1.0 - this.pheno.tension * 0.14,
       // Speaking breathes even between onsets. A body that only moved on a hard
@@ -443,29 +370,6 @@ export class JarvisNeuralRenderer {
     };
   }
 
-  /**
-   * Colour, after the phenotype has had its say. Irritation drags the orange
-   * toward red -- the same move V1 makes, and one non-orange frame says more
-   * than any amount of extra brightness.
-   */
-  private palette(): FloatUniforms {
-    const warm = this.opts.warm ?? [1.0, 0.38, 0.04];
-    const hot = this.opts.hot ?? [1.0, 0.74, 0.32];
-    const fringe = this.opts.fringe ?? [0.42, 0.09, 0.02];
-    // The WHOLE register, not just irritation. Nine of the ten scalars used to
-    // reach colour not at all, so a mood could only ever make him brighter.
-    const c = emotionColour(this.pheno);
-    return {
-      uWarm: tint(warm, c.warm, c.desaturate),
-      uHot: tint(hot, c.hot, c.desaturate),
-      uFringe: tint(fringe, c.fringe, c.desaturate),
-      // The fringe band. See FRINGE_GLSL: outer = inner / scale, and everything
-      // below outer draws nothing at all.
-      uInner: 0.52,
-      uFringeScale: 2.4,
-      uFringeGain: 1.15,
-    };
-  }
 
   private loop = (): void => {
     this.raf = requestAnimationFrame(this.loop);

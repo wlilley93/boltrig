@@ -25,50 +25,32 @@ import {
   type FloatUniforms,
 } from "../canvas/glResources";
 import { ULTRON_TUNING, pulsedCore, ramp, type UltronTuning } from "../canvas/bodyTuning";
-import { IRIS_FRAG, IRIS_VERT, IRIS_VERTS } from "../canvas/shadersIris";
+import { IRIS_FRAG, IRIS_VERT } from "../canvas/shadersIris";
 import { BLOOM_FRAG, COMPOSITE_FRAG } from "../canvas/shadersPost";
 import { QUAD_VERT, SIM_FRAG } from "../canvas/shadersSim";
-import {
-  DENDRITE_DEPTH,
-  DENDRITE_FRAG,
-  DENDRITE_SEGMENTS,
-  DENDRITE_TRUNKS,
-  DENDRITE_VERT,
-} from "./shadersDendrite";
+import { DENDRITE_FRAG, DENDRITE_VERT } from "./shadersDendrite";
 import {
   CRACK_FRAG,
-  CRACK_SEGMENTS,
   CRACK_VERT,
   FACET_FRAG,
-  FACET_STRIDE,
   FACET_VERT,
   VEIN_FRAG,
   VEIN_VERT,
 } from "./shadersUltron";
+import {
+  GRID,
+  PARTICLES,
+  drawCracks,
+  drawDendrites,
+  drawFacets,
+  drawIris,
+  drawVeins,
+  type UltronDrive,
+} from "./ultronScene";
 
-const GRID = 128;
-const PARTICLES = GRID * GRID;
-const FACETS = Math.floor(PARTICLES / FACET_STRIDE);
+export { GRID, PARTICLES, type UltronDrive };
+
 const BLOOM_DIV = 2;
-
-/** Everything a frame is driven by, derived once by the renderer and shared. */
-export interface UltronDrive {
-  /** Eight 0..1 voice bands. The membrane reads them as pressure per region. */
-  bands: Float32Array;
-  /** Overall speech level, so a silent body still holds its shape. */
-  voice: number;
-  /** Animation seconds. NOT wall clock -- see UltronRenderer.animClock. */
-  time: number;
-  dt: number;
-  energy: number;
-  /** 0..1. Drives crack kink, arc frequency and how far shards separate. */
-  aggression: number;
-  waveT: number;
-  waveAmp: number;
-  radius: number;
-  /** A low continuous breath while speaking, so a held note still moves. */
-  swell: number;
-}
 
 export class UltronPasses {
   private progs: Record<string, WebGLProgram> = {};
@@ -212,108 +194,19 @@ export class UltronPasses {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.simTex[this.ping]);
 
-    // THE NEURONS, FIRST. They are the armature the rest of him hangs on, so the
-    // membrane and the fractures draw over them rather than under.
-    //
-    // 558 vertices for the whole tree, against 32768 for the field. Cheap enough
-    // that the question is only whether it is right, never whether it fits.
-    const dendrite = this.progs.dendrite;
-    gl.useProgram(dendrite);
-    setUniforms(gl, dendrite, {
-      ...shared,
-      uGain: ramp(tuning.dendriteGain, d.energy),
-      uDend: tuning.dendrite,
-      uDendTip: tuning.dendriteTip,
-      uBead: tuning.bead,
-      uSignal: tuning.signal,
-      uArc: tuning.arc,
-      uRadius: d.radius,
-      // uLimb is set PER PASS, never in `shared` -- so a pass that forgets it
-      // gets (0,0), limbMix returns zero, and the whole pass draws nothing while
-      // the renderer reports itself healthy. That is how this one debuted.
-      uLimb: tuning.veinLimb,
-    }, {});
-    gl.drawArrays(gl.LINES, 0, DENDRITE_TRUNKS * DENDRITE_SEGMENTS * 2);
-
-    // ------------------------------------------------------------- THE IRIS
-    //
-    // He has one for the same reason Jarvis does: filaments running radially out
-    // of the middle say "this is the centre" from any angle, and without that the
-    // dendrites leave the soma in four directions and the eye has nothing to fix
-    // on. Concentrated and small -- his brief is a crystalline cloud, so the iris
-    // is the thing at the heart of the cloud, not the subject.
-    //
-    // Drawn FIRST, so the neurons and the crystal composite over it rather than
-    // being hidden behind it.
-    const iris = this.progs.iris;
-    gl.useProgram(iris);
-    setUniforms(gl, iris, {
-      ...shared,
-      uGain: ramp(tuning.irisGain, d.energy),
-      uIrisRadius: tuning.irisRadius,
-      uIrisFil: tuning.irisFil,
-      uIrisFlow: tuning.irisFlow,
-      uRadius: d.radius,
-      uBands: d.bands,
-    });
-    gl.drawArrays(gl.TRIANGLES, 0, IRIS_VERTS);
-
-    const vein = this.progs.vein;
-    gl.useProgram(vein);
-    setUniforms(gl, vein, {
-      ...shared,
-      // Longer than Jarvis's streak: growth, not data in motion.
-      uStreak: ramp(tuning.veinStreak, d.energy),
-      uGain: ramp(tuning.veinGain, d.energy),
-      uLimb: tuning.veinLimb,
-    }, { uState: 0, uGrid: GRID });
-    gl.drawArrays(gl.LINES, 0, PARTICLES * 2);
-
-    const crack = this.progs.crack;
-    gl.useProgram(crack);
-    setUniforms(gl, crack, {
-      ...shared,
-      // Wider than LINK's range: a membrane wants a connected web, where a
-      // neural interior wants sparse, flickering connections.
-      // "VERY CHAOTIC AND NOT NICE TO LOOK AT" WAS A GAIN ORDER, not a petal
-      // count. The three passes ran at vein 0.11 + 0.13e, crack 0.72 + 0.50e
-      // and facet 0.78 + 0.55e -- so the jagged web and the loose shards were
-      // each roughly six times the body they were supposed to be cracking, and
-      // he read as a swarm of debris with nothing inside it. Reducing the
-      // petals addressed the reaching arms and could not have addressed this.
-      //
-      // The range matters as much as the gain, and separately. It is the
-      // distance under which a pair counts as connected, and at 0.26 -- against
-      // Jarvis's 0.16 at the time -- the web was drawing long wires straight
-      // across the volume, which is most of what "chaotic" was describing.
-      // Tightened, the cracks are local again: they run along the surface
-      // rather than through the middle.
-      //
-      // HE IS STILL NOT JARVIS IN BLUE. The separation is silhouette and
-      // colour -- petals against a plain shell, cold against warm -- which is
-      // how Animal Logic separated them. It was never brightness.
-      uLinkRange: tuning.crackRange,
-      uGain: ramp(tuning.crackGain, d.energy),
-      uLimb: tuning.crackLimb,
-    }, { uState: 0, uGrid: GRID, uSegments: CRACK_SEGMENTS });
-    gl.drawArrays(gl.LINES, 0, PARTICLES * CRACK_SEGMENTS * 2);
-
-    const facet = this.progs.facet;
-    gl.useProgram(facet);
-    // Nearly twice Jarvis's shard at 0.030, and brighter than everything else
-    // on screen. Both halves of that were why the facets read as the subject
-    // rather than as fracture ON a subject.
-    setUniforms(gl, facet, {
-      ...shared,
-      uSize: tuning.facetSize,
-      uGain: ramp(tuning.facetGain, d.energy),
-      uLimb: tuning.facetLimb,
-      uFacetSpin: tuning.facetSpin,
-    },
-      { uState: 0, uGrid: GRID, uStride: FACET_STRIDE });
-    gl.drawArrays(gl.LINES, 0, FACETS * 4);
+    // THE ORDER IS THE PICTURE, and it is preserved here exactly as it was
+    // inside the old drawScene. Note that drawIris's own comment says it is
+    // "Drawn FIRST": it is not, and was not before this split either - the
+    // dendrites precede it. The comment is left as it was rather than quietly
+    // corrected, because whether the iris SHOULD go first is a rendering
+    // question for whoever tuned it, not something a structural split may
+    // decide by moving a line.
+    drawDendrites(gl, this.progs.dendrite, shared, d, tuning);
+    drawIris(gl, this.progs.iris, shared, d, tuning);
+    drawVeins(gl, this.progs.vein, shared, d, tuning);
+    drawCracks(gl, this.progs.crack, shared, d, tuning);
+    drawFacets(gl, this.progs.facet, shared, d, tuning);
   }
-
   private bloom(): void {
     const gl = this.gl;
     const [w, h] = this.size;

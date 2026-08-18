@@ -723,24 +723,24 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/ChatView.tsx": {
-      "file_lines": 1331,
-      "max_function_lines": 1250,
+      "file_lines": 1334,
+      "max_function_lines": 1253,
       "max_parameters": 3,
-      "max_complexity": 101,
+      "max_complexity": 102,
       "max_nesting_depth": 4,
       "over_limit_functions": [
         {
           "name": "ChatView",
           "line": 82,
           "column": 1,
-          "lines": 1250,
+          "lines": 1253,
           "parameters": 1,
-          "complexity": 101,
+          "complexity": 102,
           "nesting_depth": 4
         },
         {
           "name": "ChatView.send",
-          "line": 346,
+          "line": 348,
           "column": 3,
           "lines": 111,
           "parameters": 2,
@@ -749,7 +749,7 @@
         },
         {
           "name": "ChatView.reattach",
-          "line": 662,
+          "line": 664,
           "column": 3,
           "lines": 67,
           "parameters": 3,
@@ -758,7 +758,7 @@
         },
         {
           "name": "ChatView.acceptLiveEvent",
-          "line": 730,
+          "line": 732,
           "column": 3,
           "lines": 61,
           "parameters": 2,
