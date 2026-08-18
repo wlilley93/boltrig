@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T20:02:02.769Z",
+  "capturedAt": "2026-08-18T21:11:57.114Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,16 +17,16 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "c04e14bfe6d821c893c691b83cadebfc4f166fad174a90c335a2c6755c330d15",
-    "digestAfterCapture": "c04e14bfe6d821c893c691b83cadebfc4f166fad174a90c335a2c6755c330d15",
+    "digestBeforeCapture": "64e74aacd0e4cd81d927c46a5d25943fe863a280421edba830ce126d2a5ffd56",
+    "digestAfterCapture": "64e74aacd0e4cd81d927c46a5d25943fe863a280421edba830ce126d2a5ffd56",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/dark-default-and-site-mark",
-    "head": "8b175c7a5d4cfb5451e8ada65404cdee0c0c5af4",
-    "dirty": false
+    "branch": "feat/capability-step3-transforms",
+    "head": "e39c2c1dc9d6318101ee8e56ef4d7327b793f853",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
-    "node": "v24.15.0",
+    "node": "v22.23.1",
     "browser": "chromium",
     "browserVersion": "151.0.7922.34",
     "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
