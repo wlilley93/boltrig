@@ -26,10 +26,17 @@ from .bifrost_user_transport import (
     safe_identifier,
 )
 
+#: models.dev, which the onboarding picker is generated from, spells six
+#: providers differently from Bifrost. The picker submits its own catalogue id
+#: as the model prefix, so the kernel normalises here rather than asking the
+#: browser to know Bifrost's naming.
 _PROVIDER_ALIASES = {
     "google": "gemini",
     "google-generative-ai": "gemini",
     "x-ai": "xai",
+    "amazon-bedrock": "bedrock",
+    "fireworks-ai": "fireworks",
+    "google-vertex": "vertex",
 }
 
 
