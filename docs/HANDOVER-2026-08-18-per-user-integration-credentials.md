@@ -133,19 +133,40 @@ vds ledger routes --from docs/design/evidence/2026-08-11-console-parity/current/
 Playwright is deliberately not a dependency of `apps/worker`, hence the explicit
 path.
 
+## Done since, in commit 56e78baa
+
+Three things this document listed as open, and one it got wrong.
+
+- **A member could connect a credential they could never destroy.** Worse than
+  "cannot reach the feature", which is what the first draft of this section said:
+  `control.integration.connect` is LOW consequence, so any member may connect at
+  `level=user` -- measured, `role=member` gets a 201 -- while
+  `control.integration.revoke` is high consequence and
+  `_preauthorize_high_consequence` gates every high-consequence
+  `control.integration.*` verb on `can_author`. So the same member got a 403
+  revoking the row they had just made. The pre-authorisation now exempts exactly
+  one case, the caller's OWN user-scoped connection, which is operating their own
+  seat rather than administering the organisation (SEC-203).
+- **Org-admin offboarding exists.** `control.integration.revoke_member`, with
+  `GET`/`DELETE /v1/integrations/member-connections` and a panel in
+  Settings > Organisation. Two verbs rather than a role branch inside one,
+  because the kernel context carries GRANTS and not a role, and because one verb
+  could not tell an auditor which of the two things happened. The administrator's
+  projection omits `accounts` (SEC-202, FR-INTCRED-03).
+- **The borrowing guard 400'd every personal disconnect.** `__post_init__` said a
+  user-scoped row "must own its credential", which also caught the REVOKED row --
+  revoke clears `credential_ref` and `credential_owned` together and rebuilds the
+  dataclass. Every existing revoke test revoked an ORG row, so nothing saw it.
+
 ## What is not done
 
-- **`member` cannot reach the feature.** It is excluded from `AUTHOR_ROLES` and
-  denied `control.*` by the workspace ceiling in `boltrig/identity/rbac.py`, so
-  this currently serves author roles. A member-facing story needs a
-  non-`control.*` self-service seam of its own.
-- **No org-admin offboarding.** Revoke fails closed: only the owner may revoke a
-  user-scoped connection, so when someone leaves an admin cannot disconnect
-  their personal credential. That wants its own path, not a hole in this one.
-- **Health is per-adapter, not per-connection.** A member whose own token was
-  revoked upstream still reads "Connected", because the org's token keeps the
-  adapter healthy. Per-connection health means probing with that specific
-  credential.
+- **Health is per-adapter, and that is correct.** An earlier draft of this
+  section called it a gap. It is not: `HttpAdapter.health` is documented "Best-
+  effort reachability probe. Never raises; needs no credential", so the column
+  has always meant "is the provider reachable" and never "is this credential
+  good". Two rows for one adapter therefore show the same health, which is
+  honest but easy to misread as a claim about the credential. Making it a claim
+  about the credential needs a credentialed probe protocol that no adapter has.
 - **`workspace` is not a level.** `ai_configs` has one; this does not, because a
   workspace row needs a live membership re-check at resolve time and
   `Principal.context()` sets no `workspace_id` on the connect path. The
@@ -158,12 +179,14 @@ path.
 `boltrig/kernel/credentials.py` sits at 399 of its 400-line ceiling. The next
 thing added there has to be an extraction.
 
-The worker structure gate is red, and mostly from the earlier shader work in this
-same session: seven canvas and shader files carry no exemption entry, and
-`apps/worker/src/components/ChatView.tsx` has grown past its ratchet with three
-stale baselines. These **cannot be waived** — `evaluateTrustedBaseline` in
-`apps/worker/scripts/check-structure.mjs` reloads the catalogue from Git and
-refuses a new debt file outright, so they have to come under the limits instead.
+The worker structure gate was red from the earlier shader work in this same
+session, and is green again as of f72b4375: the seven canvas and shader files
+were split rather than pinned, and `ChatView.tsx` gave back the three lines
+commit 737f8f1f took without moving the baseline. Nothing there could be waived —
+`evaluateTrustedBaseline` in `apps/worker/scripts/check-structure.mjs` reloads
+the catalogue from Git and refuses a new debt file outright — so every one of
+them had to come under the limits. The moves are verbatim and
+`tests/visual/render-bodies.mjs` measured all four bodies before and after.
 
 No pre-push hook is installed in this worktree (`core.hooksPath` is unset and the
 shared git dir carries none), so none of that blocks a push. Combined with
