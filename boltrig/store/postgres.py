@@ -35,6 +35,7 @@ from .work_items import WorkItemReadsPG, work_item_from_row
 from .workflow_triggers import WorkflowTriggerStorePG
 from .workflow_schedules import WorkflowScheduleStorePG
 from .authored_definitions_postgres import AuthoredDefinitionStorePG
+from .capability_routing import CapabilityRoutingStorePG
 from .eval_cases import EvalCaseStorePG
 from .credential_references import CredentialReferencePresencePG
 from .ai_key_proposals import AiKeyProposalStorePG
@@ -138,7 +139,7 @@ class PostgresStore(
     ChannelStorePG, CapabilityStorePG, ObservabilityReadsPG,
     ChannelDedupStorePG, ChannelOutboxStorePG, PasswordResetStorePG,
     WorkflowTriggerStorePG, WorkflowScheduleStorePG,
-    AuthoredDefinitionStorePG,
+    AuthoredDefinitionStorePG, CapabilityRoutingStorePG,
     EvalCaseStorePG,
     CredentialReferencePresencePG,
     AiKeyProposalStorePG,

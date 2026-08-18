@@ -57,6 +57,7 @@ from .audit_read_contract import AuditReadContract
 from .workflow_trigger_contract import WorkflowTriggerStoreContract
 from .workflow_schedule_contract import WorkflowScheduleStoreContract
 from .authored_definitions_contract import AuthoredDefinitionStoreContract
+from .capability_routing_contract import CapabilityRoutingStoreContract
 from .eval_cases import EvalCaseStoreContract
 from .execution_search_contract import ExecutionSearchContract
 from .credential_references import CredentialReferenceContract
@@ -101,7 +102,7 @@ class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStore
             BackgroundJobStoreContract, AuditReadContract, IdempotencyStoreContract, GuardedWritesContract,
             CapabilityStoreContract, RealtimeCallStoreContract, PasswordResetStoreContract,
             WorkflowTriggerStoreContract, WorkflowScheduleStoreContract,
-            AuthoredDefinitionStoreContract,
+            AuthoredDefinitionStoreContract, CapabilityRoutingStoreContract,
             EvalCaseStoreContract, ExecutionSearchContract,
             CredentialReferenceContract, AiKeyProposalStoreContract,
             ChannelGatewayStateContract, ConversationStoreContract,

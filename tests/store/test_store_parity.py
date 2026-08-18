@@ -73,7 +73,8 @@ _TABLES = (
     "integration_connections,integration_catalogue,"
     "security_log,audit_rollup_anchors,conversation_steer_queue,conversation_messages,"
     "conversations,channels,realtime_calls,"
-    "realtime_call_events,audit_outbox"
+    "realtime_call_events,audit_outbox,"
+    "routing_policies,capability_bindings,source_operations,provider_connections"
 )
 
 
@@ -2281,3 +2282,102 @@ async def test_audit_outbox_enqueue_due_delete_and_mark_failed_parity(store):
         r["id"] != row["id"]
         for r in await store.audit_outbox_due(T, now + timedelta(hours=1), limit=100)
     )
+
+
+@pytest.mark.store
+async def test_capability_bindings_are_plural_and_ordered_on_both_stores(store):
+    """The shard's whole point, asserted on the store that ships.
+
+    Under the old single-binding contract the SECOND write replaced the first.
+    Here both survive, and they come back in the order the resolver depends on -
+    priority, then binding id - because an unstable order would make a route
+    non-deterministic in the one place the doctrine will not tolerate it.
+    """
+    from boltrig.models.capability_routing import (
+        CapabilityBinding,
+        ProviderConnection,
+        RoutingPolicy,
+        SourceOperation,
+    )
+
+    for connection_id, label, provider in (
+        ("pconn-a", "HubSpot — UK Sales", "hubspot"),
+        ("pconn-b", "Pipedrive — EU", "pipedrive"),
+    ):
+        await store.upsert_provider_connection(
+            ProviderConnection(
+                id=connection_id, tenant_id=T, label=label, provider=provider
+            )
+        )
+    for connection_id, provider, priority in (
+        ("pconn-a", "hubspot", 100),
+        ("pconn-b", "pipedrive", 50),
+    ):
+        operation_id = f"{provider}.contact.search"
+        await store.upsert_source_operation(
+            SourceOperation(
+                id=operation_id,
+                tenant_id=T,
+                provider=provider,
+                connection_id=connection_id,
+                input_schema={"type": "object"},
+                schema_digest="digest-1",
+            )
+        )
+        await store.upsert_capability_binding(
+            CapabilityBinding(
+                binding_id=f"cb-{connection_id}",
+                tenant_id=T,
+                capability_id="crm.contact.search",
+                source_operation_id=operation_id,
+                connection_id=connection_id,
+                status="approved",
+                priority=priority,
+            )
+        )
+
+    bindings = await store.list_capability_bindings(T, "crm.contact.search")
+    assert [b.binding_id for b in bindings] == ["cb-pconn-b", "cb-pconn-a"]
+    assert [b.ref for b in bindings] == ["crm.contact.search@1"] * 2
+
+    # Re-declaring one binding UPDATES that row and leaves its sibling alone.
+    await store.upsert_capability_binding(
+        CapabilityBinding(
+            binding_id="cb-pconn-a",
+            tenant_id=T,
+            capability_id="crm.contact.search",
+            source_operation_id="hubspot.contact.search",
+            connection_id="pconn-a",
+            status="disabled",
+            priority=100,
+        )
+    )
+    bindings = await store.list_capability_bindings(T, "crm.contact.search")
+    assert [(b.binding_id, b.status) for b in bindings] == [
+        ("cb-pconn-b", "approved"),
+        ("cb-pconn-a", "disabled"),
+    ]
+
+    # The routing rule round-trips with its workspace scope intact: a rule that
+    # silently lost its scope would route every workspace to one destination.
+    await store.upsert_routing_policy(
+        RoutingPolicy(
+            id="rp-1",
+            tenant_id=T,
+            capability_id="crm.contact.search",
+            binding_id="cb-pconn-b",
+            operation_class="read",
+            scope="workspace",
+            workspace_id="ws-1",
+        )
+    )
+    policies = await store.list_routing_policies(T, "crm.contact.search")
+    assert [(p.scope, p.workspace_id, p.binding_id) for p in policies] == [
+        ("workspace", "ws-1", "cb-pconn-b")
+    ]
+
+    connection = await store.get_provider_connection(T, "pconn-a")
+    assert connection.label == "HubSpot — UK Sales" and connection.eligible
+    operation = await store.get_source_operation(T, "hubspot.contact.search")
+    assert operation.schema_digest == "digest-1"
+    assert operation.input_schema == {"type": "object"}

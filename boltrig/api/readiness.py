@@ -24,7 +24,7 @@ from .background_readiness import read_background_job_readiness
 from .codex_readiness import codex_runtime_check
 from .readiness_dependencies import database_checks, password_reset_check
 
-EXPECTED_ALEMBIC_HEAD = "0078_capability_presentation_fields"
+EXPECTED_ALEMBIC_HEAD = "0079_capability_routing_shard"
 
 _PRODUCTION_NAMES = {"prod", "production", "staging"}
 # Browser automation is the only separately shipped stack tool. Codex has its

@@ -27,6 +27,7 @@ from .work_items import WorkItemReadsMem
 from .workflow_triggers import WorkflowTriggerStoreMem
 from .workflow_schedules import WorkflowScheduleStoreMem
 from .authored_definitions_memory import AuthoredDefinitionStoreMem
+from .capability_routing import CapabilityRoutingStoreMem
 from .eval_cases import EvalCaseStoreMem
 from .credential_references import CredentialReferencePresenceMem
 from .ai_key_proposals import AiKeyProposalStoreMem
@@ -104,7 +105,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
                     ObservabilityReadsMem, ChannelDedupStoreMem,
                     ChannelOutboxStoreMem, PasswordResetStoreMem,
                     WorkflowTriggerStoreMem, WorkflowScheduleStoreMem,
-                    AuthoredDefinitionStoreMem,
+                    AuthoredDefinitionStoreMem, CapabilityRoutingStoreMem,
                     EvalCaseStoreMem, CredentialReferencePresenceMem,
                     AiKeyProposalStoreMem, McpLifecycleStoreMem,
                     ModelEndpointStoreMem, ConversationQueueStoreMem):
@@ -112,6 +113,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
 
     def __init__(self) -> None:
         self._init_authored_definition_state()
+        self._init_capability_routing_state()
         self._init_ai_key_proposal_state()
         self._init_background_job_state()
         self._init_mcp_lifecycle_state()

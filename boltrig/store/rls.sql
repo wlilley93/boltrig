@@ -115,6 +115,14 @@ DECLARE
     'device_enrollments','devices','device_roots','device_leases',
     'camera_bindings','camera_leases',
     'integration_catalogue','integration_connections',
+    -- Capability doctrine step 2 (migration 0079): the canonical routing
+    -- layer. Every row carries a real tenant_id - a connection label, a
+    -- provider operation, an implementation claim and a routing rule are all
+    -- tenant data, and a route read outside the fence would pick a
+    -- destination belonging to someone else. Same generic tenant_id policy,
+    -- fail-closed on a null GUC.
+    'provider_connections','source_operations','capability_bindings',
+    'routing_policies',
     -- Org -> workspace tenancy ([2026] VJS-COUNTY 8). These three carry a real
     -- tenant_id column, so the generic tenant_id policy binds them. organisations
     -- is handled separately below (its isolation column is id, which IS tenant_id).
