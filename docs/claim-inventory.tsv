@@ -461,7 +461,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/pii.py:1	contains_identity
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/questions.py:1	apply_manifest	The governed "ask the user a question" built-in verb (US-CHAT-12).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/routing.py:1	RouteRequired	Deterministic capability routing (docs/SPEC-capability-doctrine.md §2, §8).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/routing.py:241	TenantPermissions	Every grant a routed call must hold: the capability AND the source operation behind it, each checked by ``GrantChecker.check``.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/routing.py:267	grant_verbs	The names available WITHOUT a store read: what the caller typed, the capability it resolved to, and the source operation it will execute.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/routing.py:267	governed_capabilities	The names available WITHOUT a store read: what the caller typed, the capability it resolved to, and the source operation it will execute.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/run_event_projection.py:1	_summarise_params	Where ``_summarise_params``, ``_summarise_output`` and ``_event_safe`` live.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/schema_diagnosis.py:1	contains_secret	What may be recorded about a schema-validation failure, and how it is read back.
 LOAD-BEARING	SUBJECT-REACHED	comment	boltrig/kernel/schema_diagnosis.py:137	audit_detail	append-only ledger, and ``audit_detail`` is what implements it.

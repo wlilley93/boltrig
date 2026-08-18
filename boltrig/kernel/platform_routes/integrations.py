@@ -39,9 +39,16 @@ async def _enabled_capabilities(kernel, tenant_id: str, adapter_id: str) -> list
     }
     if not connection_ids:
         return []
+    # UNPINNED, deliberately. `binding.ref` is `crm.contact.search@1`, and every
+    # governance path reads the unpinned id: grant_verbs checks it, blocking_names
+    # drops the pin, governed_aliases resolves it. Publishing the pinned form made
+    # this page's most copyable string the one that matches nothing - paste it
+    # into a role scope or a skill's tool_grants and the grant is legal, silent
+    # and inert. The version is an addressing detail of one call, not an identity
+    # a person acts on.
     return sorted(
         {
-            binding.ref
+            binding.capability_id
             for binding in await kernel.store.list_capability_bindings(tenant_id)
             if binding.connection_id in connection_ids and binding.status == "approved"
         }

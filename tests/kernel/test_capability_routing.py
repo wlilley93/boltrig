@@ -426,3 +426,32 @@ async def test_a_binding_consequence_override_raises_the_gate():
     # ... and the un-overridden sibling capability stays ungated.
     out = await kernel.invoke("contact", "crm.contact.search", {"query": "a"}, _ctx())
     assert out["served_by"] == "hubspot"
+
+
+@pytest.mark.kernel
+async def test_the_published_capability_name_is_one_you_can_act_on():
+    """The Connections page's most copyable string must be the working one.
+
+    It published `binding.ref` - `crm.contact.search@1` - while every governance
+    path reads the UNPINNED id: grant_verbs checks it, blocking_names drops the
+    pin, governed_aliases resolves it. So the string most likely to be pasted
+    into a role scope or a skill's tool_grants was the one that matches nothing,
+    and a grant made from it is legal, silent and inert.
+    """
+    from boltrig.kernel.platform_routes.integrations import _enabled_capabilities
+
+    kernel, _ = await _kernel("hubspot")
+    published = await _enabled_capabilities(kernel, TENANT, "hubspot")
+    assert published == ["crm.contact.create", "crm.contact.search"]
+
+    # Each published name, used verbatim as the only capability grant a caller
+    # holds, reaches the capability through the real chokepoint.
+    for name in published:
+        assert GrantSet.of([name]).permits(name), f"{name} is not grantable as written"
+    out = await kernel.invoke(
+        "contact",
+        "crm.contact.search",
+        {"query": "a"},
+        make_ctx(["crm.contact.search", "hubspot.contact.search"]),
+    )
+    assert out["served_by"] == "hubspot"
