@@ -557,6 +557,56 @@ describe("first-run onboarding", () => {
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
   });
 
+  it("holds the provider step when the saved key does not reach its provider", async () => {
+    // THE DEFECT THIS PINS. A key saved with base_url https://<host>:11434 was
+    // accepted, sealed and stored, so intake answered `ok` and onboarding said
+    // "Provider connected." and moved on. Ollama serves plain HTTP on that
+    // port, so nothing ever reached it. `ok` is a fact about the write; only
+    // gateway_ready is a fact about the provider, and the step now reads it.
+    api.setAiKey.mockResolvedValueOnce({ status: "ok" });
+    api.aiKeys
+      .mockResolvedValueOnce({ allow_own_ai_keys: true, ai_keys: [] })
+      .mockResolvedValue({
+        allow_own_ai_keys: true,
+        ai_keys: [{
+          level: "user",
+          scope_id: "owner",
+          provider: "openai",
+          model: "openai/gpt-5.4",
+          modality: "text",
+          has_key: true,
+          gateway_ready: false,
+        }],
+      });
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
+    fireEvent.change(await screen.findByLabelText("Provider API key"), {
+      target: { value: "provider-secret" },
+    });
+    await clickWhenReady("Choose a model");
+    fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "GPT-5.4" } });
+    fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
+    await clickWhenReady("Continue");
+
+    await waitFor(() => expect(api.setAiKey).toHaveBeenCalled());
+    expect(await screen.findByText(/did not answer/)).toBeTruthy();
+    expect(screen.getByText(/usually http, not https/)).toBeTruthy();
+    // Still on the provider step, and never claimed success.
+    expect(screen.getByText("Choose your AI provider")).toBeTruthy();
+    expect(screen.queryByText("Provider connected.")).toBeNull();
+    expect(screen.queryByText("Add vision")).toBeNull();
+  });
+
   it("reconciles an approved saved model before allowing onboarding to finish", async () => {
     api.aiKeys.mockResolvedValueOnce({
       allow_own_ai_keys: true,

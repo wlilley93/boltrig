@@ -1,17 +1,28 @@
 #!/usr/bin/env python3
-"""Idempotently wire the boltrig.io / boltrig.dev hostnames onto the configured
-production host
+"""Idempotently wire every Boltrig hostname onto the configured production host
 Cloudflare tunnel: a proxied DNS CNAME per host -> <tunnel>.cfargotunnel.com, and
 a tunnel public-hostname ingress rule per host -> http://localhost:80 (the host
 Caddy routes by hostname). Minimal calls (the token got rate-flagged by rapid
 probing during the initial bring-up). Reads CLOUDFLARE_API_TOKEN +
 CLOUDFLARE_ACCOUNT_ID from the env.
 
+boltrig.ai IS THE PRODUCT DOMAIN as of 2026-08-18. boltrig.io and boltrig.dev
+were the originals and are now redirect sources only.
+
 Layout served by the host Caddy:
-  boltrig.io / www.boltrig.io  -> /srv/boltrig-marketing (the landing page)
-  app.boltrig.io               -> 127.0.0.1:8620 (the console UI)
-  dev.boltrig.io               -> 127.0.0.1:1420 (the current Worker preview)
-  boltrig.dev / www.boltrig.dev-> 301 redirect to https://boltrig.io
+  boltrig.ai / www.boltrig.ai   -> /srv/boltrig-marketing (the landing page)
+  app.boltrig.ai                -> 127.0.0.1:8622 (Worker, with 8620 as fallback)
+  dev.boltrig.ai                -> 127.0.0.1:1420 + :8629 (the Worker preview)
+  boltrig.io / www.boltrig.io   -> 301 to https://boltrig.ai
+  app.boltrig.io                -> 301 to https://app.boltrig.ai
+  dev.boltrig.io                -> 301 to https://dev.boltrig.ai
+  boltrig.dev / www.boltrig.dev -> 301 to https://boltrig.ai
+
+A REDIRECT SOURCE STILL NEEDS ITS DNS RECORD AND ITS INGRESS RULE. The 301 is
+issued by Caddy on the box, so the request has to reach the box first: dropping
+a retired hostname from this table does not retire it, it breaks it. Retiring
+one for real means removing its Caddy vhost and its DNS record together, and
+the standing reason not to is that inbound links to boltrig.io predate .ai.
 """
 import json
 import os
@@ -22,9 +33,14 @@ import urllib.request
 TOK = os.environ["CLOUDFLARE_API_TOKEN"]
 ACC = os.environ["CLOUDFLARE_ACCOUNT_ID"]
 TUN = "d7bbe973-cefa-4269-82e2-b0df7673317c"
-ZONES = {"boltrig.io": "f7d8f1a9e9798510472b2b8b2664e361",
+ZONES = {"boltrig.ai": "b077bd6e8e8dca4b53316bf6e3a80d25",
+         "boltrig.io": "f7d8f1a9e9798510472b2b8b2664e361",
          "boltrig.dev": "c9dd24626a9cf83beef3b5f77cf4bba2"}
 HOSTS = {  # hostname -> zone
+    "boltrig.ai": "boltrig.ai",
+    "www.boltrig.ai": "boltrig.ai",
+    "app.boltrig.ai": "boltrig.ai",
+    "dev.boltrig.ai": "boltrig.ai",
     "boltrig.io": "boltrig.io",
     "www.boltrig.io": "boltrig.io",
     "app.boltrig.io": "boltrig.io",
