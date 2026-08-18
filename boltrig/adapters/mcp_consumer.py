@@ -57,7 +57,7 @@ from .mcp_discovery import (
     McpProtocolInvalid,
 )
 from .mcp_tool_policy import consequence_hint as _consequence_hint
-from .mcp_tool_policy import external_description
+from .mcp_verb_specs import spec_from_snapshot
 
 log = logging.getLogger(__name__)
 
@@ -216,25 +216,7 @@ class McpConsumerAdapter:
         for tool in snapshot:
             verb_id = f"{self.id}.{tool.name}"
             self._tools[verb_id] = tool.name
-            specs.append(
-                VerbSpec(
-                    verb_id=verb_id,
-                    noun_id=self.id,  # one noun per consumed server (opbox.*)
-                    input_schema=tool.input_schema,
-                    # An MCP tool returns arbitrary JSON - an array, a string and a
-                    # number are all legal results. Asserting `{"type": "object"}`
-                    # here rejected every list-shaped tool at OUTPUT validation with
-                    # `invalid output for '<verb>'`, long after the call had already
-                    # succeeded downstream: opbox's `list_matters` really did return
-                    # the caller's matters and the kernel then threw the answer away.
-                    # Honour the server's own `outputSchema` when it declares one,
-                    # otherwise accept any JSON rather than inventing a constraint
-                    # the protocol does not make.
-                    output_schema=tool.output_schema,
-                    description=external_description(tool.description),
-                    consequence=tool.consequence,
-                )
-            )
+            specs.append(spec_from_snapshot(self.id, tool))
         self._specs = specs
         return self._specs
 

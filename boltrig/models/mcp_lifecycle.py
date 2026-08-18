@@ -100,10 +100,18 @@ class McpToolSnapshot:
     consequence: str
     input_schema: dict[str, Any]
     output_schema: dict[str, Any]
+    # The canonical capability this tool CLAIMS to implement (SPEC §5 level 1).
+    # Optional and defaulted so a snapshot persisted before this existed still
+    # loads: the strict key check in the store codec accepts both shapes.
+    implements: str | None = None
 
     def __post_init__(self) -> None:
         if not self.name:
             raise ValueError("MCP tool snapshot name is required")
+        if self.implements is not None and (
+            not self.implements or "@" in self.implements
+        ):
+            raise ValueError("MCP tool capability claim must be an unpinned id")
         if self.consequence not in {"low", "high"}:
             raise ValueError("MCP tool consequence must be low or high")
         if len(self.description.encode("utf-8")) > MCP_MAX_TOOL_DESCRIPTION_BYTES:

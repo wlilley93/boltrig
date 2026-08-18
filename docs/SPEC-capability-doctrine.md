@@ -888,10 +888,31 @@ What is NOT closed:
   first-boot bootstrap and a migration-parity test compares the catalogues of
   both paths — every alembic revision must edit `schema.sql` in lockstep.
 - The Node SDK already exposes an app as an MCP server with byte-compatible
-  envelopes; the manifest v2 is an extension, not a rewrite. (Doc drift to fix
-  when touching it: `sdks/node/src/server.ts` claims the consumer maps every
-  consumed verb to consequence "low"; the consumer now propagates a real
-  consequence hint.)
+  envelopes; the manifest v2 is an extension, not a rewrite.
+
+  **Started 2026-08-18: `implements` is live end to end.** A `VerbDef` may
+  declare the canonical capability it implements; the SDK emits it on the wire,
+  `mcp_tool_policy.implements_hint` validates it as untrusted third-party text
+  (verb charset, bounded, and a PINNED claim is refused rather than
+  reinterpreted — a version this side has not agreed to must not be silently
+  read as the one it has), `McpToolSnapshot` carries it, and the registry
+  records a binding. That binding lands **proposed**, because the adapter is not
+  first-party: it routes nothing, confers no approval reach, and is invisible to
+  the connection projection until a human approves it. The approval step IS the
+  control (§5), which is what makes accepting a stranger's claim on
+  `matter.open` safe.
+
+  Not yet: capability VERSION on the wire (everything is version 1 and the
+  claim is unpinned by construction), and the transform, idempotency and
+  provenance fields — those are step 3.
+
+  The doc drift that block warned about is also fixed, and it was worse than
+  stale. `server.ts` said the consumer mapped every consumed verb to "low" and
+  told operators to re-assert "high" kernel-side; the consumer has failed CLOSED
+  since 2026-08-16, so absence reads HIGH. Meanwhile the SDK sent
+  `consequence: v.consequence ?? "low"`, turning "the app declared nothing" into
+  a positive claim of safety on the wire and defeating that rule for every
+  SDK-built server. Absence now travels as absence.
 
 ### 11.8 The 128-tool cliff
 

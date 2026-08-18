@@ -15,7 +15,7 @@ from boltrig.models.mcp_lifecycle import (
     validate_mcp_tool_snapshot,
 )
 
-from .mcp_tool_policy import external_description
+from .mcp_tool_policy import external_description, implements_hint
 
 _TOOL_VERB_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 log = logging.getLogger("boltrig.adapters.mcp_consumer")
@@ -168,6 +168,7 @@ def page_from_response(
                     consequence=consequence_for(tool),
                     input_schema=input_schema,
                     output_schema=output_schema,
+                    implements=implements_hint(tool),
                 )
             )
         except ValueError as exc:
