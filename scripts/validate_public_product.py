@@ -45,7 +45,7 @@ def _typescript_without_comments(text: str) -> str:
     )
 
 
-def validate(root: Path = ROOT) -> None:
+def validate(root: Path = ROOT) -> list[str]:
     root = root.resolve()
     manifest = _read("manifest.example.yaml", root=root)
     env = _read(".env.example", root=root)
@@ -238,15 +238,22 @@ def validate(root: Path = ROOT) -> None:
         "Published Worker images always ship the stock companion set",
         label="Worker Dockerfile",
     )
+    return [symbol.lower() for symbol in registrations]
 
 
 def main() -> int:
     try:
-        validate()
+        shipped = validate()
     except (OSError, ValueError) as exc:
         print(f"public-product: FAIL: {exc}", file=sys.stderr)
         return 1
-    print("public-product: PASS (BYO Bifrost; Familiar + Jarvis only)")
+    # DERIVED, not written. This line used to read "Familiar + Jarvis only" as a
+    # literal. The CHECK above had already been rewritten to derive the set from
+    # what the stock registry actually registers, but the sentence reporting the
+    # result had not, so the gate went green while naming two characters on a
+    # tree that ships three. A pass that states a fact it did not measure is the
+    # same defect the derived check was written to remove, one line further down.
+    print(f"public-product: PASS (BYO Bifrost; {', '.join(shipped)})")
     return 0
 
 

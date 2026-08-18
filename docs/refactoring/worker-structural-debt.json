@@ -1331,15 +1331,15 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/ParityViews.tsx": {
-      "file_lines": 1594,
-      "max_function_lines": 456,
+      "file_lines": 1588,
+      "max_function_lines": 408,
       "max_parameters": 2,
-      "max_complexity": 31,
+      "max_complexity": 28,
       "max_nesting_depth": 4,
       "over_limit_functions": [
         {
           "name": "RunsView",
-          "line": 39,
+          "line": 44,
           "column": 1,
           "lines": 212,
           "parameters": 0,
@@ -1348,7 +1348,7 @@
         },
         {
           "name": "WorkView",
-          "line": 284,
+          "line": 289,
           "column": 1,
           "lines": 255,
           "parameters": 0,
@@ -1357,7 +1357,7 @@
         },
         {
           "name": "WorkDetail",
-          "line": 560,
+          "line": 565,
           "column": 1,
           "lines": 226,
           "parameters": 1,
@@ -1366,7 +1366,7 @@
         },
         {
           "name": "WorkDetail.mutate",
-          "line": 656,
+          "line": 661,
           "column": 3,
           "lines": 64,
           "parameters": 2,
@@ -1375,7 +1375,7 @@
         },
         {
           "name": "AgentsView",
-          "line": 849,
+          "line": 854,
           "column": 1,
           "lines": 213,
           "parameters": 0,
@@ -1384,21 +1384,12 @@
         },
         {
           "name": "MemoryView",
-          "line": 1092,
+          "line": 1148,
           "column": 1,
-          "lines": 456,
+          "lines": 408,
           "parameters": 0,
-          "complexity": 31,
+          "complexity": 28,
           "nesting_depth": 1
-        },
-        {
-          "name": "MemoryView.onApplied",
-          "line": 1145,
-          "column": 5,
-          "lines": 44,
-          "parameters": 2,
-          "complexity": 16,
-          "nesting_depth": 3
         }
       ],
       "owner": "worker-maintainers",
