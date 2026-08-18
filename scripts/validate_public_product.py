@@ -115,15 +115,20 @@ def validate(root: Path = ROOT) -> None:
             if value:
                 raise ValueError(".env.example bundles a webhook value")
 
-    # The production registry is deliberately closed: Familiar and Jarvis are
-    # first-party. A private distribution can own a separate entrypoint, but the
-    # public package graph, lockfile, and stock plugin join must be hermetic.
+    # The production registry is deliberately closed: Familiar, Jarvis and
+    # Ultron are first-party. A private distribution can own a separate
+    # entrypoint, but the public package graph, lockfile, and stock plugin join
+    # must be hermetic - which is why the list is spelled out here rather than
+    # derived: adding a character is a deliberate edit to this gate, not a
+    # side effect of registering a bundle. 2026-08-16: Ultron joined the
+    # first-party set (his own id, voice and body - see the character registry
+    # header for why he is a character, not a Jarvis skin).
     registrations = re.findall(
         r"(?m)^\s*registerCharacter\(([A-Z][A-Z0-9_]*)\);\s*$", characters
     )
-    if registrations != ["FAMILIAR", "JARVIS"]:
+    if registrations != ["FAMILIAR", "JARVIS", "ULTRON"]:
         raise ValueError(
-            "character registry must register exactly Familiar then Jarvis"
+            "character registry must register exactly Familiar, Jarvis then Ultron"
         )
     if familiar_manifest.get("id") != "familiar":
         raise ValueError("stock Familiar bundle must keep the familiar id")
@@ -193,7 +198,7 @@ def main() -> int:
     except (OSError, ValueError) as exc:
         print(f"public-product: FAIL: {exc}", file=sys.stderr)
         return 1
-    print("public-product: PASS (BYO Bifrost; Familiar + Jarvis only)")
+    print("public-product: PASS (BYO Bifrost; Familiar + Jarvis + Ultron only)")
     return 0
 
 
