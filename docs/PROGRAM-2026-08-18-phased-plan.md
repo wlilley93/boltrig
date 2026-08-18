@@ -10,6 +10,13 @@ It is derived from a tree state measured on 2026-08-18, and the measurements are
 named where they matter. Anything measured will drift, so re-measure before
 acting on a number: the derivation is given each time so you can.
 
+> **Revised the same day.** `56e78baa` landed on `feat/real-brand-mark` between
+> the first and second drafts and closed two of Phase 2's four items. Phase 0.1's
+> merge was re-probed against the moved tip rather than left resting on the
+> earlier probe. Both changes are marked in place. This document went stale in
+> hours, which is the case for reading it as an order of work rather than as a
+> status report.
+
 ## How to read the phases
 
 A phase is a set of work that shares one exit gate. Phases are ordered by
@@ -67,6 +74,16 @@ One item in that change deserves a second reader and did not get one: ChatView i
 recorded at a measured 1334/1253/102, which is a **raise** on the branch's own
 1331, admitted by the provenance check because it is still below main's 1337.
 Raising a ratchet normally needs governance review. Read it before merging.
+
+**The merge was re-probed after the tip moved, and it still holds.** The
+structural fix branched before `56e78baa`, so it is no longer a fast-forward and
+the handover's clean-merge finding was against a tip that had since moved. Merged
+into `56e78baa` in a throwaway detached worktree: no conflicts; the structure gate
+reads `PASS`, `files=279 functions=4790 debt_files=63`,
+`trusted_baseline=7722f07d provenance=enforced`; and the gate's own test file
+passes 11 of 11, which is the exact CI step that is failing. Re-probe again if the
+tip moves once more, because `56e78baa` itself touches two files under
+`apps/worker/src` and so is inside the gate's scope.
 
 ### 0.2 The visual receipt is not a CI blocker
 
@@ -199,21 +216,36 @@ flag off a user row is skipped entirely, so revoking the policy is sufficient on
 its own and turning it back on restores the personal credential with no row
 surgery. The scope is sealed into the credential and compared on read.
 
-It is a working feature that **the `member` role cannot reach**, plus three named
-gaps. Each is its own path, not a hole widened in the existing one.
+Four gaps were recorded against it. **Two closed on 2026-08-18 in `56e78baa`,
+after this plan's first draft**, and the item that read largest turned out to
+rest on an overstated claim.
 
-1. **A member-facing seam.** `member` is excluded from the author roles and
-   denied `control.*` by the workspace ceiling in `boltrig/identity/rbac.py`, so
-   the feature currently serves author roles only. A member-facing story needs a
-   non-`control.*` self-service surface of its own. This is the largest of the
-   four and the one that decides whether the feature is finished.
-2. **Org-admin offboarding.** Revoke fails closed: only the owner may revoke a
-   user-scoped connection, so when someone leaves, an admin cannot disconnect
-   their personal credential.
-3. **Per-connection health.** Health is per-adapter today, so a member whose own
-   token was revoked upstream still reads "Connected" because the org's token
-   keeps the adapter healthy. Per-connection health means probing with that
-   specific credential.
+1. ~~**A member-facing seam.**~~ **Closed, and the original framing was wrong.**
+   The claim was that `member` cannot reach the feature at all, being excluded
+   from the author roles and denied `control.*` by the workspace ceiling in
+   `boltrig/identity/rbac.py`. Measured, a member gets 201 on connect, because
+   connect is low consequence. The real defect was narrower and worse: revoke
+   *is* high consequence, so a member could seal a third-party credential and
+   then get 403 destroying the row they had just created. Pre-authorisation now
+   exempts exactly one case, the caller's own user-scoped connection, which is
+   operating their own seat rather than administering the organisation. The org's
+   shared row stays author-only.
+2. ~~**Org-admin offboarding.**~~ **Closed.** A new verb
+   `control.integration.revoke_member`, a member-connections route, and a panel
+   in the organisation settings. Two verbs rather than a role branch inside one,
+   because the kernel context carries grants and not a role, so reaching the verb
+   *is* the authority, and because one verb could never tell an auditor which of
+   the two things happened. Both make the same single write, so the paths cannot
+   drift. The administrator's projection omits the account identifier: that is
+   the member's identity at the provider, and administering a row is not a reason
+   to read it. Invariants SEC-202, SEC-203 and FR-INTCRED-03 bind it.
+3. **Per-connection health, still open.** Confirmed by reading the route on the
+   merged tree rather than inferring it from the commit: the health endpoint
+   resolves `health_of(tenant, adapter_id)` and writes it onto the connection
+   row, so it reports the *adapter's* health under a per-connection URL. A member
+   whose own token was revoked upstream still reads "Connected" because the org's
+   token keeps the adapter healthy. Per-connection health means probing with that
+   specific credential. **This is now the only open item in the phase.**
 4. **The workspace level, deliberately deferred.** A workspace row needs a live
    membership re-check at resolve time, and the connect path sets no workspace on
    the principal context. The level constraint means adding it later costs a
@@ -231,9 +263,10 @@ Two traps from that build are worth carrying forward because they generalise:
   can reach, so a strict comparison would raise on every dispatch for every
   existing tenant. That is an outage, not a fence.
 
-**Exit gate for Phase 2:** a member can connect their own credential through a
-seam that is not `control.*`; an admin can offboard a departed member's
-connection; health answers per connection.
+**Exit gate for Phase 2:** ~~a member can connect their own credential and
+destroy it again~~ (done); ~~an admin can offboard a departed member's
+connection~~ (done); health answers per connection, probed with that connection's
+own credential.
 
 ---
 
