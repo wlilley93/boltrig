@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T16:24:34.192Z",
+  "capturedAt": "2026-08-18T18:41:28.016Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "7ffcaf59620e210c6ab1136b0896f797b1404f69758d8103c66807af1244b46b",
-    "digestAfterCapture": "7ffcaf59620e210c6ab1136b0896f797b1404f69758d8103c66807af1244b46b",
+    "digestBeforeCapture": "e17d2bcefd8b6e00b11b27f5023ff42fc0ae4b3106289a4545d9020a246217fe",
+    "digestAfterCapture": "e17d2bcefd8b6e00b11b27f5023ff42fc0ae4b3106289a4545d9020a246217fe",
     "sourceUnchangedDuringCapture": true,
-    "branch": "integrate/capability-doctrine",
-    "head": "d6f702b52d81aebfef6ef713b1f12cd9403d097e",
+    "branch": "react19-fixes",
+    "head": "13007ec7abf913db190f68f9fd5ce4c3616f05bd",
     "dirty": false
   },
   "runner": {
