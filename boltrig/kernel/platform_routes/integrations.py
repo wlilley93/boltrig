@@ -22,6 +22,32 @@ async def _enabled_tools(kernel, tenant_id: str, adapter_id: str) -> list[str]:
     return sorted(enabled)
 
 
+async def _enabled_capabilities(kernel, tenant_id: str, adapter_id: str) -> list[str]:
+    """The canonical capabilities this connection actually serves.
+
+    ``enabled_tools`` above counts raw verb ids bound to the adapter - the
+    SOURCE OPERATIONS. Once a capability layer exists that stops being the
+    honest answer to "what can this connection do": two connections can serve
+    one capability, and a provider-prefixed verb id is not what the model ever
+    sees (SPEC §11.1 site 6). Only APPROVED bindings count, so a proposed
+    mapping is invisible here exactly as it is invisible to routing.
+    """
+    connection_ids = {
+        connection.id
+        for connection in await kernel.store.list_provider_connections(tenant_id)
+        if connection.adapter_id == adapter_id
+    }
+    if not connection_ids:
+        return []
+    return sorted(
+        {
+            binding.ref
+            for binding in await kernel.store.list_capability_bindings(tenant_id)
+            if binding.connection_id in connection_ids and binding.status == "approved"
+        }
+    )
+
+
 async def _catalogue_view(kernel, tenant_id: str, item) -> dict:
     adapter = (
         await kernel.store.get_adapter(tenant_id, item.adapter_id)
@@ -76,10 +102,14 @@ async def _catalogue_view(kernel, tenant_id: str, item) -> dict:
 
 
 async def _connection_view(kernel, tenant_id: str, connection) -> dict:
+    revoked = connection.health == "revoked"
     enabled = (
+        [] if revoked else await _enabled_tools(kernel, tenant_id, connection.adapter_id)
+    )
+    capabilities = (
         []
-        if connection.health == "revoked"
-        else await _enabled_tools(kernel, tenant_id, connection.adapter_id)
+        if revoked
+        else await _enabled_capabilities(kernel, tenant_id, connection.adapter_id)
     )
     accounts = [
         {
@@ -98,6 +128,7 @@ async def _connection_view(kernel, tenant_id: str, connection) -> dict:
         "credential_ref_present": bool(connection.credential_ref),
         "accounts": accounts,
         "enabled_tools": enabled,
+        "enabled_capabilities": capabilities,
         "last_checked_at": (
             connection.last_checked_at.isoformat()
             if connection.last_checked_at

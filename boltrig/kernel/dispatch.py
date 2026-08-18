@@ -76,6 +76,7 @@ from .run_event_projection import (
     _summarise_params,
 )
 from .ratelimit import RateLimiter
+from .routing import grant_verbs, resolve_invocation_target
 
 log = logging.getLogger("boltrig.kernel")
 
@@ -494,22 +495,21 @@ class Dispatcher:
         meta: dict[str, Any],
     ) -> dict[str, Any]:
         tenant = context.tenant_id
-        # 1. resolve verb + binding (tenant-scoped; fail-closed)
-        verb_def = await self._store.get_verb(tenant, verb)
-        if verb_def is None:
-            raise BindingNotFound(f"unknown verb '{verb}'")
-        binding = await self._store.get_binding(tenant, verb)
-        if binding is None:
-            raise BindingNotFound(f"verb '{verb}' has no binding")
-        # record which adapter/agent services this call so the audit can attribute it.
-        meta["target_adapter"] = binding.target_ref
+        # 1. resolve the verb + its binding, or a canonical capability's ONE
+        # execution plan (tenant-scoped; fail-closed). A stored verb id takes the
+        # path it always took; only a name that is NOT a stored verb reaches the
+        # router, so this adds routes where there was a 404 and changes none.
+        verb_def, binding, plan = await resolve_invocation_target(
+            self._store, tenant, verb, meta, workspace_id=context.workspace_id
+        )
 
         # 2. validate params (SEC-21)
         _reject_if_invalid("params", verb, verb_def.input_schema, params)
 
         # 3. grant check (SEC-07)
         perms = await self._store.get_tenant_permissions(tenant)
-        self._grants.check(context, verb, perms)
+        for granted in grant_verbs(verb, verb_def, plan):
+            self._grants.check(context, granted, perms)
 
         # 4. atomically bind/claim the key after authorization. Completed results
         # replay before execution-side approval/rate-limit gates (SEC-15).
