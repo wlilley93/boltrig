@@ -179,6 +179,46 @@ CREATE TABLE IF NOT EXISTS routing_policies (
 CREATE INDEX IF NOT EXISTS routing_policies_capability_idx
   ON routing_policies (tenant_id, capability_id, operation_class, precedence);
 
+-- Doctrine step 3: an opaque, kernel-issued reference to ONE remote record, so
+-- a merged fan-out can be acted on without the model ever holding a provider
+-- id. The ref is minted random and stored rather than derived from the record's
+-- identity; boltrig/models/provenance.py records why (a derived ref is a
+-- confirmation oracle, and a keyed one buys a key to manage).
+CREATE TABLE IF NOT EXISTS entity_provenance (
+    ref                 TEXT NOT NULL,
+    tenant_id           TEXT NOT NULL,
+    entity_type         TEXT NOT NULL,
+    connection_id       TEXT NOT NULL,
+    provider            TEXT NOT NULL,
+    remote_object_type  TEXT NOT NULL,
+    remote_record_id    TEXT NOT NULL,
+    capability_id       TEXT NOT NULL,
+    capability_version  INT NOT NULL DEFAULT 1,
+    binding_id          TEXT,
+    workspace_id        TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, ref),
+    FOREIGN KEY (tenant_id, connection_id)
+      REFERENCES provider_connections(tenant_id, id) ON DELETE CASCADE
+);
+-- THIS INDEX IS THE IDEMPOTENCY. A second sighting of the same remote record
+-- updates last_seen_at and returns the ref already minted, instead of naming
+-- one object twice - two refs for one record makes a follow-up write ambiguous
+-- in exactly the way the ref exists to prevent.
+--
+-- workspace_id is part of the identity, and coalesced because Postgres treats
+-- NULLs as distinct in a unique index: without the coalesce, every tenant-wide
+-- sighting (workspace_id NULL) would mint a fresh ref and the idempotency would
+-- silently apply only to workspace-scoped rows. Scoping the ref this way also
+-- means a ref minted in one workspace does not resolve in another, so the
+-- tenant fence holds inside the resolution path and not only downstream of it.
+CREATE UNIQUE INDEX IF NOT EXISTS entity_provenance_record_idx
+  ON entity_provenance (
+    tenant_id, coalesce(workspace_id, ''), connection_id,
+    remote_object_type, remote_record_id
+  );
+
 -- ---------------------------------------------------------------------------
 -- 6.2 Adapters, skills, capabilities, workflows, endpoints
 -- ---------------------------------------------------------------------------

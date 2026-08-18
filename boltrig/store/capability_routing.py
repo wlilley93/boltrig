@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from .provenance import ProvenanceStoreMem, ProvenanceStorePG
 from boltrig.models.capability_routing import (
     CapabilityBinding,
     ProviderConnection,
@@ -78,12 +79,13 @@ def _routing_policy(r):
     )
 
 
-class CapabilityRoutingStoreMem:
+class CapabilityRoutingStoreMem(ProvenanceStoreMem):
     def _init_capability_routing_state(self) -> None:
         self._provider_connections: dict[tuple[str, str], ProviderConnection] = {}
         self._source_operations: dict[tuple[str, str], SourceOperation] = {}
         self._capability_bindings: dict[tuple[str, str], CapabilityBinding] = {}
         self._routing_policies: dict[tuple[str, str], RoutingPolicy] = {}
+        self._init_provenance_state()
 
     async def upsert_provider_connection(self, connection):
         self._provider_connections[(connection.tenant_id, connection.id)] = replace(connection)
@@ -142,7 +144,7 @@ class CapabilityRoutingStoreMem:
         return sorted(rows, key=lambda p: (p.precedence, p.id))
 
 
-class CapabilityRoutingStorePG:
+class CapabilityRoutingStorePG(ProvenanceStorePG):
     async def upsert_provider_connection(self, connection):
         await self._pool.execute(
             """INSERT INTO provider_connections (
