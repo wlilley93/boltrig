@@ -348,9 +348,58 @@ async def test_the_always_block_list_cannot_be_walked_past_by_canonical_name():
 @pytest.mark.kernel
 @pytest.mark.invariant("SEC-14")
 async def test_the_always_block_list_also_takes_the_capability_name():
-    """The other direction: blocking the capability blocks every binding under
-    it, including a source operation the operator has never heard of."""
+    """Blocking the capability gates the canonical spelling."""
     kernel, _ = await _kernel("hubspot", blocking_verbs={"crm.contact.create"})
+    with pytest.raises(PendingHuman):
+        await kernel.invoke("contact", "crm.contact.create", {"email": "a@b"}, _ctx())
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-14")
+async def test_blocking_a_capability_gates_the_source_operation_it_routes_to():
+    """The half that actually matters, and that the first version of this test
+    asserted in prose while exercising the trivial path.
+
+    The MCP face offers SOURCE OPERATION verb ids and never capability names, so
+    the direct spelling is the only one a model can reach. A capability block
+    that governed only the canonical name governed nothing.
+    """
+    kernel, _ = await _kernel("hubspot", blocking_verbs={"crm.contact.create"})
+    with pytest.raises(PendingHuman):
+        await kernel.invoke("contact", "hubspot.contact.create", {"email": "a@b"}, _ctx())
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-14")
+async def test_an_unapproved_binding_does_not_extend_the_block():
+    """A block reaches through APPROVED bindings only - the same set routing
+    uses. A proposed mapping serves nothing, so it governs nothing."""
+    kernel, store = await _kernel("hubspot", blocking_verbs={"crm.contact.create"})
+    binding = (await store.list_capability_bindings(TENANT, "crm.contact.create"))[0]
+    binding.status = "proposed"
+    await store.upsert_capability_binding(binding)
+    out = await kernel.invoke(
+        "contact", "hubspot.contact.create", {"email": "a@b"}, _ctx()
+    )
+    assert out["served_by"] == "hubspot"
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-14")
+async def test_a_version_pinned_block_entry_is_read_as_the_capability():
+    """An operator who writes crm.contact.create@1 means that capability.
+
+    Honouring the pin as written makes the gate expire the day a binding's
+    version moves; ignoring it makes the gate never fire. Both fail silently, so
+    the entry is normalised instead - and it still gates after a version bump.
+    """
+    kernel, store = await _kernel("hubspot", blocking_verbs={"crm.contact.create@1"})
+    with pytest.raises(PendingHuman):
+        await kernel.invoke("contact", "crm.contact.create", {"email": "a@b"}, _ctx())
+
+    binding = (await store.list_capability_bindings(TENANT, "crm.contact.create"))[0]
+    binding.capability_version = 2
+    await store.upsert_capability_binding(binding)
     with pytest.raises(PendingHuman):
         await kernel.invoke("contact", "crm.contact.create", {"email": "a@b"}, _ctx())
 
@@ -368,6 +417,12 @@ async def test_a_binding_consequence_override_raises_the_gate():
     await store.upsert_capability_binding(binding)
     with pytest.raises(PendingHuman):
         await kernel.invoke("contact", "crm.contact.create", {"email": "a@b"}, _ctx())
+    # ... including through the source operation, because the override is a
+    # property of the ROUTE and not of the spelling that reached it. Reading it
+    # only for the canonical name let the identical call through the identical
+    # binding execute ungated.
+    with pytest.raises(PendingHuman):
+        await kernel.invoke("contact", "hubspot.contact.create", {"email": "a@b"}, _ctx())
     # ... and the un-overridden sibling capability stays ungated.
     out = await kernel.invoke("contact", "crm.contact.search", {"query": "a"}, _ctx())
     assert out["served_by"] == "hubspot"

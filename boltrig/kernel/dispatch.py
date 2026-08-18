@@ -504,12 +504,12 @@ class Dispatcher:
             authorize=lambda name: self._grants.check(context, name, perms),
         )
 
-        # 2. validate params (SEC-21)
-        _reject_if_invalid("params", verb, verb_def.input_schema, params)
-
-        # 3. grant check (SEC-07); the capability half already ran above
+        # 2. grant check (SEC-07) BEFORE validation - see routing.grant_verbs.
         for granted in grant_verbs(verb, verb_def, plan):
             self._grants.check(context, granted, perms)
+
+        # 3. validate params (SEC-21)
+        _reject_if_invalid("params", verb, verb_def.input_schema, params)
 
         # 4. atomically bind/claim the key after authorization. Completed results
         # replay before execution-side approval/rate-limit gates (SEC-15).

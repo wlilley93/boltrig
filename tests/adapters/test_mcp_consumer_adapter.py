@@ -451,7 +451,13 @@ async def test_the_manifest_network_posture_binds_the_mcp_leg(monkeypatch):
 @pytest.mark.invariant("FR-MCP-03")
 async def test_unpublishable_tool_names_are_skipped_without_logging_content(caplog):
     """Unpublishable names are skipped without echoing server-controlled tool
-    names into logs."""
+    names into logs, and in ONE bounded line rather than one per tool.
+
+    The per-tool line was bounded by a single response until discovery learned
+    to paginate; across a page loop it became a write amplifier a remote server
+    controls - 50 pages x 5000 unpublishable names is a quarter of a million log
+    lines from a few megabytes of traffic.
+    """
     import logging
 
     async def rpc(request):
@@ -473,7 +479,8 @@ async def test_unpublishable_tool_names_are_skipped_without_logging_content(capl
 
     warnings = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
     assert [s.verb_id for s in specs] == ["opbox.matter.list"]
-    assert len(warnings) == 3
+    assert len(warnings) == 1
+    assert "3" in warnings[0]
     assert all("opbox/expand_tools" not in message for message in warnings)
     assert all("weird name" not in message for message in warnings)
 

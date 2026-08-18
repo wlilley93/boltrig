@@ -44,8 +44,16 @@ class CapabilityRoutingStoreContract(Protocol):
     # doctrine's multiple eligible implementations expressible at all.
     async def upsert_capability_binding(self, binding: CapabilityBinding) -> None: ...
 
+    # ``source_operation_id`` is the REVERSE lookup the approval gate needs:
+    # given a bare provider verb, which capabilities does it implement? Without
+    # it the gate can only match names, and a capability blocked by an operator
+    # governs only the spelling nobody uses.
     async def list_capability_bindings(
-        self, tenant_id: str, capability_id: str | None = None
+        self,
+        tenant_id: str,
+        capability_id: str | None = None,
+        *,
+        source_operation_id: str | None = None,
     ) -> list[CapabilityBinding]: ...
 
     async def upsert_routing_policy(self, policy: RoutingPolicy) -> None: ...

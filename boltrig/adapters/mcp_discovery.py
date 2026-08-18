@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
 from boltrig.models import MCP_MAX_TOOL_SNAPSHOT, McpToolSnapshot
 from boltrig.models.mcp_lifecycle import (
     MCP_MAX_CURSOR_BYTES,
+    MCP_MAX_TOOL_PAGES,
     validate_mcp_tool_snapshot,
 )
 
@@ -37,6 +38,47 @@ class McpProbeResult:
     tools: tuple[McpToolSnapshot, ...]
 
 
+async def discover_pages(
+    call: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]],
+    adapter_id: str,
+    consequence_for: Callable[[dict[str, Any]], str],
+) -> tuple[McpToolSnapshot, ...]:
+    """Follow ``tools/list`` to its last page over ONE caller-owned connection.
+
+    The loop lives here rather than in the consumer because every bound it obeys
+    belongs to the parser: the accumulated scan count, the cursor validation and
+    the dedup set are all page-parser state, and splitting them across two
+    modules is how a cap ends up applied per page.
+
+    Four bounds, each answering a way a remote server could turn the loop into a
+    weapon: a page ceiling, the accumulated SCAN cap, the cursor length bound,
+    and a repeat-cursor check - a server that hands back its own cursor forever
+    is otherwise an infinite loop inside the probe timeout, which presents as a
+    hang rather than a refusal.
+    """
+    tools: list[McpToolSnapshot] = []
+    seen: set[str] = set()
+    cursors: set[str] = set()
+    cursor: str | None = None
+    scanned = 0
+    for _page in range(MCP_MAX_TOOL_PAGES):
+        params: dict[str, Any] = {} if cursor is None else {"cursor": cursor}
+        response = await call(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": params}
+        )
+        page, cursor, page_size = page_from_response(
+            adapter_id, response, consequence_for, seen, accumulated=scanned
+        )
+        tools.extend(page)
+        scanned += page_size
+        if cursor is None:
+            return finalise_snapshot(tools)
+        if cursor in cursors:
+            raise McpDiscoveryInvalid
+        cursors.add(cursor)
+    raise McpDiscoveryInvalid
+
+
 def finalise_snapshot(tools: list[McpToolSnapshot]) -> tuple[McpToolSnapshot, ...]:
     """Sort and re-validate an assembled snapshot.
 
@@ -60,9 +102,14 @@ def _next_cursor(result: dict[str, Any]) -> str | None:
     wearing a loop.
     """
     raw = result.get("nextCursor")
-    if raw is None:
+    if not raw:
+        # Absent, null, "", false, 0. The old single-request path ignored the key
+        # entirely, and "" is a common end-of-list convention for a server built
+        # over a generic pager - refusing it would have turned discovery of a
+        # perfectly good single-page server into a content-free failure the
+        # operator could not diagnose.
         return None
-    if not isinstance(raw, str) or not raw:
+    if not isinstance(raw, str):
         raise McpDiscoveryInvalid
     if len(raw.encode("utf-8")) > MCP_MAX_CURSOR_BYTES:
         raise McpDiscoveryInvalid
@@ -76,12 +123,15 @@ def page_from_response(
     seen: set[str],
     *,
     accumulated: int = 0,
-) -> tuple[list[McpToolSnapshot], str | None]:
+) -> tuple[list[McpToolSnapshot], str | None, int]:
     """Parse one page, sharing ``seen`` so a duplicate ACROSS pages still fails.
 
-    ``accumulated`` is what previous pages already yielded: the snapshot cap is
-    tested against the running total, because a per-response cap is no cap at
-    all once a server can paginate.
+    ``accumulated`` is what previous pages already SCANNED, not what they
+    yielded, and the difference is the whole bound. A tool whose name cannot
+    publish is skipped, so counting survivors let a server send 50 pages of 5000
+    unpublishable names while the running total stayed at zero - 250,000 parses
+    and, before this, 250,000 log lines. The third return value is that scanned
+    count, so the caller can hold the total the check is made against.
     """
     if not isinstance(response, dict):
         raise McpProtocolInvalid
@@ -92,16 +142,16 @@ def page_from_response(
     if accumulated + len(tools) > MCP_MAX_TOOL_SNAPSHOT:
         raise McpDiscoveryInvalid
     snapshot: list[McpToolSnapshot] = []
+    skipped = 0
     for tool in tools:
         if not isinstance(tool, dict):
             raise McpDiscoveryInvalid
         name = str(tool.get("name") or "")
         if not name or not _TOOL_VERB_ID.fullmatch(f"{adapter_id}.{name}"):
-            log.warning(
-                "mcp server '%s' exposed a tool that was skipped because its "
-                "name is not publishable",
-                adapter_id,
-            )
+            # Counted and reported ONCE per page. One line per skipped tool was
+            # bounded by a single response before pagination; across a page loop
+            # it is an unthrottled write amplifier a remote server controls.
+            skipped += 1
             continue
         if name in seen:
             raise McpDiscoveryInvalid
@@ -122,4 +172,11 @@ def page_from_response(
             )
         except ValueError as exc:
             raise McpDiscoveryInvalid from exc
-    return snapshot, _next_cursor(result)
+    if skipped:
+        log.warning(
+            "mcp server '%s' offered %d tool(s) skipped because their names are "
+            "not publishable",
+            adapter_id,
+            skipped,
+        )
+    return snapshot, _next_cursor(result), len(tools)

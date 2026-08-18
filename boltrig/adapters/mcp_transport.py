@@ -143,6 +143,13 @@ class StreamableHttp:
         # bearer form. The token never enters a log line or an error message.
         headers = {
             "Accept": _ACCEPT,
+            # A compressed body allocates its DECODED size inside httpx before
+            # any application-level bound can see it, so a small response can
+            # cost gigabytes of memory. ``http_response.bounded_http_response``
+            # forces identity for every other outbound adapter for exactly this
+            # reason; the MCP transport did not, and a page loop would multiply
+            # the exposure by the page ceiling.
+            "Accept-Encoding": "identity",
             "Authorization": f"Bearer {bearer}",
             "x-boltrig-mcp-token": bearer,
         }

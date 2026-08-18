@@ -25,7 +25,10 @@ from urllib.parse import quote, unquote
 
 from boltrig.adapters.base import McpResourceSpec
 
-from boltrig.kernel import mcp_errors, tool_disclosure
+from boltrig.kernel import mcp_errors
+from boltrig.kernel.mcp_errors import err as _err
+from boltrig.kernel.mcp_errors import ok as _ok
+from boltrig.kernel.mcp_tools_list import list_tools
 from boltrig.models import (
     GrantSet,
     InvocationContext,
@@ -37,12 +40,6 @@ from boltrig.models import (
 _PROTOCOL_VERSION = "2024-11-05"
 
 
-def _ok(rid, result: dict) -> dict:
-    return {"jsonrpc": "2.0", "id": rid, "result": result}
-
-
-def _err(rid, code: int, message: str) -> dict:
-    return {"jsonrpc": "2.0", "id": rid, "error": {"code": code, "message": message}}
 
 
 @dataclass(frozen=True)
@@ -218,7 +215,13 @@ class McpFace:
         set_current_tenant(rt.tenant_id)
         rid = request.get("id")
         method = request.get("method")
-        params = request.get("params") or {}
+        # JSON-RPC allows positional params, and a string or number survives a
+        # truthiness test. Every branch here reads params as an object, so the
+        # type check belongs at the door: without it `tools/list` with
+        # `"params": "x"` raised AttributeError out of an unguarded route and
+        # became an HTTP 500 with no JSON-RPC frame at all.
+        raw_params = request.get("params")
+        params = raw_params if isinstance(raw_params, dict) else {}
         if method == "initialize":
             capabilities: dict = {"tools": {"listChanged": False}}
             if self._resource_specs(rt.tenant_id):
@@ -231,7 +234,7 @@ class McpFace:
         if method in ("notifications/initialized", "ping"):
             return _ok(rid, {})
         if method == "tools/list":
-            return _ok(rid, await self._list_tools(rt, params.get("cursor")))
+            return await list_tools(self._kernel, rt, rid, params.get("cursor"))
         if method == "tools/call":
             return _ok(rid, await self._call_tool(
                 rt, params, ip_address=ip_address, user_agent=user_agent
@@ -354,16 +357,6 @@ class McpFace:
                 break
             return [{"uri": uri, "mimeType": media_type, "blob": blob}]
         raise ValueError("resource not found")
-
-    async def _list_tools(self, rt: RunToken, cursor: object = None) -> dict:
-        """Granted-only, RANKED and PAGED: tenant ceiling ∩ run grants (SEC-23,
-        FR-MCP-02). Returns the whole ``tools/list`` result, so the continuation
-        token travels with the page that produced it."""
-        perms = await self._kernel.store.get_tenant_permissions(rt.tenant_id)
-        verbs = await self._kernel.store.list_verbs(rt.tenant_id)
-        return tool_disclosure.offer_page(
-            [v for v in verbs if perms.grants.permits(v.id)], rt.grants, rt.skills, cursor
-        )
 
     async def _call_tool(
         self, rt: RunToken, params: dict, *,

@@ -118,11 +118,15 @@ class CapabilityRoutingStoreMem:
         # capability coexists rather than replacing (SPEC §8, §11.1 site 2).
         self._capability_bindings[(binding.tenant_id, binding.binding_id)] = replace(binding)
 
-    async def list_capability_bindings(self, tenant_id, capability_id=None):
+    async def list_capability_bindings(
+        self, tenant_id, capability_id=None, *, source_operation_id=None
+    ):
         rows = [
             replace(b)
             for (t, _), b in self._capability_bindings.items()
-            if t == tenant_id and (capability_id is None or b.capability_id == capability_id)
+            if t == tenant_id
+            and (capability_id is None or b.capability_id == capability_id)
+            and (source_operation_id is None or b.source_operation_id == source_operation_id)
         ]
         return sorted(rows, key=lambda b: (b.priority, b.binding_id))
 
@@ -250,12 +254,16 @@ class CapabilityRoutingStorePG:
             binding.reviewed_by,
         )
 
-    async def list_capability_bindings(self, tenant_id, capability_id=None):
+    async def list_capability_bindings(
+        self, tenant_id, capability_id=None, *, source_operation_id=None
+    ):
         rows = await self._pool.fetch(
             """SELECT * FROM capability_bindings
-               WHERE tenant_id=$1 AND ($2::text IS NULL OR capability_id=$2)
+               WHERE tenant_id=$1
+                 AND ($2::text IS NULL OR capability_id=$2)
+                 AND ($3::text IS NULL OR source_operation_id=$3)
                ORDER BY priority, binding_id""",
-            tenant_id, capability_id,
+            tenant_id, capability_id, source_operation_id,
         )
         return [_capability_binding(row) for row in rows]
 

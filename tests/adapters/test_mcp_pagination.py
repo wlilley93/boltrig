@@ -112,7 +112,7 @@ async def test_a_repeating_cursor_is_refused_rather_than_looping():
 
 async def test_the_page_ceiling_bounds_a_server_that_never_ends(monkeypatch):
     """Distinct cursors defeat the repeat check, so the ceiling is the backstop."""
-    monkeypatch.setattr("boltrig.adapters.mcp_consumer.MCP_MAX_TOOL_PAGES", 3)
+    monkeypatch.setattr("boltrig.adapters.mcp_discovery.MCP_MAX_TOOL_PAGES", 3)
     counter = {"n": 0}
 
     async def rpc(request: dict) -> dict:
@@ -131,10 +131,37 @@ async def test_the_page_ceiling_bounds_a_server_that_never_ends(monkeypatch):
     assert counter["n"] == 3
 
 
-@pytest.mark.parametrize("cursor", [123, "", {"a": 1}, [], "x" * 4096])
-async def test_a_malformed_cursor_is_refused_not_read_as_the_last_page(cursor):
-    """Treating an unusable cursor as end-of-list would restore the original
-    defect exactly - a truncated surface, silently."""
+@pytest.mark.parametrize("cursor", [123, {"a": 1}, "x" * 4096])
+async def test_a_usable_looking_but_invalid_cursor_is_refused(cursor):
+    """Treating a REAL cursor we cannot use as end-of-list would restore the
+    original defect exactly - a truncated surface, silently."""
     rpc, _sent = _pager([{"tools": [_tool("alpha")], "nextCursor": cursor}])
+    with pytest.raises(McpDiscoveryInvalid):
+        await McpConsumerAdapter("ext", rpc=rpc).connect()
+
+
+@pytest.mark.parametrize("cursor", ["", None, False, 0, []])
+async def test_a_falsy_next_cursor_is_the_last_page(cursor):
+    """"" is a common end-of-list convention for a server built over a generic
+    pager, and the pre-pagination code ignored the key entirely. Refusing these
+    would turn discovery of a perfectly good single-page server into a
+    content-free failure its operator could not diagnose."""
+    rpc, sent = _pager([{"tools": [_tool("alpha")], "nextCursor": cursor}])
+    specs = await McpConsumerAdapter("ext", rpc=rpc).connect()
+    assert {spec.verb_id for spec in specs} == {"ext.alpha"}
+    assert len(sent) == 1
+
+
+async def test_the_scan_cap_counts_names_that_were_skipped(monkeypatch):
+    """The cap must count what was SCANNED, not what survived: a page of names
+    that cannot publish costs the same parsing as a page that can, so counting
+    survivors let a server send pages forever with the total stuck at zero."""
+    monkeypatch.setattr("boltrig.adapters.mcp_discovery.MCP_MAX_TOOL_SNAPSHOT", 3)
+    rpc, _sent = _pager(
+        [
+            {"tools": [{"name": "a/b"}, {"name": "c/d"}], "nextCursor": "page-2"},
+            {"tools": [{"name": "e/f"}, {"name": "g/h"}]},
+        ]
+    )
     with pytest.raises(McpDiscoveryInvalid):
         await McpConsumerAdapter("ext", rpc=rpc).connect()

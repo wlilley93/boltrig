@@ -247,6 +247,13 @@ def grant_verbs(verb: str, verb_def: Any, plan: ExecutionPlan | None) -> tuple[s
     list are verb-id shaped today, so the capability layer must ADD a check
     through the same checker, never replace one.
 
+    THE CHECK PRECEDES SCHEMA VALIDATION, and that order is not tidiness. A
+    routed call is validated against the SOURCE OPERATION's input schema, and
+    the rejection hands the caller that schema's field names and a digest - the
+    same value stored as the binding's ``source_schema_digest``. Validating
+    first therefore described a verb to a caller who may not call it, using the
+    capability name as the way in.
+
     The capability is checked UNVERSIONED. ``crm.contact.search@1`` is an
     addressing detail of one call, not a separate permission, and a grant list
     spelled with pinned versions would silently stop matching the day a
@@ -258,16 +265,68 @@ def grant_verbs(verb: str, verb_def: Any, plan: ExecutionPlan | None) -> tuple[s
 
 
 def blocking_names(verb: str, verb_def: Any, plan: ExecutionPlan | None) -> tuple[str, ...]:
-    """Every name an operator's always-ask list could reasonably have meant.
+    """The names available WITHOUT a store read: what the caller typed, the
+    capability it resolved to, and the source operation it will execute.
 
-    The always-block list is matched by plain set membership on the invoked
-    name. Before the capability layer that was the whole truth, because there
-    was one name. Now a call has up to three - what the caller typed, the
-    canonical capability, and the source operation actually executed - and an
-    operator who blocked ``hubspot.contact.create`` means that action, however
-    it is addressed. Testing only the typed name let the canonical spelling walk
-    straight past a deliberate human gate.
+    Deliberately NOT the versioned form. ``grant_verbs`` refuses the pinned
+    spelling because a list written as ``crm.contact.create@1`` silently stops
+    matching the day the version moves, and that argument is stronger for a
+    human gate than for a grant: the pin adds no coverage (a caller who TYPES
+    the pinned name is already matched by ``verb``, and an unpinned operator
+    entry is already matched by ``capability_id``), while offering exactly one
+    configuration - operator pins, caller does not - that works until it
+    quietly does not.
+
+    This is only half the answer; see ``governed_capabilities`` for the half a
+    name cannot know.
     """
     if plan is None:
         return (verb,)
-    return (verb, plan.capability_id, plan.ref, verb_def.id)
+    return (verb, plan.capability_id, verb_def.id)
+
+
+def unpinned(names: Any) -> frozenset[str]:
+    """An operator's always-ask entries with any version pin removed.
+
+    Three ways to treat ``crm.contact.create@1`` in a blocking list, and only one
+    is safe. Honour it as written and the gate stops firing the day a binding's
+    version moves - silently, because nothing reads that list back. Ignore it and
+    the gate never fires at all - also silently. Normalise it and the operator
+    gets what they plainly meant: this capability, at whatever version serves it.
+    A plain verb id has no pin and passes through unchanged.
+    """
+    return frozenset(parse_capability_ref(str(name))[0] for name in names)
+
+
+async def governed_capabilities(
+    store: Any, tenant_id: str, verb_def: Any, plan: ExecutionPlan | None
+) -> tuple[frozenset[str], str | None]:
+    """The capabilities this call answers to, and the strongest override on the
+    binding that serves it - resolved from STORED bindings when the caller
+    addressed the source operation directly.
+
+    A name-only match cannot see this, and that gap was a hole rather than an
+    inelegance: ``crm.contact.create`` and ``hubspot.contact.create`` are the
+    same action through the same binding, so an operator who blocked the
+    capability blocked nothing a model could actually reach - the MCP face
+    offers source-operation verb ids and never capability names. The binding's
+    ``consequence_override`` has the same shape of bug: it is a property of the
+    ROUTE, so reading it only when the caller happened to spell the canonical
+    name let the identical call through the identical binding go ungated.
+
+    ``status != approved`` bindings are ignored here exactly as they are ignored
+    by routing: an unapproved mapping governs nothing because it serves nothing.
+    """
+    if plan is not None:
+        return frozenset({plan.capability_id}), plan.target.consequence_override
+    names: set[str] = set()
+    override: str | None = None
+    for binding in await store.list_capability_bindings(
+        tenant_id, source_operation_id=verb_def.id
+    ):
+        if binding.status != "approved":
+            continue
+        names.add(binding.capability_id)
+        if binding.consequence_override == "high":
+            override = "high"
+    return frozenset(names), override

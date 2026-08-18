@@ -824,28 +824,53 @@ protocol version is a fixed 2024-11-05 reply (not a negotiation).
 
 **Disposition, 2026-08-18. Both faces now paginate; the version is still not
 negotiated.** The consumer follows `nextCursor` to the last page under four
-bounds — a page ceiling, the ACCUMULATED snapshot cap (a per-response cap is no
-cap once a server can paginate), a cursor length bound, and a repeat-cursor
-check, because a server that returns its own cursor forever is otherwise an
-infinite loop inside the 5s probe timeout. A malformed cursor is a protocol
-violation rather than a quiet end-of-list, since reading it as "no more pages"
-is the original defect wearing a loop.
+bounds — a page ceiling, the ACCUMULATED SCAN cap, a cursor length bound, and a
+repeat-cursor check, because a server that returns its own cursor forever is
+otherwise an infinite loop inside the 5s probe timeout. The cap counts entries
+SCANNED rather than accepted: a name that cannot publish is skipped, so counting
+survivors let a server paginate forever with the running total stuck at zero.
+The whole walk runs on ONE pinned connection, because opening a client costs a
+synchronous DNS resolution on the event loop — time no timeout can interrupt —
+and one per page turned a bounded probe into a bounded freeze.
+
+A *falsy* `nextCursor` (absent, null, `""`, `false`, `0`) is the last page: the
+pre-pagination code ignored the key entirely and `""` is a common end-of-list
+convention, so refusing it would turn discovery of a good single-page server
+into a content-free failure. A *truthy but unusable* cursor is a protocol
+violation, since reading a real cursor as "no more pages" is the original defect
+wearing a loop.
 
 Boltrig's own face accepts `params.cursor` and emits `nextCursor`, paging OVER
-`offer_payload` rather than replacing it: every row the ranked offer produces is
-still delivered, in the same order, across the pages a client walks. That
-matters because [2026] VJS-CC-VJS 10 D4 reserves the choice of a truncation
-SIZE as a policy question — pagination changes the number of round trips and not
-the membership, so the reserved question stays reserved and a dropping budget is
-still passed to `compute_tool_offer` and nowhere else. The default page size is
-above every measured surface (293 committed verb rows, 633 for the widest
-consumed server), so no client alive sees a different answer today.
+`offer_payload` rather than replacing it, so no page-size choice drops a row.
+That matters because [2026] VJS-CC-VJS 10 D4 reserves the choice of a truncation
+SIZE as a policy question, and a dropping budget is still passed to
+`compute_tool_offer` and nowhere else. The default page size is above every
+measured surface (293 committed verb rows, 633 for the widest consumed server),
+so no client alive sees a different answer today. An absent or empty cursor is
+the first page; anything else unresolvable is JSON-RPC `-32602`, because an
+empty success page is indistinguishable from "this server has no tools" and an
+agent reports that as nothing at all.
 
-What is NOT closed: the protocol version is still a fixed reply on the server
-face (2024-11-05) while the consumer transport pins 2025-06-18, and
-`capabilities.tools.listChanged` is still `false` with no notification channel —
-so a mechanism that GROWS a run's tool table has no way to say so, which is a
-live constraint on §7.E rather than a detail.
+**The membership guarantee is exact only for a STABLE offer.** The offer is
+recomputed from live store state per page and the rank depends on each verb's
+consequence and grant specificity, so a row that re-ranks ahead of the cursor's
+anchor between two of a client's requests is delivered on neither page.
+Registering an adapter or re-probing a consumed server mid-pagination is enough.
+The name-anchored cursor bounds that failure to rows that MOVED; an index cursor
+would lose a row whenever the offer merely shrank.
+
+What is NOT closed:
+- the protocol version is still a fixed reply on the server face (2024-11-05)
+  while the consumer transport pins 2025-06-18;
+- `capabilities.tools.listChanged` is still `false` with no notification
+  channel, so a mechanism that GROWS a run's tool table has no way to say so —
+  a live constraint on §7.E rather than a detail (see §11.10);
+- the MCP transport has NO response-byte bound. Every other outbound adapter
+  reads through `bounded_http_response` (4MB cap); this one calls
+  `client.post` and `response.json()` directly. Compression is now refused
+  (`Accept-Encoding: identity`), which removes the decompression-bomb
+  amplification, but a server willing to actually send the bytes is still
+  unbounded. A streaming bound is the complete fix and is its own change.
 
 ### 11.7 What already exists and is reused, not rebuilt
 
@@ -953,3 +978,23 @@ tool list changed mid-run" has no way to be said even if it could happen.
 
 Whichever is chosen, capability-shaped grants come first: until a grant token can
 name a capability, a projected capability name is a tool nobody can call.
+
+### 11.11 The connection catalogue is readable without a grant [verified 2026-08-18]
+
+`route_required` no longer names the tenant's connections to an ungranted
+caller. The read door one module over never checked at all:
+`GET /v1/integrations/connections` and `GET /v1/integrations/catalogue` are
+registered with the principal dependency only — no `require_author`, no
+`GrantChecker.check`, no scope filter — while the `DELETE` on the same prefix
+does call `require_author`. `_connection_view` returns the connection label, the
+per-account labels, `enabled_tools` and now `enabled_capabilities`. So the exact
+list the routing refusal was hardened to withhold is available, by label, to any
+authenticated member of the tenant.
+
+This is NOT closed here, and the reason is worth stating rather than leaving as
+an omission: hardening a read the console depends on is a decision about who may
+see a tenant's connected systems, not a bug fix, and guessing it would either
+break the Connections page for ordinary members or leave a half-measure that
+reads as protection. What the capability work adds is that the same view now
+also lists capabilities, so the decision is slightly more consequential than it
+was, not less.

@@ -290,23 +290,36 @@ def test_todays_surfaces_are_one_page_and_unchanged():
     assert page == {"tools": offer_payload(rows, grants, ())}
 
 
-@pytest.mark.parametrize("cursor", ["not-base64-!!", "", 17, {"a": 1}])
-def test_an_unusable_cursor_stops_the_client_instead_of_restarting_it(cursor):
-    """Restarting at zero on a stale cursor is an infinite client loop; an empty
-    final page is a clean stop. Both are wrong answers to a bad cursor, and this
-    is the one that terminates."""
+@pytest.mark.parametrize("cursor", ["not-base64-!!", 17, {"a": 1}])
+def test_an_unusable_cursor_is_an_error_not_an_empty_offer(cursor):
+    """Both silent answers are wrong, so neither is given.
+
+    An empty success page is indistinguishable from "this server has no tools",
+    which an agent reports as nothing at all; restarting at zero turns a stale
+    cursor into a client that pages forever. The face turns this into JSON-RPC
+    -32602 so the client learns which of the two it is.
+    """
     rows = [_verb(f"doc.op{index}") for index in range(4)]
-    page = offer_page(rows, GrantSet.of(["doc.*"]), (), cursor)
-    assert page["tools"] == [] and "nextCursor" not in page
+    with pytest.raises(ToolDisclosureError):
+        offer_page(rows, GrantSet.of(["doc.*"]), (), cursor)
 
 
-def test_a_cursor_naming_a_vanished_tool_stops_rather_than_skipping(monkeypatch):
-    """The offer can shrink between a client's pages. Anchoring on a NAME means
-    the worst case is a clean stop; an index cursor would have silently skipped
-    whatever slid into that position."""
+@pytest.mark.parametrize("cursor", [None, ""])
+def test_an_absent_or_empty_cursor_is_the_first_page(cursor):
+    """A client that initialises the field rather than omitting it is asking for
+    the beginning. Reading that as an unusable cursor cost it every tool."""
+    rows = [_verb(f"doc.op{index}") for index in range(4)]
+    grants = GrantSet.of(["doc.*"])
+    assert offer_page(rows, grants, (), cursor) == {"tools": offer_payload(rows, grants, ())}
+
+
+def test_a_cursor_naming_a_vanished_tool_is_an_error_rather_than_a_skip(monkeypatch):
+    """The offer can shrink between a client's pages. Anchoring on a NAME makes
+    that detectable; an index cursor would silently have skipped whatever slid
+    into that position, which is the failure nobody can see."""
     monkeypatch.setattr(tool_disclosure, "MCP_TOOLS_PAGE_SIZE", 2)
     rows = [_verb(f"doc.op{index}") for index in range(4)]
     first = offer_page(rows, GrantSet.of(["doc.*"]), ())
     shrunk = [row for row in rows if row.id != first["tools"][-1]["name"]]
-    page = offer_page(shrunk, GrantSet.of(["doc.*"]), (), first["nextCursor"])
-    assert page["tools"] == [] and "nextCursor" not in page
+    with pytest.raises(ToolDisclosureError):
+        offer_page(shrunk, GrantSet.of(["doc.*"]), (), first["nextCursor"])

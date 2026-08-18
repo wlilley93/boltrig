@@ -225,24 +225,31 @@ def _encode_cursor(name: str) -> str:
 
 
 def _resume_index(rows: list[dict], cursor: Any) -> int:
-    """Where the next page starts, fail-CLOSED on anything unusable.
+    """Where the next page starts. Raises on a cursor that cannot be resolved.
 
-    An unresolvable cursor yields the END of the list: one empty final page and
-    the client stops. Restarting at zero would turn a stale cursor into a client
-    that pages forever.
+    An empty or absent cursor is the FIRST page, not a broken one: a client that
+    initialises the field rather than omitting it is asking for the beginning,
+    and answering that with zero tools is a silent capability outage - the agent
+    sees a server with nothing to offer and no error to report.
+
+    Anything else unusable - a non-string, undecodable base64, or an anchor no
+    longer in the offer - raises, and the face turns that into JSON-RPC -32602.
+    The alternatives are both silent: an empty success is indistinguishable from
+    "this server has no tools", and restarting at zero turns a stale cursor into
+    a client that pages forever.
     """
-    if cursor is None:
+    if cursor is None or cursor == "":
         return 0
-    if not isinstance(cursor, str) or not cursor:
-        return len(rows)
+    if not isinstance(cursor, str):
+        raise ToolDisclosureError("cursor is not a string")
     try:
         anchor = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)).decode("utf-8")
-    except Exception:
-        return len(rows)
+    except Exception as exc:
+        raise ToolDisclosureError("cursor is not decodable") from exc
     for index, row in enumerate(rows):
         if row["name"] == anchor:
             return index + 1
-    return len(rows)
+    raise ToolDisclosureError("cursor names a tool that is no longer offered")
 
 
 def offer_page(
@@ -253,11 +260,18 @@ def offer_page(
 ) -> dict[str, Any]:
     """One PAGE of ``offer_payload``, plus the MCP continuation token (SPEC 11.6).
 
-    PAGING IS NOT THE TRUNCATION D4 RESERVES. Every row ``offer_payload``
-    produces is still delivered, in the same ranked order, across the pages a
-    client walks - membership is untouched and only the number of round trips
-    changes. A budget that DROPS rows remains unadopted, and when one is adopted
-    it is still passed to ``compute_tool_offer`` and nowhere else.
+    PAGING IS NOT THE TRUNCATION D4 RESERVES. No page-size choice here drops a
+    row from the offer: a budget that DROPS rows remains unadopted, and when one
+    is adopted it is still passed to ``compute_tool_offer`` and nowhere else.
+
+    THE GUARANTEE IS EXACT ONLY FOR A STABLE OFFER, and that limit is stated
+    rather than glossed. The offer is recomputed from live store state on every
+    page, and the rank depends on each verb's consequence and grant specificity,
+    so a row that re-ranks AHEAD of the cursor's anchor between two of a
+    client's requests is not delivered on either page. Registering an adapter or
+    re-probing a consumed server mid-pagination is enough to do it. What the
+    name-anchored cursor buys is that the failure is bounded to rows that MOVED:
+    an index cursor loses a row whenever the offer merely shrinks.
     """
     rows = offer_payload(candidates, grants, skills)
     start = _resume_index(rows, cursor)

@@ -47,16 +47,14 @@ from boltrig.models import (
     McpToolSnapshot,
 )
 from boltrig.models.mcp_lifecycle import (
-    MCP_MAX_TOOL_PAGES,
     validate_mcp_tool_snapshot,
 )
 
 from .mcp_discovery import (
     McpDiscoveryInvalid,
+    discover_pages,
     McpProbeResult,
     McpProtocolInvalid,
-    finalise_snapshot,
-    page_from_response,
 )
 from .mcp_tool_policy import consequence_hint as _consequence_hint
 from .mcp_tool_policy import external_description
@@ -188,39 +186,27 @@ class McpConsumerAdapter:
         return McpProbeResult(False, code, ())
 
     async def _discover(self, credential: Credential | None) -> tuple[McpToolSnapshot, ...]:
-        """Follow ``tools/list`` to its last page (SPEC §11.6).
+        """Follow ``tools/list`` to its last page (SPEC §11.6), on ONE connection.
 
-        One request WAS the whole of discovery, so every page after the first
-        was invisible: a paginating server's later tools did not exist as far as
-        Boltrig was concerned, silently and with nothing to notice. Four bounds
-        stop the loop becoming its own hazard - a page ceiling, the ACCUMULATED
-        snapshot cap (per-page is no cap once a server can paginate), the cursor
-        length bound, and a repeat-cursor check, because a server that hands
-        back its own cursor forever is otherwise an infinite loop burning the
-        probe timeout. Note each page is a fresh pinned client and a fresh
-        egress resolution (``_call``), which is what the page ceiling is really
-        bounding.
+        One request was the whole of discovery, so every page after the first was
+        invisible: a paginating server's later tools did not exist as far as
+        Boltrig was concerned, silently and with nothing to notice. The bounds
+        that make the loop safe belong to the parser and live with it in
+        ``discover_pages``; what belongs here is the CONNECTION. A pinned client
+        per page would have run one synchronous DNS resolution per page on the
+        event loop, so the client is opened once and held for the whole walk.
         """
-        tools: list[McpToolSnapshot] = []
-        seen: set[str] = set()
-        cursors: set[str] = set()
-        cursor: str | None = None
-        for _page in range(MCP_MAX_TOOL_PAGES):
-            params: dict[str, Any] = {} if cursor is None else {"cursor": cursor}
-            resp = await self._call(
-                {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": params},
-                bearer_token(credential),
+        if self._rpc is not None:
+            return await discover_pages(self._rpc, self.id, _consequence_hint)
+        bearer = bearer_token(credential)
+        self._require_bearer(bearer)
+        client = self._open_client()
+        async with client:
+            return await discover_pages(
+                lambda request: self._invoke(client, request, str(bearer)),
+                self.id,
+                _consequence_hint,
             )
-            page, cursor = page_from_response(
-                self.id, resp, _consequence_hint, seen, accumulated=len(tools)
-            )
-            tools.extend(page)
-            if cursor is None:
-                return finalise_snapshot(tools)
-            if cursor in cursors:
-                raise McpDiscoveryInvalid
-            cursors.add(cursor)
-        raise McpDiscoveryInvalid
 
     def apply_tool_snapshot(self, snapshot: tuple[McpToolSnapshot, ...]) -> list[VerbSpec]:
         """Load an already-vetted snapshot into this in-process adapter only."""
@@ -330,65 +316,84 @@ class McpConsumerAdapter:
         return "ok" if self._specs else "unknown"
 
     async def _call(self, request: dict, bearer: str | None) -> dict:
+        """One round trip on a connection opened and closed for it."""
         if self._rpc is not None:
             # Injected in-process transport (tests, self-consumption): it owns its
             # own auth, so no bearer is derived or sent here.
             return await self._rpc(request)
+        self._require_bearer(bearer)
+        client = self._open_client()
+        async with client:
+            return await self._invoke(client, request, str(bearer))
+
+    def _require_bearer(self, bearer: str | None) -> None:
+        # Fail closed behind execute's own check and the connect() guard: never
+        # post an empty bearer, which would be an unauthenticated request.
         if not bearer:
-            # Fail closed (defence in depth behind execute's own check, and the
-            # guard for connect()): never post an empty bearer, which would be an
-            # unauthenticated request.
             raise CredentialResolution(f"no mcp credential resolved for '{self.id}'")
+
+    def _open_client(self) -> Any:
+        """One SSRF-vetted, IP-pinned client.
+
+        SSRF (SEC-61, H2): pin the connection to the vetted IP before posting -
+        this path carries the MCP bearer token, so httpx re-resolving to internal
+        space would both reach internal services AND leak the token.
+        ``pinned_async_client`` forces ``follow_redirects=False``;
+        ``allow_internal`` (the reviewed registration opt-in) is the ONLY waiver,
+        for an operator-vetted internal server.
+
+        Separated from ``_call`` so a caller making SEVERAL round trips opens one
+        client and holds it. Opening costs a synchronous ``getaddrinfo`` on the
+        event loop, and a blocking resolution is time ``asyncio.wait_for`` cannot
+        interrupt: a client per page would have put one such freeze between every
+        page of a discovery, inside the probe's own timeout.
+        """
         from boltrig.adapters.egress import EgressBlocked
 
-        # SSRF (SEC-61, H2): pin the connection to the vetted IP before
-        # posting - this path carries the MCP bearer token, so httpx re-resolving
-        # to internal space would both reach internal services AND leak the token.
-        # pinned_async_client forces follow_redirects=False. allow_internal (the
-        # reviewed registration opt-in) is the ONLY waiver, for an
-        # operator-vetted internal server.
         try:
-            client = self._transport.pinned_client()
+            return self._transport.pinned_client()
         except EgressBlocked as exc:
             raise _McpFailure(
                 AdapterError(ErrorClass.INVALID, str(exc), retryable=False),
                 "egress_denied",
             ) from exc
-        async with client:
-            try:
-                return await self._transport.call(client, request, bearer)
-            except McpHttpRefusal as refusal:
-                failure_code = (
-                    "credential_unavailable"
-                    if refusal.status in {401, 403}
-                    else "transport_unavailable"
-                )
-                raise _McpFailure(
-                    AdapterError(
-                        _status_error(refusal.status),
-                        str(refusal),  # status only - the body never crosses
-                        retryable=refusal.status == 429 or refusal.status >= 500,
-                    ),
-                    failure_code,
-                ) from refusal
-            except (TypeError, ValueError, KeyError) as exc:
-                raise _McpFailure(
-                    AdapterError(
-                        ErrorClass.INVALID,
-                        "mcp server returned an invalid protocol response",
-                        retryable=False,
-                    ),
-                    "protocol_invalid",
-                ) from exc
-            except Exception as exc:
-                raise _McpFailure(
-                    AdapterError(
-                        ErrorClass.UNAVAILABLE,
-                        "mcp transport unavailable",
-                        retryable=True,
-                    ),
-                    "transport_unavailable",
-                ) from exc
+
+    async def _invoke(self, client: Any, request: dict, bearer: str) -> dict:
+        """One JSON-RPC round trip on an already-open pinned client."""
+        try:
+            return await self._transport.call(client, request, bearer)
+        except McpHttpRefusal as refusal:
+            failure_code = (
+                "credential_unavailable"
+                if refusal.status in {401, 403}
+                else "transport_unavailable"
+            )
+            raise _McpFailure(
+                AdapterError(
+                    _status_error(refusal.status),
+                    str(refusal),  # status only - the body never crosses
+                    retryable=refusal.status == 429 or refusal.status >= 500,
+                ),
+                failure_code,
+            ) from refusal
+        except (TypeError, ValueError, KeyError) as exc:
+            raise _McpFailure(
+                AdapterError(
+                    ErrorClass.INVALID,
+                    "mcp server returned an invalid protocol response",
+                    retryable=False,
+                ),
+                "protocol_invalid",
+            ) from exc
+        except Exception as exc:
+            raise _McpFailure(
+                AdapterError(
+                    ErrorClass.UNAVAILABLE,
+                    "mcp transport unavailable",
+                    retryable=True,
+                ),
+                "transport_unavailable",
+            ) from exc
 
 
 def build() -> Any:  # loader hook; real config comes from the mcp_servers table
