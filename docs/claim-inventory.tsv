@@ -246,7 +246,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/prompt_stack.py:235	actor_
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:1	new_work_items	The delegation pump: the org goes live (Beat 4; US-FLT-06, US-EXE-06).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:109	error	A bounded, infrastructure-free error note for a FAILED item's result.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/result.py:99	tokens_used	A clearly-marked degraded result (no SDK / no key / backend down, P9).
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/runtime_resolver.py:55	pinned_policy	Resolve one runtime under either caller-routing or pinned profile policy.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/runtime_resolver.py:57	pinned_policy	Resolve one runtime under either caller-routing or pinned profile policy.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/spawn.py:198	subagent	Resolve the runtime and run the turn, refunding the reservation on a raise.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/delegation.py:1	delegated	On-behalf-of identity decisions and OBO token exchange (US-IAM-03/05, SEC-03).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/password_reset_evidence.py:22	not_observed_in_bounded_tail	Project no recipient, provider, address, exception, or message content.
@@ -399,6 +399,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/reflection.py:84	kernel.inv
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/result.py:16	ok	The outcome of one ephemeral agent run (US-FLT-04).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/result.py:86	degrade	The bounded degrade tag this result carries, or None.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/retention.py:1	run_retention_once	Retention purge: hard-erasure of closed conversations (M11, right-to-erasure).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/runtime_resolver.py:374	offer_candidates	The run's effective kernel tool set: tenant ceiling ∩ run grants.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:307	_publish_subagent_end_event	Retire the bearer this child inherited, at the child's run terminal.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:334	_publish_subagent_event	Settle a delegated child on the parent relay (G3, SDK-CONTRACT §5).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:409	resolve_run_scoped_credential	Carry a run-scoped adapter bearer from the spawning run to its child.
@@ -1038,7 +1039,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/reflection.py:123		failure must never 
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/result.py:51		never at zero.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/routine_run.py:159		so an engine retry never emits duplicate completion notices.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/routine_run.py:176		Notification delivery is a side channel, never the authority for
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime_resolver.py:30		A composed runtime cannot honestly satisfy an authored pinned profile.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime_resolver.py:32		A composed runtime cannot honestly satisfy an authored pinned profile.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:229		cross: see _inherit_adapter_bearer for why the child cannot use the seal
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:235		decided (SEC-13).
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:389		(0/0) is priced on the total exactly as before - never at zero.
@@ -1130,6 +1131,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/audit.py:45		it may not.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/audit.py:47		perfectly.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/audit.py:55		[(retired_at_seq, key)] oldest boundary first; malformed entries are ignored.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/call_gateway_routes.py:65		history cannot be proven, typed provider work fails closed.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/capability_offer.py:34		The binding may RAISE a source operation's consequence, never lower it.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/channel_inbound_routes.py:45		channel into allowlist mode;
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/channel_pair_finalization.py:56		List only the caller's safe pairing intent;
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/channel_principal.py:24		than the member tier - the lowest console tier, which operates but can never
@@ -1639,6 +1641,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:257	request.stat
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/approval_gate.py:131	held_call.name_redeemer	Refuse to MINT an approval no lane could ever redeem (decision 0018, Order 5).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/approval_posture.py:66	blocking_names	Every reason one invocation must pause for a human, in one place.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/camera_agent_routes.py:300	parse_enrollment	Record the enrolled face as KERNEL data, published by the host agent.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/capability_offer.py:1	routing.grant_verbs	What the model is OFFERED: canonical capabilities in place of raw operations.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/channel_notify.py:126	eligible_approval_responders	Enqueue an APPROVAL request's notice to every eligible approver.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/channel_policy.py:89	authority.context_for	Stamp the resolved narrowing onto the durable work item.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/events.py:173	max_seq	Record an event and fan it out to current subscribers (non-blocking).
