@@ -49,13 +49,20 @@ function projectProvider(id, raw) {
     throw new Error(`invalid provider row: ${id}`);
   }
   const name = safeText(raw.name, 120) ? raw.name : id;
+  // The provider's API base URL, kept so a provider Bifrost has no native
+  // driver for can still be bound as an OpenAI-compatible custom provider.
+  // models.dev records it as `api`; entries without one fall back to the
+  // picker's typed base-URL field.
+  const api = safeHttpUrl(raw.api, 200);
   const models = Object.entries(raw.models ?? {})
     .filter(([modelId, model]) => model?.status !== "deprecated"
       && exactModelIdAllowed(id, modelId))
     .map(([modelId, model]) => projectModel(id, modelId, model))
     .sort((left, right) => (left.name ?? left.id).localeCompare(right.name ?? right.id)
       || left.id.localeCompare(right.id));
-  return { id, name, models };
+  const projected = { id, name, models };
+  if (api) projected.api = api;
+  return projected;
 }
 
 function projectModel(providerId, id, raw) {
@@ -70,6 +77,15 @@ function projectModel(providerId, id, raw) {
   if (name !== id) projected.name = name;
   if (input.includes("image") || input.includes("vision")) projected.vision = true;
   return projected;
+}
+
+function safeHttpUrl(value, maximum) {
+  if (!safeText(value, maximum)) return undefined;
+  let parsed;
+  try { parsed = new URL(value); } catch { return undefined; }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return undefined;
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) return undefined;
+  return value;
 }
 
 function safeText(value, maximum) {
