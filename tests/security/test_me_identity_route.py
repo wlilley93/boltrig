@@ -108,3 +108,125 @@ async def test_a_revoked_membership_disappears_from_the_answer():
     await store.remove_workspace_member(T, "ws-beta", "u1")
 
     assert [w["id"] for w in client.get("/v1/me").json()["workspaces"]] == ["ws-alpha"]
+
+
+# --- POST /v1/me/permits ------------------------------------------------------
+#
+# The question a host asks INSTEAD of reimplementing GrantSet.permits. Opbox has
+# to decide "may this caller do X" on every tool call; the only safe way for it
+# to know is to ask the kernel that will actually enforce it, because a second
+# implementation of deny-dominance and terminal wildcards is a divergence whose
+# failure mode is a host granting what this kernel would refuse.
+
+
+async def _permits_client(*, allow, deny=(), ceiling=("*",), ceiling_deny=()):
+    from boltrig.models import GrantSet, TenantPermissions
+
+    client, store = await _client("ws-alpha")
+    store.set_tenant_permissions(
+        TenantPermissions(T, GrantSet.of(allow=list(ceiling), deny=list(ceiling_deny)))
+    )
+    app = FastAPI()
+
+    class _PG(_P):
+        def __init__(self) -> None:
+            super().__init__("ws-alpha", "pat")
+            self.grants = GrantSet.of(allow=list(allow), deny=list(deny))
+
+    class _K:
+        pass
+
+    k = _K()
+    k.store = store
+    register_org_discovery_routes(
+        app, principal_dep=lambda: _PG(), get_kernel=lambda: k
+    )
+    return TestClient(app)
+
+
+@pytest.mark.security
+async def test_it_answers_the_verbs_it_was_asked_about():
+    client = await _permits_client(allow=["matter.open", "matter.read"])
+
+    body = client.post(
+        "/v1/me/permits",
+        json={"verbs": ["matter.open", "matter.close", "matter.read"]},
+    ).json()
+
+    assert body["verbs"] == {
+        "matter.open": True,
+        "matter.close": False,
+        "matter.read": True,
+    }
+    assert body["active_workspace_id"] == "ws-alpha"
+
+
+@pytest.mark.security
+async def test_a_deny_beats_an_allow_and_a_wildcard():
+    """Deny-dominance is the rule a host reimplementing this would most likely
+    get wrong, because the allow reads as the answer."""
+    client = await _permits_client(allow=["matter.*"], deny=["matter.delete"])
+
+    body = client.post(
+        "/v1/me/permits", json={"verbs": ["matter.open", "matter.delete"]}
+    ).json()
+
+    assert body["verbs"] == {"matter.open": True, "matter.delete": False}
+
+
+@pytest.mark.security
+async def test_the_tenant_ceiling_is_folded_in_not_just_the_caller_grants():
+    """BOTH authorities, as the dispatcher composes them.
+
+    The caller holds `matter.*` outright. The tenant does not permit
+    `matter.delete` at all, so the honest answer is no, and answering on the
+    caller's grants alone would report an upper bound as a selection.
+    """
+    client = await _permits_client(
+        allow=["matter.*"], ceiling=["matter.open", "matter.read"]
+    )
+
+    body = client.post(
+        "/v1/me/permits", json={"verbs": ["matter.open", "matter.delete"]}
+    ).json()
+
+    assert body["verbs"] == {"matter.open": True, "matter.delete": False}
+
+    # The counterweight: widen the ceiling and the same caller, unchanged, now
+    # gets a yes. Without this the refusal above is equally consistent with an
+    # endpoint that says no to everything.
+    wide = await _permits_client(allow=["matter.*"], ceiling=["*"])
+    assert wide.post(
+        "/v1/me/permits", json={"verbs": ["matter.delete"]}
+    ).json()["verbs"] == {"matter.delete": True}
+
+
+@pytest.mark.security
+async def test_a_pattern_is_refused_rather_than_answered():
+    """`permits` takes a verb id. "Do I hold matter.*" is a different question,
+    and answering it as though it were an id would answer confidently and
+    wrongly."""
+    client = await _permits_client(allow=["matter.*"])
+
+    refused = client.post("/v1/me/permits", json={"verbs": ["matter.*"]})
+
+    assert refused.status_code == 400
+    assert refused.json()["reason"] == "verb patterns are not questions"
+
+
+@pytest.mark.security
+async def test_an_empty_or_oversized_ask_is_refused():
+    from boltrig.kernel.org_discovery_routes import MAX_PERMIT_QUESTIONS
+
+    client = await _permits_client(allow=["*"])
+
+    assert client.post("/v1/me/permits", json={"verbs": []}).status_code == 400
+    assert client.post("/v1/me/permits", json={}).status_code == 400
+    too_many = [f"noun.verb{i}" for i in range(MAX_PERMIT_QUESTIONS + 1)]
+    over = client.post("/v1/me/permits", json={"verbs": too_many})
+    assert over.status_code == 400
+    assert over.json()["reason"] == "too_many_verbs"
+    # At the bound exactly, it answers.
+    at_bound = client.post("/v1/me/permits", json={"verbs": too_many[:-1]})
+    assert at_bound.status_code == 200
+    assert len(at_bound.json()["verbs"]) == MAX_PERMIT_QUESTIONS

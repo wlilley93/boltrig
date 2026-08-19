@@ -473,7 +473,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:321	
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/integration_scope.py:75	_execute_adapter	Who this call is really being made by.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp.py:1	initialize	The kernel's MCP server face (Round Two, Epic MCP).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp_errors.py:1	_call_tool	The MCP wire envelopes: the JSON-RPC frames, and the result a model reads.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/org_discovery_routes.py:64	list_orgs_for_email	List session switch candidates only from ``list_orgs_for_email`` for the caller identity.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/org_discovery_routes.py:129	list_orgs_for_email	List session switch candidates only from ``list_orgs_for_email`` for the caller identity.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/pii.py:1	contains_identity	PII detection and redaction at the kernel boundary (US-PRIV-02, SEC-13).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/platform_routes/capability_review.py:1	may_see	The capability review queue, the catalogue it feeds, and the routes it selects.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/platform_routes/device_inventory.py:1	list_devices	Who has the desktop installed, and on how many machines.
@@ -1230,6 +1230,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:211		would see a null GUC and 
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:60		The run that DELEGATED to this one.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/memory_mutation_routes.py:55		under its own key so a success always reads status="ok".
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/memory_mutation_routes.py:92		under its own key so a success always reads status="ok".
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/org_discovery_routes.py:19		: unbounded list cannot turn a self-scoped read into arbitrary work.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/pii.py:133		may not be widened for one of them.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/admin.py:50		a bare ValueError never leaks internal text as the client reason.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/agent_capabilities.py:45		so the inventory and the routing answer cannot disagree.
@@ -1567,7 +1568,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/held_call.py:117	hitl_request
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/held_call.py:359	paused	Retire a held call: drop the seal and mark its checkpoints spent.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/integration_credentials.py:15	level	Build the kernel-only value that the store envelope-seals atomically.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/mcp_tools_list.py:1	mcp.py	The ``tools/list`` handler: what a run is offered, ranked and paged.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/org_discovery_routes.py:25	active_workspace_id	The resolved caller, as the kernel already understands them.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/org_discovery_routes.py:30	active_workspace_id	The resolved caller, as the kernel already understands them.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/platform_routes/observability.py:212	external_ref	never widen visibility.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/questions.py:42	secure	``secure`` + ``purpose`` ask for a value the AGENT never sees (SEC-181): the
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/run_access.py:283	max_nodes	Reconstruct the durable subagent topology under a root run, or None.

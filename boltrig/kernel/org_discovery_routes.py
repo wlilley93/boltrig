@@ -14,6 +14,11 @@ from typing import Any
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 
+#: How many verbs one question may name. A host batches the checks a page needs
+#: rather than asking per tool, so the bound has to be generous; it exists so an
+#: unbounded list cannot turn a self-scoped read into arbitrary work.
+MAX_PERMIT_QUESTIONS = 200
+
 
 def register_org_discovery_routes(
     app: Any, *, principal_dep: Any, get_kernel: Any
@@ -60,6 +65,11 @@ def register_org_discovery_routes(
             }
         )
 
+    @app.post("/v1/me/permits")  # type: ignore[untyped-decorator]
+    async def me_permits(body: dict, k: Any = kernel, p: Any = principal) -> JSONResponse:
+        """Whether this caller may run each named verb."""
+        return await answer_permit_questions(k.store, p, body)
+
     @app.get("/v1/me/orgs")  # type: ignore[untyped-decorator]
     async def my_organisations(
         request: Request, k: Any = kernel, p: Any = principal
@@ -92,3 +102,69 @@ def register_org_discovery_routes(
 
 
 __all__ = ["register_org_discovery_routes"]
+
+
+async def answer_permit_questions(store: Any, principal: Any, body: dict[str, Any]) -> JSONResponse:
+    """Whether this caller may run each named verb.
+
+    AN ASK, NOT A DUMP, and the distinction is the point. Returning the caller's
+    raw allow/deny patterns would be one round trip instead of many, and it would
+    make every host reimplement ``GrantSet.permits``: deny-dominance, terminal
+    wildcards, and the nothing-matched-is-deny floor. A second implementation of
+    an authority predicate is the worst place in the system for a subtle
+    divergence, because the failure is a host granting what this kernel would
+    have refused. The patterns stay here and the verdict travels.
+
+    BOTH AUTHORITIES, exactly as the dispatcher composes them: the tenant ceiling
+    AND the caller's own grants (US-IAM-04). Answering on either alone is how an
+    upper bound gets mistaken for a selection, which is the reasoning
+    ``capability_offer.offer_candidates`` records at its own seam. The caller's
+    grants arrive already narrowed by their workspace role, so a workspace member
+    does not get an org answer.
+
+    A caller asking about THEMSELVES, so it discloses nothing they could not
+    learn by trying the verb; it only lets them learn it without a failed write.
+    """
+    verbs, refusal = _permit_questions(body)
+    if refusal is not None:
+        return refusal
+    ceiling = await store.get_tenant_permissions(principal.tenant_id)
+    return JSONResponse(
+        {
+            "tenant_id": principal.tenant_id,
+            "active_workspace_id": principal.active_workspace_id,
+            "verbs": {
+                verb: bool(
+                    ceiling.grants.permits(verb) and principal.grants.permits(verb)
+                )
+                for verb in verbs
+            },
+        }
+    )
+
+
+def _permit_questions(
+    body: dict[str, Any],
+) -> tuple[list[str], JSONResponse | None]:
+    """The asked-about verbs, or the refusal that says why there are none."""
+    raw = body.get("verbs")
+    if not isinstance(raw, list) or not raw:
+        return [], JSONResponse(
+            {"status": "error", "reason": "verbs must be a non-empty list"},
+            status_code=400,
+        )
+    if len(raw) > MAX_PERMIT_QUESTIONS:
+        return [], JSONResponse(
+            {"status": "error", "reason": "too_many_verbs"}, status_code=400
+        )
+    verbs = [str(item) for item in raw]
+    # Patterns are refused rather than evaluated. ``permits`` takes a verb id;
+    # asking "do I hold control.*" is a different question with a different
+    # answer, and quietly treating a pattern as an id would answer the wrong one
+    # confidently.
+    if any("*" in verb for verb in verbs):
+        return [], JSONResponse(
+            {"status": "error", "reason": "verb patterns are not questions"},
+            status_code=400,
+        )
+    return verbs, None

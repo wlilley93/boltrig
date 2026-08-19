@@ -677,6 +677,11 @@ _non_ui("service-probe", "GET /healthz")
 # the resolved principal from its own session, so nothing in apps/worker calls
 # this. It is service-native because the consumer is another product.
 _non_ui("service-native", "GET /v1/me")
+# The question a host asks instead of reimplementing GrantSet.permits. Same
+# consumer and the same reason as GET /v1/me: the Worker holds its own resolved
+# grants and has nothing to ask. It is a POST because the ask is a list, and a
+# read either way.
+_non_ui("service-native", "POST /v1/me/permits")
 _non_ui(
     "operator-only",
     """
@@ -810,4 +815,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 # 294 since GET /v1/me and GET /v1/branding (the product's own name, read unauthenticated by
 # the sign-in screen). An exact census, not a ratchet: it must equal the
 # routes the app actually serves, so it moves when the surface does.
-EXPECTED_ROUTE_COUNT = 298
+EXPECTED_ROUTE_COUNT = 299
