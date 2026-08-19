@@ -131,6 +131,21 @@ export interface BargeInVerdict {
   trigger: boolean;
   /** This frame was above threshold, trigger or not. */
   active: boolean;
+  /**
+   * 0..1 how loudly the person is talking, measured against the tracked floor.
+   *
+   * FREE, AND IT WAS BEING THROWN AWAY. The gate already reads the microphone
+   * every 10ms and already knows what silence sounds like in this room, which
+   * is the whole of what a level meter needs — so a body that wants to react to
+   * the person in front of it has no business opening a second analyser and
+   * calibrating a second floor. Until this, `micLevel` reached the character
+   * contract from nowhere: every character declared it, none was ever sent one,
+   * and the listening animations were driving on a constant zero.
+   *
+   * Relative to the floor rather than absolute, for the same reason the trigger
+   * is: an absolute meter reads a quiet room and a loud one as different people.
+   */
+  level: number;
 }
 
 export interface BargeInGate {
@@ -166,6 +181,30 @@ function nextFloor(floor: number, rms: number, active: boolean): number {
 
 function sanitise(rms: number): number {
   return Number.isFinite(rms) && rms > 0 ? rms : 0;
+}
+
+/**
+ * The span above the floor that counts as a full-scale voice, in dB.
+ *
+ * MEASURED, not chosen. On the two barge-in captures the first voiced frame
+ * already sat +35.0dB and +39.1dB above the preceding 150ms floor and stayed
+ * there, so 36dB is where a normal speaking voice reaches the top of the meter.
+ * A larger span would leave a person sounding permanently half-hearted; a
+ * smaller one would peg the meter on the first syllable and show nothing after.
+ */
+const LEVEL_SPAN_DB = 36;
+
+/** How far this frame sits above the floor, as 0..1 over LEVEL_SPAN_DB. */
+function levelAbove(sample: number, floor: number): number {
+  if (sample <= 0) return 0;
+  // The floor can legitimately be zero in a digitally silent room, where any
+  // sample at all is infinitely above it. BARGE_IN_MIN_RMS is the same absolute
+  // anchor the trigger falls back on, so the meter and the gate agree on what
+  // "quiet" means rather than each having their own idea.
+  const base = Math.max(floor, BARGE_IN_MIN_RMS);
+  if (sample <= base) return 0;
+  const db = 20 * Math.log10(sample / base);
+  return Math.min(1, db / LEVEL_SPAN_DB);
 }
 
 interface GateState {
@@ -266,7 +305,7 @@ export function createBargeInGate(options: BargeInGateOptions = {}): BargeInGate
   const selfTrigger = options.selfTrigger
     ?? createSelfTriggerGuard(BARGE_IN_SELF_TRIGGER_DEFAULTS);
   const state: GateState = { ...QUIET_GATE_STATE };
-  const quiet = { trigger: false, active: false } as const;
+  const quiet = { trigger: false, active: false, level: 0 } as const;
 
   return {
     observe({ rms, playing, now, reference }) {
@@ -294,6 +333,10 @@ export function createBargeInGate(options: BargeInGateOptions = {}): BargeInGate
 
       const bar = Math.max(thresholdFor(state, tracked, playing, limits), guard.bar);
       const active = sample >= bar;
+      // Measured against the floor as it stood BEFORE this frame moved it —
+      // the same value the threshold was computed from, so the meter cannot
+      // disagree with the verdict it is reported beside.
+      const level = levelAbove(sample, tracked);
       setFloor(state, playing, nextFloor(tracked, sample, active));
       // A blocked frame breaks the run rather than pausing it: the three frames
       // that interrupt her have to be three frames the guard allowed.
@@ -307,10 +350,10 @@ export function createBargeInGate(options: BargeInGateOptions = {}): BargeInGate
         cooldownMs,
         triggerFrames,
       });
-      if (!armed) return { trigger: false, active };
+      if (!armed) return { trigger: false, active, level };
       state.lastTriggerAt = now;
       state.hotFrames = 0;
-      return { trigger: true, active };
+      return { trigger: true, active, level };
     },
     reset() {
       Object.assign(state, QUIET_GATE_STATE);

@@ -240,8 +240,10 @@ describe("console chat surface", () => {
     // At 30px the canonical ladder uses its glossy Stage, not the flat badge.
     // No chief genotype exists in this route's contract, so the renderer must
     // state that absence instead of borrowing a child identity.
+    // The NAME is the identity alone: the state moved to a live region beside
+    // the body, because an aria-label changing on a role="img" is not announced.
     const voiceFamiliar = screen.getByRole("img", {
-      name: "chief of staff Familiar · ready",
+      name: "chief of staff Familiar",
     });
     expect(voiceFamiliar.classList.contains("familiar-stage")).toBeTruthy();
     expect(voiceFamiliar.classList.contains("conversation")).toBeTruthy();
