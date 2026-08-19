@@ -35,7 +35,7 @@
 //   node apps/worker/tests/visual/render-bodies.mjs \
 //     --playwright /home/jellytot/pw-node/node_modules/playwright/index.mjs
 //
-//   --body jarvis|ultron|colossus   repeatable; default all three
+//   --body jarvis-v1|jarvis-v2|ultron|colossus|familiar   repeatable; default all
 //   --mode standby|listening|thinking|working|speaking   repeatable;
 //                                   default standby,thinking,speaking
 //   --level <0..1>                  voice level inside the mode, default 0.8
@@ -69,8 +69,12 @@ const workerRoot = join(repoRoot, "apps/worker");
  * whole point of measuring here -- v1 paints an opaque near-black canvas and v2
  * composites with alpha, which is what decides whether the onboarding panel has
  * to take the body's colour or can let it float on the glass. */
-const ALL_BODIES = ["jarvis-v1", "jarvis-v2", "ultron", "colossus"];
-const ALL_MODES = ["standby", "listening", "thinking", "working", "speaking"];
+const ALL_BODIES = ["jarvis-v1", "jarvis-v2", "ultron", "colossus", "familiar"];
+// `error` is the Familiar's alone -- the other bodies have no failure preset and
+// must not be asked for one, since an empty delta is a state the enum claims and
+// the body does not honour. Asking for it on Jarvis renders his standby, which
+// is the honest answer rather than an invented look.
+const ALL_MODES = ["standby", "listening", "thinking", "working", "speaking", "error"];
 
 let options;
 
@@ -161,11 +165,17 @@ async function buildBundle() {
     import { JarvisNeuralRenderer } from "${workerRoot}/src/components/jarvis/v2/JarvisNeuralRenderer";
     import { UltronRenderer } from "${workerRoot}/src/components/ultron/UltronRenderer";
     import { ColossusRenderer } from "${workerRoot}/src/components/colossus/ColossusRenderer";
+    import { FamiliarWebGLRenderer } from "${workerRoot}/src/components/familiar/FamiliarWebGLRenderer";
     globalThis.__BODIES = {
       "jarvis-v1": JarvisWebGLRenderer,
       "jarvis-v2": JarvisNeuralRenderer,
       ultron: UltronRenderer,
       colossus: ColossusRenderer,
+      // She is as much the reason the raw-text plugin below exists as Jarvis is:
+      // familiar.frag is VENDORED and byte-pinned, so a GLSL error in it is
+      // SILENT -- the renderer removes its canvas and the stage looks like a CSS
+      // problem. This harness is the ten-second way to find out otherwise.
+      familiar: FamiliarWebGLRenderer,
     };
   `;
   const built = await esbuild.build({
@@ -677,7 +687,8 @@ function helpText() {
 
   node apps/worker/tests/visual/render-bodies.mjs --playwright <abs path> [options]
 
-  --body <name>      jarvis | ultron | colossus; repeatable, default all three
+  --body <name>      jarvis-v1 | jarvis-v2 | ultron | colossus | familiar;
+                     repeatable, default all five
   --mode <name>      ${ALL_MODES.join(" | ")}; repeatable,
                      default standby,thinking,speaking
   --level <0..1>     voice level within the mode (default 0.8)

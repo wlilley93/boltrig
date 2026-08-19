@@ -78,6 +78,20 @@
         background: #000;
       }
       #stage canvas { display: block; width: 100%; height: 100%; }
+      /* SQUARE FOR THE FAMILIAR. Her canvas sizes itself from its own width and
+         draws square -- the shipped Stage is `aspect-ratio: 1` on every surface
+         -- so a full-bleed host stretches the drawing buffer across a wide
+         window, and every judgement made here about her shape would be a
+         judgement about a distortion the app never renders. */
+      #stage.square {
+        inset: auto;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: min(94%, 94vh);
+        height: auto;
+        aspect-ratio: 1;
+      }
       #readout {
         position: absolute; left: 0; right: 0; bottom: 10px;
         text-align: center; font-variant-numeric: tabular-nums; color: #8b8b95;
@@ -207,9 +221,10 @@
     <aside>
       <h1>Shader bench</h1>
       <p class="lede">
-        The real renderers, live. <code>white</code> is the centre-blowout number —
-        keep it at zero. Copy settings pastes straight into
-        <code>canvas/bodyTuning.ts</code>. Every change is remembered, so a reload
+        The real renderers, live — Jarvis and Ultron by their draw passes, the
+        Familiar by her host recipe (the vendored shader is never edited here).
+        <code>white</code> is the centre-blowout number — keep it at zero. Copy
+        settings pastes straight into <code>canvas/bodyTuning.ts</code>. Every change is remembered, so a reload
         keeps your look; <b>Copy link</b> makes it shareable.
       </p>
       <div class="top">
@@ -218,18 +233,14 @@
           <select id="body">
             <option value="jarvis">Jarvis V2</option>
             <option value="ultron">Ultron</option>
+            <option value="familiar">Familiar</option>
           </select>
         </div>
         <div>
           <label for="mode">Mode</label>
-          <select id="mode">
-            <option value="arrival">arrival (draw-in)</option>
-            <option selected>standby</option>
-            <option>listening</option>
-            <option>thinking</option>
-            <option>working</option>
-            <option>speaking</option>
-          </select>
+          <!-- Filled by paintModes(): the bodies do not all have the same
+               states, and a hardcoded list would offer one nothing renders. -->
+          <select id="mode"></select>
         </div>
       </div>
       <div class="row">

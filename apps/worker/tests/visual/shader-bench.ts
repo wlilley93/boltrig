@@ -26,8 +26,10 @@
 // the pixels in the same task. Reproducible, not flaky; measured on the beelink.
 
 import {
+  FAMILIAR_TUNING,
   JARVIS_TUNING,
   ULTRON_TUNING,
+  type FamiliarTuning,
   type JarvisTuning,
   type UltronTuning,
 } from "../../src/components/canvas/bodyTuning";
@@ -38,16 +40,40 @@ import {
   type BodyPhenotype,
 } from "../../src/components/canvas/bodyEmotion";
 import {
+  FAMILIAR_ARRIVAL,
   JARVIS_ARRIVAL,
   ULTRON_ARRIVAL,
+  familiarModeTuning,
   jarvisModeTuning,
   ultronModeTuning,
 } from "../../src/components/canvas/bodyPresets";
+import { FamiliarWebGLRenderer } from "../../src/components/familiar/FamiliarWebGLRenderer";
+import { FAMILIAR_MODES } from "../../src/components/familiar/FamiliarState";
 import { JarvisNeuralRenderer } from "../../src/components/jarvis/v2/JarvisNeuralRenderer";
 import { UltronRenderer } from "../../src/components/ultron/UltronRenderer";
 
-type Tuning = JarvisTuning | UltronTuning;
-type Mode = "standby" | "listening" | "thinking" | "working" | "speaking";
+type Tuning = FamiliarTuning | JarvisTuning | UltronTuning;
+type Mode = "standby" | "listening" | "thinking" | "working" | "speaking" | "error";
+
+/**
+ * WHICH BODIES THIS BENCH DRIVES.
+ *
+ * The Familiar joined last and she is a different KIND of body, which is worth
+ * stating because it decides what her sliders are. Jarvis and Ultron are drawn
+ * by passes this repository owns, so their tuning describes brightness, radius
+ * and pace. She is one vendored 2,000-line shader that must not be edited here
+ * -- it flows from boltrig-familiar, never the reverse -- so there is nothing of
+ * that kind to turn. What IS hers is the HOST recipe: how a voice becomes
+ * movement, how the inner life wanders, what each mode does to her. Those were
+ * literals in a frame loop until they became canvas/familiarTuning, and this is
+ * the place they were made for.
+ *
+ * Her `error` mode is hers alone. Adding it to the shared BodyMode would have
+ * forced an entry into the other two preset tables, and an empty entry there is
+ * a state the enum claims and the body does not honour.
+ */
+type Body = "familiar" | "jarvis" | "ultron";
+const FAMILIAR_ONLY_MODES = new Set<string>(["error"]);
 
 /**
  * WHAT EACH SLIDER IN A ROW ACTUALLY IS.
@@ -127,6 +153,23 @@ const LEGEND: Record<string, readonly string[]> = {
   crackLimb: ["face-on keep", "rim boost"],
   petal: ["bloom lobes"],
   cloud: ["how un-spherical", "shape churn SPEED"],
+  // ---- The Familiar: her host recipe, not draw passes ---------------------
+  voiceLevel: ["base", "\u00d7voice"],
+  voiceLow: ["base", "\u00d7voice"],
+  voiceMid: ["base", "\u00d7voice"],
+  voiceHigh: ["base", "\u00d7voice"],
+  voiceEnv: ["attack SECONDS", "release SECONDS"],
+  voiceGate: ["silence floor", "knee width"],
+  beat: ["impulse gain", "decay SECONDS"],
+  listen: ["mic \u2192 body", "mic \u2192 attention"],
+  gaze: ["looking away", "watching you"],
+  arousalLift: ["while working", "while speaking"],
+  idlePulse: ["depth", "rate Hz"],
+  composition: ["her size", "porthole fit"],
+  daylight: ["night floor", "midday span"],
+  wander: ["ease SECONDS", "dwell SECONDS"],
+  gesture: ["min gap SECONDS", "max gap SECONDS"],
+  errorTone: ["tension", "light left"],
   ...Object.fromEntries(PHENOTYPE_SCALARS
     .map((k) => [`pheno.${k}`, ["0 = none, 1 = full"]])),
 };
@@ -219,6 +262,36 @@ const RANGE: Record<string, [number, number, number]> = {
   veinLimb: [0, 3, 0.01],
   crackLimb: [0, 3, 0.01],
   facetLimb: [0, 3, 0.01],
+  // ---- The Familiar -------------------------------------------------------
+  // SECONDS, not gains. The attack has to reach a few milliseconds to find where
+  // a syllable starts arriving late, and the release has to reach a second to
+  // find where a held note stops decaying and starts smearing.
+  voiceEnv: [0.005, 1.0, 0.005],
+  // The gate lives entirely in the quiet end -- the whole point is that it never
+  // touches a loud frame -- so a 0..1 slider would spend 90% of its travel doing
+  // nothing at all.
+  voiceGate: [0, 0.3, 0.005],
+  // Impulse gain past 1 on purpose: uBeat is multiplied hard in five places, so
+  // the interesting question is how much OVER unity a syllable can land.
+  beat: [0, 2, 0.02],
+  // Ratios of the voice drive, and the ceiling matters: the failure being tuned
+  // away from is her mouthing your words back, which lives above about 0.5.
+  listen: [0, 1, 0.01],
+  // A body twice its porthole is a crop, not a composition; below a third of it
+  // she is a dot. The shipped pair sits in the middle of both.
+  composition: [0.1, 1.2, 0.01],
+  // Depth is a fraction of full drive and rate is in Hz; both need to reach zero,
+  // which is how a mode says "nothing moves her but her own inner life".
+  idlePulse: [0, 1, 0.005],
+  // Seconds, and long: a wander that turns over in under a second is a tremor.
+  wander: [0.5, 60, 0.5],
+  // Seconds between gestures. It has to reach a few seconds to be judged inside
+  // one sentence, and two minutes to be judged as ambient.
+  gesture: [2, 150, 1],
+  daylight: [0, 1.2, 0.01],
+  errorTone: [0, 1, 0.01],
+  arousalLift: [0, 1, 0.01],
+  gaze: [0, 1, 0.01],
 };
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -327,14 +400,28 @@ function shareLink(): string {
  * special case would have meant a second editing path for the one preset nobody
  * can check without watching it happen.
  */
-type Slot = "arrival" | BodyMode;
-const SLOTS: readonly Slot[] = ["arrival", ...BODY_MODES];
+type Slot = "arrival" | Mode;
+const SLOTS: readonly Slot[] = ["arrival", ...BODY_MODES, "error"];
 let slot: Slot = "standby";
 
+/** The slots a body actually has. Only the Familiar answers for a failure. */
+function slotsFor(which: Body): readonly Slot[] {
+  return which === "familiar"
+    ? ["arrival", ...FAMILIAR_MODES]
+    : ["arrival", ...BODY_MODES];
+}
+
 /** The shipped numbers for a body and slot, before any local edit. */
-function shippedFor(which: "jarvis" | "ultron", at: Slot): Tuning {
-  if (at === "arrival") return which === "jarvis" ? JARVIS_ARRIVAL : ULTRON_ARRIVAL;
-  return which === "jarvis" ? jarvisModeTuning(at) : ultronModeTuning(at);
+function shippedFor(which: Body, at: Slot): Tuning {
+  if (at === "arrival") {
+    if (which === "familiar") return FAMILIAR_ARRIVAL;
+    return which === "jarvis" ? JARVIS_ARRIVAL : ULTRON_ARRIVAL;
+  }
+  if (which === "familiar") return familiarModeTuning(at);
+  // The other two have no error preset, and must not be asked for one: standby
+  // is the honest stand-in rather than an empty delta pretending to be a state.
+  const shared = (FAMILIAR_ONLY_MODES.has(at) ? "standby" : at) as BodyMode;
+  return which === "jarvis" ? jarvisModeTuning(shared) : ultronModeTuning(shared);
 }
 
 /**
@@ -344,24 +431,56 @@ function shippedFor(which: "jarvis" | "ultron", at: Slot): Tuning {
  * the body sits in -- so it is shown against standby, which is the quietest
  * backdrop and therefore the one that hides the least.
  */
-function renderMode(at: Slot): BodyMode {
+function renderMode(at: Slot): Mode {
   return at === "arrival" ? "standby" : at;
 }
 
 /** Storage and save key. Per body AND slot: six presets, six sets of numbers. */
 const slotKey = (which: string, at: Slot): string => `${which}.${at}`;
 
-let renderer: JarvisNeuralRenderer | UltronRenderer | null = null;
+let renderer: FamiliarWebGLRenderer | JarvisNeuralRenderer | UltronRenderer | null = null;
 /** Whether the arrival has already been shown this page load. */
 let introPlayed = false;
 let tuning: Tuning = clone(JARVIS_TUNING);
 let shipped: Tuning = JARVIS_TUNING;
-let body: "jarvis" | "ultron" = "jarvis";
+let body: Body = "jarvis";
 let raf = 0;
 let frames = 0;
 
 function clone<T extends Tuning>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+/**
+ * REDUCED MOTION IS FORCED OFF for the Familiar here, and only here.
+ *
+ * She is the one body that honours the OS preference by dropping to one frame a
+ * second with her inner life frozen -- correct in the app, and in a bench built
+ * for watching motion it is indistinguishable from a hung renderer. Whoever is
+ * tuning her has asked to see her move by opening this page.
+ */
+function newRenderer(): FamiliarWebGLRenderer | JarvisNeuralRenderer | UltronRenderer {
+  if (body === "familiar") return new FamiliarWebGLRenderer({ reducedMotion: false });
+  return body === "jarvis"
+    ? new JarvisNeuralRenderer({ maxDevicePixelRatio: 1 })
+    : new UltronRenderer({ maxDevicePixelRatio: 1 });
+}
+
+/** Rebuild the mode select for the body on stage, keeping the slot if it has
+ *  one. Switching from the Familiar's `error` to a body without it must land
+ *  somewhere real rather than leaving a select showing a slot nothing renders. */
+function paintModes(): void {
+  const select = $("mode") as HTMLSelectElement;
+  const available = slotsFor(body);
+  if (!available.includes(slot)) slot = "standby";
+  select.innerHTML = "";
+  for (const at of available) {
+    const option = document.createElement("option");
+    option.value = at;
+    option.textContent = at === "arrival" ? "arrival (draw-in)" : at;
+    option.selected = at === slot;
+    select.appendChild(option);
+  }
 }
 
 /**
@@ -379,15 +498,20 @@ function mount(): void {
   renderer?.destroy();
   const host = $("stage");
   host.innerHTML = "";
-  renderer = body === "jarvis"
-    ? new JarvisNeuralRenderer({ maxDevicePixelRatio: 1 })
-    : new UltronRenderer({ maxDevicePixelRatio: 1 });
+  renderer = newRenderer();
+  // SQUARE FOR THE FAMILIAR, full-bleed for the other two. Her canvas sizes
+  // itself from its own width and draws square -- the shipped Stage is
+  // `aspect-ratio: 1` everywhere -- so a full-bleed host stretches the drawing
+  // buffer across a wide window and every judgement made about her shape is
+  // made about a distortion the app never renders.
+  $("stage").classList.toggle("square", body === "familiar");
   renderer.mount(host);
   const status = renderer.status();
   if (status.state !== "running") {
     $("readout").textContent = `FAILED — ${status.reason ?? status.state}`;
     return;
   }
+  paintModes();
   pheno = savedPheno();
   // The measured mood, not null. Passing null meant the bench always showed a
   // resting body, so the registers were unfalsifiable by eye.
@@ -632,6 +756,23 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "6 · Voice reverberation — how speech crosses the body", fields: [
     "reverb",
   ] },
+  // ---- The Familiar. Ordered the way her frame runs, not the way the struct
+  // is written: what the voice does, then what a mode does, then who she is.
+  { title: "1 · Her voice — what speech does to the body", fields: [
+    "voiceLevel", "voiceLow", "voiceMid", "voiceHigh",
+  ] },
+  { title: "2 · Her envelope — the shape of a syllable", fields: [
+    "voiceEnv", "voiceGate", "beat",
+  ] },
+  { title: "3 · Her attention — being spoken to", fields: [
+    "listen", "gaze", "arousalLift",
+  ] },
+  { title: "4 · Her inner life — alive between events", fields: [
+    "idlePulse", "wander", "gesture",
+  ] },
+  { title: "5 · Her presence — size, light and failure", fields: [
+    "composition", "daylight", "errorTone",
+  ] },
 ];
 
 /**
@@ -697,6 +838,22 @@ const TITLES: Record<string, string> = {
   starburst: "Horizontal flare across the middle",
   petal: "How many bloom lobes",
   cloud: "How cloud-formed the mass is",
+  voiceLevel: "How hard her voice moves her overall",
+  voiceLow: "How hard the lows pressurise her nucleus",
+  voiceMid: "How hard the mids move her interior",
+  voiceHigh: "How much the highs light her surface",
+  voiceEnv: "How fast she answers a syllable, and how slowly she lets go",
+  voiceGate: "How quiet counts as silence",
+  beat: "How hard a syllable lands, and how long it rings",
+  listen: "How much she shows that you are talking",
+  gaze: "Where she is looking, idle and engaged",
+  arousalLift: "How far a working or spoken turn rouses her",
+  idlePulse: "The oscillator that stands in for a voice she does not have",
+  composition: "How big she is inside her porthole",
+  daylight: "How the time of day warms her",
+  wander: "How her mood drifts when nothing is happening",
+  gesture: "How often she looks, nods or preens",
+  errorTone: "What a dropped call does to her",
   ...Object.fromEntries(Object.entries(PHENO_TITLES)
     .map(([k, v]) => [`pheno.${k}`, v])),
 };
@@ -1028,7 +1185,7 @@ function drive(): void {
       bands: Array.from(voice.bands),
       onset: Math.min(1, onset),
       micLevel: mode === "listening" ? Math.min(1, peak) : 0,
-    });
+    } as never);
     $("voiceMeter").style.width = `${Math.round(Math.min(1, peak) * 100)}%`;
     return;
   }
@@ -1165,8 +1322,12 @@ async function savePreset(): Promise<void> {
 
 /** The export, in the exact shape of bodyTuning.ts, so it pastes straight in. */
 function settingsText(): string {
-  const ty = body === "jarvis" ? "JarvisTuning" : "UltronTuning";
-  const stem = body === "jarvis" ? "JARVIS" : "ULTRON";
+  const ty = body === "familiar"
+    ? "FamiliarTuning"
+    : body === "jarvis" ? "JarvisTuning" : "UltronTuning";
+  const stem = body === "familiar"
+    ? "FAMILIAR"
+    : body === "jarvis" ? "JARVIS" : "ULTRON";
   const name = slot === "arrival"
     ? `${stem}_ARRIVAL: ${ty}`
     : `${stem}_${slot.toUpperCase()}: ${ty}`;
@@ -1185,7 +1346,7 @@ function trim(value: number): string {
 }
 
 $("body").addEventListener("change", (event) => {
-  body = (event.target as HTMLSelectElement).value as "jarvis" | "ultron";
+  body = (event.target as HTMLSelectElement).value as Body;
   mount();
 });
 /**
@@ -1342,11 +1503,16 @@ if (startMode && (SLOTS as readonly string[]).includes(startMode)) {
   ($("mode") as HTMLSelectElement).value = startMode;
 }
 if (startLevel) ($("level") as HTMLInputElement).value = startLevel;
-// A link naming the other body should open on it.
-if ([...params.keys()].some((k) => k.startsWith("ultron."))
-    && ![...params.keys()].some((k) => k.startsWith("jarvis."))) {
-  body = "ultron";
-  ($("body") as HTMLSelectElement).value = "ultron";
+// A link naming a body should open on it. Checked in order and first match
+// wins, because a link carries exactly one body's numbers.
+for (const named of ["familiar", "ultron"] as const) {
+  const keys = [...params.keys()];
+  if (keys.some((k) => k.startsWith(`${named}.`))
+      && !keys.some((k) => k.startsWith("jarvis."))) {
+    body = named;
+    ($("body") as HTMLSelectElement).value = named;
+    break;
+  }
 }
 $("export").textContent = "";
 mount();
