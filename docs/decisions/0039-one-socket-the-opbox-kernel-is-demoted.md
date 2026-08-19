@@ -79,6 +79,26 @@ before per-user identity lands, and it retires when the contract's identity
 line (boltrig owns auth and membership; the user's own identity is the bearer)
 replaces it.
 
+## The presentation half of the seam: one UI, two wordmarks
+
+Confirmed by Will on 2026-08-19, relayed through the opbox pen-holder,
+verbatim: "Agents surface will be the boltrig ui, where the logo and all ui
+says opbox agents (with the boltrig logo and logo text)."
+
+That settles the surface the socket serves a UI for:
+
+- **The Agents surface IS worker-ui**, hosted under opbox and re-worded - not
+  an opbox-built screen. Opbox's own twelve-file agents surface (nav-retired
+  2026-08-16) is SUPERSEDED, not rebranded; nobody spends effort restyling it.
+- **The wordmark reads "Opbox Agents"; the mark and the logo-text styling are
+  boltrig's.** The marks had already converged (worker-ui's core took opbox's
+  blue and pulse timings on 2026-08-19); this names the destination.
+- **Mechanism is proposed, not built**: the wording rides the existing addon
+  activation - when the opbox addon is active, worker-ui renders the "Opbox
+  Agents" wordmark; standalone it stays "Boltrig". One UI, no fork, no second
+  build. Nothing implements this yet, and it sequences AFTER the four docking
+  items above - plumbing before paint.
+
 ## Consequences
 
 - The agent plane sees exactly one opbox surface, in one naming dialect.
