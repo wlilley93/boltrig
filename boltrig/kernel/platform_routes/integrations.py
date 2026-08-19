@@ -55,7 +55,7 @@ async def _enabled_capabilities(kernel, tenant_id: str, adapter_id: str) -> list
     )
 
 
-def _permitted_tools(principal, tools: list[str]) -> list[str]:
+def permitted_tools(principal, tools: list[str]) -> list[str]:
     """The subset of a projection's tools this caller may actually call.
 
     An author administers integrations and sees the whole list - that is the
@@ -70,7 +70,7 @@ def _permitted_tools(principal, tools: list[str]) -> list[str]:
     return [verb for verb in tools if principal.grants.permits(verb)]
 
 
-def _may_see(principal, permitted: list[str]) -> bool:
+def may_see(principal, permitted: list[str]) -> bool:
     """Whether a CONNECTION belongs in this caller's list at all.
 
     Decided from what survived the narrowing, with one exception: an author
@@ -151,7 +151,7 @@ def visible_to(connection, viewer: str) -> bool:
     bearing: accounts[].id is routinely an email address, so an unfenced list
     would hand every member every other member's provider identity.
 
-    This is the OWNERSHIP half of the fence. `_may_see` below is the CAPABILITY
+    This is the OWNERSHIP half of the fence. `may_see` below is the CAPABILITY
     half, and the two are complementary rather than alternatives: ownership
     keeps one member's provider identity from another, grants keep the tenant's
     wiring from a caller who can use none of it. The list route applies both.
@@ -211,14 +211,14 @@ def _register_reads(app, P, K) -> None:
         items = await k.store.list_integration_catalogue(p.tenant_id)
         views = [await _catalogue_view(k, p.tenant_id, item) for item in items]
         for view in views:
-            view["enabled_tools"] = _permitted_tools(p, view["enabled_tools"])
+            view["enabled_tools"] = permitted_tools(p, view["enabled_tools"])
         return {"integrations": views}
 
     @app.get("/v1/integrations/connections")
     async def connections(k=K, p=P) -> dict:
         # BOTH fences, because they refuse different things. `visible_to`
         # is ownership: a personal connection is its owner's, and accounts[].id
-        # is routinely an email address. `_may_see` over the narrowed tool list
+        # is routinely an email address. `may_see` over the narrowed tool list
         # is capability: a caller who can use none of it has no reason to learn
         # it is there (SPEC 11.11). Dropping either one reopens a door.
         viewer = str(getattr(p, "subject", "") or "")
@@ -228,8 +228,8 @@ def _register_reads(app, P, K) -> None:
             if not visible_to(row, viewer):
                 continue
             view = await _connection_view(k, p.tenant_id, row, viewer)
-            view["enabled_tools"] = _permitted_tools(p, view["enabled_tools"])
-            if _may_see(p, view["enabled_tools"]):
+            view["enabled_tools"] = permitted_tools(p, view["enabled_tools"])
+            if may_see(p, view["enabled_tools"]):
                 listed.append(view)
         return {"connections": listed}
 

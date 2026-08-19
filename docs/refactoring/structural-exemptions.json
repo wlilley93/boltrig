@@ -251,22 +251,22 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/access_routes.py": {
-      "max_file_lines": 684,
+      "max_file_lines": 671,
       "max_function_lines": 120,
       "over_limit_functions": [
         {
           "name": "_register_context_routes",
-          "line": 410,
+          "line": 397,
           "lines": 103
         },
         {
           "name": "_register_admin_directory_routes",
-          "line": 515,
+          "line": 502,
           "lines": 120
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Decompose access, user, invitation, and notification route registrars behind the governed control chokepoint. 2026-07-29: focused notification, account profile, conversation account, AI-key, workspace-management, and model-endpoint route modules lower this facade from 1038 to 681 lines and its largest registrar from 148 to 120 while preserving the same governed dependencies and response contracts. 2026-08-11: the camera/modalities landing. This entry's measurements are re-pinned to the source as it now stands; the growth is the camera and per-model-modality work, and the debt is recorded here rather than hidden so its owner can retire it.",
+      "reason": "Decompose access, user, invitation, and notification route registrars behind the governed control chokepoint. 2026-07-29: focused notification, account profile, conversation account, AI-key, workspace-management, and model-endpoint route modules lower this facade from 1038 to 681 lines and its largest registrar from 148 to 120 while preserving the same governed dependencies and response contracts. 2026-08-11: the camera/modalities landing. This entry's measurements are re-pinned to the source as it now stands; the growth is the camera and per-model-modality work, and the debt is recorded here rather than hidden so its owner can retire it. 2026-08-19: 684->671, LOWERED, by extracting the user projection this file and config/control_plane.py each carried a byte-identical copy of into identity/user_view.py. Two copies of one projection is one copy and a future disagreement, and this disagreement would have been quiet: an operator reading the control verb's output would have seen a different user than the same operator reading the console. The two registrar entries below are re-anchored to their new line numbers by the same 13 lines; neither function changed.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/app.py": {

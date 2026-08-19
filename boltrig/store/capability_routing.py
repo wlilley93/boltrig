@@ -143,6 +143,9 @@ class CapabilityRoutingStoreMem(ProvenanceStoreMem):
     async def upsert_routing_policy(self, policy):
         self._routing_policies[(policy.tenant_id, policy.id)] = replace(policy)
 
+    async def delete_routing_policy(self, tenant_id, policy_id):
+        return self._routing_policies.pop((tenant_id, policy_id), None) is not None
+
     async def list_routing_policies(self, tenant_id, capability_id=None):
         rows = [
             replace(p)
@@ -304,6 +307,13 @@ class CapabilityRoutingStorePG(ProvenanceStorePG):
             policy.operation_class, policy.capability_version, policy.scope,
             policy.workspace_id, policy.precedence,
         )
+
+    async def delete_routing_policy(self, tenant_id, policy_id):
+        result = await self._pool.execute(
+            "DELETE FROM routing_policies WHERE tenant_id=$1 AND id=$2",
+            tenant_id, policy_id,
+        )
+        return result.endswith("1")
 
     async def list_routing_policies(self, tenant_id, capability_id=None):
         rows = await self._pool.fetch(

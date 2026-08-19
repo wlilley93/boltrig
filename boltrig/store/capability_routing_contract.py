@@ -64,6 +64,12 @@ class CapabilityRoutingStoreContract(Protocol):
 
     async def upsert_routing_policy(self, policy: RoutingPolicy) -> None: ...
 
+    # Returns False where the policy does not exist, so a delete naming a stale
+    # id reports that rather than reading as a successful removal. A route is
+    # the thing an agent depends on: "already gone" and "never existed" have to
+    # be distinguishable to whoever is editing routing.
+    async def delete_routing_policy(self, tenant_id: str, policy_id: str) -> bool: ...
+
     async def list_routing_policies(
         self, tenant_id: str, capability_id: str | None = None
     ) -> list[RoutingPolicy]: ...

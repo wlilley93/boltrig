@@ -704,6 +704,20 @@ GET /v1/devices/{device_id}/camera-leases
 # is Track B, and classifying it here is what keeps the route from being
 # invisible in the meantime.
 _non_ui("operator-only", "GET /v1/admin/devices")
+# The doctrine's own review surface (A5). Author-gated reads over capability
+# bindings, the catalogue derived from them, and the routing policies that
+# select between them. NOT a Worker surface yet: the Connections / Capabilities
+# / Rules / Review tabs are Track B, and these three are what that work will
+# consume. Classified rather than left unlisted so the routes are visible in the
+# ledger before the UI exists.
+_non_ui(
+    "operator-only",
+    """
+GET /v1/capability-bindings
+GET /v1/capability-catalogue
+GET /v1/routing-policies
+""",
+)
 _non_ui(
     "operator-only",
     """
@@ -775,4 +789,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 # 294 since GET /v1/me and GET /v1/branding (the product's own name, read unauthenticated by
 # the sign-in screen). An exact census, not a ratchet: it must equal the
 # routes the app actually serves, so it moves when the surface does.
-EXPECTED_ROUTE_COUNT = 295
+EXPECTED_ROUTE_COUNT = 298

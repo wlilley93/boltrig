@@ -2386,6 +2386,40 @@ async def test_capability_bindings_are_plural_and_ordered_on_both_stores(store):
 
 
 @pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-06")
+async def test_routing_policy_delete_reports_absence_on_both_stores(store):
+    """A5: the delete half, which had no store method until step 6's verbs.
+
+    "Already gone" and "never existed" have to be distinguishable, because the
+    thing being removed is which implementation a live canonical verb reaches.
+    """
+    from boltrig.models.capability_routing import RoutingPolicy
+
+    policy = RoutingPolicy(
+        id="rp:parity",
+        tenant_id=T,
+        capability_id="matter.open",
+        binding_id="cb:parity",
+        operation_class="read",
+    )
+    await store.upsert_routing_policy(policy)
+    assert [row.id for row in await store.list_routing_policies(T)] == ["rp:parity"]
+    assert [
+        row.id for row in await store.list_routing_policies(T, "matter.open")
+    ] == ["rp:parity"]
+    assert await store.list_routing_policies(T, "other.capability") == []
+
+    assert await store.delete_routing_policy(T, "rp:parity") is True
+    # The second call is the whole point: False, not another True.
+    assert await store.delete_routing_policy(T, "rp:parity") is False
+    assert await store.delete_routing_policy(T, "rp:never-was") is False
+    # And the tenant fence holds on delete as well as on read.
+    await store.upsert_routing_policy(policy)
+    assert await store.delete_routing_policy("other-tenant", "rp:parity") is False
+    assert [row.id for row in await store.list_routing_policies(T)] == ["rp:parity"]
+
+
+@pytest.mark.store
 @pytest.mark.invariant("SEC-WRK-12")
 async def test_agent_capability_workspace_scope_matches_on_both_stores(store):
     """0083: the union read, the exact-scope write, and the exact-scope reconcile.
