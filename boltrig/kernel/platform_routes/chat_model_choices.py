@@ -88,6 +88,39 @@ async def _scoped_ai_default(kernel, principal, platform: dict):
     return model, True, None
 
 
+def _declared_for(endpoints, model: str | None) -> tuple[str, ...] | None:
+    """The declaration of the store endpoint naming exactly this model, if any."""
+
+    return next(
+        (endpoint.modalities for endpoint in endpoints if endpoint.model == model),
+        None,
+    )
+
+
+def _advertised_modalities(
+    advertised: dict, declared_modalities: tuple[str, ...] | None
+) -> list[str] | None:
+    """Resolve a row's modalities, letting a store declaration stand in.
+
+    Plain OpenAI-compatible gateways list provider-derived models as bare
+    {id, name} rows: absence of the key means "not described", never
+    "describes nothing". Only that absence may be answered by the store
+    endpoint's own declaration - the same declaration the kernel already
+    trusts to route to the model at all. A row carrying the key malformed
+    stays refused.
+    """
+
+    modalities = advertised.get("input_modalities")
+    if isinstance(modalities, list):
+        return modalities
+    if "input_modalities" not in advertised and declared_modalities:
+        return [
+            "image" if modality == "vision" else modality
+            for modality in declared_modalities
+        ]
+    return None
+
+
 def _choice_availability(
     model: str,
     platform: dict,
@@ -105,21 +138,9 @@ def _choice_availability(
     advertised = catalogue_by_id.get(model)
     if advertised is None:
         return False, "model_not_advertised"
-    modalities = advertised.get("input_modalities")
-    if not isinstance(modalities, list):
-        # Plain OpenAI-compatible gateways list provider-derived models as
-        # bare {id, name} rows: absence of the key means "not described",
-        # never "describes nothing". Only that absence may be answered by
-        # the store endpoint's own declaration - the same declaration the
-        # kernel already trusts to route to the model at all. A row that
-        # carries the key malformed stays refused.
-        if "input_modalities" not in advertised and declared_modalities:
-            modalities = [
-                "image" if modality == "vision" else modality
-                for modality in declared_modalities
-            ]
-        else:
-            return False, "text_capability_not_advertised"
+    modalities = _advertised_modalities(advertised, declared_modalities)
+    if modalities is None:
+        return False, "text_capability_not_advertised"
     if "text" not in modalities:
         return False, "text_not_supported"
     return True, None
@@ -257,19 +278,11 @@ def register(app, P, K) -> None:
             default_available = scoped_default[1]
             default_unavailable_reason = scoped_default[2]
         elif catalogue_available:
-            default_endpoint = next(
-                (
-                    endpoint
-                    for endpoint in endpoints
-                    if endpoint.model == default_model
-                ),
-                None,
-            )
             default_available, default_unavailable_reason = _model_availability(
                 default_model,
                 platform,
                 catalogue_by_id,
-                default_endpoint.modalities if default_endpoint is not None else None,
+                _declared_for(endpoints, default_model),
             )
         else:
             default_available = False

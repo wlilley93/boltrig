@@ -106,6 +106,16 @@ def trusted_codex_configured(config: dict[str, Any] | None) -> bool:
     )
 
 
+def _same_model_declaration(
+    endpoint: ModelEndpoint | None, model_id: str
+) -> tuple[str, ...] | None:
+    """The store row's declaration counts only when it names this exact model."""
+
+    if endpoint is not None and endpoint.model == model_id:
+        return endpoint.modalities
+    return None
+
+
 async def require_catalogue_model(
     catalogue: Any,
     model_id: str,
@@ -194,11 +204,7 @@ async def resolve_codex_model(
         model_catalogue,
         model_id,
         required_modalities,
-        declared_modalities=(
-            endpoint.modalities
-            if endpoint is not None and endpoint.model == model_id
-            else None
-        ),
+        declared_modalities=_same_model_declaration(endpoint, model_id),
     )
     if endpoint is None:
         return ModelEndpoint(
