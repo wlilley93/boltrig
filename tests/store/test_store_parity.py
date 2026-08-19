@@ -2383,3 +2383,117 @@ async def test_capability_bindings_are_plural_and_ordered_on_both_stores(store):
     operation = await store.get_source_operation(T, "hubspot.contact.search")
     assert operation.schema_digest == "digest-1"
     assert operation.input_schema == {"type": "object"}
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-06")
+async def test_routing_policy_delete_reports_absence_on_both_stores(store):
+    """A5: the delete half, which had no store method until step 6's verbs.
+
+    "Already gone" and "never existed" have to be distinguishable, because the
+    thing being removed is which implementation a live canonical verb reaches.
+    """
+    from boltrig.models.capability_routing import RoutingPolicy
+
+    policy = RoutingPolicy(
+        id="rp:parity",
+        tenant_id=T,
+        capability_id="matter.open",
+        binding_id="cb:parity",
+        operation_class="read",
+    )
+    await store.upsert_routing_policy(policy)
+    assert [row.id for row in await store.list_routing_policies(T)] == ["rp:parity"]
+    assert [
+        row.id for row in await store.list_routing_policies(T, "matter.open")
+    ] == ["rp:parity"]
+    assert await store.list_routing_policies(T, "other.capability") == []
+
+    assert await store.delete_routing_policy(T, "rp:parity") is True
+    # The second call is the whole point: False, not another True.
+    assert await store.delete_routing_policy(T, "rp:parity") is False
+    assert await store.delete_routing_policy(T, "rp:never-was") is False
+    # And the tenant fence holds on delete as well as on read.
+    await store.upsert_routing_policy(policy)
+    assert await store.delete_routing_policy("other-tenant", "rp:parity") is False
+    assert [row.id for row in await store.list_routing_policies(T)] == ["rp:parity"]
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-12")
+async def test_agent_capability_workspace_scope_matches_on_both_stores(store):
+    """0083: the union read, the exact-scope write, and the exact-scope reconcile.
+
+    ``coalesce(workspace_id,'')`` in the unique index and ``workspace_id or ""``
+    in the memory key are one rule spelled twice, and the shadowing case below is
+    the only thing that can catch them disagreeing.
+    """
+    workspace_a, workspace_b = "ws-parity-a", "ws-parity-b"
+
+    def profile(name, workspace_id, *, runtime="codex", source="control-plane"):
+        return AgentCapability(
+            name=name,
+            tenant_id=T,
+            runtime=runtime,
+            supported_skills=["*"],
+            max_depth=1,
+            is_ephemeral=True,
+            cost_tier="standard",
+            workspace_id=workspace_id,
+            source=source,
+        )
+
+    await store.upsert_capability(profile("shared", None))
+    await store.upsert_capability(profile("researcher", None))
+    await store.upsert_capability(profile("researcher", workspace_a, runtime="script"))
+    await store.upsert_capability(profile("acme-only", workspace_b))
+
+    async def scoped(workspace_id):
+        rows = await store.list_capabilities(
+            T, workspace_id=workspace_id, enforce_workspace=True
+        )
+        return sorted(
+            (row.name, row.workspace_id or "", row.runtime) for row in rows
+        )
+
+    # The same name in two scopes is TWO rows, not one overwritten one.
+    assert await scoped(workspace_a) == [
+        ("researcher", "", "codex"),
+        ("researcher", workspace_a, "script"),
+        ("shared", "", "codex"),
+    ]
+    assert await scoped(workspace_b) == [
+        ("acme-only", workspace_b, "codex"),
+        ("researcher", "", "codex"),
+        ("shared", "", "codex"),
+    ]
+    assert await scoped(None) == [
+        ("researcher", "", "codex"),
+        ("shared", "", "codex"),
+    ]
+
+    # An upsert at one scope replaces only that row.
+    await store.upsert_capability(profile("researcher", workspace_a, runtime="codex"))
+    assert len(await store.list_all_capabilities(T)) == 4
+
+    # Retirement is exact: the shared profile stays routable in both workspaces.
+    assert await store.set_capability_active(
+        T, "researcher", False, workspace_id=workspace_a
+    ) is not None
+    assert ("researcher", "", "codex") in await scoped(workspace_a)
+    assert ("researcher", workspace_a, "codex") not in await scoped(workspace_a)
+
+    # A name that exists only in another workspace is ABSENT here, not retired.
+    assert await store.set_capability_active(
+        T, "acme-only", False, workspace_id=workspace_a
+    ) is None
+
+    # An org-scoped manifest reconcile leaves every workspace roster alone.
+    await store.upsert_capability(profile("org-manifest", None, source="manifest"))
+    await store.upsert_capability(
+        profile("ws-manifest", workspace_b, source="manifest")
+    )
+    assert await store.deactivate_absent_manifest_capabilities(
+        T, [], workspace_id=None
+    ) == ["org-manifest"]
+    assert ("ws-manifest", workspace_b, "codex") in await scoped(workspace_b)

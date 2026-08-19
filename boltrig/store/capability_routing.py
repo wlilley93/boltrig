@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from .provenance import ProvenanceStoreMem, ProvenanceStorePG
 from boltrig.models.capability_routing import (
     CapabilityBinding,
     ProviderConnection,
@@ -78,12 +79,13 @@ def _routing_policy(r):
     )
 
 
-class CapabilityRoutingStoreMem:
+class CapabilityRoutingStoreMem(ProvenanceStoreMem):
     def _init_capability_routing_state(self) -> None:
         self._provider_connections: dict[tuple[str, str], ProviderConnection] = {}
         self._source_operations: dict[tuple[str, str], SourceOperation] = {}
         self._capability_bindings: dict[tuple[str, str], CapabilityBinding] = {}
         self._routing_policies: dict[tuple[str, str], RoutingPolicy] = {}
+        self._init_provenance_state()
 
     async def upsert_provider_connection(self, connection):
         self._provider_connections[(connection.tenant_id, connection.id)] = replace(connection)
@@ -118,6 +120,14 @@ class CapabilityRoutingStoreMem:
         # capability coexists rather than replacing (SPEC §8, §11.1 site 2).
         self._capability_bindings[(binding.tenant_id, binding.binding_id)] = replace(binding)
 
+    async def set_capability_binding_status(self, tenant_id, binding_id, status, reviewed_by):
+        binding = self._capability_bindings.get((tenant_id, binding_id))
+        if binding is None:
+            return None
+        updated = replace(binding, status=status, reviewed_by=reviewed_by)
+        self._capability_bindings[(tenant_id, binding_id)] = updated
+        return replace(updated)
+
     async def list_capability_bindings(
         self, tenant_id, capability_id=None, *, source_operation_id=None
     ):
@@ -133,6 +143,9 @@ class CapabilityRoutingStoreMem:
     async def upsert_routing_policy(self, policy):
         self._routing_policies[(policy.tenant_id, policy.id)] = replace(policy)
 
+    async def delete_routing_policy(self, tenant_id, policy_id):
+        return self._routing_policies.pop((tenant_id, policy_id), None) is not None
+
     async def list_routing_policies(self, tenant_id, capability_id=None):
         rows = [
             replace(p)
@@ -142,7 +155,7 @@ class CapabilityRoutingStoreMem:
         return sorted(rows, key=lambda p: (p.precedence, p.id))
 
 
-class CapabilityRoutingStorePG:
+class CapabilityRoutingStorePG(ProvenanceStorePG):
     async def upsert_provider_connection(self, connection):
         await self._pool.execute(
             """INSERT INTO provider_connections (
@@ -254,6 +267,15 @@ class CapabilityRoutingStorePG:
             binding.reviewed_by,
         )
 
+    async def set_capability_binding_status(self, tenant_id, binding_id, status, reviewed_by):
+        return _capability_binding(await self._pool.fetchrow(
+            """UPDATE capability_bindings
+                 SET status=$3, reviewed_by=$4, updated_at=now()
+               WHERE tenant_id=$1 AND binding_id=$2
+               RETURNING *""",
+            tenant_id, binding_id, status, reviewed_by,
+        ))
+
     async def list_capability_bindings(
         self, tenant_id, capability_id=None, *, source_operation_id=None
     ):
@@ -285,6 +307,13 @@ class CapabilityRoutingStorePG:
             policy.operation_class, policy.capability_version, policy.scope,
             policy.workspace_id, policy.precedence,
         )
+
+    async def delete_routing_policy(self, tenant_id, policy_id):
+        result = await self._pool.execute(
+            "DELETE FROM routing_policies WHERE tenant_id=$1 AND id=$2",
+            tenant_id, policy_id,
+        )
+        return result.endswith("1")
 
     async def list_routing_policies(self, tenant_id, capability_id=None):
         rows = await self._pool.fetch(

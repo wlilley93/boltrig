@@ -28,6 +28,7 @@ from __future__ import annotations
 import pytest
 
 from boltrig.kernel import tool_disclosure
+from boltrig.kernel.capability_offer import offer_candidates
 from boltrig.fleet.runtime_resolver import RuntimeResolver
 from boltrig.models import Consequence, GrantSet, Verb
 
@@ -53,9 +54,17 @@ class _Kernel:
 class _Store:
     """One tenant whose ceiling admits some verbs and not others."""
 
-    def __init__(self, verbs: tuple[Verb, ...], ceiling: GrantSet) -> None:
+    def __init__(
+        self,
+        verbs: tuple[Verb, ...],
+        ceiling: GrantSet,
+        bindings: tuple = (),
+        operations: tuple = (),
+    ) -> None:
         self._verbs = verbs
         self._ceiling = ceiling
+        self._bindings = bindings
+        self._operations = operations
 
     async def get_tenant_permissions(self, tenant_id: str) -> object:
         ceiling = self._ceiling
@@ -68,12 +77,27 @@ class _Store:
     async def list_verbs(self, tenant_id: str) -> tuple[Verb, ...]:
         return self._verbs
 
+    async def list_capability_bindings(self, tenant_id: str, capability_id=None, **_):
+        return list(self._bindings)
 
-def _offer_names(store_verbs, ceiling: GrantSet, run: GrantSet, skills=()) -> set[str]:
-    """What the MCP face would advertise, by the face's own derivation."""
-    page = tool_disclosure.offer_page(
-        [verb for verb in store_verbs if ceiling.permits(verb.id)], run, skills
+    async def list_source_operations(self, tenant_id: str, connection_id=None):
+        return list(self._operations)
+
+
+async def _offer_names(store, ceiling: GrantSet, run: GrantSet, skills=()) -> set[str]:
+    """What the MCP face would advertise, by CALLING the face's derivation.
+
+    This used to re-implement the candidate filter inline, which was right when
+    there were two copies of it: the test compared the ceiling against its own
+    copy of the face rather than against the face. Now that both call sites
+    share ``offer_candidates`` the test calls it too, so a change to the real
+    derivation reaches both sides of the comparison and the paging and ranking
+    the face adds on top stay inside the thing being compared.
+    """
+    candidates = await offer_candidates(
+        store, TENANT, permits=lambda name: ceiling.permits(name) and run.permits(name)
     )
+    page = tool_disclosure.offer_page(candidates, run, skills)
     return {row["name"] for row in page["tools"]}
 
 
@@ -108,7 +132,7 @@ async def test_the_proxy_ceiling_and_the_tool_offer_are_the_same_set(
     resolver = RuntimeResolver(kernel, codex_config={"trusted": True})
 
     admitted = set(await resolver._compile_codex_tool_ceiling(TENANT, run))
-    advertised = _offer_names(verbs, ceiling, run)
+    advertised = await _offer_names(kernel.store, ceiling, run)
 
     assert admitted == advertised, (
         "the admission-compiled proxy ceiling and the kernel's advertised tools "
@@ -127,4 +151,57 @@ async def test_the_parity_check_can_actually_see_a_divergence() -> None:
 
     admitted = set(await resolver._compile_codex_tool_ceiling(TENANT, GrantSet.of(["*"])))
     assert admitted == {"ticket.read", "ticket.write", "doc.read"}
-    assert admitted == _offer_names(verbs, GrantSet.of(["*"]), GrantSet.of(["*"]))
+    assert admitted == await _offer_names(
+        kernel.store, GrantSet.of(["*"]), GrantSet.of(["*"])
+    )
+
+
+async def test_both_sides_project_an_approved_capability_identically() -> None:
+    """The case this file's docstring was written for.
+
+    "The moment either derivation starts selecting - ranking to a bound,
+    filtering by skill, PROJECTING CAPABILITIES INSTEAD OF VERBS - the other
+    must select identically." It now does project, so the parity claim has to
+    be exercised over a projection and not only over plain verbs.
+
+    The asymmetry the docstring names is what makes this sharp: if the ceiling
+    admitted `opbox.create_matter` while the face advertised `matter.open`, the
+    model would call a tool the proxy silently drops from the request body -
+    no error, no log, an ordinary-looking turn in which nothing happened.
+    """
+    from boltrig.models.capability_routing import CapabilityBinding, SourceOperation
+
+    verbs = (_verb("opbox.create_matter"), _verb("opbox.unmapped"))
+    operations = (
+        SourceOperation(
+            id="opbox.create_matter",
+            tenant_id=TENANT,
+            provider="opbox",
+            connection_id="pconn:opbox",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        ),
+    )
+    bindings = (
+        CapabilityBinding(
+            binding_id="cb:1",
+            tenant_id=TENANT,
+            capability_id="matter.open",
+            source_operation_id="opbox.create_matter",
+            connection_id="pconn:opbox",
+            status="approved",
+        ),
+    )
+    grants = GrantSet.of(["*"])
+
+    kernel = _Kernel()
+    kernel.store = _Store(verbs, grants, bindings, operations)
+    resolver = RuntimeResolver(kernel, codex_config={"trusted": True})
+
+    admitted = set(await resolver._compile_codex_tool_ceiling(TENANT, grants))
+    advertised = await _offer_names(kernel.store, grants, grants)
+
+    # Non-vacuous: the projection really happened on both sides.
+    assert "matter.open" in admitted
+    assert "opbox.create_matter" not in admitted
+    assert admitted == advertised

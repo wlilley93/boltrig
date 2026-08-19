@@ -28,6 +28,7 @@ from .control_approval_model_endpoints import (
     model_endpoint_context,
     model_endpoint_upsert_context,
 )
+from .control_routing_policy_specs import ROUTING_POLICY_ACTIONS
 from .control_approval_workflows import (
     CAPABILITY_ACTIONS,
     EVAL_CASE_ACTIONS,
@@ -249,6 +250,11 @@ async def _resource_context(
         return await capability_context(store, params, context)
     if verb == "control.capability.upsert":
         return await capability_upsert_context(store, params, context)
+    if verb in ROUTING_POLICY_ACTIONS:
+        from .control_routing_policies import routing_policy_context
+
+        return await routing_policy_context(store, verb, params, context)
+
     if verb == "control.permanent_fleet.apply":
         from .permanent_fleet import latest_permanent_fleet_revision
 

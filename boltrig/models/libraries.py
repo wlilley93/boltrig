@@ -99,6 +99,13 @@ class AgentCapability:
     # compatibility projection; new modality routes live here so adding a
     # modality does not require another column or a new approval shape.
     model_routes: dict[str, str] = field(default_factory=dict)
+    # The workspace this profile belongs to, or NULL for an ORG-WIDE profile every
+    # workspace sees. A tenant is the organisation; a workspace is a scope inside it
+    # ([2026] VJS-COUNTY 8, D4), so one account running two businesses gets a
+    # different agent roster per workspace without duplicating the shared agents.
+    # NULL is deliberately the default: every row that existed before the column did
+    # is org-wide, which is what it was.
+    workspace_id: WorkspaceId | None = None
     # Provenance for scoped-declarative reconciliation ([2026] LEXBY LOG-2026-07-17):
     # 'manifest' rows are authored by the fleet manifest and are reconciled
     # declaratively (a name dropped from a redeployed manifest is deactivated);

@@ -13,6 +13,13 @@ store write, so a tripped mass-deactivation guard aborts the whole apply with
 nothing committed (fail-closed). The actual soft-deactivation
 (:func:`reconcile_capabilities`) runs AFTER the upsert loop through a single
 atomic store statement, so no partial wipe can be observed.
+
+A manifest carries a tenant and no workspace, so both the plan and the
+reconciliation are pinned to the ORG-WIDE scope (``workspace_id=None``,
+matched exactly). Since 0083 gave capabilities a workspace, an unscoped
+reconcile would soft-deactivate every workspace's manifest agents on the first
+apply after a workspace authored one - invisibly, because a deactivated row
+still exists and merely stops being routable.
 """
 
 from __future__ import annotations
@@ -99,7 +106,15 @@ async def plan_capability_reconciliation(
     unconditional (it does not depend on the counts).
     """
     declared_names = frozenset(c.name for c in declared_capabilities(manifest))
-    active = await store.list_capabilities(manifest.tenant_id)
+    # ORG-WIDE ONLY. A fleet manifest carries a tenant and no workspace, so it
+    # authors org-wide rows and reconciles org-wide rows. Reading the unfiltered
+    # set instead would count every workspace's manifest agents into A and list
+    # their names in `absent`, so the mass-deactivation guard would fire on
+    # arithmetic about rows this apply cannot touch, and the plan would promise
+    # drops that never happen.
+    active = await store.list_capabilities(
+        manifest.tenant_id, workspace_id=None, enforce_workspace=True
+    )
     active_manifest = [c for c in active if c.source == MANIFEST_SOURCE]
     absent = tuple(sorted(c.name for c in active_manifest if c.name not in declared_names))
     a_before, dropped = len(active_manifest), len(absent)
@@ -127,7 +142,7 @@ async def reconcile_capabilities(
     if not plan.absent_names:
         return []
     deactivated = await kernel.store.deactivate_absent_manifest_capabilities(
-        manifest.tenant_id, list(plan.declared_names)
+        manifest.tenant_id, list(plan.declared_names), workspace_id=None
     )
     audit = getattr(kernel, "audit", None)
     for name in deactivated:

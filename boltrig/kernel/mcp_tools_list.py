@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import tool_disclosure
+from .capability_offer import offer_candidates
 from .mcp_errors import err, ok
 
 # JSON-RPC 2.0 §5.1. Named because a bare -32602 at the call site reads as a
@@ -36,14 +37,16 @@ async def list_tools(kernel: Any, rt: Any, rid: Any, cursor: Any = None) -> dict
     either one standing alone.
     """
     perms = await kernel.store.get_tenant_permissions(rt.tenant_id)
-    verbs = await kernel.store.list_verbs(rt.tenant_id)
+    # Both authorities folded into one predicate before the candidates are
+    # built: a capability is offered only where the dispatcher would run it,
+    # and that demands the run's grants as well as the tenant's ceiling.
+    candidates = await offer_candidates(
+        kernel.store,
+        rt.tenant_id,
+        permits=lambda name: perms.grants.permits(name) and rt.grants.permits(name),
+    )
     try:
-        page = tool_disclosure.offer_page(
-            [verb for verb in verbs if perms.grants.permits(verb.id)],
-            rt.grants,
-            rt.skills,
-            cursor,
-        )
+        page = tool_disclosure.offer_page(candidates, rt.grants, rt.skills, cursor)
     except tool_disclosure.ToolDisclosureError:
         return err(rid, INVALID_PARAMS, "invalid cursor")
     return ok(rid, page)

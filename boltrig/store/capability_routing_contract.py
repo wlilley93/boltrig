@@ -44,6 +44,12 @@ class CapabilityRoutingStoreContract(Protocol):
     # doctrine's multiple eligible implementations expressible at all.
     async def upsert_capability_binding(self, binding: CapabilityBinding) -> None: ...
 
+    # The review action. Returns None where the binding does not exist, so an
+    # approval naming a stale id reports that rather than silently succeeding.
+    async def set_capability_binding_status(
+        self, tenant_id: str, binding_id: str, status: str, reviewed_by: str | None
+    ) -> CapabilityBinding | None: ...
+
     # ``source_operation_id`` is the REVERSE lookup the approval gate needs:
     # given a bare provider verb, which capabilities does it implement? Without
     # it the gate can only match names, and a capability blocked by an operator
@@ -57,6 +63,12 @@ class CapabilityRoutingStoreContract(Protocol):
     ) -> list[CapabilityBinding]: ...
 
     async def upsert_routing_policy(self, policy: RoutingPolicy) -> None: ...
+
+    # Returns False where the policy does not exist, so a delete naming a stale
+    # id reports that rather than reading as a successful removal. A route is
+    # the thing an agent depends on: "already gone" and "never existed" have to
+    # be distinguishable to whoever is editing routing.
+    async def delete_routing_policy(self, tenant_id: str, policy_id: str) -> bool: ...
 
     async def list_routing_policies(
         self, tenant_id: str, capability_id: str | None = None

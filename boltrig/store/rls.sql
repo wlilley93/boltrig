@@ -127,6 +127,9 @@ DECLARE
     -- fail-closed on a null GUC.
     'provider_connections','source_operations','capability_bindings',
     'routing_policies',
+    -- Doctrine step 3: a ref resolves to a remote record, so an unfenced row
+    -- here would let one tenant's brref name another tenant's record.
+    'entity_provenance',
     -- Org -> workspace tenancy ([2026] VJS-COUNTY 8). These three carry a real
     -- tenant_id column, so the generic tenant_id policy binds them. organisations
     -- is handled separately below (its isolation column is id, which IS tenant_id).

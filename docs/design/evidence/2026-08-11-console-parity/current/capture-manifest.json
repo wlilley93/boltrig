@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T20:01:58.407Z",
+  "capturedAt": "2026-08-19T14:04:56.471Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,12 +16,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "c04e14bfe6d821c893c691b83cadebfc4f166fad174a90c335a2c6755c330d15",
-    "digestAfterCapture": "c04e14bfe6d821c893c691b83cadebfc4f166fad174a90c335a2c6755c330d15",
+    "digestBeforeCapture": "921dfc59f7a6f3998ddf37bd4f4469e08e3af2d5b71b7262790c7a7fe582576a",
+    "digestAfterCapture": "921dfc59f7a6f3998ddf37bd4f4469e08e3af2d5b71b7262790c7a7fe582576a",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/dark-default-and-site-mark",
-    "head": "8b175c7a5d4cfb5451e8ada65404cdee0c0c5af4",
-    "dirty": false
+    "branch": "integrate/capability-step3-to-main",
+    "head": "ea7fb8f1bdc730b4148a80e17a0ba7e93df339f7",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
@@ -41,7 +41,7 @@
       "hash": "#/chat",
       "settledSelector": "html[data-visual-ready=\"new-chat\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
-      "sha256": "75718aed357acff70e88ea839759b74134ed9fed4854ae90cb14d675ddc787bc",
+      "sha256": "4ccfda1826322a822c94dbc5c946cc3ea64ba24e21096c939f14116b5bffaffb",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -181,7 +181,7 @@
       "hash": "#/integrations",
       "settledSelector": "html[data-visual-ready=\"plugins\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
-      "sha256": "7b76c0865ef6f65dbb236fe3c3563d571f001367b6b83ed11142bbfd7b276a27",
+      "sha256": "82f14d3e237d42b637d908455087d1871f0bbd0f711e207be91a4ed8e792ce32",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -197,7 +197,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 5,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -274,7 +274,7 @@
       "hash": "#/chat/voice-thread",
       "settledSelector": "html[data-visual-ready=\"call\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
-      "sha256": "400133ffc772196b1cfd9f1d0c7827ecc528bca6e41fe7755eed283bfb9eaa62",
+      "sha256": "7e33a98ebf5e5a0fc03e76f09502af17299dad83e03978c11e65eb77a3cbff0f",
       "width": 1440,
       "height": 900,
       "captureContract": {

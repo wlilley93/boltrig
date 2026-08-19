@@ -85,15 +85,20 @@ function bandsOf({ voice, slot, t }: PreviewDrive): number[] | null {
 function familiarPreview(drive: PreviewDrive): FamiliarStageState {
   return {
     ...RESTING_STAGE_STATE,
-    working: true,
-    // SPEAKING + BANDS, or her voice embodiment never runs. The renderer gates
-    // it on both: with bands the lows pressurise her nucleus, the mids move her
-    // interior and the highs light her surface. Without them she takes the
-    // working-pulse path and merely looks busy while her own voice plays over
-    // the top.
-    speaking: Boolean(drive.voice),
+    // THE SAME CYCLE AS THE OTHER THREE, now that she has modes rather than two
+    // booleans. She used to be pinned to `working: true` for the whole preview
+    // -- the only body in the picker that could not show what its states look
+    // like, because it did not have any.
+    //
+    // A playing clip still overrides to speaking: her voice embodiment is gated
+    // on speaking AND bands together, and without both she takes the pulse path
+    // and merely looks busy while her own voice plays over the top.
+    mode: drive.voice
+      ? "speaking"
+      : (drive.slot.mode ?? "standby") as FamiliarStageState["mode"],
     bands: drive.voice ? drive.voice.bands : null,
     level: drive.level,
+    micLevel: drive.slot.micLevel ?? 0,
     onset: drive.voice?.onset ?? Math.max(0, Math.sin(drive.t * 0.55)) * 0.4,
   };
 }
@@ -133,7 +138,7 @@ function colossusPreview(drive: PreviewDrive): ColossusStageState {
 
 export function useCompanionPreview(): CompanionPreview {
   const [preview, setPreview] = useState<CompanionPreview>({
-    familiar: { ...RESTING_STAGE_STATE, working: true, level: 0.32 },
+    familiar: { ...RESTING_STAGE_STATE, mode: "thinking", level: 0.32 },
     jarvis: { ...RESTING_JARVIS_STATE, ...JARVIS_CYCLE[0] },
     ultron: { ...RESTING_ULTRON_STATE, mode: "thinking", level: 0.3 },
     colossus: { ...RESTING_COLOSSUS_STATE, mode: "thinking", level: 0.3 },

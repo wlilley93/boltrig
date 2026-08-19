@@ -28,6 +28,7 @@ from boltrig.kernel.ai_key_routes import register_ai_key_routes
 from boltrig.kernel.conversation_account_routes import (
     register_conversation_account_routes,
 )
+from boltrig.identity.user_view import user_view
 from boltrig.kernel.control_routes import dispatch_control_route
 from boltrig.kernel.notification_routes import register_notification_routes
 from boltrig.kernel.trajectory_routes import register_trajectory_routes
@@ -84,20 +85,6 @@ def _pat_view(pat) -> dict:
         "last_used_at": pat.last_used_at.isoformat() if pat.last_used_at else None,
         "expires_at": pat.expires_at.isoformat() if pat.expires_at else None,
         "revoked": pat.revoked,
-    }
-
-
-def _user_view(u) -> dict:
-    return {
-        "id": u.id,
-        "email": u.email,
-        "display_name": u.display_name,
-        "role": u.role,
-        "scope": u.scope,
-        "status": u.status,
-        "source": u.source,
-        "source_group": u.source_group,
-        "last_seen_at": u.last_seen_at.isoformat() if u.last_seen_at else None,
     }
 
 
@@ -185,7 +172,7 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
 
     P = Depends(principal_dep)
     K = Depends(get_kernel)
-    register_account_profile_routes(app, P, K, _audit, _user_view)
+    register_account_profile_routes(app, P, K, _audit, user_view)
     register_conversation_account_routes(app, P, K, _audit)
     _register_hitl_run_routes(app, principal_dep, get_kernel)
     _register_token_routes(app, principal_dep, get_kernel)
@@ -521,7 +508,7 @@ def _register_admin_directory_routes(app, principal_dep, get_kernel) -> None:
     async def list_directory(k=K, p=P) -> JSONResponse:
         _require_admin(p)
         users = await k.store.list_users(p.tenant_id)
-        return JSONResponse({"users": [_user_view(u) for u in users]})
+        return JSONResponse({"users": [user_view(u) for u in users]})
 
     @app.patch("/v1/admin/users/{user_id}")
     async def update_user(user_id: str, body: dict, request: Request, k=K, p=P) -> JSONResponse:

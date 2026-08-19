@@ -39,6 +39,17 @@ def _surface(source: str, declarations: str) -> None:
         WORKER_ROUTES[route] = WorkerSurface(sdk_method=sdk_method, source=source)
 
 
+# Unauthenticated, and read at bootstrap rather than by a component: the
+# sign-in screen is the first surface that needs the product's name and it
+# renders before anyone has a session.
+_surface(
+    "apps/worker/src/productName.ts",
+    """
+GET /v1/branding branding
+""",
+)
+
+
 _surface(
     "apps/worker/src/components/shell/useConversationDirectory.ts",
     """
@@ -55,6 +66,30 @@ _surface(
     "apps/worker/src/components/CommandPalette.tsx",
     """
 POST /v1/search federatedSearch
+""",
+)
+# The doctrine's own review surface (A5/B). These were classified operator-only
+# for exactly one commit, while the routes existed and nothing read them; the
+# Integrations page's Capabilities / Rules / Review tabs read them now.
+_surface(
+    # The hook, not the panel: the queue's state and its governed decision lane
+    # were extracted so the approval handling could be read on its own, and the
+    # read lives with them.
+    "apps/worker/src/components/integrations/useCapabilityReviewQueue.ts",
+    """
+GET /v1/capability-bindings capabilityBindings
+""",
+)
+_surface(
+    "apps/worker/src/components/integrations/CapabilityCataloguePanel.tsx",
+    """
+GET /v1/capability-catalogue capabilityCatalogue
+""",
+)
+_surface(
+    "apps/worker/src/components/integrations/RoutingRulesPanel.tsx",
+    """
+GET /v1/routing-policies routingPolicies
 """,
 )
 _surface(
@@ -174,6 +209,16 @@ POST /v1/me/tokens mintToken
 DELETE /v1/me/tokens/{token_id} revokeToken
 GET /v1/me/sessions meSessions
 DELETE /v1/me/sessions/{session_id} revokeSession
+""",
+)
+# The only control that changes what the WHOLE application is looking at, which
+# is why it is its own component now: a successful switch reloads, because at
+# least four things move with it (grants, the agent roster, the companion, and
+# which canonical capabilities are offered) and nothing in the shell re-reads
+# any of them.
+_surface(
+    "apps/worker/src/components/account/useActiveContext.ts",
+    """
 POST /v1/me/active-context switchActiveContext
 POST /v1/me/active-org switchActiveOrg
 GET /v1/me/orgs myOrganisations
@@ -627,6 +672,16 @@ def _non_ui(classification: str, declarations: str) -> None:
 
 
 _non_ui("service-probe", "GET /healthz")
+# The identity contract a HOST APPLICATION reads instead of trusting its own
+# session (Opbox is the first). Not a Worker surface: the Worker already holds
+# the resolved principal from its own session, so nothing in apps/worker calls
+# this. It is service-native because the consumer is another product.
+_non_ui("service-native", "GET /v1/me")
+# The question a host asks instead of reimplementing GrantSet.permits. Same
+# consumer and the same reason as GET /v1/me: the Worker holds its own resolved
+# grants and has nothing to ask. It is a POST because the ask is a list, and a
+# read either way.
+_non_ui("service-native", "POST /v1/me/permits")
 _non_ui(
     "operator-only",
     """
@@ -681,6 +736,14 @@ GET /v1/devices/{device_id}/camera-bindings
 GET /v1/devices/{device_id}/camera-leases
 """,
 )
+# The desktop install census (A4). An author-gated administrator read over the
+# whole tenant's `devices` rows, where every other device route is scoped to the
+# caller's own machines. NOT a Worker surface TODAY and this row says so rather
+# than implying it never should be: the admin console tab that would consume it
+# is Track B, and classifying it here is what keeps the route from being
+# invisible in the meantime.
+_non_ui("operator-only", "GET /v1/admin/devices")
+
 _non_ui(
     "operator-only",
     """
@@ -749,4 +812,7 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 }
 
 
-EXPECTED_ROUTE_COUNT = 292
+# 294 since GET /v1/me and GET /v1/branding (the product's own name, read unauthenticated by
+# the sign-in screen). An exact census, not a ratchet: it must equal the
+# routes the app actually serves, so it moves when the surface does.
+EXPECTED_ROUTE_COUNT = 299

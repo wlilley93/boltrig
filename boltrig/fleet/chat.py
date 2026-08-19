@@ -211,6 +211,7 @@ class ChatService(ChatQueueService):
         idempotency_key: str | None = None,
         origin: str | None = None,
         model_profile_id: str | None = None, model_choice_id: str | None = None,
+        caller_context: Any = None,
         input_role: MessageRole = MessageRole.USER,
     ) -> AsyncIterator[dict[str, Any]]:
         request = TurnRequest(
@@ -228,6 +229,7 @@ class ChatService(ChatQueueService):
             origin=origin,
             model_profile_id=model_profile_id,
             model_choice_id=model_choice_id,
+            caller_context=caller_context,
             input_role=input_role,
         )
         async for event in stream_turn(self, request):
@@ -247,6 +249,7 @@ class ChatService(ChatQueueService):
         attachments=None,
         *,
         heartbeat=True,
+        caller_context=None,
         workspace_id=None,
         scope=None,
         on_behalf_bearer=None,

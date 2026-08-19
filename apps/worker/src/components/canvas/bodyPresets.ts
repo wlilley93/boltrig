@@ -10,6 +10,11 @@
  * the move it is.
  */
 export {
+  FAMILIAR_ARRIVAL,
+  FAMILIAR_MODES,
+  familiarModeTuning,
+} from "./familiarPresets";
+export {
   JARVIS_ARRIVAL,
   JARVIS_MODES,
   JARVIS_PULSES,

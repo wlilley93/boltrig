@@ -35,6 +35,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from boltrig.models.workspace_settings import workspace_setting_value
+
 from .personas import persona_for
 
 #: The settings-bag key the web client writes when a character is chosen.
@@ -48,13 +50,19 @@ VOICE_HEADER = (
 )
 
 
-async def chosen_persona(store: Any, tenant_id: str, user_id: str) -> str:
+async def chosen_persona(
+    store: Any, tenant_id: str, user_id: str, workspace_id: str | None = None
+) -> str:
     """The persona prefix for this user's chosen character, or empty.
 
     Empty for every case that is not a shipped character with a persona: no
     setting, an id from a build that shipped a body this one does not, or a
     character that carries no prompts. A missing persona costs the turn its
     voice and nothing else.
+
+    The character is a per-workspace choice, resolved through the one ladder in
+    ``models/workspace_settings.py``. A second copy of that ladder here is how
+    the settings screen and the actual voice come to disagree.
     """
     if not user_id:
         return ""
@@ -64,9 +72,6 @@ async def chosen_persona(store: Any, tenant_id: str, user_id: str) -> str:
         # Presentation, not authority. A settings read that fails must not be
         # able to fail a turn -- the answer is simply in the default voice.
         return ""
-    chosen = next(
-        (row.value for row in rows if getattr(row, "key", None) == CHARACTER_SETTING),
-        None,
-    )
+    chosen = workspace_setting_value(rows, CHARACTER_SETTING, workspace_id)
     persona = persona_for(chosen if isinstance(chosen, str) else None)
     return f"{VOICE_HEADER}\n{persona}\n\n" if persona else ""
