@@ -41,7 +41,7 @@ from .revertible import EffectLog
 log = logging.getLogger("boltrig.kernel.registry")
 
 
-def _is_external_provider(adapter) -> bool:
+def _is_external_provider(adapter: Any) -> bool:
     """Whether this adapter's operations are somebody else's API catalogue.
 
     ``source`` is ``builtin`` for the adapters that ship inside the image and
