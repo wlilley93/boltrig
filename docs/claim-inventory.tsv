@@ -248,6 +248,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:109	error	A bounde
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/result.py:99	tokens_used	A clearly-marked degraded result (no SDK / no key / backend down, P9).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/runtime_resolver.py:57	pinned_policy	Resolve one runtime under either caller-routing or pinned profile policy.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/spawn.py:198	subagent	Resolve the runtime and run the turn, refunding the reservation on a raise.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/bifrost_user_admin.py:198	BIFROST_PROVIDERS	Ensure the provider row exists - native, or custom with an address.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/delegation.py:1	delegated	On-behalf-of identity decisions and OBO token exchange (US-IAM-03/05, SEC-03).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/password_reset_evidence.py:22	not_observed_in_bounded_tail	Project no recipient, provider, address, exception, or message content.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/provisioning.py:1	users	Just-in-time user provisioning and current-grant resolution (Round Four USR).
@@ -419,6 +420,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/ai_keys.py:72	workspace_
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/auth.py:1	dev_principal_resolver	Token verification and the principal resolver (US-IAM-01, SEC-01/02).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/auth.py:176	verify	SAML assertion verification seam (US-IAM-01).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/auth.py:236	Principal	Build a production ``PrincipalResolver`` from a verifier (US-IAM-01/02).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/bifrost_user_admin.py:60	admin_base	A custom provider's endpoint: absolute http(s), no secrets in the URL.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/bifrost_user_transport.py:1	BifrostUserTransport	``BifrostUserTransport`` is the fail-closed scoped administration transport.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/mailersend_password_reset.py:1	MailerSendPasswordResetNotifier	``MailerSendPasswordResetNotifier`` provides bounded MailerSend delivery.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/passwords.py:1	verify_dummy	First-party password hashing ([2026] VJS-COUNTY 7, D4).
@@ -1073,8 +1075,9 @@ ORDINARY	NO-SUBJECT	comment	boltrig/identity/auth.py:169		A missing/non-numeric 
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/auth.py:368		Unmapped / none / an unknown tier -> denied fail-closed (K-13),
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/auth.py:72		(HS*) algorithm are rejected outright - never inferred from the JWKS - so an
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/auth.py:78		request with a bogus kid must not amplify into an outbound IdP fetch per
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/bifrost_user_admin.py:206		"Bifrost refused the provider key" and cannot act on.
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/bifrost_user_binding.py:204		routing;
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/bifrost_user_admin.py:269		"Bifrost refused the provider key" and cannot act on.
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/bifrost_user_binding.py:229		routing;
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/bifrost_user_binding.py:45		: Bifrost - an id is an identifier, never an address or an instruction.
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/onboarding.py:36		but a missing marker is deliberately fail-closed in Worker: chat is not
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/password_reset_evidence.py:15		deliberately never called, so attributing it to provider failure would
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/passwords.py:33		always fails but costs the same as a genuine verify.
@@ -1548,6 +1551,7 @@ ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/fleet/turn_executor_compat.py:11	on_be
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:151	fn	Await ``fn`` directly.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:173	KeyError	Start the registered task on the engine without waiting (US-EXE-02).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:73	KeyError	Run the registered task body INLINE (awaited here, US-EXE-05).
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/identity/bifrost_user_binding.py:82	BIFROST_PROVIDERS	Resolve (provider, raw_model, model_id) - native or custom.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/identity/password_reset.py:42	False	Run a sync or async notifier and make an explicit ``False`` fail closed.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/app.py:147	id	The streamable-HTTP answer for one JSON-RPC message.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/audit.py:75	seq	The ONE key a row at ``seq`` is allowed to verify under.
