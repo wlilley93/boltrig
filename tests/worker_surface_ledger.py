@@ -638,6 +638,11 @@ def _non_ui(classification: str, declarations: str) -> None:
 
 
 _non_ui("service-probe", "GET /healthz")
+# The identity contract a HOST APPLICATION reads instead of trusting its own
+# session (Opbox is the first). Not a Worker surface: the Worker already holds
+# the resolved principal from its own session, so nothing in apps/worker calls
+# this. It is service-native because the consumer is another product.
+_non_ui("service-native", "GET /v1/me")
 _non_ui(
     "operator-only",
     """
@@ -760,7 +765,7 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 }
 
 
-# 293 since GET /v1/branding (the product's own name, read unauthenticated by
+# 294 since GET /v1/me and GET /v1/branding (the product's own name, read unauthenticated by
 # the sign-in screen). An exact census, not a ratchet: it must equal the
 # routes the app actually serves, so it moves when the surface does.
-EXPECTED_ROUTE_COUNT = 293
+EXPECTED_ROUTE_COUNT = 294

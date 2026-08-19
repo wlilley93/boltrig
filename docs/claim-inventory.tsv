@@ -101,8 +101,8 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/identity/sessions.py:350		closed, so the
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/sessions.py:71		A fresh high-entropy session secret (the cookie value;
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/sessions.py:76		The at-rest representation of a session: its sha256, never the secret.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/tokens.py:1		Personal access tokens (Round Four PAT, SEC-34).
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/identity/tokens.py:102		read fails closed - a valid token would 401 as "de-provisioned".
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/tokens.py:35		The at-rest representation of a PAT: a SHA-256 hash, never the secret.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/identity/tokens.py:158		read fails closed - a valid token would 401 as "de-provisioned".
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/tokens.py:36		The at-rest representation of a PAT: a SHA-256 hash, never the secret.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/totp.py:152		A fresh high-entropy 2FA login challenge token (never stored raw).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/totp.py:157		The at-rest sha256 of a challenge token - never the token itself (D3).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/totp.py:72		The ``otpauth://`` URI for the QR shown ONCE at enroll-begin.
@@ -117,8 +117,8 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/access_routes.py:469		active org 
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/access_routes.py:646		handle + policy flags, never a secret.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/access_routes.py:682		add-member picker;
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/access_routes.py:77		A PAT for listing: never the secret or the hash (PAT-02).
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/app.py:505		fail-closed to the caller's scope.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/app.py:735		user has a password), so they are always wired.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/app.py:496		fail-closed to the caller's scope.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/app.py:726		user has a password), so they are always wired.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/approval_gate.py:37		Return approval context that is faithful but never a secret store.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/audit.py:167		Bounded-observability scrub (K-20).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/audit.py:277		The JSONB-safe, chain-field-free payload of a deferred audit event.
@@ -430,14 +430,16 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:1	build_sess
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:237	UserSession	Resolve a session cookie secret to a live :class:`UserSession`, else None.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:85	store.add_session	Build a fresh :class:`UserSession` plus its ``(secret, csrf_token)``.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/tenancy.py:1	create_org	Default-organisation backfill ([2026] VJS-COUNTY 8, D1).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/tokens.py:50	resolve_pat_principal	Mint a PAT and return ``(record, secret)``; the secret is shown ONCE.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/tokens.py:86	Principal	Resolve a PAT secret to a ``Principal``, or ``None`` if it is not usable.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/tokens.py:127	effective_grants_for_request	Resolve a PAT secret to a ``Principal``, or ``None`` if it is not usable.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/tokens.py:51	resolve_pat_principal	Mint a PAT and return ``(record, secret)``; the secret is shown ONCE.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/tokens.py:95	resolve_active_workspace	Which workspace this bearer is acting in.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/totp.py:1	verify_totp	First-party TOTP two-factor + one-time recovery codes ([2026] VJS-COUNTY 10).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/app.py:1	Principal	The kernel HTTP surface (FastAPI) - a thin transport over the engine.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/audit.py:1	detail	Append-only, tamper-evident audit (SEC-16/17, K-19/K-20).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/audit.py:149	_scrub_key	Scrub a single free-text CHAIN FIELD, staying a string (K-20).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/audit.py:224	store.security_scan	Re-derive a tamper-evidence hash chain for a tenant from seq 1 upward.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/audit_outbox.py:1	detail	The audit-outbox janitor (SEC-16 audit-always, durable half) - the drain.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/bearer_principal.py:1	create_app	Resolving a bearer to a Principal, and the workspace it is acting in.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/channel_notify.py:1	notify_work_item_result	Channel notification delivery (decision 0003, Phase 2; SEC-179).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/channel_principal.py:51	resolve_pat_principal	Resolve a VERIFIED channel sender to a Principal via its binding row, or ``None`` if the sender is unbound (the caller applies ``unpaired_behavior``).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/channel_routes.py:313	RateLimited	Opt-in self-serve onboarding for a customer-facing channel (SEC-180).
@@ -466,7 +468,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:321	
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/integration_scope.py:75	_execute_adapter	Who this call is really being made by.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp.py:1	initialize	The kernel's MCP server face (Round Two, Epic MCP).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp_errors.py:1	_call_tool	The MCP wire envelopes: the JSON-RPC frames, and the result a model reads.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/org_discovery_routes.py:18	list_orgs_for_email	List session switch candidates only from ``list_orgs_for_email`` for the caller identity.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/org_discovery_routes.py:64	list_orgs_for_email	List session switch candidates only from ``list_orgs_for_email`` for the caller identity.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/pii.py:1	contains_identity	PII detection and redaction at the kernel boundary (US-PRIV-02, SEC-13).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/platform_routes/integrations.py:144	_may_see	May ``viewer`` see this connection at all? Org connections are shared and visible to everyone in the tenant.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/questions.py:1	apply_manifest	The governed "ask the user a question" built-in verb (US-CHAT-12).
@@ -1077,8 +1079,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/identity/sessions.py:305		a cross-site form 
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/sessions.py:328		fail-closed and covers a mid-session policy flip, not just fresh logins.
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/sessions.py:359		never widen (COUNTY 5).
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/sessions.py:366		to it - a cross-org read is impossible.
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/tokens.py:115		it here.
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/tokens.py:131		effective_grants_for_request and narrow_grants_to_workspace, and never drive a
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/tokens.py:183		effective_grants_for_request and narrow_grants_to_workspace, and never drive a
 ORDINARY	NO-SUBJECT	docstring	boltrig/identity/totp.py:142		The at-rest sha256 of a recovery code - never the plaintext (D2).
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/totp.py:61		challenge path (D5): verifying a presented code against it always fails but
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/__init__.py:186		List work items, row-scoped by department at the store (US-IAM-02).
@@ -1103,20 +1104,20 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/access_routes.py:584		denial leaves n
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/access_routes.py:657		Org-admin only, fail-closed + audited: rename / settings / toggle the
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/ai_key_proposal_routes.py:283		Explicit requester click;
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/ai_key_proposal_routes.py:90		staging and never claim that the key was applied.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:109		request body can never seed kernel-trusted authority (principal_role/_scope
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/app.py:132		The one canonical kernel error body: a 403 is a denial, anything else is an error.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:137		A refusal that does not say what WOULD have been accepted cannot be acted
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/app.py:205		Caller-supplied spawn depth, clamped: garbage is 0 (never a 500) and a negative depth floors at 0, so a body can never reset the runaway-tree budget (fleet/spawn.py checks ``depth + 1 > max_depth``).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:249		builds the app without a resolver must not silently get full-trust auth.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:331		D1).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:353		SEC-186: the body may not name somebody else's run.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:50		request (fail-closed to None); never read from the request body.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:506		route so "search" is never captured as a conversation id.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:55		User-Agent), never from a body field.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:622		never load the whole visible set into a dict - that was O(all items).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:63		"machine" so an unlabelled resolver is refused, never admitted.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:634		out-of-scope reads 404 (not 403) so the item's existence never leaks.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:702		(visibility was fully enforced above);
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:110		request body can never seed kernel-trusted authority (principal_role/_scope
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/app.py:133		The one canonical kernel error body: a 403 is a denial, anything else is an error.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:138		A refusal that does not say what WOULD have been accepted cannot be acted
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/app.py:206		Caller-supplied spawn depth, clamped: garbage is 0 (never a 500) and a negative depth floors at 0, so a body can never reset the runaway-tree budget (fleet/spawn.py checks ``depth + 1 > max_depth``).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:250		builds the app without a resolver must not silently get full-trust auth.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:322		D1).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:344		SEC-186: the body may not name somebody else's run.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:497		route so "search" is never captured as a conversation id.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:51		request (fail-closed to None); never read from the request body.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:56		User-Agent), never from a body field.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:613		never load the whole visible set into a dict - that was O(all items).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:625		out-of-scope reads 404 (not 403) so the item's existence never leaks.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:64		"machine" so an unlabelled resolver is refused, never admitted.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:693		(visibility was fully enforced above);
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:29		selects the handling department.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:51		{name, media_type, data (base64)}.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:74		selects the handling department.
@@ -1519,7 +1520,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:151	fn	Await ``fn``
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:173	KeyError	Start the registered task on the engine without waiting (US-EXE-02).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:73	KeyError	Run the registered task body INLINE (awaited here, US-EXE-05).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/identity/password_reset.py:42	False	Run a sync or async notifier and make an explicit ``False`` fail closed.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/app.py:146	id	The streamable-HTTP answer for one JSON-RPC message.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/app.py:147	id	The streamable-HTTP answer for one JSON-RPC message.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/audit.py:75	seq	The ONE key a row at ``seq`` is allowed to verify under.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/capability_records.py:117	proposed	Record one declared implementation claim, and the operation behind it.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/capability_records.py:146	proposed	Bind a curated pack's mappings to this connection's operations (SPEC §5 level 2).
@@ -1538,6 +1539,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/held_call.py:117	hitl_request
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/held_call.py:359	paused	Retire a held call: drop the seal and mark its checkpoints spent.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/integration_credentials.py:15	level	Build the kernel-only value that the store envelope-seals atomically.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/mcp_tools_list.py:1	mcp.py	The ``tools/list`` handler: what a run is offered, ranked and paged.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/org_discovery_routes.py:25	active_workspace_id	The resolved caller, as the kernel already understands them.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/platform_routes/observability.py:212	external_ref	never widen visibility.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/questions.py:42	secure	``secure`` + ``purpose`` ask for a value the AGENT never sees (SEC-181): the
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/run_access.py:283	max_nodes	Reconstruct the durable subagent topology under a root run, or None.

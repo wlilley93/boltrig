@@ -1,4 +1,11 @@
-"""Self-scoped organisation discovery for first-party session switching."""
+"""Self-scoped identity: who the caller is, and where they may act.
+
+``GET /v1/me`` is the contract a HOST APPLICATION reads instead of trusting its
+own session. Opbox is the first: it stops owning identity and asks Boltrig on
+each request who this person is, which org and workspace they are in, and which
+workspaces they may switch to. Everything here is the caller's OWN record, so
+it discloses nothing they could not already reach.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +20,45 @@ def register_org_discovery_routes(
 ) -> None:
     principal = Depends(principal_dep)
     kernel = Depends(get_kernel)
+
+    @app.get("/v1/me")  # type: ignore[untyped-decorator]
+    async def me(request: Request, k: Any = kernel, p: Any = principal) -> JSONResponse:
+        """The resolved caller, as the kernel already understands them.
+
+        A projection of the Principal, which the resolver has already built and
+        re-authorised: ``active_workspace_id`` in particular is re-checked
+        against CURRENT membership on every request, so a revoked membership
+        disappears here without anything having to expire.
+
+        ``credential_kind`` is reported because it CHANGES WHAT THE CALLER MAY
+        DO: a PAT can select a workspace by header but cannot switch the active
+        ORG, which needs a first-party session. A host rendering a switcher has
+        to know which of the two it is holding rather than discovering it from a
+        400.
+        """
+        user = await k.store.get_user(p.tenant_id, p.subject)
+        workspaces = await k.store.list_workspaces_for_user(p.tenant_id, p.subject)
+        return JSONResponse(
+            {
+                "subject": p.subject,
+                "email": getattr(user, "email", None),
+                "display_name": getattr(user, "display_name", None),
+                "tenant_id": p.tenant_id,
+                "role": p.role,
+                "actor_tier": p.actor_tier,
+                "credential_kind": getattr(p, "credential_kind", "machine"),
+                "active_workspace_id": p.active_workspace_id,
+                "workspaces": [
+                    {
+                        "id": w.id,
+                        "name": w.name,
+                        "slug": w.slug,
+                        "active": w.id == p.active_workspace_id,
+                    }
+                    for w in workspaces
+                ],
+            }
+        )
 
     @app.get("/v1/me/orgs")  # type: ignore[untyped-decorator]
     async def my_organisations(
