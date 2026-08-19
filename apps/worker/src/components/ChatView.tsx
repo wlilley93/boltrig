@@ -26,7 +26,7 @@ import { FamiliarBadge } from "./familiar/FamiliarBadge";
 import { StageBody, useFamiliarBody } from "./StageBody";
 import { stageTurnInput, type StageVoiceActivity } from "./chat/stageTurnInput";
 import { useCharacter } from "./characters";
-import { familiarStateFromTurn } from "./familiar/FamiliarState";
+import { familiarBusy, familiarStateFromTurn } from "./familiar/FamiliarState";
 import { MobileChat } from "./MobileChat";
 import { VoiceCall } from "./VoiceCall";
 import { Composer } from "./chat/Composer";
@@ -1145,7 +1145,7 @@ export function ChatView({
               <span aria-hidden className="chat-header-familiar-mark">
                 <FamiliarBadge
                   label="chief of staff"
-                  state={stageState.working ? "working" : "ready"}
+                  state={familiarBusy(stageState) ? "working" : "ready"}
                 />
               </span>
               <h1>{headerTitle}</h1>

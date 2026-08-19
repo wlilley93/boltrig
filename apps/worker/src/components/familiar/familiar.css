@@ -98,3 +98,19 @@
     animation: none;
   }
 }
+
+/* The Stage's live region: announced, never seen. Not `display: none` and not
+ * `visibility: hidden` -- both remove it from the accessibility tree as well as
+ * from the page, which would make the element pure decoration. Clipped to a
+ * single pixel is the form that survives both. */
+.familiar-stage-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

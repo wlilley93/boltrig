@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T20:02:02.769Z",
+  "capturedAt": "2026-08-19T13:42:56.669Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,12 +17,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "c04e14bfe6d821c893c691b83cadebfc4f166fad174a90c335a2c6755c330d15",
-    "digestAfterCapture": "c04e14bfe6d821c893c691b83cadebfc4f166fad174a90c335a2c6755c330d15",
+    "digestBeforeCapture": "003a75004111078f338567f20cb7bd041edbefc1f80cbcfa4c2c3aa3b0fc7b85",
+    "digestAfterCapture": "003a75004111078f338567f20cb7bd041edbefc1f80cbcfa4c2c3aa3b0fc7b85",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/dark-default-and-site-mark",
-    "head": "8b175c7a5d4cfb5451e8ada65404cdee0c0c5af4",
-    "dirty": false
+    "branch": "",
+    "head": "2c1a872c39f5f8b5306eb826b574f9a5a13c56ea",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
@@ -56,7 +56,7 @@
         "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

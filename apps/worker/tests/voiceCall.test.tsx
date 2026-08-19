@@ -623,7 +623,7 @@ describe("Worker realtime voice continuity", () => {
       }));
     });
 
-    const chief = await screen.findByRole("img", { name: "Familiar · ready" });
+    const chief = await screen.findByRole("img", { name: "Familiar" });
     expect(chief.getAttribute("data-familiar-body")).toBe("cassini");
     expect(document.querySelectorAll(".familiar-stage")).toHaveLength(1);
     expect(document.querySelector(".voice-call-participants")).toBeNull();
