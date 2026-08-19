@@ -330,10 +330,22 @@ CREATE TABLE IF NOT EXISTS agent_capabilities (
     is_active        BOOLEAN NOT NULL DEFAULT true,
     source           TEXT NOT NULL DEFAULT 'control-plane'
                          CHECK (source IN ('manifest', 'control-plane')),
+    -- The workspace this profile belongs to, or NULL for an ORG-WIDE profile every
+    -- workspace sees (0083). A workspace read is the UNION of its own rows and the
+    -- org-wide ones, so a shared agent is declared once, not copied per workspace.
+    workspace_id     TEXT,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (tenant_id, name)
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- There is deliberately NO primary key: PRIMARY KEY (tenant_id, name) forbade two
+-- workspaces from each having a "researcher", which is what 0083 exists to allow.
+-- Uniqueness still holds WITHIN a scope, because the profile editor disables the
+-- name on edit and select_capability matches on the bare name. coalesce() because
+-- Postgres treats NULLs as DISTINCT in a unique index, so the bare column would
+-- constrain every workspace scope and leave the org-wide one unconstrained.
+CREATE UNIQUE INDEX IF NOT EXISTS agent_capabilities_scope_idx
+  ON agent_capabilities (tenant_id, coalesce(workspace_id, ''), name);
 
 CREATE TABLE IF NOT EXISTS workflow_definitions (
     id          TEXT NOT NULL,

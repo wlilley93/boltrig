@@ -8,7 +8,6 @@ lands in, because that decides whether a model treats it as instructions.
 
 from __future__ import annotations
 
-import pytest
 
 from boltrig.fleet.chat_caller_context import rendered_context
 from boltrig.models.chat_context import (

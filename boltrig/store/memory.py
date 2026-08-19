@@ -124,7 +124,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
 
     def _init_execution_state(self) -> None:
         self._perms: dict[str, TenantPermissions] = {}
-        self._caps: dict[tuple[str, str], AgentCapability] = {}
+        self._caps: dict[tuple[str, str, str], AgentCapability] = {}  # capability_key()
         self._workflows: dict[tuple[str, str, str], WorkflowDefinition] = {}
         # Design brief 22.1: workflow runs keyed by (tenant_id, run_id), one row per execute.
         # Read aggregated by workflow_run_stats to feed the automations home

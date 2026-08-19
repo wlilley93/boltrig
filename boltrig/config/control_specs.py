@@ -77,6 +77,12 @@ def _profile_specs() -> list[VerbSpec]:
                     "additionalProperties": _STRING,
                     "maxProperties": len(MODEL_MODALITIES),
                 },
+                # The workspace this profile belongs to; omit for an org-wide
+                # profile every workspace sees (0083). A caller already operating
+                # inside a workspace may only name that workspace, and omitting
+                # it means THEIR workspace rather than the organisation - see
+                # config/capability_scope.py.
+                "workspace_id": _STRING,
             },
             ("name", "runtime"),
             "Author or replace an agent capability profile",
@@ -84,7 +90,7 @@ def _profile_specs() -> list[VerbSpec]:
         *[
             _spec(
                 f"control.capability.{action}",
-                {"name": _STRING},
+                {"name": _STRING, "workspace_id": _STRING},
                 ("name",),
                 f"{action.title()} an agent capability without deleting it",
                 additional=False,

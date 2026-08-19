@@ -291,7 +291,9 @@ class KernelRegistry:
             )
         return sorted(views, key=lambda workflow: workflow["id"])
 
-    async def _agent_profile_views(self, tenant_id: str) -> list[dict[str, Any]]:
+    async def _agent_profile_views(
+        self, tenant_id: str, workspace_id: str | None
+    ) -> list[dict[str, Any]]:
         views = [
             {
                 "name": capability.name,
@@ -307,7 +309,9 @@ class KernelRegistry:
                     capability.name
                 ).as_view(),
             }
-            for capability in await self._store.list_capabilities(tenant_id)
+            for capability in await self._store.list_capabilities(
+                tenant_id, workspace_id=workspace_id, enforce_workspace=True
+            )
         ]
         return sorted(views, key=lambda profile: profile["name"])
 
@@ -321,9 +325,10 @@ class KernelRegistry:
         """Return the caller-visible discovery catalogue.
 
         Verb and noun visibility is the intersection of the tenant ceiling and
-        the caller's grants.  Workflows additionally honour the caller's active
-        workspace, while agent capability profiles are tenant-scoped library
-        records.  The verb payload is deliberately kept backward-compatible.
+        the caller's grants.  Workflows AND agent capability profiles honour the
+        caller's active workspace: a profile is visible when it is org-wide or
+        belongs to that workspace (0083).  The verb payload is deliberately kept
+        backward-compatible.
         """
         verbs = await self._store.list_verbs(tenant_id, noun_id)
         # A verb is visible iff the tenant ceiling permits it AND the caller's own
@@ -359,5 +364,7 @@ class KernelRegistry:
             "nouns": await self._noun_views(tenant_id, visible),
             "verbs": out,
             "workflows": await self._workflow_views(tenant_id, workspace_id),
-            "agent_capabilities": await self._agent_profile_views(tenant_id),
+            "agent_capabilities": await self._agent_profile_views(
+                tenant_id, workspace_id
+            ),
         }

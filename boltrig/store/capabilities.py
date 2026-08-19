@@ -15,6 +15,20 @@ no longer declares, and it touches ONLY ``source='manifest'`` rows, so a governe
 ``source='control-plane'`` grant is never reconciled away.
 Governed profile edits use ``preserve_status=True`` so editing a retired row
 cannot reactivate it; only the explicit lifecycle seam does that.
+
+Workspace scope (0083): a capability carries a ``workspace_id``, or NULL for an
+ORG-WIDE profile every workspace sees. TWO DIFFERENT PREDICATES apply and
+confusing them is the whole hazard:
+
+* READS are the UNION - own workspace plus org-wide - via
+  ``workspace_scope.append_workspace_scope_clause``. ``enforce_workspace=False``
+  is the trusted unfiltered read an internal caller uses; it is the default so
+  that no existing caller silently changes behaviour, and every routing caller
+  opts in explicitly.
+* WRITES, RETIREMENT and MANIFEST RECONCILIATION are EXACT - one scope, matched
+  with ``IS NOT DISTINCT FROM``. The union predicate here would let an
+  org-scoped manifest apply soft-deactivate every workspace's agents, which is
+  exactly the silent failure this note exists to prevent.
 """
 
 from __future__ import annotations
@@ -26,6 +40,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from boltrig.models import AgentCapability
 
 from .model_endpoint_contract import lock_model_endpoint_reference_graph
+from .workspace_scope import append_workspace_scope_clause, workspace_scope_visible
 
 
 def _capability_endpoint_ids(capability: AgentCapability | None) -> set[str]:
@@ -55,27 +70,64 @@ class CapabilityStoreContract(Protocol):
     async def upsert_capability(
         self, cap: AgentCapability, *, preserve_status: bool = False
     ) -> None: ...
-    # Routing read: ACTIVE capabilities only (is_active = true).
-    async def list_capabilities(self, tenant_id: str) -> list[AgentCapability]: ...
+    # Routing read: ACTIVE capabilities only (is_active = true). With
+    # ``enforce_workspace=True`` the answer is the caller's workspace UNION the
+    # org-wide rows; the default is the trusted unfiltered read.
+    async def list_capabilities(
+        self,
+        tenant_id: str,
+        *,
+        workspace_id: str | None = None,
+        enforce_workspace: bool = False,
+    ) -> list[AgentCapability]: ...
     # ``list_all_capabilities`` is the admin/audit read, never the routing read.
-    async def list_all_capabilities(self, tenant_id: str) -> list[AgentCapability]: ...
+    async def list_all_capabilities(
+        self,
+        tenant_id: str,
+        *,
+        workspace_id: str | None = None,
+        enforce_workspace: bool = False,
+    ) -> list[AgentCapability]: ...
     # Reconcile seam (manifest apply only): soft-deactivate the manifest-sourced
     # capabilities NOT in ``declared_names``. Only ``source='manifest'`` rows are
-    # ever touched; returns the names it deactivated (for audit).
+    # ever touched; returns the names it deactivated (for audit). EXACT scope, not
+    # the union: an org-scoped apply must not reach into a workspace's roster.
     async def deactivate_absent_manifest_capabilities(
-        self, tenant_id: str, declared_names: list[str]
+        self,
+        tenant_id: str,
+        declared_names: list[str],
+        *,
+        workspace_id: str | None = None,
     ) -> list[str]: ...
     # Governed lifecycle seam: retain the row and all references while removing
-    # it from every active routing read.
+    # it from every active routing read. EXACT scope.
     async def set_capability_active(
-        self, tenant_id: str, name: str, active: bool
+        self,
+        tenant_id: str,
+        name: str,
+        active: bool,
+        *,
+        workspace_id: str | None = None,
     ) -> AgentCapability | None: ...
+
+
+def capability_key(
+    tenant_id: str, workspace_id: str | None, name: str
+) -> tuple[str, str, str]:
+    """The in-memory twin of ``agent_capabilities_scope_idx``.
+
+    ``coalesce(workspace_id, '')`` in SQL and ``workspace_id or ""`` here are one
+    rule; a mismatch between them is a parity bug that only appears once a
+    workspace-scoped row exists, so both spellings live next to each other.
+    """
+    return (tenant_id, workspace_id or "", name)
 
 
 class CapabilityStoreMem:
     async def upsert_capability(self, cap, *, preserve_status=False):
         with self._model_endpoint_lock:
-            existing = self._caps.get((cap.tenant_id, cap.name))
+            key = capability_key(cap.tenant_id, cap.workspace_id, cap.name)
+            existing = self._caps.get(key)
             changed_references = (
                 _capability_endpoint_ids(existing) ^ _capability_endpoint_ids(cap)
             )
@@ -85,35 +137,54 @@ class CapabilityStoreMem:
             cap.is_active = (
                 existing.is_active if preserve_status and existing is not None else True
             )
-            self._caps[(cap.tenant_id, cap.name)] = cap
+            self._caps[key] = cap
             self._bump_model_endpoint_revisions_locked(
                 cap.tenant_id, changed_references
             )
 
-    async def list_capabilities(self, tenant_id):
+    def _scoped_caps(self, tenant_id, workspace_id, enforce_workspace):
         return [
-            c for (t, _), c in self._caps.items() if t == tenant_id and c.is_active
+            c
+            for key, c in self._caps.items()
+            if key[0] == tenant_id
+            and workspace_scope_visible(c, workspace_id, enforce_workspace)
         ]
 
-    async def list_all_capabilities(self, tenant_id):
-        return [c for (t, _), c in self._caps.items() if t == tenant_id]
+    async def list_capabilities(
+        self, tenant_id, *, workspace_id=None, enforce_workspace=False
+    ):
+        return [
+            c
+            for c in self._scoped_caps(tenant_id, workspace_id, enforce_workspace)
+            if c.is_active
+        ]
 
-    async def deactivate_absent_manifest_capabilities(self, tenant_id, declared_names):
+    async def list_all_capabilities(
+        self, tenant_id, *, workspace_id=None, enforce_workspace=False
+    ):
+        return self._scoped_caps(tenant_id, workspace_id, enforce_workspace)
+
+    async def deactivate_absent_manifest_capabilities(
+        self, tenant_id, declared_names, *, workspace_id=None
+    ):
         declared = set(declared_names)
         deactivated: list[str] = []
-        for (t, name), cap in self._caps.items():
+        for key, cap in self._caps.items():
             if (
-                t == tenant_id
+                key[0] == tenant_id
+                # EXACT scope, never `workspace_scope_visible`: an org-scoped
+                # apply (workspace_id=None) must leave every roster alone.
+                and cap.workspace_id == workspace_id
                 and cap.source == "manifest"
                 and cap.is_active
-                and name not in declared
+                and key[2] not in declared
             ):
                 cap.is_active = False
-                deactivated.append(name)
+                deactivated.append(key[2])
         return sorted(deactivated)
 
-    async def set_capability_active(self, tenant_id, name, active):
-        cap = self._caps.get((tenant_id, name))
+    async def set_capability_active(self, tenant_id, name, active, *, workspace_id=None):
+        cap = self._caps.get(capability_key(tenant_id, workspace_id, name))
         if cap is None:
             return None
         cap.is_active = bool(active)
@@ -137,9 +208,11 @@ class CapabilityStorePG:
             row = await conn.fetchrow(
                 """SELECT model_endpoint, vision_model_endpoint, model_routes
                    FROM agent_capabilities
-                   WHERE tenant_id=$1 AND name=$2""",
+                   WHERE tenant_id=$1 AND name=$2
+                     AND workspace_id IS NOT DISTINCT FROM $3""",
                 c.tenant_id,
                 c.name,
+                c.workspace_id,
             )
             existing_ids = set()
             if row is not None:
@@ -156,23 +229,27 @@ class CapabilityStorePG:
                     )
                     if endpoint_id is not None
                 }
+            # ON CONFLICT names the EXPRESSION index (0083), not a column list:
+            # the arbiter has to be the same coalesce() the index is built on, or
+            # Postgres cannot infer it and every insert raises rather than
+            # updating.
             await conn.execute(
                 """INSERT INTO agent_capabilities (name, tenant_id, runtime, model_endpoint,
                                                    vision_model_endpoint, model_routes, supported_skills, max_depth, is_ephemeral,
-                                                   cost_tier, source, is_active)
-                   VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,true)
-                   ON CONFLICT (tenant_id, name) DO UPDATE SET
+                                                   cost_tier, source, workspace_id, is_active)
+                   VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,true)
+                   ON CONFLICT (tenant_id, coalesce(workspace_id, ''), name) DO UPDATE SET
                      runtime=EXCLUDED.runtime, model_endpoint=EXCLUDED.model_endpoint,
                      vision_model_endpoint=EXCLUDED.vision_model_endpoint,
                      model_routes=EXCLUDED.model_routes,
                      supported_skills=EXCLUDED.supported_skills, max_depth=EXCLUDED.max_depth,
                      is_ephemeral=EXCLUDED.is_ephemeral, cost_tier=EXCLUDED.cost_tier,
                      source=EXCLUDED.source,
-                     is_active=CASE WHEN $12 THEN agent_capabilities.is_active ELSE true END,
+                     is_active=CASE WHEN $13 THEN agent_capabilities.is_active ELSE true END,
                      updated_at=now()""",
                 c.name, c.tenant_id, c.runtime, c.model_endpoint, c.vision_model_endpoint,
                 c.model_routes, c.supported_skills, c.max_depth,
-                c.is_ephemeral, c.cost_tier, c.source,
+                c.is_ephemeral, c.cost_tier, c.source, c.workspace_id,
                 preserve_status,
             )
             changed_references = existing_ids ^ _capability_endpoint_ids(c)
@@ -185,37 +262,56 @@ class CapabilityStorePG:
                     sorted(changed_references),
                 )
 
-    async def list_capabilities(self, tenant_id):
+    async def _scoped_rows(self, tenant_id, workspace_id, enforce_workspace, extra):
+        clauses = ["tenant_id=$1", *extra]
+        args: list[Any] = [tenant_id]
+        append_workspace_scope_clause(clauses, args, workspace_id, enforce_workspace)
         rows = await self._pool.fetch(
-            "SELECT * FROM agent_capabilities WHERE tenant_id=$1 AND is_active = true",
-            tenant_id,
+            f"SELECT * FROM agent_capabilities WHERE {' AND '.join(clauses)}", *args
         )
         return [_capability(r) for r in rows]
 
-    async def list_all_capabilities(self, tenant_id):
-        rows = await self._pool.fetch(
-            "SELECT * FROM agent_capabilities WHERE tenant_id=$1", tenant_id
+    async def list_capabilities(
+        self, tenant_id, *, workspace_id=None, enforce_workspace=False
+    ):
+        return await self._scoped_rows(
+            tenant_id, workspace_id, enforce_workspace, ["is_active = true"]
         )
-        return [_capability(r) for r in rows]
 
-    async def deactivate_absent_manifest_capabilities(self, tenant_id, declared_names):
+    async def list_all_capabilities(
+        self, tenant_id, *, workspace_id=None, enforce_workspace=False
+    ):
+        return await self._scoped_rows(tenant_id, workspace_id, enforce_workspace, [])
+
+    async def deactivate_absent_manifest_capabilities(
+        self, tenant_id, declared_names, *, workspace_id=None
+    ):
         # One atomic statement: no partial wipe can be observed, and only
         # source='manifest' active rows outside the declared set are touched.
+        #
+        # IS NOT DISTINCT FROM, not the union predicate the reads use. A manifest
+        # is an org-scoped artefact, so without this an apply would soft-deactivate
+        # every workspace's manifest agents the moment rosters became scoped -
+        # silent, because a deactivated row still exists and only stops being
+        # routable.
         rows = await self._pool.fetch(
             """UPDATE agent_capabilities
                SET is_active = false, updated_at = now()
                WHERE tenant_id = $1 AND source = 'manifest' AND is_active = true
+                 AND workspace_id IS NOT DISTINCT FROM $3
                  AND name <> ALL($2::text[])
                RETURNING name""",
-            tenant_id, list(declared_names),
+            tenant_id, list(declared_names), workspace_id,
         )
         return [r["name"] for r in rows]
 
-    async def set_capability_active(self, tenant_id, name, active):
+    async def set_capability_active(self, tenant_id, name, active, *, workspace_id=None):
         row = await self._pool.fetchrow(
             """UPDATE agent_capabilities SET is_active=$3, updated_at=now()
-               WHERE tenant_id=$1 AND name=$2 RETURNING *""",
-            tenant_id, name, bool(active),
+               WHERE tenant_id=$1 AND name=$2
+                 AND workspace_id IS NOT DISTINCT FROM $4
+               RETURNING *""",
+            tenant_id, name, bool(active), workspace_id,
         )
         return _capability(row)
 
@@ -238,4 +334,5 @@ def _capability(r):
         ),
         source=r["source"] if "source" in r else "control-plane",
         is_active=r["is_active"] if "is_active" in r else True,
+        workspace_id=r["workspace_id"] if "workspace_id" in r else None,
     )
