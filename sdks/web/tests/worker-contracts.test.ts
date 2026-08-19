@@ -476,7 +476,10 @@ test("conversation follow uses projected cursor frames and ignores heartbeats", 
 
   assert.equal(url, "/v1/conversations/c%2F1/events?follow=1&since=3");
   assert.equal(request?.method, "GET");
-  assert.equal(request?.credentials, "include");
+  // "omit", not "include": this client supplies a bearer, and a bearer
+  // request has no reason to carry the cookie as well. It asserted
+  // "include" because every fetch hardcoded it.
+  assert.equal(request?.credentials, "omit");
   assert.equal(new Headers(request?.headers).get("authorization"), "Bearer session");
   assert.deepEqual(frames.map((frame) => frame.event.type), [
     "message_start",
@@ -507,7 +510,10 @@ test("run event snapshots preserve authorized redacted execution detail on deman
 
   assert.equal(url, "/v1/runs/run%2Fa/events");
   assert.equal(request?.method, "GET");
-  assert.equal(request?.credentials, "include");
+  // "omit", not "include": this client supplies a bearer, and a bearer
+  // request has no reason to carry the cookie as well. It asserted
+  // "include" because every fetch hardcoded it.
+  assert.equal(request?.credentials, "omit");
   assert.equal(new Headers(request?.headers).get("authorization"), "Bearer session");
   assert.deepEqual(events, [
     {
@@ -985,4 +991,66 @@ test("webhook secret finalization replays the exact approval without persisting 
       body: { approval_id: "approval/rotate" },
     },
   ]);
+});
+
+test("a bearer client sends no cookie and reaches for no cookie CSRF token", async () => {
+  // The leak this closes: every fetch in the client hardcoded
+  // credentials: "include", so a host application authenticating with its own
+  // bearer from its own origin would have shipped the user's Boltrig session
+  // cookie cross-origin on every call, next to a bearer that already
+  // authenticates the request.
+  let init: RequestInit | undefined;
+  const client = new BoltrigClient({
+    accessToken: () => "host-bearer",
+    fetch: async (_input, request) => {
+      init = request;
+      return new Response('{"status":"ok"}', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  await client.invoke({ noun: "control", verb: "control.capability.upsert", params: {} });
+  assert.equal(init?.credentials, "omit");
+  assert.equal(new Headers(init?.headers).get("authorization"), "Bearer host-bearer");
+  // No CSRF header: the double-submit token belongs to a cookie session, and a
+  // bearer caller reaching for document.cookie would copy an unrelated
+  // same-origin value into a cross-origin header.
+  assert.equal(new Headers(init?.headers).has("x-boltrig-csrf"), false);
+});
+
+test("a cookie client is unchanged, and an explicit choice wins over both defaults", async () => {
+  // The counterweight. Without it the assertions above are equally consistent
+  // with a client that stopped sending cookies for everyone.
+  let cookieInit: RequestInit | undefined;
+  const cookieClient = new BoltrigClient({
+    csrfToken: () => "csrf-value",
+    fetch: async (_input, request) => {
+      cookieInit = request;
+      return new Response('{"status":"ok"}', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  await cookieClient.invoke({ noun: "control", verb: "control.capability.upsert", params: {} });
+  assert.equal(cookieInit?.credentials, "include");
+  assert.equal(new Headers(cookieInit?.headers).get("x-boltrig-csrf"), "csrf-value");
+
+  let bothInit: RequestInit | undefined;
+  const bothClient = new BoltrigClient({
+    accessToken: () => "host-bearer",
+    credentials: "include",
+    csrfToken: () => "csrf-value",
+    fetch: async (_input, request) => {
+      bothInit = request;
+      return new Response('{"status":"ok"}', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  await bothClient.invoke({ noun: "control", verb: "control.capability.upsert", params: {} });
+  assert.equal(bothInit?.credentials, "include");
+  assert.equal(new Headers(bothInit?.headers).get("x-boltrig-csrf"), "csrf-value");
 });

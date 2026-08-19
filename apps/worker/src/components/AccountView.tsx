@@ -13,8 +13,8 @@ import {
   PrivacyPolicyEvidence,
   ProfileSettings,
 } from "./AccountProfileSections";
+import { ActiveContext } from "./account/ActiveContext";
 import {
-  ActiveContext,
   DeveloperTokens,
   PasswordSecurity,
   SecuritySessions,

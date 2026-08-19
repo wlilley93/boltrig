@@ -7,6 +7,7 @@ import type {
   AdminInvitationsResponse,
   AdminUsersResponse,
   AddonsResponse,
+  BrandingResponse,
   AdapterInventoryResponse,
   AdapterSourceResponse,
   Artifact,
@@ -105,6 +106,10 @@ import type {
   SensingResponse,
   PrivacyPolicyResponse,
   BackupStatusResponse,
+  CapabilityBindingsResponse,
+  CapabilityBindingStatus,
+  CapabilityCatalogueResponse,
+  RoutingPoliciesResponse,
   IntegrationCatalogueResponse,
   IntegrationConnectionResponse,
   IntegrationConnectionsResponse,
@@ -252,6 +257,19 @@ export interface BoltrigClientOptions {
   accessToken?: () => string | null | Promise<string | null>;
   csrfToken?: () => string | null;
   headers?: () => Record<string, string>;
+  /**
+   * Whether the browser attaches its cookies. Defaults to "include" for a
+   * cookie-session client and "omit" for a BEARER one, which is the case that
+   * matters: every fetch here hardcoded "include", so a host application
+   * authenticating with `accessToken` from its own origin would have shipped
+   * the user's Boltrig session cookie cross-origin on every call, alongside a
+   * bearer that already authenticates the request. The cookie is not needed and
+   * sending it is not free.
+   *
+   * Set it explicitly to override either default, for a host that genuinely
+   * wants both credentials on one request.
+   */
+  credentials?: RequestCredentials;
 }
 
 export interface ChatQueued {
@@ -307,6 +325,26 @@ export class BoltrigClient {
     this.fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
+  /** Cookies for a cookie session; nothing for a bearer one. */
+  private credentials(): RequestCredentials {
+    if (this.options.credentials) return this.options.credentials;
+    return this.options.accessToken ? "omit" : "include";
+  }
+
+  /**
+   * The double-submit CSRF token, or null.
+   *
+   * The browser FALLBACK reads `document.cookie`, which is meaningful only for
+   * a cookie session on this origin. A bearer caller has no such cookie to
+   * read, and reaching for one would copy an unrelated same-origin cookie value
+   * into a cross-origin header. An explicitly supplied `csrfToken` is always
+   * honoured: a host that configures one has said it wants it.
+   */
+  private csrf(): string | null {
+    if (this.options.csrfToken) return this.options.csrfToken();
+    return this.options.accessToken ? null : browserCsrfToken();
+  }
+
   private async request<T>(
     path: string,
     init: RequestInit & { tolerateStatus?: boolean } = {},
@@ -319,7 +357,7 @@ export class BoltrigClient {
     }
     const accessToken = await this.options.accessToken?.();
     if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
-    const csrf = (this.options.csrfToken ?? browserCsrfToken)();
+    const csrf = this.csrf();
     if (csrf && mutating.has(method)) headers.set("x-boltrig-csrf", csrf);
 
     let response: Response;
@@ -328,7 +366,7 @@ export class BoltrigClient {
         ...init,
         method,
         headers,
-        credentials: "include",
+        credentials: this.credentials(),
       });
     } catch (error) {
       throw new BoltrigApiError(
@@ -383,7 +421,7 @@ export class BoltrigClient {
     }
     const accessToken = await this.options.accessToken?.();
     if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
-    const csrf = (this.options.csrfToken ?? browserCsrfToken)();
+    const csrf = this.csrf();
     if (csrf && mutating.has(method)) headers.set("x-boltrig-csrf", csrf);
     let response: Response;
     try {
@@ -391,7 +429,7 @@ export class BoltrigClient {
         ...init,
         method,
         headers,
-        credentials: "include",
+        credentials: this.credentials(),
       });
     } catch (error) {
       throw new BoltrigApiError(
@@ -487,7 +525,7 @@ export class BoltrigClient {
         {
           method: "GET",
           headers,
-          credentials: "include",
+          credentials: this.credentials(),
           signal: options.signal,
         },
       );
@@ -1240,7 +1278,7 @@ export class BoltrigClient {
       response = await this.fetcher(`${this.baseUrl}/v1/runs/${encodeURIComponent(runId)}/events`, {
         method: "GET",
         headers,
-        credentials: "include",
+        credentials: this.credentials(),
         signal,
       });
     } catch (error) {
@@ -2250,7 +2288,7 @@ export class BoltrigClient {
     try {
       response = await this.fetcher(this.artifactDownloadUrl(id), {
         headers,
-        credentials: "include",
+        credentials: this.credentials(),
         signal,
       });
     } catch (error) {
@@ -2332,12 +2370,41 @@ export class BoltrigClient {
     return this.request("/v1/addons");
   }
 
+  /** Unauthenticated: the sign-in screen renders before anyone has a session. */
+  branding(): Promise<BrandingResponse> {
+    return this.request("/v1/branding");
+  }
+
   integrationCatalogue(): Promise<IntegrationCatalogueResponse> {
     return this.request("/v1/integrations/catalogue");
   }
 
   integrationConnections(): Promise<IntegrationConnectionsResponse> {
     return this.request("/v1/integrations/connections");
+  }
+
+  /**
+   * The capability review queue. `status` filters it; an unknown status returns
+   * an empty list with a reason rather than falling through to everything,
+   * because "show me the rejected ones" must never answer with all of them.
+   */
+  capabilityBindings(
+    status?: CapabilityBindingStatus,
+  ): Promise<CapabilityBindingsResponse> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    return this.request(`/v1/capability-bindings${query}`);
+  }
+
+  /** Which capabilities exist, derived from the bindings that claim them. */
+  capabilityCatalogue(): Promise<CapabilityCatalogueResponse> {
+    return this.request("/v1/capability-catalogue");
+  }
+
+  routingPolicies(capabilityId?: string): Promise<RoutingPoliciesResponse> {
+    const query = capabilityId
+      ? `?capability_id=${encodeURIComponent(capabilityId)}`
+      : "";
+    return this.request(`/v1/routing-policies${query}`);
   }
 
   integrationConnectionHealth(id: string): Promise<IntegrationConnectionResponse> {
@@ -2452,7 +2519,7 @@ export class BoltrigClient {
     }
     const accessToken = await this.options.accessToken?.();
     if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
-    const csrf = (this.options.csrfToken ?? browserCsrfToken)();
+    const csrf = this.csrf();
     if (csrf) headers.set("x-boltrig-csrf", csrf);
 
     let response: Response;
@@ -2461,7 +2528,7 @@ export class BoltrigClient {
         method: "POST",
         headers,
         body: JSON.stringify(body),
-        credentials: "include",
+        credentials: this.credentials(),
         signal,
       });
     } catch (error) {

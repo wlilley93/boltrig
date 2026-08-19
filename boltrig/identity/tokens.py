@@ -20,6 +20,7 @@ from boltrig.kernel.app import Principal
 from boltrig.models import GrantSet, PersonalAccessToken, utcnow
 
 from .provisioning import effective_grants_for_request
+from .sessions import resolve_active_workspace
 
 PAT_PREFIX = "boltrig_pat_"
 # A sane maximum lifetime (PAT-03: required, bounded expiry).
@@ -83,13 +84,68 @@ async def mint_pat(
     return pat, secret
 
 
-async def resolve_pat_principal(store: Any, secret: str) -> Principal | None:
+class WorkspaceNotPermitted(Exception):
+    """A bearer named a workspace its owner is not a member of."""
+
+    def __init__(self, workspace_id: str) -> None:
+        super().__init__("not a member of that workspace")
+        self.workspace_id = workspace_id
+
+
+async def _pat_active_workspace(
+    store: Any, tenant_id: str, user_id: str, requested_workspace_id: str | None
+) -> str | None:
+    """Which workspace this bearer is acting in.
+
+    A PAT carries no session and so no active workspace, which leaves a
+    PAT-driven chat turn unscoped and degrades the read-only Codex phase
+    (no_read_only_phase_scope). Two ways to get one:
+
+    REQUESTED. The caller names it, and it goes through
+    ``resolve_active_workspace`` - the SAME re-check the session path runs on
+    every request - rather than a second membership test that could drift from
+    it. A workspace the owner cannot reach raises rather than returning None,
+    because None means "no active workspace" and that yields the owner's org
+    grants UN-NARROWED. Falling back would answer an out-of-reach request by
+    widening authority.
+
+    INFERRED. With exactly one membership the choice is unambiguous, so bind it.
+    With zero or many it stays None, fail-closed, which is what it did before a
+    caller could ask.
+    """
+    if requested_workspace_id:
+        active = await resolve_active_workspace(
+            store, tenant_id, user_id, requested_workspace_id
+        )
+        if active is None:
+            raise WorkspaceNotPermitted(requested_workspace_id)
+        return active
+    workspaces = await store.list_workspaces_for_user(tenant_id, user_id)
+    return workspaces[0].id if len(workspaces) == 1 else None
+
+
+async def resolve_pat_principal(
+    store: Any, secret: str, *, requested_workspace_id: str | None = None
+) -> Principal | None:
     """Resolve a PAT secret to a ``Principal``, or ``None`` if it is not usable.
 
     Fail-closed on: unknown / revoked / expired token, or a missing / deactivated
     owner (a de-provisioned user's tokens stop working). The effective grants are
     the PAT scope intersected with the owner's CURRENT grants - re-checked on every
     call, so the token never exceeds the user (SEC-34).
+
+    ``requested_workspace_id`` lets a headless caller say WHICH workspace it is
+    acting in, which a PAT could not do before: the session routes that switch an
+    active context refuse a bearer outright, so a user who belongs to two
+    workspaces had no way to select one and every PAT call ran unscoped. An
+    embedded console (Opbox Agents) needs exactly this, and so does a per-workspace
+    agent roster.
+
+    A REQUESTED WORKSPACE THAT FAILS MEMBERSHIP REFUSES THE CALL. It does not fall
+    back to None, and the direction matters: with no active workspace
+    ``effective_grants_for_request`` returns the owner's org grants UN-NARROWED, so
+    a silent fallback would answer a request for a workspace the caller cannot
+    reach by WIDENING their authority. Refusing is the only fail-closed answer.
     """
     pat = await store.get_pat_by_hash(hash_secret(secret))
     if pat is None or pat.revoked:
@@ -108,13 +164,9 @@ async def resolve_pat_principal(store: Any, secret: str) -> Principal | None:
     if user is None or user.status != "active":
         return None  # de-provisioned / deactivated -> token stops working
 
-    # A PAT is the headless-client credential, but it carries no session and so no
-    # active workspace - which leaves a PAT-driven chat turn with no workspace
-    # scope, degrading the read-only Codex phase (no_read_only_phase_scope). When
-    # the user belongs to EXACTLY ONE workspace the choice is unambiguous, so bind
-    # it here. With zero or many memberships it stays None - fail-closed.
-    workspaces = await store.list_workspaces_for_user(pat.tenant_id, user.id)
-    active_workspace_id = workspaces[0].id if len(workspaces) == 1 else None
+    active_workspace_id = await _pat_active_workspace(
+        store, pat.tenant_id, user.id, requested_workspace_id
+    )
 
     # SEC-34 / SEC-109. The grants are narrowed by the ACTIVE WORKSPACE's role
     # ceiling, exactly as the session path does (identity/sessions.py). Until

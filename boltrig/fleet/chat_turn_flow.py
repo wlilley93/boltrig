@@ -35,6 +35,7 @@ class TurnRequest:
     origin: str | None
     model_profile_id: str | None
     model_choice_id: str | None
+    caller_context: Any
     input_role: MessageRole
 
 
@@ -150,6 +151,7 @@ async def _stream_one(
         origin=request.origin,
         model_profile_id=request.model_profile_id,
         model_choice_id=getattr(request, "model_choice_id", None),
+        caller_context=getattr(request, "caller_context", None),
     ):
         if not service._refresh_active_run(  # noqa: SLF001
             request.tenant_id, conversation.id, expected=run_id

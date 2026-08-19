@@ -39,7 +39,7 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/AccountSecuritySections.tsx": {
-      "file_lines": 465,
+      "file_lines": 371,
       "max_function_lines": 122,
       "max_parameters": 1,
       "max_complexity": 8,
@@ -62,19 +62,10 @@
           "parameters": 0,
           "complexity": 8,
           "nesting_depth": 2
-        },
-        {
-          "name": "ActiveContext",
-          "line": 372,
-          "column": 1,
-          "lines": 94,
-          "parameters": 1,
-          "complexity": 2,
-          "nesting_depth": 0
         }
       ],
       "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-19: 465->371, LOWERED, and the ActiveContext entry RETIRED rather than re-anchored. That component moved to components/account/ActiveContext.tsx and split into a hook and a view, both under the floor, so it is no longer debt anywhere. It moved because it is the only control on the estate that changes what the whole application is looking at, and the reasoning for the reload it now performs on a successful switch needed room to be read.",
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/AgentProfileEditor.tsx": {
@@ -960,15 +951,15 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/IntegrationsView.tsx": {
-      "file_lines": 1533,
+      "file_lines": 1526,
       "max_function_lines": 707,
       "max_parameters": 4,
-      "max_complexity": 37,
+      "max_complexity": 34,
       "max_nesting_depth": 3,
       "over_limit_functions": [
         {
           "name": "IntegrationsView",
-          "line": 100,
+          "line": 101,
           "column": 1,
           "lines": 707,
           "parameters": 0,
@@ -977,7 +968,7 @@
         },
         {
           "name": "IntegrationsView.connect",
-          "line": 375,
+          "line": 376,
           "column": 3,
           "lines": 60,
           "parameters": 1,
@@ -986,16 +977,16 @@
         },
         {
           "name": "IntegrationRow",
-          "line": 808,
+          "line": 809,
           "column": 1,
-          "lines": 172,
+          "lines": 164,
           "parameters": 1,
-          "complexity": 37,
+          "complexity": 34,
           "nesting_depth": 3
         }
       ],
       "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-19: 1533->1526 and IntegrationRow 172->164 lines / 37->34 complexity, LOWERED while adding the capability-layer tabs. The tabs deliberately live in a WRAPPER (integrations/IntegrationsSurface.tsx) rather than inside this component: adding four tabs here would have meant raising a ratchet to make room for the thing the ratchet exists to discourage. The reduction itself is real, not accounting - the row's Enabled tools block became integrations/ConnectionSurface.tsx, which also fixed the row meta counting raw provider verbs where the kernel had been sending canonical capabilities all along. IntegrationsView keeps ZERO parameters: passing the tab strip in was tried and the trusted-baseline check refuses growth in any per-function metric, limit or no limit, so the strip owns its own selection instead (integrations/IntegrationsTabs.tsx). That is the better shape anyway - both places that render the page heading get the same strip with no state to keep in step.",
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/jarvis/JarvisRenderer.ts": {

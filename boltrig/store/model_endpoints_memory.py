@@ -22,10 +22,19 @@ class ModelEndpointStoreMem:
         self, tenant_id: str, endpoint_id: str
     ) -> ModelEndpointReferenceSnapshot:
         return canonical_model_endpoint_references(
+            # Names, deduped, exactly as the PostgreSQL twin does. Two
+            # same-named capabilities in different workspaces therefore collapse
+            # to one entry: the snapshot is a compare-and-set fingerprint that is
+            # SERIALISED INTO A GOVERNED APPROVAL CONTEXT
+            # (ModelEndpointReferenceSnapshot.parse_approval_context), so widening
+            # it to scope-qualified names would invalidate every in-flight
+            # model-endpoint approval. Both stores lose the same precision in the
+            # same way, so parity holds; the residue is that retiring one of two
+            # same-named references leaves the fingerprint unchanged.
             (
                 capability.name
-                for (tenant, _), capability in self._caps.items()
-                if tenant == tenant_id
+                for key, capability in self._caps.items()
+                if key[0] == tenant_id
                 and (
                     capability.model_endpoint == endpoint_id
                     or capability.vision_model_endpoint == endpoint_id

@@ -176,7 +176,10 @@ def make_agent_invoker(
     ) -> Result:
         prompt = f"Verb: {verb}\nParams: {json.dumps(params, default=str, sort_keys=True)}"
         cap, retired = await bound_capability_status(
-            kernel.store, context.tenant_id, agent_capability
+            kernel.store,
+            context.tenant_id,
+            agent_capability,
+            workspace_id=context.workspace_id,
         )
         if retired:
             return Result.failure(

@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from boltrig.models import (
@@ -32,6 +32,7 @@ from .conversation_list_views import conversation_search_views, conversation_vie
 from .hitl_http import list_visible_hitl, respond_to_hitl
 from .web_security import client_ip
 from .work_http import get_visible_work_item, list_visible_work_items, work_item_audit_trail
+from .bearer_principal import resolve_principal
 
 
 @dataclass
@@ -311,22 +312,12 @@ def create_app(
         app.state.platform = _platform_for(kernel)
 
     async def principal(request: Request) -> Principal:
-        from boltrig.identity.tokens import looks_like_pat, resolve_pat_principal
         from boltrig.store.postgres import set_current_tenant
 
-        # Headless parity (US-HEAD-02, SEC-37): a personal access token bearer is
-        # resolved to its owner's effective grants (PAT scope ∩ owner's current
-        # grants) and flows through the same chokepoint as the site. Anything else
-        # falls through to the configured resolver (OIDC in prod, headers in dev).
-        auth = request.headers.get("authorization", "")
-        scheme, _, value = auth.partition(" ")
-        token = value.strip() if scheme.lower() == "bearer" else None
-        if token and looks_like_pat(token):
-            p = await resolve_pat_principal(_get_kernel(request).store, token)
-            if p is None:
-                raise HTTPException(status_code=401, detail="invalid or expired access token")
-        else:
-            p = await resolver(request)
+        # A PAT bearer, else the configured resolver. Lives in bearer_principal
+        # because deciding WHICH WORKSPACE a headless caller acts in is a security
+        # question, and this file is at its structural ratchet.
+        p = await resolve_principal(request, resolver, _get_kernel)
         # Stamp request provenance for the enriched audit row ([2026] VJS-COUNTY 9,
         # D1). Taken from the request at the door, never from a body field. Behind
         # the CF tunnel the TCP peer is the tunnel, so CF's authoritative client
@@ -433,7 +424,7 @@ def create_app(
             attachments=body.attachments,
             on_behalf_bearer=body.on_behalf_bearer,
             idempotency_key=body.idempotency_key,
-            origin=body.origin,
+            origin=body.origin, caller_context=body.caller_context,
             model_profile_id=body.model_profile_id, model_choice_id=body.model_choice_id,
         )
         # RBAC / access errors happen before the first event and propagate to the
