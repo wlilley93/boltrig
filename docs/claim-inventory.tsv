@@ -473,7 +473,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:321	
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/integration_scope.py:75	_execute_adapter	Who this call is really being made by.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp.py:1	initialize	The kernel's MCP server face (Round Two, Epic MCP).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp_errors.py:1	_call_tool	The MCP wire envelopes: the JSON-RPC frames, and the result a model reads.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/org_discovery_routes.py:129	list_orgs_for_email	List session switch candidates only from ``list_orgs_for_email`` for the caller identity.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/org_discovery_routes.py:74	list_orgs_for_email	List session switch candidates only from ``list_orgs_for_email`` for the caller identity.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/pii.py:1	contains_identity	PII detection and redaction at the kernel boundary (US-PRIV-02, SEC-13).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/platform_routes/capability_review.py:1	may_see	The capability review queue, the catalogue it feeds, and the routes it selects.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/platform_routes/device_inventory.py:1	list_devices	Who has the desktop installed, and on how many machines.
