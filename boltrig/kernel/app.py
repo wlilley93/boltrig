@@ -424,7 +424,7 @@ def create_app(
             attachments=body.attachments,
             on_behalf_bearer=body.on_behalf_bearer,
             idempotency_key=body.idempotency_key,
-            origin=body.origin,
+            origin=body.origin, caller_context=body.caller_context,
             model_profile_id=body.model_profile_id, model_choice_id=body.model_choice_id,
         )
         # RBAC / access errors happen before the first event and propagate to the
