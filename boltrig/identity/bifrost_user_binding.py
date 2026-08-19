@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -38,6 +39,11 @@ _PROVIDER_ALIASES = {
     "fireworks-ai": "fireworks",
     "google-vertex": "vertex",
 }
+
+#: A catalogue provider id: lowercase, dot/dash/underscore, bounded. The same
+#: shape models.dev uses, and the only names the custom path will create in
+#: Bifrost - an id is an identifier, never an address or an instruction.
+_CUSTOM_PROVIDER_ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -74,6 +80,16 @@ def _binding_ids(tenant_id: str, resolution: Any) -> tuple[str, str, str]:
 
 
 def _provider_and_model(resolution: Any) -> tuple[str, str, str]:
+    """Resolve (provider, raw_model, model_id) - native or custom.
+
+    A provider in ``BIFROST_PROVIDERS`` rides Bifrost's native driver. ANY
+    other well-formed catalogue provider is bound as an OpenAI-compatible
+    CUSTOM provider instead - Bifrost stores its ``base_url`` in
+    ``custom_provider_config`` - so the full models.dev picker connects
+    rather than 93% of it failing here at submit. A custom provider without
+    a base URL is refused with the actionable half of the sentence, because
+    an address is the one thing the custom path cannot invent.
+    """
     model_id = exact_model_id(getattr(resolution, "model", None))
     configured = str(getattr(resolution, "provider", "") or "").strip().lower()
     configured = _PROVIDER_ALIASES.get(configured, configured)
@@ -83,10 +99,17 @@ def _provider_and_model(resolution: Any) -> tuple[str, str, str]:
         if separator
         else configured
     )
-    if not provider or provider not in BIFROST_PROVIDERS:
+    if not provider or not _CUSTOM_PROVIDER_ID.fullmatch(provider):
         raise BifrostUserBindingUnavailable(
             "the selected provider is not supported by Bifrost"
         )
+    if provider not in BIFROST_PROVIDERS:
+        base_url = str(getattr(resolution, "base_url", "") or "").strip()
+        if not base_url:
+            raise BifrostUserBindingUnavailable(
+                f"{provider} needs the URL of its OpenAI-compatible endpoint; "
+                "set the provider's base URL and try again"
+            )
     if configured and configured not in {provider, "custom"}:
         raise BifrostUserBindingUnavailable(
             "the selected provider and model do not match"
@@ -194,7 +217,9 @@ class BifrostUserGateway:
             and previous.get("provider") != provider
         ):
             await self._admin.revoke_metadata(previous)
-        await self._admin.ensure_provider(provider)
+        await self._admin.ensure_provider(
+            provider, base_url=getattr(resolution, "base_url", None)
+        )
         await self._admin.ensure_provider_key(
             provider,
             provider_key_id,

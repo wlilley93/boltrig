@@ -9,7 +9,7 @@ import type {
 
 import { submitWriteOnlyAiKey } from "../../aiKeyIntake";
 import { client } from "../../client";
-import { providerKeyOptional, providerNeedsBaseUrl } from "./providerCatalogue";
+import { providerApiBaseUrl, providerKeyOptional, providerNeedsBaseUrl } from "./providerCatalogue";
 
 interface ProviderReadiness {
   models: ChatModelChoicesResponse | null;
@@ -99,7 +99,12 @@ async function completeProvider(context: ProviderCompletionContext): Promise<boo
       provider: context.provider.trim(),
       model: context.model.trim(),
       modality: context.modality,
-      base_url: context.baseUrl.trim() || undefined,
+      // A typed base URL always wins. Failing that, a non-native provider
+      // submits the catalogue's published URL: the kernel binds it as an
+      // OpenAI-compatible custom provider and cannot do so without an address.
+      base_url: context.baseUrl.trim()
+        || providerApiBaseUrl(context.provider.trim())
+        || undefined,
     });
     context.setKeyPresent(false);
     return applyIntakeResult(context, await submission);

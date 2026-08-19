@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-19T14:05:00.794Z",
+  "capturedAt": "2026-08-19T16:35:52.462Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "921dfc59f7a6f3998ddf37bd4f4469e08e3af2d5b71b7262790c7a7fe582576a",
-    "digestAfterCapture": "921dfc59f7a6f3998ddf37bd4f4469e08e3af2d5b71b7262790c7a7fe582576a",
+    "digestBeforeCapture": "7eea0931a0ddcee6d4235109d17a13c8be3f435aa1cf44d5ae89bbb161469ea9",
+    "digestAfterCapture": "7eea0931a0ddcee6d4235109d17a13c8be3f435aa1cf44d5ae89bbb161469ea9",
     "sourceUnchangedDuringCapture": true,
-    "branch": "integrate/capability-step3-to-main",
-    "head": "ea7fb8f1bdc730b4148a80e17a0ba7e93df339f7",
+    "branch": "fix/provider-catalogue-full-list",
+    "head": "f1293d13f31335d609935388b96f55f5075ebb21",
     "dirty": true
   },
   "runner": {
