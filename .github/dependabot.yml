@@ -41,7 +41,9 @@ updates:
     #   gunicorn>=24            cognee>=1.2.0 depends on gunicorn>=20.1.0,<24
     #   limits>=5               cognee>=1.2.0 depends on limits>=4.4.1,<5
     #   packaging>=25           limits<5 depends on packaging>=21,<25 (via cognee)
-    #   importlib-metadata>=9   litellm 1.83.x depends on importlib-metadata==8.5.0
+    #   importlib-metadata>=9   litellm 1.96.x depends on importlib-metadata>=8.0.0,<9.0
+    #                           (was ==8.5.0 under litellm 1.83.x; the bound >=9 now
+    #                           EQUALS upstream's ceiling by measurement, not by luck)
     #
     # Three of the four are one constraint wearing different hats: `cognee` bounds
     # this graph. Dependabot cannot see any of it, because it reasons per-package
@@ -168,7 +170,12 @@ updates:
     # a major past what their parents allow. Neither is imported anywhere in this
     # repository; each exists only as a `# via` line in a compiled lock:
     #
-    #   pylance>=1      # via cognee, and cognee decides it
+    #   pylance>=0.37   # via cognee; EVERY cognee release through 1.5.0 pins
+    #                   # pylance<=0.36.0,>=0.22.0. The bound was >=1, a round
+    #                   # number that only blocked the major line - which the
+    #                   # minor-patch group already excluded - so 0.39.0 was
+    #                   # offered and failed CI on the resolver conflict (#299).
+    #                   # Bounds are upstream's, not round numbers.
     #   openai>=3       # via cognee, instructor, litellm
     #
     # THE TRIAGE RULE, since this is now four rounds of one shape: read the
@@ -185,7 +192,7 @@ updates:
       - dependency-name: mpmath
         versions: [">=1.4"]
       - dependency-name: pylance
-        versions: [">=1"]
+        versions: [">=0.37"]
       - dependency-name: openai
         versions: [">=3"]
     labels:
