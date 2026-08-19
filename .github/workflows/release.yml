@@ -491,8 +491,26 @@ jobs:
           esac
           digest="$(docker buildx imagetools inspect "$candidate_ref" --format '{{json .Manifest.Digest}}' | tr -d '"')"
           if [ "$digest" != "$expected_digest" ]; then
-            echo "registry candidate digest $digest differs from built digest $expected_digest" >&2
-            exit 1
+            # docker push re-manifests a classic-store image (media types and
+            # layer compression are rewritten), so the registry manifest digest
+            # can lawfully differ from BuildKit's metadata digest - first seen
+            # 2026-08-19 on all four candidates when the runner image moved
+            # under this workflow. The identity that must not drift is the
+            # image CONFIG digest (the docker image ID): it pins the config
+            # and every rootfs diff-id, and survives a re-manifest. Bind on
+            # that; the digest of record becomes the registry's - the bytes
+            # that actually ship and the exact ref cosign signs.
+            local_config="$(docker image inspect "$LOCAL_IMAGE" --format '{{.Id}}')"
+            manifest_json="$RUNNER_TEMP/candidate-$IMAGE.manifest.json"
+            curl -fsSL --retry 3 --retry-all-errors --retry-delay 2 \
+              -H "Authorization: Bearer $token" -H "Accept: $accept" \
+              "https://ghcr.io/v2/$repository/manifests/$digest" > "$manifest_json"
+            pushed_config="$(jq -r '.config.digest // empty' "$manifest_json")"
+            if [ -z "$pushed_config" ] || [ "$pushed_config" != "$local_config" ]; then
+              echo "pushed candidate config digest ($pushed_config) differs from the built image id ($local_config)" >&2
+              exit 1
+            fi
+            echo "registry re-manifested the candidate ($expected_digest -> $digest); config digest verified equal ($local_config)"
           fi
           image_ref="$image_name@$digest"
           {
