@@ -48,10 +48,14 @@ route would otherwise silently 401 every NEW sign-up), (c) revoke
 nothing kernel-side (store-wide: execution_root_runs 0, conversations 7,
 work_items 92 - all unchanged since 16:53). Prime suspect is client bundle
 caching (`NEXT_PUBLIC_USE_KERNEL_CHAT` is build-time inlined; his browser
-likely held the pre-kchat bundle). Remedy: hard refresh, resend. The one-shot
-confirmation script is staged beelink-side at the session scratchpad
-(`confirm-live-proof.sh <timestamp>`), reads subject attribution by joining
-`execution_root_runs.requested_by_user_id` to `users.email`.
+likely held the pre-kchat bundle). Remedy: hard refresh, resend. The confirmation
+instrument (a session-scratchpad script that will NOT survive the session, so
+here is its substance): against `boltrig-postgres-1` on the beelink, given the
+send timestamp T - (a) `execution_root_runs` rows with `created_at > T`,
+joining `requested_by_user_id` to `users.email` for named subject attribution;
+(b) `work_items` count vs the 92 baseline plus any new rows'
+`source/on_behalf_of/intent`; (c) `conversations` delta vs 7 with
+`source_run_id`. Baselines cross-confirmed with the opbox session pre-test.
 
 ## 3. The "hello spawned a subagent" bug: fingerprint found, discriminator designed
 
@@ -91,6 +95,17 @@ EVER), measured link by link tonight:
   chat dies at endpoint resolution. This is structural for ollama-backed
   models on this kernel+bifrost pairing, not a config slip.
 
+**The jellytot-prod dev stack carries the same question.** Recon from
+tonight, recorded so nobody re-derives it: `boltrig-dev-kernel` (image
+`boltrig/dev-kernel:cognee-20260815T124928Z`) got `BOLTRIG_MODEL_GATEWAY_URL`
+fixed earlier today, sits on the `boltrig_default` network and therefore
+SHARES THE PROD STACK'S BIFROST (`boltrig-bifrost-1`, image digest
+c4de3a1d6bd2 - NOT the pinned 1221046a the beelink runs); its database is
+`boltrig_dev` on the shared postgres. That bifrost already has an `ollama`
+provider pointed at the M1 too. Any provider row added there is visible to
+prod boltrig - mutate it knowingly. The same catalogue link will decide
+whether dev chat works.
+
 Candidate fixes, none started: teach bifrost's config to carry model metadata
 (if the pinned build supports it); relax/enrich kernel-side (catalogue policy
 could merge `endpoint.modalities`, which the store already holds, for
@@ -124,3 +139,31 @@ and not. It is also the gate on the H1/H2 discriminator above.
    with codex tiers 2/3 is the doc's recommendation; codex-everywhere and
    script-everywhere are the alternatives. Nothing downstream starts until
    picked.
+
+Deliberately NOT done today, so absence is not mistaken for oversight: no
+catalogue-link fix attempted (diagnosis handed over instead), the admin PAT
+NOT revoked (sequence (a)-(c) above must run first, (c) needs Will's yes),
+ONE-AI-SURFACE deliverables not started, seam items 2-4 not started, nothing
+opbox-side touched (that pen belongs to merge-build-deploy-opbox-demo).
+
+## 7. Operational traps met today, for whoever runs this next
+
+- **Branch protection is `strict: false`**: a PR can merge on greens taken
+  against a stale base. The three dependabot PRs' greens were 3 hours and 5
+  merges old; refresh with `gh api -X PUT repos/<owner>/<repo>/pulls/N/update-branch`
+  and re-green before merging anything that has sat.
+- **`make relock` is a regenerator, not a check**: it rewrites both
+  requirements lock files. Run it in a gate sweep and the worktree is dirty
+  against whatever main has since merged (it blocked a branch switch tonight
+  and briefly put a commit on the wrong branch). Keep it out of verification
+  loops.
+- **The desktop-package 60-minute ceiling** killed four cold-cache runs today;
+  #314 raised it to 120. If a leg still times out, `gh run rerun --failed` on
+  a warm cache passed every time (6-12 minutes) - but measure the first
+  successful cold run and revisit the number.
+- **The M1 has no `ollama` CLI on PATH** (binary lives inside Ollama.app); the
+  HTTP API is the reliable instrument - the tag alias was done with
+  `POST /api/copy`.
+- **Five-gate masking**: `make python-quality` stops at first failure - run
+  the full target list locally before any push (all non-Postgres targets run
+  with the fixtree venv).
