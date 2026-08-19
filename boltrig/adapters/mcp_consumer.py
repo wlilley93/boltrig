@@ -118,10 +118,8 @@ class McpConsumerAdapter:
         self._url = url
         self._rpc = rpc
         self._specs: list[VerbSpec] = []
-        # Has this adapter ever completed a round trip to the server IN THIS
-        # PROCESS? Set only in _call, which every live path funnels through.
-        # It is deliberately NOT persisted: a stored flag would answer "it
-        # worked once, somewhere" to a question that means "is it working".
+        # Round trip completed in THIS process? Set only in _call; never
+        # persisted, since a stored flag answers "it worked once, somewhere".
         self._contacted = False
         # Prefixed verb id -> the server's BARE tool name (the namespacing map;
         # rebuilt by every connect()). Rebuilt per discovery, so a re-sync can
@@ -300,31 +298,12 @@ class McpConsumerAdapter:
         return Result.success(output)
 
     async def health(self) -> str:
-        """Best-effort liveness, on the same terms as the other network adapters.
-
-        THIS USED TO RETURN "ok" WHENEVER ``self._specs`` WAS NON-EMPTY, and that
-        was a green that could not go red. Specs are not evidence of anything
-        being reachable: ``control_rehydrate`` calls ``apply_tool_snapshot`` with
-        the stored ``last_known_tools`` at boot, and that method's own docstring
-        says it loads "into this in-process adapter only". So a server that has
-        been unplugged since the last restart still reported healthy, on the
-        strength of a row in the database. Found live: /healthz said
-        default/opbox "ok" while the mcp_servers row had last_known_tools=[],
-        tools_observed_at NULL, and zero probe receipts.
-
-        ``cloud_audio_base`` already refuses exactly this, in this repo, in one
-        line: setup "must never be projected as healthy merely because the
-        adapter was constructed". This brings the MCP consumer into line with
-        that, and with ``http_base``/``sql_base``, where "unknown" means the
-        probe could not be attempted and "ok" is only ever returned after
-        something answered.
-
-        No live probe is fired from here on purpose. Every MCP round trip needs
-        a per-call bearer that ``health()`` has no seam to resolve, and the one
-        alternative - posting without one - is the thing ``_require_bearer``
-        exists to forbid. So this reports what has actually been observed rather
-        than manufacturing a call, and ``probe()`` remains the way to ask the
-        network a fresh question.
+        """"ok" only after a round trip has ANSWERED in this process.
+        Held specs are not reach: ``control_rehydrate`` replays a stored
+        snapshot in at boot without touching the network, so `"ok" if
+        self._specs` was a green that could not go red - the rule
+        ``cloud_audio_base`` states one file away. No probe fires here (it
+        needs a per-call bearer this cannot resolve); ``probe()`` asks live.
         """
         if self._contacted:
             return "ok"
@@ -342,9 +321,8 @@ class McpConsumerAdapter:
         client = self._open_client()
         async with client:
             response = await self._invoke(client, request, str(bearer))
-        # Recorded only on the success path: _invoke raises for transport,
-        # protocol and JSON-RPC error results, so a failed round trip leaves
-        # health degraded rather than promoting it.
+        # Success path only: _invoke raises for transport, protocol and
+        # JSON-RPC errors, so a failed trip leaves health degraded.
         self._contacted = True
         return response
 
