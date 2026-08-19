@@ -422,6 +422,8 @@
         "#shell-projects.shell-task-group-label",
         ".plugins-page",
         ".plugins-pane",
+        ".plugins-tabs[aria-label=\"Integrations views\"]",
+        ".plugins-tab.active",
         ".plugins-heading h1",
         ".plugins-alert[aria-label=\"Connection health issues\"]",
         ".plugins-alert-copy strong",
@@ -445,6 +447,7 @@
       "required_visible_selectors": [
         ".companion-switcher-trigger",
         "#shell-projects.shell-task-group-label",
+        ".plugins-tabs[aria-label=\"Integrations views\"]",
         ".plugins-heading h1",
         ".plugins-alert[aria-label=\"Connection health issues\"]",
         ".plugins-alert > button",
@@ -456,8 +459,9 @@
       ],
       "required_geometry": [
         { "selector": ".plugins-pane", "x": 403, "width": 900 },
-        { "selector": ".plugins-alert", "x": 435, "y": 140.875, "width": 836, "height": 64.125 },
-        { "selector": ".plugins-search", "y": 256, "height": 38 },
+        { "selector": ".plugins-tabs", "x": 435, "y": 140.875, "height": 31 },
+        { "selector": ".plugins-alert", "x": 435, "y": 203.875, "width": 836, "height": 64.125 },
+        { "selector": ".plugins-search", "y": 319, "height": 38 },
         { "selector": ".plugins-group:first-child .plugins-row:first-child", "height": 57 },
         { "selector": ".plugins-group:first-child .plugins-row:first-child .plugins-row-toggle", "height": 56 }
       ],

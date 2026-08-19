@@ -971,15 +971,15 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/IntegrationsView.tsx": {
-      "file_lines": 1533,
+      "file_lines": 1526,
       "max_function_lines": 707,
       "max_parameters": 4,
-      "max_complexity": 37,
+      "max_complexity": 34,
       "max_nesting_depth": 3,
       "over_limit_functions": [
         {
           "name": "IntegrationsView",
-          "line": 100,
+          "line": 101,
           "column": 1,
           "lines": 707,
           "parameters": 0,
@@ -988,7 +988,7 @@
         },
         {
           "name": "IntegrationsView.connect",
-          "line": 375,
+          "line": 376,
           "column": 3,
           "lines": 60,
           "parameters": 1,
@@ -997,16 +997,16 @@
         },
         {
           "name": "IntegrationRow",
-          "line": 808,
+          "line": 809,
           "column": 1,
-          "lines": 172,
+          "lines": 164,
           "parameters": 1,
-          "complexity": 37,
+          "complexity": 34,
           "nesting_depth": 3
         }
       ],
       "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-19: 1533->1526 and IntegrationRow 172->164 lines / 37->34 complexity, LOWERED while adding the capability-layer tabs. The tabs deliberately live in a WRAPPER (integrations/IntegrationsSurface.tsx) rather than inside this component: adding four tabs here would have meant raising a ratchet to make room for the thing the ratchet exists to discourage. The reduction itself is real, not accounting - the row's Enabled tools block became integrations/ConnectionSurface.tsx, which also fixed the row meta counting raw provider verbs where the kernel had been sending canonical capabilities all along. IntegrationsView keeps ZERO parameters: passing the tab strip in was tried and the trusted-baseline check refuses growth in any per-function metric, limit or no limit, so the strip owns its own selection instead (integrations/IntegrationsTabs.tsx). That is the better shape anyway - both places that render the page heading get the same strip with no state to keep in step.",
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/jarvis/JarvisRenderer.ts": {

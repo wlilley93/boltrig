@@ -106,6 +106,10 @@ import type {
   SensingResponse,
   PrivacyPolicyResponse,
   BackupStatusResponse,
+  CapabilityBindingsResponse,
+  CapabilityBindingStatus,
+  CapabilityCatalogueResponse,
+  RoutingPoliciesResponse,
   IntegrationCatalogueResponse,
   IntegrationConnectionResponse,
   IntegrationConnectionsResponse,
@@ -2344,6 +2348,30 @@ export class BoltrigClient {
 
   integrationConnections(): Promise<IntegrationConnectionsResponse> {
     return this.request("/v1/integrations/connections");
+  }
+
+  /**
+   * The capability review queue. `status` filters it; an unknown status returns
+   * an empty list with a reason rather than falling through to everything,
+   * because "show me the rejected ones" must never answer with all of them.
+   */
+  capabilityBindings(
+    status?: CapabilityBindingStatus,
+  ): Promise<CapabilityBindingsResponse> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    return this.request(`/v1/capability-bindings${query}`);
+  }
+
+  /** Which capabilities exist, derived from the bindings that claim them. */
+  capabilityCatalogue(): Promise<CapabilityCatalogueResponse> {
+    return this.request("/v1/capability-catalogue");
+  }
+
+  routingPolicies(capabilityId?: string): Promise<RoutingPoliciesResponse> {
+    const query = capabilityId
+      ? `?capability_id=${encodeURIComponent(capabilityId)}`
+      : "";
+    return this.request(`/v1/routing-policies${query}`);
   }
 
   integrationConnectionHealth(id: string): Promise<IntegrationConnectionResponse> {

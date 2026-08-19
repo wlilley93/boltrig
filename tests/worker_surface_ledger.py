@@ -68,6 +68,30 @@ _surface(
 POST /v1/search federatedSearch
 """,
 )
+# The doctrine's own review surface (A5/B). These were classified operator-only
+# for exactly one commit, while the routes existed and nothing read them; the
+# Integrations page's Capabilities / Rules / Review tabs read them now.
+_surface(
+    # The hook, not the panel: the queue's state and its governed decision lane
+    # were extracted so the approval handling could be read on its own, and the
+    # read lives with them.
+    "apps/worker/src/components/integrations/useCapabilityReviewQueue.ts",
+    """
+GET /v1/capability-bindings capabilityBindings
+""",
+)
+_surface(
+    "apps/worker/src/components/integrations/CapabilityCataloguePanel.tsx",
+    """
+GET /v1/capability-catalogue capabilityCatalogue
+""",
+)
+_surface(
+    "apps/worker/src/components/integrations/RoutingRulesPanel.tsx",
+    """
+GET /v1/routing-policies routingPolicies
+""",
+)
 _surface(
     "apps/worker/src/components/ChatView.tsx",
     """
@@ -704,20 +728,7 @@ GET /v1/devices/{device_id}/camera-leases
 # is Track B, and classifying it here is what keeps the route from being
 # invisible in the meantime.
 _non_ui("operator-only", "GET /v1/admin/devices")
-# The doctrine's own review surface (A5). Author-gated reads over capability
-# bindings, the catalogue derived from them, and the routing policies that
-# select between them. NOT a Worker surface yet: the Connections / Capabilities
-# / Rules / Review tabs are Track B, and these three are what that work will
-# consume. Classified rather than left unlisted so the routes are visible in the
-# ledger before the UI exists.
-_non_ui(
-    "operator-only",
-    """
-GET /v1/capability-bindings
-GET /v1/capability-catalogue
-GET /v1/routing-policies
-""",
-)
+
 _non_ui(
     "operator-only",
     """

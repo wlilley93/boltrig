@@ -2001,12 +2001,104 @@ export interface IntegrationConnection {
   is_own: boolean;
   accounts: IntegrationAccount[];
   enabled_tools: string[];
+  /**
+   * The canonical capabilities this connection actually serves, from APPROVED
+   * bindings only. `enabled_tools` counts raw provider verb ids; this counts
+   * what a model is ever offered, which is a different and usually smaller
+   * number. Optional because a kernel older than the capability layer omits it.
+   */
+  enabled_capabilities?: string[];
   last_checked_at?: string | null;
   created_at: string;
 }
 
 export interface IntegrationConnectionsResponse {
   connections: IntegrationConnection[];
+}
+
+/** A binding's status, matching the kernel's BINDING_STATUS vocabulary. */
+export type CapabilityBindingStatus =
+  | "proposed"
+  | "approved"
+  | "disabled"
+  | "retired";
+
+export interface CapabilityBindingSourceOperation {
+  id: string;
+  provider: string;
+  title: string | null;
+  description: string;
+  consequence_hint: string | null;
+}
+
+export interface CapabilityBindingConnection {
+  id: string;
+  label: string;
+  provider: string;
+  status: string;
+  health: string;
+  eligible: boolean;
+}
+
+export interface CapabilityBindingView {
+  binding_id: string;
+  /** The pinned form, `matter.open@1`. */
+  capability: string;
+  /** The UNPINNED id, which is what every governance path reads. */
+  capability_id: string;
+  capability_version: number;
+  status: CapabilityBindingStatus;
+  trust_level: string;
+  priority: number;
+  created_from: string;
+  reviewed_by: string | null;
+  workspace_predicate: string | null;
+  source_operation_id: string;
+  source_operation: CapabilityBindingSourceOperation | null;
+  /**
+   * Whether the binding is pinned to a source schema at all, and whether that
+   * pin still matches the operation. A drifted binding had its approval
+   * withdrawn, so a reviewer needs both answers and neither digest.
+   */
+  schema_pinned: boolean;
+  schema_current: boolean;
+  connection: CapabilityBindingConnection | null;
+}
+
+export interface CapabilityBindingsResponse {
+  status: CapabilityBindingStatus | null;
+  bindings: CapabilityBindingView[];
+  needs_review: number;
+  /** Present only when the requested status filter was not a known status. */
+  reason?: string;
+}
+
+export interface CapabilityCatalogueEntry {
+  capability_id: string;
+  implementations: number;
+  approved: number;
+  needs_review: number;
+  providers: string[];
+  routing_policies: number;
+}
+
+export interface CapabilityCatalogueResponse {
+  capabilities: CapabilityCatalogueEntry[];
+}
+
+export interface RoutingPolicyView {
+  id: string;
+  capability_id: string;
+  binding_id: string;
+  operation_class: "read" | "create" | "update" | "delete";
+  capability_version: number | null;
+  scope: "tenant" | "workspace";
+  workspace_id: string | null;
+  precedence: number;
+}
+
+export interface RoutingPoliciesResponse {
+  routing_policies: RoutingPolicyView[];
 }
 
 export interface IntegrationConnectionResponse {

@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T21:33:52.403Z",
+  "capturedAt": "2026-08-19T11:24:11.690Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,19 +17,19 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "2ba38318e76374389505e587d6e69be73fb8dac4460d1f5dbafa3fad4ab1d92d",
-    "digestAfterCapture": "2ba38318e76374389505e587d6e69be73fb8dac4460d1f5dbafa3fad4ab1d92d",
+    "digestBeforeCapture": "a176265f255484875765ed13c1e489dd31a4d804021847094bab5efb86dc1dad",
+    "digestAfterCapture": "a176265f255484875765ed13c1e489dd31a4d804021847094bab5efb86dc1dad",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/capability-step3-transforms",
-    "head": "ca7c5f43ce8a1299ec7397567d8e55b25fe6aa8b",
+    "head": "15db5973f8d179398239ea56c61a11951faca278",
     "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
     "node": "v22.23.1",
     "browser": "chromium",
-    "browserVersion": "151.0.7922.34",
-    "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
+    "browserVersion": "148.0.7778.215",
+    "browserExecutable": "/usr/bin/google-chrome",
     "origin": "http://localhost:1420",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
@@ -40,7 +40,7 @@
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "015ca5a23e11535f558c5014b656121778a3c430eee6b3f6c51dbc8ab9fe9e61",
+      "sha256": "e5b20ed32d17572e0a566a60279a15a1f102bba5d65b3b3f18e5318f4d57378d",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -56,7 +56,7 @@
         "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
