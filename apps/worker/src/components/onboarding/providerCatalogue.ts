@@ -12,6 +12,8 @@ export interface CatalogueProvider {
   models: CatalogueModel[];
   detail?: string;
   info?: string;
+  /** The provider's API base URL from models.dev, when it publishes one. */
+  api?: string;
   requiresBaseUrl?: true;
   /** The server authenticates nothing, so the key field is optional. */
   keyOptional?: true;
@@ -37,19 +39,20 @@ const SELF_HOSTED_OLLAMA: CatalogueProvider = {
 };
 
 /**
- * The providers Bifrost can actually bind a key for.
+ * The providers Bifrost drives with a NATIVE driver.
  *
- * The vendored models.dev snapshot lists 191 providers. The kernel binds 23 of
- * them, and offering the rest produced a picker where 93% of the choices failed
- * at submit with "the selected provider is not supported by Bifrost" -- a
- * configuration path that looks successful right up until it is not, which is
- * the thing this product does not do.
+ * This set used to be the whole picker: everything else was filtered out,
+ * because submitting an unlisted provider failed at the kernel with "the
+ * selected provider is not supported by Bifrost". The kernel now binds any
+ * OTHER catalogue provider as an OpenAI-compatible CUSTOM provider through
+ * its published base URL (`api` in the snapshot, or one the user types), so
+ * the full models.dev list is offered again and the set below only decides
+ * WHICH PATH a provider takes, not whether it is offered.
  *
- * THIS SET IS A SECOND COPY OF `BIFROST_PROVIDERS` in
- * `boltrig/identity/bifrost_user_admin.py`, which is the authority. It is
- * duplicated because no route exposes it to the browser, and
+ * THIS SET IS STILL A SECOND COPY OF `BIFROST_PROVIDERS` in
+ * `boltrig/identity/bifrost_user_admin.py`, which is the authority, and
  * `apps/worker/tests/providerCatalogue.test.ts` parses the Python source and
- * fails if the two ever disagree. Add a provider there first.
+ * fails if the two ever disagree. Add a native provider there first.
  */
 const BIFROST_SUPPORTED = new Set([
   "anthropic", "azure", "bedrock", "cerebras", "cohere", "elevenlabs",
@@ -77,14 +80,13 @@ export function isBifrostSupported(catalogueId: string): boolean {
   return BIFROST_SUPPORTED.has(bifrostProviderId(catalogueId));
 }
 
+// The FULL catalogue, unfiltered. Ollama Cloud stays distinct from self-hosted
+// `ollama` -- it is a hosted API with its own base URL and a real key, and it
+// now stands on its own custom binding rather than being dropped.
 export const AI_PROVIDERS = catalogue.providers
   .flatMap((provider) => (
     provider.id === "ollama-cloud" ? [SELF_HOSTED_OLLAMA, provider] : [provider]
-  ))
-  // Ollama Cloud is deliberately NOT aliased to self-hosted `ollama`: it is a
-  // hosted API with its own base URL and a real key, and inventing that mapping
-  // without a live binding to prove it is how a picker starts lying again.
-  .filter((provider) => isBifrostSupported(provider.id));
+  ));
 export const AI_CATALOGUE_REVISION = catalogue.revision;
 
 export function exactModelId(providerId: string, modelId: string): string {
@@ -98,10 +100,22 @@ export function modelAcceptsVision(model: CatalogueModel | null): boolean {
   return model?.vision === true;
 }
 
+/** The catalogue's published base URL for a provider, if it has one. */
+export function providerApiBaseUrl(providerId: string): string | undefined {
+  return AI_PROVIDERS.find((provider) => provider.id === providerId)?.api;
+}
+
+/**
+ * Whether the user must TYPE a base URL: self-hosted entries always, and any
+ * non-native provider the catalogue publishes no `api` URL for. A non-native
+ * provider WITH a published URL submits it silently -- the custom binding
+ * needs an address, and the catalogue already knows it.
+ */
 export function providerNeedsBaseUrl(providerId: string): boolean {
-  return AI_PROVIDERS.some((provider) => (
-    provider.id === providerId && provider.requiresBaseUrl === true
-  ));
+  const provider = AI_PROVIDERS.find((entry) => entry.id === providerId);
+  if (!provider) return false;
+  if (provider.requiresBaseUrl === true) return true;
+  return !isBifrostSupported(provider.id) && !provider.api;
 }
 
 export function providerKeyOptional(providerId: string): boolean {
