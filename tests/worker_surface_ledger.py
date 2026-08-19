@@ -209,6 +209,16 @@ POST /v1/me/tokens mintToken
 DELETE /v1/me/tokens/{token_id} revokeToken
 GET /v1/me/sessions meSessions
 DELETE /v1/me/sessions/{session_id} revokeSession
+""",
+)
+# The only control that changes what the WHOLE application is looking at, which
+# is why it is its own component now: a successful switch reloads, because at
+# least four things move with it (grants, the agent roster, the companion, and
+# which canonical capabilities are offered) and nothing in the shell re-reads
+# any of them.
+_surface(
+    "apps/worker/src/components/account/useActiveContext.ts",
+    """
 POST /v1/me/active-context switchActiveContext
 POST /v1/me/active-org switchActiveOrg
 GET /v1/me/orgs myOrganisations

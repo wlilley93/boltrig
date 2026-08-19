@@ -1,5 +1,5 @@
 schema_version: 1
-generated_at: 2026-08-19T11:24:33Z
+generated_at: 2026-08-19T11:54:30Z
 generated_by: vds ledger screens
 source_globs:
 - apps/worker/src/components/*View.tsx
@@ -7,11 +7,11 @@ source_globs:
 - apps/worker/src/components/PermanentFleetTopology.tsx
 - apps/worker/src/components/SettingsSurface.tsx
 - apps/worker/src/components/VoiceCall.tsx
-source_digest: sha256:d3b64119895b97ec27974d7b0813f13b8ded989875de8296db352e76e4b68ac4
-content_digest: sha256:799aefff01ff81f3cda66c087dd3abddf2c284870f766cafda1a42f96e15128a
+source_digest: sha256:7ef29f3631b96104e6996c28a7d42d01cbbc59e0d57403955120826fefe658ac
+content_digest: sha256:1237ef57a3390d3bddab4e32c1d0d0e9e7004b7abf6c151bc16b989237726b8a
 screens:
 - route: apps/worker/src/components/AccountView.tsx
-  digest: sha256:de974d81b5f02bd734d36b61476d72dbe60a8c12931d6b3084f396dd446825ac
+  digest: sha256:a0c87b3a1ca42e62c595f9a1a951bab8fc27367180e0c1d89862cefc74da90ab
   references:
   - name: div
     root: div
@@ -183,8 +183,8 @@ screens:
     export_name: ActiveContext
     namespace_member: false
     kind: component
-    import_path: ./AccountSecuritySections
-    resolved_path: apps/worker/src/components/AccountSecuritySections
+    import_path: ./account/ActiveContext
+    resolved_path: apps/worker/src/components/account/ActiveContext
     line: 86
   - name: NotificationPreferences
     root: NotificationPreferences
