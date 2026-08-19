@@ -118,6 +118,9 @@ class McpConsumerAdapter:
         self._url = url
         self._rpc = rpc
         self._specs: list[VerbSpec] = []
+        # Round trip completed in THIS process? Set only in _call; never
+        # persisted, since a stored flag answers "it worked once, somewhere".
+        self._contacted = False
         # Prefixed verb id -> the server's BARE tool name (the namespacing map;
         # rebuilt by every connect()). Rebuilt per discovery, so a re-sync can
         # never leave a stale mapping.
@@ -295,18 +298,33 @@ class McpConsumerAdapter:
         return Result.success(output)
 
     async def health(self) -> str:
-        return "ok" if self._specs else "unknown"
+        """"ok" only after a round trip has ANSWERED in this process.
+        Held specs are not reach: ``control_rehydrate`` replays a stored
+        snapshot in at boot without touching the network, so `"ok" if
+        self._specs` was a green that could not go red - the rule
+        ``cloud_audio_base`` states one file away. No probe fires here (it
+        needs a per-call bearer this cannot resolve); ``probe()`` asks live.
+        """
+        if self._contacted:
+            return "ok"
+        return "degraded" if self._specs else "unknown"
 
     async def _call(self, request: dict, bearer: str | None) -> dict:
         """One round trip on a connection opened and closed for it."""
         if self._rpc is not None:
             # Injected in-process transport (tests, self-consumption): it owns its
             # own auth, so no bearer is derived or sent here.
-            return await self._rpc(request)
+            response = await self._rpc(request)
+            self._contacted = True
+            return response
         self._require_bearer(bearer)
         client = self._open_client()
         async with client:
-            return await self._invoke(client, request, str(bearer))
+            response = await self._invoke(client, request, str(bearer))
+        # Success path only: _invoke raises for transport, protocol and
+        # JSON-RPC errors, so a failed trip leaves health degraded.
+        self._contacted = True
+        return response
 
     def _require_bearer(self, bearer: str | None) -> None:
         # Fail closed behind execute's own check and the connect() guard: never
