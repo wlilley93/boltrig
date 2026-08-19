@@ -31,6 +31,7 @@ from .capability_records import (
     apply_mapping_pack,
     capability_connection,
     declare_capability,
+    reconcile_binding_schemas,
     record_source_operation,
 )
 from boltrig.capabilities.mapping_packs import load_packs
@@ -109,9 +110,21 @@ class KernelRegistry:
         for spec in specs:
             await self._register_spec(tenant_id, adapter, spec, effects)
             registered.append(spec.verb_id)
+        digests: dict[str, str] = {}
         for spec in catalogue:
             assert connection is not None
-            await record_source_operation(self._store, tenant_id, connection, spec)
+            digests[spec.verb_id] = await record_source_operation(
+                self._store, tenant_id, connection, spec
+            )
+        if digests:
+            # One pass over the tenant's bindings rather than a read per
+            # operation: an Opbox door is 443 of them.
+            demoted = await reconcile_binding_schemas(self._store, tenant_id, digests)
+            if demoted:
+                log.warning(
+                    "capability bindings returned to review after a schema change: %d",
+                    len(demoted),
+                )
         if connection is not None:
             pack = load_packs().get(connection.provider)
             if pack is not None:

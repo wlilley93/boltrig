@@ -165,14 +165,27 @@ store: Store, tenant_id: str, connection: ProviderConnection, specs, pack
     silence: a pack outlives the catalogue it maps, and a stale entry should
     map nothing rather than mint a binding onto an operation that is not there.
     """
-    available = {spec.verb_id for spec in specs}
+    # Keyed by id so a pack binding can carry the SAME schema digest a declared
+    # one does. Without it a pack binding is unreconcilable: reconcile compares
+    # the stored digest, and None reads as "no opinion", so a packed capability
+    # would outlive any schema change under it.
+    by_id = {spec.verb_id: spec for spec in specs}
+    available = set(by_id)
+    # A PACK PROPOSES ONCE. Registration runs at every startup, and re-asserting
+    # the pack's `proposed` over an existing row silently undid every approval
+    # on the next boot - the review survived in nobody's memory but the
+    # operator's. Once a binding exists, its status is the review's to own.
+    existing = {
+        b.binding_id for b in await store.list_capability_bindings(tenant_id)
+    }
     written = 0
     for mapping in pack.mappings:
-        if mapping.operation_id not in available:
+        binding_id = f"cb:{connection.id}:{mapping.operation_id}"
+        if mapping.operation_id not in available or binding_id in existing:
             continue
         await store.upsert_capability_binding(
             CapabilityBinding(
-                binding_id=f"cb:{connection.id}:{mapping.operation_id}",
+                binding_id=binding_id,
                 tenant_id=tenant_id,
                 capability_id=mapping.capability_id,
                 capability_version=mapping.capability_version,
@@ -180,8 +193,49 @@ store: Store, tenant_id: str, connection: ProviderConnection, specs, pack
                 connection_id=connection.id,
                 status="proposed",
                 trust_level=connection.trust_level,
+                source_schema_digest=schema_digest(by_id[mapping.operation_id]),
                 created_from="mapping_pack",
             )
         )
         written += 1
     return written
+
+
+async def reconcile_binding_schemas(
+store: Store, tenant_id: str, digests: dict[str, str]
+) -> list[str]:
+    """Withdraw an approval whose source operation no longer has the same schema.
+
+    Returns the binding ids demoted.
+
+    ``source_schema_digest`` was recorded on every binding from the day the
+    shard landed and compared by NOTHING - the bytes existed so a divergence
+    was "at least detectable" (SPEC §11.9), but nothing ever detected it. An
+    approved binding therefore survived any change to the operation behind it,
+    and the capability kept being offered against a contract nobody had
+    approved.
+
+    An approval is granted FOR a contract, so it does not transfer to a
+    different one. On divergence the binding returns to ``proposed``: the claim
+    and its review history survive, the route stops, and the capability leaves
+    the offer until someone approves what is actually there now.
+
+    This is deliberately disruptive, because the quiet alternative is worse. A
+    narrowed or renamed field would make every routed call fail validation
+    against a schema the model was never shown, which presents as an agent that
+    has started getting its own arguments wrong.
+    """
+    demoted: list[str] = []
+    for binding in await store.list_capability_bindings(tenant_id):
+        if binding.status != "approved":
+            continue
+        fresh = digests.get(binding.source_operation_id)
+        # An operation absent from this pass was not re-registered, so this run
+        # has no opinion about it. Silence is not evidence of a change.
+        if fresh is None or binding.source_schema_digest in (None, fresh):
+            continue
+        await store.set_capability_binding_status(
+            tenant_id, binding.binding_id, "proposed", None
+        )
+        demoted.append(binding.binding_id)
+    return demoted
