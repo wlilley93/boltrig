@@ -1,5 +1,5 @@
 schema_version: 1
-generated_at: 2026-08-19T11:54:30Z
+generated_at: 2026-08-19T14:05:07Z
 generated_by: vds ledger screens
 source_globs:
 - apps/worker/src/components/*View.tsx
@@ -7,8 +7,8 @@ source_globs:
 - apps/worker/src/components/PermanentFleetTopology.tsx
 - apps/worker/src/components/SettingsSurface.tsx
 - apps/worker/src/components/VoiceCall.tsx
-source_digest: sha256:7ef29f3631b96104e6996c28a7d42d01cbbc59e0d57403955120826fefe658ac
-content_digest: sha256:1237ef57a3390d3bddab4e32c1d0d0e9e7004b7abf6c151bc16b989237726b8a
+source_digest: sha256:d8bbb1f88d3beacfd8b71f2aaf57d87553862657509f49c67157b9cf4726156b
+content_digest: sha256:3927959db7ae4eecc90d972bbd9d5ca6aa789eff0de0f26121d3cc2174b651dd
 screens:
 - route: apps/worker/src/components/AccountView.tsx
   digest: sha256:a0c87b3a1ca42e62c595f9a1a951bab8fc27367180e0c1d89862cefc74da90ab
@@ -4070,7 +4070,7 @@ screens:
     import_path: null
     line: 2138
 - route: apps/worker/src/components/ChatView.tsx
-  digest: sha256:fdf099eb9fbd62771ae16d2f94bdd1e1686c1b4b70f628a2c4e4b6c5b98d5880
+  digest: sha256:ed7dca759021c15fe8d28cae2effe3323881cb3fb5f54723025572e4a65cef48
   references:
   - name: Composer
     root: Composer
@@ -11337,7 +11337,7 @@ screens:
     resolved_path: apps/worker/src/components/settings/SectionHead
     line: 153
 - route: apps/worker/src/components/VoiceCall.tsx
-  digest: sha256:b4792d5c08a3f0ec60c5950484b4774f63330482713f02d92f46e08219538902
+  digest: sha256:1506ff574a19d2e6997474b6bf2e2622f9ba9077c33135d7495054aa1dd38174
   references:
   - name: div
     root: div
@@ -11345,14 +11345,14 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 1009
+    line: 1017
   - name: CallReceipt
     root: CallReceipt
     export_name: null
     namespace_member: false
     kind: component
     import_path: null
-    line: 1010
+    line: 1018
     unresolved_because: '"CallReceipt" is not imported in this file, so it is defined locally or comes from a global'
   - name: button
     root: button
@@ -11360,70 +11360,70 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 1011
+    line: 1019
   - name: svg
     root: svg
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1019
+    line: 1027
   - name: rect
     root: rect
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1020
+    line: 1028
   - name: rect
     root: rect
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1021
+    line: 1029
   - name: rect
     root: rect
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1022
+    line: 1030
   - name: rect
     root: rect
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1023
+    line: 1031
   - name: details
     root: details
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1027
+    line: 1035
   - name: summary
     root: summary
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1028
+    line: 1036
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1029
+    line: 1037
   - name: RecentCalls
     root: RecentCalls
     export_name: null
     namespace_member: false
     kind: component
     import_path: null
-    line: 1030
+    line: 1038
     unresolved_because: '"RecentCalls" is not imported in this file, so it is defined locally or comes from a global'
   - name: label
     root: label
@@ -11431,70 +11431,70 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 1037
+    line: 1045
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1038
+    line: 1046
   - name: select
     root: select
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1039
+    line: 1047
   - name: option
     root: option
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1044
+    line: 1052
   - name: option
     root: option
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1046
+    line: 1054
   - name: section
     root: section
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1059
+    line: 1067
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1060
+    line: 1068
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1061
+    line: 1069
   - name: strong
     root: strong
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1062
+    line: 1070
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1064
+    line: 1072
   - name: VoiceTranscript
     root: VoiceTranscript
     export_name: VoiceTranscript
@@ -11502,21 +11502,21 @@ screens:
     kind: component
     import_path: ./voice/VoiceCallScreen
     resolved_path: apps/worker/src/components/voice/VoiceCallScreen
-    line: 1065
+    line: 1073
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1066
+    line: 1074
   - name: CallReceipt
     root: CallReceipt
     export_name: null
     namespace_member: false
     kind: component
     import_path: null
-    line: 1067
+    line: 1075
     unresolved_because: '"CallReceipt" is not imported in this file, so it is defined locally or comes from a global'
   - name: RecentCalls
     root: RecentCalls
@@ -11524,7 +11524,7 @@ screens:
     namespace_member: false
     kind: component
     import_path: null
-    line: 1069
+    line: 1077
     unresolved_because: '"RecentCalls" is not imported in this file, so it is defined locally or comes from a global'
   - name: button
     root: button
@@ -11532,7 +11532,7 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 1076
+    line: 1084
   - name: VoiceCallScreen
     root: VoiceCallScreen
     export_name: VoiceCallScreen
@@ -11540,7 +11540,7 @@ screens:
     kind: component
     import_path: ./voice/VoiceCallScreen
     resolved_path: apps/worker/src/components/voice/VoiceCallScreen
-    line: 1114
+    line: 1104
   - name: StageBody
     root: StageBody
     export_name: StageBody
@@ -11548,193 +11548,193 @@ screens:
     kind: component
     import_path: ./StageBody
     resolved_path: apps/worker/src/components/StageBody
-    line: 1134
+    line: 1124
   - name: details
     root: details
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1158
+    line: 1148
   - name: summary
     root: summary
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1159
+    line: 1149
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1160
+    line: 1150
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1161
+    line: 1151
   - name: article
     root: article
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1167
+    line: 1157
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1168
+    line: 1158
   - name: strong
     root: strong
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1169
+    line: 1159
   - name: time
     root: time
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1171
+    line: 1161
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1176
+    line: 1166
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1183
+    line: 1173
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1185
+    line: 1175
   - name: details
     root: details
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1210
+    line: 1200
   - name: summary
     root: summary
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1211
+    line: 1201
   - name: dl
     root: dl
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1212
+    line: 1202
   - name: dd
     root: dd
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1213
+    line: 1203
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1213
+    line: 1203
   - name: dt
     root: dt
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1213
+    line: 1203
   - name: dd
     root: dd
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1214
+    line: 1204
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1214
+    line: 1204
   - name: dt
     root: dt
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1214
+    line: 1204
   - name: dd
     root: dd
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1215
+    line: 1205
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1215
+    line: 1205
   - name: dt
     root: dt
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1215
+    line: 1205
   - name: dd
     root: dd
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1216
+    line: 1206
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1216
+    line: 1206
   - name: dt
     root: dt
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1216
+    line: 1206
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1218
+    line: 1208

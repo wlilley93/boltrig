@@ -1,4 +1,4 @@
-import type { JarvisTuning, UltronTuning } from "./bodyTuning";
+import type { FamiliarTuning, JarvisTuning, UltronTuning } from "./bodyTuning";
 
 /** The five presentation states every animated body is driven through. */
 export type BodyMode = "standby" | "listening" | "thinking" | "working" | "speaking";
@@ -7,8 +7,10 @@ export const BODY_MODES: readonly BodyMode[] = [
   "standby", "listening", "thinking", "working", "speaking",
 ];
 
-/** Either body's numbers. The machinery here is deliberately shape-agnostic. */
-export type AnyTuning = JarvisTuning | UltronTuning;
+/** Any body's numbers. The machinery here is deliberately shape-agnostic --
+ *  which is what let the Familiar join without a line of it changing, even
+ *  though her fields describe a uniform recipe rather than draw passes. */
+export type AnyTuning = FamiliarTuning | JarvisTuning | UltronTuning;
 
 /**
  * One field oscillating gently around whatever the mode set it to.

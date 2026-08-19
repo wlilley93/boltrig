@@ -17,5 +17,6 @@ export {
   type EnergyRamp,
   type LimbMix,
 } from "./bodyRamp";
+export { FAMILIAR_TUNING, type FamiliarTuning, type VoiceRamp } from "./familiarTuning";
 export { JARVIS_TUNING, type JarvisTuning } from "./jarvisTuning";
 export { ULTRON_TUNING, type UltronTuning } from "./ultronTuning";

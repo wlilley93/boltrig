@@ -908,17 +908,6 @@
       "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"
     },
-    "apps/worker/src/components/familiar/FamiliarWebGLRenderer.ts": {
-      "file_lines": 435,
-      "max_function_lines": 49,
-      "max_parameters": 2,
-      "max_complexity": 12,
-      "max_nesting_depth": 3,
-      "over_limit_functions": [],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
     "apps/worker/src/components/GovernedCreateModal.tsx": {
       "file_lines": 142,
       "max_function_lines": 106,
@@ -1700,24 +1689,24 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/VoiceCall.tsx": {
-      "file_lines": 1535,
-      "max_function_lines": 954,
+      "file_lines": 1525,
+      "max_function_lines": 943,
       "max_parameters": 3,
-      "max_complexity": 34,
+      "max_complexity": 31,
       "max_nesting_depth": 4,
       "over_limit_functions": [
         {
           "name": "VoiceCall",
-          "line": 191,
+          "line": 192,
           "column": 1,
-          "lines": 954,
+          "lines": 943,
           "parameters": 1,
-          "complexity": 34,
+          "complexity": 31,
           "nesting_depth": 2
         },
         {
           "name": "VoiceCall.useLayoutEffect[0]",
-          "line": 261,
+          "line": 267,
           "column": 19,
           "lines": 105,
           "parameters": 0,
@@ -1726,7 +1715,7 @@
         },
         {
           "name": "VoiceCall.connect",
-          "line": 564,
+          "line": 572,
           "column": 3,
           "lines": 223,
           "parameters": 2,
@@ -1735,7 +1724,7 @@
         },
         {
           "name": "VoiceCall.connect.<anonymous>",
-          "line": 658,
+          "line": 666,
           "column": 31,
           "lines": 118,
           "parameters": 2,
@@ -1744,7 +1733,7 @@
         },
         {
           "name": "VoiceCall.applyCallEvent",
-          "line": 936,
+          "line": 944,
           "column": 3,
           "lines": 70,
           "parameters": 2,

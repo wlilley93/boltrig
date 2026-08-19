@@ -46,6 +46,15 @@ export interface CharacterTurnInput {
   micActive?: boolean;
   micLevel?: number;
   /**
+   * The turn or the call FAILED, as distinct from having finished.
+   *
+   * A body reads this as a state of its own. Without it a dropped call is
+   * indistinguishable from a completed one -- every other field goes quiet in
+   * exactly the same way -- so the only character able to show a failure would
+   * be one that also read the chat text, which none of them may.
+   */
+  failed?: boolean;
+  /**
    * A short phrase from the reply being spoken aloud, for a body that displays
    * WORDS. Absent for every body that does not.
    *

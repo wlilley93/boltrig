@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-19T11:54:11.280Z",
+  "capturedAt": "2026-08-19T14:05:00.794Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,19 +17,19 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "d8eb5ab1376fd7b6f6eafff13927dbdddeb95eabcad240c66f0e8dfedd883bb7",
-    "digestAfterCapture": "d8eb5ab1376fd7b6f6eafff13927dbdddeb95eabcad240c66f0e8dfedd883bb7",
+    "digestBeforeCapture": "921dfc59f7a6f3998ddf37bd4f4469e08e3af2d5b71b7262790c7a7fe582576a",
+    "digestAfterCapture": "921dfc59f7a6f3998ddf37bd4f4469e08e3af2d5b71b7262790c7a7fe582576a",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/capability-step3-transforms",
-    "head": "48eb38fdf55893b2134e59710b8463d0e2f5a653",
+    "branch": "integrate/capability-step3-to-main",
+    "head": "ea7fb8f1bdc730b4148a80e17a0ba7e93df339f7",
     "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
-    "node": "v22.23.1",
+    "node": "v24.15.0",
     "browser": "chromium",
-    "browserVersion": "148.0.7778.215",
-    "browserExecutable": "/usr/bin/google-chrome",
+    "browserVersion": "151.0.7922.34",
+    "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
     "origin": "http://localhost:1420",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
@@ -40,7 +40,7 @@
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "e5b20ed32d17572e0a566a60279a15a1f102bba5d65b3b3f18e5318f4d57378d",
+      "sha256": "015ca5a23e11535f558c5014b656121778a3c430eee6b3f6c51dbc8ab9fe9e61",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -56,7 +56,7 @@
         "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
