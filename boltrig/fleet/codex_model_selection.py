@@ -107,9 +107,17 @@ def trusted_codex_configured(config: dict[str, Any] | None) -> bool:
 
 
 async def require_catalogue_model(
-    catalogue: Any, model_id: str, required_modalities: tuple[str, ...]
+    catalogue: Any,
+    model_id: str,
+    required_modalities: tuple[str, ...],
+    declared_modalities: tuple[str, ...] | None = None,
 ) -> None:
-    """Re-prove exact Bifrost support at the runtime admission boundary."""
+    """Re-prove exact Bifrost support at the runtime admission boundary.
+
+    ``declared_modalities`` is the store endpoint's own declaration for this
+    exact model; the shared policy lets it stand in only when the gateway
+    lists the model as a bare row with no ``input_modalities`` key at all.
+    """
 
     if catalogue is None:
         raise ModelCatalogueUnavailable("the Bifrost model catalogue is unavailable")
@@ -117,7 +125,7 @@ async def require_catalogue_model(
         result = await catalogue.list_models()
     except Exception:
         raise ModelCatalogueUnavailable("the Bifrost model catalogue is unavailable") from None
-    reason = catalogue_model_reason(result, model_id, required_modalities)
+    reason = catalogue_model_reason(result, model_id, required_modalities, declared_modalities)
     if reason == "catalogue_unavailable":
         raise ModelCatalogueUnavailable("the Bifrost model catalogue is unavailable")
     if reason is not None:
@@ -164,7 +172,12 @@ async def resolve_codex_model(
                 "model choice uses an unsupported immutable model id"
             ) from None
         required_modalities = tuple(dict.fromkeys(("text", modality)))
-        await require_catalogue_model(model_catalogue, selected.model, required_modalities)
+        await require_catalogue_model(
+            model_catalogue,
+            selected.model,
+            required_modalities,
+            declared_modalities=selected.modalities,
+        )
         return replace(selected, kind="bifrost", base_url=gateway_url)
     if pinned_policy:
         return endpoint
@@ -177,7 +190,16 @@ async def resolve_codex_model(
     except ValueError:
         return None
     required_modalities = tuple(dict.fromkeys(("text", modality)))
-    await require_catalogue_model(model_catalogue, model_id, required_modalities)
+    await require_catalogue_model(
+        model_catalogue,
+        model_id,
+        required_modalities,
+        declared_modalities=(
+            endpoint.modalities
+            if endpoint is not None and endpoint.model == model_id
+            else None
+        ),
+    )
     if endpoint is None:
         return ModelEndpoint(
             id="codex-process-default",

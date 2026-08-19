@@ -92,6 +92,7 @@ def _choice_availability(
     model: str,
     platform: dict,
     catalogue_by_id: dict[str, dict],
+    declared_modalities: tuple[str, ...] | None = None,
 ) -> tuple[bool, str | None]:
     try:
         exact_model_id(model)
@@ -106,7 +107,19 @@ def _choice_availability(
         return False, "model_not_advertised"
     modalities = advertised.get("input_modalities")
     if not isinstance(modalities, list):
-        return False, "text_capability_not_advertised"
+        # Plain OpenAI-compatible gateways list provider-derived models as
+        # bare {id, name} rows: absence of the key means "not described",
+        # never "describes nothing". Only that absence may be answered by
+        # the store endpoint's own declaration - the same declaration the
+        # kernel already trusts to route to the model at all. A row that
+        # carries the key malformed stays refused.
+        if "input_modalities" not in advertised and declared_modalities:
+            modalities = [
+                "image" if modality == "vision" else modality
+                for modality in declared_modalities
+            ]
+        else:
+            return False, "text_capability_not_advertised"
     if "text" not in modalities:
         return False, "text_not_supported"
     return True, None
@@ -116,10 +129,11 @@ def _model_availability(
     model: str | None,
     platform: dict,
     catalogue_by_id: dict[str, dict],
+    declared_modalities: tuple[str, ...] | None = None,
 ) -> tuple[bool, str | None]:
     if model is None:
         return False, "default_model_unconfigured"
-    return _choice_availability(model, platform, catalogue_by_id)
+    return _choice_availability(model, platform, catalogue_by_id, declared_modalities)
 
 
 async def _catalogue(platform: dict) -> dict:
@@ -188,7 +202,9 @@ def _project_choices(endpoints, platform, catalogue_available, catalogue_by_id):
         except ValueError:
             continue
         available, reason = (
-            _choice_availability(endpoint.model, platform, catalogue_by_id)
+            _choice_availability(
+                endpoint.model, platform, catalogue_by_id, endpoint.modalities
+            )
             if catalogue_available
             else (False, "catalogue_unavailable")
         )
@@ -241,10 +257,19 @@ def register(app, P, K) -> None:
             default_available = scoped_default[1]
             default_unavailable_reason = scoped_default[2]
         elif catalogue_available:
+            default_endpoint = next(
+                (
+                    endpoint
+                    for endpoint in endpoints
+                    if endpoint.model == default_model
+                ),
+                None,
+            )
             default_available, default_unavailable_reason = _model_availability(
                 default_model,
                 platform,
                 catalogue_by_id,
+                default_endpoint.modalities if default_endpoint is not None else None,
             )
         else:
             default_available = False
