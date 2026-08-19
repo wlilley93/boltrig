@@ -697,6 +697,13 @@ GET /v1/devices/{device_id}/camera-bindings
 GET /v1/devices/{device_id}/camera-leases
 """,
 )
+# The desktop install census (A4). An author-gated administrator read over the
+# whole tenant's `devices` rows, where every other device route is scoped to the
+# caller's own machines. NOT a Worker surface TODAY and this row says so rather
+# than implying it never should be: the admin console tab that would consume it
+# is Track B, and classifying it here is what keeps the route from being
+# invisible in the meantime.
+_non_ui("operator-only", "GET /v1/admin/devices")
 _non_ui(
     "operator-only",
     """
@@ -768,4 +775,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 # 294 since GET /v1/me and GET /v1/branding (the product's own name, read unauthenticated by
 # the sign-in screen). An exact census, not a ratchet: it must equal the
 # routes the app actually serves, so it moves when the surface does.
-EXPECTED_ROUTE_COUNT = 294
+EXPECTED_ROUTE_COUNT = 295
