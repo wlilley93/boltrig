@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-18T13:56:30.973Z",
+  "capturedAt": "2026-08-19T12:39:22.110Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,12 +16,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "558a2fe0f6168198929ea9ca009c2c47ca28db99e47f1a502c8dfb4902390a90",
-    "digestAfterCapture": "558a2fe0f6168198929ea9ca009c2c47ca28db99e47f1a502c8dfb4902390a90",
+    "digestBeforeCapture": "5be1b5db272ea90b98b60d2d9eea91d8dce923526d8a53be0b35d9794a50c7ca",
+    "digestAfterCapture": "5be1b5db272ea90b98b60d2d9eea91d8dce923526d8a53be0b35d9794a50c7ca",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/real-brand-mark",
-    "head": "db96d4d0dfe6b5307451e2208a91ebc581643bf5",
-    "dirty": true
+    "head": "effce8bde5a706e2de7a7df7bcc9a0377c43f367",
+    "dirty": false
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
@@ -57,7 +57,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -104,7 +104,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -197,7 +197,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
