@@ -1242,7 +1242,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/agent_capabilities.py
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/agent_capabilities.py:76		workspace can only name their own (config/capability_scope.py refuses
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/bifrost_models.py:41		Re-project even an injected provider so extra upstream fields cannot escape.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/capability_review.py:140		and offer_candidates filters on, so the queue cannot advertise a
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/chat_model_choices.py:201		Project exact model names, never endpoint topology or credentials.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/chat_model_choices.py:100		Resolve a row's modalities, letting a store declaration stand in.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/chat_model_choices.py:238		Project exact model names, never endpoint topology or credentials.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/eval_routes.py:34		creation;
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/integration_setup.py:94		principal.subject, never principal.on_behalf_of: on_behalf_of names the
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/integrations.py:266		Every OTHER member's personal connections, for offboarding.
