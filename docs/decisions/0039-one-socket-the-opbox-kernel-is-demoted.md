@@ -79,6 +79,27 @@ before per-user identity lands, and it retires when the contract's identity
 line (boltrig owns auth and membership; the user's own identity is the bearer)
 replaces it.
 
+The expiry on that bridge is load-bearing, not hygienic - measured the same
+day it was minted. During the demo kernel-chat flip, ten
+`control.invitation.create` approvals were answered ~0.2s after creation by
+the admin PAT itself: the PAT's subject is Will, the requests sat in Will's
+own scope, and the kernel's sole-author relief (`authorize_hitl_response`,
+surfaced to callers as `sole_author_exemption: true`) let the credential
+answer its own gate. Confirmed by the calling session; ratified by Will after
+the fact. The shape to design out: a human-approval gate plus a standing
+identity-bearing credential is not a human-approval gate for any holder of
+that credential, and the audit trail records the person, not the machine.
+
+Retirement therefore runs in this order, adopted from the opbox pen-holder's
+reading of what still rides the credential: (a) a real per-user chat produces
+a run and audit entry over a per-user PAT; (b) opbox re-points register-time
+auto-provisioning and the backfill script at an operator flow that carries no
+standing broad PAT, accepting the run-cost read's fallback to estimate;
+(c) `opbox-demo-admin` is revoked by name with Will's explicit yes. Chat for
+already-provisioned users survives revocation immediately; step (b) exists
+because new sign-ups would otherwise silently lose provisioning and 401 on
+first chat.
+
 ## The presentation half of the seam: one UI, two wordmarks
 
 Confirmed by Will on 2026-08-19, relayed through the opbox pen-holder,
