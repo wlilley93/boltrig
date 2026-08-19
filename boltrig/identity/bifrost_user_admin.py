@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import re
+
 from typing import Any, Protocol
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 
@@ -50,6 +52,36 @@ BIFROST_PROVIDERS = frozenset(
 _PROVIDER_URL_CONFIG = {"ollama": "ollama_key_config"}
 
 _MAX_MODEL_PAGES = 8
+
+#: models.dev's provider-id shape; the only names the custom path creates.
+_CUSTOM_ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
+
+
+def _custom_base_url(value: str | None) -> str:
+    """A custom provider's endpoint: absolute http(s), no secrets in the URL.
+
+    Deliberately looser than ``admin_base`` (which pins the INTERNAL gateway to
+    a known host and an exact /v1 path): this is an EXTERNAL provider address
+    the operator chose, the same trust the self-hosted Ollama path already
+    extends. Userinfo, query and fragment are refused because a credential
+    belongs in the sealed key, never in an address that gets logged.
+    """
+    candidate = str(value or "").strip()
+    if not candidate or len(candidate) > 200 or candidate != candidate.strip():
+        raise BifrostUserBindingUnavailable(
+            "the provider needs the URL of its OpenAI-compatible endpoint"
+        )
+    parsed = urlsplit(candidate)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise BifrostUserBindingUnavailable("the provider base URL is invalid")
+    return candidate.rstrip("/")
 
 
 class _Binding(Protocol):
@@ -131,7 +163,10 @@ class BifrostUserAdmin:
 
     async def revoke_metadata(self, sealed: dict[str, Any]) -> None:
         provider = str(sealed.get("provider") or "").lower()
-        if provider not in BIFROST_PROVIDERS:
+        # Custom providers are legitimate stored rows now; the gate is the id
+        # SHAPE, not membership of the native set, or revoking a custom
+        # binding would strand its keys in Bifrost forever.
+        if provider not in BIFROST_PROVIDERS and _CUSTOM_ID.fullmatch(provider) is None:
             raise BifrostUserBindingUnavailable(
                 "the stored Bifrost provider binding is invalid"
             )
@@ -160,7 +195,18 @@ class BifrostUserAdmin:
                 "Bifrost refused the provider-key revocation"
             )
 
-    async def ensure_provider(self, provider: str) -> None:
+    async def ensure_provider(
+        self, provider: str, *, base_url: str | None = None
+    ) -> None:
+        """Ensure the provider row exists - native, or custom with an address.
+
+        A provider outside ``BIFROST_PROVIDERS`` has no native driver, so it is
+        created with ``custom_provider_config``: Bifrost speaks the
+        OpenAI-compatible dialect to the given base URL. An existing custom row
+        whose stored address DIFFERS is refused rather than silently repointed:
+        other scopes' keys may already ride it, and moving the address under
+        them is the kind of quiet cross-tenant surprise this module refuses.
+        """
         payload = await self._http.request_json(
             "GET", f"{self._http.base}api/providers"
         )
@@ -169,10 +215,27 @@ class BifrostUserAdmin:
             raise BifrostUserBindingUnavailable(
                 "Bifrost provider inventory is unavailable"
             )
-        if any(isinstance(row, dict) and row.get("name") == provider for row in rows):
-            return
+        custom_url = _custom_base_url(base_url) if provider not in BIFROST_PROVIDERS else None
+        for row in rows:
+            if isinstance(row, dict) and row.get("name") == provider:
+                if custom_url is None:
+                    return
+                config = row.get("custom_provider_config")
+                stored = config.get("base_url") if isinstance(config, dict) else None
+                if stored == custom_url:
+                    return
+                raise BifrostUserBindingUnavailable(
+                    f"{provider} is already bound to a different endpoint; "
+                    "remove that binding first or use its address"
+                )
+        body: dict[str, Any] = {"provider": provider}
+        if custom_url is not None:
+            body["custom_provider_config"] = {
+                "base_provider_type": "openai",
+                "base_url": custom_url,
+            }
         status, _payload = await self._http.request(
-            "POST", f"{self._http.base}api/providers", {"provider": provider}
+            "POST", f"{self._http.base}api/providers", body
         )
         if status not in {200, 201, 409}:
             raise BifrostUserBindingUnavailable("Bifrost refused the selected provider")

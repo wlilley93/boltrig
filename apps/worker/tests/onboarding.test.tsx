@@ -3,6 +3,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { providerApiBaseUrl, providerNeedsBaseUrl } from "../src/components/onboarding/providerCatalogue";
+
 const api = vi.hoisted(() => ({
   activateAiKey: vi.fn(),
   aiKeys: vi.fn(),
@@ -368,11 +370,14 @@ describe("first-run onboarding", () => {
     expect(screen.getAllByRole("option").length).toBeGreaterThan(0);
   });
 
-  it("does not offer a provider Bifrost cannot bind", async () => {
-    // The picker was generated from the whole 190-provider models.dev snapshot
-    // while the kernel binds 23. Choosing any of the rest reached
-    // "the selected provider is not supported by Bifrost" only after the key
-    // had been typed. An option that cannot complete is worse than no option.
+  it("offers the full catalogue again, now that the kernel custom-binds it", async () => {
+    // HISTORY, because this test has said opposite things and both were right
+    // at the time. The picker once offered the whole snapshot while the kernel
+    // bound 23, so these three providers failed AT SUBMIT and this test pinned
+    // their ABSENCE. The kernel now binds any catalogue provider as an
+    // OpenAI-compatible custom provider through its published base URL, so
+    // their absence would be the defect. Each must be findable and carry a
+    // real address for the silent-submit path.
     render(
       <OnboardingGate initialAccount={{
         profile,
@@ -388,13 +393,19 @@ describe("first-run onboarding", () => {
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
 
     await clickWhenReady("OpenAI");
-    for (const absent of ["deepseek", "togetherai", "moonshotai"]) {
-      fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: absent } });
-      expect(screen.queryAllByRole("option")).toHaveLength(0);
+    for (const present of ["deepseek", "togetherai", "moonshotai"]) {
+      fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: present } });
+      expect(screen.queryAllByRole("option").length).toBeGreaterThan(0);
+      // The custom binding needs an address one way or the other: models.dev
+      // publishes one (submitted silently - deepseek, moonshotai), or it does
+      // not and the picker must ask (togetherai). Neither is optional.
+      const published = providerApiBaseUrl(present);
+      if (published) expect(published).toMatch(/^https:\/\//);
+      else expect(providerNeedsBaseUrl(present)).toBe(true);
     }
   });
 
-  it("offers secured self-hosted Ollama, and no Ollama Cloud, without exposing localhost", async () => {
+  it("offers self-hosted Ollama and Ollama Cloud as distinct options, without exposing localhost", async () => {
     render(
       <OnboardingGate initialAccount={{
         profile,
@@ -411,11 +422,11 @@ describe("first-run onboarding", () => {
 
     await clickWhenReady("OpenAI");
     fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "ollama" } });
-    // Ollama Cloud is deliberately absent. It is a hosted API with its own base
-    // URL and a real key, and the kernel has no binding for `ollama-cloud`, so
-    // it failed at submit. Aliasing it onto self-hosted `ollama` without a live
-    // binding to prove it would put the same lie back in a different place.
-    expect(screen.queryByRole("option", { name: /Ollama Cloud/ })).toBeNull();
+    // Ollama Cloud stands as its own CUSTOM provider now - hosted API, its own
+    // base URL, a real key - rather than being dropped or aliased onto the
+    // self-hosted entry. What must never come back is the aliasing: the two
+    // remain distinct options with distinct addresses.
+    expect(screen.getByRole("option", { name: /Ollama Cloud/ })).toBeTruthy();
     const selfHosted = screen.getByRole("option", { name: /Ollama Self-hosted/ });
     const guidance = "Hosted Boltrig can use Ollama through a secured public HTTPS endpoint. Never expose an unauthenticated Ollama port. Use Boltrig Desktop to keep Ollama local to your computer.";
     expect(screen.getByTitle(guidance)).toBeTruthy();
