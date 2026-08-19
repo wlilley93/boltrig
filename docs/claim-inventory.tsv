@@ -8,8 +8,8 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/builtin/xai_voice.py:154		Fail 
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/http_base.py:135		Best-effort reachability probe.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/http_base.py:208		Turn credential material into request auth.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/http_base.py:261		cannot reach internal services or steal a managed-identity token.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:246		The kernel-resolved credential is the ONLY bearer source: no instance
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:248		credential fails closed rather than posting an empty bearer.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:251		The kernel-resolved credential is the ONLY bearer source: no instance
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:253		credential fails closed rather than posting an empty bearer.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_transport.py:146		server reads Authorization (it is the only header the Opbox /mcp door
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_transport.py:148		bearer form.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/mcp_transport.py:57		A final (post-retry) HTTP refusal, carrying ONLY the status code: the body can echo the request back, credential headers included, so it never crosses this boundary.
@@ -297,9 +297,10 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/xai_voice.py:1	H
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/egress.py:1	pinned_async_client_for_ip	The shared outbound-egress guard (Batch 1 INJ-02, Batch 2 CLOUD-03, H2/SEC-61).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/http_base.py:1	paginate	Reusable HTTP adapter base for ``runtime='http'`` integrations (S7.3).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:1	review_and_activate	Consume an external MCP server as a Boltrig adapter (Round Two, US-MCP-03).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:144	kernel.credentials.resolve_for_adapter	Discover the external server's tools and map them to VerbSpecs.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:158	probe	``probe`` runs bounded discovery without publishing live tool state.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:317	pinned_async_client	One SSRF-vetted, IP-pinned client.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:149	kernel.credentials.resolve_for_adapter	Discover the external server's tools and map them to VerbSpecs.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:163	probe	``probe`` runs bounded discovery without publishing live tool state.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:302	_require_bearer	Best-effort liveness, on the same terms as the other network adapters.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_consumer.py:357	pinned_async_client	One SSRF-vetted, IP-pinned client.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:1	McpHttpRefusal	The MCP Streamable-HTTP client transport the consumer speaks (US-MCP-03).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:192	initialize	The MCP handshake, run lazily when a server demands a session.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/sql_base.py:1	db.execute_write	Reusable SQL adapter base for ``runtime='sql'`` integrations (US-ADP-03, SEC-09).
@@ -598,10 +599,10 @@ ORDINARY	NO-SUBJECT	comment	boltrig/adapters/http_base.py:201		SSRF: never auto-
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/http_base.py:89		explicit config always wins;
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/loader.py:40		health claim.
 ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/loader.py:92		The cached posture, refreshed in the background when stale.
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:123		never leave a stale mapping.
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:133		is the default;
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:252		server never sees the namespace.
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:312		Fail closed behind execute's own check and the connect() guard: never
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:128		never leave a stale mapping.
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:138		is the default;
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:257		server never sees the namespace.
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:352		Fail closed behind execute's own check and the connect() guard: never
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:70		an empty name can never publish.
 ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/mcp_tool_policy.py:1		Fail-closed policy for translating external MCP metadata into Boltrig verbs.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_tool_policy.py:32		charset.

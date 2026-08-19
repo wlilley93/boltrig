@@ -118,6 +118,11 @@ class McpConsumerAdapter:
         self._url = url
         self._rpc = rpc
         self._specs: list[VerbSpec] = []
+        # Has this adapter ever completed a round trip to the server IN THIS
+        # PROCESS? Set only in _call, which every live path funnels through.
+        # It is deliberately NOT persisted: a stored flag would answer "it
+        # worked once, somewhere" to a question that means "is it working".
+        self._contacted = False
         # Prefixed verb id -> the server's BARE tool name (the namespacing map;
         # rebuilt by every connect()). Rebuilt per discovery, so a re-sync can
         # never leave a stale mapping.
@@ -295,18 +300,53 @@ class McpConsumerAdapter:
         return Result.success(output)
 
     async def health(self) -> str:
-        return "ok" if self._specs else "unknown"
+        """Best-effort liveness, on the same terms as the other network adapters.
+
+        THIS USED TO RETURN "ok" WHENEVER ``self._specs`` WAS NON-EMPTY, and that
+        was a green that could not go red. Specs are not evidence of anything
+        being reachable: ``control_rehydrate`` calls ``apply_tool_snapshot`` with
+        the stored ``last_known_tools`` at boot, and that method's own docstring
+        says it loads "into this in-process adapter only". So a server that has
+        been unplugged since the last restart still reported healthy, on the
+        strength of a row in the database. Found live: /healthz said
+        default/opbox "ok" while the mcp_servers row had last_known_tools=[],
+        tools_observed_at NULL, and zero probe receipts.
+
+        ``cloud_audio_base`` already refuses exactly this, in this repo, in one
+        line: setup "must never be projected as healthy merely because the
+        adapter was constructed". This brings the MCP consumer into line with
+        that, and with ``http_base``/``sql_base``, where "unknown" means the
+        probe could not be attempted and "ok" is only ever returned after
+        something answered.
+
+        No live probe is fired from here on purpose. Every MCP round trip needs
+        a per-call bearer that ``health()`` has no seam to resolve, and the one
+        alternative - posting without one - is the thing ``_require_bearer``
+        exists to forbid. So this reports what has actually been observed rather
+        than manufacturing a call, and ``probe()`` remains the way to ask the
+        network a fresh question.
+        """
+        if self._contacted:
+            return "ok"
+        return "degraded" if self._specs else "unknown"
 
     async def _call(self, request: dict, bearer: str | None) -> dict:
         """One round trip on a connection opened and closed for it."""
         if self._rpc is not None:
             # Injected in-process transport (tests, self-consumption): it owns its
             # own auth, so no bearer is derived or sent here.
-            return await self._rpc(request)
+            response = await self._rpc(request)
+            self._contacted = True
+            return response
         self._require_bearer(bearer)
         client = self._open_client()
         async with client:
-            return await self._invoke(client, request, str(bearer))
+            response = await self._invoke(client, request, str(bearer))
+        # Recorded only on the success path: _invoke raises for transport,
+        # protocol and JSON-RPC error results, so a failed round trip leaves
+        # health degraded rather than promoting it.
+        self._contacted = True
+        return response
 
     def _require_bearer(self, bearer: str | None) -> None:
         # Fail closed behind execute's own check and the connect() guard: never

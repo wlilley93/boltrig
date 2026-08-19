@@ -16,6 +16,7 @@ import pytest
 
 from boltrig.adapters.base import Credential
 from boltrig.adapters.mcp_consumer import McpConsumerAdapter
+from boltrig.models.mcp_lifecycle import McpToolSnapshot
 from boltrig.models import GrantSet, InvocationContext
 
 T = "acme"
@@ -27,6 +28,19 @@ def _ctx():
 
 def _cred():
     return Credential(id="MCP", kind="api_key", material={"value": "secret"})
+
+
+def _snapshot():
+    """One vetted tool, the shape boot-time rehydration replays from the store."""
+    return (
+        McpToolSnapshot(
+            name="ping",
+            description="ping",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+            consequence="low",
+        ),
+    )
 
 
 def _adapter(rpc) -> McpConsumerAdapter:
@@ -547,3 +561,61 @@ async def test_calls_use_the_bare_tool_name_not_the_prefixed_verb():
 
     assert result.ok
     assert seen == ["matter.list", "matter.list"]
+
+
+# --- health: a green that could not go red -----------------------------------
+#
+# health() used to be `return "ok" if self._specs else "unknown"`, which reported
+# a server healthy on the strength of a snapshot replayed out of the database at
+# boot (control_rehydrate calls apply_tool_snapshot, whose docstring says it loads
+# "into this in-process adapter only"). Found live: /healthz said default/opbox
+# "ok" while that server's row had last_known_tools=[], tools_observed_at NULL and
+# no probe receipts at all.
+#
+# These pin the three states apart. The middle one is the one that matters: it
+# fails on the old implementation, which is what makes it a check rather than a
+# restatement.
+
+
+async def test_health_is_unknown_before_anything_is_known():
+    assert await _adapter(None).health() == "unknown"
+
+
+async def test_rehydrated_specs_alone_are_never_reported_healthy():
+    """Specs without contact is DEGRADED, not ok.
+
+    This is the regression. `apply_tool_snapshot` is exactly what boot-time
+    rehydration calls, so this reproduces a kernel that came up holding a stored
+    snapshot for a server it has never reached.
+    """
+    adapter = _adapter(None)
+    adapter.apply_tool_snapshot(_snapshot())
+
+    assert adapter.describe(), "precondition: the adapter is holding specs"
+    assert await adapter.health() == "degraded"
+
+
+async def test_health_is_ok_only_after_a_round_trip_actually_answered():
+    async def rpc(request):
+        return {"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "hi"}]}}
+
+    adapter = _adapter(rpc)
+    adapter.apply_tool_snapshot(_snapshot())
+    assert await adapter.health() == "degraded"
+
+    await adapter.execute("mcp-x.ping", {}, _cred(), _ctx())
+
+    assert await adapter.health() == "ok"
+
+
+async def test_a_failed_round_trip_does_not_promote_health():
+    async def rpc(request):
+        raise httpx.ConnectError("no route to host")
+
+    adapter = _adapter(rpc)
+    adapter.apply_tool_snapshot(_snapshot())
+
+    result = await adapter.execute("mcp-x.ping", {}, _cred(), _ctx())
+
+    assert not result.ok
+    assert await adapter.health() == "degraded"
