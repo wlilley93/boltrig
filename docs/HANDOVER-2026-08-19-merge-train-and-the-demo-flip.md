@@ -111,3 +111,16 @@ and not. It is also the gate on the H1/H2 discriminator above.
   retire `opbox_key_`; re-probe the frontend door (~698 rows, not 633); cap by
   profile. Item 1 (health fix) merged as #306.
 - **Tier-split runtime decision** (PROGRAM doc section 2) - Will's call.
+
+## 6. Waiting on Will, by his own instruction ("just write it in the handover")
+
+1. **The live-proof resend**: hard-refresh the demo tab (the browser likely
+   holds the pre-kchat bundle), send one chat message from his demo login. The
+   store proves per-user attribution regardless of the reply erroring; the
+   staged one-shot script on the beelink confirms it in one command. Until the
+   catalogue link (section 4) is fixed the reply will still be a
+   model-unavailable error - proof and pleasant answer are separable.
+2. **The tier-split runtime decision** (PROGRAM doc section 2): script tier-1
+   with codex tiers 2/3 is the doc's recommendation; codex-everywhere and
+   script-everywhere are the alternatives. Nothing downstream starts until
+   picked.
