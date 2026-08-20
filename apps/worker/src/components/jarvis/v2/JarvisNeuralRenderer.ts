@@ -134,6 +134,8 @@ export class JarvisNeuralRenderer {
   private live: JarvisTuning = JARVIS_ARRIVAL;
   /** A bench override. Null means follow the mode, which is the shipped path. */
   private tuning: JarvisTuning | null = null;
+  /** The baked lattice loop, when one is mounted. See NeuralPasses.drawLattice. */
+  private latticeEl: HTMLVideoElement | null = null;
 
   constructor(private readonly opts: NeuralRendererOptions = {}) {}
 
@@ -157,6 +159,28 @@ export class JarvisNeuralRenderer {
 
   /** What it is currently drawing with, so a bench can seed its own controls. */
   currentTuning(): JarvisTuning { return this.tuning ?? JARVIS_TUNING; }
+
+  /**
+   * Mount (or clear) the baked lattice loop. The video is created muted,
+   * looping and inline, and every failure path degrades to "no layer": a body
+   * whose extra footage is missing must still be a body. The layer draws only
+   * while `tuning.lattice` gives it gain, so mounting is free until dialled in.
+   */
+  setLatticeVideo(url: string | null): void {
+    this.latticeEl?.remove();
+    this.latticeEl = null;
+    if (!url) return;
+    const video = document.createElement("video");
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.crossOrigin = "anonymous";
+    video.src = url;
+    // Silently absent on error: the error event leaves readyState < 2, and
+    // uploadLattice already treats that as "no layer this frame".
+    void video.play().catch(() => undefined);
+    this.latticeEl = video;
+  }
 
   /**
    * Hand the body back to its own mode logic and draw it in again.
@@ -244,6 +268,8 @@ export class JarvisNeuralRenderer {
   }
 
   destroy(): void {
+    this.latticeEl?.remove();
+    this.latticeEl = null;
     cancelAnimationFrame(this.raf);
     this.raf = 0;
     this.passes?.destroy();
@@ -334,6 +360,7 @@ export class JarvisNeuralRenderer {
         ? this.live
         : applyPulses(this.live, JARVIS_PULSES[mode], this.clock.animClock);
     }
+    passes.uploadLattice(this.latticeEl);
     passes.render(d, jarvisPalette(this.opts, this.pheno), jarvisEmotion(shown, this.pheno));
   }
 

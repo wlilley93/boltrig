@@ -204,6 +204,14 @@ export interface JarvisTuning {
    */
   focus: readonly [farSwell: number, farDim: number];
   /**
+   * The baked lattice layer: gain on a pre-rendered hubs-and-spokes loop
+   * composited additively UNDER the live passes, with the second component
+   * riding the voice like every other gain. The loop carries film-density
+   * structure no real-time pass can afford; the live body carries the pulse.
+   * Zero ships: without a video loaded the layer draws nothing regardless.
+   */
+  lattice: EnergyRamp;
+  /**
    * The eye, after familiar.frag's heart -- pupil, iris, and the lens ring.
    *
    * Two stacked gaussians were already here and they made a bright BLOB. What
@@ -262,6 +270,7 @@ export const JARVIS_TUNING: JarvisTuning = {
   starburst: 1,
   clump: [0, 2.6],
   focus: [0, 0],
+  lattice: [0, 0],
   eye: [1, 1.5, 0.34, 15],
   drawLimb: [3, 3],
   linkLimb: [3, 3],

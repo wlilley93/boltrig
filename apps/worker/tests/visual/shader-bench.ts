@@ -128,6 +128,7 @@ const LEGEND: Record<string, readonly string[]> = {
   shardSize: ["shard size"],
   shardStride: ["1 in N particles"],
   clump: ["strength", "cluster scale"],
+  lattice: ["gain", "×voice"],
   focus: ["far swell", "far dim"],
   // ---- The eye ------------------------------------------------------------
   core: ["heart brightness", "×voice"],
@@ -214,6 +215,7 @@ const RANGE: Record<string, [number, number, number]> = {
   facetSize: [0.002, 0.06, 0.001],
   shardStride: [1, 64, 1],
   clump: [0, 1, 0.005],
+  lattice: [0, 2, 0.01],
   focus: [0, 1, 0.005],
   petal: [0, 1, 0.01],
   cloud: [0, 1.2, 0.02],
@@ -558,6 +560,11 @@ function mount(): void {
   // made about a distortion the app never renders.
   $("stage").classList.toggle("square", body === "familiar");
   renderer.mount(host);
+  if (body === "jarvis") {
+    // The baked layer's loop, mounted whenever Jarvis is on stage. Free until
+    // the lattice dial gives it gain; silently absent if the file is not there.
+    (renderer as JarvisNeuralRenderer).setLatticeVideo("/tests/visual/assets/jarvis-lattice.mp4");
+  }
   const status = renderer.status();
   if (status.state !== "running") {
     $("readout").textContent = `FAILED — ${status.reason ?? status.state}`;
@@ -763,6 +770,7 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   ] },
   { title: "5 · Circuit shards", fields: ["shardGain", "shardSize", "shardStride"] },
   { title: "5 · Debris — clumping and depth", fields: ["clump", "focus"] },
+  { title: "0 · Lattice loop — the baked layer", fields: ["lattice"] },
   { title: "5 · Crystal facets", fields: [
     "facetGain", "facetSize", "facetSpin", "facetLimb",
   ] },
@@ -845,6 +853,7 @@ const TITLES: Record<string, string> = {
   shardSize: "How big a shard is",
   shardStride: "How many particles become shards",
   clump: "How the debris clusters into clumps and voids",
+  lattice: "The baked hubs-and-spokes loop under the live body",
   focus: "How the far hemisphere falls out of focus",
   facetGain: "How bright the crystal facets are",
   facetSize: "How big a facet is",
