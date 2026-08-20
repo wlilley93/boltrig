@@ -3,7 +3,11 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
+<<<<<<< HEAD
   "capturedAt": "2026-08-20T15:38:00.402Z",
+=======
+  "capturedAt": "2026-08-20T14:39:25.045Z",
+>>>>>>> origin/main
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,11 +20,19 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
+<<<<<<< HEAD
     "digestBeforeCapture": "5626696e8be8b5adf819dd662ad8df56a12059ba9a14099ef2edfc429c5f19d7",
     "digestAfterCapture": "5626696e8be8b5adf819dd662ad8df56a12059ba9a14099ef2edfc429c5f19d7",
     "sourceUnchangedDuringCapture": true,
     "branch": "codex/flat-named-agent-peers",
     "head": "ba4482f4534883ff9bdb1c73f188871f2acd9bb7",
+=======
+    "digestBeforeCapture": "df947ec981b9abb81f9689af9555d632baa0ce3b103547e4187c5e01fe649953",
+    "digestAfterCapture": "df947ec981b9abb81f9689af9555d632baa0ce3b103547e4187c5e01fe649953",
+    "sourceUnchangedDuringCapture": true,
+    "branch": "feat/ultron-membrane",
+    "head": "87151d97640bf10b4ac9f3f5a9cefc16e614a26f",
+>>>>>>> origin/main
     "dirty": true
   },
   "runner": {
@@ -104,7 +116,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

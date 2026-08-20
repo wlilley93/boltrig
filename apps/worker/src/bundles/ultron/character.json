@@ -55,7 +55,10 @@
       "uReverb",
       "uSignal",
       "uArc",
-      "uCloud"
+      "uCloud",
+      "uHomePull",
+      "uKnee",
+      "uMembrane"
     ]
   },
   "prompts": {
