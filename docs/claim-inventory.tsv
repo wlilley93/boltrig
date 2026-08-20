@@ -967,6 +967,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_events.py
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_events.py:448		A usage count, floored at 0.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_events.py:65		Normalize observations; native limits are detection tripwires, not controls.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_preflight.py:289		fail-closed.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_surface_preflight.py:252		view against the written shape can therefore NEVER pass, and
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_surface_preflight.py:255		binary that changes any of them - or adds a fourth - refuses
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_validation.py:130		Copy a schema so a malformed mutable backing value cannot race the request.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_validation.py:57		cannot predict, so the exact spec-token compare is relaxed to a slot-shape
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_sandbox_engagement.py:146		Leg one.
