@@ -2,6 +2,8 @@
 // Fields the kernel may add later (binding target, live verb health) are kept
 // optional so the client tolerates their absence.
 
+import type { DisplayObjectEnvelope } from "./displayObjects.js";
+
 export type AdapterHealth = "ok" | "degraded" | "down" | "unknown";
 
 export interface HealthResponse {
@@ -993,6 +995,13 @@ export interface ChatArtifactRejected {
   run_id?: string;
 }
 
+/** A validated visual object emitted by the named agent for this turn. */
+export interface ChatDisplayObject {
+  type: "display_object";
+  object: DisplayObjectEnvelope;
+  run_id?: string;
+}
+
 /**
  * A relay frame was intentionally withheld because it is not part of the
  * reviewed public chat vocabulary or did not satisfy that vocabulary.
@@ -1022,6 +1031,7 @@ export type ChatEvent =
   | ChatModelRouting
   | ChatArtifact
   | ChatArtifactRejected
+  | ChatDisplayObject
   | ChatEventUnavailable;
 
 // POST /v1/hitl/{question_id}/answer: owner-only, fail-closed answer to an

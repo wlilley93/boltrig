@@ -1,13 +1,13 @@
 {
   "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-  "captureManifestSha256": "9a16a4cb903242cc9c377aaab89da57a21f0c11f0bcc0c84f54d7b67f6f63427",
+  "captureManifestSha256": "42bce95013ccb35a432398485392d245e1095e13434b359ce860dbdea8b8d849",
   "captureSourceBinding": {
-    "branch": "codex/flat-named-agent-peers",
-    "digestAfterCapture": "52216c365e5c0cde084324304d8461fcd63872e1ed327e33e510109c3dfdb18f",
+    "branch": "codex/turn-scoped-agent-chat",
+    "digestAfterCapture": "3fe9d9813cd255ff92ca14b9eb00bbecc5d319bdf12ad1f67e35e53e33aa3330",
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "52216c365e5c0cde084324304d8461fcd63872e1ed327e33e510109c3dfdb18f",
+    "digestBeforeCapture": "3fe9d9813cd255ff92ca14b9eb00bbecc5d319bdf12ad1f67e35e53e33aa3330",
     "dirty": true,
-    "head": "4c8a564092f56a266c5a7d5cb0a6cfa6f7dd6e49",
+    "head": "1f65a6c2ad34ba9b26ce481d7aaebac2919cb749",
     "scope": [
       "apps/worker/src",
       "apps/worker/tests/visual"

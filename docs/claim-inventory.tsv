@@ -810,7 +810,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat.py:155		user only), so a caller o
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_authority.py:108		function's contract is that it must NEVER take down a spawn that would
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/chat_conversation_access.py:20		A retained conversation cannot accept a turn until explicitly restored.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/chat_event_projection.py:1		Closed, browser-safe projection of the internal run-event relay.
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/chat_event_projection.py:14		An internal frame cannot be represented by the public chat contract.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/chat_event_projection.py:19		An internal frame cannot be represented by the public chat contract.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_idempotency.py:44		their own namespace so a client-chosen key can never collide with a real
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_idempotency.py:49		stream; short enough that a key is never a permanent reservation.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/chat_idempotency.py:73		True when THIS caller owns the turn; False when it is a replay.
@@ -1365,6 +1365,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/models/context.py:35		the User-Agent), never
 ORDINARY	NO-SUBJECT	comment	boltrig/models/context.py:44		The kernel dispatch never reads this;
 ORDINARY	NO-SUBJECT	comment	boltrig/models/conversation.py:52		owner/team, never to an agent.
 ORDINARY	NO-SUBJECT	comment	boltrig/models/conversation.py:87		filtered out of continuity - it is never presented as live.
+ORDINARY	NO-SUBJECT	comment	boltrig/models/display_objects.py:81		in ordinary card data, but it cannot mint provider or connection truth.
 ORDINARY	NO-SUBJECT	comment	boltrig/models/egress_diversion.py:18		status - which is every reader that matters - cannot read a diversion as a
 ORDINARY	NO-SUBJECT	docstring	boltrig/models/errors.py:206		The current spawn-rule snapshot cannot produce one governed route.
 ORDINARY	NO-SUBJECT	docstring	boltrig/models/errors.py:269		An archived evaluation case cannot start a new run.

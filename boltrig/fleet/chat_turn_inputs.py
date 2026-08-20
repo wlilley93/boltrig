@@ -54,7 +54,7 @@ def chat_invocation_context(
     return InvocationContext(
         tenant_id=tenant_id,
         grants=GrantSet.of(
-            list(ceiling.allow) + (["agent.send"] if actor else []),
+            list(ceiling.allow) + (["agent.send", "chat.present"] if actor else []),
             list(ceiling.deny),
         ),
         actor=actor or "chief-of-staff",

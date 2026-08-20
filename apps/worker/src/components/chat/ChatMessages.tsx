@@ -12,6 +12,8 @@ import { InlineApproval } from "./InlineApproval";
 import { OrderedWorkTranscript } from "./OrderedWorkTranscript";
 import { PersistedDecision } from "./PersistedDecision";
 import { SubagentChips } from "./SubagentChips";
+import { DisplayObjectList } from "./display/DisplayObjectList";
+import type { DisplayObjectReply } from "./display/DecisionDisplayCards";
 import {
   attachmentIdentity,
   downloadAttachment,
@@ -25,6 +27,7 @@ export function Message({
   durationSeconds,
   onDecisionResolved,
   onOpenSubagent,
+  onDisplayReply,
 }: {
   message: ChatMessage;
   agentLabel?: string;
@@ -32,6 +35,7 @@ export function Message({
   durationSeconds?: number;
   onDecisionResolved?(): void;
   onOpenSubagent?(agent: SubagentEntry): void;
+  onDisplayReply?: DisplayObjectReply;
 }) {
   const turn = useMemo(() => normalizeEvents(message.events ?? []), [message.events]);
   return (
@@ -51,6 +55,7 @@ export function Message({
           settled
           durationSeconds={durationSeconds ?? null}
         />
+        <DisplayObjectList entries={turn.displayObjects ?? []} settled onReply={onDisplayReply} />
         {message.attachments?.map((item) => (
           <button
             type="button"
@@ -77,6 +82,7 @@ export function LiveTurn({
   tech,
   startedAt,
   onOpenSubagent,
+  onDisplayReply,
 }: {
   events: ChatEvent[];
   agentLabel?: string;
@@ -84,6 +90,7 @@ export function LiveTurn({
   tech: boolean;
   startedAt: number | null;
   onOpenSubagent?(agent: SubagentEntry): void;
+  onDisplayReply?: DisplayObjectReply;
 }) {
   return (
     <article className="message assistant live">
@@ -109,6 +116,7 @@ export function LiveTurn({
           turn={turn}
           startedAt={startedAt}
         />
+        <DisplayObjectList entries={turn.displayObjects ?? []} settled={turn.ended} onReply={onDisplayReply} />
         <TurnDecisions turn={turn} tech={tech} onOpenSubagent={onOpenSubagent} />
         {/* The resolved routing receipt is developer detail; the plain console
             already names the selected model in the composer chip. */}

@@ -1011,7 +1011,7 @@ export function ChatView({
             );
           }}
           onRetryConversation={retryConversationLoad}
-          onDecisionResolved={retryConversationLoad}
+          onDecisionResolved={retryConversationLoad} onDisplayReply={(text) => send(text, [])}
           onReorderQueued={queue.reorder}
           onRespondHitl={async (id, decision) => {
             try {
@@ -1220,7 +1220,7 @@ export function ChatView({
                 message={message}
                 agentLabel={agentSelection.messageLabel(message)}
                 tech={tech}
-                onDecisionResolved={retryConversationLoad}
+                onDecisionResolved={retryConversationLoad} onDisplayReply={(text) => send(text, [])}
                 durationSeconds={message.run_id ? turnDurations[message.run_id] : undefined}
               />
             )}
@@ -1232,7 +1232,7 @@ export function ChatView({
               tech={tech}
               startedAt={live.runId ? liveStartsRef.current.get(live.runId) ?? null : null}
               onOpenSubagent={canOpenPanes && railTurnIsLive ? openSubagentTab : undefined}
-              agentLabel={agentSelection.label(agentSelection.address)}
+              agentLabel={agentSelection.label(agentSelection.address)} onDisplayReply={(text) => send(text, [])}
             />
           )}
           {continuity && (

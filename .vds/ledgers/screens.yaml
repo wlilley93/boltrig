@@ -1,5 +1,5 @@
 schema_version: 1
-generated_at: 2026-08-20T20:11:07Z
+generated_at: 2026-08-20T21:03:11Z
 generated_by: vds ledger screens
 source_globs:
 - apps/worker/src/components/*View.tsx
@@ -7,8 +7,8 @@ source_globs:
 - apps/worker/src/components/PermanentFleetTopology.tsx
 - apps/worker/src/components/SettingsSurface.tsx
 - apps/worker/src/components/VoiceCall.tsx
-source_digest: sha256:cd12df458c57f64e17e7220c1f348b9b4900098c7ed5175f6065495241259284
-content_digest: sha256:9d5b1c301ca231b2d4419e7cf464a62b9d2ca1aeb1b44a21f74ce7f3f0908a30
+source_digest: sha256:ceb6fbc2b6efc0d4ead0392af079b062d76ff488cf855b9239c2616f62fe8b4c
+content_digest: sha256:1ee8750e7a337afdba8e6bc65d163dd476a6c13eb57fcd7a7ad42e4e80024d70
 screens:
 - route: apps/worker/src/components/AccountView.tsx
   digest: sha256:a0c87b3a1ca42e62c595f9a1a951bab8fc27367180e0c1d89862cefc74da90ab
@@ -4070,7 +4070,7 @@ screens:
     import_path: null
     line: 2138
 - route: apps/worker/src/components/ChatView.tsx
-  digest: sha256:607ca4196257924887eacc9e89e8d634138dc45ff20da174473027f2851a2abc
+  digest: sha256:32359bd839fca1b3778d5e90d33fc5dafe9253f5c6262dea8375ee04c4280f2d
   references:
   - name: Composer
     root: Composer
@@ -6561,7 +6561,7 @@ screens:
     import_path: null
     line: 1523
 - route: apps/worker/src/components/LocalChatView.tsx
-  digest: sha256:1d2898dcaf32ad33b5ce6ab135cd06b67dfa7f719a4506746a87f056cbdc78cc
+  digest: sha256:389ffcdbcc33f6d47a11e6c3a2856d4c36d37be1bd1ee778f82da7faf86a736c
   references:
   - name: div
     root: div
@@ -6639,21 +6639,21 @@ screens:
     kind: component
     import_path: ./chat/ChatMessages
     resolved_path: apps/worker/src/components/chat/ChatMessages
-    line: 114
+    line: 115
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 120
+    line: 122
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 121
+    line: 123
   - name: TranscriptNavigation
     root: TranscriptNavigation
     export_name: TranscriptNavigation
@@ -6661,7 +6661,7 @@ screens:
     kind: component
     import_path: ./chat/TranscriptNavigation
     resolved_path: apps/worker/src/components/chat/TranscriptNavigation
-    line: 123
+    line: 125
   - name: Composer
     root: Composer
     export_name: Composer
@@ -6669,35 +6669,35 @@ screens:
     kind: component
     import_path: ./chat/Composer
     resolved_path: apps/worker/src/components/chat/Composer
-    line: 145
+    line: 147
   - name: header
     root: header
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 180
+    line: 182
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 181
+    line: 183
   - name: h1
     root: h1
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 182
+    line: 184
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 183
+    line: 185
   - name: ThemeToggle
     root: ThemeToggle
     export_name: ThemeToggle
@@ -6705,42 +6705,42 @@ screens:
     kind: component
     import_path: ./chat/ThemeToggle
     resolved_path: apps/worker/src/components/chat/ThemeToggle
-    line: 187
+    line: 189
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 196
+    line: 198
   - name: label
     root: label
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 199
+    line: 201
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 200
+    line: 202
   - name: select
     root: select
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 201
+    line: 203
   - name: option
     root: option
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 202
+    line: 204
 - route: apps/worker/src/components/OperationsView.tsx
   digest: sha256:0644af99d49bb92a6a37bb7cc146b59550d83c490cf246a312713a9ec373049e
   references:

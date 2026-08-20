@@ -16,12 +16,14 @@ async def register_agent_support(kernel: Kernel, tenant_id: str) -> None:
     """Register the tools and durable identity substrate every agent uses."""
 
     from boltrig.adapters.builtin.agent_messages import build as build_agent_messages
+    from boltrig.adapters.builtin.chat_present import build as build_chat_present
 
     await kernel.register_adapter(tenant_id, build_skill_shelf_adapter(kernel.store))
     await kernel.register_adapter(tenant_id, build_work_read_adapter(kernel.store))
     await kernel.register_adapter(
         tenant_id, build_agent_messages(kernel.store, events=kernel.events)
     )
+    await kernel.register_adapter(tenant_id, build_chat_present(events=kernel.events))
     if not await kernel.store.list_named_agents(tenant_id):
         await kernel.store.upsert_named_agent(
             NamedAgent(
@@ -32,4 +34,6 @@ async def register_agent_support(kernel: Kernel, tenant_id: str) -> None:
                 default_for_intake=True,
             )
         )
-    log.info("agent support registered (skills, work reads, durable peer messaging)")
+    log.info(
+        "agent support registered (skills, work reads, peer messaging, chat presentation)"
+    )

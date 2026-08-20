@@ -36,6 +36,7 @@ from boltrig.models import (
     Workspace,
     WorkspaceMember,
 )
+from boltrig.models.display_objects import build_display_object
 from boltrig.store import InMemoryStore
 
 T = "acme"
@@ -74,6 +75,16 @@ async def test_chat_streams_events_and_persists():
         {"type": "tool_call", "verb": "ticket.create", "input": {}, "status": "running"},
         {"type": "tool_result", "verb": "ticket.create", "status": "ok", "output": {"id": "1"}},
         {"type": "subagent", "child_run_id": "c1", "task": "decompose", "skills": ["a"]},
+        {
+            "type": "display_object",
+            "object": build_display_object(
+                {
+                    "kind": "status.notice", "title": "Ticket ready",
+                    "data": {"summary": "Ticket 1 is ready for review."},
+                },
+                run_id="display-run", agent_address="general",
+            ),
+        },
         {"type": "text_delta", "delta": "Created ticket 1."},
     ]
     chat = ChatService(store, relay, turn_executor=_stub_executor(events))
@@ -82,13 +93,14 @@ async def test_chat_streams_events_and_persists():
     )
     types = [e["type"] for e in out]
     assert types[0] == "message_start" and types[-1] == "message_end"
-    assert "tool_call" in types and "subagent" in types
+    assert "tool_call" in types and "subagent" in types and "display_object" in types
     # persisted: one conversation, user + assistant messages (US-CONV-05)
     convs = await store.list_conversations(T, "alice")
     assert len(convs) == 1
     msgs = await store.list_messages(T, convs[0].id)
     assert [m.role.value for m in msgs] == ["user", "assistant"]
     assert msgs[1].content == "Created ticket 1."
+    assert any(event["type"] == "display_object" for event in msgs[1].events)
 
 
 @pytest.mark.invariant("FR-CONV-04")
@@ -193,6 +205,7 @@ async def test_direct_chat_runs_the_default_named_identity(monkeypatch):
     assert seen["context"].actor == "researcher"
     assert seen["context"].actor_tier == "tier1"
     assert seen["context"].grants.permits("agent.send")
+    assert seen["context"].grants.permits("chat.present")
     assert store._agent_turn_leases[(T, "researcher")] is None
     conversation = (await store.list_conversations(T, "alice"))[0]
     assert conversation.agent_address == "researcher"

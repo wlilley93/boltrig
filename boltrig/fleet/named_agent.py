@@ -104,7 +104,7 @@ class NamedAgent(DepartmentHead):
             context,
             grants=GrantSet.of(
                 list(context.grants.allow),
-                list(context.grants.deny) + ["agent.send"],
+                list(context.grants.deny) + ["agent.send", "chat.present"],
             ),
         )
         outcome = await super().handle(work_item, child_context, prefer=prefer, tree_id=tree_id)
@@ -120,7 +120,9 @@ class NamedAgent(DepartmentHead):
             f"You are the named tier-1 agent at address {self.address}. "
             "Synthesize the completed ephemeral work into the final result. "
             "Use agent.send only when another durable peer genuinely needs "
-            "to be consulted; peer delivery is asynchronous.",
+            "to be consulted; peer delivery is asynchronous. Use chat.present "
+            "when a reviewed visual card materially clarifies the answer; it "
+            "never replaces the accompanying plain-language conclusion.",
             wrap_untrusted("work_item", work_item.source, work_item.intent),
         ]
         channel_context = channel_provenance_prompt(work_item)
