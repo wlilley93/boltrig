@@ -1710,9 +1710,10 @@ invariants:
     tests:
       - tests/security/test_ai_keys.py::test_set_key_route_is_role_scoped
   FR-AIKEY-03:
-    description: 'An explicitly approved scoped AI key is reconciled into a server-owned Bifrost provider-key plus exact-model virtual-key binding before it becomes a runnable chat default. The response exposes only gateway_ready; chat projects the exact personal model after reload instead of an invented Automatic choice, and an already-approved sealed row can be reconciled without resubmitting plaintext.'
+    description: 'An approved scoped AI key is reconciled into a server-owned Bifrost provider-key plus exact-model virtual-key binding before it becomes a runnable chat default. A member''s OWN user-level key completes inside the submit call - the kernel answers the approval its requester would be asked for, with sealing, single consumption and keys-only audit unchanged - while any shared scope still parks as pending_human for the explicit approve route. The response exposes only gateway_ready; chat projects the exact personal model after reload instead of an invented Automatic choice, and an already-approved sealed row can be reconciled without resubmitting plaintext.'
     tests:
-      - tests/security/test_ai_keys.py::test_onboarding_approval_is_explicit_and_activates_the_exact_saved_model
+      - tests/security/test_ai_keys.py::test_onboarding_connects_your_own_provider_in_one_press
+      - tests/security/test_ai_keys.py::test_org_level_key_still_pends_and_the_approve_route_finalizes_it
       - tests/security/test_ai_keys.py::test_existing_approved_key_can_be_reconciled_without_resubmitting_secret
       - tests/security/test_bifrost_user_binding.py::test_scoped_key_provisions_exact_virtual_key_and_seals_it
       - tests/security/test_chat_model_choices.py::test_personal_model_is_the_exact_available_default_after_refresh

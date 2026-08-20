@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from boltrig.models.model_id_policy import exact_model_id
+from boltrig.models.model_id_policy import user_model_id
 
 from .model_proxy_ceiling_errors import (
     ModelCeilingViolation,
@@ -19,7 +19,9 @@ def enforce_model_ceiling(body: bytes, allowed_model: str) -> bytes:
     if type(body) is not bytes:
         raise TypeError("body must be exact bytes")
     try:
-        exact_model_id(allowed_model)
+        # The ceiling pins the exact admission STRING; whether that string is a
+        # provider alias was decided (and allowed for user bindings) upstream.
+        user_model_id(allowed_model)
     except ValueError:
         raise ValueError("allowed model must be a bounded non-empty string")
     if not body:

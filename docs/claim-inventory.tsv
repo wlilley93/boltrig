@@ -67,8 +67,8 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_s
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_config.py:107		lane and renders byte-identically to before.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_config.py:185		server or bearer env var was rewritten cannot match its receipt.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_config_argv.py:117		env var.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_config_policy.py:119		Validate the kernel MCP endpoint a kernel-tools cell connects to.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_config_policy.py:98		Validate the ABSTRACT ingress socket name the shared helper gets on argv.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_config_policy.py:101		Validate the ABSTRACT ingress socket name the shared helper gets on argv.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_config_policy.py:122		Validate the kernel MCP endpoint a kernel-tools cell connects to.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_config_toml.py:165		The ``[mcp_servers]`` section: empty, or exactly the kernel's own face.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_config_toml.py:19		so it is a fixed constant, never a per-run value.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_stdio_transport.py:51		Content-free diagnostic labels for a codex stderr tail.
@@ -238,7 +238,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_slots.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:195	assignment	The exact kernel-tools spec the adapter sends for ``assignment``.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_model_proxy_server.py:1	SO_PEERCRED	Per-cell loopback model proxy: authenticate a Codex cell's model calls by bearer and forward them to the shared gateway with the kernel-only key.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_runtime_config_argv.py:1	config.toml	Deterministic App Server argv pinning for security-critical Codex config.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_runtime_config_policy.py:72	codex_cell_boundary	Validate lexical paths; production must separately bind roots and reject symlinks.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_runtime_config_policy.py:75	codex_cell_boundary	Validate lexical paths; production must separately bind roots and reject symlinks.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:532	auth.command	Refuse a second live cell while config.toml is unprotected (G3).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_support.py:1	model_auth_helper	Support values for the trusted single-tenant read-only Codex proxy provider.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/model_gateway.py:1	model_router	Conversation-scoped model binding for an upstream gateway (Round Six, gap 3.2).
@@ -249,7 +249,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:109	error	A bounde
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/result.py:99	tokens_used	A clearly-marked degraded result (no SDK / no key / backend down, P9).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/runtime_resolver.py:57	pinned_policy	Resolve one runtime under either caller-routing or pinned profile policy.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/spawn.py:198	subagent	Resolve the runtime and run the turn, refunding the reservation on a raise.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/bifrost_user_admin.py:198	BIFROST_PROVIDERS	Ensure the provider row exists - native, or custom with an address.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/bifrost_user_admin.py:221	BIFROST_PROVIDERS	Ensure the provider row exists - native, or custom with an address.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/delegation.py:1	delegated	On-behalf-of identity decisions and OBO token exchange (US-IAM-03/05, SEC-03).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/password_reset_evidence.py:22	not_observed_in_bounded_tail	Project no recipient, provider, address, exception, or message content.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/provisioning.py:1	users	Just-in-time user provisioning and current-grant resolution (Round Four USR).
@@ -523,6 +523,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/conversation.py:81	ChatCon
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/errors.py:22	kernel.dispatch._validate	Verb params (or output) did not match the registered JSON Schema (SEC-21).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/grants.py:1	ticket.create	The grant primitive - least-privilege authority over verbs (P8, SEC-07).
 LOAD-BEARING	SUBJECT-REACHED	comment	boltrig/models/memory.py:38	status	are append-only and carry no key.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/model_id_policy.py:44	exact_model_id	Validate a model id a USER connected, where aliases are theirs to pick.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/provenance.py:78	ProvenanceStoreContract.resolve_entity_ref	Whether a value LOOKS like a kernel-issued reference.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/tenancy.py:111	tenant_id	A per-workspace membership (D3).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/tenancy.py:129	resolve_ai_key	A per-org / workspace / user AI-key configuration row ([2026] VJS-COUNTY 8 D5).
@@ -945,7 +946,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_admission
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_config.py:246		Derived from the record, so it cannot disagree with it.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_config_argv.py:115		Pin the kernel-tools MCP leaves too: a rewritten per-cell config cannot
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_config_argv.py:230		Refuse an argv whose auth.args names another cell.
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_config_policy.py:152		The MCP server pair is both-present or both-absent, never half-wired.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_config_policy.py:155		The MCP server pair is both-present or both-absent, never half-wired.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_config_toml.py:20		the named environment variable at spawn time - never in this file, never on
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_event_state.py:10		Detect native lifecycle drift;
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_event_state.py:69		Refuse root completion while any observed descendant work is still live.
@@ -1058,6 +1059,7 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/pump.py:631		Re-save a succeeded, sy
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:76		from (Phase 3, US-WFL-03).
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:87		a deterministic automation.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/reflection.py:123		failure must never fail the run - but a swallow at DEBUG made
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/result.py:139		output text, so it reads as a sentence, never as a code;
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/result.py:51		never at zero.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/routine_run.py:159		so an engine retry never emits duplicate completion notices.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/routine_run.py:176		Notification delivery is a side channel, never the authority for
@@ -1077,8 +1079,9 @@ ORDINARY	NO-SUBJECT	comment	boltrig/identity/auth.py:169		A missing/non-numeric 
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/auth.py:368		Unmapped / none / an unknown tier -> denied fail-closed (K-13),
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/auth.py:72		(HS*) algorithm are rejected outright - never inferred from the JWKS - so an
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/auth.py:78		request with a bogus kid must not amplify into an outbound IdP fetch per
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/bifrost_user_admin.py:269		"Bifrost refused the provider key" and cannot act on.
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/bifrost_user_binding.py:229		routing;
+ORDINARY	NO-SUBJECT	docstring	boltrig/identity/bifrost_user_admin.py:164		The gateway's own health verdict for one provider key, or None.
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/bifrost_user_admin.py:294		"Bifrost refused the provider key" and cannot act on.
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/bifrost_user_binding.py:238		routing;
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/bifrost_user_binding.py:45		: Bifrost - an id is an identifier, never an address or an instruction.
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/onboarding.py:36		but a missing marker is deliberately fail-closed in Worker: chat is not
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/password_reset_evidence.py:15		deliberately never called, so attributing it to provider failure would
@@ -1125,8 +1128,10 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/access_routes.py:465		active org.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/access_routes.py:571		denial leaves no invitation behind (fail-closed):
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/access_routes.py:644		Org-admin only, fail-closed + audited: rename / settings / toggle the
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/account_profile_routes.py:66		namespaced storage keys never surface under their raw names, so a
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/ai_key_proposal_routes.py:283		Explicit requester click;
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/ai_key_proposal_routes.py:90		staging and never claim that the key was applied.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/ai_key_proposal_routes.py:187		ValueError guards a legacy stored model id the current policy refuses:
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/ai_key_proposal_routes.py:188		activation of old rows must answer with a sentence, never a bare 500
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/ai_key_proposal_routes.py:318		Explicit requester click;
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/ai_key_proposal_routes.py:56		staging and never claim that the key was applied.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:110		request body can never seed kernel-trusted authority (principal_role/_scope
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/app.py:133		The one canonical kernel error body: a 403 is a denial, anything else is an error.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:138		A refusal that does not say what WOULD have been accepted cannot be acted
@@ -1242,8 +1247,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/agent_capabilities.py
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/agent_capabilities.py:76		workspace can only name their own (config/capability_scope.py refuses
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/bifrost_models.py:41		Re-project even an injected provider so extra upstream fields cannot escape.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/capability_review.py:140		and offer_candidates filters on, so the queue cannot advertise a
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/chat_model_choices.py:100		Resolve a row's modalities, letting a store declaration stand in.
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/chat_model_choices.py:238		Project exact model names, never endpoint topology or credentials.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/chat_model_choices.py:102		Resolve a row's modalities, letting a store declaration stand in.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/chat_model_choices.py:240		Project exact model names, never endpoint topology or credentials.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/eval_routes.py:34		creation;
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/integration_setup.py:94		principal.subject, never principal.on_behalf_of: on_behalf_of names the
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/platform_routes/integrations.py:266		Every OTHER member's personal connections, for offboarding.
