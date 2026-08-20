@@ -198,7 +198,14 @@ def build_trusted_codex_config(
         # Dev bifrost is unauth, so an empty key is acceptable; prefer the configured
         # value when present.
         upstream_key=settings.model_gateway_key or "",
-        http_client=httpx.AsyncClient(),
+        # httpx's DEFAULT timeout is 5s on every leg, and a self-hosted model's
+        # prompt prefill sits silent longer than that between stream chunks -
+        # measured 2026-08-20: every live turn died mid-stream at ~5.5s while
+        # the gateway completed the same call in 13s. The read leg matches the
+        # cell's own stream_idle_timeout_ms (300s); connect stays tight.
+        http_client=httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=30.0)
+        ),
     )
     # model_id is non-secret admission policy: the resolver refuses a permanent
     # profile whose endpoint differs from the supervised cell's composed model.
