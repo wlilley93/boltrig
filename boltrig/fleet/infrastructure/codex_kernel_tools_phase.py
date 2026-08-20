@@ -161,7 +161,8 @@ _log = logging.getLogger(__name__)
 def admissible_kernel_tool_names(
     verb_ids: tuple[str, ...], *, run_id: str | None
 ) -> tuple[str, ...] | None:
-    """The attestable tool set for this run, or None = run read-only instead.
+    """The tool set ``validated_kernel_tool_names`` admits under
+    ``MAX_KERNEL_TOOLS``, or None = the caller runs the read-only phase.
 
     None on BOTH inadmissible states, each logged with its own reason:
 
