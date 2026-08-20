@@ -176,16 +176,30 @@ function spokenDrive(
   };
 }
 
-/** A body oscillating because there is nothing to follow. A stand-in for
+/** A body BREATHING because there is nothing to follow. A stand-in for
  *  embodiment, not embodiment -- which is why it is one shape with two dials
- *  rather than four hand-tuned waveforms. */
+ *  rather than four hand-tuned waveforms.
+ *
+ *  ONE waveform on BOTH channels, in phase, resting near zero. The previous
+ *  form ran two sines at unrelated rates around a HIGH resting offset, which
+ *  had three visible consequences the author judged as "being zapped": the
+ *  voice channel idled at ~0.45 and continuously lit the surface filaments,
+ *  the bass channel continuously excited the interior warp field (a lateral
+ *  slosh that reads as rotating left and right), and the two rates beat
+ *  against each other. A single slow swell instead PULSES TOWARD THE VIEWER:
+ *  the shader's breath term scales the whole orb with uAudio.x/.y, so a
+ *  coherent rise on both reads as approach, and the shaped curve (settle,
+ *  swell, settle) keeps her at rest between breaths -- below the filament and
+ *  warp thresholds that made the old idle flicker. */
 function pulseDrive(tuning: FamiliarTuning, t: number): FamiliarDrive {
   const [depth, rate] = tuning.idlePulse;
   if (depth <= 0) return SILENT_DRIVE;
+  const swell = 0.5 - 0.5 * Math.cos(t * rate * Math.PI * 2);
+  const shaped = Math.pow(swell, 1.4);
   return {
     ...SILENT_DRIVE,
-    ax: clamp01(depth * (3 + Math.sin(t * rate * 6.4))),
-    ay: clamp01(depth * (2.7 + 1.3 * Math.sin(t * rate * 4.5 + 1.3))),
+    ax: clamp01(depth * 1.2 * shaped),
+    ay: clamp01(depth * 1.6 * shaped),
   };
 }
 

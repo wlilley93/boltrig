@@ -1,13 +1,13 @@
 {
   "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-  "captureManifestSha256": "cf2b1c9ad59223eaa6d170bbcf856a6d1740494e54d52826a96b5f9916e56f22",
+  "captureManifestSha256": "593d69ba3e1598fccd41ff8b1742991a00c5c2fba6dd34fcc4df3df22f18f849",
   "captureSourceBinding": {
-    "branch": "fix/provider-onboarding-one-press",
-    "digestAfterCapture": "0c96ece10f364367e4b96324aac94bc16626a7fb3602c88d0151c7050abb3485",
+    "branch": "feat/familiar-bodies-polish",
+    "digestAfterCapture": "44d2baacc81adee314b4d7fd4dd8de8f7a7a569c0e645a0cfdd1f4cfd067067d",
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "0c96ece10f364367e4b96324aac94bc16626a7fb3602c88d0151c7050abb3485",
+    "digestBeforeCapture": "44d2baacc81adee314b4d7fd4dd8de8f7a7a569c0e645a0cfdd1f4cfd067067d",
     "dirty": true,
-    "head": "dbd09ec9a20479c717923d83d6bc6e23fd16f34e",
+    "head": "b0dcbf11d51745b457178e1ba6ba52d2f88f6a56",
     "scope": [
       "apps/worker/src",
       "apps/worker/tests/visual"
@@ -132,23 +132,23 @@
       }
     },
     {
-      "changedPixelRatioGt16": 0.23805324074074075,
-      "changedPixelRatioGt32": 0.1667361111111111,
-      "changedPixelRatioGt8": 0.2600640432098765,
+      "changedPixelRatioGt16": 0.20908873456790122,
+      "changedPixelRatioGt32": 0.1339868827160494,
+      "changedPixelRatioGt8": 0.23868904320987655,
       "currentPath": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
-      "currentSha256": "7e33a98ebf5e5a0fc03e76f09502af17299dad83e03978c11e65eb77a3cbff0f",
+      "currentSha256": "732b3f53526f1fd15d7fcc2650ca14f9593d33a6c688b34ad320982ddcc97c92",
       "diffPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/call.png",
-      "diffSha256": "879e40fde871e08ca9e0736a6c6c1e266c3e8bd463a0da6dd694e4766a24ca95",
-      "exactChangedPixelRatio": 0.38378395061728393,
+      "diffSha256": "6bd14e11004899dea7f7e31ba73c37f63712278bffa1f2ae8d34720179f5aef6",
+      "exactChangedPixelRatio": 0.36406172839506173,
       "figmaNodeId": "17:2",
-      "meanAbsoluteChannelDelta": 10.123810442386832,
-      "psnrDb": 18.41149693556061,
-      "rootMeanSquareChannelDelta": 30.617190307658717,
+      "meanAbsoluteChannelDelta": 8.66837242798354,
+      "psnrDb": 18.97357058331234,
+      "rootMeanSquareChannelDelta": 28.69866212594117,
       "state": "call",
       "targetPath": "docs/design/evidence/2026-08-11-console-parity/figma/call__17-2.png",
       "targetSha256": "31b55e68eadb7f0a1d8767c9b7435d668b531f2ae38c915ea976bc893d67f45e",
       "triptychPath": "docs/design/evidence/2026-08-11-console-parity/current/diff/call__triptych.png",
-      "triptychSha256": "35216562d3a633d66045e185a3bc2275a5fb7bd9094747fb0b33a5c3366d27a7",
+      "triptychSha256": "dd534acb883c6d04b75cb20bf050b90f155128d9888362b3d03bec1439259927",
       "viewport": {
         "height": 900,
         "width": 1440

@@ -177,26 +177,46 @@ describe("familiarDrive by mode", () => {
     expect(pause.ax).toBeCloseTo(0, 3);
   });
 
-  it("stands still in standby and pulses when there is no voice to follow", () => {
+  it("stands still in standby and breathes when there is no voice to follow", () => {
     const idle = settle({ ...RESTING_STAGE_STATE, mode: "standby" }, familiarModeTuning("standby"), 5);
-    const working = settle({ ...RESTING_STAGE_STATE, mode: "working" }, familiarModeTuning("working"), 5);
+    // Working rate is 0.2 Hz: the crest of the breath sits at half the period,
+    // t = 2.5s. settle counts FRAMES at 30fps and its last step is (n-1)·DT,
+    // so 76 frames lands exactly on the crest.
+    const crest = settle({ ...RESTING_STAGE_STATE, mode: "working" }, familiarModeTuning("working"), 76);
     expect(idle.ax).toBe(0);
     expect(idle.attend).toBe(0);
-    expect(working.ax).toBeGreaterThan(0.2);
+    expect(crest.ax).toBeGreaterThan(0.15);
   });
 
-  it("reproduces the shipped working oscillator from two dials", () => {
-    // The oscillator was `0.45 + 0.15 sin(3.1t)` and `0.4 + 0.2 sin(2.2t + 1.3)`
-    // as literals. Turning them into depth-and-rate must not have moved the
-    // body: this is the preset that proves the whole table against memory.
+  it("breathes as ONE coherent swell toward the viewer, resting between breaths", () => {
+    // THE BUG THIS PINS. The old idle ran two sines at unrelated rates around a
+    // HIGH resting offset: the voice channel idled at ~0.45 (continuously
+    // lighting the surface filaments) and the bass channel continuously excited
+    // the interior warp, and the author's verdict was "it looks like it's being
+    // zapped ... it should pulse towards the user, not rotate left and right".
+    // The pinned properties are the fix: both channels rise IN PHASE from a
+    // near-zero rest, the crest stays below the filament-ignition region, and
+    // the cycle length is literally 1/rate.
     const tuning = familiarModeTuning("working");
-    for (const t of [0, 0.37, 1.2, 2.9]) {
-      const drive = familiarDrive(
-        { ...RESTING_STAGE_STATE, mode: "working" }, smoothers(), DT, t, tuning,
-      );
-      expect(drive.ax).toBeCloseTo(0.45 + 0.15 * Math.sin(t * 3.136), 2);
-      expect(drive.ay).toBeCloseTo(0.405 + 0.195 * Math.sin(t * 2.205 + 1.3), 2);
+    const at = (t: number) => familiarDrive(
+      { ...RESTING_STAGE_STATE, mode: "working" }, smoothers(), DT, t, tuning,
+    );
+    const rest = at(0);
+    expect(rest.ax).toBeLessThan(0.01);
+    expect(rest.ay).toBeLessThan(0.01);
+    const crest = at(2.5);
+    expect(crest.ax).toBeGreaterThan(0.15);
+    expect(crest.ax).toBeLessThanOrEqual(0.25);
+    expect(crest.ay).toBeGreaterThan(crest.ax);
+    // Coherence: the two channels are one waveform at two depths, so their
+    // ratio holds across the whole cycle instead of beating.
+    for (const t of [0.7, 1.4, 2.1, 3.4]) {
+      const drive = at(t);
+      expect(drive.ay).toBeCloseTo(drive.ax * (1.6 / 1.2), 5);
     }
+    // Period: one full breath returns to rest.
+    const nextRest = at(5);
+    expect(nextRest.ax).toBeLessThan(0.01);
   });
 
   it("falls back to a level-scaled oscillator when there is no spectrum", () => {
