@@ -58,6 +58,8 @@ export const JARVIS_ARRIVAL: JarvisTuning = {
   eye: [0.35, 1.8, 0.62, 9],
   drawLimb: [3, 3],
   linkLimb: [3, 3],
+  clump: [0, 2.6],
+  focus: [0, 0],
 };
 
 /**

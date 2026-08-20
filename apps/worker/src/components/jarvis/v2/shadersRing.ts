@@ -6,7 +6,7 @@
 // identity: "angular shapes mimicking computer circuitry", which is what
 // distinguishes Animal Logic's JARVIS from their deliberately organic Ultron.
 
-import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../../canvas/glslCommon";
+import { CLUMP_GLSL, FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../../canvas/glslCommon";
 
 /** Great circles of data. Six intersecting axes read as a sphere of wheels;
  *  three read as a hoop skirt, and a dozen turns the surface into a mesh. */
@@ -300,6 +300,10 @@ uniform float uEnergy;
 uniform int uGrid;
 uniform int uStride;
 uniform float uSize;
+// x how much a far-side chip swells, y how much it dims. Together they are a
+// fake depth of field: a defocused element covers more screen with less light,
+// and that trade is nearly all a viewer reads of real defocus.
+uniform vec2 uFocus;
 
 out vec2 vLocal;
 out float vFade;
@@ -307,6 +311,7 @@ out float vGlyph;
 ${FIELD_GLSL}
 ${PROJECT_GLSL}
 ${PULSE_GLSL}
+${CLUMP_GLSL}
 
 const vec2 CORNER[6] = vec2[6](
   vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(1.0, 1.0),
@@ -346,10 +351,26 @@ void main() {
   // The data in transit gets the circuitry: migrating particles carry brighter
   // shards than the resident interior does.
   vFade *= isMigrating(uv) ? 1.0 : 0.45;
+  vFade *= clumpOf(p);
   vFade *= 1.0 + 2.2 * pulse(p) + 0.35 * uSwell;
 
-  float size = uSize * (0.6 + 0.8 * hash(vec3(uv * 11.1, 9.0)));
-  vec2 offset = (dir * vLocal.x * 2.0 + perp * vLocal.y) * size;
+  // FILM DEBRIS IS NOT ONE STAMP. The reference chips vary in scale, in aspect
+  // and in set angle; a fleet of identical 2:1 quads reads as confetti. Size
+  // spreads wider than before, the aspect runs squat to slab, and each chip
+  // takes its own tilt off the flow direction -- velocity still leads, so the
+  // debris keeps reading as riding the field rather than sprayed at random.
+  float size = uSize * (0.45 + 1.15 * hash(vec3(uv * 11.1, 9.0)));
+  float chipAspect = mix(1.1, 3.0, hash(vec3(uv * 23.9, 4.0)));
+  float tilt = (hash(vec3(uv * 17.3, 8.0)) - 0.5) * 1.15;
+  float tc_ = cos(tilt);
+  float ts_ = sin(tilt);
+  dir = mat2(tc_, -ts_, ts_, tc_) * dir;
+  perp = vec2(-dir.y, dir.x);
+  // The far hemisphere falls out of focus: swollen and dimmed, never culled.
+  float behind = clamp(1.0 - depthOf(p), 0.0, 1.0);
+  size *= 1.0 + uFocus.x * behind;
+  vFade *= 1.0 - clamp(uFocus.y * behind, 0.0, 0.9);
+  vec2 offset = (dir * vLocal.x * chipAspect + perp * vLocal.y) * size;
   offset.x /= max(uAspect, 0.001);
   gl_Position = vec4(head.xy + offset, 0.0, 1.0);
 }`;

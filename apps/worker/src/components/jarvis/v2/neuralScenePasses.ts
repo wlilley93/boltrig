@@ -120,6 +120,7 @@ d: Drive, tuning: JarvisTuning, shared: FloatUniforms,
     uLinkRange: tuning.linkRange,
     uLimb: tuning.linkLimb,
     uLinkBow: tuning.linkBow,
+    uClump: tuning.clump,
   }, { uState: 0, uGrid: GRID });
   gl.drawArrays(gl.LINES, 0, PARTICLES * LINK_SEGMENTS * 2);
 }
@@ -150,6 +151,7 @@ d: Drive, tuning: JarvisTuning, shared: FloatUniforms,
       uStreak: ramp(outer ? tuning.outerStreak : tuning.streak, d.energy),
       uGain: ramp(outer ? tuning.outerGain : tuning.drawGain, d.energy),
       uLimb: outer ? tuning.outerLimb : tuning.drawLimb,
+      uClump: tuning.clump,
       // THE FRINGE FLOOR IS PER LAYER, and this is the third pass to be bitten
       // by it not being.
       //
@@ -185,6 +187,8 @@ d: Drive, tuning: JarvisTuning, shared: FloatUniforms,
     uSize: tuning.shardSize,
     uGain: ramp(tuning.shardGain, d.energy),
     uLimb: tuning.drawLimb,
+    uClump: tuning.clump,
+    uFocus: tuning.focus,
   }, { uState: 0, uGrid: GRID, uStride: tuning.shardStride });
   gl.drawArrays(gl.TRIANGLES, 0, shardCount(tuning.shardStride) * 6);
 }

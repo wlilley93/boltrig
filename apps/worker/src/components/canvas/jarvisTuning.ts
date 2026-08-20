@@ -193,6 +193,17 @@ export interface JarvisTuning {
   outerPace: number;
   starburst: number;
   /**
+   * Debris clustering: x blends between the uniform body and one with clumps
+   * and voids, y is the cluster scale. Zero ships: the film's sphere is
+   * clustered, the product's default body stays the even one it always was.
+   */
+  clump: readonly [strength: number, scale: number];
+  /**
+   * Fake depth of field on the circuit shards: x how much a far-side chip
+   * swells, y how much it dims. Zero ships.
+   */
+  focus: readonly [farSwell: number, farDim: number];
+  /**
    * The eye, after familiar.frag's heart -- pupil, iris, and the lens ring.
    *
    * Two stacked gaussians were already here and they made a bright BLOB. What
@@ -249,6 +260,8 @@ export const JARVIS_TUNING: JarvisTuning = {
   outerLimb: [1.9, 2.3],
   outerPace: -0.55,
   starburst: 1,
+  clump: [0, 2.6],
+  focus: [0, 0],
   eye: [1, 1.5, 0.34, 15],
   drawLimb: [3, 3],
   linkLimb: [3, 3],
