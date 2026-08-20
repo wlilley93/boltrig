@@ -1,13 +1,13 @@
 {
   "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-  "captureManifestSha256": "6f999977188fe115669b0701a695843dd21e55542bd4e8fe23f4db6214f15063",
+  "captureManifestSha256": "1e03a8758bcbd6cbf660ca87e1fff842a0caf981a0be5db21b9600e1c6bfb388",
   "captureSourceBinding": {
     "branch": "feat/ultron-membrane",
-    "digestAfterCapture": "9690292bc5d9eae3c5d7f3ff86d03fc22fb1196905a59a21c0b529f0f0dcd2fe",
+    "digestAfterCapture": "df947ec981b9abb81f9689af9555d632baa0ce3b103547e4187c5e01fe649953",
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "9690292bc5d9eae3c5d7f3ff86d03fc22fb1196905a59a21c0b529f0f0dcd2fe",
+    "digestBeforeCapture": "df947ec981b9abb81f9689af9555d632baa0ce3b103547e4187c5e01fe649953",
     "dirty": true,
-    "head": "7d110d8ae4c37de0b41b7fdc8c96ce5be636860f",
+    "head": "87151d97640bf10b4ac9f3f5a9cefc16e614a26f",
     "scope": [
       "apps/worker/src",
       "apps/worker/tests/visual"

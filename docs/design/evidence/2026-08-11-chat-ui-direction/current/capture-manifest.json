@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-20T14:14:51.513Z",
+  "capturedAt": "2026-08-20T14:39:29.182Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "9690292bc5d9eae3c5d7f3ff86d03fc22fb1196905a59a21c0b529f0f0dcd2fe",
-    "digestAfterCapture": "9690292bc5d9eae3c5d7f3ff86d03fc22fb1196905a59a21c0b529f0f0dcd2fe",
+    "digestBeforeCapture": "df947ec981b9abb81f9689af9555d632baa0ce3b103547e4187c5e01fe649953",
+    "digestAfterCapture": "df947ec981b9abb81f9689af9555d632baa0ce3b103547e4187c5e01fe649953",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/ultron-membrane",
-    "head": "7d110d8ae4c37de0b41b7fdc8c96ce5be636860f",
+    "head": "87151d97640bf10b4ac9f3f5a9cefc16e614a26f",
     "dirty": true
   },
   "runner": {
