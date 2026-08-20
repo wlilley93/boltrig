@@ -3,11 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-<<<<<<< HEAD
-  "capturedAt": "2026-08-20T15:38:00.402Z",
-=======
-  "capturedAt": "2026-08-20T14:39:25.045Z",
->>>>>>> origin/main
+  "capturedAt": "2026-08-20T18:38:25.290Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -20,27 +16,19 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-<<<<<<< HEAD
-    "digestBeforeCapture": "5626696e8be8b5adf819dd662ad8df56a12059ba9a14099ef2edfc429c5f19d7",
-    "digestAfterCapture": "5626696e8be8b5adf819dd662ad8df56a12059ba9a14099ef2edfc429c5f19d7",
+    "digestBeforeCapture": "c56cc3b575d161a696ba1b70aba6c0291f0962431c5c87af7935ef0226139802",
+    "digestAfterCapture": "c56cc3b575d161a696ba1b70aba6c0291f0962431c5c87af7935ef0226139802",
     "sourceUnchangedDuringCapture": true,
-    "branch": "codex/flat-named-agent-peers",
-    "head": "ba4482f4534883ff9bdb1c73f188871f2acd9bb7",
-=======
-    "digestBeforeCapture": "df947ec981b9abb81f9689af9555d632baa0ce3b103547e4187c5e01fe649953",
-    "digestAfterCapture": "df947ec981b9abb81f9689af9555d632baa0ce3b103547e4187c5e01fe649953",
-    "sourceUnchangedDuringCapture": true,
-    "branch": "feat/ultron-membrane",
-    "head": "87151d97640bf10b4ac9f3f5a9cefc16e614a26f",
->>>>>>> origin/main
-    "dirty": true
+    "branch": "pr321-update",
+    "head": "ec1a9a95bb36faef7bff23959ac29d6169f3d753",
+    "dirty": false
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
-    "node": "v26.7.0",
+    "node": "v24.15.0",
     "browser": "chromium",
     "browserVersion": "151.0.7922.34",
-    "browserExecutable": "/Users/williamlilley/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
     "origin": "http://localhost:1420",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
@@ -53,7 +41,7 @@
       "hash": "#/chat",
       "settledSelector": "html[data-visual-ready=\"new-chat\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
-      "sha256": "5d8752d03f55eb513ca8faedc1c7d23c8df7b7066ee604061f36fda3f1311a2d",
+      "sha256": "4ccfda1826322a822c94dbc5c946cc3ea64ba24e21096c939f14116b5bffaffb",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -100,7 +88,7 @@
       "hash": "#/chat/run-thread",
       "settledSelector": "html[data-visual-ready=\"chat-run\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
-      "sha256": "2f13be79117e73cfcb0c0d05bae2bbb57510138041c1fe76b4f14a9434025386",
+      "sha256": "1cdfba9f3b32158fc5d980fffc8b29fc10c2aac06b328b994f9c7f4607454d32",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -151,7 +139,7 @@
       "hash": "#/agents",
       "settledSelector": "html[data-visual-ready=\"agents\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/agents.png",
-      "sha256": "3e0b0d5ea13f11c55bfdffab68e75eaa92b0ed36aa5560dc35efa0eeb642a04c",
+      "sha256": "1a714bf2ec1fcb9f2c8fe5f158349b3288761288da5196f54e9c743c967acb5b",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -193,7 +181,7 @@
       "hash": "#/integrations",
       "settledSelector": "html[data-visual-ready=\"plugins\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
-      "sha256": "296f4cace29c1a8d37fa0da45a8ddae525037bc0dd8988be87ac62e2f64939a8",
+      "sha256": "82f14d3e237d42b637d908455087d1871f0bbd0f711e207be91a4ed8e792ce32",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -209,7 +197,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -235,7 +223,7 @@
       "hash": "#/chat/run-thread",
       "settledSelector": "html[data-visual-ready=\"command-palette\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png",
-      "sha256": "e6773c28a37a2ddd70d34b7b2b0087bd32f72cca31192204fd03fbd356e4f016",
+      "sha256": "81e9cb386d907768536f029c11a0380303afbff38bfd20c1c2373c93412d397d",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -251,7 +239,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -286,7 +274,7 @@
       "hash": "#/chat/voice-thread",
       "settledSelector": "html[data-visual-ready=\"call\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
-      "sha256": "469cffefe32d37ead1881bd5374bc39a87f3039d2d7b3543be493a93cfec6e9a",
+      "sha256": "732b3f53526f1fd15d7fcc2650ca14f9593d33a6c688b34ad320982ddcc97c92",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -302,7 +290,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 5,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -339,7 +327,7 @@
       "hash": "#/settings/you",
       "settledSelector": "html[data-visual-ready=\"settings-you\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png",
-      "sha256": "c2341452ad3605712867049db424856bfbcfe89ca378f1ec0503e4c3b2ad11ea",
+      "sha256": "26f26522462797baf4ced4394057308efdb1b9f92c935921d289a75b95b5e2db",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -355,7 +343,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
