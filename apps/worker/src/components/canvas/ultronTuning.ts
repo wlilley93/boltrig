@@ -124,6 +124,40 @@ export interface UltronTuning {
   veinLimb: LimbMix;
   crackLimb: LimbMix;
   facetLimb: LimbMix;
+  /**
+   * The azimuthal anchoring pull, dissolving the vein-density combs.
+   *
+   * The radial spring fixes only |p|; nothing restored a particle's BEARING, so
+   * the on-shell tangential flow (compressible on the sphere) random-walked the
+   * density into bright vertically-striated knots that survived facets=0 and
+   * petal=0 -- they were particle mass, not a pass. Each particle now feels a
+   * gentle tangential pull toward its own hashed bearing; the curl still swirls
+   * everything locally, but coverage is uniform at equilibrium. Zero is the
+   * pre-dial body, byte for byte.
+   */
+  homePull: number;
+  /**
+   * Pre-knee highlight compression at the composite, 0 = identity.
+   *
+   * Wherever thousands of additive streaks stack, the filmic knee saturates and
+   * the hue is gone -- a knot reads as a white slab. Reinhard on the linear
+   * scene keeps dense regions blue and graded while thin filaments pass nearly
+   * untouched.
+   */
+  knee: number;
+  /** The membrane's brightness: base, and what a voice adds. */
+  membraneGain: readonly [base: number, perVoice: number];
+  /**
+   * The analytic shell itself: radius as a scale on the body radius, the
+   * silhouette feather, and the interior veil.
+   *
+   * The volumetric surface the reference has and line passes cannot make: bright
+   * at the limb by chord length, faint through the middle, silhouette displaced
+   * by the same cloudy() lobes that shape the particle mass. The veil is the
+   * through-the-body glow -- too high and he is fog again, which is the failure
+   * this whole program exists to end, so it starts low.
+   */
+  membrane: readonly [radius: number, feather: number, veil: number];
 }
 
 export const ULTRON_TUNING: UltronTuning = {
@@ -138,9 +172,9 @@ export const ULTRON_TUNING: UltronTuning = {
   swirl: [0.20, 0.32],
   veinGain: [1.03, 0.86],
   veinStreak: [0.10, 0.02],
-  crackGain: [0.86, 0.66],
+  crackGain: [1.05, 0.78],
   crackRange: 0.19,
-  facetGain: [0.84, 0.61],
+  facetGain: [0.98, 0.72],
   facetSize: 0.016,
   core: [0.82, 1.0],
   eye: [1, 1, 0, 60],
@@ -151,8 +185,12 @@ export const ULTRON_TUNING: UltronTuning = {
   irisRadius: [0.04, 0.19],
   irisFil: [0.8, 0.004],
   irisFlow: [0.16, 0.7],
-  petal: 0.3,
+  petal: 0.0,
   cloud: [0.34, 0.85],
+  homePull: 1.1,
+  knee: 0.75,
+  membraneGain: [0.5, 0.35],
+  membrane: [0.98, 0.10, 0.12],
   veinLimb: [0.26, 1.35],
   crackLimb: [0.22, 1.0],
   facetLimb: [0.22, 1.05],
