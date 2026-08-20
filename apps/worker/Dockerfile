@@ -30,7 +30,7 @@ COPY docs/design/imported/tokens/colors.css docs/design/imported/tokens/spacing.
 RUN cd apps/worker && pnpm run build
 
 FROM nginx:1.30.4-alpine@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46 AS runtime
-RUN apk add --no-cache c-ares=1.34.8-r0 expat=2.8.2-r0 libexpat=2.8.2-r0
+RUN apk add --no-cache c-ares=1.34.8-r0 expat=2.8.3-r0 libexpat=2.8.3-r0
 COPY apps/worker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=worker-build /workspace/apps/worker/dist /usr/share/nginx/html
 
