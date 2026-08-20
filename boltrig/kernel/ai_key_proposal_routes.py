@@ -9,49 +9,15 @@ from typing import Any
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
+from boltrig.kernel.ai_key_proposal_views import (
+    proposal_audit,
+    proposal_params,
+    proposal_view,
+    state_reason,
+)
 from boltrig.kernel.control_routes import dispatch_control_route
 from boltrig.kernel.invoke_finalization import invoke_approval_state
 from boltrig.models import AiKeySecretProposal, utcnow
-
-
-def proposal_params(proposal: AiKeySecretProposal) -> dict:
-    return {
-        "level": proposal.level,
-        "scope_id": proposal.scope_id,
-        "provider": proposal.provider,
-        "model": proposal.model,
-        "modality": proposal.modality,
-        **({"base_url": proposal.base_url} if proposal.base_url is not None else {}),
-        "proposal_id": proposal.id,
-        "secret_digest": proposal.secret_digest,
-    }
-
-
-def proposal_view(proposal: AiKeySecretProposal, status: str) -> dict:
-    return {
-        "id": proposal.id,
-        "level": proposal.level,
-        "scope_id": proposal.scope_id,
-        "provider": proposal.provider,
-        "model": proposal.model,
-        "modality": proposal.modality,
-        "base_url": proposal.base_url,
-        "status": status,
-        "created_at": proposal.created_at.isoformat(),
-        "expires_at": proposal.expires_at.isoformat(),
-    }
-
-
-def proposal_audit(proposal: AiKeySecretProposal) -> dict:
-    return {
-        "proposal_id": proposal.id,
-        "level": proposal.level,
-        "scope_id": proposal.scope_id,
-        "provider": proposal.provider,
-        "model": proposal.model,
-        "modality": proposal.modality,
-        "base_url": proposal.base_url,
-    }
 
 
 def _owned_by(proposal, principal) -> bool:
@@ -131,7 +97,10 @@ async def _finalize_approved(
         return JSONResponse(
             {
                 "status": "invalidated",
-                "reason": "caller or governed resource changed after approval",
+                "reason": (
+                    "Something changed while this was being approved. "
+                    "Submit the provider again."
+                ),
             },
             status_code=409,
         )
@@ -182,7 +151,13 @@ async def activate_ai_key_config(kernel, principal, level, scope_id, modality):
     )
     if config is None:
         return JSONResponse(
-            {"status": "unavailable", "reason": "approved AI configuration is unavailable"},
+            {
+                "status": "unavailable",
+                "reason": (
+                    "The saved provider details could not be found. "
+                    "Submit the provider again."
+                ),
+            },
             status_code=503,
         )
     resolution = AiKeyResolution(
@@ -197,14 +172,22 @@ async def activate_ai_key_config(kernel, principal, level, scope_id, modality):
     material = await load_ai_key_material(kernel.store, principal.tenant_id, resolution)
     if material is None:
         return JSONResponse(
-            {"status": "unavailable", "reason": "approved provider credential is unavailable"},
+            {
+                "status": "unavailable",
+                "reason": (
+                    "The saved key could not be read. Submit the provider again."
+                ),
+            },
             status_code=503,
         )
     try:
         await BifrostUserGateway().ensure(
             kernel.store, principal.tenant_id, resolution, material
         )
-    except BifrostUserBindingUnavailable as error:
+    # ValueError guards a legacy stored model id the current policy refuses:
+    # activation of old rows must answer with a sentence, never a bare 500
+    # (measured 2026-08-20: an approved ':latest' row crashed this route).
+    except (BifrostUserBindingUnavailable, ValueError) as error:
         return JSONResponse(
             {"status": "unavailable", "reason": str(error)},
             status_code=503,
@@ -253,24 +236,76 @@ def _register_proposal_read_routes(deps: _RouteDeps) -> None:
         return JSONResponse({"status": state, "proposal": proposal_view(proposal, state)})
 
 
+async def finalize_owned_proposal(
+    kernel,
+    principal,
+    proposal_id: str,
+    audit,
+    authorize,
+    admin_roles,
+    workspace_admin_roles,
+) -> JSONResponse:
+    """Finalize the caller's proposal if approved, else answer with a sentence."""
+
+    proposal = await _load_owned_proposal(kernel, principal, proposal_id)
+    if proposal is None:
+        return _not_found()
+    state = await proposal_state(kernel, principal, proposal)
+    if state != "approved":
+        return JSONResponse(
+            {
+                "status": state,
+                "reason": state_reason(state),
+                "proposal": proposal_view(proposal, state),
+            },
+            status_code=202 if state == "pending" else 409,
+        )
+    return await _finalize_approved(
+        kernel,
+        principal,
+        proposal,
+        audit,
+        authorize,
+        admin_roles,
+        workspace_admin_roles,
+    )
+
+
+async def approve_owned_proposal(kernel, principal, proposal) -> JSONResponse | None:
+    """Answer the caller's own pending approval; None means it went through.
+
+    The requester approving their own submission carries no oversight, so the
+    HITL layer's own policy decides whether that answer is acceptable; a
+    refusal comes back as a response for the caller rather than an exception.
+    """
+
+    from boltrig.kernel.hitl_http import respond_to_hitl
+
+    try:
+        await respond_to_hitl(
+            kernel,
+            principal,
+            proposal.approval_id,
+            "approve",
+            "Approved during provider setup",
+        )
+    except HTTPException as error:
+        return JSONResponse(
+            {"status": "denied", "reason": str(error.detail)},
+            status_code=error.status_code,
+        )
+    return None
+
+
 def _register_finalize_route(deps: _RouteDeps) -> None:
     @deps.app.post("/v1/ai-keys/proposals/{proposal_id}/finalize")
     async def finalize_ai_key_proposal(
         proposal_id: str, k=deps.kernel, p=deps.principal
     ) -> JSONResponse:
-        proposal = await _load_owned_proposal(k, p, proposal_id)
-        if proposal is None:
-            return _not_found()
-        state = await proposal_state(k, p, proposal)
-        if state != "approved":
-            return JSONResponse(
-                {"status": state, "proposal": proposal_view(proposal, state)},
-                status_code=202 if state == "pending" else 409,
-            )
-        return await _finalize_approved(
+        return await finalize_owned_proposal(
             k,
             p,
-            proposal,
+            proposal_id,
             deps.audit,
             deps.authorize,
             deps.admin_roles,
@@ -290,34 +325,13 @@ def _register_approve_route(deps: _RouteDeps) -> None:
             return _not_found()
         state = await proposal_state(k, p, proposal)
         if state == "pending":
-            from boltrig.kernel.hitl_http import respond_to_hitl
-
-            try:
-                await respond_to_hitl(
-                    k,
-                    p,
-                    proposal.approval_id,
-                    "approve",
-                    "Approved during provider setup",
-                )
-            except HTTPException as error:
-                return JSONResponse(
-                    {"status": "denied", "reason": str(error.detail)},
-                    status_code=error.status_code,
-                )
-            proposal = await _load_owned_proposal(k, p, proposal_id)
-            if proposal is None:
-                return _not_found()
-            state = await proposal_state(k, p, proposal)
-        if state != "approved":
-            return JSONResponse(
-                {"status": state, "proposal": proposal_view(proposal, state)},
-                status_code=409,
-            )
-        return await _finalize_approved(
+            refused = await approve_owned_proposal(k, p, proposal)
+            if refused is not None:
+                return refused
+        return await finalize_owned_proposal(
             k,
             p,
-            proposal,
+            proposal_id,
             deps.audit,
             deps.authorize,
             deps.admin_roles,
@@ -368,8 +382,11 @@ def _not_found():
 
 __all__ = [
     "activate_ai_key_config",
+    "approve_owned_proposal",
+    "finalize_owned_proposal",
     "proposal_audit",
     "proposal_params",
     "proposal_view",
     "register_ai_key_proposal_routes",
+    "state_reason",
 ]
