@@ -74,21 +74,28 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
   // simultaneous motion than any other precisely because there is nothing else
   // happening to look at. The rings turn slowest here and take longest to come and
   // go, so the silhouette changes over twenty seconds rather than five.
+  // The bases here were once roughly half of thinking's, on the reasoning that
+  // idle is quiet. Measured (render harness, 2026-08-20): centre value 0.079
+  // against speaking's 0.42 -- an 80% drop reads as SWITCHED OFF, and the
+  // author's verdict on the preview was exactly that. Quiet is the MOTION
+  // dials (spin, flow, pace, reverb), which stay slow; the light holds near
+  // three quarters of the settled look so the globe -- limb, rings, interior
+  // -- stays legible at rest.
   standby: {
     swirl: [0.05, 0],
-    ringGain: [0.58, 0.2],
+    ringGain: [0.74, 0.2],
     ringSpin: [0.008, 0.003],
-    ringLife: 0.028,
-    ringArc: [1.15, 0.74],
-    ringWidth: 0.125,
-    irisGain: [0.5, 0.2],
+    ringLife: 0.034,
+    ringArc: [1.2, 0.76],
+    ringWidth: 0.135,
+    irisGain: [0.72, 0.2],
     irisFlow: [0.05, 0.45],
-    glyphGain: [0.16, 0.1],
-    glyphDensity: [0.42, 0.62],
-    outerGain: [0.62, 0.24],
+    glyphGain: [0.26, 0.1],
+    glyphDensity: [0.56, 0.62],
+    outerGain: [0.95, 0.24],
     outerPace: -0.72,
-    core: [0.55, 0.3],
-    shardGain: [0.42, 0.16],
+    core: [0.78, 0.3],
+    shardGain: [0.66, 0.16],
     // A slow, wide swell rather than a ring: the front barely outruns the body, so
     // an idle pulse reads as the whole thing breathing.
     reverb: [0.85, 0.42, 0.5, 1.3],

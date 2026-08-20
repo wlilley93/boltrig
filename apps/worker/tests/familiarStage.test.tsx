@@ -360,6 +360,13 @@ describe("FamiliarWebGLRenderer lifecycle", () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     const dateNow = vi.spyOn(Date, "now")
       .mockReturnValue(new Date(2026, 7, 11, 15, 0, 0).getTime());
+    // PIN THE WANDER. uAttention is max(wander, drive), and the unseeded wander
+    // has a 25% branch that rolls attention up to 1.0 — above listening's
+    // deterministic drive (~0.84), so the listening-beats-standby comparison
+    // below failed whenever standby drew that mood (first seen on CI
+    // 2026-08-20). 0.7 selects the calm branch for every read(), so all four
+    // modes share one wander and the assertions compare only the drive.
+    const dice = vi.spyOn(Math, "random").mockReturnValue(0.7);
 
     const read = (mode: FamiliarStageState["mode"], micLevel = 0.8) => {
       const values = new Map<string, number>();
@@ -426,6 +433,7 @@ describe("FamiliarWebGLRenderer lifecycle", () => {
     expect(failed.get("uIrritation")).toBe(0);
     expect(failed.get("uGaze")!).toBeLessThan(0.3);
 
+    dice.mockRestore();
     dateNow.mockRestore();
   });
 

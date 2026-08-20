@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-20T10:34:18.915Z",
+  "capturedAt": "2026-08-20T13:11:32.573Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "0c96ece10f364367e4b96324aac94bc16626a7fb3602c88d0151c7050abb3485",
-    "digestAfterCapture": "0c96ece10f364367e4b96324aac94bc16626a7fb3602c88d0151c7050abb3485",
+    "digestBeforeCapture": "44d2baacc81adee314b4d7fd4dd8de8f7a7a569c0e645a0cfdd1f4cfd067067d",
+    "digestAfterCapture": "44d2baacc81adee314b4d7fd4dd8de8f7a7a569c0e645a0cfdd1f4cfd067067d",
     "sourceUnchangedDuringCapture": true,
-    "branch": "fix/provider-onboarding-one-press",
-    "head": "dbd09ec9a20479c717923d83d6bc6e23fd16f34e",
+    "branch": "feat/familiar-bodies-polish",
+    "head": "b0dcbf11d51745b457178e1ba6ba52d2f88f6a56",
     "dirty": true
   },
   "runner": {
@@ -56,7 +56,7 @@
         "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
