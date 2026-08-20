@@ -160,6 +160,36 @@ function benchPresets(): Plugin {
             if (!bodies.includes(bodyName) || !slots.includes(slot)) {
               return reply(400, { error: "unknown body or slot" });
             }
+            // A TRANSITION take: `to` names the destination and `tracks` carry
+            // the recorded dial journeys, keyed "body.from->to" and versioned
+            // like a state, so choreography accumulates instead of overwriting.
+            const to = String((sent as { to?: unknown }).to ?? "");
+            if (to !== "") {
+              if (!slots.includes(to) || to === "baseline" || slot === "baseline" || to === slot) {
+                return reply(400, { error: "unknown destination" });
+              }
+              const tracks = (sent as { tracks?: unknown }).tracks;
+              if (typeof tracks !== "object" || tracks === null) {
+                return reply(400, { error: "no tracks" });
+              }
+              const transitStore = fs.existsSync(PRESETS)
+                ? JSON.parse(fs.readFileSync(PRESETS, "utf8")) as Record<string, unknown>
+                : {};
+              const transitKey = `${bodyName}.${slot}->${to}`;
+              const take: Record<string, unknown> = {
+                tracks,
+                duration: Number((sent as { duration?: unknown }).duration) || 0,
+                savedAt: new Date().toISOString(),
+              };
+              if (typeof sent.label === "string" && sent.label.trim() !== "") {
+                take.label = sent.label.trim().slice(0, 120);
+              }
+              const transitEntry = asVersions(transitStore[transitKey]);
+              transitEntry.versions.push(take);
+              transitStore[transitKey] = transitEntry;
+              fs.writeFileSync(PRESETS, `${JSON.stringify(transitStore, null, 2)}\n`);
+              return reply(200, { path: "tests/visual/presets.json", versions: transitEntry.versions.length });
+            }
             if (typeof sent.tuning !== "object" || sent.tuning === null) {
               return reply(400, { error: "no tuning" });
             }

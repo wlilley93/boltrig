@@ -149,6 +149,16 @@
       #states button .sbadge { font-size: 9px; color: #ffb060; margin-left: 6px; font-variant-numeric: tabular-nums; }
       #states button.on .sbadge { color: #0b0b0f; }
       #abHold:active { color: #0b0b0f; background: #6ee7a8; border-color: #6ee7a8; }
+      #rec { width: 34px; height: 30px; border-radius: 15px; color: #ff6a4a; font-size: 13px; }
+      #rec.armed { background: #2a1a12; border-color: #ffb060; color: #ffb060; }
+      #rec.live { background: #ff6a4a; border-color: #ff6a4a; color: #0b0b0f; animation: recpulse 1s infinite; }
+      @keyframes recpulse { 50% { opacity: .55; } }
+      #transTo, #transChoose { width: auto; height: 30px; border-radius: 15px; font-size: 11px; }
+      #transSave { width: auto; height: 30px; border-radius: 15px; font-size: 11px; padding: 0 12px; }
+      #transLoop { width: 34px; height: 30px; border-radius: 15px; }
+      #transLoop.on { color: #0b0b0f; background: #6ee7a8; border-color: #6ee7a8; }
+      #transStatus { color: #74747e; text-transform: none; letter-spacing: normal; }
+      #states button.legal .sbadge::after { content: " ⇢"; color: #6ee7a8; }
       /* THE SETTINGS MODAL: voice, capture and export utilities off the rail,
          so the rail is nothing but the selected channel's effects. */
       #modal {
@@ -326,6 +336,13 @@
       <span class="sep"></span>
       <span class="tlabel">Emotion</span>
       <div id="emotions"></div>
+      <span class="sep"></span>
+      <button id="rec" type="button" title="Record a transition take — arm, move dials, click again to stop">●</button>
+      <select id="transTo" style="display:none"></select>
+      <button id="transSave" type="button" style="display:none">Save transition</button>
+      <button id="transLoop" type="button" title="Loop a transition; dials stay live">⟳</button>
+      <select id="transChoose" style="display:none"></select>
+      <span id="transStatus" class="tlabel"></span>
     </div>
     <div id="mixer"></div>
     <div id="modal">

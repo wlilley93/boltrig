@@ -127,6 +127,8 @@ const LEGEND: Record<string, readonly string[]> = {
   shardGain: ["shard brightness", "×voice"],
   shardSize: ["shard size"],
   shardStride: ["1 in N particles"],
+  clump: ["strength", "cluster scale"],
+  focus: ["far swell", "far dim"],
   // ---- The eye ------------------------------------------------------------
   core: ["heart brightness", "×voice"],
   eye: ["pupil", "iris aura", "lens ring radius", "aura width"],
@@ -184,6 +186,8 @@ const LEGEND: Record<string, readonly string[]> = {
  * exact look the arc gating exists to break, and unreachable from the panel.
  */
 const RANGE_AT: Record<string, [number, number, number]> = {
+  "clump:1": [0.4, 8, 0.05],
+  "focus:0": [0, 2, 0.01],
   // Fractional on purpose: an integer dial jumped, and easing between modes
   // stepped through the counts in between instead of gliding.
   "ringArc:0": [0.25, 9, 0.05],
@@ -209,6 +213,8 @@ const RANGE: Record<string, [number, number, number]> = {
   shardSize: [0.002, 0.06, 0.001],
   facetSize: [0.002, 0.06, 0.001],
   shardStride: [1, 64, 1],
+  clump: [0, 1, 0.005],
+  focus: [0, 1, 0.005],
   petal: [0, 1, 0.01],
   cloud: [0, 1.2, 0.02],
   // Down to a standstill, because the complaint was that it is far too fast and
@@ -517,6 +523,8 @@ function paintStates(): void {
   for (const button of Array.from($("states").children) as HTMLElement[]) {
     const at = button.dataset.state as Slot;
     button.classList.toggle("on", at === slot);
+    button.classList.toggle("legal",
+      at !== slot && (history[`${body}.${slot}->${at}`]?.versions.length ?? 0) > 0);
     const badge = button.querySelector(".sbadge");
     if (badge) {
       const off = at === slot
@@ -578,8 +586,13 @@ function mount(): void {
   for (const id of Object.keys(sliderDom)) delete sliderDom[id];
   lfos = savedLfos(slotKey(body, slot));
   loadBaseline();
+  loadDraft();
   buildControls();
   buildMixer();
+  paintTransTo();
+  paintTransChoose();
+  paintRec();
+  transStatus(draft ? `draft: ${Object.keys(draft.tracks).length} track(s) from ${draft.from}` : "");
   paintHistory();
   paintDrift();
   push();
@@ -749,6 +762,7 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
     "outerShell", "outerGain", "outerStreak", "outerLimb", "outerPace",
   ] },
   { title: "5 · Circuit shards", fields: ["shardGain", "shardSize", "shardStride"] },
+  { title: "5 · Debris — clumping and depth", fields: ["clump", "focus"] },
   { title: "5 · Crystal facets", fields: [
     "facetGain", "facetSize", "facetSpin", "facetLimb",
   ] },
@@ -830,6 +844,8 @@ const TITLES: Record<string, string> = {
   shardGain: "How bright the circuit shards are",
   shardSize: "How big a shard is",
   shardStride: "How many particles become shards",
+  clump: "How the debris clusters into clumps and voids",
+  focus: "How the far hemisphere falls out of focus",
   facetGain: "How bright the crystal facets are",
   facetSize: "How big a facet is",
   facetSpin: "How fast the crystal turns",
@@ -1154,12 +1170,33 @@ function clipsFor(which: string): string[] {
 }
 
 function assign(key: string, value: number | number[]): void {
+  // The recorder taps every dial here — rail sliders and desk faders alike.
+  if (recState === "armed") {
+    recClock = performance.now();
+    recState = "recording";
+    transStatus("recording…");
+    paintRec();
+  }
+  if (recState === "recording" || recState === "overdub") {
+    const now = performance.now();
+    const at = recState === "recording"
+      ? now - recClock
+      : (draft ? ((now - recClock) % draft.duration) / draft.duration : 0);
+    if (!takeTouched.has(key)) {
+      takeTouched.add(key);
+      const prev = (tuning as unknown as Record<string, number | number[]>)[key];
+      // The dial's resting value holds from the start of the take until the
+      // first movement — without this seed the journey would begin mid-air.
+      takeTracks[key] = [{ t: recState === "recording" ? 0 : Math.max(0, at - 0.001), v: clone({ v: prev }).v }];
+    }
+    takeTracks[key].push({ t: at, v: clone({ v: value }).v });
+  }
   (tuning as unknown as Record<string, unknown>)[key] = value;
 }
 
 function push(): void {
   if (!renderer) return;
-  remember(slotKey(body, slot), tuning);
+  if (recState === "idle") remember(slotKey(body, slot), tuning);
   // Cast at the seam: the page holds one union and each renderer takes its own
   // half of it, which the body switch above already guarantees.
   // The renderer hears effectiveTuning() — the desk's monitor mix — while
@@ -1235,12 +1272,31 @@ function loop(): void {
   frames += 1;
   if (abActive) {
     // The reference holds the stage; sweeps and journeys wait their turn.
+  } else if (looping && renderer) {
+    // LOOP PREVIEW: journey, hold at the destination, go again. The base is
+    // the live tuning, so dials keep answering while the loop plays.
+    const hold = looping.dest ? 700 : 0;
+    const cycle = (performance.now() - looping.start) % (looping.duration + hold);
+    const at = Math.min(1, cycle / looping.duration);
+    const eased = 0.5 - 0.5 * Math.cos(Math.PI * at);
+    const base = looping.dest ? lerpTuning(tuning, looping.dest, eased) : tuning;
+    (renderer as { setTuning(next: never): void })
+      .setTuning(effectiveTuning(applyTracks(base, looping.tracks, at)) as never);
+  } else if (recState === "overdub" && draft && renderer) {
+    // The existing tracks replay on a loop while new dial moves record on top;
+    // a field being re-recorded stops replaying the moment it is touched.
+    const at = ((performance.now() - recClock) % draft.duration) / draft.duration;
+    (renderer as { setTuning(next: never): void })
+      .setTuning(effectiveTuning(applyTracks(tuning, draft.tracks, at, takeTouched)) as never);
   } else if (transit && renderer) {
     const at = Math.min(1, (performance.now() - transit.start) / transit.ms);
     // A raised cosine, so the journey leaves and arrives gently.
     const eased = 0.5 - 0.5 * Math.cos(Math.PI * at);
-    (renderer as { setTuning(next: never): void })
-      .setTuning(lerpTuning(transit.from, effectiveTuning(), eased) as never);
+    const mixed = lerpTuning(transit.from, effectiveTuning(), eased);
+    // A recorded journey drives its tracked fields on real time, not eased
+    // time — the choreography IS the easing for those dials.
+    const framed = transit.tracks ? applyTracks(mixed, transit.tracks, at) : mixed;
+    (renderer as { setTuning(next: never): void }).setTuning(framed as never);
     if (at >= 1) transit = null;
   } else {
     tickLfos(performance.now());
@@ -1402,9 +1458,9 @@ function audible(title: string): boolean {
 
 /** The tuning the renderer hears: muted channels' levels at zero, the real
  *  numbers untouched. With nothing muted this is `tuning` itself. */
-function effectiveTuning(): Tuning {
-  if (muted.size === 0 && soloed === null) return tuning;
-  const out = clone(tuning);
+function effectiveTuning(of: Tuning = tuning): Tuning {
+  if (muted.size === 0 && soloed === null) return of;
+  const out = clone(of);
   const record = out as unknown as Record<string, number | number[]>;
   for (const g of channelsFor()) {
     if (audible(g.title)) continue;
@@ -1745,6 +1801,8 @@ async function refreshHistory(): Promise<void> {
   paintHistory();
   loadBaseline();
   paintDrift();
+  paintTransChoose();
+  paintStates();
 }
 
 function paintHistory(): void {
@@ -1864,7 +1922,8 @@ paintSheet();
 const PACE_MS: Record<string, number> = { instant: 0, fast: 350, normal: 1100, slow: 2600 };
 /** Fields that are counts, kept whole mid-journey: 1.4 wheels is not a look. */
 const INT_FIELDS = new Set(["rings", "shardStride", "petal"]);
-let transit: { from: Tuning; start: number; ms: number } | null = null;
+let transit: { from: Tuning; start: number; ms: number; tracks?: Tracks } | null = null;
+const PACE_FACTOR: Record<string, number> = { instant: 0, fast: 0.5, normal: 1, slow: 2 };
 
 function lerpTuning(from: Tuning, to: Tuning, at: number): Tuning {
   const out = clone(to);
@@ -1886,6 +1945,19 @@ function lerpTuning(from: Tuning, to: Tuning, at: number): Tuning {
 
 function setState(next: Slot): void {
   if (next === slot) return;
+  if (recState !== "idle") finishTake("recording cancelled — state changed");
+  if (looping) stopLoop();
+  const recorded = ((): Tracks | undefined => {
+    const versions = history[`${body}.${slot}->${next}`]?.versions ?? [];
+    const newest = versions[versions.length - 1] as unknown as
+      { tracks?: Tracks; duration?: number } | undefined;
+    return newest?.tracks;
+  })();
+  const recordedMs = ((): number => {
+    const versions = history[`${body}.${slot}->${next}`]?.versions ?? [];
+    const newest = versions[versions.length - 1] as unknown as { duration?: number } | undefined;
+    return newest?.duration ?? 0;
+  })();
   const from = clone(effectiveTuning());
   slot = next;
   shipped = shippedFor(body, slot);
@@ -1899,13 +1971,19 @@ function setState(next: Slot): void {
   paintMixer();
   paintHistory();
   paintDrift();
-  const ms = PACE_MS[($("pace") as HTMLSelectElement).value] ?? 0;
+  paintTransChoose();
+  const paceName = ($("pace") as HTMLSelectElement).value;
+  // A RECORDED transition is the legal path between this pair: it plays at its
+  // own length scaled by the pace, and the lerp carries any untracked field.
+  const ms = recorded
+    ? recordedMs * (PACE_FACTOR[paceName] ?? 1)
+    : PACE_MS[paceName] ?? 0;
   if (ms === 0 || !renderer) {
     transit = null;
     push();
     return;
   }
-  transit = { from, start: performance.now(), ms };
+  transit = { from, start: performance.now(), ms, tracks: recorded };
 }
 try {
   const storedPace = localStorage.getItem(storageKey("pace"));
@@ -2069,6 +2147,279 @@ $("driftOnly").addEventListener("click", () => {
     localStorage.setItem(storageKey("driftOnly"), driftOnly ? "1" : "0");
   } catch { /* fine */ }
   paintDriftFilter();
+});
+
+/**
+ * THE TRANSITION RECORDER. A transition is choreography between two states,
+ * captured the way a looper captures music: arm record, move a dial, stop —
+ * that is a take. Record again and the take plays back while you move another
+ * dial on top; layer until the journey is complete, then bind it to a
+ * destination. Saving writes the take to the file AND commits the end values
+ * into the destination state, so arriving there IS the look you built toward
+ * — and marks the pair as a legal transition the state buttons will play.
+ */
+type Sample = { t: number; v: number | number[] };
+type Tracks = Record<string, Sample[]>;
+let recState: "idle" | "armed" | "recording" | "overdub" = "idle";
+let recClock = 0;
+let takeTracks: Tracks = {};
+const takeTouched = new Set<string>();
+let preTake: Tuning | null = null;
+let draft: { from: Slot; duration: number; tracks: Tracks } | null = null;
+let looping: { tracks: Tracks; duration: number; dest: Tuning | null; start: number } | null = null;
+
+function draftKey(): string {
+  return storageKey(`transitdraft.${body}`);
+}
+function saveDraft(): void {
+  try {
+    if (draft) localStorage.setItem(draftKey(), JSON.stringify(draft));
+    else localStorage.removeItem(draftKey());
+  } catch { /* fine */ }
+}
+function loadDraft(): void {
+  try {
+    const raw = localStorage.getItem(draftKey());
+    draft = raw ? JSON.parse(raw) as typeof draft : null;
+  } catch {
+    draft = null;
+  }
+}
+
+/** The take's value at phase p — hold before the first sample and after the
+ *  last, linear between neighbours: the dial replays exactly as it was moved. */
+function trackValueAt(samples: Sample[], p: number): number | number[] {
+  if (samples.length === 0) return 0;
+  if (p <= samples[0].t) return samples[0].v;
+  const last = samples[samples.length - 1];
+  if (p >= last.t) return last.v;
+  for (let i = 1; i < samples.length; i += 1) {
+    if (samples[i].t >= p) {
+      const a = samples[i - 1];
+      const b = samples[i];
+      const span = b.t - a.t;
+      const mix = span > 0 ? (p - a.t) / span : 1;
+      if (typeof a.v === "number" && typeof b.v === "number") {
+        return a.v + (b.v - a.v) * mix;
+      }
+      const av = a.v as number[];
+      const bv = b.v as number[];
+      return bv.map((v, index) =>
+        typeof av[index] === "number" ? av[index] + (v - av[index]) * mix : v);
+    }
+  }
+  return last.v;
+}
+
+/** Apply tracks over a base look, animating the rail so the dials move. */
+function applyTracks(base: Tuning, tracks: Tracks, p: number, skip?: Set<string>): Tuning {
+  const out = clone(base);
+  const record = out as unknown as Record<string, number | number[]>;
+  for (const [field, samples] of Object.entries(tracks)) {
+    if (skip?.has(field)) continue;
+    if (record[field] === undefined) continue;
+    const value = trackValueAt(samples, p);
+    record[field] = value;
+    const parts = typeof value === "number" ? [value] : value;
+    parts.forEach((part, index) => {
+      const dom = sliderDom[lfoKey(field, index)];
+      if (dom) {
+        dom.input.value = String(part);
+        dom.out.textContent = part.toFixed(3);
+      }
+    });
+  }
+  return out;
+}
+
+function transStatus(text: string): void {
+  $("transStatus").textContent = text;
+}
+
+function paintRec(): void {
+  const rec = $("rec");
+  rec.classList.toggle("armed", recState === "armed");
+  rec.classList.toggle("live", recState === "recording" || recState === "overdub");
+  $("transSave").style.display = draft ? "" : "none";
+  $("transTo").style.display = draft ? "" : "none";
+  $("transLoop").classList.toggle("on", looping !== null);
+}
+
+function paintTransTo(): void {
+  const select = $("transTo") as HTMLSelectElement;
+  const keep = select.value;
+  select.innerHTML = "";
+  const head = document.createElement("option");
+  head.value = "";
+  head.textContent = "→ destination…";
+  select.appendChild(head);
+  if (!draft) return;
+  for (const at of slotsFor(body)) {
+    if (at === "arrival" || at === "error" || at === draft.from) continue;
+    const option = document.createElement("option");
+    option.value = at;
+    option.textContent = `→ ${at}`;
+    option.selected = at === keep;
+    select.appendChild(option);
+  }
+}
+
+/** Saved transitions leaving the state on stage, for the loop preview. */
+function transitionsFrom(at: Slot): string[] {
+  return Object.keys(history)
+    .filter((key) => key.startsWith(`${body}.${at}->`));
+}
+
+function paintTransChoose(): void {
+  const select = $("transChoose") as HTMLSelectElement;
+  const keep = select.value;
+  const from = transitionsFrom(slot);
+  select.innerHTML = "";
+  for (const key of from) {
+    const option = document.createElement("option");
+    option.value = key;
+    option.textContent = `⟳ ${key.slice(body.length + 1)}`;
+    option.selected = key === keep;
+    select.appendChild(option);
+  }
+  select.style.display = from.length > 0 ? "" : "none";
+}
+
+function stopLoop(): void {
+  looping = null;
+  paintRec();
+  push();
+}
+
+$("rec").addEventListener("click", () => {
+  if (recState === "armed") {
+    recState = "idle";
+    preTake = null;
+    transStatus(draft ? `draft: ${Object.keys(draft.tracks).length} tracks` : "");
+    paintRec();
+    return;
+  }
+  if (recState === "recording") {
+    // End of take one. Time ran from the first dial move to this click.
+    const duration = Math.max(400, performance.now() - recClock);
+    for (const samples of Object.values(takeTracks)) {
+      for (const sample of samples) sample.t = Math.min(1, Math.max(0, sample.t / duration));
+      samples.sort((a, b) => a.t - b.t);
+    }
+    draft = { from: slot, duration, tracks: takeTracks };
+    saveDraft();
+    finishTake(`take saved — ${Object.keys(takeTracks).length} track(s), ${(duration / 1000).toFixed(1)}s. Choose a destination, or record again to layer.`);
+    return;
+  }
+  if (recState === "overdub") {
+    for (const [field, samples] of Object.entries(takeTracks)) {
+      samples.sort((a, b) => a.t - b.t);
+      if (draft) draft.tracks[field] = samples;
+    }
+    saveDraft();
+    finishTake(`layered — now ${draft ? Object.keys(draft.tracks).length : 0} track(s)`);
+    return;
+  }
+  // Idle. Arm a first take, or roll an overdub pass over the draft.
+  if (recState === "idle" && draft && draft.from === slot) {
+    preTake = clone(tuning);
+    takeTracks = {};
+    takeTouched.clear();
+    recClock = performance.now();
+    recState = "overdub";
+    transStatus("overdubbing — existing tracks play, move a dial to layer");
+    paintRec();
+    return;
+  }
+  preTake = clone(tuning);
+  takeTracks = {};
+  takeTouched.clear();
+  recState = "armed";
+  transStatus("record armed — move a dial to start the take");
+  paintRec();
+});
+
+function finishTake(message: string): void {
+  recState = "idle";
+  if (preTake) {
+    // The origin look is restored: a transition is choreography, and
+    // recording one must not quietly rewrite the state it leaves from.
+    tuning = preTake;
+    preTake = null;
+    buildControls();
+    push();
+  }
+  transStatus(message);
+  paintTransTo();
+  paintRec();
+}
+
+$("transSave").addEventListener("click", () => {
+  const to = ($("transTo") as HTMLSelectElement).value as Slot | "";
+  if (!draft || to === "") {
+    transStatus("choose a destination first");
+    return;
+  }
+  const from = draft.from;
+  const origin = saved(slotKey(body, from), shippedFor(body, from));
+  // The arrival: the origin look with every track at its final value. This is
+  // the whole point of the layering — the end of the journey IS the next state.
+  const arrival = applyTracks(origin, draft.tracks, 1);
+  const label = `${Object.keys(draft.tracks).length} tracks, ${(draft.duration / 1000).toFixed(1)}s`;
+  void fetch("/__bench-presets", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ body, slot: from, to, tracks: draft.tracks, duration: draft.duration, label }),
+  }).then(async (response) => {
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    try {
+      localStorage.setItem(storageKey(slotKey(body, to)), JSON.stringify(arrival));
+    } catch { /* fine */ }
+    await fetch("/__bench-presets", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ body, slot: to, tuning: arrival, lfos: {}, label: `arrival via ${from}->${to}` }),
+    });
+    draft = null;
+    saveDraft();
+    paintTransTo();
+    paintRec();
+    transStatus(`saved ${from}->${to} — arrival committed into ${to}`);
+    void refreshHistory();
+  }).catch((error: Error) => {
+    transStatus(`SAVE FAILED — ${error.message}`);
+  });
+});
+
+$("transLoop").addEventListener("click", () => {
+  if (looping) {
+    stopLoop();
+    transStatus(draft ? `draft: ${Object.keys(draft.tracks).length} tracks` : "");
+    return;
+  }
+  if (draft && draft.from === slot) {
+    looping = { tracks: draft.tracks, duration: draft.duration, dest: null, start: performance.now() };
+    transStatus("looping the draft — dials stay live");
+    paintRec();
+    return;
+  }
+  const key = ($("transChoose") as HTMLSelectElement).value;
+  const versions = history[key]?.versions ?? [];
+  const newest = versions[versions.length - 1] as unknown as
+    { tracks?: Tracks; duration?: number } | undefined;
+  if (!newest?.tracks) {
+    transStatus("no transition to loop from this state");
+    return;
+  }
+  const destSlot = key.slice(key.indexOf("->") + 2) as Slot;
+  looping = {
+    tracks: newest.tracks,
+    duration: newest.duration || 1200,
+    dest: saved(slotKey(body, destSlot), shippedFor(body, destSlot)),
+    start: performance.now(),
+  };
+  transStatus(`looping ${key.slice(body.length + 1)} — dials stay live`);
+  paintRec();
 });
 
 /**
