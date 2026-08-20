@@ -161,10 +161,9 @@ def build_trusted_codex_config(
     if not (settings.codex_trusted and settings.codex_binary and settings.codex_stack_root):
         return None
 
-    # Lazy imports so the flag-off path never pulls in the infrastructure layer or
-    # httpx (mirrors build_codex_execution_stack's lazy imports). Only reached on.
-    import httpx
-
+    # Lazy imports so the flag-off path never pulls in the infrastructure layer
+    # (mirrors build_codex_execution_stack's lazy imports; httpx now enters via
+    # _upstream_client, equally lazily). Only reached on.
     from boltrig.fleet.application.model_proxy_grants import (
         PhaseScopedModelProxyGrantBroker,
     )

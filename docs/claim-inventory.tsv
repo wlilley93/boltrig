@@ -676,9 +676,9 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/api/chat_cli_gateway.py:26		One outbound l
 ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_execution.py:126		Lazy import so the flag-off path never pulls in the Postgres/asyncpg module
 ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_execution.py:148		structural ratchet (forbidden here).
 ORDINARY	NO-SUBJECT	docstring	boltrig/api/codex_readiness.py:1		Fail-closed readiness projection for the configured Codex runtime.
-ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:164		Lazy imports so the flag-off path never pulls in the infrastructure layer or
-ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:195		never carries the upstream key;
-ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:221		model_id is non-secret admission policy: the resolver refuses a permanent
+ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:164		Lazy imports so the flag-off path never pulls in the infrastructure layer
+ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:194		never carries the upstream key;
+ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:220		model_id is non-secret admission policy: the resolver refuses a permanent
 ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:22		three sites cannot disagree about what counts as a placeholder again.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:327		Removed runtime names are migration drift, never revival targets.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/host_boundary.py:26		Deliberately not an email and not a real user id: it must not collide with any
