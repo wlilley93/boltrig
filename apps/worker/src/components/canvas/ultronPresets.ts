@@ -49,6 +49,13 @@ export const ULTRON_ARRIVAL: UltronTuning = {
   veinLimb: [0.26, 1.35],
   crackLimb: [0.22, 1.0],
   facetLimb: [0.22, 1.05],
+  // Coverage does not matter while the body is sparks: let the birth swirl free.
+  homePull: 0.0,
+  knee: 0.5,
+  // No membrane at birth -- the crystalline mass BLOOMS into one as the ease
+  // carries these toward the settled tuning.
+  membraneGain: [0.0, 0.0],
+  membrane: [0.98, 0.10, 0.16],
 };
 
 /**

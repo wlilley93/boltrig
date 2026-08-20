@@ -99,6 +99,15 @@ uniform vec3 uHot;
 uniform float uCore;
 uniform float uStarburst;
 uniform vec4 uEye;
+// PRE-KNEE HIGHLIGHT COMPRESSION, for additive pile-ups. The filmic knee below
+// maps everything far above 1.5 to the same white, so wherever thousands of
+// additive streaks stack (a density knot, a hot syllable) the hue is gone
+// before the knee ever shapes it. This Reinhard term compresses the SCENE
+// while it is still linear: dense regions keep their colour and their
+// gradient instead of clipping to a white slab, thin filaments (far below
+// 1/uKnee) pass through nearly untouched. Zero -- the unset default -- is the
+// identity, so every body that predates the dial is byte-identical.
+uniform float uKnee;
 ${FINITE_CEILING}
 void main() {
   // Clamped on read, for the reason FINITE_CEILING gives: an Inf reaching the
@@ -106,6 +115,7 @@ void main() {
   // frame rather than a bright spot.
   vec3 c = min(texture(uScene, vUV).rgb, CEIL)
          + min(texture(uBloom, vUV).rgb, CEIL) * uBloomGain;
+  c = c / (1.0 + uKnee * c);
 
   vec2 d = (vUV - 0.5) * vec2(max(uAspect, 0.001), 1.0);
   float r = length(d);
