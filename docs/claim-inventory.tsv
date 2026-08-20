@@ -728,7 +728,7 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/config/control_integrations.py:81		Return 
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_lifecycle.py:51		The same predicate registration now applies, so the two cannot drift.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_lifecycle.py:90		stale reference cannot execute (SEC-22, mirrors review_and_activate).
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_mcp.py:103		can never be rehydrated.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/control_mcp_lifecycle.py:225		A losing CAS must not unpublish/deactivate an identical winner.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/control_mcp_lifecycle.py:232		A losing CAS must not unpublish/deactivate an identical winner.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:222		A store row this kernel never rebuilt (another replica's
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:225		otherwise - never pend or fail opaquely on a row that exists.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:242		dispatch uses (SEC-04/05);

@@ -17,6 +17,8 @@ from boltrig.models import (
     utcnow,
 )
 
+from boltrig.kernel.revertible import EffectLog
+
 from .control_lifecycle import _drop_orphaned_nouns, _unpublish_owned_verbs
 from .control_rehydrate import is_mcp_consumer, reconcile_mcp_adapter
 from .control_safety import ControlConflict, ensure_activation_safe
@@ -198,9 +200,14 @@ async def _publish_activation(
 ) -> list[str]:
     registered: list[str] = []
     transitioned = None
+    # Revertible effects (kernel/revertible.py): the registry records the
+    # exact inverse of every noun/verb/binding AT APPLY TIME. The ownership
+    # scan this replaces DELETED the adapter's pre-existing rows on a failed
+    # re-activation instead of restoring them.
+    effects = EffectLog()
     try:
         registered = await registry.register_adapter_verbs(
-            context.tenant_id, adapter
+            context.tenant_id, adapter, effects=effects
         )
         transitioned = await store.set_mcp_server_lifecycle(
             context.tenant_id,
@@ -229,10 +236,9 @@ async def _publish_activation(
             and current.state == "active"
         ):
             raise
-        removed = await _unpublish_owned_verbs(
-            store, context.tenant_id, record.id
-        )
-        await _drop_orphaned_nouns(store, context.tenant_id, removed)
+        # LIFO compensation from the log: added rows removed, displaced rows
+        # restored, nouns this attempt created dropped, shared nouns untouched.
+        await effects.revert()
         if getattr(adapter, "activated", False):
             adapter.activated = False
         if current is not None and current.state == "active":
