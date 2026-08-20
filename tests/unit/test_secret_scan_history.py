@@ -46,3 +46,11 @@ def test_make_target_preflights_history_before_gitleaks():
     target = makefile.split("secret-scan:", 1)[1].split("\n\n", 1)[0]
 
     assert target.index("check_secret_scan_history.py") < target.index("gitleaks")
+
+
+def test_security_workflow_uses_the_configured_ci_python():
+    workflow = (
+        Path(__file__).parents[2] / ".github" / "workflows" / "security.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "run: make secret-scan PY=python" in workflow
