@@ -56,7 +56,16 @@ def enforce_reasoning_effort_ceiling(body: bytes, allowed_effort: str) -> bytes:
             "model-call body is not parseable JSON"
         ) from error
     reasoning = payload.get("reasoning") if isinstance(payload, dict) else None
-    if not isinstance(reasoning, dict) or reasoning.get("effort") != allowed_effort:
+    if reasoning is None:
+        # Absence is BELOW the ceiling, not outside it: codex only includes a
+        # reasoning block for models it recognises as reasoning models, so a
+        # ceiling that demands the block refuses every plain model's call
+        # (measured 2026-08-20: the first live turn against a self-hosted
+        # model died here). The same None/exact shape the native-collaboration
+        # gate already applies to child overrides.
+        return body
+    effort = reasoning.get("effort") if isinstance(reasoning, dict) else object()
+    if effort is not None and effort != allowed_effort:
         raise ReasoningEffortCeilingViolation(
             "model-call reasoning effort is outside the admission ceiling"
         )

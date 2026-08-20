@@ -63,7 +63,7 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_cell_bounda
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:230		Prove the named boundary is in force right now, or refuse to proceed (G4).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_cell_policy.py:64		Supervisor-managed upstream Codex authentication, always redacted.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:209		Fail-closed: never reach upstream without an active bearer.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:258		Bounded, body-safe: never leak the key or the upstream error detail.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:265		Bounded, body-safe: never leak the key or the upstream error detail.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_config.py:107		lane and renders byte-identically to before.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_config.py:185		server or bearer env var was rewritten cannot match its receipt.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_config_argv.py:117		env var.
@@ -927,13 +927,13 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_kernel_tools_phas
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:157		Canonicalize the per-run wire-name ceiling, fail-closed.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:172		narrow it to ~74 today, which is the only reason it does not bite.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:73		the ONLY lane that never sent the floor - including the sentence that explains
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:214		runtime's own config: Codex 0.144.3 cannot suppress its built-in
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:238		Kernel-only gateway credentials are injected here and NEVER seen by
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:249		Exclusivity limb (a): the chokepoint is only the only path if the
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:250		tail cannot leave it.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:290		Fail-closed truncation is correct either way;
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:292		the ceiling this run held the reason).
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_model_proxy_server.py:312		Read the request body under the hard verifiable cap.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:218		runtime's own config: Codex 0.144.3 cannot suppress its built-in
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:245		Kernel-only gateway credentials are injected here and NEVER seen by
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:256		Exclusivity limb (a): the chokepoint is only the only path if the
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:257		tail cannot leave it.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:297		Fail-closed truncation is correct either way;
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:299		the ceiling this run held the reason).
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_model_proxy_server.py:319		Read the request body under the hard verifiable cap.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:56		transport never imports or hard-codes a store.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_protocol.py:16		Base error whose text never includes request or response payloads.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_actor.py:264		exception's TYPE is a class name from our own stack - never model output,
@@ -1015,6 +1015,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/model_proxy_peer_listen
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/model_proxy_peer_listener.py:53		(never by widened file perms) - that widening is exactly what VJS-CC-VJS 2/3
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/model_proxy_peer_registry.py:206		Drop the oldest terminal tombstones once the terminal bound is exceeded.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/model_proxy_peer_registry.py:73		Internal registration receipt;
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/model_proxy_request_ceiling.py:62		ceiling that demands the block refuses every plain model's call
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/model_proxy_tool_ceiling.py:128		The top-level tools one declared entry contributes after the ceiling.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/model_proxy_tool_ceiling.py:229		The earliest event terminator in the buffer as ``(index, length)``.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/model_proxy_tool_ceiling.py:248		Flush the trailing partial event at stream end.
@@ -1541,7 +1542,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_spawner.py
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_agent_runtime.py:286	agentMessage	The latest turn's assistant text, captured from the lifecycle stream.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:113	path	Ask the KERNEL whether our effective ids can write ``path``.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:292	execve	Refuse to run if any setuid/setgid binary survives in the image (J4).
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_model_proxy_server.py:267	function_call	Relay the upstream body, holding the ceiling and bridging the namespace.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_model_proxy_server.py:274	function_call	Relay the upstream body, holding the ceiling and bridging the namespace.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_read_only_phase.py:94	model_id	The read-only static profile compiled into the birth policy.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_runtime_events.py:223	ThreadTokenUsage	Carry what the turn consumed onto the normalized event stream.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_sandbox_engagement.py:63	refusal_detail	One proved statement that the sandbox refuses writes on THIS host.

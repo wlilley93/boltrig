@@ -22,10 +22,14 @@ def empty_output_reason(errors: list[Mapping[str, object]], run_id: str) -> str:
         return "codex_empty_output"
     logger.warning(
         "codex reported %d runtime error(s) before an empty turn for run %s "
-        "(will_retry=%s)",
+        "(will_retry=%s): %s",
         len(errors),
         run_id,
         [observed.get("will_retry") for observed in errors],
+        # The runtime's ERROR payloads are already content-free lifecycle
+        # reports; dropping them here left "1 runtime error(s)" as the whole
+        # operator record of WHY a turn died (2026-08-20).
+        [dict(observed) for observed in errors],
     )
     return "codex_empty_output_after_error"
 
