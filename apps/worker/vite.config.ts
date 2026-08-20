@@ -112,6 +112,28 @@ function benchPresets(): Plugin {
     apply: "serve",
     configureServer(server) {
       server.middlewares.use("/__bench-presets", (req, res, next) => {
+        const reply = (code: number, payload: unknown): void => {
+          res.statusCode = code;
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify(payload));
+        };
+        // One entry per body.slot, holding a VERSION LIST: a save appends rather
+        // than overwrites, so locking a look in can never destroy the look
+        // before it. Entries written by the pre-history format (a bare object)
+        // read as a one-version list.
+        const asVersions = (entry: unknown): { versions: unknown[] } =>
+          entry !== null && typeof entry === "object"
+            && Array.isArray((entry as { versions?: unknown[] }).versions)
+            ? entry as { versions: unknown[] }
+            : { versions: entry === undefined ? [] : [entry] };
+        if (req.method === "GET") {
+          const store = fs.existsSync(PRESETS)
+            ? JSON.parse(fs.readFileSync(PRESETS, "utf8")) as Record<string, unknown>
+            : {};
+          return reply(200, Object.fromEntries(
+            Object.entries(store).map(([key, entry]) => [key, asVersions(entry)]),
+          ));
+        }
         if (req.method !== "POST") return next();
         const chunks: Buffer[] = [];
         req.on("data", (chunk: Buffer) => {
@@ -120,14 +142,10 @@ function benchPresets(): Plugin {
           if (chunks.reduce((n, c) => n + c.length, 0) > 256 * 1024) req.destroy();
         });
         req.on("end", () => {
-          const reply = (code: number, payload: unknown): void => {
-            res.statusCode = code;
-            res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify(payload));
-          };
           try {
             const sent = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
               body?: unknown; slot?: unknown; tuning?: unknown; lfos?: unknown;
+              label?: unknown;
             };
             const bodyName = String(sent.body ?? "");
             const slot = String(sent.slot ?? "");
@@ -136,7 +154,9 @@ function benchPresets(): Plugin {
             // against that set rather than filtered for characters somebody
             // thought of.
             const bodies = ["jarvis", "ultron", "familiar", "colossus"];
-            const slots = ["arrival", "standby", "listening", "thinking", "working", "speaking"];
+            // "baseline" is a slot in the store though not a render state: the
+            // ground look every state is measured from, versioned like the rest.
+            const slots = ["arrival", "standby", "listening", "thinking", "working", "speaking", "baseline"];
             if (!bodies.includes(bodyName) || !slots.includes(slot)) {
               return reply(400, { error: "unknown body or slot" });
             }
@@ -146,13 +166,20 @@ function benchPresets(): Plugin {
             const store = fs.existsSync(PRESETS)
               ? JSON.parse(fs.readFileSync(PRESETS, "utf8")) as Record<string, unknown>
               : {};
-            store[`${bodyName}.${slot}`] = {
+            const key = `${bodyName}.${slot}`;
+            const version: Record<string, unknown> = {
               tuning: sent.tuning,
               lfos: sent.lfos ?? {},
               savedAt: new Date().toISOString(),
             };
+            if (typeof sent.label === "string" && sent.label.trim() !== "") {
+              version.label = sent.label.trim().slice(0, 120);
+            }
+            const entry = asVersions(store[key]);
+            entry.versions.push(version);
+            store[key] = entry;
             fs.writeFileSync(PRESETS, `${JSON.stringify(store, null, 2)}\n`);
-            return reply(200, { path: "tests/visual/presets.json", count: Object.keys(store).length });
+            return reply(200, { path: "tests/visual/presets.json", versions: entry.versions.length });
           } catch (error) {
             return reply(400, { error: (error as Error).message });
           }

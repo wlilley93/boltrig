@@ -15,6 +15,7 @@
         margin: 0;
         display: grid;
         grid-template-columns: minmax(0, 1fr) 380px;
+        grid-template-rows: minmax(0, 1fr) auto auto;
         height: 100vh;
         height: 100dvh;
         font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
@@ -66,7 +67,102 @@
         h1, p.lede { display: none; }
         .top { grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
       }
-      #stageWrap { position: relative; display: block; min-width: 0; overflow: hidden; }
+      #stageWrap { position: relative; display: block; min-width: 0; overflow: hidden; grid-column: 1; grid-row: 1; }
+      /* THE TRANSPORT. The states are the instrument's keys: standby, listening,
+         thinking, working, speaking are the animated base looks, and everything
+         else — voice, emotion — is a modifier layered on top. Clicking a state
+         eases the body there at the chosen pace. */
+      #transport {
+        grid-column: 1; grid-row: 2;
+        display: flex; align-items: center; gap: 10px;
+        padding: 8px 10px 2px; background: #0b0b0f;
+        border-top: 1px solid #1c1c22;
+        overflow-x: auto;
+      }
+      #states { display: flex; gap: 6px; }
+      #states button {
+        width: auto; padding: 0 14px; height: 30px; border-radius: 15px;
+        font-size: 11.5px; letter-spacing: .02em; white-space: nowrap;
+      }
+      #states button.on { color: #0b0b0f; background: #6f8cff; border-color: #6f8cff; font-weight: 600; }
+      #pace { width: auto; height: 30px; border-radius: 15px; font-size: 11px; }
+      #transport .sep { flex: 0 0 1px; height: 22px; background: #26262e; }
+      #transport .tlabel {
+        font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em;
+        color: #55555f; white-space: nowrap;
+      }
+      #emotions { display: flex; gap: 5px; }
+      #emotions button {
+        width: auto; padding: 0 10px; height: 24px; border-radius: 12px;
+        font-size: 10.5px; color: #9a9aa4; white-space: nowrap;
+      }
+      #emotions button.on { color: #e8e8ef; border-color: #6f8cff; background: #10101a; }
+      /* THE DESK. One strip per draw pass, along the bottom like a mixing
+         console: fader on the pass's master level, mute/solo for auditioning,
+         a lamp when an LFO is sweeping it. Click a strip and the right rail
+         becomes that channel's effects. */
+      #mixer {
+        grid-column: 1; grid-row: 3;
+        display: flex; gap: 6px; padding: 8px 10px;
+        border-top: 1px solid #1c1c22; background: #0b0b0f;
+        overflow-x: auto; overflow-y: hidden;
+      }
+      .channel {
+        flex: 0 0 86px; display: grid; justify-items: center; gap: 4px;
+        padding: 7px 4px 6px; border: 1px solid #1c1c22; border-radius: 8px;
+        background: #0d0d11; cursor: pointer; user-select: none;
+      }
+      .channel:hover { border-color: #3a3a46; }
+      .channel.selected { border-color: #6f8cff; background: #10101a; }
+      .channel.muted { opacity: .45; }
+      .channel .chname {
+        font-size: 9.5px; font-weight: 600; letter-spacing: .06em;
+        text-transform: uppercase; color: #8b8b95; text-align: center;
+        max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .channel.selected .chname { color: #6f8cff; }
+      .channel .chlamp { width: 6px; height: 6px; border-radius: 3px; background: #1a1a22; }
+      .channel .chlamp.on { background: #6f8cff; box-shadow: 0 0 6px #6f8cff; }
+      .channel .fader {
+        writing-mode: vertical-lr; direction: rtl;
+        width: 22px; height: 84px; margin: 2px 0; accent-color: #6f8cff;
+      }
+      .channel b {
+        font-variant-numeric: tabular-nums; font-weight: 500;
+        color: #9a9aa4; font-size: 10px;
+      }
+      .channel .ms { display: flex; gap: 4px; }
+      .channel .ms button { width: 26px; height: 20px; padding: 0; font-size: 10px; border-radius: 5px; }
+      .channel .ms button.on { color: #0b0b0f; background: #6f8cff; border-color: #6f8cff; }
+      .channel .chdrift {
+        position: absolute; top: 3px; right: 5px;
+        font-size: 9px; color: #ffb060; font-variant-numeric: tabular-nums;
+      }
+      .channel { position: relative; }
+      @media (max-width: 900px) { #mixer, #transport { display: none; } }
+      /* Values sitting off the baseline are marked, so "how far have we gone"
+         is a glance rather than an audit. */
+      .row b.drift { color: #ffb060; }
+      #baselineNote { font-size: 10.5px; color: #74747e; margin: 2px 0 8px; min-height: 12px; }
+      #baselineNote b { color: #ffb060; font-weight: 500; }
+      #driftOnly.on { color: #0b0b0f; background: #ffb060; border-color: #ffb060; }
+      #states button .sbadge { font-size: 9px; color: #ffb060; margin-left: 6px; font-variant-numeric: tabular-nums; }
+      #states button.on .sbadge { color: #0b0b0f; }
+      #abHold:active { color: #0b0b0f; background: #6ee7a8; border-color: #6ee7a8; }
+      /* THE SETTINGS MODAL: voice, capture and export utilities off the rail,
+         so the rail is nothing but the selected channel's effects. */
+      #modal {
+        position: fixed; inset: 0; z-index: 10; display: none;
+        place-items: center; background: rgba(0, 0, 0, .55);
+      }
+      #modal.open { display: grid; }
+      #modal .card {
+        width: min(440px, 92vw); max-height: 84vh; overflow: auto;
+        background: #0d0d11; border: 1px solid #26262e; border-radius: 12px;
+        padding: 18px;
+      }
+      #modal h2 { margin: 0 0 12px; font-size: 13px; letter-spacing: .02em; }
+      #modal .top { margin-bottom: 10px; }
       /* FULL BLEED. It was a 760px square box floating in the page, which meant the
          body was always judged inside a frame roughly its own size -- and how much
          empty space sits around a being is part of how big it reads. Filling the
@@ -100,6 +196,7 @@
       #readout b.bad { color: #ff6a4a; }
       #readout b.good { color: #5cb87f; }
       aside {
+        grid-column: 2; grid-row: 1 / -1;
         overflow: auto;
         padding: 16px 18px 28px;
         border-left: 1px solid #1c1c22;
@@ -218,15 +315,51 @@
       <div id="readout">starting…</div>
       <button id="sheetToggle" type="button" aria-expanded="true">Controls</button>
     </div>
+    <div id="transport">
+      <div id="states"></div>
+      <select id="pace" title="How fast the body travels between states">
+        <option value="instant">instant</option>
+        <option value="fast">fast</option>
+        <option value="normal" selected>normal</option>
+        <option value="slow">slow</option>
+      </select>
+      <span class="sep"></span>
+      <span class="tlabel">Emotion</span>
+      <div id="emotions"></div>
+    </div>
+    <div id="mixer"></div>
+    <div id="modal">
+      <div class="card">
+        <h2>Settings</h2>
+        <div class="row">
+          <label for="level">Voice level</label>
+          <input id="level" type="range" min="0" max="1" step="0.01" value="0.8" />
+        </div>
+        <div class="voice">
+          <select id="clip"></select>
+          <button id="voicePlay" type="button">▶ Speak</button>
+          <button id="voiceStop" type="button">■ Stop</button>
+          <label class="tick"><input id="loop" type="checkbox" checked /> loop</label>
+          <input id="clipFile" type="file" accept="audio/*" />
+          <div class="meter"><i id="voiceMeter"></i></div>
+          <div id="voiceState"></div>
+        </div>
+        <div class="top">
+          <button id="play" type="button">Play draw-in</button>
+          <button id="reset" type="button">Reset to shipped</button>
+        </div>
+        <div class="top">
+          <button id="copy" type="button">Copy settings</button>
+          <button id="link" type="button">Copy link to this look</button>
+        </div>
+        <div id="export"></div>
+        <div class="top" style="margin-top: 12px">
+          <button id="modalClose" type="button">Close</button>
+        </div>
+      </div>
+    </div>
     <aside>
       <h1>Shader bench</h1>
-      <p class="lede">
-        The real renderers, live — Jarvis and Ultron by their draw passes, the
-        Familiar by her host recipe (the vendored shader is never edited here).
-        <code>white</code> is the centre-blowout number — keep it at zero. Copy
-        settings pastes straight into <code>canvas/bodyTuning.ts</code>. Every change is remembered, so a reload
-        keeps your look; <b>Copy link</b> makes it shareable.
-      </p>
       <div class="top">
         <div>
           <label for="body">Body</label>
@@ -237,37 +370,31 @@
           </select>
         </div>
         <div>
-          <label for="mode">Mode</label>
-          <!-- Filled by paintModes(): the bodies do not all have the same
-               states, and a hardcoded list would offer one nothing renders. -->
-          <select id="mode"></select>
+          <label>&nbsp;</label>
+          <button id="gear" type="button">⚙ Settings</button>
         </div>
-      </div>
-      <div class="row">
-        <label for="level">Voice level</label>
-        <input id="level" type="range" min="0" max="1" step="0.01" value="0.8" />
       </div>
       <div class="top">
-        <div class="voice">
-          <select id="clip"></select>
-          <button id="voicePlay" type="button">▶ Speak</button>
-          <button id="voiceStop" type="button">■</button>
-          <label class="tick"><input id="loop" type="checkbox" checked /> loop</label>
-          <input id="clipFile" type="file" accept="audio/*" />
-          <div class="meter"><i id="voiceMeter"></i></div>
-          <div id="voiceState"></div>
-        </div>
         <button id="save" type="button" class="primary">Save preset</button>
-        <button id="play" type="button">Play draw-in</button>
-        <button id="reset" type="button">Reset to shipped</button>
-        <button id="copy" type="button">Copy settings</button>
+        <!-- The baseline: copy this state's look to every state of the body, so
+             each one is edited FROM the same ground and drift is measurable. -->
+        <button id="applyAll" type="button">Apply to all states</button>
       </div>
       <div class="top">
-        <button id="link" type="button">Copy link to this look</button>
+        <button id="fromBaseline" type="button">Load baseline</button>
+        <button id="driftOnly" type="button" title="Show only dials off the baseline">Δ only</button>
       </div>
+      <div class="top" style="grid-template-columns: 1fr">
+        <button id="abHold" type="button" title="Hold to show the baseline; release to return (or hold B)">A/B baseline — hold</button>
+      </div>
+      <div class="top" style="grid-template-columns: 1fr">
+        <!-- Every version ever locked in for the body and state on stage; saving
+             appends rather than overwrites. Choosing one loads it into the dials. -->
+        <select id="history"></select>
+      </div>
+      <div id="baselineNote"></div>
       <div id="controls"></div>
       <div id="saved"></div>
-      <div id="export"></div>
     </aside>
     <script type="module" src="/tests/visual/shader-bench.ts"></script>
   </body>

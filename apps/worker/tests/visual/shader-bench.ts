@@ -470,16 +470,60 @@ function newRenderer(): FamiliarWebGLRenderer | JarvisNeuralRenderer | UltronRen
  *  one. Switching from the Familiar's `error` to a body without it must land
  *  somewhere real rather than leaving a select showing a slot nothing renders. */
 function paintModes(): void {
-  const select = $("mode") as HTMLSelectElement;
+  const bar = $("states");
   const available = slotsFor(body);
   if (!available.includes(slot)) slot = "standby";
-  select.innerHTML = "";
+  bar.innerHTML = "";
   for (const at of available) {
-    const option = document.createElement("option");
-    option.value = at;
-    option.textContent = at === "arrival" ? "arrival (draw-in)" : at;
-    option.selected = at === slot;
-    select.appendChild(option);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.state = at;
+    const name = document.createElement("span");
+    name.textContent = at === "arrival" ? "arrival ↘" : at;
+    button.appendChild(name);
+    const badge = document.createElement("span");
+    badge.className = "sbadge";
+    button.appendChild(badge);
+    button.classList.toggle("on", at === slot);
+    button.addEventListener("click", () => setState(at));
+    bar.appendChild(button);
+  }
+}
+
+/** How far each state's SAVED look sits from the ground — the journey's
+ *  spread, readable off the transport without visiting every state. */
+function stateDrift(at: Slot): number {
+  if (!baseline) return 0;
+  const look = saved(slotKey(body, at), shippedFor(body, at)) as unknown as
+    Record<string, number | number[]>;
+  const ground = baseline.tuning as unknown as Record<string, number | number[]>;
+  let count = 0;
+  for (const [field, value] of Object.entries(look)) {
+    if (HIDDEN_FIELDS.has(field)) continue;
+    const was = ground[field];
+    if (was === undefined) continue;
+    const now = typeof value === "number" ? [value] : value;
+    const ref = typeof was === "number" ? [was] : was;
+    for (let index = 0; index < now.length; index += 1) {
+      const a = now[index];
+      const b = (ref as number[])[index];
+      if (typeof a === "number" && typeof b === "number" && Math.abs(a - b) > 1e-6) count += 1;
+    }
+  }
+  return count;
+}
+
+function paintStates(): void {
+  for (const button of Array.from($("states").children) as HTMLElement[]) {
+    const at = button.dataset.state as Slot;
+    button.classList.toggle("on", at === slot);
+    const badge = button.querySelector(".sbadge");
+    if (badge) {
+      const off = at === slot
+        ? driftCount(Object.keys(tuning).filter((f) => !HIDDEN_FIELDS.has(f)))
+        : stateDrift(at);
+      badge.textContent = off > 0 ? `Δ${off}` : "";
+    }
   }
 }
 
@@ -512,9 +556,9 @@ function mount(): void {
     return;
   }
   paintModes();
-  pheno = savedPheno();
-  // The measured mood, not null. Passing null meant the bench always showed a
-  // resting body, so the registers were unfalsifiable by eye.
+  // The emotion chip is the mood's source of truth: a fixed pose for judging
+  // the look, where the app's inner life drives these scalars continuously.
+  pheno = { ...RESTING_PHENOTYPE, ...EMOTIONS[emotion] };
   renderer.applyPhenotype(pheno as unknown as Record<string, unknown>);
   // The export is per body, so a stale one is a wrong label on a set of numbers
   // — exactly the failure mode this whole session has been unpicking.
@@ -533,7 +577,11 @@ function mount(): void {
   // Rebuilt per body: an LFO bound to `linkGain` means nothing on Ultron.
   for (const id of Object.keys(sliderDom)) delete sliderDom[id];
   lfos = savedLfos(slotKey(body, slot));
+  loadBaseline();
   buildControls();
+  buildMixer();
+  paintHistory();
+  paintDrift();
   push();
   // THE INTRO, on every mount. `push()` first so the renderer knows what it is
   // easing TOWARD -- the saved look if there is one, not the shipped preset -- and
@@ -584,65 +632,69 @@ function rememberPheno(): void {
   } catch { /* a blocked store is not a reason to stop rendering */ }
 }
 
-function savedPheno(): BodyPhenotype {
+/**
+ * EMOTION IS A MODIFIER, NOT A STATE. The states are the animated base looks;
+ * an emotion rides on top of whichever state is on stage, the way an
+ * expression rides on a face. The chips set the phenotype wholesale — the
+ * in-app inner life drives these same scalars continuously; here they are
+ * fixed poses for judging a look under each one.
+ */
+const EMOTIONS: Record<string, Partial<BodyPhenotype>> = {
+  neutral: {},
+  calm: { valence: 0.35, attachment: 0.35, luminosity: 0.25 },
+  joy: { valence: 0.9, buoyancy: 0.8, arousal: 0.55, luminosity: 0.6, social: 0.5 },
+  warm: { valence: 0.6, attachment: 0.8, social: 0.7, buoyancy: 0.4, luminosity: 0.35 },
+  alert: { attention: 0.9, arousal: 0.6, tension: 0.3, luminosity: 0.4 },
+  worry: { tension: 0.65, attention: 0.7, arousal: 0.45, fatigue: 0.25, irritation: 0.25 },
+  anger: { irritation: 0.9, arousal: 0.75, tension: 0.85, attention: 0.6, luminosity: 0.3 },
+  tired: { fatigue: 0.85, luminosity: 0.12, attention: 0.15 },
+};
+let emotion = ((): string => {
   try {
-    const raw = localStorage.getItem(storageKey("pheno"));
-    if (!raw) return { ...RESTING_PHENOTYPE };
-    // Merged OVER resting, so a scalar added later loads as its resting value
-    // rather than as undefined -- which would turn every product into NaN.
-    return { ...RESTING_PHENOTYPE, ...JSON.parse(raw) as Partial<BodyPhenotype> };
+    return localStorage.getItem(storageKey("emotion")) ?? "neutral";
   } catch {
-    return { ...RESTING_PHENOTYPE };
+    return "neutral";
   }
+})();
+
+function applyEmotion(name: string): void {
+  emotion = name in EMOTIONS ? name : "neutral";
+  pheno = { ...RESTING_PHENOTYPE, ...EMOTIONS[emotion] };
+  rememberPheno();
+  try {
+    localStorage.setItem(storageKey("emotion"), emotion);
+  } catch { /* fine */ }
+  renderer?.applyPhenotype(pheno as unknown as Record<string, unknown>);
+  paintEmotions();
 }
 
-/** The register sliders, appended under their own collapsible heading. */
-function buildPhenotype(panel: HTMLElement): void {
-  const head = document.createElement("h3");
-  head.className = "group";
-  head.textContent = "7 · Emotion registers — mood and colour";
-  panel.appendChild(head);
-  const rows: HTMLElement[] = [];
-  for (const scalar of PHENOTYPE_SCALARS) {
-    const before = panel.childElementCount;
-    panel.appendChild(row(
-      `pheno.${scalar}`,
-      // The full key, not the bare scalar: TITLES and LEGEND are keyed by it, and a
-      // register showing only "attention" is indistinguishable from a tuning field
-      // that happened to be called the same thing.
-      `pheno.${scalar}`,
-      [pheno[scalar]],
-      (next) => {
-        pheno = { ...pheno, [scalar]: next[0] };
-        rememberPheno();
-        renderer?.applyPhenotype(pheno as unknown as Record<string, unknown>);
-      },
-    ));
-    for (let i = before; i < panel.childElementCount; i += 1) {
-      rows.push(panel.children[i] as HTMLElement);
-    }
+function buildEmotions(): void {
+  const chips = $("emotions");
+  chips.innerHTML = "";
+  for (const name of Object.keys(EMOTIONS)) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.dataset.emotion = name;
+    chip.textContent = name;
+    chip.addEventListener("click", () => applyEmotion(name));
+    chips.appendChild(chip);
   }
-  const paint = () => {
-    const shut = collapsed.has("pheno");
-    head.classList.toggle("shut", shut);
-    for (const r of rows) r.style.display = shut ? "none" : "";
-  };
-  head.addEventListener("click", () => {
-    if (collapsed.has("pheno")) collapsed.delete("pheno");
-    else collapsed.add("pheno");
-    try {
-      localStorage.setItem(storageKey("collapsed"), JSON.stringify([...collapsed]));
-    } catch { /* nothing to persist to */ }
-    paint();
-  });
-  paint();
+  paintEmotions();
+}
+
+function paintEmotions(): void {
+  for (const chip of Array.from($("emotions").children) as HTMLElement[]) {
+    chip.classList.toggle("on", chip.dataset.emotion === emotion);
+  }
 }
 
 function buildControls(): void {
   const panel = $("controls");
   panel.innerHTML = "";
-  const fields = Object.keys(tuning);
-  const placed = new Set<string>();
+  for (const id of Object.keys(sliderDom)) delete sliderDom[id];
+  ensureChannel();
+  const active = channelsFor().find((c) => c.title === channel);
+  if (!active) return;
 
   const add = (key: string) => {
     const value = (tuning as unknown as Record<string, number | number[]>)[key];
@@ -653,54 +705,15 @@ function buildControls(): void {
     }
   };
 
-  for (const group of GROUPS) {
-    const mine = group.fields.filter((f) => fields.includes(f));
-    if (mine.length === 0) continue;
-    const head = document.createElement("h3");
-    head.className = "group";
-    head.textContent = group.title;
-    panel.appendChild(head);
-    // COLLAPSIBLE, and collapsed state is remembered. Nine groups of controls is
-    // more than fits on a screen, so working on the wheels means scrolling past
-    // the dendrites every time -- and the scroll position is lost on every remount.
-    const rows: HTMLElement[] = [];
-    for (const key of mine) {
-      const before = panel.childElementCount;
-      add(key);
-      placed.add(key);
-      for (let i = before; i < panel.childElementCount; i += 1) {
-        rows.push(panel.children[i] as HTMLElement);
-      }
-    }
-    const paintGroup = () => {
-      const shut = collapsed.has(group.title);
-      head.classList.toggle("shut", shut);
-      for (const r of rows) r.style.display = shut ? "none" : "";
-    };
-    head.addEventListener("click", () => {
-      if (collapsed.has(group.title)) collapsed.delete(group.title);
-      else collapsed.add(group.title);
-      try {
-        localStorage.setItem(storageKey("collapsed"), JSON.stringify([...collapsed]));
-      } catch { /* a blocked store is not a reason to stop rendering */ }
-      paintGroup();
-    });
-    paintGroup();
-  }
-
-  // Nothing is hidden. A field in no group still appears, because a panel you
-  // cannot trust to show everything is worse than an untidy one -- silently
-  // dropping one would make a control vanish the moment a field is renamed.
-  const orphans = fields.filter((f) => !placed.has(f));
-  if (orphans.length > 0) {
-    const head = document.createElement("h3");
-    head.className = "group warn";
-    head.textContent = "UNGROUPED — add these to GROUPS";
-    panel.appendChild(head);
-    for (const key of orphans) add(key);
-  }
-
-  buildPhenotype(panel);
+  // ONE CHANNEL AT A TIME. The rail used to stack every group and rely on
+  // collapsing; the desk below is now the index, so the rail is the selected
+  // channel's effects and nothing else. Nothing is hidden: every field belongs
+  // to a strip, orphans get a warning strip of their own.
+  const head = document.createElement("h3");
+  head.className = active.title.startsWith("UNGROUPED") ? "group warn" : "group";
+  head.textContent = active.title;
+  panel.appendChild(head);
+  for (const key of active.fields) add(key);
 }
 
 /**
@@ -711,14 +724,6 @@ function buildControls(): void {
  * you are looking at. Grouping by PASS puts the controls for the thing you are
  * staring at together, and numbering them makes the render order legible.
  */
-/** Which groups are shut, remembered across reloads. */
-const collapsed = new Set<string>((() => {
-  try {
-    return JSON.parse(localStorage.getItem(storageKey("collapsed")) ?? "[]") as string[];
-  } catch {
-    return [];
-  }
-})());
 
 const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "1 · Wheels — the orbiting beams", fields: [
@@ -730,9 +735,6 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   ] },
   { title: "3 · The iris — radial filaments", fields: [
     "irisGain", "irisRadius", "irisFil", "irisFlow",
-  ] },
-  { title: "3 · Neural pathways — superseded by the iris", fields: [
-    "linkGain", "linkBow", "linkRange", "linkLimb",
   ] },
   { title: "3 · Dendrites — the neurons and their signals", fields: [
     "dendriteGain", "dendrite", "dendriteTip", "bead", "signal", "arc",
@@ -1058,7 +1060,7 @@ function tickLfos(nowMs: number): void {
   // Pushed but NOT remembered: a swept value is a question, not a decision, and
   // writing it to the store every frame would overwrite the look you set.
   if (changed && renderer) {
-    (renderer as { setTuning(next: never): void }).setTuning(clone(tuning) as never);
+    (renderer as { setTuning(next: never): void }).setTuning(clone(effectiveTuning()) as never);
   }
 }
 
@@ -1160,7 +1162,13 @@ function push(): void {
   remember(slotKey(body, slot), tuning);
   // Cast at the seam: the page holds one union and each renderer takes its own
   // half of it, which the body switch above already guarantees.
-  (renderer as { setTuning(next: never): void }).setTuning(clone(tuning) as never);
+  // The renderer hears effectiveTuning() — the desk's monitor mix — while
+  // remember() above stores the REAL numbers: mute and solo can never leak
+  // into a saved look, which is exactly how a zeroed speaking preset once
+  // happened.
+  (renderer as { setTuning(next: never): void }).setTuning(clone(effectiveTuning()) as never);
+  paintMixerLevels();
+  paintDrift();
 }
 
 function drive(): void {
@@ -1225,7 +1233,18 @@ window.__benchFrame = () => {
 function loop(): void {
   raf = realRaf(loop);
   frames += 1;
-  tickLfos(performance.now());
+  if (abActive) {
+    // The reference holds the stage; sweeps and journeys wait their turn.
+  } else if (transit && renderer) {
+    const at = Math.min(1, (performance.now() - transit.start) / transit.ms);
+    // A raised cosine, so the journey leaves and arrives gently.
+    const eased = 0.5 - 0.5 * Math.cos(Math.PI * at);
+    (renderer as { setTuning(next: never): void })
+      .setTuning(lerpTuning(transit.from, effectiveTuning(), eased) as never);
+    if (at >= 1) transit = null;
+  } else {
+    tickLfos(performance.now());
+  }
   drive();
   renderer?.frame(performance.now());
   // Every twelfth frame: often enough to feel live while dragging, rare enough
@@ -1296,11 +1315,18 @@ function measure(): void {
  */
 async function savePreset(): Promise<void> {
   const status = $("saved");
+  const label = window.prompt(`Label this ${slotKey(body, slot)} version (optional)`, "");
+  if (label === null) {
+    status.textContent = "save cancelled";
+    status.className = "";
+    return;
+  }
   const payload = {
     body,
     slot,
     tuning,
     lfos: Object.fromEntries(Object.entries(lfos).filter(([, l]) => l.on)),
+    ...(label.trim() === "" ? {} : { label: label.trim() }),
   };
   try {
     const response = await fetch("/__bench-presets", {
@@ -1309,14 +1335,441 @@ async function savePreset(): Promise<void> {
       body: JSON.stringify(payload),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const body_ = await response.json() as { path?: string; count?: number };
-    status.textContent = `locked in — ${body_.count ?? "?"} saved`;
+    const body_ = await response.json() as { path?: string; versions?: number };
+    status.textContent = `locked in — v${body_.versions ?? "?"} of ${slotKey(body, slot)}`;
     status.className = "ok";
+    void refreshHistory();
   } catch (error) {
     // Said out loud rather than swallowed: a save that silently failed would be
     // discovered when the tuning was wanted, which is exactly too late.
     status.textContent = `SAVE FAILED — ${(error as Error).message}`;
     status.className = "bad";
+  }
+}
+
+/**
+ * THE DESK. One strip per draw pass along the bottom of the stage; the right
+ * rail is the selected channel's effects. A strip carries the pass's short
+ * name, a lamp that lights while an LFO sweeps any of its values, a fader on
+ * the pass's master level, and mute/solo.
+ *
+ * MUTE AND SOLO ARE MONITOR CONTROLS. They shape what the renderer shows and
+ * never touch `tuning`, so a saved preset cannot inherit a channel somebody
+ * was auditioning without.
+ */
+/** Superseded by the iris: present in the struct, deliberately not a channel.
+ *  Hidden rather than orphaned, so the desk does not grow a warning strip for
+ *  fields nothing should be editing. */
+const HIDDEN_FIELDS = new Set(["linkGain", "linkBow", "linkRange", "linkLimb"]);
+let channel = "";
+const muted = new Set<string>();
+let soloed: string | null = null;
+const mixerDom: Record<string, { input: HTMLInputElement; out: HTMLElement }> = {};
+
+function channelsFor(): { title: string; fields: string[] }[] {
+  const fields = Object.keys(tuning).filter((f) => !HIDDEN_FIELDS.has(f));
+  const present = GROUPS
+    .map((g) => ({ title: g.title, fields: g.fields.filter((f) => fields.includes(f)) }))
+    .filter((g) => g.fields.length > 0);
+  const placed = new Set(present.flatMap((g) => g.fields));
+  const orphans = fields.filter((f) => !placed.has(f));
+  if (orphans.length > 0) {
+    present.push({ title: "UNGROUPED — add these to GROUPS", fields: orphans });
+  }
+  return present;
+}
+
+/** What a channel's fader drives: the pass's first master level. */
+function levelFields(fields: readonly string[]): string[] {
+  const levels = fields.filter((f) => f.endsWith("Gain"));
+  for (const special of ["core", "reverb", "voiceLevel"] as const) {
+    if (fields.includes(special)) levels.push(special);
+  }
+  return levels;
+}
+
+/** What mute silences: every field that puts light on screen for this pass.
+ *  Wider than the fader, because a pass like the eye draws through `eye` and
+ *  `starburst` as well as `core` — muting only the gains left it half lit. */
+const MUTE_EXTRA = new Set(["core", "eye", "starburst", "reverb", "voiceLevel"]);
+function muteFields(fields: readonly string[]): string[] {
+  return fields.filter((f) => f.endsWith("Gain") || MUTE_EXTRA.has(f));
+}
+
+function audible(title: string): boolean {
+  return soloed !== null ? title === soloed : !muted.has(title);
+}
+
+/** The tuning the renderer hears: muted channels' levels at zero, the real
+ *  numbers untouched. With nothing muted this is `tuning` itself. */
+function effectiveTuning(): Tuning {
+  if (muted.size === 0 && soloed === null) return tuning;
+  const out = clone(tuning);
+  const record = out as unknown as Record<string, number | number[]>;
+  for (const g of channelsFor()) {
+    if (audible(g.title)) continue;
+    for (const field of muteFields(g.fields)) {
+      const value = record[field];
+      record[field] = typeof value === "number" ? 0 : value.map(() => 0);
+    }
+  }
+  return out;
+}
+
+function channelShortName(title: string): string {
+  return title.replace(/^\d+ · /, "").split(" — ")[0];
+}
+
+function selectChannel(title: string): void {
+  channel = title;
+  try {
+    localStorage.setItem(storageKey(`channel.${body}`), title);
+  } catch { /* nothing to persist to */ }
+  buildControls();
+  paintMixer();
+}
+
+/** The selected channel, valid for the body on stage: the remembered one if it
+ *  still exists here, the first strip otherwise. */
+function ensureChannel(): void {
+  const channels = channelsFor();
+  if (channels.some((c) => c.title === channel)) return;
+  let stored: string | null = null;
+  try {
+    stored = localStorage.getItem(storageKey(`channel.${body}`));
+  } catch { /* fine */ }
+  channel = channels.some((c) => c.title === stored)
+    ? stored as string
+    : channels[0]?.title ?? "";
+}
+
+function buildMixer(): void {
+  const desk = $("mixer");
+  desk.innerHTML = "";
+  for (const id of Object.keys(mixerDom)) delete mixerDom[id];
+  ensureChannel();
+  for (const g of channelsFor()) {
+    const strip = document.createElement("div");
+    strip.className = "channel";
+    strip.dataset.channel = g.title;
+    const name = document.createElement("div");
+    name.className = "chname";
+    name.textContent = channelShortName(g.title);
+    name.title = g.title;
+    strip.appendChild(name);
+    const lamp = document.createElement("i");
+    lamp.className = "chlamp";
+    lamp.title = "Lit while an LFO sweeps this channel";
+    strip.appendChild(lamp);
+    const drift = document.createElement("span");
+    drift.className = "chdrift";
+    drift.title = "Values off the baseline in this channel";
+    strip.appendChild(drift);
+    const level = levelFields(g.fields)[0] ?? g.fields[0];
+    if (level !== undefined) {
+      const record = tuning as unknown as Record<string, number | number[]>;
+      const current = record[level];
+      const at = typeof current === "number" ? current : current[0];
+      const [min, max, step] = RANGE[level] ?? [0, 1, 0.005];
+      const fader = document.createElement("input");
+      fader.type = "range";
+      fader.className = "fader";
+      fader.min = String(min);
+      fader.max = String(max);
+      fader.step = String(step);
+      fader.value = String(at);
+      fader.title = TITLES[level] ?? level;
+      const out = document.createElement("b");
+      out.textContent = at.toFixed(3);
+      fader.addEventListener("input", () => {
+        const live = tuning as unknown as Record<string, number | number[]>;
+        const value = live[level];
+        const next = Number(fader.value);
+        assign(level, typeof value === "number"
+          ? next
+          : [next, ...(value as number[]).slice(1)]);
+        out.textContent = next.toFixed(3);
+        // The rail's slider for the same value follows, if it is on show.
+        const rail = sliderDom[lfoKey(level, 0)];
+        if (rail) {
+          rail.input.value = fader.value;
+          rail.out.textContent = next.toFixed(3);
+        }
+        push();
+      });
+      // The fader must not also select the channel mid-drag.
+      fader.addEventListener("click", (event) => event.stopPropagation());
+      mixerDom[level] = { input: fader, out };
+      strip.appendChild(fader);
+      strip.appendChild(out);
+      const ms = document.createElement("div");
+      ms.className = "ms";
+      const mute = document.createElement("button");
+      mute.type = "button";
+      mute.textContent = "M";
+      mute.title = "Mute — silence this channel in the renderer; the numbers are untouched";
+      mute.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (muted.has(g.title)) muted.delete(g.title);
+        else muted.add(g.title);
+        paintMixer();
+        push();
+      });
+      const solo = document.createElement("button");
+      solo.type = "button";
+      solo.textContent = "S";
+      solo.title = "Solo — silence every other channel";
+      solo.addEventListener("click", (event) => {
+        event.stopPropagation();
+        soloed = soloed === g.title ? null : g.title;
+        paintMixer();
+        push();
+      });
+      ms.appendChild(mute);
+      ms.appendChild(solo);
+      strip.appendChild(ms);
+    }
+    strip.addEventListener("click", () => selectChannel(g.title));
+    desk.appendChild(strip);
+  }
+  paintMixer();
+}
+
+function paintMixer(): void {
+  const desk = $("mixer");
+  const channels = channelsFor();
+  for (const strip of Array.from(desk.children) as HTMLElement[]) {
+    const title = strip.dataset.channel ?? "";
+    strip.classList.toggle("selected", title === channel);
+    strip.classList.toggle("muted", !audible(title));
+    const fields = channels.find((c) => c.title === title)?.fields ?? [];
+    const swept = fields.some((field) =>
+      Object.entries(lfos).some(([id, l]) => l.on && id.startsWith(`${field}:`)));
+    strip.querySelector(".chlamp")?.classList.toggle("on", swept);
+    const off = driftCount(fields);
+    const badge = strip.querySelector(".chdrift");
+    if (badge) badge.textContent = off > 0 ? `Δ${off}` : "";
+    const [mute, solo] = Array.from(strip.querySelectorAll(".ms button"));
+    mute?.classList.toggle("on", muted.has(title));
+    solo?.classList.toggle("on", soloed === title);
+  }
+}
+
+/** The faders follow the numbers, wherever the numbers were changed. */
+function paintMixerLevels(): void {
+  const record = tuning as unknown as Record<string, number | number[]>;
+  for (const [field, dom] of Object.entries(mixerDom)) {
+    const value = record[field];
+    const at = typeof value === "number" ? value : value?.[0];
+    if (typeof at !== "number") continue;
+    dom.input.value = String(at);
+    dom.out.textContent = at.toFixed(3);
+  }
+}
+
+/**
+ * THE BASELINE. "Apply to all states" copies the look on stage to every state
+ * of the body and records it as the ground truth each state is then edited
+ * FROM — so "how far has this state gone" is a measurable answer, not a
+ * memory. Values off the baseline are marked amber in the rail, and each
+ * channel strip counts its own drift.
+ */
+let baseline: { tuning: Tuning; lfos: LfoMap } | null = null;
+
+/**
+ * Server first, localStorage second. A baseline is a decision, and a decision
+ * that lives in one browser profile is one localStorage clear from gone — the
+ * same lesson the save button already carries. The file's `<body>.baseline`
+ * entry is versioned like any state, so the ground truth has a history too.
+ */
+function loadBaseline(): void {
+  const versions = history[`${body}.baseline`]?.versions ?? [];
+  const newest = versions[versions.length - 1];
+  if (newest) {
+    baseline = {
+      tuning: { ...clone(shippedFor(body, "standby")), ...newest.tuning } as Tuning,
+      lfos: { ...(newest.lfos ?? {}) },
+    };
+    paintBaselineNote();
+    return;
+  }
+  try {
+    const raw = localStorage.getItem(storageKey(`baseline.${body}`));
+    const parsed = raw ? JSON.parse(raw) as Tuning & { tuning?: Tuning; lfos?: LfoMap } : null;
+    baseline = parsed
+      ? ("tuning" in parsed && parsed.tuning
+          ? { tuning: parsed.tuning, lfos: parsed.lfos ?? {} }
+          : { tuning: parsed as Tuning, lfos: {} })
+      : null;
+  } catch {
+    baseline = null;
+  }
+  paintBaselineNote();
+}
+
+function driftAt(field: string, index: number): boolean {
+  if (!baseline) return false;
+  const now = (tuning as unknown as Record<string, number | number[]>)[field];
+  const was = (baseline.tuning as unknown as Record<string, number | number[]>)[field];
+  if (now === undefined || was === undefined) return false;
+  const a = typeof now === "number" ? now : now[index];
+  const b = typeof was === "number" ? was : (was as number[])[index];
+  return typeof a === "number" && typeof b === "number" && Math.abs(a - b) > 1e-6;
+}
+
+function driftCount(fields: readonly string[]): number {
+  if (!baseline) return 0;
+  let count = 0;
+  for (const field of fields) {
+    const now = (tuning as unknown as Record<string, number | number[]>)[field];
+    const width = typeof now === "number" ? 1 : now?.length ?? 0;
+    for (let index = 0; index < width; index += 1) {
+      if (driftAt(field, index)) count += 1;
+    }
+  }
+  return count;
+}
+
+function paintDrift(): void {
+  for (const [id, dom] of Object.entries(sliderDom)) {
+    const [field, indexText] = id.split(":");
+    dom.out.classList.toggle("drift", driftAt(field, Number(indexText)));
+  }
+  paintBaselineNote();
+  // The strips' Δ counts live in paintMixer; drift changes on every dial move,
+  // so the desk repaints with the rail rather than waiting for a click.
+  paintMixer();
+  paintDriftFilter();
+  paintStates();
+}
+
+function paintBaselineNote(): void {
+  const note = $("baselineNote");
+  if (!baseline) {
+    note.innerHTML = "No baseline — <i>Apply to all states</i> makes this look the ground truth.";
+    return;
+  }
+  const versions = history[`${body}.baseline`]?.versions ?? [];
+  const from = versions[versions.length - 1]?.label;
+  const off = driftCount(Object.keys(tuning).filter((f) => !HIDDEN_FIELDS.has(f)));
+  const provenance = from ? ` · ${from}` : "";
+  note.innerHTML = off === 0
+    ? `<b style="color:#6ee7a8">on baseline</b> — ${slot} matches the shared ground${provenance}`
+    : `<b>${off} value${off === 1 ? "" : "s"}</b> off baseline in ${slot}${provenance}`;
+}
+
+$("applyAll").addEventListener("click", () => {
+  const states = slotsFor(body).filter((at) => at !== "arrival" && at !== "error");
+  const sure = window.confirm(
+    `Copy the ${slot} look of ${body} to ${states.join(", ")}, and make it the baseline every state is measured from?`,
+  );
+  if (!sure) return;
+  baseline = { tuning: clone(tuning), lfos: { ...lfos } };
+  try {
+    localStorage.setItem(storageKey(`baseline.${body}`), JSON.stringify(baseline));
+    for (const at of states) {
+      // The look AND its motion: a state is animated, so the oscillators are
+      // part of the ground, not an accessory left behind.
+      localStorage.setItem(storageKey(slotKey(body, at)), JSON.stringify(baseline.tuning));
+      localStorage.setItem(storageKey(`${slotKey(body, at)}.lfo`), JSON.stringify(baseline.lfos));
+    }
+  } catch { /* a blocked store is not a reason to stop rendering */ }
+  // And to the FILE, so the ground survives this browser. Fire-and-report:
+  // a failed write says so in the status line rather than pretending.
+  void fetch("/__bench-presets", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      body,
+      slot: "baseline",
+      tuning: baseline.tuning,
+      lfos: baseline.lfos,
+      label: `baseline from ${slot}`,
+    }),
+  }).then((response) => {
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    $("saved").textContent = `baseline set from ${slot} — applied to ${states.length} states, saved to file`;
+    $("saved").className = "ok";
+    void refreshHistory();
+  }).catch((error: Error) => {
+    $("saved").textContent = `baseline applied locally, FILE SAVE FAILED — ${error.message}`;
+    $("saved").className = "bad";
+  });
+  lfos = { ...baseline.lfos };
+  paintDrift();
+  paintMixer();
+});
+
+/** Load the ground into the state on stage, oscillators included, and edit up
+ *  from there — the iteration loop the baseline exists for. */
+$("fromBaseline").addEventListener("click", () => {
+  if (!baseline) {
+    $("saved").textContent = "no baseline yet — Apply to all states sets one";
+    $("saved").className = "bad";
+    return;
+  }
+  transit = null;
+  tuning = { ...clone(shipped), ...clone(baseline.tuning) } as Tuning;
+  lfos = { ...baseline.lfos };
+  buildControls();
+  remember(slotKey(body, slot), tuning);
+  rememberLfos();
+  renderer?.transitionTo(clone(effectiveTuning()) as never);
+  paintMixerLevels();
+  paintDrift();
+  $("saved").textContent = `${slot} reset to baseline`;
+  $("saved").className = "ok";
+});
+
+/**
+ * THE SAVE HISTORY, read back from the file the saves go into. Saving appends
+ * a version rather than replacing the entry, so every look ever locked in
+ * stays reachable. Choosing one loads it into the dials and localStorage like
+ * any edit; the file is not touched until the next save.
+ */
+type SavedVersion = {
+  tuning: Partial<Tuning>; lfos?: LfoMap; savedAt?: string; label?: string;
+};
+let history: Record<string, { versions: SavedVersion[] }> = {};
+
+async function refreshHistory(): Promise<void> {
+  try {
+    const response = await fetch("/__bench-presets");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    history = await response.json() as typeof history;
+  } catch {
+    // An unreachable store reads as empty rather than as an error page: the
+    // bench still works, the select just says nothing is saved.
+    history = {};
+  }
+  paintHistory();
+  loadBaseline();
+  paintDrift();
+}
+
+function paintHistory(): void {
+  const select = $("history") as HTMLSelectElement;
+  const versions = history[slotKey(body, slot)]?.versions ?? [];
+  select.innerHTML = "";
+  const head = document.createElement("option");
+  head.value = "";
+  head.textContent = versions.length > 0
+    ? `History — ${versions.length} saved for ${slotKey(body, slot)}`
+    : `History — nothing saved for ${slotKey(body, slot)}`;
+  select.appendChild(head);
+  // Newest first BY DATE, with the version number stable: v3 stays v3 wherever
+  // it sorts, because it names a row in the file, not a position in this list.
+  const order = versions
+    .map((version, index) => ({ version, index }))
+    .sort((a, b) => (b.version.savedAt ?? "").localeCompare(a.version.savedAt ?? ""));
+  for (const { version, index } of order) {
+    const option = document.createElement("option");
+    option.value = String(index);
+    const when = version.savedAt
+      ? version.savedAt.slice(0, 16).replace("T", " ")
+      : "undated";
+    option.textContent = `v${index + 1} · ${when}${version.label ? ` · ${version.label}` : ""}`;
+    select.appendChild(option);
   }
 }
 
@@ -1400,23 +1853,94 @@ try {
 }
 paintSheet();
 
-$("mode").addEventListener("change", (event) => {
-  // The mode select drives BOTH the render state and which preset is loaded.
-  // Two controls for those would be two things to forget to line up.
-  slot = (event.target as HTMLSelectElement).value as Slot;
-  // A TRANSITION, NOT A REMOUNT. This used to call mount(), which destroys the
-  // renderer, rebuilds it and plays the arrival -- so every change of mode sent the
-  // body back out to twice the radius and drew it in again. Changing mode is a
-  // response, not an introduction; the arrival happens once, on load.
+/**
+ * THE JOURNEY BETWEEN STATES, mapped here rather than left to a cut.
+ *
+ * A state is an animated base look; changing state eases every number from the
+ * look on stage to the destination's saved look over an interval chosen on the
+ * transport. The renderer keeps drawing throughout — this is the same journey
+ * the app will make, at a pace you can audition slow enough to judge.
+ */
+const PACE_MS: Record<string, number> = { instant: 0, fast: 350, normal: 1100, slow: 2600 };
+/** Fields that are counts, kept whole mid-journey: 1.4 wheels is not a look. */
+const INT_FIELDS = new Set(["rings", "shardStride", "petal"]);
+let transit: { from: Tuning; start: number; ms: number } | null = null;
+
+function lerpTuning(from: Tuning, to: Tuning, at: number): Tuning {
+  const out = clone(to);
+  const target = out as unknown as Record<string, number | number[]>;
+  const source = from as unknown as Record<string, number | number[]>;
+  for (const [key, value] of Object.entries(target)) {
+    const was = source[key];
+    if (was === undefined) continue;
+    if (typeof value === "number" && typeof was === "number") {
+      const mixed = was + (value - was) * at;
+      target[key] = INT_FIELDS.has(key) ? Math.round(mixed) : mixed;
+    } else if (Array.isArray(value) && Array.isArray(was)) {
+      target[key] = value.map((v, index) =>
+        typeof was[index] === "number" ? was[index] + (v - was[index]) * at : v);
+    }
+  }
+  return out;
+}
+
+function setState(next: Slot): void {
+  if (next === slot) return;
+  const from = clone(effectiveTuning());
+  slot = next;
   shipped = shippedFor(body, slot);
   tuning = saved(slotKey(body, slot), shipped);
   for (const id of Object.keys(sliderDom)) delete sliderDom[id];
   lfos = savedLfos(slotKey(body, slot));
   buildControls();
   remember(slotKey(body, slot), tuning);
-  renderer?.transitionTo(clone(tuning) as never);
+  paintStates();
+  paintMixerLevels();
+  paintMixer();
+  paintHistory();
+  paintDrift();
+  const ms = PACE_MS[($("pace") as HTMLSelectElement).value] ?? 0;
+  if (ms === 0 || !renderer) {
+    transit = null;
+    push();
+    return;
+  }
+  transit = { from, start: performance.now(), ms };
+}
+try {
+  const storedPace = localStorage.getItem(storageKey("pace"));
+  if (storedPace && storedPace in PACE_MS) ($("pace") as HTMLSelectElement).value = storedPace;
+} catch { /* fine */ }
+$("pace").addEventListener("change", () => {
+  try {
+    localStorage.setItem(storageKey("pace"), ($("pace") as HTMLSelectElement).value);
+  } catch { /* fine */ }
 });
 $("save").addEventListener("click", () => { void savePreset(); });
+$("history").addEventListener("change", (event) => {
+  const select = event.target as HTMLSelectElement;
+  const raw = select.value;
+  const picked = select.selectedOptions[0]?.textContent ?? "";
+  select.value = "";
+  if (raw === "") return;
+  const version = history[slotKey(body, slot)]?.versions[Number(raw)];
+  if (!version) return;
+  transit = null;
+  // Straight into the dials rather than through saved(): a URL parameter for
+  // this slot would otherwise shadow the version just chosen. localStorage is
+  // updated like any edit; the file is untouched until the next save.
+  tuning = { ...clone(shipped), ...version.tuning } as Tuning;
+  lfos = { ...(version.lfos ?? {}) };
+  buildControls();
+  remember(slotKey(body, slot), tuning);
+  rememberLfos();
+  renderer?.transitionTo(clone(effectiveTuning()) as never);
+  paintMixerLevels();
+  paintMixer();
+  paintDrift();
+  $("saved").textContent = `loaded ${picked}`;
+  $("saved").className = "ok";
+});
 $("voicePlay").addEventListener("click", () => {
   const pick = ($("clip") as HTMLSelectElement).value;
   void startVoice(pick).catch((error: Error) => {
@@ -1500,7 +2024,6 @@ const startMode = params.get("mode");
 const startLevel = params.get("level");
 if (startMode && (SLOTS as readonly string[]).includes(startMode)) {
   slot = startMode as Slot;
-  ($("mode") as HTMLSelectElement).value = startMode;
 }
 if (startLevel) ($("level") as HTMLInputElement).value = startLevel;
 // A link naming a body should open on it. Checked in order and first match
@@ -1514,5 +2037,95 @@ for (const named of ["familiar", "ultron"] as const) {
     break;
   }
 }
+/** Show only the dials that have left the baseline — the working set, when
+ *  iterating a state up from the ground. */
+let driftOnly = ((): boolean => {
+  try {
+    return localStorage.getItem(storageKey("driftOnly")) === "1";
+  } catch {
+    return false;
+  }
+})();
+
+function paintDriftFilter(): void {
+  const toggle = $("driftOnly");
+  toggle.classList.toggle("on", driftOnly);
+  for (const wrap of Array.from($("controls").querySelectorAll(".row")) as HTMLElement[]) {
+    const field = wrap.dataset.field;
+    if (!field) continue;
+    const value = (tuning as unknown as Record<string, number | number[]>)[field];
+    const width = typeof value === "number" ? 1 : value?.length ?? 0;
+    let off = false;
+    for (let index = 0; index < width; index += 1) {
+      if (driftAt(field, index)) { off = true; break; }
+    }
+    wrap.style.display = driftOnly && !off ? "none" : "";
+  }
+}
+
+$("driftOnly").addEventListener("click", () => {
+  driftOnly = !driftOnly;
+  try {
+    localStorage.setItem(storageKey("driftOnly"), driftOnly ? "1" : "0");
+  } catch { /* fine */ }
+  paintDriftFilter();
+});
+
+/**
+ * A/B AGAINST THE GROUND. Hold the button (or the B key) to hear the baseline;
+ * release to fall back to your edit. A reference you can flash mid-judgement
+ * is the difference between "I think it moved" and knowing.
+ */
+let abActive = false;
+
+function abBaseline(on: boolean): void {
+  if (!baseline || !renderer || on === abActive) return;
+  abActive = on;
+  if (on) {
+    (renderer as { setTuning(next: never): void }).setTuning(clone(baseline.tuning) as never);
+    $("saved").textContent = "A/B — showing baseline";
+    $("saved").className = "ok";
+  } else {
+    push();
+    $("saved").textContent = "";
+  }
+}
+
+for (const [down, up] of [["mousedown", "mouseup"], ["touchstart", "touchend"]] as const) {
+  $("abHold").addEventListener(down, (event) => {
+    event.preventDefault();
+    abBaseline(true);
+  });
+  $("abHold").addEventListener(up, () => abBaseline(false));
+}
+$("abHold").addEventListener("mouseleave", () => abBaseline(false));
+document.addEventListener("keyup", (event) => {
+  if (event.key.toLowerCase() === "b") abBaseline(false);
+});
+
+/** 1–6 play the states like keys, skipped while typing in any control. */
+document.addEventListener("keydown", (event) => {
+  const at = event.target as HTMLElement;
+  if (at.tagName === "INPUT" || at.tagName === "SELECT" || at.tagName === "TEXTAREA") return;
+  if (event.key.toLowerCase() === "b" && !event.repeat) {
+    abBaseline(true);
+    return;
+  }
+  const index = Number(event.key) - 1;
+  if (!Number.isInteger(index) || index < 0) return;
+  const available = slotsFor(body);
+  if (index < available.length) setState(available[index]);
+});
+
+$("gear").addEventListener("click", () => $("modal").classList.add("open"));
+$("modalClose").addEventListener("click", () => $("modal").classList.remove("open"));
+$("modal").addEventListener("click", (event) => {
+  if (event.target === $("modal")) $("modal").classList.remove("open");
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") $("modal").classList.remove("open");
+});
+buildEmotions();
 $("export").textContent = "";
 mount();
+void refreshHistory();
