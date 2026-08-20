@@ -1,13 +1,13 @@
 {
   "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-  "captureManifestSha256": "593d69ba3e1598fccd41ff8b1742991a00c5c2fba6dd34fcc4df3df22f18f849",
+  "captureManifestSha256": "1e03a8758bcbd6cbf660ca87e1fff842a0caf981a0be5db21b9600e1c6bfb388",
   "captureSourceBinding": {
-    "branch": "feat/familiar-bodies-polish",
-    "digestAfterCapture": "44d2baacc81adee314b4d7fd4dd8de8f7a7a569c0e645a0cfdd1f4cfd067067d",
+    "branch": "feat/ultron-membrane",
+    "digestAfterCapture": "df947ec981b9abb81f9689af9555d632baa0ce3b103547e4187c5e01fe649953",
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "44d2baacc81adee314b4d7fd4dd8de8f7a7a569c0e645a0cfdd1f4cfd067067d",
+    "digestBeforeCapture": "df947ec981b9abb81f9689af9555d632baa0ce3b103547e4187c5e01fe649953",
     "dirty": true,
-    "head": "b0dcbf11d51745b457178e1ba6ba52d2f88f6a56",
+    "head": "87151d97640bf10b4ac9f3f5a9cefc16e614a26f",
     "scope": [
       "apps/worker/src",
       "apps/worker/tests/visual"

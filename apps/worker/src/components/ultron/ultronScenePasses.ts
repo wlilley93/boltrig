@@ -21,6 +21,25 @@ import {
 } from "./shadersDendrite";
 import { CRACK_SEGMENTS, FACET_STRIDE } from "./shadersUltron";
 
+export function drawMembrane(
+gl: WebGL2RenderingContext, progs: Record<string, WebGLProgram>,
+d: UltronDrive, tuning: UltronTuning, shared: FloatUniforms,
+): void {
+  // THE BODY ITSELF, UNDER EVERYTHING. The analytic shell is the ground the
+  // structural passes read against -- drawn first so veins, cracks and facets
+  // sit ON a surface instead of floating in the dark, which is the difference
+  // between fracture on a membrane and debris in a void.
+  const membrane = progs.membrane;
+  gl.useProgram(membrane);
+  setUniforms(gl, membrane, {
+    ...shared,
+    uGain: ramp(tuning.membraneGain, d.energy),
+    uMembrane: tuning.membrane,
+    uRadius: d.radius,
+  }, {});
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
 export function drawDendrite(
 gl: WebGL2RenderingContext, progs: Record<string, WebGLProgram>,
 d: UltronDrive, tuning: UltronTuning, shared: FloatUniforms,

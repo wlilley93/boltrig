@@ -53,6 +53,79 @@ export const CRACK_SEGMENTS = 3;
  *  board is mostly board. */
 export const FACET_STRIDE = 9;
 
+// ---------------------------------------------------------------- membrane
+//
+// THE VOLUMETRIC SURFACE the references have and the particle passes cannot
+// make. Veins, cracks and facets are all LINES: everywhere they are dense the
+// additive stack blows out, and everywhere they are sparse he has no body at
+// all -- which is both halves of "a bit nebulous". This pass draws the body
+// itself: an analytic translucent shell, bright at the limb where a line of
+// sight grazes the most of it (the same chord-length argument homeRadius makes
+// for putting particles on a shell), faint through the middle, with its
+// silhouette displaced by the SAME cloudy() lobes the simulation shapes the
+// particles with -- so the membrane and the mass agree about where his edge is.
+//
+// Analytic in NDC rather than raymarched: the camera is project()'s fixed
+// perspective, so the shell's screen footprint is a closed form and a
+// fullscreen triangle is the whole geometry. The speech wave crosses it as
+// expanding rings (pulse sampled at the projected radius), which is Animal
+// Logic's cause-and-effect-through-the-form on the surface itself.
+export const MEMBRANE_VERT = `#version 300 es
+precision highp float;
+out vec2 vNdc;
+const vec2 POS[3] = vec2[3](vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0));
+void main() {
+  vNdc = POS[gl_VertexID];
+  gl_Position = vec4(POS[gl_VertexID], 0.0, 1.0);
+}`;
+
+export const MEMBRANE_FRAG = `#version 300 es
+precision highp float;
+in vec2 vNdc;
+out vec4 oColor;
+
+uniform float uTime;
+uniform float uAspect;
+uniform float uRadius;
+uniform float uGain;
+uniform vec3 uWarm;
+uniform vec3 uHot;
+// x radius as a scale on uRadius, y the silhouette feather, z the interior veil.
+uniform vec3 uMembrane;
+${FIELD_GLSL}
+${PULSE_GLSL}
+
+void main() {
+  // Undo project() at the z=0 plane: xy_ndc = p.xy / 1.9 there. The shell has
+  // depth, but a soft glow does not need the per-fragment depth solve.
+  vec2 q = vec2(vNdc.x * max(uAspect, 0.001), vNdc.y) * 1.9;
+  float r = length(q);
+  float R = uRadius * uMembrane.x;
+
+  // The front-hemisphere bearing for this fragment, for the lobes. Clamped
+  // inside the shell so the sqrt stays real out to the feathered edge.
+  float zf = sqrt(max(R * R - min(r * r, R * R * 0.98), 0.0));
+  vec3 n = normalize(vec3(q, max(zf, R * 0.02)));
+  float Rl = R * (1.0 + uCloud.x * cloudy(n, uTime * uCloud.y));
+
+  float x = clamp(r / max(Rl, 1e-4), 0.0, 1.2);
+  // Chord length through a thin shell: flat in the middle, steep at the limb.
+  float chord = 1.0 / sqrt(1.0 - min(x * x, 0.9975)) - 1.0;
+  // Outside the (lobed) silhouette it feathers to nothing.
+  float edge = smoothstep(1.0 + uMembrane.y, 1.0 - uMembrane.y, x);
+  // The interior veil: the faint through-the-body glow that says membrane
+  // rather than ring. Quieter at the centre so the iris and dendrites read.
+  float veil = uMembrane.z * mix(0.30, 1.0, x * x);
+
+  float glow = (min(chord, 6.0) * 0.55 + veil) * edge;
+  // The voice crossing the surface, as rings at the projected radius; a held
+  // note keeps the whole sheet breathing gently under uSwell.
+  glow *= 1.0 + 1.5 * pulse(vec3(q, 0.0)) + 0.35 * uSwell;
+
+  vec3 c = mix(uWarm, uHot, 0.16 + 0.22 * clamp(chord * 0.25, 0.0, 1.0));
+  oColor = vec4(c * glow * uGain, 1.0);
+}`;
+
 // -------------------------------------------------------------------- veins
 //
 // The same velocity-stretched streaks, given a longer tail and a slower ramp to

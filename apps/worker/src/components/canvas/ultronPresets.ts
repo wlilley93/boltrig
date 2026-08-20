@@ -49,6 +49,13 @@ export const ULTRON_ARRIVAL: UltronTuning = {
   veinLimb: [0.26, 1.35],
   crackLimb: [0.22, 1.0],
   facetLimb: [0.22, 1.05],
+  // Coverage does not matter while the body is sparks: let the birth swirl free.
+  homePull: 0.0,
+  knee: 0.5,
+  // No membrane at birth -- the crystalline mass BLOOMS into one as the ease
+  // carries these toward the settled tuning.
+  membraneGain: [0.0, 0.0],
+  membrane: [0.98, 0.10, 0.16],
 };
 
 /**
@@ -85,6 +92,8 @@ export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
     irisGain: [0.42, 0.14],
     irisFlow: [0.06, 0.5],
     cloud: [0.3, 0.6],
+    // The shell rests visible: at rest he IS the membrane, structure asleep.
+    membraneGain: [0.38, 0.12],
   },
   listening: {
     dendriteGain: [3.78, 1.8],
@@ -102,6 +111,9 @@ export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
     irisGain: [0.46, 0.28],
     irisFlow: [0.12, 0.62],
     cloud: [0.32, 0.9],
+    // LISTENING IS SURFACE. The skin brightens toward whoever is talking while
+    // the interior stays quiet -- receiving, not computing.
+    membraneGain: [0.52, 0.30],
   },
   // THE BUSIEST STATE. Every pass is up, the crystal turns fastest, the pathways
   // reach furthest and wander widest, the fracture lines spread.
@@ -120,6 +132,9 @@ export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
     irisGain: [0.6, 0.4],
     irisFlow: [0.18, 0.7],
     cloud: [0.36, 1.1],
+    // THINKING IS INTERIOR. The shell thins so the churn reads through it; the
+    // busiest state is inside him, not on him.
+    membraneGain: [0.34, 0.18],
   },
   // Executing rather than searching: facets and fractures lead, the neurons hold.
   working: {
