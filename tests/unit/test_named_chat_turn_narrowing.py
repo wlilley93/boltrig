@@ -97,18 +97,20 @@ async def test_skills_narrow_a_wildcard_ceiling_to_their_tool_grants(recording):
         context, skills=["browser/visual"],
     )
 
+    # agent.send rides along: the lane's intrinsic peer verb (FLT-PEER-01),
+    # kept by the intersection because the wildcard ceiling permits it.
     assert sorted(recording.seen["grants"].allow) == [
-        "browser.navigate", "browser.snapshot",
+        "agent.send", "browser.navigate", "browser.snapshot",
     ]
     assert sorted(recording.seen["tools"]) == [
-        "browser.navigate", "browser.snapshot",
+        "agent.send", "browser.navigate", "browser.snapshot",
     ]
 
 
-async def test_a_role_with_no_skills_gets_the_empty_set_not_the_ceiling(recording):
+async def test_a_role_with_no_skills_keeps_only_the_peer_verb(recording):
     # Legacy spawns gave a skill-less child EMPTY grants; the named lane must
-    # not hand the same child the whole ceiling instead. The runtime answers
-    # the empty set with the read-only phase, observably.
+    # not hand the same child the whole ceiling instead - only its intrinsic
+    # peer capability survives.
     store = await _store_with_skill()
     context = InvocationContext(tenant_id=T, run_id="r2", grants=GrantSet.of(["*"]))
 
@@ -116,8 +118,10 @@ async def test_a_role_with_no_skills_gets_the_empty_set_not_the_ceiling(recordin
         _Kernel(store), object(), _Item(), _Profile(), "task", context, skills=[],
     )
 
-    assert recording.seen["grants"].allow == ()
-    assert recording.seen["tools"] == ()
+    # Voice and peers, no kernel tools: the intrinsic agent.send survives,
+    # every skill-derived verb is gone.
+    assert recording.seen["grants"].allow == ("agent.send",)
+    assert recording.seen["tools"] == ("agent.send",)
 
 
 async def test_callers_that_pass_no_skills_keep_the_raw_context(recording):

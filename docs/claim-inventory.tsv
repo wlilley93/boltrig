@@ -1048,6 +1048,8 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/model_gateway.py:33		An in-memory, T
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/model_router.py:49		Choose an agent's governed endpoint for one input modality.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/named_agent.py:101		authority, but never the named-peer mailbox capability.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/named_agent.py:80		real named identity always enters the distributed turn scheduler.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/named_chat_turn.py:36		appends it after the role ceiling so a durable identity can always reach
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/named_chat_turn.py:37		its peers (FLT-PEER-01).
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/named_work_routing.py:32		Resolve an explicit peer address or the declared default, never infer.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/personas.py:46		The persona text for a character id, or None.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/authority.py:11		Resolve all current ceilings;
