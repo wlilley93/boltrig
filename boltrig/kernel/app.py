@@ -32,6 +32,7 @@ from .conversation_list_views import conversation_search_views, conversation_vie
 from .hitl_http import list_visible_hitl, respond_to_hitl
 from .web_security import client_ip
 from .work_http import get_visible_work_item, list_visible_work_items, work_item_audit_trail
+from .work_views import work_item_view
 from .bearer_principal import resolve_principal
 
 
@@ -421,11 +422,14 @@ def create_app(
             scope=p.scope,
             message=body.message,
             conversation_id=body.conversation_id,
+            agent_address=body.agent_address,
             attachments=body.attachments,
             on_behalf_bearer=body.on_behalf_bearer,
             idempotency_key=body.idempotency_key,
-            origin=body.origin, caller_context=body.caller_context,
-            model_profile_id=body.model_profile_id, model_choice_id=body.model_choice_id,
+            origin=body.origin,
+            caller_context=body.caller_context,
+            model_profile_id=body.model_profile_id,
+            model_choice_id=body.model_choice_id,
         )
         # RBAC / access errors happen before the first event and propagate to the
         # central exception handler (canonical envelope) - the stream hasn't begun.
@@ -581,20 +585,7 @@ def create_app(
         )
         next_cursor = items[-1].id if len(items) == page else None
         return {
-            "items": [
-                {
-                    "id": w.id,
-                    "intent": w.intent,
-                    "status": w.status.value,
-                    "confidence": w.confidence,
-                    "convergent": w.convergent,
-                    "owner_member": w.owner_member,
-                    "source": w.source,
-                    "parent_id": w.parent_id,
-                    "hatchet_run_id": w.hatchet_run_id,
-                }
-                for w in items
-            ],
+            "items": [work_item_view(w) for w in items],
             "limit": page,
             "next_cursor": next_cursor,
         }
@@ -626,18 +617,7 @@ def create_app(
             return JSONResponse({"error": "not_found"}, status_code=404)
 
         def _wd(w) -> dict:
-            return {
-                "id": w.id,
-                "intent": w.intent,
-                "status": w.status.value,
-                "confidence": w.confidence,
-                "convergent": w.convergent,
-                "owner_member": w.owner_member,
-                "source": w.source,
-                "parent_id": w.parent_id,
-                "hatchet_run_id": w.hatchet_run_id,
-                "on_behalf_of": w.on_behalf_of,
-            }
+            return work_item_view(w, detail=True)
 
         # children queried directly by parent_id, still department-scoped and
         # bounded to a page (US-IAM-02 preserved; M7 / SEC-69 bounding).

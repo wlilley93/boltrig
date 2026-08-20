@@ -8,6 +8,10 @@ lands in, because that decides whether a model treats it as instructions.
 
 from __future__ import annotations
 
+from boltrig.fleet.chat import ChatService, build_turn_executor
+from boltrig.kernel import Kernel
+from boltrig.kernel.events import EventRelay
+from boltrig.store import InMemoryStore
 
 from boltrig.fleet.chat_caller_context import rendered_context
 from boltrig.models.chat_context import (
@@ -147,3 +151,49 @@ def test_unusable_references_are_dropped_never_a_refusal():
 
     assert "matter:good" in supplement
     assert "no-type" not in supplement
+
+
+async def test_caller_context_reaches_the_real_turn_executor_in_the_correct_bands():
+    """The HTTP/service seam must not accept context and drop it before prompt build."""
+    captured: dict[str, str] = {}
+
+    async def spawn(
+        tenant_id, task, skills, prefer, context, *, partial_on_budget=True,
+        grant_ceiling=None, announce_child=True,
+    ):
+        captured["task"] = task
+        return {"output": {"text": "done"}, "summary": "done"}
+
+    store, relay = InMemoryStore(), EventRelay()
+    kernel = Kernel(store)
+    chat = ChatService(
+        store,
+        relay,
+        turn_executor=build_turn_executor(
+            kernel, type("Spawner", (), {"spawn": staticmethod(spawn)})(), continuity=False
+        ),
+    )
+    context = CallerContext.from_body(
+        _Body(
+            mode="plan",
+            page_context={"type": "screen", "id": "display-1", "label": "Inbox"},
+        )
+    )
+
+    await _collect_events(
+        chat.handle_turn(
+            tenant_id="acme",
+            user_id="alice",
+            role="engineer",
+            message="summarise what I am looking at",
+            caller_context=context,
+        )
+    )
+
+    assert "asked for a PLAN" in captured["task"]
+    assert "<untrusted" in captured["task"]
+    assert "screen:display-1 (Inbox)" in captured["task"]
+
+
+async def _collect_events(events):
+    return [event async for event in events]

@@ -33,6 +33,7 @@ import type {
 interface Accumulator {
   runId?: string;
   conversationId?: string;
+  agentAddress?: string;
   text: string;
   reasoning: string;
   ended: boolean;
@@ -131,6 +132,7 @@ function buildTurn(acc: Accumulator): NormalizedTurn {
   return {
     runId: acc.runId,
     conversationId: acc.conversationId,
+    agentAddress: acc.agentAddress,
     text: acc.text,
     reasoning: acc.reasoning,
     tools: acc.tools,
@@ -149,6 +151,7 @@ function buildTurn(acc: Accumulator): NormalizedTurn {
 function handleMessageStart(ev: ChatMessageStart, acc: Accumulator) {
   acc.runId = ev.run_id;
   acc.conversationId = ev.conversation_id;
+  acc.agentAddress = ev.agent_address;
 }
 
 function handleTextDelta(ev: ChatTextDelta, acc: Accumulator) {

@@ -25,6 +25,9 @@ from boltrig.models import (
     ActionType,
     AdapterRecord,
     AgentCapability,
+    AgentMessage,
+    AgentMessageKind,
+    AgentTurnLane,
     AuditEvent,
     Channel,
     Conversation,
@@ -41,6 +44,7 @@ from boltrig.models import (
     MessageRole,
     MemoryProjectionStatus,
     ModelEndpoint,
+    NamedAgent,
     Noun,
     RealtimeCallEvent,
     RealtimeCallSession,
@@ -75,6 +79,8 @@ _TABLES = (
     "conversations,channels,realtime_calls,"
     "realtime_call_events,audit_outbox,"
     "routing_policies,capability_bindings,source_operations,provider_connections"
+    ",agent_session_summaries,agent_message_deliveries,agent_messages,agent_sessions"
+    ",agent_turn_waiters,agent_turn_leases,named_agents"
 )
 
 
@@ -145,6 +151,101 @@ async def store(request):
     close = getattr(s, "close", None)
     if close is not None:
         await close()
+
+
+@pytest.mark.store
+@pytest.mark.invariant("REL-AGENT-01")
+@pytest.mark.invariant("REL-AGENT-02")
+async def test_named_agent_turn_scheduling_and_delivery_match_on_both_stores(store):
+    for address in ("alice", "bob"):
+        await store.upsert_named_agent(
+            NamedAgent(
+                tenant_id=T,
+                address=address,
+                name=address,
+                runtime="script",
+                default_for_intake=address == "alice",
+            )
+        )
+    held = await store.acquire_agent_turn(
+        T, "bob", "holder", AgentTurnLane.INTERACTIVE, 60
+    )
+    assert held is not None
+    assert await store.acquire_agent_turn(
+        T, "bob", "background", AgentTurnLane.BACKGROUND, 60
+    ) is None
+    message = AgentMessage(
+        id="parity-peer-message",
+        tenant_id=T,
+        conversation_id="parity-dialogue",
+        sender="alice",
+        recipient="bob",
+        kind=AgentMessageKind.TELL,
+        content="Persist before waking Bob.",
+    )
+    assert await store.enqueue_agent_message(message)
+    assert await store.acquire_agent_turn(
+        T, "bob", "interactive", AgentTurnLane.INTERACTIVE, 60
+    ) is None
+    assert await store.release_agent_turn(held)
+
+    assert await store.claim_next_agent_message(T, "peer-worker", 60) is None
+    interactive = await store.acquire_agent_turn(
+        T, "bob", "interactive", AgentTurnLane.INTERACTIVE, 60
+    )
+    assert interactive is not None
+    assert await store.release_agent_turn(interactive)
+    claimed = await store.claim_next_agent_message(T, "peer-worker", 60)
+    assert claimed is not None
+    assert claimed.turn_lease.lane is AgentTurnLane.PEER
+    renewed = await store.renew_agent_message_claim(
+        T, message.id, claimed.turn_lease, 60
+    )
+    assert renewed is not None and renewed.token == claimed.turn_lease.token
+    assert await store.complete_agent_message(T, message.id, renewed)
+    inbox = await store.list_agent_inbox(T, "bob")
+    assert [(row.id, status) for row, status in inbox] == [
+        (message.id, "delivered")
+    ]
+
+    background = await store.acquire_agent_turn(
+        T, "bob", "background", AgentTurnLane.BACKGROUND, 60
+    )
+    assert background is not None
+    assert await store.release_agent_turn(background)
+
+
+@pytest.mark.store
+@pytest.mark.invariant("CONV-AGENT-02")
+async def test_conversation_agent_binding_is_compare_and_set_on_both_stores(store):
+    for address in ("alice", "bob"):
+        await store.upsert_named_agent(
+            NamedAgent(
+                tenant_id=T,
+                address=address,
+                name=address.title(),
+                runtime="script",
+                default_for_intake=address == "alice",
+            )
+        )
+    conversation = Conversation(
+        id="legacy-null-agent", tenant_id=T, user_id="owner"
+    )
+    await store.create_conversation(conversation)
+
+    assert await store.bind_conversation_agent(T, conversation.id, "bob") == "bob"
+    assert await store.bind_conversation_agent(T, conversation.id, "alice") == "bob"
+    stored = await store.get_conversation(T, conversation.id)
+    assert stored is not None and stored.agent_address == "bob"
+
+    # The generic metadata update path cannot rewrite the routing identity.
+    stored.agent_address = "alice"
+    stored.title = "ordinary metadata update"
+    await store.update_conversation(stored)
+    reloaded = await store.get_conversation(T, conversation.id)
+    assert reloaded is not None
+    assert reloaded.agent_address == "bob"
+    assert reloaded.title == "ordinary metadata update"
 
 
 @pytest.mark.store

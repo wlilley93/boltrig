@@ -2,15 +2,14 @@
 
 Everything that varies between organisations is data, not code (P1/P7). The
 fleet manifest is that data: who the org is, how it authenticates, which models
-and adapters it uses, the agent hierarchy, the ephemeral runtimes, the HITL
-policy, and the network / privacy posture. ``load_manifest`` parses it into
+and adapters it uses, its flat named-agent roster, the ephemeral runtimes, the
+HITL policy, and the network / privacy posture. ``load_manifest`` parses it into
 frozen dataclasses (with ``${ENV}`` interpolation); ``apply_manifest`` seeds the
 store so the kernel and fleet can run against it.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -38,7 +37,6 @@ _BUILTIN_MODULES: dict[str, str] = {
     "runpod": "boltrig.adapters.builtin.runpod",
     "browser-cli": "boltrig.adapters.builtin.browser_cli",
 }
-
 
 # --- typed config dataclasses (frozen; data, not behaviour) -----------------
 @dataclass(frozen=True)
@@ -89,7 +87,7 @@ class ModelsConfig:
 
 @dataclass(frozen=True)
 class BudgetConfig:
-    """A cost / token ceiling for a hierarchy tier (FR cost-control)."""
+    """A cost / token ceiling for a named agent or ephemeral runtime."""
 
     token_limit: int | None = None
     cost_limit_micros: int | None = None
@@ -103,7 +101,7 @@ class BudgetConfig:
 
 @dataclass(frozen=True)
 class HierarchyTier:
-    """A durable agent in the org chart (tier1 chief-of-staff / tier2 head)."""
+    """Deprecated Chief/Department manifest record accepted for migration."""
 
     name: str
     # Compatibility default for old manifests. Codex is the only target agent
@@ -126,10 +124,47 @@ class HierarchyTier:
 
 @dataclass(frozen=True)
 class HierarchyConfig:
-    """The agent org chart: one tier1 over many tier2 department heads (S6)."""
+    """Deprecated input bridge for pre-flat manifests.
+
+    Runtime composition consumes :func:`resolved_named_agents`; this shape is
+    retained so an existing deployment can migrate without a flag day.
+    """
 
     tier1: HierarchyTier | None = None
     tier2: tuple[HierarchyTier, ...] = ()
+
+
+@dataclass(frozen=True)
+class NamedAgentConfig:
+    """One durable, addressable tier-1 peer declared by the manifest."""
+
+    name: str
+    address: str
+    runtime: str = "codex"
+    model_endpoint: str | None = None
+    max_depth: int = 3
+    supported_skills: tuple[str, ...] = ("*",)
+    cost_tier: str = "standard"
+    scope_id: str | None = None
+    budget: BudgetConfig | None = None
+    purpose: str = ""
+    brief: str = ""
+
+
+@dataclass(frozen=True)
+class NamedAgentsConfig:
+    """A flat roster plus the peer that receives unaddressed work."""
+
+    default: str | None = None
+    members: tuple[NamedAgentConfig, ...] = ()
+
+    def __post_init__(self) -> None:
+        addresses = [member.address for member in self.members]
+        names = [member.name for member in self.members]
+        if len(addresses) != len(set(addresses)) or len(names) != len(set(names)):
+            raise ValueError("named agent names and addresses must be unique")
+        if self.members and self.default not in set(addresses):
+            raise ValueError("agents.default must name a declared agent address")
 
 
 @dataclass(frozen=True)
@@ -341,6 +376,7 @@ class FleetManifest:
     timezone_default: str = "UTC"
     identity: IdentityConfig = field(default_factory=IdentityConfig)
     models: ModelsConfig = field(default_factory=ModelsConfig)
+    named_agents: NamedAgentsConfig = field(default_factory=NamedAgentsConfig)
     hierarchy: HierarchyConfig = field(default_factory=HierarchyConfig)
     ephemeral_runtimes: tuple[EphemeralRuntime, ...] = ()
     spawn_rules: tuple[SpawnRule, ...] = ()
@@ -388,6 +424,11 @@ class FleetManifest:
             deny.update(gs.deny)
             if m.role == "org-admin":
                 allow.add("*")
+        # Internal peer coordination is part of the named-agent substrate. It
+        # enters a caller context only after the durable tier-1 sender check;
+        # adding it to this independent tenant ceiling does not grant it to a
+        # human or ephemeral context.
+        allow.add("agent.send")
         if "*" in allow:
             return GrantSet.of(["*"], deny=sorted(deny))
         return GrantSet.of(sorted(allow), deny=sorted(deny))
@@ -595,6 +636,19 @@ def _parse_hierarchy(raw: Mapping[str, Any]) -> HierarchyConfig:
     return HierarchyConfig(tier1=tier1, tier2=tier2)
 
 
+def _parse_named_agents(raw: Mapping[str, Any]) -> NamedAgentsConfig:
+    from .manifest_agents import parse_named_agents
+
+    return parse_named_agents(
+        raw, as_tuple=_as_tuple, parse_budget=_parse_budget
+    )
+
+
+def resolved_named_agents(manifest: FleetManifest) -> NamedAgentsConfig:
+    from .manifest_agents import resolve_named_agents
+    return resolve_named_agents(manifest)
+
+
 def _parse_ephemeral(raw: Mapping[str, Any]) -> EphemeralRuntime:
     skills = raw.get("supported_skills", raw.get("skills", ["*"]))
     return EphemeralRuntime(
@@ -780,6 +834,8 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
     doc: dict[str, Any] = _interpolate(raw_doc, environ)
 
     tenant_id = str(doc["tenant_id"])
+    if doc.get("agents") and doc.get("hierarchy"):
+        raise ValueError("manifest must declare agents or legacy hierarchy, not both")
     return FleetManifest(
         organisation=str(doc.get("organisation", tenant_id)),
         tenant_id=tenant_id,
@@ -787,6 +843,11 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
         timezone_default=str(doc.get("timezone_default", "UTC")),
         identity=_parse_identity(doc.get("identity") or {}, tenant_id),
         models=_parse_models(doc.get("models") or {}, tenant_id),
+        named_agents=(
+            _parse_named_agents(doc.get("agents") or {})
+            if doc.get("agents")
+            else NamedAgentsConfig()
+        ),
         hierarchy=_parse_hierarchy(doc.get("hierarchy") or {}),
         ephemeral_runtimes=tuple(
             _parse_ephemeral(r) for r in (doc.get("ephemeral_runtimes") or [])
@@ -806,54 +867,7 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
     )
 
 
-def export_runtime_environment(
-    manifest: FleetManifest, env: dict[str, str] | None = None
-) -> None:
-    """Expose manifest runtime seams to env-reading runtimes without secrets.
-
-    Explicit process environment wins. This helper only exports config-only model
-    gateway/profile and browser policy data from the manifest so runtime resolvers
-    can stay decoupled from the manifest object. Secret material stays in the
-    deployment environment / credential store.
-    """
-    target = env if env is not None else os.environ
-    runtimes = manifest.section("runtimes")
-    gateway = runtimes.get("gateway") if isinstance(runtimes.get("gateway"), dict) else {}
-    if not isinstance(gateway, dict):
-        return
-    base_url = str(gateway.get("base_url") or "").strip()
-    if base_url and "BOLTRIG_MODEL_GATEWAY_URL" not in target:
-        target["BOLTRIG_MODEL_GATEWAY_URL"] = base_url
-    ttl = gateway.get("cache_ttl_seconds")
-    if ttl not in (None, "") and "BOLTRIG_MODEL_GATEWAY_TTL" not in target:
-        try:
-            target["BOLTRIG_MODEL_GATEWAY_TTL"] = str(int(ttl))
-        except (TypeError, ValueError):
-            pass
-    health = gateway.get("health") if isinstance(gateway.get("health"), dict) else {}
-    if isinstance(health, dict):
-        enabled = health.get("enabled")
-        if enabled not in (None, "") and "BOLTRIG_MODEL_GATEWAY_HEALTH" not in target:
-            target["BOLTRIG_MODEL_GATEWAY_HEALTH"] = (
-                "1" if is_truthy(str(enabled)) else "0"
-            )
-        path = str(health.get("path") or "").strip()
-        if path and "BOLTRIG_MODEL_GATEWAY_HEALTH_PATH" not in target:
-            target["BOLTRIG_MODEL_GATEWAY_HEALTH_PATH"] = path
-        timeout = health.get("timeout")
-        if timeout not in (None, "") and "BOLTRIG_MODEL_GATEWAY_HEALTH_TIMEOUT" not in target:
-            target["BOLTRIG_MODEL_GATEWAY_HEALTH_TIMEOUT"] = str(timeout)
-    profiles = gateway.get("model_profiles")
-    if (
-        isinstance(profiles, dict)
-        and profiles
-        and "BOLTRIG_MODEL_PROFILES" not in target
-    ):
-        target["BOLTRIG_MODEL_PROFILES"] = json.dumps(profiles, sort_keys=True)
-    browser = manifest.section("browser_cli")
-    policy = str(browser.get("cloud_policy") or "").strip().lower()
-    if policy and "BOLTRIG_BROWSER_CLOUD_POLICY" not in target:
-        target["BOLTRIG_BROWSER_CLOUD_POLICY"] = policy
+from .manifest_runtime import export_runtime_environment  # noqa: E402,F401
 
 
 async def apply_manifest(
@@ -863,21 +877,7 @@ async def apply_manifest(
     load_builtin_adapters: bool = True,
     confirm_bulk_deactivate: bool = False,
 ) -> None:
-    """Seed the store from the manifest so the kernel/fleet can run (S11.2, P7).
-
-    Seeds, in order: model endpoints, agent capabilities (ephemeral runtimes and
-    hierarchy tiers), tier budgets, tenant permissions, credential references
-    (and adapter bindings), then optionally imports + registers the builtin
-    adapters named in the manifest. Unknown adapter ids are skipped gracefully.
-
-    Capabilities are reconciled scoped-declaratively ([2026] LEXBY LOG-2026-07-17):
-    the manifest is declarative over the capabilities it authored
-    (``source='manifest'``) and additive over governed control-plane grants. A
-    manifest-sourced capability a redeployed manifest no longer declares is
-    soft-deactivated; the mass-deactivation guard aborts the whole apply (nothing
-    committed) unless ``confirm_bulk_deactivate`` (or ``reconcile.allow_bulk_
-    deactivate`` in the manifest) is set.
-    """
+    """Compatibility façade for the guarded store projection."""
     from .manifest_apply import apply_manifest as project_manifest
 
     await project_manifest(

@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from boltrig.config import BudgetConfig, export_runtime_environment, load_manifest
+from boltrig.config import (
+    BudgetConfig,
+    export_runtime_environment,
+    load_manifest,
+    resolved_named_agents,
+)
 
 _MANIFEST = "manifest.example.yaml"
 _ACTIVE_MANIFEST = "manifest.yaml"
@@ -36,10 +41,11 @@ def test_manifest_still_loads_with_round_two_sections():
 def test_no_default_lane_targets_a_retired_runtime(manifest_path):
     """The shipped template is what every new tenant is seeded from.
 
-    `worker-cheap` is the capability every spawn rule routes to, and the tier
-    hierarchy is what a chat turn runs on - a retired runtime on any of them makes
-    the tenant's agent dead on arrival. Retired capabilities are absent, so this
-    checks every declared default lane and guards old stored manifests too.
+    `worker-cheap` is the capability every spawn rule routes to, and every named
+    peer can own a chat or addressed turn. A retired runtime on any of them makes
+    that address dead on arrival. Retired capabilities are absent, so this checks
+    every declared lane and also normalises old hierarchy manifests through the
+    compatibility bridge.
 
     ``manifest.yaml`` is the ACTIVE manifest of whatever checkout this runs in and
     is gitignored - a deployment artifact, not a repo file - so that leg is a local
@@ -54,7 +60,7 @@ def test_no_default_lane_targets_a_retired_runtime(manifest_path):
     if not Path(manifest_path).exists():
         pytest.skip(f"{manifest_path} absent (gitignored active manifest); template leg still runs")
     m = load_manifest(manifest_path)
-    defaulted = [m.hierarchy.tier1, *m.hierarchy.tier2] if m.hierarchy.tier1 else list(m.hierarchy.tier2)
+    defaulted = list(resolved_named_agents(m).members)
     defaulted += [rt for rt in m.ephemeral_runtimes if rt.name.startswith("worker-")]
     assert defaulted, "a manifest with no default lane would spawn nothing"
     for cap in defaulted:

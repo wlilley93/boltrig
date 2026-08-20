@@ -769,6 +769,8 @@ _non_ui("advanced-compatibility", "POST /v1/spawn")
 _non_ui(
     "governed-agent-surface",
     """
+GET /v1/named-agents
+GET /v1/named-agents/{address}/inbox
 POST /v1/memory/propose
 POST /v1/memory/bundle
 GET /v1/memory/resolve
@@ -815,4 +817,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 # 294 since GET /v1/me and GET /v1/branding (the product's own name, read unauthenticated by
 # the sign-in screen). An exact census, not a ratchet: it must equal the
 # routes the app actually serves, so it moves when the surface does.
-EXPECTED_ROUTE_COUNT = 299
+EXPECTED_ROUTE_COUNT = 301

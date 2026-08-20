@@ -459,7 +459,7 @@ test("conversation follow uses projected cursor frames and ignores heartbeats", 
       url = String(input);
       request = init;
       return new Response(
-        'data: {"cursor":4,"event":{"type":"message_start","run_id":"r1","conversation_id":"c/1"},"replay_truncated":true}\n\n' +
+        'data: {"cursor":4,"event":{"type":"message_start","run_id":"r1","conversation_id":"c/1","agent_address":"researcher"},"replay_truncated":true}\n\n' +
         'data: {"cursor":5,"event":{"type":"heartbeat","run_id":"r1"}}\n\n' +
         'data: {"cursor":6,"event":{"type":"tool_call","run_id":"r1","tool":"ticket.create","call_id":"x","args_summary":{"keys":["title"],"count":1}}}\n\n' +
         'data: {"cursor":6,"event":{"type":"message_end","run_id":"r1"}}\n\n',
@@ -487,6 +487,12 @@ test("conversation follow uses projected cursor frames and ignores heartbeats", 
     "message_end",
   ]);
   assert.equal(frames[0]?.replay_truncated, true);
+  assert.equal(
+    frames[0]?.event.type === "message_start"
+      ? frames[0].event.agent_address
+      : undefined,
+    "researcher",
+  );
   assert.deepEqual(result, { status: "ended", cursor: 6 });
 });
 

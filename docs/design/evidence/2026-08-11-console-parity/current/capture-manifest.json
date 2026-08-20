@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-20T14:39:25.045Z",
+  "capturedAt": "2026-08-20T18:38:25.290Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,12 +16,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "df947ec981b9abb81f9689af9555d632baa0ce3b103547e4187c5e01fe649953",
-    "digestAfterCapture": "df947ec981b9abb81f9689af9555d632baa0ce3b103547e4187c5e01fe649953",
+    "digestBeforeCapture": "c56cc3b575d161a696ba1b70aba6c0291f0962431c5c87af7935ef0226139802",
+    "digestAfterCapture": "c56cc3b575d161a696ba1b70aba6c0291f0962431c5c87af7935ef0226139802",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/ultron-membrane",
-    "head": "87151d97640bf10b4ac9f3f5a9cefc16e614a26f",
-    "dirty": true
+    "branch": "pr321-update",
+    "head": "ec1a9a95bb36faef7bff23959ac29d6169f3d753",
+    "dirty": false
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
@@ -290,7 +290,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 5,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

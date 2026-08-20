@@ -51,7 +51,7 @@ jobs:
         run: make python-audit sast iac-scan PY=python
 
       - name: Scan complete Git history for secrets
-        run: make secret-scan
+        run: make secret-scan PY=python
 
       - name: Lint GitHub Actions workflows
         run: make actionlint

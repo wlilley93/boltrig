@@ -77,6 +77,11 @@ MANIFEST_FEATURES: dict[str, FeatureCoverage] = {
         ("worker", "missing", "worker", "worker", "missing"),
         "Endpoints are managed in Worker; process-start sensitive routing and price policy are projected, while mutation/rollback and the parsed-only default role remain incomplete.",
     ),
+    "named_agents": _coverage(
+        "boltrig/config/manifest.py:NamedAgentsConfig",
+        ("worker", "deployment", "worker", "worker", "deployment"),
+        "Worker can inspect the durable peer roster and inboxes; manifest authoring and restart recovery remain deployment-owned.",
+    ),
     "hierarchy": _coverage(
         "boltrig/config/manifest.py:HierarchyConfig",
         ("worker", "worker", "worker", "worker", "deployment"),
@@ -253,6 +258,20 @@ _nested(
     "boltrig/config/manifest.py",
     ("worker", "worker", "worker", "worker", "deployment"),
     "Desired hierarchy is separate from startup-observed runtime evidence.",
+)
+_nested(
+    "NamedAgentsConfig",
+    "default members",
+    "boltrig/config/manifest.py",
+    ("worker", "deployment", "worker", "worker", "deployment"),
+    "The flat roster and its intake default are projected for operators; manifest mutation and restart recovery remain deployment-owned.",
+)
+_nested(
+    "NamedAgentConfig",
+    "name address runtime model_endpoint max_depth supported_skills cost_tier scope_id budget purpose brief",
+    "boltrig/config/manifest.py",
+    ("worker", "deployment", "worker", "worker", "deployment"),
+    "Each durable peer profile is observable and operable through governed serving; declarative profile mutation remains deployment-owned.",
 )
 _nested(
     "EphemeralRuntime",

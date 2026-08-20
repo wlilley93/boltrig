@@ -83,6 +83,7 @@ export type TimelineEntry =
 export interface NormalizedTurn {
   runId?: string;
   conversationId?: string;
+  agentAddress?: string;
   text: string;
   reasoning: string;
   tools: ToolEntry[];

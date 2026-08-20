@@ -151,9 +151,7 @@ class ChannelSidecarDaemon:
         poll_seconds: float = 2.0,
         reconcile_seconds: float = 10.0,
         max_browser_calls: int = _DEFAULT_MAX_BROWSER_CALLS,
-        adapter_factory: Callable[
-            [str, dict[str, Any]], PlatformAdapter
-        ] = create_adapter,
+        adapter_factory: Callable[[str, dict[str, Any]], PlatformAdapter] = create_adapter,
         token_reloader: Callable[[], str | None] | None = None,
         token_source: str = "environment",
     ) -> None:
@@ -168,9 +166,7 @@ class ChannelSidecarDaemon:
         # A non-empty static env snapshot stays a compatibility deployment.
         # An empty snapshot opts into the canonical kernel desired-state pull.
         self._dynamic_reconcile = not bool(specs)
-        self._owner_election_supported = callable(
-            getattr(kernel, "reconcile_channels", None)
-        )
+        self._owner_election_supported = callable(getattr(kernel, "reconcile_channels", None))
         self._token_reloader = token_reloader
         self._token_source = token_source
         self._max_browser_calls = max_browser_calls
@@ -184,11 +180,7 @@ class ChannelSidecarDaemon:
         self._observations: dict[str, dict[str, str]] = {}
         self._stopping = asyncio.Event()
         loaded_token = getattr(kernel, "has_token", None)
-        self.auth_ok = (
-            bool(loaded_token)
-            if loaded_token is not None
-            else token_source != "missing"
-        )
+        self.auth_ok = bool(loaded_token) if loaded_token is not None else token_source != "missing"
         # An empty desired set is valid only after the kernel has actually
         # authenticated this gateway and returned it. Without this separate
         # bit, an initial network failure could make /ready report a false green.
@@ -251,14 +243,25 @@ class ChannelSidecarDaemon:
                 pass
 
     # --- link (a): inbound -------------------------------------------------
-    async def _on_message(
-        self, spec: ChannelSpec, message: dict[str, Any]
-    ) -> None:
+    async def _on_message(self, spec: ChannelSpec, message: dict[str, Any]) -> None:
         body = {
             "id": message.get("id"),
             "sender": str(message.get("sender")),
             "text": message.get("text"),
             "type": "message",
+            # The kernel stamps provider/channel/subject/target itself.  These
+            # exact platform identifiers are signed transport data for private
+            # correlation only and are never projected directly to a client.
+            "message_provenance": {
+                "schema": "channel_message_v1",
+                "provider": spec.platform,
+                "provider_message_id": message.get("provider_message_id") or message.get("id"),
+                "provider_sender_id": message.get("provider_sender_id") or message.get("sender"),
+                "provider_conversation_id": message.get("provider_conversation_id")
+                or message.get("thread"),
+                "provider_timestamp": message.get("provider_timestamp"),
+                "threaded": message.get("threaded") is True,
+            },
         }
         if message.get("thread"):
             # routing data only (SEC-178): the intake maps it onto the reply
@@ -306,9 +309,7 @@ class ChannelSidecarDaemon:
                     "channel_id": channel_id,
                     "revision": revision,
                     "status": "needs_action",
-                    "reason_code": str(
-                        entry.get("reason_code") or "configuration_incomplete"
-                    ),
+                    "reason_code": str(entry.get("reason_code") or "configuration_incomplete"),
                 }
                 continue
             next_specs[channel_id] = ChannelSpec(
@@ -361,9 +362,7 @@ class ChannelSidecarDaemon:
             for channel_id in self._static_specs
             if (
                 channel_id in entries
-                and dict(entries[channel_id].get("ownership") or {}).get(
-                    "status"
-                ) == "owner"
+                and dict(entries[channel_id].get("ownership") or {}).get("status") == "owner"
             )
         }
         for channel_id in sorted(set(self._specs) - owned):
@@ -372,10 +371,7 @@ class ChannelSidecarDaemon:
         for channel_id in sorted(owned - set(self._specs)):
             spec = self._static_specs[channel_id]
             self._start_adapter_task(spec)
-        self._specs = {
-            channel_id: self._static_specs[channel_id]
-            for channel_id in sorted(owned)
-        }
+        self._specs = {channel_id: self._static_specs[channel_id] for channel_id in sorted(owned)}
         await self._report_observations()
 
     async def _reconcile_loop(self) -> None:
@@ -394,8 +390,7 @@ class ChannelSidecarDaemon:
                 recovered = self._reload_token()
                 log.error(
                     "channel reconcile refused: token expired or revoked%s",
-                    "; a rotated token file was loaded"
-                    if recovered else "",
+                    "; a rotated token file was loaded" if recovered else "",
                 )
             except KernelLinkError as exc:
                 self.reconcile_ok = False
@@ -432,6 +427,7 @@ class ChannelSidecarDaemon:
                     config["event_sink"] = browser_audio.emit_event
                 adapter = self._factory(spec.platform, config)
                 try:
+
                     async def on_message(message: dict[str, Any]) -> None:
                         await self._on_message(spec, message)
 
@@ -445,7 +441,9 @@ class ChannelSidecarDaemon:
                     }
                     log.warning(
                         "adapter for channel %s failed to start (%s); retrying in %.0fs",
-                        spec.channel_id, type(exc).__name__, backoff,
+                        spec.channel_id,
+                        type(exc).__name__,
+                        backoff,
                     )
                     await self._sleep(backoff)
                     backoff = min(backoff * 2, 30.0)
@@ -533,6 +531,7 @@ class ChannelSidecarDaemon:
             # the caller's tool token and profile; no base-authority provider
             # conversation is briefly created or later recycled.
             await activate(tool_token, call_id, claimed.get("session_profile"))
+
             async def on_message(message: dict[str, Any]) -> None:
                 await self._on_message(spec, message)
 
@@ -550,9 +549,7 @@ class ChannelSidecarDaemon:
             async with self._browser_session_lock:
                 self._browser_session_pending.discard(call_id)
 
-    async def inject_browser_text(
-        self, call_id: str, audio: BrowserAudio, text: str
-    ) -> bool:
+    async def inject_browser_text(self, call_id: str, audio: BrowserAudio, text: str) -> bool:
         """Forward text only for the exact authenticated media generation.
 
         The identity recheck and provider injection share the exact session's
@@ -575,13 +572,12 @@ class ChannelSidecarDaemon:
                 # The text itself is caller content: log the outcome, not the text.
                 log.warning(
                     "user text injection failed for call %s (%s)",
-                    call_id, type(exc).__name__,
+                    call_id,
+                    type(exc).__name__,
                 )
                 return False
 
-    async def release_browser_media(
-        self, call_id: str, audio: BrowserAudio | None = None
-    ) -> None:
+    async def release_browser_media(self, call_id: str, audio: BrowserAudio | None = None) -> None:
         """Destroy one exact call generation; every other session remains live.
 
         ``audio`` fences late cleanup from a replaced WebSocket: an old
@@ -609,17 +605,14 @@ class ChannelSidecarDaemon:
                 self.auth_ok = False
                 recovered = self._reload_token()
                 log.error(
-                    "outbox claim refused: the run-scoped token is expired or revoked; "
-                    "%s",
+                    "outbox claim refused: the run-scoped token is expired or revoked; %s",
                     (
                         "a rotated token file was loaded"
                         if recovered
                         else "mint a replacement gateway session token"
                     ),
                 )
-                await self._sleep(
-                    self._poll if recovered else _AUTH_RETRY_SECONDS
-                )
+                await self._sleep(self._poll if recovered else _AUTH_RETRY_SECONDS)
                 continue
             except KernelLinkError as exc:
                 log.warning("outbox claim failed (%s); backing off", exc)
@@ -710,13 +703,12 @@ def build_daemon() -> ChannelSidecarDaemon:
     token_file = str(os.environ.get(_TOKEN_FILE_ENV) or "").strip()
     env_token = str(os.environ.get(_TOKEN_ENV) or "").strip()
     if token_file and env_token:
-        raise RuntimeError(
-            "configure exactly one gateway token source, not both"
-        )
+        raise RuntimeError("configure exactly one gateway token source, not both")
     token_reloader = None
     token_source = "missing"
     token: str | None = None
     if token_file:
+
         def token_reloader() -> str | None:
             return _read_token_file(token_file)
 
@@ -731,14 +723,10 @@ def build_daemon() -> ChannelSidecarDaemon:
     reconcile = float(os.environ.get(_RECONCILE_ENV, "10"))
     try:
         max_browser_calls = int(
-            os.environ.get(
-                _MAX_BROWSER_CALLS_ENV, str(_DEFAULT_MAX_BROWSER_CALLS)
-            )
+            os.environ.get(_MAX_BROWSER_CALLS_ENV, str(_DEFAULT_MAX_BROWSER_CALLS))
         )
     except ValueError as exc:
-        raise ValueError(
-            f"{_MAX_BROWSER_CALLS_ENV} must be a positive integer"
-        ) from exc
+        raise ValueError(f"{_MAX_BROWSER_CALLS_ENV} must be a positive integer") from exc
     return ChannelSidecarDaemon(
         KernelClient(kernel_url, token),
         specs,
@@ -774,9 +762,7 @@ async def health() -> JSONResponse:
 async def ready(request: Request) -> JSONResponse:
     """Operational readiness, distinct from liveness and delivery proof."""
     daemon: ChannelSidecarDaemon = request.app.state.daemon
-    converged = all(
-        channel_id in daemon._adapters for channel_id in daemon._specs
-    )
+    converged = all(channel_id in daemon._adapters for channel_id in daemon._specs)
     ok = daemon.auth_ok and daemon.reconcile_ok and converged
     return JSONResponse(
         {
@@ -786,8 +772,7 @@ async def ready(request: Request) -> JSONResponse:
             "token_source": daemon._token_source,
             "token_reload_supported": daemon._token_reloader is not None,
             "single_owner_enforced": (
-                daemon._dynamic_reconcile
-                or daemon._owner_election_supported
+                daemon._dynamic_reconcile or daemon._owner_election_supported
             ),
             "desired": len(daemon._specs),
             "adapters_up": len(daemon._adapters),
@@ -871,9 +856,7 @@ async def browser_call_media(websocket: WebSocket, call_id: str) -> None:
                 # this call's final content-free usage event through the sink.
                 await bridge.detach(call_id, retain_call=True)
             with contextlib.suppress(Exception):
-                await websocket.app.state.daemon.release_browser_media(
-                    call_id, bridge
-                )
+                await websocket.app.state.daemon.release_browser_media(call_id, bridge)
 
 
 @app.get("/status")
@@ -890,12 +873,10 @@ async def status(request: Request) -> JSONResponse:
             "token_source": daemon._token_source,
             "token_reload_supported": daemon._token_reloader is not None,
             "single_owner_enforced": (
-                daemon._dynamic_reconcile
-                or daemon._owner_election_supported
+                daemon._dynamic_reconcile or daemon._owner_election_supported
             ),
             "observations": [
-                daemon._observations[channel_id]
-                for channel_id in sorted(daemon._observations)
+                daemon._observations[channel_id] for channel_id in sorted(daemon._observations)
             ],
             "browser_calls_active": len(daemon._browser_sessions),
             "browser_calls_capacity": daemon._max_browser_calls,

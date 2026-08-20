@@ -3,6 +3,7 @@
 Used by tests and dev as the reference Store; PostgreSQL must behave identically.
 Tenant scoping is enforced on every method (keys are ``(tenant_id, id)`` tuples).
 """
+
 from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -34,6 +35,8 @@ from .ai_key_proposals import AiKeyProposalStoreMem
 from .mcp_lifecycle import McpLifecycleStoreMem
 from .model_endpoints_memory import ModelEndpointStoreMem
 from .conversation_queue import ConversationQueueStoreMem
+from .conversation_binding_memory import ConversationBindingStoreMem
+from .agent_mailbox_memory import AgentMailboxStoreMem
 from boltrig.models import (
     AgentCapability,
     AuditEvent,
@@ -92,23 +95,43 @@ from boltrig.models import (
 from boltrig.models.errors import SchemaValidationError
 from boltrig.models.work import RunCheckpoint
 
+
 def _norm_email_key(value) -> str:
     """Normalise an identity key (the email == user_id in the first-party flow) so
     the global email -> orgs index is case/space-insensitive, matching the login
     normalisation ([2026] VJS-COUNTY 11)."""
     return value.strip().lower() if isinstance(value, str) else ""
 
-class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkItemReadsMem, IdempotencyStoreMem,
-                    GuardedWritesMem, ChannelStoreMem, CapabilityStoreMem,
-                    PermanentFleetStoreMem, BirthProfileStoreMem,
-                    BackgroundJobStoreMem,
-                    ObservabilityReadsMem, ChannelDedupStoreMem,
-                    ChannelOutboxStoreMem, PasswordResetStoreMem,
-                    WorkflowTriggerStoreMem, WorkflowScheduleStoreMem,
-                    AuthoredDefinitionStoreMem, CapabilityRoutingStoreMem,
-                    EvalCaseStoreMem, CredentialReferencePresenceMem,
-                    AiKeyProposalStoreMem, McpLifecycleStoreMem,
-                    ModelEndpointStoreMem, ConversationQueueStoreMem):
+
+class InMemoryStore(
+    DistillationReadsMem,
+    BudgetPolicyMem,
+    BudgetUsageMem,
+    WorkItemReadsMem,
+    IdempotencyStoreMem,
+    GuardedWritesMem,
+    ChannelStoreMem,
+    CapabilityStoreMem,
+    PermanentFleetStoreMem,
+    BirthProfileStoreMem,
+    BackgroundJobStoreMem,
+    ObservabilityReadsMem,
+    ChannelDedupStoreMem,
+    ChannelOutboxStoreMem,
+    PasswordResetStoreMem,
+    WorkflowTriggerStoreMem,
+    WorkflowScheduleStoreMem,
+    AuthoredDefinitionStoreMem,
+    CapabilityRoutingStoreMem,
+    EvalCaseStoreMem,
+    CredentialReferencePresenceMem,
+    AiKeyProposalStoreMem,
+    McpLifecycleStoreMem,
+    ModelEndpointStoreMem,
+    ConversationQueueStoreMem,
+    ConversationBindingStoreMem,
+    AgentMailboxStoreMem,
+):
     """In-memory Store composed from domain partial mixins for offline use and tests."""
 
     def __init__(self) -> None:
@@ -119,6 +142,8 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         self._init_mcp_lifecycle_state()
         self._init_model_endpoint_state()
         self._init_conversation_queue_state()
+        self._init_conversation_binding_state()
+        self._init_agent_mailbox_state()
         self._init_execution_state()
         self._init_account_state()
 
@@ -140,9 +165,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         self._security: dict[str, list[SecurityEvent]] = {}
         self._anchors: dict[str, list[AuditRollupAnchor]] = {}
         self._budgets: dict[tuple[str, str], Budget] = {}
-        self._budget_usage: dict[
-            tuple[str, str, str], tuple[BudgetWindowRef, int, int]
-        ] = {}
+        self._budget_usage: dict[tuple[str, str, str], tuple[BudgetWindowRef, int, int]] = {}
         self._idem: dict[tuple[str, str], dict] = {}
         self._creds: dict[tuple[str, str], dict] = {}
         self._convs: dict[tuple[str, str], Conversation] = {}
@@ -157,12 +180,8 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         self._rev_seq = 0
 
     def _init_account_state(self) -> None:
-        self._permanent_fleet_observations: dict[
-            tuple[str, str], PermanentFleetObservation
-        ] = {}
-        self._birth_profile_receipts: dict[
-            tuple[str, str, str], BirthProfileReceipt
-        ] = {}
+        self._permanent_fleet_observations: dict[tuple[str, str], PermanentFleetObservation] = {}
+        self._birth_profile_receipts: dict[tuple[str, str, str], BirthProfileReceipt] = {}
         self._eval_cases: dict[tuple[str, str], EvalCase] = {}
         self._eval_runs: list[EvalRun] = []
         self._notif: dict[tuple[str, str], NotificationPref] = {}
@@ -196,12 +215,8 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         self._channels: dict[str, Channel] = {}
         self._chan_bindings: dict[tuple[str, str], ChannelBinding] = {}
         self._chan_pairings: dict[tuple[str, str], ChannelPairing] = {}
-        self._chan_gateway_status: dict[
-            tuple[str, str], ChannelGatewayStatus
-        ] = {}
-        self._chan_gateway_leases: dict[
-            tuple[str, str], ChannelGatewayLease
-        ] = {}
+        self._chan_gateway_status: dict[tuple[str, str], ChannelGatewayStatus] = {}
+        self._chan_gateway_leases: dict[tuple[str, str], ChannelGatewayLease] = {}
         # Phase 2 durability: replay-dedup markers keyed (tenant, channel,
         # delivery) -> expiry, and the socket-class outbound hand-off.
         self._chan_deliveries: dict[tuple[str, str, str], datetime] = {}
@@ -458,8 +473,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         self, tenant_id, requested_by, statuses, *, limit=20
     ):
         allowed = {
-            status.value if isinstance(status, HITLStatus) else str(status)
-            for status in statuses
+            status.value if isinstance(status, HITLStatus) else str(status) for status in statuses
         }
         rows = [
             request
@@ -531,15 +545,14 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
 
     async def audit_outbox_due(self, tenant_id, now, limit=100):
         rows = [
-            r for r in getattr(self, "_audit_outbox", [])
+            r
+            for r in getattr(self, "_audit_outbox", [])
             if r["next_retry_at"] <= now and r["tenant_id"] == tenant_id
         ]
         return rows[:limit]
 
     async def audit_outbox_delete(self, outbox_id):
-        self._audit_outbox = [
-            r for r in getattr(self, "_audit_outbox", []) if r["id"] != outbox_id
-        ]
+        self._audit_outbox = [r for r in getattr(self, "_audit_outbox", []) if r["id"] != outbox_id]
 
     async def audit_outbox_mark_failed(self, outbox_id, append_error, next_retry_at):
         for r in getattr(self, "_audit_outbox", []):
@@ -611,22 +624,12 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
 
     async def delete_credential_refs_for_run(self, tenant_id: str, run_id: str) -> int:
         prefix = f"run:{run_id}:"
-        doomed = [
-            key for key in self._creds
-            if key[0] == tenant_id and key[1].startswith(prefix)
-        ]
+        doomed = [key for key in self._creds if key[0] == tenant_id and key[1].startswith(prefix)]
         for key in doomed:
             del self._creds[key]
         return len(doomed)
 
     # --- conversations ---
-    async def create_conversation(self, conv):
-        # Insert-if-absent (mirrors the PG ON CONFLICT (tenant_id, id) DO NOTHING).
-        self._convs.setdefault((conv.tenant_id, conv.id), conv)
-
-    async def get_conversation(self, tenant_id, conv_id):
-        return self._convs.get((tenant_id, conv_id))
-
     async def list_conversations(self, tenant_id, user_id):
         return self._owned_conversations(tenant_id, user_id)
 
@@ -680,12 +683,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
                 matches.append((conv, snippet))
         return self._page(matches, limit, offset)
 
-    async def update_conversation(self, conv):
-        self._convs[(conv.tenant_id, conv.id)] = conv
-
-    async def restore_closed_conversation(
-        self, tenant_id, conv_id, user_id, restored_at
-    ):
+    async def restore_closed_conversation(self, tenant_id, conv_id, user_id, restored_at):
         # One critical section decides existence, ownership, and CLOSED -> ACTIVE.
         # `restore_closed_conversation` never upserts; a concurrent purge stays final.
         with self._conversation_lifecycle_lock:
@@ -746,6 +744,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
             ]
             for conv in doomed:
                 self._convs.pop((conv.tenant_id, conv.id), None)
+                self._conversation_agent_bindings.pop((conv.tenant_id, conv.id), None)
                 self._messages.pop(conv.id, None)
                 self._summaries.pop(conv.id, None)
                 self._steer_queues.pop((conv.tenant_id, conv.id), None)
@@ -851,9 +850,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         key = (status.tenant_id, status.id)
         previous = self._mem_projection.get(key)
         self._mem_projection[key] = (
-            replace(status, created_at=previous.created_at)
-            if previous is not None
-            else status
+            replace(status, created_at=previous.created_at) if previous is not None else status
         )
 
     async def list_memory_projection_statuses(self, tenant_id, fact_id=None, limit=50):
@@ -920,9 +917,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
     async def add_memory_event(self, event):
         self._mem_events[(event.tenant_id, event.id)] = event
 
-    async def list_memory_events(
-        self, tenant_id, *, memory_id=None, memory_key=None, limit=100
-    ):
+    async def list_memory_events(self, tenant_id, *, memory_id=None, memory_key=None, limit=100):
         out = [
             e
             for (t, _), e in self._mem_events.items()
@@ -1235,12 +1230,17 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
                 errors=[f"modality must be one of {sorted(AI_CONFIG_MODALITIES)}"],
             )
         config.updated_at = utcnow()
-        self._ai_configs[(config.tenant_id, config.level, config.scope_id, config.modality)] = config
+        self._ai_configs[(config.tenant_id, config.level, config.scope_id, config.modality)] = (
+            config
+        )
+
     async def get_ai_config(self, tenant_id, level, scope_id, modality="text"):
         # Tenant-scoped: the key includes tenant_id, so a lookup under another tenant
         # never returns this tenant's row (fail-closed, never crosses the boundary).
         return self._ai_configs.get((tenant_id, level, scope_id, modality))
+
     async def list_ai_configs(self, tenant_id):
         return [c for (t, _, _, _), c in self._ai_configs.items() if t == tenant_id]
+
     async def delete_ai_config(self, tenant_id, level, scope_id, modality="text"):
         self._ai_configs.pop((tenant_id, level, scope_id, modality), None)

@@ -93,6 +93,10 @@ DECLARE
     'personal_agents','memory_items','mcp_servers','mcp_probe_receipts',
     'conversation_messages','conversation_steer_queue',
     'conversation_summaries',
+    -- Flat named-agent federation (0084): identities, immutable envelopes,
+    -- mutable delivery/turn leases, priority waiters, logical sessions, and summaries.
+    'named_agents','agent_turn_leases','agent_turn_waiters','agent_sessions','agent_messages',
+    'agent_message_deliveries','agent_session_summaries',
     'user_invitations','user_credentials','password_reset_tokens',
     'user_settings','user_sessions','memory_facts',
     -- TOTP two-factor ([2026] VJS-COUNTY 10): all three carry a tenant_id column, so

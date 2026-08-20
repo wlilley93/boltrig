@@ -273,13 +273,17 @@ def _artifact_rejected(event: dict[str, Any]) -> dict[str, Any]:
 def _steer(event: dict[str, Any]) -> dict[str, Any]:
     return _simple(
         event,
-        optional=("run_id", "conversation_id", "message_id"),
+        optional=("run_id", "conversation_id", "message_id", "agent_address"),
     )
 
 
 _Projector = Callable[[dict[str, Any]], dict[str, Any]]
 _PROJECTORS: dict[str, _Projector] = {
-    "message_start": lambda event: _simple(event, required=("run_id", "conversation_id")),
+    "message_start": lambda event: _simple(
+        event,
+        required=("run_id", "conversation_id"),
+        optional=("agent_address",),
+    ),
     "text_delta": _text_delta,
     "reasoning_delta": lambda event: _simple(event, required=("delta",)),
     "tool_call": _tool_call,

@@ -47,6 +47,15 @@ class RespondBody(BaseModel):
 class ChatBody(BaseModel):
     message: str
     conversation_id: str | None = None
+    # Optional only when STARTING a conversation: the durable tier-1 identity
+    # to bind it to. On an existing conversation this is an assertion, never a
+    # reroute request; a mismatch is refused before a message or run is written.
+    agent_address: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=63,
+        pattern=r"^[a-z0-9][a-z0-9_-]{0,62}$",
+    )
     # Inline, size-capped attachments ([2026] VJS-COUNTY 3): each is a record
     # {name, media_type, data (base64)}. Caps are enforced fail-closed at intake
     # from ChatConfig; an over-cap turn is refused whole before anything persists.

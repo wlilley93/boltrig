@@ -202,6 +202,7 @@ class CodexRuntime:
                 context.grants,
                 run_id=context.run_id,
                 actor=context.actor,
+                actor_tier=context.actor_tier,
                 skills=context.skills_loaded,
                 workspace_id=context.workspace_id,
                 on_behalf_of=context.on_behalf_of,
