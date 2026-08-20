@@ -6,12 +6,9 @@ import contextlib
 from typing import TYPE_CHECKING, Any
 
 from boltrig.config.manifest import ChatConfig
-from boltrig.kernel.work_authority import stamp_creator_ceiling
 from boltrig.models import (
     EMPTY_GRANTS,
     BoltrigError,
-    GrantSet,
-    InvocationContext,
     WorkItem,
     WorkStatus,
 )
@@ -20,7 +17,7 @@ from .chat_attachments import attachment_task_supplement
 from .chat_caller_context import rendered_context
 from .chat_authority import seal_on_behalf_bearer, warn_if_no_usable_authority
 from .chat_model_routing import publish_model_routing
-from .chat_origin import normalised_origin
+from .chat_turn_inputs import chat_invocation_context, chat_work_item
 from .continuity import (
     compaction_enabled,
     compose_turn_task,
@@ -48,73 +45,6 @@ async def _turn_skills(kernel, cfg, tenant_id: str, role: str) -> list[str]:
         if await kernel.store.get_skill(tenant_id, skill_id) is not None:
             skills.append(skill_id)
     return skills
-
-
-def _work_item(
-    tenant_id: str,
-    user_id: str,
-    run_id: str,
-    message: str,
-    origin: str | None,
-    workspace_id: str | None,
-    ceiling: GrantSet,
-) -> WorkItem:
-    item = WorkItem(
-        id=run_id,
-        tenant_id=tenant_id,
-        source="chat",
-        intent=message,
-        source_id=normalised_origin(origin),
-        confidence=1.0,
-        convergent=False,
-        status=WorkStatus.IN_FLIGHT,
-        owner_member="chief-of-staff",
-        hatchet_run_id=run_id,
-        on_behalf_of=user_id,
-        workspace_id=workspace_id,
-    )
-    stamp_creator_ceiling(item, ceiling)
-    return item
-
-
-def _invocation_context(
-    *,
-    tenant_id,
-    user_id,
-    role,
-    ceiling,
-    conversation_id,
-    run_id,
-    workspace_id,
-    scope,
-    model_profile_id,
-    model_choice_id,
-    attachments,
-) -> InvocationContext:
-    return InvocationContext(
-        tenant_id=tenant_id,
-        grants=ceiling,
-        actor="chief-of-staff",
-        actor_tier="tier1",
-        run_id=run_id,
-        on_behalf_of=user_id,
-        workspace_id=workspace_id,
-        extra={
-            "conversation_id": conversation_id,
-            "input_modality": (
-                "vision"
-                if any(
-                    str(item.get("media_type") or "").lower().startswith("image/")
-                    for item in attachments or []
-                )
-                else "text"
-            ),
-            "principal_role": role,
-            **({"principal_scope": dict(scope)} if scope is not None else {}),
-            **({"model_profile": model_profile_id} if model_profile_id else {}),
-            **({"model_endpoint_id": model_choice_id} if model_choice_id else {}),
-        },
-    )
 
 
 async def _turn_task(
@@ -224,17 +154,25 @@ async def _spawn_turn(
     context,
     model_profile_id,
     model_choice_id,
+    named_profile=None,
 ):
     try:
-        result = await spawner.spawn(
-            tenant_id,
-            task,
-            skills,
-            ({"capability": cfg.default_capability} if cfg.default_capability else {}),
-            context,
-            partial_on_budget=True,
-            announce_child=False,
-        )
+        if named_profile is None:
+            result = await spawner.spawn(
+                tenant_id,
+                task,
+                skills,
+                ({"capability": cfg.default_capability} if cfg.default_capability else {}),
+                context,
+                partial_on_budget=True,
+                announce_child=False,
+            )
+        else:
+            from .named_chat_turn import run_named_chat_turn
+
+            result = await run_named_chat_turn(
+                kernel, spawner, item, named_profile, task, context
+            )
         _publish_reply(relay, item.id, model_profile_id, model_choice_id, result, item)
         await persist_new_work_items(
             kernel.store, item, result.get("new_work_items"), source="chat"
@@ -254,6 +192,23 @@ async def _spawn_turn(
         item.status = WorkStatus.FAILED
         item.result = {"error": type(exc).__name__}
     await _settle_turn(kernel, item, tenant_id, item.id)
+
+
+async def _create_chat_item(
+    kernel, cfg, tenant_id, user_id, role, grants, run_id, message, origin, workspace_id
+):
+    skills = await _turn_skills(kernel, cfg, tenant_id, role)
+    ceiling = grants if grants is not None else EMPTY_GRANTS
+    warn_if_no_usable_authority(role, ceiling, skills)
+    from .named_chat_turn import default_named_profile
+
+    profile = await default_named_profile(kernel.store, tenant_id)
+    owner = profile.address if profile is not None else "chief-of-staff"
+    item = chat_work_item(
+        tenant_id, user_id, run_id, message, origin, workspace_id, ceiling, owner
+    )
+    await kernel.store.create_work_item(item)
+    return skills, profile, item, ceiling
 
 
 async def _execute_turn(
@@ -280,11 +235,10 @@ async def _execute_turn(
     model_choice_id,
     caller_context=None,
 ):
-    skills = await _turn_skills(kernel, cfg, tenant_id, role)
-    ceiling = grants if grants is not None else EMPTY_GRANTS
-    warn_if_no_usable_authority(role, ceiling, skills)
-    item = _work_item(tenant_id, user_id, run_id, message, origin, workspace_id, ceiling)
-    await kernel.store.create_work_item(item)
+    skills, named_profile, item, ceiling = await _create_chat_item(
+        kernel, cfg, tenant_id, user_id, role, grants, run_id, message, origin, workspace_id
+    )
+    owner = item.owner_member
     if on_behalf_bearer:
         await seal_on_behalf_bearer(
             kernel.credentials,
@@ -295,7 +249,7 @@ async def _execute_turn(
         )
     if codex_execution is not None:
         await codex_execution.shadow_admit(tenant_id, workspace_id, run_id)
-    context = _invocation_context(
+    context = chat_invocation_context(
         tenant_id=tenant_id,
         user_id=user_id,
         role=role,
@@ -307,6 +261,7 @@ async def _execute_turn(
         model_profile_id=model_profile_id,
         model_choice_id=model_choice_id,
         attachments=attachments,
+        actor=owner if named_profile is not None else None,
     )
     task = await _turn_task(
         kernel,
@@ -332,6 +287,7 @@ async def _execute_turn(
         context,
         model_profile_id,
         model_choice_id,
+        named_profile,
     )
 
 

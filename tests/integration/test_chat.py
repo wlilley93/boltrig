@@ -25,6 +25,7 @@ from boltrig.models import (
     ConversationMessage,
     GrantSet,
     MessageRole,
+    NamedAgent,
     TenantPermissions,
 )
 from boltrig.store import InMemoryStore
@@ -122,6 +123,62 @@ async def test_direct_chat_worker_is_not_rendered_as_a_delegated_subagent():
     work_item = await store.get_work_item(T, run_id)
     assert work_item is not None
     assert work_item.degraded is True
+
+
+@pytest.mark.invariant("FLT-PEER-01")
+@pytest.mark.invariant("REL-AGENT-02")
+async def test_direct_chat_runs_the_default_named_identity(monkeypatch):
+    from boltrig.fleet.permanent_runtime import PermanentAgentRuntime
+    from boltrig.fleet.result import AgentResult
+
+    store, relay = InMemoryStore(), EventRelay()
+    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
+    await store.upsert_named_agent(
+        NamedAgent(
+            tenant_id=T,
+            address="researcher",
+            name="Researcher",
+            runtime="script",
+            default_for_intake=True,
+        )
+    )
+    seen = {}
+
+    async def run_named(self, prompt, context, *, tools):
+        seen.update(prompt=prompt, context=context, tools=tools)
+        return AgentResult.succeeded(
+            {"text": "Named Researcher here."}, summary="Named Researcher here."
+        )
+
+    monkeypatch.setattr(PermanentAgentRuntime, "run_agent_turn", run_named)
+    kernel = Kernel(store)
+    chat = ChatService(
+        store,
+        relay,
+        turn_executor=build_turn_executor(
+            kernel, types.SimpleNamespace(), continuity=False
+        ),
+    )
+
+    out = await _collect(
+        chat.handle_turn(
+            tenant_id=T,
+            user_id="alice",
+            role="engineer",
+            grants=GrantSet.of(["*"]),
+            message="hello",
+        )
+    )
+
+    assert any(
+        event.get("type") == "text_delta"
+        and event.get("delta") == "Named Researcher here."
+        for event in out
+    )
+    assert seen["context"].actor == "researcher"
+    assert seen["context"].actor_tier == "tier1"
+    assert seen["context"].grants.permits("agent.send")
+    assert store._agent_turn_leases[(T, "researcher")] is None
 
 
 @pytest.mark.invariant("FR-CONV-04")

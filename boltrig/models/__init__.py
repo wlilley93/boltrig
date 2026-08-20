@@ -8,6 +8,18 @@ bodies are Pydantic and live with the FastAPI app.
 from __future__ import annotations
 
 from ._exports import PUBLIC_MODEL_EXPORTS as _PUBLIC_MODEL_EXPORTS
+from .agent_comms import (
+    AgentDelivery as AgentDelivery,
+    AgentDeliveryStatus as AgentDeliveryStatus,
+    AgentMessage as AgentMessage,
+    AgentMessageKind as AgentMessageKind,
+    AgentSession as AgentSession,
+    AgentSessionSummary as AgentSessionSummary,
+    AgentTurnLane as AgentTurnLane,
+    AgentTurnLease as AgentTurnLease,
+    ClaimedAgentMessage as ClaimedAgentMessage,
+    NamedAgent as NamedAgent,
+)
 from .audit import (
     ActionType as ActionType,
     AuditEvent as AuditEvent,

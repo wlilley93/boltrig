@@ -42,6 +42,7 @@ from .ai_key_proposals import AiKeyProposalStorePG
 from .mcp_lifecycle import McpLifecycleStorePG
 from .model_endpoints_postgres import ModelEndpointStorePG
 from .conversation_queue import ConversationQueueStorePG
+from .agent_mailbox_postgres import AgentMailboxStorePG
 from .rows import (
     _adapter, _ai_config, _anchor, _audit, _checkpoint,
     _conversation, _hitl_req, _hitl_resp,
@@ -127,7 +128,6 @@ async def _init_conn(conn: asyncpg.Connection) -> None:
     await conn.set_type_codec(
         "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
     )
-
 @bind_tenant_on_store_methods
 class PostgresStore(
     ControlPlaneReadsPG,
@@ -144,7 +144,7 @@ class PostgresStore(
     CredentialReferencePresencePG,
     AiKeyProposalStorePG,
     McpLifecycleStorePG,
-    ModelEndpointStorePG, ConversationQueueStorePG,
+    ModelEndpointStorePG, ConversationQueueStorePG, AgentMailboxStorePG,
 ):
     """asyncpg-backed Store. Domain methods live in partial mixins
     (e.g. ``ChannelStorePG``) to keep this file under the structural floor;

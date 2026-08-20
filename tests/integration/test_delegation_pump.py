@@ -398,16 +398,23 @@ async def test_chat_turn_persists_new_work_items_and_stamps_degraded():
     assert "follow-up" in child.intent
 
 
-# --- the org factory: manifest hierarchy in, minimal default out (P9) ---------
-async def test_build_org_reads_the_manifest_hierarchy():
-    from boltrig.config.manifest import FleetManifest, HierarchyConfig, HierarchyTier
+# --- the org factory: flat manifest roster in, minimal default out (P9) -------
+async def test_build_org_reads_the_flat_named_roster():
+    from boltrig.config.manifest import (
+        FleetManifest,
+        NamedAgentConfig,
+        NamedAgentsConfig,
+    )
 
     kernel = _kernel()
     manifest = FleetManifest(
         organisation=T, tenant_id=T,
-        hierarchy=HierarchyConfig(
-            tier1=HierarchyTier(
+        named_agents=NamedAgentsConfig(
+            default="chief-of-staff",
+            members=(
+                NamedAgentConfig(
                 name="chief-of-staff",
+                address="chief-of-staff",
                 runtime="codex",
                 model_endpoint="chief-model",
                 max_depth=4,
@@ -415,10 +422,11 @@ async def test_build_org_reads_the_manifest_hierarchy():
                 cost_tier="expensive",
                 purpose="Coordinate the whole organisation",
                 brief="Prefer an explicit department decision.",
-            ),
-            tier2=(
-                HierarchyTier(
-                    name="head-of-engineering", department="engineering",
+                ),
+                NamedAgentConfig(
+                    name="head-of-engineering",
+                    address="engineering",
+                    scope_id="engineering",
                     supported_skills=("analysis/*", "integration/refactor"),
                     runtime="script",
                     model_endpoint="head-model",
@@ -427,15 +435,19 @@ async def test_build_org_reads_the_manifest_hierarchy():
                     purpose="Own engineering delivery",
                     brief="Split work into independently verifiable tasks.",
                 ),
-                HierarchyTier(name="head-of-sales", department="sales"),
+                NamedAgentConfig(
+                    name="head-of-sales", address="sales", scope_id="sales"
+                ),
             ),
         ),
     )
     pump = build_org(kernel, build_spawner(kernel), manifest)
-    assert sorted(pump.heads) == ["engineering", "sales"]
+    assert pump._cos is None
+    assert pump._default_agent == "chief-of-staff"
+    assert sorted(pump.named_agents) == ["chief-of-staff", "engineering", "sales"]
     # wildcard patterns describe capabilities, not loadable skill ids
-    assert pump.heads["engineering"].domain_skills == ["integration/refactor"]
-    chief_runtime = pump._cos._runtime
+    assert pump.named_agents["engineering"].domain_skills == ["integration/refactor"]
+    chief_runtime = pump.named_agents["chief-of-staff"]._runtime
     assert chief_runtime is not None
     assert chief_runtime.capability == AgentCapability(
         name="chief-of-staff",
@@ -450,7 +462,8 @@ async def test_build_org_reads_the_manifest_hierarchy():
     )
     assert chief_runtime.purpose == "Coordinate the whole organisation"
     assert chief_runtime.brief == "Prefer an explicit department decision."
-    head_runtime = pump.heads["engineering"]._runtime
+    assert chief_runtime.role == "tier1"
+    head_runtime = pump.named_agents["engineering"]._runtime
     assert head_runtime is not None
     assert head_runtime.capability == AgentCapability(
         name="head-of-engineering",
@@ -464,6 +477,7 @@ async def test_build_org_reads_the_manifest_hierarchy():
         source="manifest",
     )
     assert head_runtime.department == "engineering"
+    assert head_runtime.role == "tier1"
     assert head_runtime.purpose == "Own engineering delivery"
     assert head_runtime.brief == "Split work into independently verifiable tasks."
 

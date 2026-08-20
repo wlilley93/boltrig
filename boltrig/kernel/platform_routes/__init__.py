@@ -39,6 +39,7 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
         integrations,
         mcp_servers,
         memory,
+        named_agents,
         model_endpoints,
         model_profiles,
         observability,
@@ -57,7 +58,7 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
     for module in (
         skills, router, addons, adapters, mcp_servers, agent_capabilities, workflows, admin, artifacts, bifrost_models, birth_profile,
         backup_status, budgets, capability_review, observability, console, device_inventory,
-        eval_routes, hitl_policy, personal, permanent_fleet, privacy_policy, memory, knowledge, integrations, model_endpoints, model_profiles, chat_model_choices,
+        eval_routes, hitl_policy, personal, permanent_fleet, privacy_policy, memory, named_agents, knowledge, integrations, model_endpoints, model_profiles, chat_model_choices,
         spawn_rules, work,
     ):
         module.register(app, P, K)

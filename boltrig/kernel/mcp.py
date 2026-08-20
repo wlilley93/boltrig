@@ -51,6 +51,7 @@ class RunToken:
     grants: GrantSet
     run_id: str | None = None
     actor: str = "ephemeral"
+    actor_tier: str = "ephemeral"
     skills: tuple[str, ...] = field(default_factory=tuple)
     # The active WORKSPACE the MCP caller operates in ([2026] VJS-COUNTY 9, D2), so
     # an MCP-initiated audit row carries org/workspace at the SAME depth as a human
@@ -106,7 +107,7 @@ class McpFace:
     # --- token lifecycle (issued by the fleet per run) ---
     def issue_run_token(
         self, tenant_id: str, grants: GrantSet, *, run_id=None, actor="ephemeral",
-        skills=(), workspace_id=None, on_behalf_of=None, parent_run_id=None,
+        actor_tier="ephemeral", skills=(), workspace_id=None, on_behalf_of=None, parent_run_id=None,
         extra=None, ttl_seconds=300,
     ) -> str:
         if (
@@ -119,7 +120,7 @@ class McpFace:
         now = self._clock()
         self._tokens[self._token_key(token)] = RunToken(
             lease_id=uuid.uuid4().hex, tenant_id=tenant_id, grants=grants, run_id=run_id,
-            actor=actor, skills=tuple(skills), workspace_id=workspace_id,
+            actor=actor, actor_tier=actor_tier, skills=tuple(skills), workspace_id=workspace_id,
             on_behalf_of=on_behalf_of, parent_run_id=parent_run_id,
             extra=dict(extra or {}),
             issued_at=now, expires_at=now + timedelta(seconds=ttl_seconds),
@@ -148,7 +149,7 @@ class McpFace:
         # to the same depth (the chokepoint stamps them onto the audit row).
         return InvocationContext(
             tenant_id=rt.tenant_id, grants=rt.grants, actor=rt.actor,
-            actor_tier="ephemeral", run_id=rt.run_id, skills_loaded=rt.skills,
+            actor_tier=rt.actor_tier, run_id=rt.run_id, skills_loaded=rt.skills,
             workspace_id=rt.workspace_id, ip_address=ip_address, user_agent=user_agent,
             on_behalf_of=rt.on_behalf_of, parent_run_id=rt.parent_run_id,
             extra=dict(rt.extra),
@@ -188,6 +189,7 @@ class McpFace:
         rt = RunToken(
             lease_id="user-request", tenant_id=principal.tenant_id, grants=principal.grants,
             run_id=None, actor=principal.subject, skills=(),
+            actor_tier=principal.actor_tier,
             workspace_id=getattr(principal, "active_workspace_id", None),
             on_behalf_of=getattr(principal, "on_behalf_of", None),
             extra={

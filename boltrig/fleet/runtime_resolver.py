@@ -62,6 +62,7 @@ class RuntimeResolver:
         *,
         pinned_policy: bool = False,
         allow_kernel_tools: bool = True,
+        force_kernel_tools: bool = False,
         outbound_text: str | None = None,
     ) -> Runtime:
         """Resolve one runtime under either caller-routing or pinned profile policy.
@@ -101,6 +102,7 @@ class RuntimeResolver:
             model_route,
             gateway_virtual_key=gateway_virtual_key,
             allow_kernel_tools=allow_kernel_tools,
+            force_kernel_tools=force_kernel_tools,
         )
         self._attach_model_route(runtime, endpoint, model_route)
         return runtime
@@ -256,6 +258,7 @@ class RuntimeResolver:
         *,
         gateway_virtual_key: str | None,
         allow_kernel_tools: bool,
+        force_kernel_tools: bool,
     ) -> Runtime:
         def lookup(endpoint_id: str) -> ModelEndpoint | None:
             if endpoint is not None and endpoint.id == endpoint_id:
@@ -273,6 +276,7 @@ class RuntimeResolver:
                 ),
                 gateway_virtual_key=gateway_virtual_key,
                 allow_kernel_tools=allow_kernel_tools,
+                force_kernel_tools=force_kernel_tools,
             ),
         )
 
@@ -336,6 +340,7 @@ class RuntimeResolver:
         model_endpoint_id: str | None = None,
         gateway_virtual_key: str | None = None,
         allow_kernel_tools: bool = True,
+        force_kernel_tools: bool = False,
     ) -> dict[str, Any] | None:
         """The injected trusted-Codex config, gated ONLY on ``capability.runtime``.
 
@@ -360,7 +365,9 @@ class RuntimeResolver:
             cfg["model_id"] = model_id
         cfg["model_endpoint_id"] = model_endpoint_id
         cfg["gateway_virtual_key"] = gateway_virtual_key
-        cfg["kernel_tools"] = allow_kernel_tools and "*" in (capability.supported_skills or [])
+        cfg["kernel_tools"] = allow_kernel_tools and (
+            force_kernel_tools or "*" in (capability.supported_skills or [])
+        )
         cfg["issue_token"] = self._kernel.mcp.issue_run_token
         cfg["revoke_token"] = self._kernel.mcp.revoke
         cfg["mcp_url"] = (

@@ -122,6 +122,7 @@ async def test_permanent_profile_is_pinned_metered_and_redacted_in_audit():
     assert spawner._runtime_resolver.runtime_for.await_args.kwargs == {
         "pinned_policy": True,
         "allow_kernel_tools": False,
+        "force_kernel_tools": False,
         "outbound_text": resolved.calls[0][0],
     }
     assert phase_context.actor == "head-of-research"

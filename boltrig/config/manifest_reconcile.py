@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Any
 from boltrig.models import ActionType, AgentCapability, AuditEvent, utcnow
 
 if TYPE_CHECKING:  # imported for typing only; avoids a manifest <-> reconcile cycle
-    from .manifest import EphemeralRuntime, FleetManifest, HierarchyTier
+    from .manifest import EphemeralRuntime, FleetManifest, NamedAgentConfig
 
 MANIFEST_SOURCE = "manifest"
 # The mass-deactivation floor: an apply may drop at most this many manifest-sourced
@@ -48,12 +48,14 @@ class BulkCapabilityDeactivationError(RuntimeError):
     """
 
 
-def _capability_from_tier(tier: HierarchyTier, tenant_id: str) -> AgentCapability:
+def _capability_from_named_agent(
+    agent: NamedAgentConfig, tenant_id: str
+) -> AgentCapability:
     return AgentCapability(
-        name=tier.name, tenant_id=tenant_id, runtime=tier.runtime,
-        supported_skills=list(tier.supported_skills), max_depth=tier.max_depth,
-        is_ephemeral=False, cost_tier=tier.cost_tier,
-        model_endpoint=tier.model_endpoint, source=MANIFEST_SOURCE,
+        name=agent.name, tenant_id=tenant_id, runtime=agent.runtime,
+        supported_skills=list(agent.supported_skills), max_depth=agent.max_depth,
+        is_ephemeral=False, cost_tier=agent.cost_tier,
+        model_endpoint=agent.model_endpoint, source=MANIFEST_SOURCE,
     )
 
 
@@ -67,13 +69,15 @@ def _capability_from_ephemeral(rt: EphemeralRuntime, tenant_id: str) -> AgentCap
 
 
 def declared_capabilities(manifest: FleetManifest) -> list[AgentCapability]:
-    """Every capability the manifest authors (ephemeral runtimes + hierarchy
-    tiers), each stamped ``source='manifest'``."""
+    """Every ephemeral runtime and durable named peer authored by the manifest."""
+    from .manifest import resolved_named_agents
+
     tenant = manifest.tenant_id
     caps = [_capability_from_ephemeral(rt, tenant) for rt in manifest.ephemeral_runtimes]
-    if manifest.hierarchy.tier1 is not None:
-        caps.append(_capability_from_tier(manifest.hierarchy.tier1, tenant))
-    caps.extend(_capability_from_tier(t, tenant) for t in manifest.hierarchy.tier2)
+    caps.extend(
+        _capability_from_named_agent(agent, tenant)
+        for agent in resolved_named_agents(manifest).members
+    )
     return caps
 
 

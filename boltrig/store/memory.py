@@ -34,6 +34,7 @@ from .ai_key_proposals import AiKeyProposalStoreMem
 from .mcp_lifecycle import McpLifecycleStoreMem
 from .model_endpoints_memory import ModelEndpointStoreMem
 from .conversation_queue import ConversationQueueStoreMem
+from .agent_mailbox_memory import AgentMailboxStoreMem
 from boltrig.models import (
     AgentCapability,
     AuditEvent,
@@ -91,13 +92,11 @@ from boltrig.models import (
 )
 from boltrig.models.errors import SchemaValidationError
 from boltrig.models.work import RunCheckpoint
-
 def _norm_email_key(value) -> str:
     """Normalise an identity key (the email == user_id in the first-party flow) so
     the global email -> orgs index is case/space-insensitive, matching the login
     normalisation ([2026] VJS-COUNTY 11)."""
     return value.strip().lower() if isinstance(value, str) else ""
-
 class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkItemReadsMem, IdempotencyStoreMem,
                     GuardedWritesMem, ChannelStoreMem, CapabilityStoreMem,
                     PermanentFleetStoreMem, BirthProfileStoreMem,
@@ -108,9 +107,9 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
                     AuthoredDefinitionStoreMem, CapabilityRoutingStoreMem,
                     EvalCaseStoreMem, CredentialReferencePresenceMem,
                     AiKeyProposalStoreMem, McpLifecycleStoreMem,
-                    ModelEndpointStoreMem, ConversationQueueStoreMem):
+                    ModelEndpointStoreMem, ConversationQueueStoreMem,
+                    AgentMailboxStoreMem):
     """In-memory Store composed from domain partial mixins for offline use and tests."""
-
     def __init__(self) -> None:
         self._init_authored_definition_state()
         self._init_capability_routing_state()
@@ -119,6 +118,7 @@ class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkI
         self._init_mcp_lifecycle_state()
         self._init_model_endpoint_state()
         self._init_conversation_queue_state()
+        self._init_agent_mailbox_state()
         self._init_execution_state()
         self._init_account_state()
 

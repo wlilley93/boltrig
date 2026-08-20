@@ -6,7 +6,7 @@ import importlib
 import inspect
 from typing import Any
 
-from boltrig.models import Budget, ConfigRevision, TenantPermissions
+from boltrig.models import Budget, ConfigRevision, NamedAgent, TenantPermissions
 
 from .manifest_reconcile import (
     declared_capabilities,
@@ -45,31 +45,51 @@ def _budget_from_tier(
 
 
 async def _seed_tier_budgets(store: Any, manifest: Any, tenant: str) -> None:
-    """Reconcile tier budget policy without resetting accumulated usage."""
-    if manifest.hierarchy.tier1 is not None and manifest.hierarchy.tier1.budget:
+    """Reconcile flat-agent budget policy without resetting accumulated usage."""
+    from .manifest import resolved_named_agents
+
+    roster = resolved_named_agents(manifest)
+    for agent in roster.members:
+        if not agent.budget:
+            continue
+        tenant_budget = agent.address == roster.default and agent.scope_id is None
         await _seed_call(
             store,
             "upsert_budget_policy",
             _budget_from_tier(
-                manifest.hierarchy.tier1,
+                agent,
                 tenant,
-                scope_type="tenant",
-                scope_id=tenant,
+                scope_type="tenant" if tenant_budget else "department",
+                scope_id=tenant if tenant_budget else (agent.scope_id or agent.address),
             ),
         )
-    for tier in manifest.hierarchy.tier2:
-        if tier.budget:
-            scope_id = tier.department or tier.name
-            await _seed_call(
-                store,
-                "upsert_budget_policy",
-                _budget_from_tier(
-                    tier,
-                    tenant,
-                    scope_type="department",
-                    scope_id=scope_id,
-                ),
+
+
+async def _seed_named_agents(store: Any, manifest: Any) -> None:
+    """Project the manifest roster into the durable address registry."""
+    from .manifest import resolved_named_agents
+
+    roster = resolved_named_agents(manifest)
+    for agent in roster.members:
+        await store.upsert_named_agent(
+            NamedAgent(
+                tenant_id=manifest.tenant_id,
+                address=agent.address,
+                name=agent.name,
+                runtime=agent.runtime,
+                model_endpoint=agent.model_endpoint,
+                supported_skills=list(agent.supported_skills),
+                max_depth=agent.max_depth,
+                cost_tier=agent.cost_tier,
+                purpose=agent.purpose,
+                brief=agent.brief,
+                scope_id=agent.scope_id,
+                default_for_intake=agent.address == roster.default,
             )
+        )
+    await store.deactivate_absent_named_agents(
+        manifest.tenant_id, [agent.address for agent in roster.members]
+    )
 
 
 async def _seed_credentials(
@@ -106,6 +126,11 @@ async def _register_manifest_adapters(
 
 
 async def _permanent_state(store: Any, manifest: Any) -> tuple[Any, Any]:
+    # The legacy permanent-fleet desired-state document models one chief plus
+    # departments. A flat roster must never be rewritten through that shape or
+    # re-acquire tiers on restart. Named-agent policy is projected directly.
+    if manifest.named_agents.members:
+        return manifest, None
     from .permanent_fleet import (
         effective_manifest_from_desired,
         hierarchy_from_manifest,
@@ -138,6 +163,7 @@ async def _seed_projection(
         cost.set_prices(manifest.models.prices)
     for capability in declared_capabilities(manifest):
         await store.upsert_capability(capability)
+    await _seed_named_agents(store, manifest)
     await _seed_tier_budgets(store, manifest, tenant)
     await _seed_call(
         store,

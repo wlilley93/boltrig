@@ -2706,7 +2706,7 @@ invariants:
     tests:
       - tests/security/test_model_endpoint_lifecycle.py::test_agent_model_routes_keep_voice_directions_separate_and_credential_free
   SEC-WRK-27:
-    description: 'The permanent fleet has one closed, versioned desired hierarchy and a separate worker-observation contract. Non-ephemeral capability rows are persistent profiles, never liveness evidence. A governed edit appends desired state only, round-trips through Admin manifest export, and reports restart plus next-manifest-apply projection honestly; profile and budget reconciliation remains at that safe boundary and preserves governed rows and spend. At startup build_org consumes the exact Chief/Department routing identity, supported skills, purpose, brief, runtime, model endpoint, depth and cost policy into lazy permanent runtime profiles. Runtime resolution remains per-call, pinned, metered and audited, so startup observations report construction with runtime liveness explicitly unknown and never imply a hot apply, a current worker, a reachable endpoint or an admitted Codex cell. Observation persistence is tenant-scoped and equivalent in memory and PostgreSQL.'
+    description: 'The permanent-fleet authoring surface remains a closed, versioned compatibility bridge with a separate worker-observation contract. Non-ephemeral capability rows are persistent profiles, never liveness evidence. A governed legacy edit appends desired state only, round-trips through Admin manifest export, and reports restart plus next-manifest-apply projection honestly; profile and budget reconciliation remains at that safe boundary and preserves governed rows and spend. Live build_org normalises that input into the flat named roster rather than reconstructing Chief/Department authority. Runtime resolution remains per-call, pinned, metered and audited, so startup observations report construction with runtime liveness explicitly unknown and never imply a hot apply, a current worker, a reachable endpoint or an admitted Codex cell. Observation persistence is tenant-scoped and equivalent in memory and PostgreSQL.'
     tests:
       - tests/security/test_permanent_fleet.py::test_desired_write_is_single_revision_and_projects_only_on_manifest_apply
       - tests/security/test_permanent_fleet.py::test_startup_snapshot_never_claims_current_worker_liveness_or_inactive_fields
@@ -2718,6 +2718,37 @@ invariants:
       - tests/unit/test_permanent_fleet_store.py::test_memory_observation_is_tenant_scoped_and_latest_per_worker
       - tests/unit/test_permanent_fleet_store.py::test_observation_contract_rejects_false_or_overlapping_evidence
       - tests/store/test_postgres_store.py::test_pg_permanent_fleet_observation_is_tenant_scoped_and_upserted
+  FLT-PEER-01:
+    description: 'Live serving composition is a flat roster: every declared named agent is a durable addressable tier-1 peer, the declared default only receives unaddressed intake and has no structural authority, explicit addresses route directly, unknown addresses park, and the old Chief/Department shape is accepted only as a manifest migration input. Named peers own final synthesis and delegate bounded work only to one-task ephemeral children.'
+    tests:
+      - tests/unit/test_named_agent_mailbox.py::test_build_org_composes_only_flat_tier1_named_peers
+      - tests/unit/test_named_agent_mailbox.py::test_ask_commits_one_reply_and_reply_does_not_loop
+      - tests/integration/test_chat.py::test_direct_chat_runs_the_default_named_identity
+  FLT-PEER-02:
+    description: 'Ephemeral workers are task-scoped leaves, not identities: they have no named-agent registry row or mailbox address, agent.send derives its sender only from a kernel-stamped durable tier-1 context, and even an ephemeral whose actor string collides with a named address is refused.'
+    tests:
+      - tests/unit/test_named_agent_mailbox.py::test_kernel_sender_is_unspoofable_and_ephemerals_have_no_mailbox_right
+  SEC-AGENT-01:
+    description: 'Peer messages cross the one governed kernel chokepoint and are tenant-bound, sender-unspoofable immutable envelopes. The authored sender is derived from the tier-1 invocation context, both endpoints must be registered in the same tenant, arbitrary from/reply fields are schema-closed, captured authority is validated again at delivery, explicit denies and the independent tenant ceiling still dominate, and the authority envelope is never exposed by mailbox reads.'
+    tests:
+      - tests/unit/test_named_agent_mailbox.py::test_kernel_sender_is_unspoofable_and_ephemerals_have_no_mailbox_right
+  REL-AGENT-01:
+    description: 'A per-identity turn lease serializes named-agent turns across workers. Delivery attempts carry an unguessable lease token and heartbeat both the turn and delivery fences; a stale worker cannot complete or publish a reply after lease loss. The winning completion atomically settles the immutable input and inserts at most one deterministic reply, so crash replay cannot create duplicate answers.'
+    tests:
+      - tests/unit/test_named_agent_mailbox.py::test_recipient_lease_serializes_workers_and_fences_stale_reply
+      - tests/store/test_store_parity.py::test_named_agent_turn_scheduling_and_delivery_match_on_both_stores
+  REL-AGENT-02:
+    description: 'All wake sources share one transport-neutral named-agent scheduler. Interactive turns outrank queued peer mail, peer mail outranks background work, FIFO breaks ties within a lane, and expired waiters cannot block an identity forever. The same reusable lease seam is used by chat, peer delivery, and filed work, so a logical long-lived agent never runs two model turns concurrently merely because they arrived through different products.'
+    tests:
+      - tests/unit/test_named_agent_mailbox.py::test_turn_scheduler_orders_interactive_peer_then_background
+      - tests/store/test_store_parity.py::test_named_agent_turn_scheduling_and_delivery_match_on_both_stores
+      - tests/integration/test_chat.py::test_direct_chat_runs_the_default_named_identity
+  CONV-AGENT-01:
+    description: 'A named-agent session is durable logical state rather than a resident model process: immutable peer messages are replayed in order through the current serialized turn, every authored body and derived summary re-enters the model in an untrusted envelope, later queued turns are excluded, and long history compacts into append-only summary checkpoints plus a recent verbatim tail. ASK creates one REPLY while TELL and REPLY never auto-reply.'
+    tests:
+      - tests/unit/test_named_agent_mailbox.py::test_ask_commits_one_reply_and_reply_does_not_loop
+      - tests/unit/test_named_agent_mailbox.py::test_continuity_compacts_only_processed_history_plus_recent_tail
+      - tests/unit/test_named_agent_mailbox.py::test_long_lived_dialogue_compacts_past_the_old_thousand_message_edge
   DIS-1:
     description: 'A distillation corpus is tenant-fenced by refusal, not by filter: a record or target endpoint outside the corpus tenant raises rather than silently thinning the corpus (decision 0023).'
     tests:
