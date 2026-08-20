@@ -897,8 +897,10 @@ async def test_concurrent_mcp_activation_loser_preserves_the_winner(monkeypatch)
             self.arrived = 0
             self.both_arrived = asyncio.Event()
 
-        async def register_adapter_verbs(self, tenant_id, adapter):
-            registered = await k.registry.register_adapter_verbs(tenant_id, adapter)
+        async def register_adapter_verbs(self, tenant_id, adapter, *, effects=None):
+            registered = await k.registry.register_adapter_verbs(
+                tenant_id, adapter, effects=effects
+            )
             self.arrived += 1
             if self.arrived == 2:
                 self.both_arrived.set()
@@ -935,6 +937,58 @@ async def test_concurrent_mcp_activation_loser_preserves_the_winner(monkeypatch)
     assert final is not None and final.state == "active"
     assert await k.store.get_verb(T, "ext-mcp.ticket.read") is not None
     assert k.loader.peek(T, "ext-mcp").activated is True
+
+
+@pytest.mark.invariant("SEC-22")
+async def test_failed_reactivation_restores_the_previous_owned_rows(monkeypatch):
+    """The revertible-effects win the ownership scan could not deliver.
+
+    On RE-activation the adapter already owns its rows, so registration
+    upserts OVER them - and when the activation then fails, the old
+    `_unpublish_owned_verbs` compensation deleted every owned row outright:
+    a failed re-activation DESTROYED the working verbs the tenant had before
+    it. The EffectLog records each previous row at apply time and puts it
+    back, so a failed attempt leaves the store as it found it.
+    """
+    from boltrig.config.control_mcp_lifecycle import _activate
+    from boltrig.models import Noun
+
+    k = await _kernel()
+    await _register(monkeypatch, k, _FakeMcpServer(list(_TOOLS)))
+    await _approved(
+        k, "control.mcp_server.probe", {"server_id": "ext-mcp"}, run_id="p1"
+    )
+    await k.store.upsert_noun(Noun(id="ext-mcp", tenant_id=T))
+    previous = Verb(
+        id="ext-mcp.ticket.read", tenant_id=T, noun_id="ext-mcp",
+        input_schema={"marker": "the-previous-schema"}, output_schema={},
+    )
+    await k.store.upsert_verb(previous)
+    await k.store.upsert_binding(
+        VerbBinding(
+            verb_id="ext-mcp.ticket.read", tenant_id=T,
+            target_type=TargetType.ADAPTER, target_ref="ext-mcp",
+        )
+    )
+
+    record = await k.store.get_adapter(T, "ext-mcp")
+    lifecycle = await k.store.get_mcp_server_lifecycle(T, "ext-mcp")
+    context = _ctx(["*"], run_id="fail1")
+    # NO context.extra["approved_by"]: the reviewer gate fails AFTER the verbs
+    # were published, which is exactly the compensation path.
+    with pytest.raises(PermissionError):
+        await _activate(
+            k.store, k.loader, k.registry, k.credentials,
+            context, record, lifecycle,
+        )
+
+    restored = await k.store.get_verb(T, "ext-mcp.ticket.read")
+    assert restored is not None
+    assert restored.input_schema == {"marker": "the-previous-schema"}
+    binding = await k.store.get_binding(T, "ext-mcp.ticket.read")
+    assert binding is not None and binding.target_ref == "ext-mcp"
+    # The other spec's rows - added by the failed attempt - are gone again.
+    assert await k.store.get_verb(T, "ext-mcp.ticket.create") is None
 
 
 async def _direct_mcp_update(
