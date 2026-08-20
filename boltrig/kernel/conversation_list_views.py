@@ -28,6 +28,7 @@ def conversation_search_views(
 def _conversation_view(chat_service: Any, tenant_id: str, conversation: Any) -> dict[str, Any]:
     return {
         "id": conversation.id,
+        "agent_address": conversation.agent_address,
         "title": conversation.title,
         "status": conversation.status.value,
         "updated_at": conversation.updated_at.isoformat(),

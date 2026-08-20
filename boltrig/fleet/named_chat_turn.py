@@ -11,14 +11,6 @@ from .agent_turns import AgentTurnCoordinator
 from .permanent_runtime import PermanentAgentRuntime
 
 
-async def default_named_profile(store: Any, tenant_id: str) -> Any | None:
-    roster = await store.list_named_agents(tenant_id)
-    return next(
-        (agent for agent in roster if agent.default_for_intake),
-        roster[0] if roster else None,
-    )
-
-
 async def run_named_chat_turn(
     kernel: Any,
     spawner: Any,

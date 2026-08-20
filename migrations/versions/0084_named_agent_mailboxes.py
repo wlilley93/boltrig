@@ -51,6 +51,18 @@ CREATE TABLE IF NOT EXISTS named_agents (
 CREATE UNIQUE INDEX IF NOT EXISTS named_agents_one_default_idx
   ON named_agents(tenant_id) WHERE default_for_intake AND enabled;
 
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS agent_address TEXT;
+CREATE INDEX IF NOT EXISTS conversations_agent_idx
+  ON conversations(tenant_id,agent_address,updated_at DESC);
+DO $$
+BEGIN
+  ALTER TABLE conversations
+    ADD CONSTRAINT conversations_named_agent_fkey
+    FOREIGN KEY (tenant_id,agent_address)
+    REFERENCES named_agents(tenant_id,address) ON DELETE RESTRICT;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 CREATE TABLE IF NOT EXISTS agent_turn_leases (
     tenant_id       TEXT NOT NULL,
     agent_address   TEXT NOT NULL,
@@ -182,6 +194,10 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(
         """
+        ALTER TABLE conversations
+          DROP CONSTRAINT IF EXISTS conversations_named_agent_fkey;
+        DROP INDEX IF EXISTS conversations_agent_idx;
+        ALTER TABLE conversations DROP COLUMN IF EXISTS agent_address;
         DROP TABLE IF EXISTS agent_session_summaries;
         DROP TABLE IF EXISTS agent_message_deliveries;
         DROP TABLE IF EXISTS agent_messages;

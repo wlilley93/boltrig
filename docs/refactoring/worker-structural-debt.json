@@ -1311,7 +1311,7 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/ParityViews.tsx": {
-      "file_lines": 1588,
+      "file_lines": 1577,
       "max_function_lines": 408,
       "max_parameters": 2,
       "max_complexity": 28,
@@ -1319,16 +1319,16 @@
       "over_limit_functions": [
         {
           "name": "RunsView",
-          "line": 44,
+          "line": 45,
           "column": 1,
-          "lines": 212,
+          "lines": 209,
           "parameters": 0,
-          "complexity": 25,
+          "complexity": 23,
           "nesting_depth": 1
         },
         {
           "name": "WorkView",
-          "line": 289,
+          "line": 287,
           "column": 1,
           "lines": 255,
           "parameters": 0,
@@ -1337,16 +1337,16 @@
         },
         {
           "name": "WorkDetail",
-          "line": 565,
+          "line": 563,
           "column": 1,
-          "lines": 226,
+          "lines": 218,
           "parameters": 1,
-          "complexity": 23,
+          "complexity": 16,
           "nesting_depth": 1
         },
         {
           "name": "WorkDetail.mutate",
-          "line": 661,
+          "line": 659,
           "column": 3,
           "lines": 64,
           "parameters": 2,
@@ -1355,7 +1355,7 @@
         },
         {
           "name": "AgentsView",
-          "line": 854,
+          "line": 844,
           "column": 1,
           "lines": 213,
           "parameters": 0,
@@ -1364,7 +1364,7 @@
         },
         {
           "name": "MemoryView",
-          "line": 1148,
+          "line": 1138,
           "column": 1,
           "lines": 408,
           "parameters": 0,
@@ -1373,7 +1373,7 @@
         }
       ],
       "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-20: extracted typed channel-origin facts, lowering the file 1588→1577 lines, RunsView 212→209 lines and complexity 25→23, and WorkDetail 226→218 lines and complexity 23→16.",
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/PermanentFleetTopology.tsx": {
@@ -1816,4 +1816,3 @@
     }
   }
 }
-

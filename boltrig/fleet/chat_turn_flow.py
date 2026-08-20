@@ -26,6 +26,7 @@ class TurnRequest:
     role: str
     message: str
     conversation_id: str | None
+    agent_address: str | None
     grants: GrantSet | None
     attachments: list[dict[str, Any]] | None
     workspace_id: str | None
@@ -93,6 +94,7 @@ async def _reserve_or_queue(service, request, conversation, records, run_id):
         "run_id": active_run_id,
         "conversation_id": conversation.id,
         "message_id": message_id,
+        "agent_address": conversation.agent_address,
     }
     service._relay.publish(request.tenant_id, active_run_id, frame)  # noqa: SLF001
     return {**frame, "type": "queued"}
@@ -130,11 +132,13 @@ async def _stream_one(
             "run_id": run_id,
             "conversation_id": conversation.id,
             "message_id": consumed_steer_id,
+            "agent_address": conversation.agent_address,
         }
     yield {
         "type": "message_start",
         "run_id": run_id,
         "conversation_id": conversation.id,
+        "agent_address": conversation.agent_address,
     }
     async for event in service._drive(  # noqa: SLF001
         request.tenant_id,
@@ -145,6 +149,7 @@ async def _stream_one(
         request.role,
         request.grants,
         records,
+        agent_address=conversation.agent_address,
         workspace_id=request.workspace_id,
         scope=request.scope,
         on_behalf_bearer=request.on_behalf_bearer,
@@ -213,6 +218,20 @@ async def _next_turn(service, request, conversation, current_run_id):
 
 async def stream_turn(service, request: TurnRequest):
     records = validate_attachments(request.attachments, service._cfg)  # noqa: SLF001
+    # Existing-thread authority and immutable agent assertions are checked
+    # before a retry marker can be consumed. A mismatched retry must remain a
+    # refusal, not look like an accepted duplicate.
+    conversation = None
+    if request.conversation_id:
+        conversation = await resolve_conversation(
+            service._store,  # noqa: SLF001
+            request.tenant_id,
+            request.conversation_id,
+            request.user_id,
+            request.role,
+            request.message,
+            request.agent_address,
+        )
     replay = await replay_if_duplicate(
         service._store,  # noqa: SLF001
         request.tenant_id,
@@ -223,14 +242,16 @@ async def stream_turn(service, request: TurnRequest):
         for frame in replay:
             yield frame
         return
-    conversation = await resolve_conversation(
-        service._store,  # noqa: SLF001
-        request.tenant_id,
-        request.conversation_id,
-        request.user_id,
-        request.role,
-        request.message,
-    )
+    if conversation is None:
+        conversation = await resolve_conversation(
+            service._store,  # noqa: SLF001
+            request.tenant_id,
+            request.conversation_id,
+            request.user_id,
+            request.role,
+            request.message,
+            request.agent_address,
+        )
     run_id = uuid.uuid4().hex
     queued = await _reserve_or_queue(service, request, conversation, records, run_id)
     if queued is not None:

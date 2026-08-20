@@ -15,6 +15,7 @@ from boltrig.models import (
     WorkItem,
 )
 from boltrig.text_envelope import wrap_untrusted
+from boltrig.work.channel_provenance import channel_provenance_prompt
 
 from .department_head import DepartmentHead
 from .agent_turns import AgentTurnCoordinator
@@ -71,17 +72,13 @@ class NamedAgent(DepartmentHead):
     ) -> dict[str, Any]:
         get_profile = getattr(self._store, "get_named_agent", None)
         profile = (
-            await get_profile(work_item.tenant_id, self.address)
-            if callable(get_profile)
-            else None
+            await get_profile(work_item.tenant_id, self.address) if callable(get_profile) else None
         )
         if profile is None:
             # Compatibility callers can still construct a NamedAgent directly.
             # Live manifest composition seeds the registry before serving, so a
             # real named identity always enters the distributed turn scheduler.
-            return await self._handle_owned(
-                work_item, context, prefer=prefer, tree_id=tree_id
-            )
+            return await self._handle_owned(work_item, context, prefer=prefer, tree_id=tree_id)
         coordinator = AgentTurnCoordinator(self._store)
         owner = f"work:{work_item.id}:{uuid.uuid4().hex}"
         async with coordinator.hold(
@@ -90,9 +87,7 @@ class NamedAgent(DepartmentHead):
             owner,
             AgentTurnLane.BACKGROUND,
         ):
-            return await self._handle_owned(
-                work_item, context, prefer=prefer, tree_id=tree_id
-            )
+            return await self._handle_owned(work_item, context, prefer=prefer, tree_id=tree_id)
 
     async def _handle_owned(
         self,
@@ -112,9 +107,7 @@ class NamedAgent(DepartmentHead):
                 list(context.grants.deny) + ["agent.send"],
             ),
         )
-        outcome = await super().handle(
-            work_item, child_context, prefer=prefer, tree_id=tree_id
-        )
+        outcome = await super().handle(work_item, child_context, prefer=prefer, tree_id=tree_id)
         outcome["agent"] = self.address
         outcome.pop("department", None)
         if self._runtime is None:
@@ -123,27 +116,29 @@ class NamedAgent(DepartmentHead):
         # The durable peer owns synthesis after bounded child delegation. This is
         # its tool-enabled phase, so it may message another peer while the child
         # runtime remains ephemeral and mailbox-ineligible.
-        prompt = "\n\n".join(
-            (
-                f"You are the named tier-1 agent at address {self.address}. "
-                "Synthesize the completed ephemeral work into the final result. "
-                "Use agent.send only when another durable peer genuinely needs "
-                "to be consulted; peer delivery is asynchronous.",
-                wrap_untrusted("work_item", work_item.source, work_item.intent),
-                wrap_untrusted(
-                    "ephemeral_results",
-                    self.address,
-                    json.dumps(outcome.get("children") or [], default=str),
-                ),
+        prompt_parts = [
+            f"You are the named tier-1 agent at address {self.address}. "
+            "Synthesize the completed ephemeral work into the final result. "
+            "Use agent.send only when another durable peer genuinely needs "
+            "to be consulted; peer delivery is asynchronous.",
+            wrap_untrusted("work_item", work_item.source, work_item.intent),
+        ]
+        channel_context = channel_provenance_prompt(work_item)
+        if channel_context:
+            prompt_parts.append(channel_context)
+        prompt_parts.append(
+            wrap_untrusted(
+                "ephemeral_results",
+                self.address,
+                json.dumps(outcome.get("children") or [], default=str),
             )
         )
+        prompt = "\n\n".join(prompt_parts)
         run_turn = getattr(self._runtime, "run_agent_turn", None)
         result = (
             await run_turn(prompt, context, tools=list(context.grants.allow))
             if callable(run_turn)
-            else await self._runtime.run(
-                prompt, context, tools=list(context.grants.allow)
-            )
+            else await self._runtime.run(prompt, context, tools=list(context.grants.allow))
         )
         text = agent_result_text(result)
         if text:
@@ -158,14 +153,18 @@ class NamedAgent(DepartmentHead):
         return outcome
 
     def _decompose_prompt(self, work_item: WorkItem) -> str:
-        return (
+        parts = [
             f"You are the named agent {self.profile_name} at address "
             f"{self.address}. Decide the bounded, independent ephemeral tasks "
             "needed to complete this work item. You own the final synthesis; "
-            "children disappear after returning their evidence.\n"
-            f"Intent: {work_item.intent}\nSource: {work_item.source}\n"
-            "Reply with one task per line."
-        )
+            "children disappear after returning their evidence.",
+            wrap_untrusted("work_item", work_item.source, work_item.intent),
+        ]
+        channel_context = channel_provenance_prompt(work_item)
+        if channel_context:
+            parts.append(channel_context)
+        parts.append("Reply with one task per line.")
+        return "\n\n".join(parts)
 
     async def respond(
         self,
@@ -195,12 +194,8 @@ class NamedAgent(DepartmentHead):
         )
         run_turn = getattr(self._runtime, "run_agent_turn", None)
         if callable(run_turn):
-            return await run_turn(
-                prompt, context, tools=list(context.grants.allow)
-            )
-        return await self._runtime.run(
-            prompt, context, tools=list(context.grants.allow)
-        )
+            return await run_turn(prompt, context, tools=list(context.grants.allow))
+        return await self._runtime.run(prompt, context, tools=list(context.grants.allow))
 
 
 def agent_result_text(result: AgentResult) -> str:

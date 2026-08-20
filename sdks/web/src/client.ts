@@ -277,6 +277,7 @@ export interface ChatQueued {
   conversation_id: string | null;
   message_id: string | null;
   run_id: string | null;
+  agent_address?: string | null;
 }
 
 export interface ChatFollowResult {

@@ -44,6 +44,9 @@ class Conversation:
     id: str
     tenant_id: TenantId
     user_id: UserId  # owner (RBAC: only owner + scoped roles, SEC-25)
+    # Immutable durable routing identity. Nullable only while legacy rows are
+    # reconciled after the named-agent registry is seeded (0084 compatibility).
+    agent_address: str | None = None
     title: str | None = None
     status: ConversationStatus = ConversationStatus.ACTIVE
     origin: ConversationOrigin = ConversationOrigin.USER

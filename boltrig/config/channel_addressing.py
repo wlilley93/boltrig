@@ -11,6 +11,22 @@ from typing import Any
 from .permanent_fleet import permanent_fleet_view
 
 
+async def effective_intake_target(store: Any, tenant_id: str) -> str | None:
+    """The authored org default, legacy ``cos``, or no safe default.
+
+    Disabled rows count as evidence that this tenant adopted the named-agent
+    registry; they must never make the old hierarchy spring back to life.
+    """
+    roster = await store.list_named_agents(tenant_id, include_disabled=True)
+    if not roster:
+        return "cos"
+    default = next(
+        (agent for agent in roster if agent.enabled and agent.default_for_intake),
+        None,
+    )
+    return default.address if default is not None else None
+
+
 def _workflow_is_active(workflow: Any) -> bool:
     lifecycle = workflow.definition.get("_boltrig_lifecycle") or {}
     return not isinstance(lifecycle, dict) or lifecycle.get("status", "active") == "active"
@@ -24,9 +40,7 @@ async def _workflow_targets(
     store: Any, tenant_id: str, workspace_id: str | None
 ) -> list[dict[str, Any]]:
     targets: list[dict[str, Any]] = []
-    workflows = sorted(
-        await store.list_workflows(tenant_id), key=lambda workflow: workflow.id
-    )
+    workflows = sorted(await store.list_workflows(tenant_id), key=lambda workflow: workflow.id)
     for workflow in workflows:
         if not _workspace_visible(workflow, workspace_id) or not _workflow_is_active(workflow):
             continue
@@ -51,15 +65,15 @@ async def channel_addressing_catalogue(
 ) -> dict[str, Any]:
     """Project only targets the runtime can resolve, scoped for this caller."""
     targets: list[dict[str, Any]] = []
-    roster = await store.list_named_agents(tenant_id)
-    default_target = next(
-        (agent.address for agent in roster if agent.default_for_intake),
-        roster[0].address if roster else "cos",
-    )
+    full_roster = await store.list_named_agents(tenant_id, include_disabled=True)
+    roster = [agent for agent in full_roster if agent.enabled]
+    default_target: str | None = None
     visible = None if allowed_departments is None else set(allowed_departments)
     for agent in roster:
         if visible is not None and agent.scope_id and agent.scope_id not in visible:
             continue
+        if agent.default_for_intake:
+            default_target = agent.address
         targets.append(
             {
                 "id": agent.address,
@@ -74,7 +88,8 @@ async def channel_addressing_catalogue(
 
     # Read compatibility for a database awaiting its next manifest projection.
     # Runtime composition never rebuilds this hierarchy.
-    if not roster:
+    if not full_roster:
+        default_target = "cos"
         targets.append(
             {
                 "id": "cos",
@@ -108,7 +123,6 @@ async def channel_addressing_catalogue(
                     "runtime_liveness": "unknown_not_probed_by_catalogue",
                 }
             )
-
     targets.extend(await _workflow_targets(store, tenant_id, workspace_id))
 
     return {
@@ -117,9 +131,7 @@ async def channel_addressing_catalogue(
         "supports_arbitrary_agent_pinning": True,
         "scope": {
             "workspace_id": workspace_id,
-            "departments": (
-                "all" if allowed_departments is None else list(allowed_departments)
-            ),
+            "departments": ("all" if allowed_departments is None else list(allowed_departments)),
         },
     }
 
@@ -139,8 +151,9 @@ def project_channel_addressing(
     }
     configured = addressing.get("default_target")
     configured_default = configured if isinstance(configured, str) and configured else None
-    effective_default = configured_default or str(
-        catalogue.get("default_target") or "cos"
+    catalogue_default = catalogue.get("default_target")
+    effective_default = configured_default or (
+        catalogue_default if isinstance(catalogue_default, str) else None
     )
 
     projected_routes = []
@@ -153,14 +166,12 @@ def project_channel_addressing(
                     "thread": str(thread),
                     "target": target_id,
                     "state": (
-                        known[target_id]["state"]
-                        if target_id in known
-                        else "stale_or_unsupported"
+                        known[target_id]["state"] if target_id in known else "stale_or_unsupported"
                     ),
                 }
             )
 
-    default = known.get(effective_default)
+    default = known.get(effective_default) if effective_default is not None else None
     valid = default is not None and all(
         route["state"] != "stale_or_unsupported" for route in projected_routes
     )
@@ -168,7 +179,9 @@ def project_channel_addressing(
         "configured_default_target": configured_default,
         "effective_default_target": effective_default,
         "default_target_state": (
-            default["state"] if default is not None else "stale_or_unsupported"
+            default["state"]
+            if default is not None
+            else ("unassigned_no_default" if effective_default is None else "stale_or_unsupported")
         ),
         "routes": projected_routes,
         "valid": valid,
@@ -195,10 +208,7 @@ async def validate_channel_addressing_config(
     if len(routes) > 100:
         raise ValueError("channel addressing supports at most 100 thread routes")
     if any(
-        not isinstance(thread, str)
-        or not thread.strip()
-        or len(thread) > 512
-        for thread in routes
+        not isinstance(thread, str) or not thread.strip() or len(thread) > 512 for thread in routes
     ):
         raise ValueError("channel addressing thread keys must be non-empty strings")
 
@@ -232,35 +242,23 @@ def _validate_self_onboarding(
         raise ValueError("channel self-onboarding role must be member")
     scope = onboarding.get("scope", {})
     if not isinstance(scope, dict) or set(scope) - {"departments"}:
-        raise ValueError(
-            "channel self-onboarding scope supports departments only"
-        )
+        raise ValueError("channel self-onboarding scope supports departments only")
     departments = scope.get("departments", [])
     if (
         not isinstance(departments, list)
         or len(departments) > 32
         or any(
-            not isinstance(department, str)
-            or not department.strip()
-            or len(department) > 128
+            not isinstance(department, str) or not department.strip() or len(department) > 128
             for department in departments
         )
         or len(set(departments)) != len(departments)
     ):
-        raise ValueError(
-            "channel self-onboarding departments must be unique bounded strings"
-        )
-    if allowed_departments is not None and not set(departments).issubset(
-        allowed_departments
-    ):
-        raise ValueError(
-            "channel self-onboarding departments exceed the author scope"
-        )
+        raise ValueError("channel self-onboarding departments must be unique bounded strings")
+    if allowed_departments is not None and not set(departments).issubset(allowed_departments):
+        raise ValueError("channel self-onboarding departments exceed the author scope")
     welcome = onboarding.get("welcome", "")
     if not isinstance(welcome, str) or len(welcome) > 2000:
-        raise ValueError(
-            "channel self-onboarding welcome must be at most 2000 characters"
-        )
+        raise ValueError("channel self-onboarding welcome must be at most 2000 characters")
 
 
 async def validate_channel_policy_config(
@@ -279,9 +277,7 @@ async def validate_channel_policy_config(
         config,
         allowed_departments=allowed_departments,
     )
-    _validate_self_onboarding(
-        config, allowed_departments=allowed_departments
-    )
+    _validate_self_onboarding(config, allowed_departments=allowed_departments)
 
 
 __all__ = [

@@ -22,7 +22,7 @@ from typing import Any
 # integration chat tests failed with no statement of why.
 _OPTIONAL_KWARGS = frozenset({
     "scope", "workspace_id", "on_behalf_bearer", "origin", "model_profile_id",
-    "model_choice_id", "caller_context",
+    "model_choice_id", "caller_context", "agent_address",
 })
 _KEYWORD_KINDS = frozenset(
     {

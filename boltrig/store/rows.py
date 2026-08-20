@@ -183,7 +183,7 @@ def _conversation(r):
     return Conversation(
         id=r["id"], tenant_id=r["tenant_id"], user_id=r["user_id"], title=r["title"],
         status=ConversationStatus(r["status"]), origin=ConversationOrigin(r["origin"]), source_ref=r["source_ref"], source_run_id=r["source_run_id"],
-        companion_id=r["companion_id"], created_at=r["created_at"], updated_at=r["updated_at"],
+        agent_address=r["agent_address"], companion_id=r["companion_id"], created_at=r["created_at"], updated_at=r["updated_at"],
     )
 
 

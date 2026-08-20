@@ -216,6 +216,39 @@ async def test_named_agent_turn_scheduling_and_delivery_match_on_both_stores(sto
 
 
 @pytest.mark.store
+@pytest.mark.invariant("CONV-AGENT-02")
+async def test_conversation_agent_binding_is_compare_and_set_on_both_stores(store):
+    for address in ("alice", "bob"):
+        await store.upsert_named_agent(
+            NamedAgent(
+                tenant_id=T,
+                address=address,
+                name=address.title(),
+                runtime="script",
+                default_for_intake=address == "alice",
+            )
+        )
+    conversation = Conversation(
+        id="legacy-null-agent", tenant_id=T, user_id="owner"
+    )
+    await store.create_conversation(conversation)
+
+    assert await store.bind_conversation_agent(T, conversation.id, "bob") == "bob"
+    assert await store.bind_conversation_agent(T, conversation.id, "alice") == "bob"
+    stored = await store.get_conversation(T, conversation.id)
+    assert stored is not None and stored.agent_address == "bob"
+
+    # The generic metadata update path cannot rewrite the routing identity.
+    stored.agent_address = "alice"
+    stored.title = "ordinary metadata update"
+    await store.update_conversation(stored)
+    reloaded = await store.get_conversation(T, conversation.id)
+    assert reloaded is not None
+    assert reloaded.agent_address == "bob"
+    assert reloaded.title == "ordinary metadata update"
+
+
+@pytest.mark.store
 @pytest.mark.invariant("NFR-REL-05")
 async def test_routine_conversation_provenance_roundtrips_on_both_stores(store):
     conversation = Conversation(

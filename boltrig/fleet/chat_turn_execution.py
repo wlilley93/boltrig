@@ -195,14 +195,25 @@ async def _spawn_turn(
 
 
 async def _create_chat_item(
-    kernel, cfg, tenant_id, user_id, role, grants, run_id, message, origin, workspace_id
+    kernel, cfg, tenant_id, user_id, role, grants, run_id, message, origin,
+    workspace_id, agent_address
 ):
     skills = await _turn_skills(kernel, cfg, tenant_id, role)
     ceiling = grants if grants is not None else EMPTY_GRANTS
     warn_if_no_usable_authority(role, ceiling, skills)
-    from .named_chat_turn import default_named_profile
+    profile = (
+        await kernel.store.get_named_agent(tenant_id, agent_address)
+        if agent_address
+        else None
+    )
+    if agent_address and (profile is None or not profile.enabled):
+        # Admission already checked this. Repeat at execution so a disable or
+        # registry race cannot reroute the persisted conversation.
+        from .chat_conversation_access import NamedAgentDisabled, NamedAgentNotFound
 
-    profile = await default_named_profile(kernel.store, tenant_id)
+        if profile is None:
+            raise NamedAgentNotFound("conversation's named agent was not found")
+        raise NamedAgentDisabled("conversation's named agent is disabled")
     owner = profile.address if profile is not None else "chief-of-staff"
     item = chat_work_item(
         tenant_id, user_id, run_id, message, origin, workspace_id, ceiling, owner
@@ -223,6 +234,7 @@ async def _execute_turn(
     role,
     grants,
     conversation_id,
+    agent_address,
     run_id,
     message,
     relay,
@@ -236,7 +248,8 @@ async def _execute_turn(
     caller_context=None,
 ):
     skills, named_profile, item, ceiling = await _create_chat_item(
-        kernel, cfg, tenant_id, user_id, role, grants, run_id, message, origin, workspace_id
+        kernel, cfg, tenant_id, user_id, role, grants, run_id, message, origin,
+        workspace_id, agent_address
     )
     owner = item.owner_member
     if on_behalf_bearer:
@@ -309,6 +322,7 @@ def build_turn_executor(
         role,
         grants,
         conversation_id,
+        agent_address=None,
         run_id,
         message,
         relay,
@@ -332,6 +346,7 @@ def build_turn_executor(
             role=role,
             grants=grants,
             conversation_id=conversation_id,
+            agent_address=agent_address,
             run_id=run_id,
             message=message,
             relay=relay,

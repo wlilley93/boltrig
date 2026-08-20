@@ -29,6 +29,7 @@ import { Topbar, Unavailable } from "./Shell";
 import { contentText } from "./contentText";
 import { statusClass } from "./statusClass";
 import { IngestForm, IngestionHistory, MemoryReview, memoryTabs } from "./MemorySurface";
+import { originLabel, RunFacts, WorkFacts } from "./ChannelProvenanceFacts";
 
 type SurfaceState = "loading" | "ready" | "denied" | "not-found" | "unavailable";
 type DetailState = "idle" | "loading" | "ready" | "denied" | "not-found" | "unavailable";
@@ -208,7 +209,7 @@ export function RunsView() {
                 <span className={`activity-dot ${statusClass(row.status)}`} />
                 <span className="data-row-copy">
                   <strong>{row.intent || row.work_item}</strong>
-                  <small>{row.owner || "Unassigned"} · {row.source || "Boltrig"}</small>
+                  <small>{row.owner || "Unassigned"} · {originLabel(row)}</small>
                 </span>
                 <span className="row-meta">{row.status.replaceAll("_", " ")}</span>
               </button>
@@ -226,10 +227,7 @@ export function RunsView() {
                 <button className="icon-button" aria-label="Close run details" onClick={() => setSelectedRunId(null)}>×</button>
               </div>
               <dl className="fact-grid">
-                <Fact label="Run" value={selected.run_id ?? "Not started"} />
-                <Fact label="Status" value={selected.status} />
-                <Fact label="Owner" value={selected.owner ?? "Unassigned"} />
-                <Fact label="Work item" value={selected.work_item} />
+                <RunFacts run={selected} />
               </dl>
               <div className="detail-section">
                 <p className="eyebrow">Cost and execution tree</p>
@@ -388,7 +386,7 @@ export function WorkView() {
   const visible = useMemo(() => {
     const term = query.trim().toLowerCase();
     return items.filter((item) => (
-      (!term || `${item.intent} ${item.id} ${item.owner_member ?? ""} ${item.source ?? ""}`.toLowerCase().includes(term))
+      (!term || `${item.intent} ${item.id} ${item.owner_member ?? ""} ${item.source ?? ""} ${item.provenance?.display_label ?? ""}`.toLowerCase().includes(term))
       && (!owner || item.owner_member === owner)
       && (!source || item.source === source)
       && (!convergent || Boolean(item.convergent) === (convergent === "yes"))
@@ -398,7 +396,7 @@ export function WorkView() {
   const workButton = (item: WorkItem, className = "work-card") => (
     <button className={`${className}${item.convergent ? " convergent" : ""}`} key={item.id} onClick={() => inspect(item)}>
       <span className={`activity-dot ${statusClass(item.status)}`} />
-      <span><strong>{item.intent}</strong><small>{item.owner_member || "Unassigned"} · {item.source || "Boltrig"}{item.convergent ? " · convergent goal" : ""}</small></span>
+      <span><strong>{item.intent}</strong><small>{item.owner_member || "Unassigned"} · {originLabel(item)}{item.convergent ? " · convergent goal" : ""}</small></span>
       <span className="row-meta">{item.status.replaceAll("_", " ")}</span>
     </button>
   );
@@ -733,15 +731,7 @@ function WorkDetail({ detail, onClose, onSelect, onChanged }: { detail: WorkDeta
         }}>×</button>
       </div>
       <dl className="fact-grid">
-        <Fact label="ID" value={detail.item.id} />
-        <Fact label="Status" value={detail.item.status.replaceAll("_", " ")} />
-        <Fact label="Owner" value={detail.item.owner_member ?? "Unassigned"} />
-        <Fact label="Confidence" value={detail.item.confidence == null ? "—" : `${Math.round(detail.item.confidence * 100)}%`} />
-        <Fact label="Source" value={detail.item.source ?? "Boltrig"} />
-        <Fact label="Shape" value={detail.item.convergent ? "Convergent goal" : "Non-convergent work"} />
-        <Fact label="Parent" value={detail.item.parent_id ?? "Root"} />
-        <Fact label="Hatchet run" value={detail.item.hatchet_run_id ?? "None"} />
-        <Fact label="On behalf of" value={detail.item.on_behalf_of ?? "Self"} />
+        <WorkFacts item={detail.item} />
       </dl>
       <div className="detail-section">
         <p className="eyebrow">Lifecycle</p>
@@ -843,7 +833,7 @@ function WorkProjectBranch({
     <div className="work-project-branch" style={{ "--work-depth": depth } as React.CSSProperties}>
       <button className={`work-card${item.convergent ? " convergent" : ""}`} onClick={() => onInspect(item)}>
         <span className={`activity-dot ${statusClass(item.status)}`} />
-        <span><strong>{item.intent}</strong><small>{children.length} children · {item.owner_member || "Unassigned"}{item.convergent ? " · convergent goal" : ""}</small></span>
+        <span><strong>{item.intent}</strong><small>{children.length} children · {item.owner_member || "Unassigned"} · {originLabel(item)}{item.convergent ? " · convergent goal" : ""}</small></span>
         <span className="row-meta">{item.status.replaceAll("_", " ")}</span>
       </button>
       {children.map((child) => <WorkProjectBranch item={child} all={all} onInspect={onInspect} depth={depth + 1} ancestry={[...ancestry, item.id]} key={child.id} />)}
@@ -1585,4 +1575,3 @@ function formatCost(micros: number) {
     maximumFractionDigits: micros < 10_000 ? 6 : 2,
   }).format(micros / 1_000_000);
 }
-

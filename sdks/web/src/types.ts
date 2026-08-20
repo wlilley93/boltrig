@@ -339,6 +339,29 @@ export type WorkStatus =
   | "failed"
   | "cancelled";
 
+/** Caller-safe, kernel-authored channel origin. Exact provider ids stay private. */
+export interface ChannelMessageProvenance {
+  schema: "channel_message_v1";
+  kind: "channel_message";
+  direction: "inbound";
+  provider: string;
+  provider_label: string;
+  channel_id?: string | null;
+  channel_label: string;
+  display_label: string;
+  from: {
+    kind: "authenticated_subject";
+    subject?: string | null;
+    label?: string | null;
+  };
+  to: {
+    kind: "routing_target";
+    address?: string | null;
+    label?: string | null;
+  };
+  threaded: boolean;
+}
+
 export interface WorkItem {
   id: string;
   intent: string;
@@ -352,6 +375,7 @@ export interface WorkItem {
   on_behalf_of?: string | null;
   depth?: number;
   workspace_id?: string | null;
+  provenance?: ChannelMessageProvenance | null;
 }
 
 export interface WorkResponse {
@@ -502,6 +526,8 @@ export interface AuditTreeResponse {
 
 export interface ConversationSummary {
   id: string;
+  /** Immutable durable identity handling this conversation. */
+  agent_address?: string | null;
   title: string;
   status: string;
   updated_at: string;
@@ -641,7 +667,7 @@ export interface ConversationModelContext {
 export interface ConversationResponse {
   conversation?: Pick<
     ConversationSummary,
-    "id" | "title" | "status" | "origin" | "source_ref" | "source_run_id" | "companion_id"
+    "id" | "agent_address" | "title" | "status" | "origin" | "source_ref" | "source_run_id" | "companion_id"
   >;
   messages: ChatMessage[];
   active_run_id?: string | null;
@@ -671,6 +697,9 @@ export interface ChatFollowFrame {
 export interface ChatRequest {
   // omit to start a new conversation; the first message_start returns the id
   conversation_id?: string;
+  // Selects the durable tier-1 identity for a new conversation. For an
+  // existing conversation this can only assert its immutable binding.
+  agent_address?: string;
   message: string;
   // inline, size-capped attachments ({name, media_type, data:base64}); omitted
   // when the turn carries none.
@@ -723,6 +752,7 @@ export interface ChatMessageStart {
   type: "message_start";
   run_id: string;
   conversation_id: string;
+  agent_address?: string;
 }
 export interface ChatTextDelta {
   type: "text_delta";
@@ -900,6 +930,7 @@ export interface ChatSteerQueued {
   run_id?: string;
   conversation_id?: string;
   message_id?: string;
+  agent_address?: string;
 }
 
 /** A queued steer being consumed as its own run. Carries no turn content. */
@@ -908,6 +939,7 @@ export interface ChatSteerConsumed {
   run_id?: string;
   conversation_id?: string;
   message_id?: string;
+  agent_address?: string;
 }
 
 /** A newly persisted output is ready to fetch through the governed artifact API. */
@@ -3181,6 +3213,7 @@ export interface RunRow {
   // opaque external reference, so it is also the filter key:
   // GET /v1/runs?external_ref=opbox. A label: it reaches no authority decision.
   external_ref?: string | null;
+  provenance?: ChannelMessageProvenance | null;
 }
 
 export interface RunsResponse {
@@ -3209,6 +3242,7 @@ export interface RunTopologyNode {
   on_behalf_of?: string | null;
   attempts: number;
   degraded: boolean;
+  provenance?: ChannelMessageProvenance | null;
   cycle?: boolean;
   children: RunTopologyNode[];
 }
