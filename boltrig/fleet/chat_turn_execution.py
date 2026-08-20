@@ -171,7 +171,7 @@ async def _spawn_turn(
             from .named_chat_turn import run_named_chat_turn
 
             result = await run_named_chat_turn(
-                kernel, spawner, item, named_profile, task, context
+                kernel, spawner, item, named_profile, task, context, skills=skills
             )
         _publish_reply(relay, item.id, model_profile_id, model_choice_id, result, item)
         await persist_new_work_items(
