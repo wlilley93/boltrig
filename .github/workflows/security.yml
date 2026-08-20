@@ -99,7 +99,7 @@ jobs:
           - image: fleet
             dockerfile: deploy/fleet.Dockerfile
             context: .
-          - image: worker-ui
+          - image: ui
             dockerfile: apps/worker/Dockerfile
             context: .
           - image: backup

@@ -379,7 +379,7 @@ def test_worker_image_is_the_only_first_party_browser_surface():
     nginx = (WORKER / "nginx.conf").read_text(encoding="utf-8")
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert 'profiles: ["worker"]' not in compose
-    assert "worker-ui:" in compose
+    assert "ui:" in compose
     assert "COPY --from=worker-build" in dockerfile
     assert "operator-build" not in dockerfile
     assert "BOLTRIG_UI_BASE" not in dockerfile
@@ -391,7 +391,7 @@ def test_worker_image_is_the_only_first_party_browser_surface():
 @pytest.mark.invariant("WRK-02")
 def test_worker_is_the_default_edge_presentation():
     caddy = (ROOT / "deploy" / "Caddyfile.example").read_text(encoding="utf-8")
-    assert "{$BOLTRIG_FRONTEND_UPSTREAM:worker-ui:8080}" in caddy
+    assert "{$BOLTRIG_FRONTEND_UPSTREAM:ui:8080}" in caddy
     assert "{$BOLTRIG_FRONTEND_UPSTREAM:ui:80}" not in caddy
     assert not (ROOT / "deploy" / "compose.worker-primary.yml").exists()
 
@@ -406,9 +406,9 @@ def test_worker_is_a_signed_digest_pinned_first_party_release_image():
         encoding="utf-8"
     )
 
-    assert "BOLTRIG_WORKER_UI_IMAGE" in release
-    assert "BOLTRIG_WORKER_UI_IMAGE" in validator
-    assert "image: worker-ui" in workflow
+    assert "BOLTRIG_UI_IMAGE" in release
+    assert "BOLTRIG_UI_IMAGE" in validator
+    assert "image: ui" in workflow
     assert "apps/worker/Dockerfile" in workflow
 
 
