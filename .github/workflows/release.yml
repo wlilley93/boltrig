@@ -71,7 +71,7 @@ jobs:
           owner="${GITHUB_REPOSITORY%%/*}"
           name="$(echo "${GITHUB_REPOSITORY#*/}" | tr '[:upper:]' '[:lower:]')"
           denied=""
-          for image in kernel fleet worker-ui backup; do
+          for image in kernel fleet ui backup; do
             pkg="$name-$image"
             # sed, not a JSON parser: on a bad credential the body is not JSON at
             # all, and a parser would die here with a stack trace instead of the
@@ -329,7 +329,7 @@ jobs:
           - image: fleet
             dockerfile: deploy/fleet.Dockerfile
             context: .
-          - image: worker-ui
+          - image: ui
             dockerfile: apps/worker/Dockerfile
             context: .
           - image: backup
@@ -367,7 +367,7 @@ jobs:
         run: |
           set -euo pipefail
           build_args=()
-          if [ "$IMAGE" = worker-ui ]; then
+          if [ "$IMAGE" = ui ]; then
             desktop_download_url=""
             if [ "$RELEASE_MODE" = full ]; then
               desktop_download_url="$BOLTRIG_DESKTOP_DOWNLOAD_URL"
@@ -1067,15 +1067,15 @@ jobs:
             "release-metadata.json",
             "image-ref-kernel.txt",
             "image-ref-fleet.txt",
-            "image-ref-worker-ui.txt",
+            "image-ref-ui.txt",
             "image-ref-backup.txt",
             "sbom-kernel.cdx.json",
             "sbom-fleet.cdx.json",
-            "sbom-worker-ui.cdx.json",
+            "sbom-ui.cdx.json",
             "sbom-backup.cdx.json",
             "provenance-kernel.intoto.json",
             "provenance-fleet.intoto.json",
-            "provenance-worker-ui.intoto.json",
+            "provenance-ui.intoto.json",
             "provenance-backup.intoto.json"
           ]'
           release="$(gh api "/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")"
@@ -1140,7 +1140,7 @@ jobs:
           fi
           image_env="release-evidence/boltrig-images.env"
           : > "$image_env"
-          for image in kernel fleet worker-ui backup; do
+          for image in kernel fleet ui backup; do
             image_name="$(printf 'ghcr.io/%s-%s' "$GITHUB_REPOSITORY" "$image" | tr '[:upper:]' '[:lower:]')"
             image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
             digest="${image_ref##*@}"
@@ -1151,7 +1151,7 @@ jobs:
             case "$image" in
               kernel) variable=BOLTRIG_KERNEL_IMAGE ;;
               fleet) variable=BOLTRIG_FLEET_IMAGE ;;
-              worker-ui) variable=BOLTRIG_WORKER_UI_IMAGE ;;
+              ui) variable=BOLTRIG_UI_IMAGE ;;
               backup) variable=BOLTRIG_BACKUP_IMAGE ;;
             esac
             printf '%s=%s\n' "$variable" "$image_ref" >> "$image_env"
@@ -1169,7 +1169,7 @@ jobs:
           accept="$accept,application/vnd.oci.image.manifest.v1+json"
           accept="$accept,application/vnd.docker.distribution.manifest.list.v2+json"
           accept="$accept,application/vnd.docker.distribution.manifest.v2+json"
-          for image in kernel fleet worker-ui backup; do
+          for image in kernel fleet ui backup; do
             image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
             image_name="${image_ref%@*}"
             digest="${image_ref##*@}"
@@ -1208,7 +1208,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for image in kernel fleet worker-ui backup; do
+          for image in kernel fleet ui backup; do
             image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
             cosign verify \
               --certificate-identity "$CERTIFICATE_IDENTITY" \
@@ -1257,7 +1257,7 @@ jobs:
           accept="$accept,application/vnd.docker.distribution.manifest.v2+json"
           basic="$(printf '%s:%s' "$GHCR_USER" "$GHCR_TOKEN" | base64 -w0)"
 
-          for image in kernel fleet worker-ui backup; do
+          for image in kernel fleet ui backup; do
             image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
             image_name="${image_ref%@*}"
             digest="${image_ref##*@}"

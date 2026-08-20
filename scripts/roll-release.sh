@@ -53,23 +53,23 @@ say "digests for $VERSION, read from the registry"
 # default multi-line block, which a naive capture swallows whole and then writes
 # into a live overlay as a malformed pin.
 digest_of() { docker buildx imagetools inspect "$1" 2>/dev/null | awk '/^Digest:/{print $2; exit}'; }
-KD=""; FD=""; WUD=""
+KD=""; FD=""; UD=""
 for i in $(seq 1 40); do
   KD=$(digest_of "ghcr.io/wlilley93/boltrig-kernel:$VERSION")
   FD=$(digest_of "ghcr.io/wlilley93/boltrig-fleet:$VERSION")
-  WUD=$(digest_of "ghcr.io/wlilley93/boltrig-worker-ui:$VERSION")
-  [[ "$KD" == sha256:* && "$FD" == sha256:* && "$WUD" == sha256:* ]] && break
+  UD=$(digest_of "ghcr.io/wlilley93/boltrig-ui:$VERSION")
+  [[ "$KD" == sha256:* && "$FD" == sha256:* && "$UD" == sha256:* ]] && break
   [ "$i" = 1 ] && echo "  waiting for $VERSION to publish (the release workflow is probably still running)"
   sleep 15
 done
 echo "  kernel $KD"
 echo "  fleet  $FD"
-echo "  worker $WUD"
+echo "  worker $UD"
 [[ "$KD" == sha256:* ]] || die "kernel digest for $VERSION never became resolvable - did the release succeed?"
 [[ "$FD" == sha256:* ]] || die "fleet digest for $VERSION never became resolvable - did the release succeed?"
 # Worker is rolled with the kernel and fleet so the browser surface cannot drift
 # behind the signed release.
-[[ "$WUD" == sha256:* ]] || die "Worker digest for $VERSION never became resolvable - did the release succeed?"
+[[ "$UD" == sha256:* ]] || die "Worker digest for $VERSION never became resolvable - did the release succeed?"
 
 # SOURCE-FIRST. The overlay is TRACKED in wlilley93/Opbox
 # (boltrig-tenants/), and the box's copy is DERIVED. This used to sed the file on
@@ -90,13 +90,13 @@ repin() { # $1=overlay path ON THE BOX (its basename-relative path under SRC_ROO
   [ -f "$src" ] || die "no tracked source for $rel at $src - the box copy is not authoritative, so refusing to edit it"
 
   cp -a "$src" "$src.bak-roll-$STAMP"
-  python3 - "$src" "$VERSION" "$KD" "$FD" "$WUD" <<'PY'
+  python3 - "$src" "$VERSION" "$KD" "$FD" "$UD" <<'PY'
 import re, sys
-p, version, kd, fd, wud = sys.argv[1:6]
+p, version, kd, fd, ud = sys.argv[1:6]
 s = open(p).read()
 s = re.sub(r'ghcr\.io/wlilley93/boltrig-kernel:[^\s"]+', f'ghcr.io/wlilley93/boltrig-kernel:{version}@{kd}', s)
 s = re.sub(r'ghcr\.io/wlilley93/boltrig-fleet:[^\s"]+',  f'ghcr.io/wlilley93/boltrig-fleet:{version}@{fd}',  s)
-s = re.sub(r'ghcr\.io/wlilley93/boltrig-worker-ui:[^\s"]+', f'ghcr.io/wlilley93/boltrig-worker-ui:{version}@{wud}', s)
+s = re.sub(r'ghcr\.io/wlilley93/boltrig-ui:[^\s"]+', f'ghcr.io/wlilley93/boltrig-ui:{version}@{ud}', s)
 open(p, 'w').write(s)
 PY
 
@@ -138,8 +138,8 @@ PY
 
 bring_up() { # $1=overlay $2=project
   ssh "$H" "cd $PROJECT_DIR && \
-    docker compose -f $COMPOSE -f $1 -p $2 pull kernel fleet-worker worker-ui && \
-    docker compose -f $COMPOSE -f $1 -p $2 up -d --no-deps kernel fleet-worker worker-ui" \
+    docker compose -f $COMPOSE -f $1 -p $2 pull kernel fleet-worker ui && \
+    docker compose -f $COMPOSE -f $1 -p $2 up -d --no-deps kernel fleet-worker ui" \
     || die "compose up failed for $2"
 }
 
@@ -240,7 +240,7 @@ gate() { # $1=project $2=expected `addons active:` substring
   # back at all, has to fail the roll rather than be discovered twelve releases
   # later. Asserting the IMAGE and not merely `healthy` is the point - a container
   # that never restarted reports healthy while serving the old bundle.
-  local u="$P-worker-ui-1"
+  local u="$P-ui-1"
   local us=""
   for i in $(seq 1 24); do
     us=$(ssh "$H" "docker ps --filter name=^/$u\$ --format '{{.Status}}'" 2>/dev/null)

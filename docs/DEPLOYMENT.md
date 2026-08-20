@@ -13,7 +13,7 @@ generic `latest` image tag.
 | Surface | Update source | Promotion rule | Rollback |
 | --- | --- | --- | --- |
 | `dev.boltrig.ai` | a reviewed commit on the development branch | explicit atomic static-directory swap on Jellytot | restore the previous `dist.rollback-*` directory |
-| `app.boltrig.ai` and other hosted Worker stacks | the `worker-ui@sha256` entry in a protected release's `boltrig-images.env` | exact semantic-tag checkout, `release-validate`, then `release-up` | previous protected tag plus its four digest refs |
+| `app.boltrig.ai` and other hosted Worker stacks | the `ui@sha256` entry in a protected release's `boltrig-images.env` | exact semantic-tag checkout, `release-validate`, then `release-up` | previous protected tag plus its four digest refs |
 | already-installed signed desktop apps | `latest.json` attached to the latest stable **full** GitHub release | Tauri verifies the selected platform package with the public key compiled into the app | install a previous signed package explicitly; the updater never follows an image or branch |
 | pinned server products such as Opbox | operator-selected protected release tag and that release's `boltrig-images.env` | explicit maintenance-window validation and restart | retain and reapply the previous tag/environment pair |
 
@@ -796,7 +796,7 @@ For a full release, configure the protected release-environment variable:
 BOLTRIG_DESKTOP_DOWNLOAD_URL=https://<reviewed-release-page>
 ```
 
-The candidate build accepts this only for the `worker-ui` image, requires an
+The candidate build accepts this only for the `ui` image, requires an
 absolute HTTPS URL without embedded credentials, and compiles it into that
 authenticated UI. A `core` release deliberately bakes an empty value because it
 ships no desktop packages. Local Compose development can use the same variable;

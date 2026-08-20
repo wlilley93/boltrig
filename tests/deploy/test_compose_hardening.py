@@ -422,7 +422,7 @@ def test_release_publishes_only_scanned_signed_digest_images_with_sboms():
     for variable in (
         "BOLTRIG_KERNEL_IMAGE",
         "BOLTRIG_FLEET_IMAGE",
-        "BOLTRIG_WORKER_UI_IMAGE",
+        "BOLTRIG_UI_IMAGE",
         "BOLTRIG_BACKUP_IMAGE",
     ):
         assert variable in workflow
@@ -477,7 +477,7 @@ def test_release_compose_uses_only_required_digest_images_without_builds():
         "fleet-worker": "BOLTRIG_FLEET_IMAGE",
         "browser-executor": "BOLTRIG_FLEET_IMAGE",
         "hatchet-worker": "BOLTRIG_FLEET_IMAGE",
-        "worker-ui": "BOLTRIG_WORKER_UI_IMAGE",
+        "ui": "BOLTRIG_UI_IMAGE",
         "backup": "BOLTRIG_BACKUP_IMAGE",
     }
     for service, variable in variables.items():

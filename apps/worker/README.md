@@ -51,7 +51,7 @@ bounded, process-local opaque handle rather than a caller-supplied path.
 The Worker is the only first-party browser surface:
 
 ```sh
-docker compose up -d worker-ui
+docker compose up -d ui
 # Worker: http://localhost:8082/
 ```
 
@@ -65,7 +65,7 @@ show-once channel-scoped gateway token from the channel detail, place it in the
 gateway's read-only `CHANNEL_GATEWAY_TOKEN_FILE`, and start both profiles:
 
 ```sh
-docker compose --profile channels up -d worker-ui channel-gateway
+docker compose --profile channels up -d ui channel-gateway
 ```
 
 The kernel elects one durable gateway owner per channel before returning any

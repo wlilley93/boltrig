@@ -2358,7 +2358,7 @@ invariants:
     tests:
       - tests/security/test_worker_surface_boundary.py::test_worker_only_decision_is_landed_with_attribution
   WRK-02:
-    description: 'Worker is the sole default first-party browser surface: Caddy routes to worker-ui, the old frontend image and cutover overlay do not exist, the retired browser path returns 404, and Worker is produced by the same protected release workflow as every first-party service using a digest-pinned signed image reference.'
+    description: 'Worker is the sole default first-party browser surface: Caddy routes to ui, the old frontend image and cutover overlay do not exist, the retired browser path returns 404, and Worker is produced by the same protected release workflow as every first-party service using a digest-pinned signed image reference.'
     tests:
       - tests/security/test_worker_surface_boundary.py::test_worker_is_the_default_edge_presentation
       - tests/security/test_worker_surface_boundary.py::test_worker_is_a_signed_digest_pinned_first_party_release_image

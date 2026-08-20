@@ -135,7 +135,7 @@ def test_only_our_own_immutable_tags_are_failed_on() -> None:
     assert decide("TAG MOVED", "pgvector/pgvector", ours) is False
     # our own immutable release tags: both states are defects
     assert decide("TAG MOVED", "ghcr.io/wlilley93/boltrig-kernel", ours) is True
-    assert decide("TAG MISSING", "ghcr.io/wlilley93/boltrig-worker-ui", ours) is True
+    assert decide("TAG MISSING", "ghcr.io/wlilley93/boltrig-ui", ours) is True
     # a resolved tag is never a defect, whoever published it
     assert decide("ok", "ghcr.io/wlilley93/boltrig-kernel", ours) is False
     # and with no remote we cannot tell them apart, so nothing is failed on
