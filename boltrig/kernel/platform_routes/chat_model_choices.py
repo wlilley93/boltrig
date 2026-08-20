@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import Request
 
 from boltrig.model_choice_policy import opaque_model_choice_id
-from boltrig.models.model_id_policy import exact_model_id
+from boltrig.models.model_id_policy import exact_model_id, user_model_id
 
 from ._shared import platform_state
 
@@ -64,7 +64,9 @@ async def _scoped_ai_default(kernel, principal, platform: dict):
     if resolution.is_default:
         return None
     try:
-        model = exact_model_id(resolution.model)
+        # The caller's own binding: aliases are the provider's naming and are
+        # allowed (user_model_id); kernel choices below stay byte-exact.
+        model = user_model_id(resolution.model)
     except ValueError:
         raw_model = resolution.model
         return (

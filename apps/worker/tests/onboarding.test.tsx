@@ -519,7 +519,7 @@ describe("first-run onboarding", () => {
     expect(api.setAiKey).not.toHaveBeenCalled();
   });
 
-  it("does not finish onboarding until a pending provider setup is explicitly approved", async () => {
+  it("answers a parked provider approval inside the same Continue press", async () => {
     api.setAiKey.mockResolvedValueOnce({
       status: "pending_human",
       proposal: {
@@ -554,18 +554,65 @@ describe("first-run onboarding", () => {
     fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
     await clickWhenReady("Continue");
 
-    expect(await screen.findByText("Select Continue again to approve this provider and model."))
-      .toBeTruthy();
-    expect(screen.getByText("Choose your AI provider")).toBeTruthy();
-    expect(api.approveAiKeyProposal).not.toHaveBeenCalled();
-    await clickWhenReady("Continue");
-
+    // One press covers the whole journey: a parked approval is answered inside
+    // the same Continue, never by asking the person to press it twice.
     await waitFor(() => expect(api.approveAiKeyProposal).toHaveBeenCalledWith("proposal-1"));
     expect(await screen.findByText("Add vision")).toBeTruthy();
     await clickWhenReady("Skip for now");
     expect(await screen.findByText("Add voice")).toBeTruthy();
     await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
+  });
+
+  it("waits with a plain sentence when the approval belongs to an administrator", async () => {
+    api.setAiKey.mockResolvedValueOnce({
+      status: "pending_human",
+      proposal: {
+        id: "proposal-2",
+        level: "org",
+        scope_id: "acme",
+        provider: "openai",
+        model: "openai/gpt-5.4",
+        modality: "text",
+        status: "pending",
+        created_at: "2026-08-15T09:00:00Z",
+        expires_at: "2026-08-15T09:15:00Z",
+      },
+    });
+    api.approveAiKeyProposal.mockResolvedValue({
+      status: "pending",
+      reason: "This connection is waiting for an administrator's approval.",
+    });
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
+    fireEvent.change(await screen.findByLabelText("Provider API key"), {
+      target: { value: "provider-secret" },
+    });
+    await clickWhenReady("Choose a model");
+    fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "GPT-5.4" } });
+    fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
+    await clickWhenReady("Continue");
+
+    await waitFor(() => expect(api.approveAiKeyProposal).toHaveBeenCalledWith("proposal-2"));
+    expect(await screen.findByText(
+      "This connection is waiting for an administrator's approval.",
+    )).toBeTruthy();
+    expect(screen.getByText("Choose your AI provider")).toBeTruthy();
+
+    // The next press re-checks the SAME request rather than resubmitting.
+    await clickWhenReady("Continue");
+    await waitFor(() => expect(api.approveAiKeyProposal).toHaveBeenCalledTimes(2));
+    expect(api.setAiKey).toHaveBeenCalledTimes(1);
   });
 
   it("holds the provider step when the saved key does not reach its provider", async () => {

@@ -1,12 +1,12 @@
 const MODEL_UNAVAILABLE_COPY: Record<string, string> = {
   catalogue_unavailable: "The live model list is unavailable.",
   default_model_unconfigured: "No default chat model is configured.",
-  model_gateway_unavailable: "The model gateway is unavailable.",
-  model_id_unsupported: "This model identifier is not supported.",
+  model_gateway_unavailable: "Models can't be reached right now.",
+  model_id_unsupported: "This model name can't be used.",
   model_not_advertised: "This model is not currently listed by your provider.",
-  text_capability_not_advertised: "This model does not advertise text input.",
+  text_capability_not_advertised: "This model doesn't list text support.",
   text_not_supported: "This model does not support text input.",
-  trusted_codex_unavailable: "The cloud agent runtime is unavailable.",
+  trusted_codex_unavailable: "The assistant is not available right now.",
 };
 
 /** Keep kernel reason codes out of browser-facing labels and tooltips. */

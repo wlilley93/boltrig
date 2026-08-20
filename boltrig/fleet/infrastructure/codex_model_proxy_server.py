@@ -206,7 +206,11 @@ class PerCellModelProxyServer:
     async def _handle(self, request: Request) -> Response:
         token = _bearer(request.headers.get("authorization"))
         if token is None or not await self._reject_safe(token):
-            # Fail-closed: never reach upstream without an active bearer.
+            # Fail-closed: never reach upstream without an active bearer. The
+            # refusal is logged (content-free) because an unlogged 4xx here
+            # reads as "codex reported 1 runtime error" and nothing else.
+            logger.warning("model proxy refused: unauthorized (bearer %s)",
+                           "absent" if token is None else "inactive")
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         tail = request.path_params["tail"]
         try:
@@ -225,11 +229,14 @@ class PerCellModelProxyServer:
                 self._allowed_tools,
                 allow_native_collaboration=self._native_collaboration is not None,
             )
-        except ModelCeilingViolation:
+        except ModelCeilingViolation as violation:
+            logger.warning("model proxy refused: model_ceiling: %s", violation)
             return JSONResponse({"error": "model_ceiling"}, status_code=400)
-        except ReasoningEffortCeilingViolation:
+        except ReasoningEffortCeilingViolation as violation:
+            logger.warning("model proxy refused: reasoning_effort_ceiling: %s", violation)
             return JSONResponse({"error": "reasoning_effort_ceiling"}, status_code=400)
-        except ToolCeilingViolation:
+        except ToolCeilingViolation as violation:
+            logger.warning("model proxy refused: tool_ceiling: %s", violation)
             return JSONResponse({"error": "tool_ceiling"}, status_code=400)
         headers = {
             "content-type": request.headers.get("content-type", "application/json"),

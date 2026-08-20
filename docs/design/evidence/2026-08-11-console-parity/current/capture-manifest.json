@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-20T15:32:13.383Z",
+  "capturedAt": "2026-08-20T15:38:00.402Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,11 +16,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "58f110a45c5fbfc66c759e107757acf2becf6891b3f9e942b42904b49907d5df",
-    "digestAfterCapture": "58f110a45c5fbfc66c759e107757acf2becf6891b3f9e942b42904b49907d5df",
+    "digestBeforeCapture": "5626696e8be8b5adf819dd662ad8df56a12059ba9a14099ef2edfc429c5f19d7",
+    "digestAfterCapture": "5626696e8be8b5adf819dd662ad8df56a12059ba9a14099ef2edfc429c5f19d7",
     "sourceUnchangedDuringCapture": true,
     "branch": "codex/flat-named-agent-peers",
-    "head": "d0d2d61193b5994f00dec78bb761346a813a463c",
+    "head": "ba4482f4534883ff9bdb1c73f188871f2acd9bb7",
     "dirty": true
   },
   "runner": {
@@ -274,7 +274,7 @@
       "hash": "#/chat/voice-thread",
       "settledSelector": "html[data-visual-ready=\"call\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
-      "sha256": "c49587ffed1a188541fb88efcab48395b0c030685221c5e9c62aab05a4eca7c0",
+      "sha256": "469cffefe32d37ead1881bd5374bc39a87f3039d2d7b3543be493a93cfec6e9a",
       "width": 1440,
       "height": 900,
       "captureContract": {

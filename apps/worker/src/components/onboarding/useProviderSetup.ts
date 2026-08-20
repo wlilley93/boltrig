@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
-import type {
-  AiKeyLevel,
-  AiKeyProposalView,
-  AiKeyView,
-  ChatModelChoicesResponse,
-  UserProfile,
+import {
+  BoltrigApiError,
+  type AiKeyLevel,
+  type AiKeyProposalView,
+  type AiKeyView,
+  type ChatModelChoicesResponse,
+  type UserProfile,
 } from "@wlilley93/boltrig-web-sdk";
 
 import { submitWriteOnlyAiKey } from "../../aiKeyIntake";
@@ -107,13 +108,29 @@ async function completeProvider(context: ProviderCompletionContext): Promise<boo
         || undefined,
     });
     context.setKeyPresent(false);
-    return applyIntakeResult(context, await submission);
-  } catch {
-    context.setMessage("We couldn't connect that provider. Check the details and try again.");
+    return await applyIntakeResult(context, await submission);
+  } catch (error) {
+    context.setMessage(failureMessage(
+      error,
+      "We couldn't connect that provider. Check the details and try again.",
+    ));
     return false;
   } finally {
     context.setBusy(false);
   }
+}
+
+/**
+ * The sentence the server sent, or the fallback. Every refusal the kernel
+ * writes is one plain instruction for the person reading it; swallowing it
+ * behind a generic line is how three days of "still needs approval" happened.
+ */
+function failureMessage(error: unknown, fallback: string): string {
+  if (error instanceof BoltrigApiError && typeof error.body === "object" && error.body) {
+    const reason = (error.body as { reason?: unknown }).reason;
+    if (typeof reason === "string" && reason) return reason;
+  }
+  return fallback;
 }
 
 function providerInputIsComplete(context: ProviderCompletionContext): boolean {
@@ -173,6 +190,13 @@ async function confirmGatewayReady(context: ProviderCompletionContext): Promise<
   return true;
 }
 
+/**
+ * One press covers the whole journey. The kernel completes a member's own
+ * provider inside the submit call itself, so `pending_human` here means either
+ * the decision belongs to somebody else or the kernel predates the fold; both
+ * are answered by trying the approval NOW, in the same press, never by asking
+ * for a second one.
+ */
 async function applyIntakeResult(context: ProviderCompletionContext, result: {
   status: string;
   reason?: string;
@@ -180,9 +204,7 @@ async function applyIntakeResult(context: ProviderCompletionContext, result: {
 }): Promise<boolean> {
   if (result.status === "ok") return confirmGatewayReady(context);
   if (result.status === "pending_human" && result.proposal) {
-    context.setProposal(result.proposal);
-    context.setMessage("Select Continue again to approve this provider and model.");
-    return false;
+    return approveAndConnect(context, result.proposal);
   }
   context.setMessage(result.reason ?? "We couldn't connect that provider.");
   return false;
@@ -200,11 +222,29 @@ async function approveAndConnect(
       context.setProposal(null);
       return await confirmGatewayReady(context);
     }
-    if (result.proposal) context.setProposal(result.proposal);
-    context.setMessage(result.reason ?? "This provider connection still needs approval.");
+    if (result.status === "pending") {
+      // The decision genuinely sits with an administrator. Keep the request so
+      // the next press re-checks it instead of resubmitting the key.
+      context.setProposal(result.proposal ?? current);
+      context.setMessage(
+        result.reason ?? "This connection is waiting for an administrator's approval.",
+      );
+      return false;
+    }
+    // Any other state is dead. A dead request held in memory wedged this
+    // wizard for a whole morning (every press re-answered it, nothing ever
+    // resubmitted), so it is dropped here and the next press starts fresh.
+    context.setProposal(null);
+    context.setMessage(
+      result.reason ?? "That request can no longer be used. Submit the provider again.",
+    );
     return false;
-  } catch {
-    context.setMessage("We couldn't finish connecting that provider. Try again.");
+  } catch (error) {
+    context.setProposal(null);
+    context.setMessage(failureMessage(
+      error,
+      "We couldn't finish connecting that provider. Try again.",
+    ));
     return false;
   } finally {
     context.setBusy(false);
@@ -230,8 +270,11 @@ async function activateExisting(
     // Was `setReadiness(... gateway_ready: true)`: the client asserting the very
     // fact it is supposed to be reading. Ask the kernel instead.
     return await confirmGatewayReady(context);
-  } catch {
-    context.setMessage("We couldn't connect the saved provider. Try again.");
+  } catch (error) {
+    context.setMessage(failureMessage(
+      error,
+      "We couldn't connect the saved provider. Try again.",
+    ));
     return false;
   } finally {
     context.setBusy(false);

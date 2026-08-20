@@ -94,12 +94,12 @@ def _virtual_key_identity(
     row: dict[str, Any], provider: str, provider_key_id: str, raw_model: str
 ) -> tuple[str, str]:
     virtual_key_id = safe_identifier(row.get("id"), "virtual key id")
-    virtual_key = ascii_secret(row.get("value"), "Bifrost virtual key")
+    virtual_key = ascii_secret(row.get("value"), "the saved access key")
     if row.get("is_active") is not True:
-        raise BifrostUserBindingUnavailable("the Bifrost virtual key is inactive")
+        raise BifrostUserBindingUnavailable("the saved connection is switched off")
     configs = row.get("provider_configs")
     if not isinstance(configs, list) or len(configs) != 1 or not isinstance(configs[0], dict):
-        raise BifrostUserBindingUnavailable("the Bifrost virtual-key scope differs")
+        raise BifrostUserBindingUnavailable("the saved connection does not match this model")
     config = configs[0]
     keys = config.get("key_ids") if "key_ids" in config else config.get("keys")
     if isinstance(keys, list) and keys and isinstance(keys[0], dict):
@@ -113,7 +113,7 @@ def _virtual_key_identity(
         or raw_model not in (config.get("allowed_models") or [])
         or (isinstance(keys, list) and provider_key_id not in keys)
     ):
-        raise BifrostUserBindingUnavailable("the Bifrost virtual-key scope differs")
+        raise BifrostUserBindingUnavailable("the saved connection does not match this model")
     return virtual_key_id, virtual_key
 
 
@@ -161,6 +161,29 @@ class BifrostUserAdmin:
         except BifrostUserBindingUnavailable:
             return False
 
+    async def provider_key_status(self, provider: str, key_id: str) -> str | None:
+        """The gateway's own health verdict for one provider key, or None.
+
+        Distinguishes "the endpoint never answered" from "the endpoint answered
+        without the model", which need opposite user fixes. Diagnostic only:
+        callers must not gate on it, and any failure reads as unknown.
+        """
+        try:
+            payload = await self._http.request_json(
+                "GET",
+                f"{self._http.base}api/providers/{quote(provider, safe='')}/keys",
+            )
+        except BifrostUserBindingUnavailable:
+            return None
+        rows = payload.get("keys")
+        if not isinstance(rows, list):
+            return None
+        for row in rows:
+            if isinstance(row, dict) and row.get("id") == key_id:
+                status = row.get("status")
+                return status if isinstance(status, str) else None
+        return None
+
     async def revoke_metadata(self, sealed: dict[str, Any]) -> None:
         provider = str(sealed.get("provider") or "").lower()
         # Custom providers are legitimate stored rows now; the gate is the id
@@ -168,7 +191,7 @@ class BifrostUserAdmin:
         # binding would strand its keys in Bifrost forever.
         if provider not in BIFROST_PROVIDERS and _CUSTOM_ID.fullmatch(provider) is None:
             raise BifrostUserBindingUnavailable(
-                "the stored Bifrost provider binding is invalid"
+                "the saved provider entry is invalid"
             )
         provider_key_id = safe_identifier(
             sealed.get("provider_key_id"), "provider key id"
@@ -183,7 +206,7 @@ class BifrostUserAdmin:
         )
         if virtual_status not in {200, 204, 404}:
             raise BifrostUserBindingUnavailable(
-                "Bifrost refused the virtual-key revocation"
+                "the saved connection could not be removed"
             )
         key_status, _payload = await self._http.request(
             "DELETE",
@@ -192,7 +215,7 @@ class BifrostUserAdmin:
         )
         if key_status not in {200, 204, 404}:
             raise BifrostUserBindingUnavailable(
-                "Bifrost refused the provider-key revocation"
+                "the saved key could not be removed"
             )
 
     async def ensure_provider(
@@ -213,7 +236,7 @@ class BifrostUserAdmin:
         rows = payload.get("providers")
         if not isinstance(rows, list):
             raise BifrostUserBindingUnavailable(
-                "Bifrost provider inventory is unavailable"
+                "the provider list could not be read; try again shortly"
             )
         custom_url = _custom_base_url(base_url) if provider not in BIFROST_PROVIDERS else None
         for row in rows:
@@ -238,7 +261,9 @@ class BifrostUserAdmin:
             "POST", f"{self._http.base}api/providers", body
         )
         if status not in {200, 201, 409}:
-            raise BifrostUserBindingUnavailable("Bifrost refused the selected provider")
+            raise BifrostUserBindingUnavailable(
+                "that provider could not be added; try again shortly"
+            )
 
     async def ensure_provider_key(
         self,
@@ -286,10 +311,12 @@ class BifrostUserAdmin:
             status, _payload = await self._http.request("PUT", key_path, payload)
         else:
             raise BifrostUserBindingUnavailable(
-                "the existing Bifrost key binding differs"
+                "a conflicting key is already saved for this provider"
             )
         if status not in {200, 201}:
-            raise BifrostUserBindingUnavailable("Bifrost refused the provider key")
+            raise BifrostUserBindingUnavailable(
+                "the key could not be saved; check it and try again"
+            )
 
     async def ensure_virtual_key(
         self, name: str, provider: str, provider_key_id: str, raw_model: str
@@ -302,14 +329,14 @@ class BifrostUserAdmin:
             rows = []
         if not isinstance(rows, list):
             raise BifrostUserBindingUnavailable(
-                "Bifrost virtual-key inventory is unavailable"
+                "saved connections could not be read; try again shortly"
             )
         matches = [
             row for row in rows if isinstance(row, dict) and row.get("name") == name
         ]
         if len(matches) > 1:
             raise BifrostUserBindingUnavailable(
-                "the Bifrost virtual-key binding is ambiguous"
+                "duplicate saved connections were found for this model"
             )
         if matches:
             try:
@@ -325,7 +352,7 @@ class BifrostUserAdmin:
                 )
                 if status not in {200, 204, 404}:
                     raise BifrostUserBindingUnavailable(
-                        "Bifrost refused the virtual-key rotation"
+                        "the old connection could not be replaced"
                     )
         status, payload = await self._http.request(
             "POST",
@@ -348,12 +375,12 @@ class BifrostUserAdmin:
         )
         if status not in {200, 201}:
             raise BifrostUserBindingUnavailable(
-                "Bifrost refused the scoped virtual key"
+                "the connection could not be created; try again shortly"
             )
         row = payload.get("virtual_key")
         if not isinstance(row, dict):
             raise BifrostUserBindingUnavailable(
-                "Bifrost returned an invalid virtual key"
+                "the connection came back malformed; try again"
             )
         return _virtual_key_identity(row, provider, provider_key_id, raw_model)
 
