@@ -41,6 +41,7 @@ from boltrig.fleet.infrastructure.codex_assignment_model_binding import (
     CodexAssignmentModelBindingRegistry,
 )
 from boltrig.fleet.infrastructure.codex_kernel_tools_phase import (
+    MAX_KERNEL_TOOLS,
     codex_mcp_tool_name,
     kernel_tools_thread_spec,
     validated_kernel_tool_names,
@@ -179,9 +180,30 @@ class CodexRuntime:
         token: str | None = None
         try:
             verb_ids = await wiring.compile_tool_ceiling(context.tenant_id, context.grants)
-            tools = validated_kernel_tool_names(
-                tuple({codex_mcp_tool_name(verb_id) for verb_id in verb_ids})
-            )
+            names = tuple({codex_mcp_tool_name(verb_id) for verb_id in verb_ids})
+            if len(names) > MAX_KERNEL_TOOLS:
+                # The compiled ceiling exceeds what a cell may be attested for.
+                # This is a REAL deployment state, not a hypothetical: a tenant
+                # ceiling of allow:["*"] over a kernel registering 164 verbs met
+                # this bound on 2026-08-20 and - because the named-agent lane
+                # FORCES kernel tools for every interactive turn - EVERY chat
+                # turn on that deployment died here. The bound itself must not
+                # move (it is the attestation cap) and the set must not be
+                # silently truncated (which 128 of 164 would be a policy choice
+                # nobody made). So the turn keeps its voice and loses its hands:
+                # fall back to the read-only phase, exactly like the zero-tools
+                # branch below. Observable, never silent.
+                logger.warning(
+                    "codex kernel-tools run %s compiled %d tools over the "
+                    "attestation bound of %d; falling back to the read-only phase",
+                    context.run_id,
+                    len(names),
+                    MAX_KERNEL_TOOLS,
+                )
+                return await self._run_phase(
+                    prompt, read_only_thread_spec(assignment, self._stack_root)
+                )
+            tools = validated_kernel_tool_names(names)
             if not tools:
                 # A tool-enabled capability whose run holds NO effective verbs
                 # (e.g. a chat turn whose role loads no skills) has no MCP face
