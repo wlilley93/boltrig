@@ -32,6 +32,7 @@ what the admission compiles is byte-identical to what the wire carries.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from pathlib import Path
 
@@ -154,6 +155,48 @@ def codex_mcp_tool_name(verb_id: str) -> str:
     return _sanitize(verb_id)
 
 
+_log = logging.getLogger(__name__)
+
+
+def admissible_kernel_tool_names(
+    verb_ids: tuple[str, ...], *, run_id: str | None
+) -> tuple[str, ...] | None:
+    """The attestable tool set for this run, or None = run read-only instead.
+
+    None on BOTH inadmissible states, each logged with its own reason:
+
+    OVER THE BOUND - a real deployment state, not a hypothetical: a tenant
+    ceiling of allow:["*"] over a kernel registering 164 verbs met the 128
+    bound on 2026-08-20, and because the named-agent lane forces kernel tools
+    on every interactive turn, EVERY chat turn on that deployment degraded.
+    The bound cannot move (it is the attestation cap) and the set must not be
+    silently truncated (which 128 of 164 would be a policy choice nobody
+    made), so the turn keeps its voice and loses its hands.
+
+    EMPTY - a turn whose role loads no skills has no MCP face to offer;
+    exactly what the legacy lanes did with empty grants. Observable, never
+    silent, in both cases.
+    """
+
+    names = tuple({codex_mcp_tool_name(verb_id) for verb_id in verb_ids})
+    if len(names) > MAX_KERNEL_TOOLS:
+        _log.warning(
+            "codex kernel-tools run %s compiled %d tools over the "
+            "attestation bound of %d; falling back to the read-only phase",
+            run_id, len(names), MAX_KERNEL_TOOLS,
+        )
+        return None
+    tools = validated_kernel_tool_names(names)
+    if not tools:
+        _log.warning(
+            "codex kernel-tools run %s has no effective tools; "
+            "falling back to the read-only phase",
+            run_id,
+        )
+        return None
+    return tools
+
+
 def validated_kernel_tool_names(values: object) -> tuple[str, ...]:
     """Canonicalize the per-run wire-name ceiling, fail-closed.
 
@@ -240,6 +283,7 @@ __all__ = [
     "KERNEL_TOOLS_PROFILE_NAME",
     "KERNEL_TOOLS_PROFILE_VERSION",
     "MAX_KERNEL_TOOLS",
+    "admissible_kernel_tool_names",
     "MAX_KERNEL_TOOL_NAME_LENGTH",
     "CodexKernelToolsError",
     "codex_mcp_tool_name",
