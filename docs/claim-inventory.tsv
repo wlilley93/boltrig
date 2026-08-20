@@ -676,9 +676,9 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/api/chat_cli_gateway.py:26		One outbound l
 ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_execution.py:126		Lazy import so the flag-off path never pulls in the Postgres/asyncpg module
 ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_execution.py:148		structural ratchet (forbidden here).
 ORDINARY	NO-SUBJECT	docstring	boltrig/api/codex_readiness.py:1		Fail-closed readiness projection for the configured Codex runtime.
-ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:146		Lazy imports so the flag-off path never pulls in the infrastructure layer or
-ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:177		never carries the upstream key;
-ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:203		model_id is non-secret admission policy: the resolver refuses a permanent
+ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:164		Lazy imports so the flag-off path never pulls in the infrastructure layer or
+ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:195		never carries the upstream key;
+ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:221		model_id is non-secret admission policy: the resolver refuses a permanent
 ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:22		three sites cannot disagree about what counts as a placeholder again.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:327		Removed runtime names are migration drift, never revival targets.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/host_boundary.py:26		Deliberately not an email and not a real user id: it must not collide with any
@@ -1636,7 +1636,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/voice_tone/tone.py:1	Baselin
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/voice_tone/tone.py:47	observe	What ordinary sounds like, for one speaker.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/voice_tone/valence.py:1	boltrig.adapters.voice_tone.tone.classify	A lexical warmth gate -- the text half of the sarcasm test, and no more.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/api/codex_execution.py:1	shadow_admit	Flag-gated composition of the Codex read-only execution stack.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/api/codex_trusted.py:111	assert_cell_isolation_boundary	Prove the read-only sandbox ENGAGES here, before composing anything on it.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/api/codex_trusted.py:113	assert_cell_isolation_boundary	Prove the read-only sandbox ENGAGES here, before composing anything on it.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/control_rehydrate.py:1	api.bootstrap._rehydrate_store_adapters	Rebuilding a live adapter instance from its persisted store row.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/control_routing_policy_specs.py:1	RoutingPolicy	Verb specs for routing policies (SPEC §8, doctrine step 6, the route half).
 ORDINARY	SUBJECT-REACHED	comment	boltrig/config/manifest.py:226	_tighten_cap	cap (min(default, manifest)), never loosen it (see ``_tighten_cap`` below).

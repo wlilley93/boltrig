@@ -30,6 +30,8 @@ from typing import TYPE_CHECKING, Any
 from boltrig.config.settings import Settings
 
 if TYPE_CHECKING:
+    import httpx
+
     from boltrig.fleet.infrastructure.cell_lane import CellLane
 
 
@@ -129,6 +131,22 @@ def _prove_the_host_can_enforce_the_cell_wall(binary: Path, stack_root: Path) ->
     prove_sandbox_engagement(codex_binary=binary, probe_root=stack_root)
 
 
+def _upstream_client() -> "httpx.AsyncClient":
+    """The model-proxy's upstream client, sized for a self-hosted model.
+
+    httpx's DEFAULT timeout is 5s on every leg, and a self-hosted model's
+    prompt prefill sits silent longer than that between stream chunks -
+    measured 2026-08-20: every live turn died mid-stream at ~5.5s while the
+    gateway completed the same call in 13s. The read leg matches the cell's
+    own stream idle policy (300s); connect stays tight.
+    """
+    import httpx
+
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=30.0)
+    )
+
+
 def build_trusted_codex_config(
     settings: Settings, *, model_id: str, gateway_base_url: str
 ) -> dict[str, Any] | None:
@@ -198,14 +216,7 @@ def build_trusted_codex_config(
         # Dev bifrost is unauth, so an empty key is acceptable; prefer the configured
         # value when present.
         upstream_key=settings.model_gateway_key or "",
-        # httpx's DEFAULT timeout is 5s on every leg, and a self-hosted model's
-        # prompt prefill sits silent longer than that between stream chunks -
-        # measured 2026-08-20: every live turn died mid-stream at ~5.5s while
-        # the gateway completed the same call in 13s. The read leg matches the
-        # cell's own stream_idle_timeout_ms (300s); connect stays tight.
-        http_client=httpx.AsyncClient(
-            timeout=httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=30.0)
-        ),
+        http_client=_upstream_client(),
     )
     # model_id is non-secret admission policy: the resolver refuses a permanent
     # profile whose endpoint differs from the supervised cell's composed model.
