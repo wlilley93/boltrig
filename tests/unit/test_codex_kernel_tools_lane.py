@@ -934,3 +934,38 @@ def _assignment_for(suffix: str) -> PhaseAssignmentRef:
         workspace_id="ws-1",
     )
     return PhaseAssignmentRef(phase=phase, assignment_id=f"run-{suffix}-codex-assignment")
+
+
+async def test_over_bound_tool_ceiling_falls_back_to_the_read_only_phase() -> None:
+    """A ceiling past the attestation bound keeps its voice and loses its hands.
+
+    THE COUNTEREXAMPLE THIS PINS: a tenant ceiling of allow:["*"] over a kernel
+    registering more verbs than MAX_KERNEL_TOOLS. Before the fallback,
+    validated_kernel_tool_names raised and - because the named-agent lane
+    forces kernel tools on every interactive turn - EVERY chat turn on such a
+    deployment degraded (found live 2026-08-20: 164 verbs against 128). The
+    turn must instead run the read-only phase, exactly like the zero-tools
+    branch: same phase, no token minted, nothing left registered.
+    """
+    from boltrig.fleet.infrastructure.codex_kernel_tools_phase import MAX_KERNEL_TOOLS
+
+    tokens = _RecordingTokens()
+    registry = CodexKernelToolScopeRegistry()
+    over_bound = tuple(f"verb.{index}" for index in range(MAX_KERNEL_TOOLS + 1))
+    lifecycle = _FakeLifecycle()
+    runtime = CodexRuntime(
+        lifecycle,  # type: ignore[arg-type]
+        stack_root=Path("/stack"),
+        kernel_tools=_wiring(tokens, registry, verb_ids=over_bound),
+    )
+
+    result = await runtime.run("question?", _context(), tools=["ticket.read"])
+
+    assert result.ok is True
+    # The read-only phase ran: its profile, not the kernel-tools one.
+    assert getattr(lifecycle.spec, "profile").name != KERNEL_TOOLS_PROFILE_NAME
+    # No run token was ever minted for a phase that offers no MCP face,
+    # and nothing is left registered.
+    assert tokens.issued == []
+    assert tokens.revoked == []
+    assert len(registry) == 0
