@@ -923,12 +923,12 @@ class PostgresStore(
     async def add_message(self, m: ConversationMessage):
         await self._pool.execute(
             """INSERT INTO conversation_messages
-               (id, conversation_id, tenant_id, role, content, run_id, hitl_request_id,
-                events, attachments, superseded_by, created_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+               (id, conversation_id, tenant_id, role, content, run_id, recipient_agent_address, author_agent_address, hitl_request_id, events, attachments, superseded_by, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
                ON CONFLICT (tenant_id, id) DO NOTHING""",
             m.id, m.conversation_id, m.tenant_id, m.role.value, m.content, m.run_id,
-            m.hitl_request_id, m.events, m.attachments, m.superseded_by, m.created_at,
+            m.recipient_agent_address, m.author_agent_address, m.hitl_request_id,
+            m.events, m.attachments, m.superseded_by, m.created_at,
         )
 
     async def list_messages(self, tenant_id, conv_id):

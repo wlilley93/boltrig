@@ -57,6 +57,7 @@ from boltrig.models import (
     VerbBinding,
     WorkItem,
     WorkStatus,
+    Workspace,
     utcnow,
 )
 from boltrig.store.idempotency_contract import IdempotencyClaimStatus
@@ -217,7 +218,7 @@ async def test_named_agent_turn_scheduling_and_delivery_match_on_both_stores(sto
 
 @pytest.mark.store
 @pytest.mark.invariant("CONV-AGENT-02")
-async def test_conversation_agent_binding_is_compare_and_set_on_both_stores(store):
+async def test_conversation_agent_selection_is_compare_and_set_on_both_stores(store):
     for address in ("alice", "bob"):
         await store.upsert_named_agent(
             NamedAgent(
@@ -233,19 +234,54 @@ async def test_conversation_agent_binding_is_compare_and_set_on_both_stores(stor
     )
     await store.create_conversation(conversation)
 
-    assert await store.bind_conversation_agent(T, conversation.id, "bob") == "bob"
-    assert await store.bind_conversation_agent(T, conversation.id, "alice") == "bob"
+    assert await store.switch_conversation_agent(T, conversation.id, None, "bob") == "bob"
+    assert await store.switch_conversation_agent(T, conversation.id, None, "alice") == "bob"
+    assert await store.switch_conversation_agent(T, conversation.id, "bob", "alice") == "alice"
     stored = await store.get_conversation(T, conversation.id)
-    assert stored is not None and stored.agent_address == "bob"
+    assert stored is not None and stored.agent_address == "alice"
 
     # The generic metadata update path cannot rewrite the routing identity.
-    stored.agent_address = "alice"
+    stored.agent_address = "bob"
     stored.title = "ordinary metadata update"
     await store.update_conversation(stored)
     reloaded = await store.get_conversation(T, conversation.id)
     assert reloaded is not None
-    assert reloaded.agent_address == "bob"
+    assert reloaded.agent_address == "alice"
     assert reloaded.title == "ordinary metadata update"
+
+
+@pytest.mark.store
+@pytest.mark.invariant("CONV-PROJECT-01")
+async def test_conversation_project_membership_is_compare_and_set_on_both_stores(store):
+    for workspace_id in ("project-a", "project-b"):
+        await store.create_workspace(Workspace(
+            id=workspace_id,
+            tenant_id=T,
+            name=workspace_id,
+            slug=workspace_id,
+        ))
+    conversation = Conversation(id="project-cas", tenant_id=T, user_id="owner")
+    await store.create_conversation(conversation)
+
+    assert await store.move_conversation_workspace(
+        T, conversation.id, None, "project-a"
+    ) == (True, "project-a")
+    assert await store.move_conversation_workspace(
+        T, conversation.id, None, "project-b"
+    ) == (True, "project-a")
+    assert await store.move_conversation_workspace(
+        T, conversation.id, "project-a", "project-b"
+    ) == (True, "project-b")
+
+    stored = await store.get_conversation(T, conversation.id)
+    assert stored is not None
+    stored.workspace_id = "project-a"
+    stored.title = "metadata only"
+    await store.update_conversation(stored)
+    reloaded = await store.get_conversation(T, conversation.id)
+    assert reloaded is not None
+    assert reloaded.workspace_id == "project-b"
+    assert reloaded.title == "metadata only"
 
 
 @pytest.mark.store

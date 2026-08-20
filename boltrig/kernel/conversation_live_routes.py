@@ -65,6 +65,8 @@ def _message_view(message: Any) -> dict[str, Any]:
         "role": message.role.value,
         "content": message.content,
         "run_id": message.run_id,
+        "recipient_agent_address": message.recipient_agent_address,
+        "author_agent_address": message.author_agent_address,
         "hitl_request_id": message.hitl_request_id,
         "events": message.events,
         "attachments": message.attachments,
@@ -99,6 +101,7 @@ async def _conversation_view(
         "conversation": {
             "id": conversation.id,
             "agent_address": conversation.agent_address,
+            "workspace_id": conversation.workspace_id,
             "title": conversation.title,
             "status": conversation.status.value,
             "origin": conversation.origin.value,

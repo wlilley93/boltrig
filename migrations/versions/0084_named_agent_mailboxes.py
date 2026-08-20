@@ -52,13 +52,44 @@ CREATE UNIQUE INDEX IF NOT EXISTS named_agents_one_default_idx
   ON named_agents(tenant_id) WHERE default_for_intake AND enabled;
 
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS agent_address TEXT;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS workspace_id TEXT;
+ALTER TABLE conversation_messages
+  ADD COLUMN IF NOT EXISTS recipient_agent_address TEXT;
+ALTER TABLE conversation_messages
+  ADD COLUMN IF NOT EXISTS author_agent_address TEXT;
 CREATE INDEX IF NOT EXISTS conversations_agent_idx
   ON conversations(tenant_id,agent_address,updated_at DESC);
+CREATE INDEX IF NOT EXISTS conversations_workspace_idx
+  ON conversations(tenant_id,workspace_id,updated_at DESC);
 DO $$
 BEGIN
   ALTER TABLE conversations
     ADD CONSTRAINT conversations_named_agent_fkey
     FOREIGN KEY (tenant_id,agent_address)
+    REFERENCES named_agents(tenant_id,address) ON DELETE RESTRICT;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$
+BEGIN
+  ALTER TABLE conversations
+    ADD CONSTRAINT conversations_workspace_fkey
+    FOREIGN KEY (tenant_id,workspace_id)
+    REFERENCES workspaces(tenant_id,id) ON DELETE RESTRICT;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$
+BEGIN
+  ALTER TABLE conversation_messages
+    ADD CONSTRAINT conversation_messages_recipient_agent_fkey
+    FOREIGN KEY (tenant_id,recipient_agent_address)
+    REFERENCES named_agents(tenant_id,address) ON DELETE RESTRICT;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$
+BEGIN
+  ALTER TABLE conversation_messages
+    ADD CONSTRAINT conversation_messages_author_agent_fkey
+    FOREIGN KEY (tenant_id,author_agent_address)
     REFERENCES named_agents(tenant_id,address) ON DELETE RESTRICT;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
@@ -196,7 +227,19 @@ def downgrade() -> None:
         """
         ALTER TABLE conversations
           DROP CONSTRAINT IF EXISTS conversations_named_agent_fkey;
+        ALTER TABLE conversations
+          DROP CONSTRAINT IF EXISTS conversations_workspace_fkey;
+        ALTER TABLE conversation_messages
+          DROP CONSTRAINT IF EXISTS conversation_messages_recipient_agent_fkey;
+        ALTER TABLE conversation_messages
+          DROP CONSTRAINT IF EXISTS conversation_messages_author_agent_fkey;
         DROP INDEX IF EXISTS conversations_agent_idx;
+        DROP INDEX IF EXISTS conversations_workspace_idx;
+        ALTER TABLE conversation_messages
+          DROP COLUMN IF EXISTS author_agent_address;
+        ALTER TABLE conversation_messages
+          DROP COLUMN IF EXISTS recipient_agent_address;
+        ALTER TABLE conversations DROP COLUMN IF EXISTS workspace_id;
         ALTER TABLE conversations DROP COLUMN IF EXISTS agent_address;
         DROP TABLE IF EXISTS agent_session_summaries;
         DROP TABLE IF EXISTS agent_message_deliveries;

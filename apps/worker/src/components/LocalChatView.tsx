@@ -146,6 +146,10 @@ function LocalComposer({
     attachmentLimits={LOCAL_ATTACHMENT_LIMITS}
     attachmentsDisabled
     agentRuntime="local"
+    agents={[]}
+    agentAddress=""
+    agentReady
+    agentSelectionLocked
     busy={controller.busy}
     closed={false}
     conversationKey={conversationId}
@@ -161,6 +165,7 @@ function LocalComposer({
     onChange={controller.setDraft}
     onCommandPalette={onCommandPalette}
     onModelChoice={() => undefined}
+    onAgentAddress={() => undefined}
     onSend={(message, attachments) => {
       onPrimeSpeech();
       return controller.send(message, attachments);

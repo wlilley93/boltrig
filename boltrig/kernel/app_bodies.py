@@ -47,9 +47,10 @@ class RespondBody(BaseModel):
 class ChatBody(BaseModel):
     message: str
     conversation_id: str | None = None
-    # Optional only when STARTING a conversation: the durable tier-1 identity
-    # to bind it to. On an existing conversation this is an assertion, never a
-    # reroute request; a mismatch is refused before a message or run is written.
+    # The tier-1 identity requested for THIS turn. On a new conversation it
+    # chooses the initial responder. On an existing conversation a different
+    # enabled peer becomes the next responder only at an idle turn boundary;
+    # persisted message authorship is immutable and an active turn is refused.
     agent_address: str | None = Field(
         default=None,
         min_length=1,

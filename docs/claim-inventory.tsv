@@ -49,7 +49,7 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/authority.py:44		principal at all)
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/chat_compaction.py:1		Append-only conversation compaction helpers.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/codex_runtime.py:229		caller, and carry only a cause tag - never token material.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/continuity.py:171		deterministic and append-only (prefix stable), so SEC-46 still holds.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/continuity.py:194		Long-conversation compaction (append-only DERIVED summaries).
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/continuity.py:209		Long-conversation compaction (append-only DERIVED summaries).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/domain/codex_rollout.py:130		One exact tenant/workspace allowlist cell;
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/domain/grant_lease.py:28		Durable lifecycle of a bearer digest, never of the bearer itself.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/held_write_resume.py:117		Re-enter the ONE chokepoint with the recorded call.
@@ -185,7 +185,7 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/base.py:660		only ever returns a r
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/base.py:672		rows inside the bound tenant, so a caller can never read another org/workspace's
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/base.py:82		here, so a growing audit table is never pulled into memory wholesale and
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/channels.py:198		predicate): a conflicting id from another tenant is a no-op, never a
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/conversation_contract.py:77		Hard retention purge excludes the tamper-evident audit ledger.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/conversation_contract.py:90		Hard retention purge excludes the tamper-evident audit ledger.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/memory.py:1159		bound tenant's row, None otherwise (fail-closed).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/memory.py:1164		of.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/memory.py:1173		only ever returns the bound tenant's org, never another tenant's.
@@ -358,14 +358,15 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/browser_runtime.py:47	needs
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat.py:1	ChatQueueService	The conversational service (Round Two, Epic CONV).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat_authority.py:42	on_behalf_adapter_id	Seal the caller's clamped external bearer for the adapter that claims it.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat_authority.py:73	resolve_run_scoped_credential	Carry the parent run's sealed bearer down to a delegated child run.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat_conversation_access.py:58	Conversation	One authorized ``Conversation`` plus the target for the next turn.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat_idempotency.py:1	IdempotencyCoordinator	Exactly once per user message, on the surface a human actually types into.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat_persona.py:1	compose_system_prompt	The chosen character's voice, resolved for one turn.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chief_of_staff.py:1	Runtime	The tier-1 permanent agent: the Chief of Staff (US-FLT-01).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/codex_runtime.py:1	CodexRuntime	Runtime-protocol adapter over a supervised read-only Codex phase.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/codex_trusted_wall.py:1	model_proxy_peer_ancestry._registration_matches_process	The dev/prod wall for the trusted Codex runtime ([2026] VJS-CC-VJS 2, D1; 7, J8).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/continuity.py:1	chat_turn_execution._turn_task	Cross-turn conversation continuity (Round Six, gap 3.1).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/continuity.py:183	list_messages	Render an ordered message list as an append-only transcript.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/continuity.py:289	render_transcript	The task string for ``spawn()``.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/continuity.py:198	list_messages	Render an ordered message list as an append-only transcript.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/continuity.py:304	render_transcript	The task string for ``spawn()``.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/department_head.py:1	Spawner	The tier-2 permanent agent: a Department Head (US-FLT-02, US-EXE-04).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/department_head.py:83	work_item	Decompose and spawn children for ``work_item`` (one step, US-FLT-02).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/eval.py:1	EvalRun	EvalRunner - the evaluation harness (Round Three, Epic EVAL).
@@ -454,6 +455,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/bearer_principal.py:1	crea
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/channel_notify.py:1	notify_work_item_result	Channel notification delivery (decision 0003, Phase 2; SEC-179).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/channel_principal.py:51	resolve_pat_principal	Resolve a VERIFIED channel sender to a Principal via its binding row, or ``None`` if the sender is unbound (the caller applies ``unpaired_behavior``).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/channel_routes.py:264	RateLimited	Opt-in self-serve onboarding for a customer-facing channel (SEC-180).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/conversation_account_routes.py:78	move_conversation_workspace	Move one human-owned conversation with ``move_conversation_workspace``.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/cost.py:1	_rate_pair	Cost accounting and budget enforcement (US-COST-01/02, FR-COST-02/03/04).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/cost.py:329	reserve	Post-run cost true-up across every reserved scope (FR-COST-03, audit M14).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:1	resolve_run_scoped_params	Credential resolution (P3, US-KER-03, SEC-04/05, K-20).
@@ -524,7 +526,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/agent_comms.py:211	AgentSe
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/audit.py:95	AuditEvent	A distinct, tamper-evident (hash-chained) security-signal row ([2026] VJS-COUNTY 9, D3).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/capability_routing.py:167	workspace_id	Whether this binding is in scope for a workspace.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/context.py:1	tenant_id	The invocation context that travels with every kernel call (S7.1).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/conversation.py:84	ChatConfig	A DERIVED, append-only compaction record over a conversation's older turns.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/conversation.py:93	ChatConfig	A DERIVED, append-only compaction record over a conversation's older turns.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/errors.py:22	kernel.dispatch._validate	Verb params (or output) did not match the registered JSON Schema (SEC-21).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/grants.py:1	ticket.create	The grant primitive - least-privilege authority over verbs (P8, SEC-07).
 LOAD-BEARING	SUBJECT-REACHED	comment	boltrig/models/memory.py:38	status	are append-only and carry no key.
@@ -806,7 +808,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:42		never the principal's
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/bifrost_model_catalogue.py:78		Return the one safe failure shape;
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat.py:155		user only), so a caller only ever sees their own conversations - never
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_authority.py:108		function's contract is that it must NEVER take down a spawn that would
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/chat_conversation_access.py:19		A retained conversation cannot accept a turn until explicitly restored.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/chat_conversation_access.py:20		A retained conversation cannot accept a turn until explicitly restored.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/chat_event_projection.py:1		Closed, browser-safe projection of the internal run-event relay.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/chat_event_projection.py:14		An internal frame cannot be represented by the public chat contract.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_idempotency.py:44		their own namespace so a client-chosen key can never collide with a real
@@ -817,7 +819,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_persona.py:72		Presentation, not 
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_turn_execution.py:211		registry race cannot reroute the persisted conversation.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_turn_execution.py:79		the caller picks from names the kernel wrote, never supplying prose.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_turn_execution.py:84		the untrusted envelope.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_turn_flow.py:75		A steer joins the already-running request and cannot alter the
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_turn_flow.py:97		A steer joins the already-running request and cannot alter the
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chief_of_staff.py:63		provider must never raise the routing path - it falls back to the
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/codex_model_selection.py:26		Return one bounded opaque endpoint id, never a caller model string.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/codex_model_selection.py:72		none is configured - SEC-12) applies unchanged.
@@ -828,10 +830,11 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/continuity.py:105		The two caps, as 
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/continuity.py:150		The TRUE count, exact and never capped, however many pairs are elided below.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/continuity.py:169		so it is wrapped in a typed envelope (M1 / SEC-72) - a prior turn cannot smuggle
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/continuity.py:175		Charset normalisation above is a SECOND line behind this one, never a substitute:
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/continuity.py:201		The summary is DERIVED data (a ConversationSummary row), never a mutation of the
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/continuity.py:234		The DETERMINISTIC, offline summariser (no model) - the always-present fallback, mirroring how the department head keeps a deterministic decomposition fallback (P9).
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/continuity.py:252		snippet truncation above applies to the CONTENT ONLY and never to it.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/continuity.py:330		verbatim render - fail-safe, never a crash or a dropped turn.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/continuity.py:183		Trusted framing that preserves who handled each historical turn.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/continuity.py:216		The summary is DERIVED data (a ConversationSummary row), never a mutation of the
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/continuity.py:249		The DETERMINISTIC, offline summariser (no model) - the always-present fallback, mirroring how the department head keeps a deterministic decomposition fallback (P9).
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/continuity.py:267		snippet truncation above applies to the CONTENT ONLY and never to it.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/continuity.py:345		verbatim render - fail-safe, never a crash or a dropped turn.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/continuity.py:91		READ but never rendered.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/department_head.py:113		atomically, so concurrent workers can never jointly exceed it.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/department_head.py:127		(including a failure record) is captured, and the join never raises.
@@ -1163,11 +1166,10 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:616		out-of-scope reads 404 (n
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:65		"machine" so an unlabelled resolver is refused, never admitted.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app.py:673		(visibility was fully enforced above);
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:29		selects the handling department.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:51		to bind it to.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:60		{name, media_type, data (base64)}.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:83		selects the handling department.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:88		@-mentions when it moves here.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:97		request, never authority: the runtime resolver looks it up only in
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:61		{name, media_type, data (base64)}.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:84		selects the handling department.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:89		@-mentions when it moves here.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/app_bodies.py:98		request, never authority: the runtime resolver looks it up only in
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/approval_gate.py:101		cannot be redeemed for an action described differently.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/approval_gate.py:193		A spent approval must never silently re-pend;
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/approval_posture.py:1		Caller-owned approval posture for delegated agent tool calls.
@@ -1198,7 +1200,7 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/channel_routes.py:69		The at-rest r
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/control_routes.py:108		and must never turn success into a client-visible failure.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/control_routes.py:13		Late-wire the built-in adapter for in-process/test app construction.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/control_routes.py:96		notifier or sweep cannot find an orphaned replay claimant.
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/conversation_list_views.py:43		Return enough matched content to explain a hit, never the full message.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/conversation_list_views.py:44		Return enough matched content to explain a hit, never the full message.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:292		raising callback must never abort a metered reservation, matching every
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:315		charged for a call that never ran).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:45		policy-as-data price table (FR-COST-04) - a configured price always wins - and
@@ -1361,7 +1363,8 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/models/chat_context.py:40		A known mode, e
 ORDINARY	NO-SUBJECT	comment	boltrig/models/context.py:28		is never trusted from the client.
 ORDINARY	NO-SUBJECT	comment	boltrig/models/context.py:35		the User-Agent), never read from an untrusted body field by a handler.
 ORDINARY	NO-SUBJECT	comment	boltrig/models/context.py:44		The kernel dispatch never reads this;
-ORDINARY	NO-SUBJECT	comment	boltrig/models/conversation.py:78		filtered out of continuity - it is never presented as live.
+ORDINARY	NO-SUBJECT	comment	boltrig/models/conversation.py:52		owner/team, never to an agent.
+ORDINARY	NO-SUBJECT	comment	boltrig/models/conversation.py:87		filtered out of continuity - it is never presented as live.
 ORDINARY	NO-SUBJECT	comment	boltrig/models/egress_diversion.py:18		status - which is every reader that matters - cannot read a diversion as a
 ORDINARY	NO-SUBJECT	docstring	boltrig/models/errors.py:206		The current spawn-rule snapshot cannot produce one governed route.
 ORDINARY	NO-SUBJECT	docstring	boltrig/models/errors.py:269		An archived evaluation case cannot start a new run.
@@ -1427,8 +1430,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/store/channel_outbox.py:196		claim_work_item
 ORDINARY	NO-SUBJECT	comment	boltrig/store/channel_outbox.py:244		terminally failed (a poison message never hot-loops).
 ORDINARY	NO-SUBJECT	comment	boltrig/store/channels.py:108		control_channel_ops._bind_channel), so an id-arbitrated upsert never
 ORDINARY	NO-SUBJECT	comment	boltrig/store/channels.py:235		The PRIMARY KEY first, BEFORE anything is removed.
-ORDINARY	NO-SUBJECT	comment	boltrig/store/conversation_binding_memory.py:38		Match PostgreSQL's metadata-only update: this path cannot rebind.
-ORDINARY	NO-SUBJECT	comment	boltrig/store/conversation_binding_postgres.py:58		Deliberately excludes agent_address: generic metadata updates cannot
+ORDINARY	NO-SUBJECT	comment	boltrig/store/conversation_binding_memory.py:58		Match PostgreSQL's metadata-only update: this path cannot reroute.
+ORDINARY	NO-SUBJECT	comment	boltrig/store/conversation_binding_postgres.py:89		updates cannot silently reroute the next turn or move a project.
 ORDINARY	NO-SUBJECT	comment	boltrig/store/distillation_reads.py:63		caught this - the in-memory tests never touch the pool).
 ORDINARY	NO-SUBJECT	comment	boltrig/store/idempotency.py:139		twin, whose claim never awaits between its dict read and write, has no such
 ORDINARY	NO-SUBJECT	comment	boltrig/store/idempotency.py:192		a claim we never wrote - but say so, loudly.
@@ -1552,10 +1555,10 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/spawn_rules.py:337	capability
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:1	model.yaml	Load the emotion tables from ``libraries/emotion`` into engine dataclasses (EMO-5).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:172	None	Load and validate the three emotion YAML tables, or ``None`` on ANY failure.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:68	DEFAULT_INTERVAL_SECONDS	The configured sweep interval (seconds), or :data:`DEFAULT_INTERVAL_SECONDS`.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:381	cancelled	End a live chat turn's SSE stream cleanly on a server-side cancel ([2026] VJS-COUNTY 6, D5).
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:382	cancelled	End a live chat turn's SSE stream cleanly on a server-side cancel ([2026] VJS-COUNTY 6, D5).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat_caller_context.py:1	wrap_untrusted	Rendering a caller's context into a turn (A2).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/codex_trusted_wall.py:49	BOLTRIG_CODEX_TRUSTED	Fail closed unless a lawful trusted-Codex posture holds (see module docstring).
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/continuity.py:261	wrap_untrusted	Render the derived summary as a fixed, content-stable frame.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/continuity.py:276	wrap_untrusted	Render the derived summary as a fixed, content-stable frame.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/domain/attested_assignment.py:37	attempt	Trusted facts; no binding, pin, attestation set, or set reference appears.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/hatchet_app.py:304	bootstrap	Build the Hatchet client + the three registered Boltrig tasks.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_privilege.py:141	setuid	Empty the permitted, effective and inheritable sets via ``capset(2)``.
@@ -1672,7 +1675,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:266	tick	Rebuild an
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/__init__.py:1	kernel.set_agent_invoker	The Boltrig agent fleet (Epic FLT).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/application/assignment_admission.py:58	GrantLeaseBinding.from_execution_assignment	The sole atomic, total path from trusted facts to an attested assignment.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/chat.py:283	store.mark_message_superseded	Regenerate the last assistant reply (append-plus-supersede, [2026] VJS-COUNTY 4).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/chat.py:360	regenerate_turn	Carry out the write a human approved, on the turn that asked for it (decision 0018, Order 4).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/chat.py:361	regenerate_turn	Carry out the write a human approved, on the turn that asked for it (decision 0018, Order 4).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/chief_of_staff.py:81	work_item	Return the department name that should own ``work_item``.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/codex_runtime.py:314	UnavailableRuntime	Construct the trusted read-only Codex runtime, or a typed unavailable one.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/hatchet_app.py:224	register_task	Register the task bodies on an executor with a ``register_task`` seam (the LocalDurableExecutor): the offline carriage of the same bodies the Hatchet worker serves (US-EXE-05).

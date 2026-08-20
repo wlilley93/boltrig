@@ -16,7 +16,8 @@ from boltrig.fleet.chat import (
     build_turn_executor,
 )
 from boltrig.fleet.chat_conversation_access import (
-    ConversationAgentMismatch,
+    ConversationAgentSwitchBusy,
+    ConversationProjectContextMismatch,
     NamedAgentDisabled,
     NamedAgentRequired,
 )
@@ -32,6 +33,8 @@ from boltrig.models import (
     MessageRole,
     NamedAgent,
     TenantPermissions,
+    Workspace,
+    WorkspaceMember,
 )
 from boltrig.store import InMemoryStore
 
@@ -193,6 +196,9 @@ async def test_direct_chat_runs_the_default_named_identity(monkeypatch):
     assert store._agent_turn_leases[(T, "researcher")] is None
     conversation = (await store.list_conversations(T, "alice"))[0]
     assert conversation.agent_address == "researcher"
+    messages = await store.list_messages(T, conversation.id)
+    assert messages[0].recipient_agent_address == "researcher"
+    assert messages[1].author_agent_address == "researcher"
     assert (
         next(event for event in out if event["type"] == "message_start")["agent_address"]
         == "researcher"
@@ -200,7 +206,7 @@ async def test_direct_chat_runs_the_default_named_identity(monkeypatch):
 
 
 @pytest.mark.invariant("CONV-AGENT-02")
-async def test_explicit_conversation_agent_is_immutable_across_turns_and_mismatch_refuses():
+async def test_explicit_agent_switches_between_turns_without_rewriting_history():
     store, relay = InMemoryStore(), EventRelay()
     await store.upsert_named_agent(
         NamedAgent(
@@ -261,23 +267,107 @@ async def test_explicit_conversation_agent_is_immutable_across_turns_and_mismatc
         )
     )
     assert second[0]["agent_address"] == "writer"
+    third = await _collect(
+        chat.handle_turn(
+            tenant_id=T,
+            user_id="alice",
+            role="engineer",
+            message="research this next",
+            conversation_id=conversation.id,
+            agent_address="researcher",
+        )
+    )
+
+    assert third[0]["agent_address"] == "researcher"
+    assert called_as == ["writer", "writer", "researcher"]
+    messages = await store.list_messages(T, conversation.id)
+    assert [message.run_id for message in messages[::2]] == [
+        message.run_id for message in messages[1::2]
+    ]
+    assert [message.recipient_agent_address for message in messages[::2]] == [
+        "writer",
+        "writer",
+        "researcher",
+    ]
+    assert [message.author_agent_address for message in messages[1::2]] == [
+        "writer",
+        "writer",
+        "researcher",
+    ]
+    from boltrig.fleet.continuity import render_transcript
+
+    continuity = render_transcript(messages)
+    assert "Assistant by writer:" in continuity
+    assert "User to researcher:" in continuity
+    assert "Assistant by researcher:" in continuity
+    assert (await store.get_conversation(T, conversation.id)).agent_address == "researcher"
+
+
+@pytest.mark.invariant("CONV-AGENT-02")
+async def test_agent_switch_during_active_turn_is_refused_before_queue_or_mutation():
+    store, relay = InMemoryStore(), EventRelay()
+    for address in ("chief-of-staff", "head-of-legal"):
+        await store.upsert_named_agent(
+            NamedAgent(
+                tenant_id=T,
+                address=address,
+                name=address.replace("-", " ").title(),
+                runtime="script",
+                default_for_intake=address == "chief-of-staff",
+            )
+        )
+    gate = asyncio.Event()
+    called_as: list[str | None] = []
+
+    async def executor(
+        *,
+        tenant_id,
+        user_id,
+        role,
+        grants,
+        conversation_id,
+        agent_address,
+        run_id,
+        message,
+        relay,
+        attachments=None,
+    ):
+        called_as.append(agent_address)
+        await gate.wait()
+        relay.publish(run_id, {"type": "text_delta", "delta": "done"})
+
+    chat = ChatService(store, relay, turn_executor=executor)
+    turn = asyncio.create_task(
+        _collect(
+            chat.handle_turn(
+                tenant_id=T,
+                user_id="alice",
+                role="engineer",
+                message="start",
+            )
+        )
+    )
+    while not called_as:
+        await asyncio.sleep(0)
+    conversation = (await store.list_conversations(T, "alice"))[0]
     before = await store.list_messages(T, conversation.id)
 
-    with pytest.raises(ConversationAgentMismatch):
+    with pytest.raises(ConversationAgentSwitchBusy):
         await _collect(
             chat.handle_turn(
                 tenant_id=T,
                 user_id="alice",
                 role="engineer",
-                message="silently reroute",
+                message="send the next turn to Legal",
                 conversation_id=conversation.id,
-                agent_address="researcher",
+                agent_address="head-of-legal",
             )
         )
 
-    assert called_as == ["writer", "writer"]
     assert await store.list_messages(T, conversation.id) == before
-    assert (await store.get_conversation(T, conversation.id)).agent_address == "writer"
+    assert (await store.get_conversation(T, conversation.id)).agent_address == "chief-of-staff"
+    gate.set()
+    await asyncio.wait_for(turn, timeout=2)
 
 
 @pytest.mark.invariant("CONV-AGENT-02")
@@ -379,6 +469,147 @@ def test_chat_http_streams_sse():
     assert "message_start" in r.text and "hi there" in r.text and "message_end" in r.text
     convs = client.get("/v1/conversations", headers=hdr).json()["conversations"]
     assert len(convs) == 1
+
+
+@pytest.mark.invariant("CONV-PROJECT-01")
+def test_conversation_project_move_is_owner_scoped_and_future_turns_use_that_context():
+    store, relay = InMemoryStore(), EventRelay()
+
+    async def seed():
+        await store.create_workspace(Workspace(id="legal", tenant_id=T, name="Legal", slug="legal"))
+        await store.add_workspace_member(
+            WorkspaceMember(user_id="alice", workspace_id="legal", tenant_id=T, role="member")
+        )
+        await store.create_conversation(
+            Conversation(id="project-chat", tenant_id=T, user_id="alice", title="Review")
+        )
+
+    asyncio.run(seed())
+    chat = ChatService(
+        store, relay, turn_executor=_stub_executor([{"type": "text_delta", "delta": "done"}])
+    )
+    client = TestClient(create_app(Kernel(store), chat_service=chat))
+    headers = {
+        "x-boltrig-tenant": T,
+        "x-boltrig-subject": "alice",
+        "x-boltrig-role": "engineer",
+    }
+    moved = client.patch(
+        "/v1/me/conversations/project-chat/project",
+        json={"workspace_id": "legal", "expected_workspace_id": None},
+        headers=headers,
+    )
+    assert moved.status_code == 200 and moved.json()["workspace_id"] == "legal"
+    summary = client.get("/v1/conversations", headers=headers).json()["conversations"][0]
+    assert summary["workspace_id"] == "legal"
+
+    wrong_scope = client.post(
+        "/v1/chat",
+        json={"conversation_id": "project-chat", "message": "continue"},
+        headers=headers,
+    )
+    assert wrong_scope.status_code == 409
+    assert wrong_scope.json()["reason"] == "conversation_project_context_mismatch"
+    accepted = client.post(
+        "/v1/chat",
+        json={"conversation_id": "project-chat", "message": "continue"},
+        headers={**headers, "x-boltrig-workspace": "legal"},
+    )
+    assert accepted.status_code == 200
+
+    conflict = client.patch(
+        "/v1/me/conversations/project-chat/project",
+        json={"workspace_id": None, "expected_workspace_id": None},
+        headers=headers,
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["workspace_id"] == "legal"
+
+
+@pytest.mark.invariant("CONV-PROJECT-01")
+async def test_conversation_project_move_refuses_an_active_turn():
+    store, relay = InMemoryStore(), EventRelay()
+    await store.create_conversation(
+        Conversation(id="busy-project-chat", tenant_id=T, user_id="alice")
+    )
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def gated_executor(**kwargs):
+        started.set()
+        await release.wait()
+        kwargs["relay"].publish(kwargs["run_id"], {"type": "text_delta", "delta": "done"})
+
+    chat = ChatService(store, relay, turn_executor=gated_executor)
+    turn = asyncio.create_task(
+        _collect(
+            chat.handle_turn(
+                tenant_id=T,
+                user_id="alice",
+                role="engineer",
+                conversation_id="busy-project-chat",
+                message="continue",
+            )
+        )
+    )
+    await asyncio.wait_for(started.wait(), timeout=1)
+
+    move = await chat.move_conversation_workspace_if_idle(T, "busy-project-chat", None, "legal")
+    assert move.found is True
+    assert move.busy is True
+    assert move.workspace_id is None
+
+    release.set()
+    await asyncio.wait_for(turn, timeout=1)
+    moved = await chat.move_conversation_workspace_if_idle(T, "busy-project-chat", None, "legal")
+    assert moved.found is True
+    assert moved.busy is False
+    assert moved.workspace_id == "legal"
+
+
+@pytest.mark.invariant("CONV-PROJECT-01")
+async def test_turn_revalidates_a_project_move_that_won_after_resolution(monkeypatch):
+    import boltrig.fleet.chat_turn_flow as turn_flow
+
+    store, relay = InMemoryStore(), EventRelay()
+    await store.create_conversation(
+        Conversation(id="project-resolution-race", tenant_id=T, user_id="alice")
+    )
+    resolved, admit = asyncio.Event(), asyncio.Event()
+    original_resolve = turn_flow.resolve_conversation
+
+    async def gated_resolve(*args, **kwargs):
+        selection = await original_resolve(*args, **kwargs)
+        resolved.set()
+        await admit.wait()
+        return selection
+
+    monkeypatch.setattr(turn_flow, "resolve_conversation", gated_resolve)
+    chat = ChatService(
+        store,
+        relay,
+        turn_executor=_stub_executor([{"type": "text_delta", "delta": "stale"}]),
+    )
+    turn = asyncio.create_task(
+        _collect(
+            chat.handle_turn(
+                tenant_id=T,
+                user_id="alice",
+                role="engineer",
+                conversation_id="project-resolution-race",
+                message="continue",
+            )
+        )
+    )
+    await asyncio.wait_for(resolved.wait(), timeout=1)
+    move = await chat.move_conversation_workspace_if_idle(
+        T, "project-resolution-race", None, "legal"
+    )
+    assert move.workspace_id == "legal" and move.busy is False
+    admit.set()
+
+    with pytest.raises(ConversationProjectContextMismatch):
+        await asyncio.wait_for(turn, timeout=1)
+    assert await store.list_messages(T, "project-resolution-race") == []
 
 
 def test_chat_accepts_on_behalf_bearer_and_stays_compatible_with_legacy_executor():
@@ -553,6 +784,9 @@ async def test_steer_queues_during_in_flight_turn_and_is_consumed_at_boundary():
     assert [m.role.value for m in msgs] == ["user", "user", "assistant", "assistant"]
     assert msgs[2].content == "reply:first"
     assert msgs[3].content == "reply:actually, also do this"
+    assert msgs[0].run_id == msgs[2].run_id
+    assert msgs[1].run_id == msgs[3].run_id
+    assert msgs[0].run_id != msgs[1].run_id
 
 
 @pytest.mark.invariant("US-CHAT-15")

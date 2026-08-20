@@ -183,7 +183,7 @@ def _conversation(r):
     return Conversation(
         id=r["id"], tenant_id=r["tenant_id"], user_id=r["user_id"], title=r["title"],
         status=ConversationStatus(r["status"]), origin=ConversationOrigin(r["origin"]), source_ref=r["source_ref"], source_run_id=r["source_run_id"],
-        agent_address=r["agent_address"], companion_id=r["companion_id"], created_at=r["created_at"], updated_at=r["updated_at"],
+        agent_address=r["agent_address"], workspace_id=r["workspace_id"], companion_id=r["companion_id"], created_at=r["created_at"], updated_at=r["updated_at"],
     )
 
 
@@ -192,7 +192,7 @@ def _message(r):
         return None
     return ConversationMessage(
         id=r["id"], conversation_id=r["conversation_id"], tenant_id=r["tenant_id"],
-        role=MessageRole(r["role"]), content=r["content"], run_id=r["run_id"],
+        role=MessageRole(r["role"]), content=r["content"], run_id=r["run_id"], recipient_agent_address=r["recipient_agent_address"], author_agent_address=r["author_agent_address"],
         hitl_request_id=r["hitl_request_id"], events=list(r["events"] or []),
         attachments=list(r["attachments"] or []), superseded_by=r["superseded_by"],
         created_at=r["created_at"],

@@ -233,11 +233,13 @@ const runThread = {
 // activity row is a completed persisted receipt. Nothing here claims a live
 // process, a media session, spend, or an actionable approval.
 const directionThread = {
+  conversation: { agent_address: "chief-of-staff", workspace_id: null },
   messages: [
     {
       id: "direction-user-1",
       role: "user",
       content: "Reconcile the desktop chat chrome with the supplied Codex references.",
+      recipient_agent_address: "chief-of-staff",
       created_at: "2026-08-11T03:24:00Z",
       attachments: [{
         name: "codex-chat-reference.png",
@@ -250,6 +252,7 @@ const directionThread = {
       id: "direction-assistant-1",
       role: "assistant",
       content: "I mapped the chat chrome to the supplied references and kept the exact implementation receipts available.",
+      author_agent_address: "chief-of-staff",
       run_id: "run-chat-direction-ui",
       created_at: "2026-08-11T03:25:00Z",
       events: [
@@ -271,12 +274,14 @@ const directionThread = {
       id: "direction-user-2",
       role: "user",
       content: "Prepare the deterministic preview and evidence inspection.",
+      recipient_agent_address: "chief-of-staff",
       created_at: "2026-08-11T03:26:00Z",
     },
     {
       id: "direction-assistant-2",
       role: "assistant",
       content: "The preview and inspection receipts completed without inventing live state.",
+      author_agent_address: "chief-of-staff",
       run_id: "run-chat-direction-evidence",
       created_at: "2026-08-11T03:27:00Z",
       events: [
@@ -427,7 +432,28 @@ const fixtures: Record<string, unknown> = {
     },
   },
   "/v1/workspaces": {
-    workspaces: [{ id: "production", name: "production", slug: "production", status: "active", settings: {} }],
+    // The capture's authenticated execution context is "production", but it
+    // deliberately has no user-created projects. This keeps the existing
+    // Projects/Recents empty-state contract truthful now that the sidebar loads
+    // the real workspace catalogue for project grouping.
+    workspaces: [],
+  },
+  "/v1/named-agents": {
+    named_agents: [{
+      address: "chief-of-staff",
+      name: "Chief of Staff",
+      topology: "tier1_peer",
+      session: "durable_logical",
+      runtime: "claude-code",
+      model_endpoint: null,
+      supported_skills: ["coordinate", "delegate", "report"],
+      max_depth: 4,
+      cost_tier: "expensive",
+      purpose: "Coordinate peer agents and report to the user.",
+      scope_id: null,
+      default_for_intake: true,
+      enabled: true,
+    }],
   },
   "/v1/console/overview": {
     generated_at: now, tenant_id: "acme", workspace_id: "production", scope: [],

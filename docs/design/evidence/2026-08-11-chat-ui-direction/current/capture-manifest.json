@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-20T15:38:04.269Z",
+  "capturedAt": "2026-08-20T20:09:14.817Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,16 +17,16 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "5626696e8be8b5adf819dd662ad8df56a12059ba9a14099ef2edfc429c5f19d7",
-    "digestAfterCapture": "5626696e8be8b5adf819dd662ad8df56a12059ba9a14099ef2edfc429c5f19d7",
+    "digestBeforeCapture": "696c9f383b71e2d6b399c8e11ea441cef725e3bf6af678577ec22954ed4cc588",
+    "digestAfterCapture": "696c9f383b71e2d6b399c8e11ea441cef725e3bf6af678577ec22954ed4cc588",
     "sourceUnchangedDuringCapture": true,
     "branch": "codex/flat-named-agent-peers",
-    "head": "ba4482f4534883ff9bdb1c73f188871f2acd9bb7",
+    "head": "c37f0390f6df6793b29685322f07e78b19fe578c",
     "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
-    "node": "v26.7.0",
+    "node": "v22.23.1",
     "browser": "chromium",
     "browserVersion": "151.0.7922.34",
     "browserExecutable": "/Users/williamlilley/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
@@ -40,7 +40,7 @@
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "975cc1b4b4fc37ca44fe03b4576a50a6f2d49cf3c32a3e9138d4671aa3443f71",
+      "sha256": "f2b3690e14d6c5e4be08ddedb35165c74b041d133faeb0b3e7babdc358e6a440",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -62,6 +62,8 @@
         "fixtureMisses": [],
         "contractMisses": [],
         "requestedPaths": [
+          "/v1/workspaces",
+          "/v1/named-agents",
           "/v1/conversations?limit=25&offset=0",
           "/v1/me/settings",
           "/v1/orgs/current",
@@ -75,6 +77,7 @@
           "/v1/chat/config",
           "/v1/me/settings",
           "/v1/familiar/phenotype",
+          "/v1/named-agents",
           "/v1/me/settings",
           "/v1/capabilities",
           "/v1/capabilities",

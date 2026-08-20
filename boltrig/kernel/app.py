@@ -438,9 +438,7 @@ def create_app(
         except StopAsyncIteration:
             first = None
 
-        # Mid-run steer (US-CHAT-15): the conversation's turn was already in flight,
-        # so the message was durably queued instead of starting a parallel turn -
-        # acknowledge with a 202, no SSE stream on this POST.
+        # Mid-run steers are durably queued and acknowledged with 202, not SSE.
         if first is not None and first.get("type") == "queued":
             return JSONResponse(
                 {
@@ -448,6 +446,8 @@ def create_app(
                     "conversation_id": first.get("conversation_id"),
                     "message_id": first.get("message_id"),
                     "run_id": first.get("run_id"),
+                    "queued_run_id": first.get("queued_run_id"),
+                    "agent_address": first.get("agent_address"),
                 },
                 status_code=202,
             )

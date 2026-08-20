@@ -65,6 +65,7 @@ import type {
   ConnectionsResponse,
   ConsoleOverviewResponse,
   ConversationResponse,
+  ConversationProjectMoveResponse,
   ConversationQueueReorderRequest,
   ConversationQueueReorderResponse,
   ConversationSearchResponse,
@@ -135,6 +136,7 @@ import type {
   MeNotificationsResponse,
   MyOrganisationsResponse,
   MeSettingsResponse,
+  NamedAgentsResponse,
   UpdateMeProfileRequest,
   UpdateMeProfileResponse,
   MemoryFactResponse,
@@ -277,6 +279,8 @@ export interface ChatQueued {
   conversation_id: string | null;
   message_id: string | null;
   run_id: string | null;
+  /** Stable run id reserved for the queued turn itself. */
+  queued_run_id?: string | null;
   agent_address?: string | null;
 }
 
@@ -489,6 +493,10 @@ export class BoltrigClient {
 
   conversation(id: string): Promise<ConversationResponse> {
     return this.request(`/v1/conversations/${encodeURIComponent(id)}`);
+  }
+
+  namedAgents(): Promise<NamedAgentsResponse> {
+    return this.request("/v1/named-agents");
   }
 
   reorderConversationQueue(
@@ -727,6 +735,19 @@ export class BoltrigClient {
       `/v1/me/conversations/${encodeURIComponent(id)}`,
       "PATCH",
       { title },
+      true,
+    );
+  }
+
+  moveConversationProject(
+    id: string,
+    workspaceId: string | null,
+    expectedWorkspaceId: string | null,
+  ): Promise<ConversationProjectMoveResponse> {
+    return this.json(
+      `/v1/me/conversations/${encodeURIComponent(id)}/project`,
+      "PATCH",
+      { workspace_id: workspaceId, expected_workspace_id: expectedWorkspaceId },
       true,
     );
   }

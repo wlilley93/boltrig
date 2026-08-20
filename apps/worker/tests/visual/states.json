@@ -30,6 +30,7 @@
         "/v1/me/approval-posture",
         "/v1/orgs/current",
         "/v1/workspaces",
+        "/v1/named-agents",
         "/v1/console/overview",
         "/v1/conversations?limit=25&offset=0",
         "/v1/chat/config",
@@ -785,6 +786,7 @@
         "/v1/me/approval-posture",
         "/v1/orgs/current",
         "/v1/workspaces",
+        "/v1/named-agents",
         "/v1/console/overview",
         "/v1/conversations?limit=25&offset=0",
         "/v1/conversations/direction-thread",
@@ -869,7 +871,9 @@
         ".transcript-navigation[aria-label=\"Transcript navigation\"]",
         ".transcript-navigation button[aria-label=\"Previous user message\"]",
         ".transcript-navigation button[aria-label=\"Next user message\"]",
-        ".composer button[aria-label=\"Model\"]"
+        ".composer button[aria-label=\"Model\"]",
+        ".composer select[aria-label=\"Agent for the next turn\"]",
+        ".message-agent-label"
       ],
       "required_visible_counts": [
         { "selector": ".shell-task-group-label", "count": 3 },
@@ -885,6 +889,7 @@
         { "selector": ".right-rail .rail-group[aria-label=\"Sources\"]", "count": 1 },
         { "selector": ".message.user", "count": 2 },
         { "selector": ".message.assistant", "count": 2 },
+        { "selector": ".message-agent-label", "count": 4 },
         { "selector": ".sidebar-footer > button", "count": 2 },
         { "selector": ".composer .voice-primary", "count": 1 }
       ],
@@ -930,6 +935,7 @@
         "View all",
         "codex-chat-reference.png",
         "Automatic · openai/gpt-5.4",
+        "To Chief of Staff",
         "Approve for me"
       ],
       "required_absent_text": [

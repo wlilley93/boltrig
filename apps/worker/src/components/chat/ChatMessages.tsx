@@ -20,12 +20,14 @@ import {
 
 export function Message({
   message,
+  agentLabel,
   tech,
   durationSeconds,
   onDecisionResolved,
   onOpenSubagent,
 }: {
   message: ChatMessage;
+  agentLabel?: string;
   tech: boolean;
   durationSeconds?: number;
   onDecisionResolved?(): void;
@@ -35,6 +37,7 @@ export function Message({
   return (
     <article className={`message ${message.role}`}>
       <div className="message-content">
+        {agentLabel && <p className="message-agent-label">{agentLabel}</p>}
         {turn.degraded && (
           <p className="notice" role="status">
             This response used a degraded fallback; treat its result as incomplete.
@@ -69,12 +72,14 @@ export function Message({
 
 export function LiveTurn({
   events,
+  agentLabel,
   turn,
   tech,
   startedAt,
   onOpenSubagent,
 }: {
   events: ChatEvent[];
+  agentLabel?: string;
   turn: NormalizedTurn;
   tech: boolean;
   startedAt: number | null;
@@ -83,6 +88,7 @@ export function LiveTurn({
   return (
     <article className="message assistant live">
       <div className="message-content">
+        {agentLabel && <p className="message-agent-label">{agentLabel}</p>}
         <span aria-atomic="true" className="chat-live-announcement" role="status">
           {turn.ended
             ? "Response complete."
