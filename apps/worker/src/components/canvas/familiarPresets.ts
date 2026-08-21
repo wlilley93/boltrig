@@ -31,6 +31,7 @@ export const FAMILIAR_ARRIVAL: FamiliarTuning = {
   latticeBlur: 0,
   latticeSat: 1,
   latticeGlow: 0,
+  latticeSpeed: 1,
   presence: 1,
 };
 

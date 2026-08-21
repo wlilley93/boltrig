@@ -91,6 +91,7 @@ const LEGEND: Record<string, readonly string[]> = {
   latticeBlur: ["amount"],
   latticeSat: ["level"],
   latticeGlow: ["amount"],
+  latticeSpeed: ["×realtime"],
   // ---- Jarvis: the wheels -------------------------------------------------
   ringGain: ["brightness", "×voice"],
   ringSpin: ["spin SPEED", "precess SPEED"],
@@ -224,6 +225,7 @@ const RANGE: Record<string, [number, number, number]> = {
   latticeBlur: [0, 1, 0.01],
   latticeSat: [0, 2, 0.01],
   latticeGlow: [0, 1, 0.01],
+  latticeSpeed: [0.25, 4, 0.05],
   presence: [0.4, 1.8, 0.005],
   focus: [0, 1, 0.005],
   petal: [0, 1, 0.01],
@@ -878,7 +880,7 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "5 · Circuit shards", fields: ["shardGain", "shardSize", "shardStride"] },
   { title: "5 · Debris — clumping and depth", fields: ["clump", "focus"] },
   { title: "0 · Lattice loop — the baked layer", fields: [
-    "lattice", "latticeBlur", "latticeSat", "latticeGlow",
+    "lattice", "latticeBlur", "latticeSat", "latticeGlow", "latticeSpeed",
   ] },
   { title: "0 · Presence — the composite's size", fields: ["presence"] },
   { title: "5 · Crystal facets", fields: [
@@ -967,6 +969,7 @@ const TITLES: Record<string, string> = {
   latticeBlur: "Motion blur on the footage, along its own travel",
   latticeSat: "How saturated the footage is",
   latticeGlow: "A soft glow lifted off the footage",
+  latticeSpeed: "How fast the footage plays",
   presence: "How big the whole composite sits in the frame",
   focus: "How the far hemisphere falls out of focus",
   facetGain: "How bright the crystal facets are",
@@ -1740,6 +1743,15 @@ function muteFields(fields: readonly string[]): string[] {
   return fields.filter((f) => f.endsWith("Gain") || MUTE_EXTRA.has(f));
 }
 
+/** Fields that are GEOMETRY, not light. Solo and the faders must never scale
+ *  these: a soloed desk zeroing `presence` shrank the whole composite —
+ *  size is not a channel you silence. */
+const GEOMETRY_FIELDS = new Set(["presence"]);
+/** A strip the console can fade: at least one field that is light, not shape. */
+function fadeable(fields: readonly string[]): boolean {
+  return fields.some((f) => !GEOMETRY_FIELDS.has(f));
+}
+
 function audible(title: string): boolean {
   return soloed === null || title === soloed;
 }
@@ -1805,12 +1817,14 @@ function effectiveTuning(of: Tuning = tuning): Tuning {
     }
   }
   for (const g of channelsFor()) {
+    if (!fadeable(g.fields)) continue;
     const vol = audible(g.title) ? volumeOf(g.title) : 0;
     if (vol >= 1) continue;
     // A channel with no light of its own (Debris, the envelopes) scales its
-    // EFFECT instead: every field fades, so zero still means "not there".
+    // EFFECT instead: every field fades, so zero still means "not there" —
+    // except geometry, which no volume is allowed to touch.
     const lit = muteFields(g.fields);
-    for (const field of (lit.length > 0 ? lit : g.fields)) {
+    for (const field of (lit.length > 0 ? lit : g.fields.filter((f) => !GEOMETRY_FIELDS.has(f)))) {
       const value = record[field];
       record[field] = typeof value === "number" ? value * vol : value.map((x) => x * vol);
     }
@@ -1875,7 +1889,7 @@ function buildMixer(): void {
       vid.title = "The baked video layer — footage, not shader";
       strip.appendChild(vid);
     }
-    {
+    if (fadeable(g.fields)) {
       const fader = document.createElement("input");
       fader.type = "range";
       fader.className = "fader";

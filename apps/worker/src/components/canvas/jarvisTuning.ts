@@ -217,6 +217,8 @@ export interface JarvisTuning {
   latticeBlur: number;
   latticeSat: number;
   latticeGlow: number;
+  /** Playback speed of the footage itself. 1 ships. */
+  latticeSpeed: number;
   /**
    * How big the whole composite sits in the frame: one scale on the live body
    * AND the baked layer together, so they never drift apart. 1 ships.
@@ -285,6 +287,7 @@ export const JARVIS_TUNING: JarvisTuning = {
   latticeBlur: 0,
   latticeSat: 1,
   latticeGlow: 0,
+  latticeSpeed: 1,
   presence: 1,
   eye: [1, 1.5, 0.34, 15],
   drawLimb: [3, 3],

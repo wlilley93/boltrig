@@ -277,7 +277,7 @@ export class UltronRenderer {
         : applyPulses(this.live, ULTRON_PULSES[mode], this.clock.animClock);
     }
     d.radius *= shown.presence;
-    passes.latticeDeck()?.tick(this.state?.mode ?? "standby", this.clock.easeDt);
+    passes.latticeDeck()?.tick(this.state?.mode ?? "standby", this.clock.easeDt, shown.latticeSpeed);
     passes.render(d, ultronPalette(this.opts, this.pheno), ultronEmotion(shown, this.pheno));
   }
 

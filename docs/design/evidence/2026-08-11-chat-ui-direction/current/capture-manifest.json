@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-19T13:01:44.846Z",
+  "capturedAt": "2026-08-21T11:21:33.949Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,19 +17,19 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "5be1b5db272ea90b98b60d2d9eea91d8dce923526d8a53be0b35d9794a50c7ca",
-    "digestAfterCapture": "5be1b5db272ea90b98b60d2d9eea91d8dce923526d8a53be0b35d9794a50c7ca",
+    "digestBeforeCapture": "3474dfac6b62e038790b82ac0d8b7e3f5545cb5f7eb29a972e749a9b950b5c19",
+    "digestAfterCapture": "3474dfac6b62e038790b82ac0d8b7e3f5545cb5f7eb29a972e749a9b950b5c19",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/real-brand-mark",
-    "head": "effce8bde5a706e2de7a7df7bcc9a0377c43f367",
-    "dirty": false
+    "head": "0df75f0038eccdc50a8e0266c69fa307037c6682",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
     "node": "v24.15.0",
     "browser": "chromium",
-    "browserVersion": "151.0.7922.34",
-    "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
+    "browserVersion": "148.0.7778.215",
+    "browserExecutable": "/usr/bin/google-chrome",
     "origin": "http://localhost:1420",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
@@ -40,7 +40,7 @@
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "015ca5a23e11535f558c5014b656121778a3c430eee6b3f6c51dbc8ab9fe9e61",
+      "sha256": "e5b20ed32d17572e0a566a60279a15a1f102bba5d65b3b3f18e5318f4d57378d",
       "width": 1440,
       "height": 900,
       "captureContract": {

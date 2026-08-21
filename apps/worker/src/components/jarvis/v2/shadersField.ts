@@ -3,7 +3,8 @@
 // Ebb's JARVIS has "an internal network of connections within the spherical
 // centre". Streaks alone are smoke; the LINK pass is what makes it a network.
 
-import { CLUMP_GLSL, FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../../canvas/glslCommon";
+import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../../canvas/glslCommon";
+import { CLUMP_GLSL } from "./glslClump";
 
 /**
  * Segments per connection. Six is the fewest that reads as a CURVE.

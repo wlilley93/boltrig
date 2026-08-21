@@ -53,6 +53,7 @@ export const ULTRON_ARRIVAL: UltronTuning = {
   latticeBlur: 0,
   latticeSat: 1,
   latticeGlow: 0,
+  latticeSpeed: 1,
   presence: 1,
 };
 

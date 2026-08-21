@@ -321,7 +321,7 @@ export class FamiliarWebGLRenderer {
    */
   private drawLattice(gl: WebGL2RenderingContext, w: number, h: number, tuning: FamiliarTuning): void {
     if (!this.latticeDeck) return;
-    this.latticeDeck.tick(this.state.mode, this.lastDt);
+    this.latticeDeck.tick(this.state.mode, this.lastDt, tuning.latticeSpeed);
     const gain = tuning.lattice[0] + tuning.lattice[1] * this.state.level;
     if (gain <= 0) return;
     const e = emotionColour(readBodyPhenotype(this.phenoRaw));

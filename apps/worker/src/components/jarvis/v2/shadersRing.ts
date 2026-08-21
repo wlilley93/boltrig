@@ -6,7 +6,8 @@
 // identity: "angular shapes mimicking computer circuitry", which is what
 // distinguishes Animal Logic's JARVIS from their deliberately organic Ultron.
 
-import { CLUMP_GLSL, FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../../canvas/glslCommon";
+import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../../canvas/glslCommon";
+import { CLUMP_GLSL } from "./glslClump";
 
 /** Great circles of data. Six intersecting axes read as a sphere of wheels;
  *  three read as a hoop skirt, and a dozen turns the surface into a mesh. */

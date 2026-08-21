@@ -220,9 +220,15 @@ export class LatticeDeck {
     this.fade = 1;
   }
 
-  /** Advance the fade and pull in video frames. Once per frame, before draw. */
-  tick(mode: string, dt: number): void {
+  /** Advance the fade and pull in video frames. Once per frame, before draw.
+   *  `rate` is the footage's playback speed — half-time membrane, double-time
+   *  lattice — applied to both slots so a crossfade never runs two clocks. */
+  tick(mode: string, dt: number, rate = 1): void {
     if (!this.map || this.slots.length < 2) return;
+    const speed = Math.min(4, Math.max(0.25, rate));
+    for (const slot of this.slots) {
+      if (slot.el && slot.el.playbackRate !== speed) slot.el.playbackRate = speed;
+    }
     const desired = this.map[mode] ?? this.map.standby ?? null;
     const active = this.slots[this.active];
     if (desired !== active.url) {
