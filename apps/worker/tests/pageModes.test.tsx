@@ -128,6 +128,15 @@ describe("mount-derived API base (GOAL console-mounts M2/M3)", () => {
     expect(mountPrefix()).toBe("/boltrig");
   });
 
+  it("derives the mount from an EXTENSIONLESS path - the host stripped the slash", () => {
+    // Next.js 308-strips trailing slashes BEFORE its middleware (measured on
+    // the opbox mount 2026-08-21), so the framed document lives at /boltrig,
+    // never /boltrig/. An extensionless path is never a real file here.
+    setPageUrl("/boltrig");
+    expect(mountPrefix()).toBe("/boltrig");
+    expect(configuredApiOrigin()).toBe("/boltrig");
+  });
+
   it("treats any other document path as ROOT - the visual-harness trap", () => {
     // The first derivation prefixed everything: served at
     // /tests/visual/parity.html, every /v1 fixture request became
