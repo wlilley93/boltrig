@@ -1,13 +1,13 @@
 {
   "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-  "captureManifestSha256": "edc941067e9f004dd8fa445d8db1f249f0e4bfcb65606741dc0dc523d485f038",
+  "captureManifestSha256": "c01d18f887e69bc640399da3edd3623de14fe4060113075d6fae0795fdb6f80a",
   "captureSourceBinding": {
-    "branch": "codex/turn-scoped-agent-chat",
-    "digestAfterCapture": "dc806317f8364e40453808740c3482bfe50f88c38193a6dd47b0e2fee54e3b45",
+    "branch": "main",
+    "digestAfterCapture": "81b471eb92bd2243d96b01b4774fefb53ef7966c09b8cd077aaca30e70d3f798",
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "dc806317f8364e40453808740c3482bfe50f88c38193a6dd47b0e2fee54e3b45",
+    "digestBeforeCapture": "81b471eb92bd2243d96b01b4774fefb53ef7966c09b8cd077aaca30e70d3f798",
     "dirty": true,
-    "head": "f57919f67c476231ca4a3aedc6c8547160f4b875",
+    "head": "a1ab724830608494eab9db88d6f879ad26b624e2",
     "scope": [
       "apps/worker/src",
       "apps/worker/tests/visual"

@@ -28,6 +28,7 @@ _WRITE_ACTIONS = frozenset(
     {
         "create", "update", "delete", "remove", "send", "post", "put", "patch",
         "upsert", "insert", "write", "publish", "comment", "create_event",
+        "delete_event",
     }
 )
 

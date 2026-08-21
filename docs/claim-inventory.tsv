@@ -1132,7 +1132,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/identity/sessions.py:366		to it - a cross-or
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/tokens.py:183		effective_grants_for_request and narrow_grants_to_workspace, and never drive a
 ORDINARY	NO-SUBJECT	docstring	boltrig/identity/totp.py:142		The at-rest sha256 of a recovery code - never the plaintext (D2).
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/totp.py:61		challenge path (D5): verifying a presented code against it always fails but
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/__init__.py:186		List work items, row-scoped by department at the store (US-IAM-02).
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/__init__.py:195		List work items, row-scoped by department at the store (US-IAM-02).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/__init__.py:55		[2026] VJS-COUNTY 9: the distinct, tamper-evident security-signal stream
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/__init__.py:57		security writer records fail-safe so a signal never breaks a guarded path.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/__init__.py:78		selected;
@@ -1284,6 +1284,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/observability.py:253	
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/observability.py:256		parent is never revived by a visible child.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/observability.py:54		adapters / workflows / MCP) and when, read straight from the tamper-evident
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/personal.py:11		Runtime names a worker capability.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/run_effects.py:56		attempt a DIFFERENT action and the approved request could never release
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/workflows.py:278		a bare ValueError never leaks internal text as the client reason.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/ratelimit.py:71		are window-scoped, so the counts were right but the keys never left.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/realtime_call_bridge.py:18		Best-effort observation;
