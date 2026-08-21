@@ -32,11 +32,13 @@ async def _narrowed_context(
     """
 
     merged = await resolve_skills(kernel.store, item.tenant_id, skills)
-    # ``agent.send`` is the LANE's intrinsic capability - chat_turn_inputs
-    # appends it after the role ceiling so a durable identity can always reach
-    # its peers (FLT-PEER-01). Narrowing by skills must not strip it; the
-    # intersection still only keeps it when the lane actually granted it.
-    allow = [*merged.tool_grants, "agent.send"]
+    # ``agent.send`` and ``chat.present`` are the LANE's intrinsic
+    # capabilities - chat_turn_inputs appends them after the role ceiling so a
+    # durable identity can always reach its peers (FLT-PEER-01) and surface
+    # display objects into its own conversation. Narrowing by skills must not
+    # strip them; the intersection still only keeps each one when the lane
+    # actually granted it (mailbox and ephemeral turns never do).
+    allow = [*merged.tool_grants, "agent.send", "chat.present"]
     narrowed = GrantSet.of(allow=allow).intersect(context.grants)
     return replace(context, grants=narrowed)
 

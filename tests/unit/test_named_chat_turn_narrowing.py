@@ -97,13 +97,14 @@ async def test_skills_narrow_a_wildcard_ceiling_to_their_tool_grants(recording):
         context, skills=["browser/visual"],
     )
 
-    # agent.send rides along: the lane's intrinsic peer verb (FLT-PEER-01),
-    # kept by the intersection because the wildcard ceiling permits it.
+    # The lane intrinsics ride along: agent.send (FLT-PEER-01) and
+    # chat.present, kept by the intersection because the wildcard ceiling
+    # permits them.
     assert sorted(recording.seen["grants"].allow) == [
-        "agent.send", "browser.navigate", "browser.snapshot",
+        "agent.send", "browser.navigate", "browser.snapshot", "chat.present",
     ]
     assert sorted(recording.seen["tools"]) == [
-        "agent.send", "browser.navigate", "browser.snapshot",
+        "agent.send", "browser.navigate", "browser.snapshot", "chat.present",
     ]
 
 
@@ -118,10 +119,10 @@ async def test_a_role_with_no_skills_keeps_only_the_peer_verb(recording):
         _Kernel(store), object(), _Item(), _Profile(), "task", context, skills=[],
     )
 
-    # Voice and peers, no kernel tools: the intrinsic agent.send survives,
-    # every skill-derived verb is gone.
-    assert recording.seen["grants"].allow == ("agent.send",)
-    assert recording.seen["tools"] == ("agent.send",)
+    # Voice, peers and its own conversation surface, no kernel tools: the
+    # intrinsics survive, every skill-derived verb is gone.
+    assert sorted(recording.seen["grants"].allow) == ["agent.send", "chat.present"]
+    assert sorted(recording.seen["tools"]) == ["agent.send", "chat.present"]
 
 
 async def test_callers_that_pass_no_skills_keep_the_raw_context(recording):
@@ -137,3 +138,22 @@ async def test_callers_that_pass_no_skills_keep_the_raw_context(recording):
     )
 
     assert recording.seen["grants"].allow == ("ticket.read",)
+
+
+async def test_present_is_not_resurrected_where_the_lane_never_granted_it(recording):
+    # Mailbox and ephemeral turns deny chat.present in their contexts; the
+    # narrowing append keeps an intrinsic only when the lane granted it, so
+    # those turns must come out without it even though the allow names it.
+    store = await _store_with_skill()
+    context = InvocationContext(
+        tenant_id=T, run_id="r4",
+        grants=GrantSet.of(["agent.send", "browser.navigate"]),
+    )
+
+    await run_named_chat_turn(
+        _Kernel(store), object(), _Item(), _Profile(), "task",
+        context, skills=["browser/visual"],
+    )
+
+    assert "chat.present" not in recording.seen["grants"].allow
+    assert sorted(recording.seen["tools"]) == ["agent.send", "browser.navigate"]

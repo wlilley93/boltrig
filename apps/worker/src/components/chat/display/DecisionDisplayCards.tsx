@@ -146,8 +146,25 @@ function questionReply(
   fields: DisplayField[],
   values: Record<string, DisplayFieldValue>,
 ): string {
-  const answers = fields.map((field) => `${field.label}: ${formatValue(values[field.id])}`).join("\n");
+  // The user-voiced turn echoes what the USER SAW - the option label - never
+  // a bare option value they were never shown, so a card author cannot put
+  // words in the user's recorded mouth. The value rides along in parentheses
+  // when it differs, keeping the machine-readable half without voicing it.
+  const answers = fields
+    .map((field) => `${field.label}: ${formatChoice(field, values[field.id])}`)
+    .join("\n");
   return `Response to “${prompt}” (display object ${object.id}, revision ${object.revision ?? 1}):\n${answers}`;
+}
+
+function formatChoice(field: DisplayField, value: DisplayFieldValue | undefined): string {
+  const labelFor = (one: string): string => {
+    const option = field.options?.find((candidate) => candidate.value === one);
+    if (!option || option.label === one) return one;
+    return `${option.label} (${one})`;
+  };
+  if (Array.isArray(value)) return value.map(labelFor).join(", ");
+  if (typeof value === "string") return labelFor(value);
+  return formatValue(value);
 }
 
 function confirmationReply(object: DisplayObjectEnvelope, summary: string): string {

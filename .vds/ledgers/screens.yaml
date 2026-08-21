@@ -1,5 +1,5 @@
 schema_version: 1
-generated_at: 2026-08-20T21:03:11Z
+generated_at: 2026-08-21T10:43:49Z
 generated_by: vds ledger screens
 source_globs:
 - apps/worker/src/components/*View.tsx

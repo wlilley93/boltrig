@@ -820,7 +820,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_persona.py:72		Presentation, not 
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_turn_execution.py:211		registry race cannot reroute the persisted conversation.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_turn_execution.py:79		the caller picks from names the kernel wrote, never supplying prose.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_turn_execution.py:84		the untrusted envelope.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_turn_flow.py:97		A steer joins the already-running request and cannot alter the
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_turn_flow.py:102		A steer joins the already-running request and cannot alter the
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chief_of_staff.py:63		provider must never raise the routing path - it falls back to the
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/codex_model_selection.py:26		Return one bounded opaque endpoint id, never a caller model string.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/codex_model_selection.py:72		none is configured - SEC-12) applies unchanged.
@@ -1051,8 +1051,9 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/model_gateway.py:33		An in-memory, T
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/model_router.py:49		Choose an agent's governed endpoint for one input modality.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/named_agent.py:101		authority, but never the named-peer mailbox capability.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/named_agent.py:80		real named identity always enters the distributed turn scheduler.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/named_chat_turn.py:36		appends it after the role ceiling so a durable identity can always reach
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/named_chat_turn.py:37		its peers (FLT-PEER-01).
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/named_chat_turn.py:37		durable identity can always reach its peers (FLT-PEER-01) and surface
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/named_chat_turn.py:38		display objects into its own conversation.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/named_chat_turn.py:40		actually granted it (mailbox and ephemeral turns never do).
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/named_work_routing.py:32		Resolve an explicit peer address or the declared default, never infer.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/personas.py:46		The persona text for a character id, or None.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/authority.py:11		Resolve all current ceilings;
@@ -1205,6 +1206,7 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/channel_routes.py:69		The at-rest r
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/control_routes.py:108		and must never turn success into a client-visible failure.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/control_routes.py:13		Late-wire the built-in adapter for in-process/test app construction.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/control_routes.py:96		notifier or sweep cannot find an orphaned replay claimant.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/conversation_account_routes.py:111		REFUSE, never bypass: the store CAS alone cannot see an active turn,
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/conversation_list_views.py:44		Return enough matched content to explain a hit, never the full message.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:292		raising callback must never abort a metered reservation, matching every
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:315		charged for a call that never ran).
@@ -1438,7 +1440,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/store/channel_outbox.py:196		claim_work_item
 ORDINARY	NO-SUBJECT	comment	boltrig/store/channel_outbox.py:244		terminally failed (a poison message never hot-loops).
 ORDINARY	NO-SUBJECT	comment	boltrig/store/channels.py:108		control_channel_ops._bind_channel), so an id-arbitrated upsert never
 ORDINARY	NO-SUBJECT	comment	boltrig/store/channels.py:235		The PRIMARY KEY first, BEFORE anything is removed.
-ORDINARY	NO-SUBJECT	comment	boltrig/store/conversation_binding_memory.py:58		Match PostgreSQL's metadata-only update: this path cannot reroute.
+ORDINARY	NO-SUBJECT	comment	boltrig/store/conversation_binding_memory.py:61		Match PostgreSQL's metadata-only update: this path cannot reroute.
 ORDINARY	NO-SUBJECT	comment	boltrig/store/conversation_binding_postgres.py:89		updates cannot silently reroute the next turn or move a project.
 ORDINARY	NO-SUBJECT	comment	boltrig/store/distillation_reads.py:63		caught this - the in-memory tests never touch the pool).
 ORDINARY	NO-SUBJECT	comment	boltrig/store/effect_ledger_memory.py:29		mutate stored inverse params that PG callers cannot.

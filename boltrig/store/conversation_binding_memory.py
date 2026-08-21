@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from boltrig.models import utcnow
+
 
 class ConversationBindingStoreMem:
     """Conversation CRUD with explicit compare-and-set routing changes."""
@@ -33,6 +35,7 @@ class ConversationBindingStoreMem:
                 bound = agent_address
                 self._conversation_agent_bindings[key] = bound
                 conv.agent_address = bound
+                conv.updated_at = utcnow()  # the PG twin bumps it in the CAS
             return bound
 
     async def move_conversation_workspace(

@@ -88,7 +88,12 @@ async def _reserve_or_queue(service, request, selection, records, run_id):
                     request.tenant_id, conversation.id, expected=run_id
                 )
                 raise
-            return None
+            # The address the LOCK settled on, not the resolution-time one:
+            # an explicit switch can win between resolution and this lock, and
+            # the user row above was already persisted against the fresh
+            # address - answering it as the stale agent would record a turn
+            # addressed to B but authored by A.
+            return None, turn_agent_address
         if turn_agent_address != conversation.agent_address:
             raise ConversationAgentSwitchBusy(
                 "the selected agent can be changed after the active turn finishes"
@@ -122,7 +127,7 @@ async def _reserve_or_queue(service, request, selection, records, run_id):
         "queued_run_id": run_id,
     }
     service._relay.publish(request.tenant_id, active_run_id, frame)  # noqa: SLF001
-    return {**frame, "type": "queued"}
+    return {**frame, "type": "queued"}, turn_agent_address
 
 
 async def _switch_conversation_agent(service, tenant_id, conversation, turn_agent_address):
@@ -341,13 +346,14 @@ async def stream_turn(service, request: TurnRequest):
     assert selection is not None
     conversation = selection.conversation
     run_id = uuid.uuid4().hex
-    queued = await _reserve_or_queue(service, request, selection, records, run_id)
+    queued, turn_agent_address = await _reserve_or_queue(
+        service, request, selection, records, run_id
+    )
     if queued is not None:
         yield queued
         return
     try:
         message, consumed_id = request.message, None
-        turn_agent_address = selection.agent_address
         while True:
             collected: list[dict[str, Any]] = []
             async for event in _stream_one(
@@ -378,7 +384,10 @@ async def stream_turn(service, request: TurnRequest):
             run_id, steer = next_turn
             message, records = steer.content or "", steer.attachments
             consumed_id = steer.id
-            turn_agent_address = steer.recipient_agent_address
+            # A steer enqueued before this upgrade carries no recipient; it
+            # continues as the turn's current agent rather than falling into
+            # the legacy chief-of-staff lane with a NULL author.
+            turn_agent_address = steer.recipient_agent_address or turn_agent_address
     finally:
         async with service._lock_for(  # noqa: SLF001
             request.tenant_id, conversation.id
