@@ -2512,8 +2512,7 @@ function buildMixer(): void {
       solo.type = "button";
       solo.textContent = "S";
       solo.title = "Solo — silence every other channel";
-      solo.addEventListener("click", (event) => {
-        event.stopPropagation();
+      solo.addEventListener("click", () => {
         if (soloed.has(g.title)) soloed.delete(g.title);
         else soloed.add(g.title);
         paintMixer();
@@ -2526,8 +2525,9 @@ function buildMixer(): void {
       osc.type = "button";
       osc.textContent = "osc";
       osc.title = "Talk test — play this channel's speech reach as if a line were being spoken";
-      osc.addEventListener("click", (event) => {
-        event.stopPropagation();
+      // No stopPropagation on any strip button: ANY click on the channel
+      // opens its effects, and the bubble reaching the strip is how.
+      osc.addEventListener("click", () => {
         if (talkTest.has(g.title)) {
           talkTest.delete(g.title);
           talkRelease.add(g.title);
@@ -2541,8 +2541,7 @@ function buildMixer(): void {
       halt.type = "button";
       halt.textContent = "■";
       halt.title = "Stop this channel's talk test";
-      halt.addEventListener("click", (event) => {
-        event.stopPropagation();
+      halt.addEventListener("click", () => {
         if (talkTest.has(g.title)) {
           talkTest.delete(g.title);
           talkRelease.add(g.title);
