@@ -159,6 +159,7 @@ export class JarvisWebGLRenderer {
   private readonly genes: Float32Array;
   private geneLoc: WebGLUniformLocation | null = null;
   private genesDirty = false;
+  private presence = 1;
   private bloomTuning: readonly [number, number, number] =
     [BLOOM_THRESHOLD, BLOOM_KNEE, BLOOM_STRENGTH];
   private readonly fit: "auto" | "fixed";
@@ -348,10 +349,14 @@ export class JarvisWebGLRenderer {
    * ignored so the tuning object can grow without breaking this renderer.
    */
   setTuning(next: Partial<{
+    presence: number;
     accent: readonly [number, number, number];
     scale: number;
     bloom: readonly [number, number, number];
   }> & Partial<Record<keyof typeof GENE, number>>): void {
+    if (typeof next.presence === "number" && Number.isFinite(next.presence)) {
+      this.presence = Math.min(2.5, Math.max(0.2, next.presence));
+    }
     if (Array.isArray(next.accent) && next.accent.length === 3) {
       this.accent = [next.accent[0], next.accent[1], next.accent[2]];
     }
@@ -725,7 +730,7 @@ export class JarvisWebGLRenderer {
     f("uReadout", readout ?? 0);
     f("uReduced", this.reducedMotion ? 1 : 0);
     gl.uniform3f(u.uAccent ?? null, this.accent[0], this.accent[1], this.accent[2]);
-    f("uScale", this.scale * this.fitScale(w, h));
+    f("uScale", this.scale * this.presence * this.fitScale(w, h));
     if (this.genesDirty && this.geneLoc) {
       // The scene program is bound here, which is where uGene lives.
       gl.uniform4fv(this.geneLoc, this.genes);

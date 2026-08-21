@@ -504,6 +504,12 @@
     /* A video character borrows the same header, transport and emotion row; the
    tuning tools stand down rather than mislabel a body they cannot drive. */
 body.video-char #topbar > *:not(#body) { display: none; }
+/* A body with no tuning struct (one register) keeps the transport and the
+   emotion row; the save/preset/presence tools stand down rather than write
+   empty looks under a real body's keys. */
+body.no-tuning :is(#save, #applyAll, #fromBaseline, #allMin, #lockColour,
+                   #driftOnly, #abHold, #history, .pq, #saveState, #pace,
+                   #deskToggle, #bus, .tlabel, #emotions) { display: none; }
 body.video-char :is(#saveState, #pace, #deskMin, #bus, .sep) { display: none; }
 </style>
   </head>

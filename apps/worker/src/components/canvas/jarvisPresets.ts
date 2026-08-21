@@ -298,6 +298,8 @@ export function jarvisModeTuning(mode: BodyMode): JarvisTuning {
  * bench's per-state saves diverge from there.
  */
 export interface Jarvis1Tuning {
+  /** Radius multiplier -- how much space the dial takes, same meaning as V2. */
+  presence: number;
   accent: readonly [r: number, g: number, b: number];
   scale: number;
   bloom: readonly [threshold: number, knee: number, strength: number];
@@ -312,6 +314,7 @@ export interface Jarvis1Tuning {
 
 /** What ships: the hand-tuned neutral instrument. */
 export const JARVIS1_TUNING: Jarvis1Tuning = {
+  presence: 1,
   accent: [0.478, 0.365, 0.878],
   scale: 1,
   bloom: [0.55, 0.25, 0.80],

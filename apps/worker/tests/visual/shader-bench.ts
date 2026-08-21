@@ -708,6 +708,10 @@ function mount(): void {
   // buffer across a wide window and every judgement made about her shape is
   // made about a distortion the app never renders.
   $("stage").classList.toggle("square", body === "familiar");
+  document.body.classList.toggle("no-tuning", body === "colossus");
+  // Draw-in is the arrival journey; a body without an arrival has nothing to
+  // play, and a live-looking button that does nothing is a wiring bug.
+  ($("play") as HTMLButtonElement).disabled = !slotsFor(body).includes("arrival");
   renderer.mount(host);
   // The baked layer's loop, mounted whenever a body that has one is on stage.
   // Free until the lattice dial gives it gain; silently absent if the file is
