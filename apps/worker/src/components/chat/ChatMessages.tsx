@@ -8,6 +8,8 @@ import {
 } from "@wlilley93/boltrig-web-sdk";
 
 import { LiveQuestionCard } from "../LiveQuestionCard";
+import { useFamiliarBody } from "../StageBody";
+import { colossusReplyText } from "./colossusReply";
 import { InlineApproval } from "./InlineApproval";
 import { OrderedWorkTranscript } from "./OrderedWorkTranscript";
 import { PersistedDecision } from "./PersistedDecision";
@@ -32,6 +34,12 @@ export function Message({
   onOpenSubagent?(agent: SubagentEntry): void;
 }) {
   const turn = useMemo(() => normalizeEvents(message.events ?? []), [message.events]);
+  // Colossus replies in JSON ({"say", "sign"} — see colossusReply.ts); the
+  // chat prints what he SAYS. Every other character's text passes untouched.
+  const colossus = useFamiliarBody() === "colossus";
+  const content = colossus && message.role === "assistant"
+    ? colossusReplyText(message.content)
+    : message.content;
   return (
     <article className={`message ${message.role}`}>
       <div className="message-content">
@@ -41,7 +49,7 @@ export function Message({
           </p>
         )}
         <OrderedWorkTranscript
-          content={message.content}
+          content={content}
           events={message.events ?? []}
           runId={message.run_id ?? undefined}
           turn={turn}
@@ -80,6 +88,11 @@ export function LiveTurn({
   startedAt: number | null;
   onOpenSubagent?(agent: SubagentEntry): void;
 }) {
+  // Same unwrap as Message, on the STREAMING buffer: his "say" string reads
+  // as prose from its first token instead of as an arriving JSON object.
+  const liveText = useFamiliarBody() === "colossus"
+    ? colossusReplyText(turn.text)
+    : turn.text;
   return (
     <article className="message assistant live">
       <div className="message-content">
@@ -97,7 +110,7 @@ export function LiveTurn({
         )}
         {turn.reasoning && <details><summary>Working notes</summary><p>{turn.reasoning}</p></details>}
         <OrderedWorkTranscript
-          content={turn.text}
+          content={liveText}
           emptyText="Working…"
           events={events}
           turn={turn}

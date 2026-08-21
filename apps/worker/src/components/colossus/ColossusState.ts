@@ -34,6 +34,13 @@ export interface ColossusStageState {
    * would make every character a caption.
    */
   takeaway?: string | null;
+  /**
+   * The tail of the live reasoning, shown while he THINKS or WORKS — the sign
+   * reports what the machine is actually doing, which is his entire character.
+   * Bounded twice like the takeaway: by the host that makes it, and here at
+   * the boundary a third-party host crosses.
+   */
+  trace?: string | null;
 }
 
 export const RESTING_COLOSSUS_STATE: ColossusStageState = {
@@ -65,6 +72,9 @@ export function clampColossusState(next: Partial<ColossusStageState>): ColossusS
     // would leave the last thing he said scrolling under EVALUATING, which
     // reports something the machine is not doing.
     takeaway: mode === "speaking" ? takeawayOf(next.takeaway) : null,
+    // And the trace only while he is REASONING, by the same argument: the
+    // thought scrolling under TRANSMITTING would caption the wrong activity.
+    trace: mode === "thinking" || mode === "working" ? takeawayOf(next.trace) : null,
   };
 }
 
@@ -93,6 +103,7 @@ export function colossusStateFromTurn(input: {
   micActive?: boolean;
   micLevel?: number;
   speechTakeaway?: string | null;
+  thinkingTrace?: string | null;
 }): ColossusStageState {
   const streaming = input.hasLiveEvents && !input.liveEnded;
   let mode: ColossusMode = "standby";
@@ -107,5 +118,6 @@ export function colossusStateFromTurn(input: {
     bands: input.voiceBands ?? null,
     onset: input.voiceOnset,
     takeaway: input.speechTakeaway ?? null,
+    trace: input.thinkingTrace ?? null,
   });
 }
