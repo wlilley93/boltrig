@@ -14,7 +14,7 @@ import {
   sweepPeriod,
   WAVE_SAMPLES,
 } from "./JarvisMotion";
-import { genotypeFrom } from "./JarvisGenotype";
+import { GENE, genotypeFrom } from "./JarvisGenotype";
 import { NO_TELEMETRY, type JarvisTelemetry } from "./JarvisTelemetry";
 import { NO_WORK, type JarvisWork } from "./JarvisWork";
 import {
@@ -152,11 +152,15 @@ export class JarvisWebGLRenderer {
 
   private readonly reducedMotion: boolean;
   private readonly maxDevicePixelRatio: number;
-  private readonly accent: readonly [number, number, number];
-  private readonly scale: number;
+  private accent: readonly [number, number, number];
+  private scale: number;
   private readonly labels: "shader" | "none";
   private readonly wantBloom: boolean;
   private readonly genes: Float32Array;
+  private geneLoc: WebGLUniformLocation | null = null;
+  private genesDirty = false;
+  private bloomTuning: readonly [number, number, number] =
+    [BLOOM_THRESHOLD, BLOOM_KNEE, BLOOM_STRENGTH];
   private readonly fit: "auto" | "fixed";
 
   private sceneProgram: WebGLProgram | null = null;
@@ -294,6 +298,7 @@ export class JarvisWebGLRenderer {
       // every frame, and changing it rebuilds the renderer.
       const geneLoc = gl.getUniformLocation(prog, "uGene")
         ?? gl.getUniformLocation(prog, "uGene[0]");
+      this.geneLoc = geneLoc;
       if (geneLoc) gl.uniform4fv(geneLoc, this.genes);
       // Array uniforms answer to "name[0]" on some drivers and bare "name" on
       // others; ask for both rather than silently binding to null.
@@ -336,6 +341,33 @@ export class JarvisWebGLRenderer {
    * null to clear: the tracks fall back to ghosts, which is the honest
    * rendering of "no reading" and is NOT the same as a gauge at zero.
    */
+  /**
+   * THE BENCH'S LIVE KNOBS: identity genes, accent, scale, bloom -- the
+   * honest set this renderer can change without a remount. Genes re-upload
+   * on the next frame, where the scene program is bound; unknown fields are
+   * ignored so the tuning object can grow without breaking this renderer.
+   */
+  setTuning(next: Partial<{
+    accent: readonly [number, number, number];
+    scale: number;
+    bloom: readonly [number, number, number];
+  }> & Partial<Record<keyof typeof GENE, number>>): void {
+    if (Array.isArray(next.accent) && next.accent.length === 3) {
+      this.accent = [next.accent[0], next.accent[1], next.accent[2]];
+    }
+    if (typeof next.scale === "number" && Number.isFinite(next.scale)) this.scale = next.scale;
+    if (Array.isArray(next.bloom) && next.bloom.length === 3) {
+      this.bloomTuning = [next.bloom[0], next.bloom[1], next.bloom[2]];
+    }
+    for (const [field, index] of Object.entries(GENE)) {
+      const value = (next as Record<string, unknown>)[field];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        this.genes[index] = value;
+        this.genesDirty = true;
+      }
+    }
+  }
+
   applyTelemetry(next: JarvisTelemetry | null): void {
     this.telemetry = next ?? NO_TELEMETRY;
   }
@@ -694,6 +726,11 @@ export class JarvisWebGLRenderer {
     f("uReduced", this.reducedMotion ? 1 : 0);
     gl.uniform3f(u.uAccent ?? null, this.accent[0], this.accent[1], this.accent[2]);
     f("uScale", this.scale * this.fitScale(w, h));
+    if (this.genesDirty && this.geneLoc) {
+      // The scene program is bound here, which is where uGene lives.
+      gl.uniform4fv(this.geneLoc, this.genes);
+      this.genesDirty = false;
+    }
 
     f("uSpin", this.spin);
     f("uSpinDelta", this.spinDelta);
@@ -734,9 +771,9 @@ export class JarvisWebGLRenderer {
     // pass ever reads the target it is writing.
     gl.useProgram(this.postProgram);
     const pu = this.postUniforms;
-    gl.uniform1f(pu.uThreshold ?? null, BLOOM_THRESHOLD);
-    gl.uniform1f(pu.uKnee ?? null, BLOOM_KNEE);
-    gl.uniform1f(pu.uStrength ?? null, BLOOM_STRENGTH);
+    gl.uniform1f(pu.uThreshold ?? null, this.bloomTuning[0]);
+    gl.uniform1f(pu.uKnee ?? null, this.bloomTuning[1]);
+    gl.uniform1f(pu.uStrength ?? null, this.bloomTuning[2]);
     this.postPass(gl, PASS.BRIGHT, this.scene!, this.bloomA!, t);
     this.postPass(gl, PASS.BLUR_H, this.bloomA!, this.bloomB!, t);
     this.postPass(gl, PASS.BLUR_V, this.bloomB!, this.bloomA!, t);

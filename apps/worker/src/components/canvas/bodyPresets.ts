@@ -18,7 +18,10 @@ export {
   JARVIS_ARRIVAL,
   JARVIS_MODES,
   JARVIS_PULSES,
+  JARVIS1_TUNING,
   jarvisModeTuning,
+  jarvis1ModeTuning,
+  type Jarvis1Tuning,
 } from "./jarvisPresets";
 export {
   ULTRON_ARRIVAL,

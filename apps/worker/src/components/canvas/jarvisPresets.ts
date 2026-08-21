@@ -287,3 +287,43 @@ export const JARVIS_PULSES: Record<BodyMode, readonly Pulse[]> = {
 export function jarvisModeTuning(mode: BodyMode): JarvisTuning {
   return modeTuning(JARVIS_TUNING, JARVIS_MODES, mode);
 }
+
+/**
+ * JARVIS V1 -- the original dial. Its tunable surface is what the renderer
+ * can honestly change live: the seven identity genes (counts, ratios,
+ * phase -- never radii, never anything a reading depends on), the accent,
+ * the scale, and the bloom triplet. Same format as V2 above: a shipped
+ * base, a per-mode function, nothing mutated in place. The dial never had
+ * mode presets -- one register -- so every mode ships the base and the
+ * bench's per-state saves diverge from there.
+ */
+export interface Jarvis1Tuning {
+  accent: readonly [r: number, g: number, b: number];
+  scale: number;
+  bloom: readonly [threshold: number, knee: number, strength: number];
+  irisSegments: number;
+  dashSegments: number;
+  arc1Fill: number;
+  arc2Fill: number;
+  speedSkew: number;
+  chunkSeed: number;
+  tickDensity: number;
+}
+
+/** What ships: the hand-tuned neutral instrument. */
+export const JARVIS1_TUNING: Jarvis1Tuning = {
+  accent: [0.478, 0.365, 0.878],
+  scale: 1,
+  bloom: [0.55, 0.25, 0.80],
+  irisSegments: 0,
+  dashSegments: 0,
+  arc1Fill: 0.55,
+  arc2Fill: 0.50,
+  speedSkew: 1,
+  chunkSeed: 0,
+  tickDensity: 0,
+};
+
+export function jarvis1ModeTuning(_mode: BodyMode): Jarvis1Tuning {
+  return { ...JARVIS1_TUNING };
+}

@@ -45,6 +45,7 @@ import {
   ULTRON_ARRIVAL,
   familiarModeTuning,
   jarvisModeTuning,
+  jarvis1ModeTuning,
   ultronModeTuning,
 } from "../../src/components/canvas/bodyPresets";
 import { FamiliarWebGLRenderer } from "../../src/components/familiar/FamiliarWebGLRenderer";
@@ -557,7 +558,10 @@ function shippedFor(which: Body, at: Slot): Tuning {
   // A stability report does not come in an irritated variant: he has one
   // register and therefore no numbers. Empty is the honest struct, and the
   // dial builder generates nothing from it -- which is the correct panel.
-  if (which === "colossus" || which === "jarvis1") return {} as Tuning;
+  if (which === "colossus") return {} as Tuning;
+  // V1's surface in the V2 format: genes, accent, scale, bloom. One register,
+  // so every mode ships the base and the per-state saves diverge from there.
+  if (which === "jarvis1") return jarvis1ModeTuning("standby") as unknown as Tuning;
   if (at === "arrival") {
     if (which === "familiar") return FAMILIAR_ARRIVAL;
     return which === "jarvis" ? JARVIS_ARRIVAL : ULTRON_ARRIVAL;
@@ -2508,23 +2512,56 @@ function trim(value: number): string {
 
 /**
  * THE FRAME-VIDEO CHARACTERS. Montgomery and Maya are not shaders: each is a
- * whole player (clip graph, live lips, its own controls) already served on
- * this box. The bench stages them whole, in an iframe over the tailnet
- * serve, and steps aside: the dials belong to the sphere bodies, so they are
- * hidden rather than left mislabelling a body they cannot drive.
+ * whole player (clip graph, live lips, its own speech) already served on this
+ * box, staged whole in an iframe over the tailnet serve. The chrome is the
+ * SAME chrome: the transport shows his positions, the emotion row shows his
+ * bearing, and both drive the player over the clip: postMessage wire --
+ * repainted from every clip:state the player posts back, so the bench shows
+ * where he actually is, not where it last asked him to be. Only the tuning
+ * tools stand down: dials belong to the shader bodies.
  */
-const VIDEO_BODIES: Record<string, { url: string; title: string }> = {
-  montgomery: { url: "https://beelink.tailb4b671.ts.net:8902/", title: "General Montgomery" },
-  maya: { url: "https://beelink.tailb4b671.ts.net:8901/", title: "Maya" },
+const VIDEO_BODIES: Record<string, { url: string; title: string; wire: boolean }> = {
+  montgomery: { url: "https://beelink.tailb4b671.ts.net:8902/", title: "General Montgomery", wire: true },
+  maya: { url: "https://beelink.tailb4b671.ts.net:8901/", title: "Maya", wire: false },
 };
+const VIDEO_POSITIONS: Record<string, ReadonlyArray<readonly [string, string]>> = {
+  montgomery: [["H1", "Desk"], ["H2", "Table — far"], ["H3", "Fireplace"], ["H4", "Window"]],
+};
+const VIDEO_BEARINGS = ["composed", "patient", "reflective", "vigilant", "displeased", "wry"];
 let videoChar: string | null = null;
-let asideHidden: HTMLElement[] = [];
+let videoFrame: HTMLIFrameElement | null = null;
+let videoWant: string | null = null;
+function clipPost(msg: object): void {
+  try { videoFrame?.contentWindow?.postMessage(msg, "*"); } catch { /* fine */ }
+}
+function paintVideoPanel(state: { node?: string; targetHub?: string | null;
+                                  mood?: string; wantEmotion?: string | null } = {}): void {
+  if (!videoChar) return;
+  if (state.wantEmotion !== undefined) videoWant = state.wantEmotion;
+  const at = state.targetHub ?? state.node;
+  for (const b of Array.from($("states").querySelectorAll("button")) as HTMLElement[]) {
+    if (at) b.classList.toggle("on", b.dataset.state === at);
+  }
+  for (const b of Array.from($("emotions").querySelectorAll("button")) as HTMLElement[]) {
+    b.classList.toggle("on", b.dataset.emotion === videoWant);
+    // the green edge is where his mood has DRIFTED on its own; the .on ring
+    // is the directed choice -- the same two-truths split the player draws
+    b.style.boxShadow = b.dataset.emotion === state.mood ? "inset 0 0 0 1px #5cb87f" : "";
+  }
+}
+window.addEventListener("message", (ev) => {
+  const d = ev.data as { type?: string } | null;
+  if (!videoChar || !d || d.type !== "clip:state") return;
+  paintVideoPanel(d as Parameters<typeof paintVideoPanel>[0]);
+});
 function mountVideo(name: string): void {
   const info = VIDEO_BODIES[name];
   cancelLoop();
   renderer?.destroy();
   renderer = null;
   videoChar = name;
+  videoWant = null;
+  document.body.classList.add("video-char");
   const host = $("stage");
   host.classList.remove("square");
   host.innerHTML = "";
@@ -2533,31 +2570,59 @@ function mountVideo(name: string): void {
   frame.allow = "autoplay; fullscreen";
   frame.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0;background:#000";
   host.appendChild(frame);
+  videoFrame = frame;
+  frame.addEventListener("load", () => clipPost({ type: "clip:state?" }));
   $("readout").textContent = "";
-  const aside = document.querySelector("aside");
-  if (aside){
-    for (const el of Array.from(aside.children) as HTMLElement[]){
-      if (el.querySelector("#body") || el.id === "videoNote") continue;
-      if (!el.hidden){ el.hidden = true; asideHidden.push(el); }
-    }
-    let note = document.getElementById("videoNote");
-    if (!note){
-      note = document.createElement("p");
-      note.id = "videoNote";
-      note.style.cssText = "color:#74747e;font-size:12px;line-height:1.5";
-      aside.appendChild(note);
-    }
-    note.textContent = info.title + " is a frame-video character: positions, bearing and "
-      + "speech live on the stage itself (tap it to wake his controls). The dials here "
-      + "belong to the shader bodies and are stood down.";
+  const states = $("states");
+  states.innerHTML = "";
+  for (const [hub, label] of VIDEO_POSITIONS[name] ?? []) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.state = hub;
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      clipPost({ type: "clip:position", hub });
+      paintVideoPanel({ targetHub: hub });
+    });
+    states.appendChild(button);
   }
+  const chips = $("emotions");
+  chips.innerHTML = "";
+  if (info.wire) {
+    for (const tag of VIDEO_BEARINGS) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.dataset.emotion = tag;
+      chip.textContent = tag;
+      chip.addEventListener("click", () => {
+        const clearing = videoWant === tag;
+        videoWant = clearing ? null : tag;
+        clipPost({ type: "clip:emotion", tag: clearing ? null : tag });
+        paintVideoPanel({});
+      });
+      chips.appendChild(chip);
+    }
+  }
+  const mixer = $("mixer");
+  mixer.innerHTML = "";
+  const note = document.createElement("p");
+  note.style.cssText = "color:#74747e;font-size:12px;line-height:1.5;margin:8px 2px";
+  note.textContent = info.wire
+    ? info.title + " is a frame-video character: the transport is his positions, the "
+      + "emotion row is his bearing (green edge = where his mood has drifted on its own), "
+      + "and speech lives on the stage. The dials and mixer belong to the shader bodies."
+    : info.title + " is a frame-video character: her controls live on the stage itself. "
+      + "The dials and mixer belong to the shader bodies.";
+  mixer.appendChild(note);
+  ($("save") as HTMLButtonElement).disabled = true;
 }
 function unmountVideo(): void {
   if (!videoChar) return;
   videoChar = null;
-  for (const el of asideHidden) el.hidden = false;
-  asideHidden = [];
-  document.getElementById("videoNote")?.remove();
+  videoFrame = null;
+  document.body.classList.remove("video-char");
+  ($("save") as HTMLButtonElement).disabled = false;
+  $("mixer").innerHTML = "";
 }
 $("body").addEventListener("change", (event) => {
   const value = (event.target as HTMLSelectElement).value;
@@ -3146,7 +3211,6 @@ let deskHidden = ((): boolean => {
 
 function paintDesk(): void {
   document.body.classList.toggle("desk-hidden", deskHidden);
-  $("deskToggle").classList.toggle("on", deskHidden);
   $("deskMin").textContent = deskHidden ? "▴" : "▾";
   $("deskMin").title = deskHidden ? "Restore the desk" : "Minimise the desk";
 }
@@ -3158,7 +3222,7 @@ function toggleDesk(): void {
   } catch { /* fine */ }
   paintDesk();
 }
-$("deskToggle").addEventListener("click", toggleDesk);
+$("deskExpand").addEventListener("click", toggleDesk);
 $("deskMin").addEventListener("click", toggleDesk);
 paintDesk();
 

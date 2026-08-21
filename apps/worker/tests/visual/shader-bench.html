@@ -91,7 +91,13 @@
       body.desk-hidden #console { display: none; }
       body.desk-hidden #topbar { grid-row: 4; border-bottom: 0; border-top: 1px solid #1c1c22; }
       body.desk-hidden #stageWrap { grid-row: 1 / 4; }
-      #deskToggle.on { color: #0b0b0f; background: #6f8cff; border-color: #6f8cff; }
+      /* The expand control lives on the collapsed bar's right edge and only
+         exists while the desk is down; ▾ in the transport is its other half. */
+      #deskExpand { display: none; }
+      body.desk-hidden #deskExpand {
+        display: block; margin-left: auto; width: 30px; flex: 0 0 auto;
+        border-radius: 14px; font-size: 12px;
+      }
       #lockColour.on { color: #0b0b0f; background: #ffb060; border-color: #ffb060; }
       #presenceQuick { width: 130px; accent-color: #6f8cff; }
       #topbar .pq { display: flex; align-items: center; gap: 5px; }
@@ -495,7 +501,11 @@
         border: 1px solid #26262e; border-radius: 5px;
         color: #e8e8ef; font: inherit; font-size: 11px; background: #101016;
       }
-    </style>
+    /* A video character borrows the same header, transport and emotion row; the
+   tuning tools stand down rather than mislabel a body they cannot drive. */
+body.video-char #topbar > *:not(#body) { display: none; }
+body.video-char :is(#saveState, #pace, #deskMin, #bus, .sep) { display: none; }
+</style>
   </head>
   <body>
     <div id="stageWrap">
@@ -524,7 +534,6 @@
       <button id="driftOnly" type="button" title="Show only dials off the baseline">Δ only</button>
       <button id="abHold" type="button" title="Hold to show the baseline (or hold B)">A/B</button>
       <select id="history"></select>
-      <button id="deskToggle" type="button" title="Hide the desk and bus; presence stays live here">Desk</button>
       <div class="pq"><span>Presence</span>
         <input id="presenceQuick" type="range" min="0.4" max="1.8" step="0.005" value="1" />
         <b id="presenceOut" title="Click to type a value">1.000</b>
@@ -535,6 +544,7 @@
       <button id="gear" type="button">⚙</button>
       <div id="baselineNote"></div>
       <div id="saved"></div>
+      <button id="deskExpand" type="button" title="Expand the desk">▴</button>
     </div>
     <div id="splitter" title="Drag to resize the console"></div>
     <div id="console">
