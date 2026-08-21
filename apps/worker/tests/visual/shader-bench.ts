@@ -1658,7 +1658,7 @@ declare global {
 }
 window.__benchFrame = () => {
   drive();
-  renderer?.frame(performance.now());
+  (renderer as { frame?(now: number): void } | null)?.frame?.(performance.now());
 };
 
 function loop(): void {
@@ -1699,7 +1699,7 @@ function loop(): void {
     }
   }
   drive();
-  renderer?.frame(performance.now());
+  (renderer as { frame?(now: number): void } | null)?.frame?.(performance.now());
   // Every twelfth frame: often enough to feel live while dragging, rare enough
   // that the readback is not the reason the bench is slow.
   if (frames % 12 === 0) measure();
@@ -2365,7 +2365,7 @@ $("fromBaseline").addEventListener("click", () => {
   buildControls();
   remember(slotKey(body, slot), tuning);
   rememberLfos();
-  renderer?.transitionTo(clone(effectiveTuning()) as never);
+  (renderer as { transitionTo?(next: never): void } | null)?.transitionTo?.(clone(effectiveTuning()) as never);
   paintMixerLevels();
   paintDrift();
   $("saved").textContent = `${slot} reset to baseline`;
@@ -2448,7 +2448,7 @@ async function refreshHistory(): Promise<void> {
     lfos = savedLfos(key);
     speech = savedSpeech(key);
     buildControls();
-    renderer?.transitionTo(clone(effectiveTuning()) as never);
+    (renderer as { transitionTo?(next: never): void } | null)?.transitionTo?.(clone(effectiveTuning()) as never);
     paintMixerLevels();
   }
   paintDrift();
@@ -2764,7 +2764,7 @@ $("history").addEventListener("change", (event) => {
   remember(slotKey(body, slot), tuning);
   rememberLfos();
   rememberSpeech();
-  renderer?.transitionTo(clone(effectiveTuning()) as never);
+  (renderer as { transitionTo?(next: never): void } | null)?.transitionTo?.(clone(effectiveTuning()) as never);
   paintMixerLevels();
   paintMixer();
   paintDrift();
@@ -2919,7 +2919,7 @@ $("clipFile").addEventListener("change", (event) => {
 $("play").addEventListener("click", () => {
   // Releases the bench's pin, so the body eases from its arrival state to this
   // mode under its own logic. Touching any slider takes control back.
-  renderer?.replay();
+  (renderer as { replay?(): void } | null)?.replay?.();
   $("saved").textContent = "drawing in…";
   $("saved").className = "ok";
 });
