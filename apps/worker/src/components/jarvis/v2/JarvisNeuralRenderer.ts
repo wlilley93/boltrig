@@ -349,6 +349,9 @@ export class JarvisNeuralRenderer {
         ? this.live
         : applyPulses(this.live, JARVIS_PULSES[mode], this.clock.animClock);
     }
+    // PRESENCE scales the whole composite: the simulation's home radius and
+    // the baked layer read the same number, so body and footage stay one piece.
+    d.radius *= shown.presence;
     passes.latticeDeck()?.tick(mode, this.clock.easeDt);
     passes.render(d, jarvisPalette(this.opts, this.pheno), jarvisEmotion(shown, this.pheno));
   }

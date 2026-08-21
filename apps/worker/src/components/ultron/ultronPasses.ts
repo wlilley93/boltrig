@@ -234,7 +234,8 @@ export class UltronPasses {
     // The baked membrane, under everything: the heavy slow structure is
     // footage, the electricity and the instability stay live on top.
     this.lattice?.draw(this.size, shared.uWarm as number[],
-      ramp(tuning.lattice, d.energy) * (1 + 0.35 * d.swell), (p) => this.fullscreen(p));
+      ramp(tuning.lattice, d.energy) * (1 + 0.35 * d.swell),
+      (p) => this.fullscreen(p), false, tuning.presence);
     drawDendrite(gl, this.progs, d, tuning, shared);
     drawIris(gl, this.progs, d, tuning, shared);
     drawVein(gl, this.progs, d, tuning, shared);

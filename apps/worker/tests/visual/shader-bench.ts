@@ -129,6 +129,7 @@ const LEGEND: Record<string, readonly string[]> = {
   shardStride: ["1 in N particles"],
   clump: ["strength", "cluster scale"],
   lattice: ["gain", "×voice"],
+  presence: ["scale"],
   focus: ["far swell", "far dim"],
   // ---- The eye ------------------------------------------------------------
   core: ["heart brightness", "×voice"],
@@ -216,6 +217,7 @@ const RANGE: Record<string, [number, number, number]> = {
   shardStride: [1, 64, 1],
   clump: [0, 1, 0.005],
   lattice: [0, 2, 0.01],
+  presence: [0.4, 1.8, 0.005],
   focus: [0, 1, 0.005],
   petal: [0, 1, 0.01],
   cloud: [0, 1.2, 0.02],
@@ -823,6 +825,7 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "5 · Circuit shards", fields: ["shardGain", "shardSize", "shardStride"] },
   { title: "5 · Debris — clumping and depth", fields: ["clump", "focus"] },
   { title: "0 · Lattice loop — the baked layer", fields: ["lattice"] },
+  { title: "0 · Presence — the composite's size", fields: ["presence"] },
   { title: "5 · Crystal facets", fields: [
     "facetGain", "facetSize", "facetSpin", "facetLimb",
   ] },
@@ -906,6 +909,7 @@ const TITLES: Record<string, string> = {
   shardStride: "How many particles become shards",
   clump: "How the debris clusters into clumps and voids",
   lattice: "The baked hubs-and-spokes loop under the live body",
+  presence: "How big the whole composite sits in the frame",
   focus: "How the far hemisphere falls out of focus",
   facetGain: "How bright the crystal facets are",
   facetSize: "How big a facet is",
@@ -1227,7 +1231,11 @@ async function stopVoice(): Promise<void> {
 
 /** The clips for a body, by convention rather than by a list to keep in step. */
 function clipsFor(which: string): string[] {
-  return [1, 2, 3].map((n) => `/companion/${which}-${n}.wav`);
+  // The Familiar carries three extra purpose-built test clips: a sustained
+  // line for reverb tails, staccato consonants for transients, and a
+  // whisper-to-wave sweep for dynamic range.
+  const count = which === "familiar" ? 6 : 3;
+  return Array.from({ length: count }, (_, i) => `/companion/${which}-${i + 1}.wav`);
 }
 
 function assign(key: string, value: number | number[]): void {

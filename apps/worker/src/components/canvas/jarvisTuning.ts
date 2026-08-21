@@ -212,6 +212,11 @@ export interface JarvisTuning {
    */
   lattice: EnergyRamp;
   /**
+   * How big the whole composite sits in the frame: one scale on the live body
+   * AND the baked layer together, so they never drift apart. 1 ships.
+   */
+  presence: number;
+  /**
    * The eye, after familiar.frag's heart -- pupil, iris, and the lens ring.
    *
    * Two stacked gaussians were already here and they made a bright BLOB. What
@@ -271,6 +276,7 @@ export const JARVIS_TUNING: JarvisTuning = {
   clump: [0, 2.6],
   focus: [0, 0],
   lattice: [0, 0],
+  presence: 1,
   eye: [1, 1.5, 0.34, 15],
   drawLimb: [3, 3],
   linkLimb: [3, 3],

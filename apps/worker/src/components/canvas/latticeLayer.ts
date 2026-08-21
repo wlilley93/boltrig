@@ -115,14 +115,18 @@ export class LatticeLayer {
     gain: number,
     fullscreen: (prog: WebGLProgram) => void,
     recolour = false,
+    scale = 1,
   ): void {
     const gl = this.gl;
     if (!this.ready || !this.tex || !this.prog || gain <= 0) return;
     const [w, h] = size;
     const aspect = w / Math.max(1, h);
-    const fit: [number, number] = aspect > this.aspect
-      ? [aspect / this.aspect, 1]
-      : [1, this.aspect / aspect];
+    // Presence: dividing the fit enlarges the footage, so the baked layer and
+    // the shader body grow and shrink together as one composite piece.
+    const grow = Math.max(0.05, scale);
+    const fit: [number, number] = (aspect > this.aspect
+      ? [aspect / this.aspect / grow, 1 / grow]
+      : [1 / grow, this.aspect / aspect / grow]) as [number, number];
     gl.useProgram(this.prog);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.tex);
@@ -214,13 +218,14 @@ export class LatticeDeck {
     gain: number,
     fullscreen: (prog: WebGLProgram) => void,
     recolour = false,
+    scale = 1,
   ): void {
     if (!this.map || this.slots.length < 2 || gain <= 0) return;
     const front = this.slots[this.active];
     const back = this.slots[1 - this.active];
-    front.layer.draw(size, warm, gain * this.fade, fullscreen, recolour);
+    front.layer.draw(size, warm, gain * this.fade, fullscreen, recolour, scale);
     if (this.fade < 1 && back.el) {
-      back.layer.draw(size, warm, gain * (1 - this.fade), fullscreen, recolour);
+      back.layer.draw(size, warm, gain * (1 - this.fade), fullscreen, recolour, scale);
     }
   }
 

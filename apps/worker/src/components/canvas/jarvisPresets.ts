@@ -61,6 +61,7 @@ export const JARVIS_ARRIVAL: JarvisTuning = {
   clump: [0, 2.6],
   focus: [0, 0],
   lattice: [0, 0],
+  presence: 1,
 };
 
 /**

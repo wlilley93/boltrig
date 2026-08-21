@@ -50,6 +50,7 @@ export const ULTRON_ARRIVAL: UltronTuning = {
   crackLimb: [0.36, 0.88],
   facetLimb: [0.28, 0.95],
   lattice: [0, 0],
+  presence: 1,
 };
 
 /**

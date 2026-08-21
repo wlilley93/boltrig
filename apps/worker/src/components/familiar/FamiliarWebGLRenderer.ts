@@ -241,8 +241,14 @@ export class FamiliarWebGLRenderer {
     const t = this.reducedMotion ? 0 : (now - this.startTime) / 1000;
     const tuning = this.tick(now);
     const drive = familiarDrive(this.state, this.smoothers, this.lastDt, t, tuning);
+    // Presence folds into her composition, so one dial moves her and her
+    // baked orb together as a composite piece.
+    const sized = tuning.presence === 1 ? tuning : {
+      ...tuning,
+      composition: [tuning.composition[0] * tuning.presence, tuning.composition[1]] as const,
+    };
     pushFamiliarUniforms(gl, this.uniforms, {
-      w, h, t, drive, tuning,
+      w, h, t, drive, tuning: sized,
       mood: this.shownMood(tuning),
       mode: this.state.mode,
       presentation: this.mode,
@@ -325,7 +331,8 @@ export class FamiliarWebGLRenderer {
     const mood = col.map((c) => c + (lum - c) * e.desaturate);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-    this.latticeDeck.draw([w, h], mood, gain, () => gl.drawArrays(gl.TRIANGLES, 0, 3), true);
+    this.latticeDeck.draw([w, h], mood, gain,
+      () => gl.drawArrays(gl.TRIANGLES, 0, 3), true, tuning.presence);
     gl.disable(gl.BLEND);
     if (this.prog) gl.useProgram(this.prog);
   }

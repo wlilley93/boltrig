@@ -130,6 +130,11 @@ export interface FamiliarTuning {
    * rides the voice. Zero ships. See canvas/latticeLayer.ts.
    */
   lattice: readonly [gain: number, byVoice: number];
+  /**
+   * How big the whole composite sits in the frame: one scale on the live body
+   * AND the baked layer together, so they never drift apart. 1 ships.
+   */
+  presence: number;
 }
 
 /**
@@ -160,4 +165,5 @@ export const FAMILIAR_TUNING: FamiliarTuning = {
   gesture: [30, 90],
   errorTone: [0.75, 0.28],
   lattice: [0, 0],
+  presence: 1,
 };

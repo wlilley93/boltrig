@@ -97,6 +97,11 @@ export interface UltronTuning {
    */
   lattice: EnergyRamp;
   /**
+   * How big the whole composite sits in the frame: one scale on the live body
+   * AND the baked layer together, so they never drift apart. 1 ships.
+   */
+  presence: number;
+  /**
    * Three concentric clouds spread into arms. Jarvis leaves this at 0.
    *
    * 0.3, not 1.0. At 1.0 the arms reach far enough to read as flares around the
@@ -164,4 +169,5 @@ export const ULTRON_TUNING: UltronTuning = {
   crackLimb: [0.36, 0.88],
   facetLimb: [0.28, 0.95],
   lattice: [0, 0],
+  presence: 1,
 };
