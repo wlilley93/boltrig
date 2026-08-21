@@ -222,6 +222,13 @@ const RANGE_AT: Record<string, [number, number, number]> = {
   "dendriteGain:1": [0, 2, 0.05],
   // The pupil and iris terms measured 2.2 and 1.8 in canon — both past the
   // old fallback cap.
+  // FINE POINTS, NOT BLURS: the marks' height and width need a floor and a
+  // step fine enough to sharpen back down — the fallback scale could only
+  // make smudges bigger.
+  "glyphSize:0": [0.002, 0.12, 0.0005],
+  "glyphSize:1": [0.0003, 0.02, 0.0001],
+  "glyphBSize:0": [0.002, 0.12, 0.0005],
+  "glyphBSize:1": [0.0003, 0.02, 0.0001],
   "eye:0": [0, 4, 0.02],
   "eye:1": [0, 4, 0.02],
   "eye:2": [0, 1.2, 0.01],
@@ -1130,10 +1137,10 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
     "rings", "ringArc", "ringWidth", "ringGain", "ringRadius", "ringBeam",
     "ringSpin", "ringLife",
   ] },
-  { title: "2 · Glyphs — the inner inscriptions", fields: [
+  // One channel for BOTH inscription bands: inner (glyph*) and outer
+  // (glyphB*) belong to one instrument and were two strips to hunt across.
+  { title: "2 · Glyphs — both inscription bands", fields: [
     "glyphGain", "glyphRadius", "glyphSize", "glyphSpin", "glyphDensity",
-  ] },
-  { title: "2 · Sigils — the outer inscriptions", fields: [
     "glyphBGain", "glyphBRadius", "glyphBSize", "glyphBSpin", "glyphBDensity",
   ] },
   { title: "3 · The iris — radial filaments", fields: [
@@ -2149,8 +2156,7 @@ const SPATIAL_RANK: Record<string, number> = {
   "0 · Lattice loop — the baked layer": 0,
   "4 · Shell — shards and debris": 1,
   "1 · Wheels — the orbiting beams": 2,
-  "2 · Sigils — the outer inscriptions": 3,
-  "2 · Glyphs — the inner inscriptions": 4,
+  "2 · Glyphs — both inscription bands": 3,
   "5 · Crystal facets": 4,
   "4 · Veins and cracks": 5,
   "3 · Pathways — the neural links": 8,
@@ -2170,8 +2176,7 @@ const STRIP_NAME: Record<string, string> = {
   "0 · Lattice loop — the baked layer": "Film",
   "4 · Shell — shards and debris": "Shell",
   "1 · Wheels — the orbiting beams": "Wheels",
-  "2 · Glyphs — the inner inscriptions": "Glyphs",
-  "2 · Sigils — the outer inscriptions": "Sigils",
+  "2 · Glyphs — both inscription bands": "Glyphs",
   "5 · Crystal facets": "Facets",
   "4 · Veins and cracks": "Veins",
   "3 · Pathways — the neural links": "Pathways",
@@ -2458,12 +2463,46 @@ function buildMixer(): void {
         if (channel !== g.title) selectChannel(g.title);
         push();
       });
+      // A CLICK IS A SELECTION, NOT A VOLUME CHANGE. The browser jumps the
+      // thumb to the click point before any listener runs, so a click meant
+      // as "show me this channel" was silently rewriting the level. A tap
+      // (pointer moved < 5px) puts the jump back and only selects; a drag
+      // commits its value as before.
+      fader.dataset.committed = fader.value;
+      let downX = 0;
+      let downY = 0;
+      fader.addEventListener("pointerdown", (event) => {
+        downX = event.clientX;
+        downY = event.clientY;
+        // Fires BEFORE the thumb jump (measured), so this is the true
+        // pre-gesture value — and the flag keeps paintMixerLevels (which
+        // push() calls inside this very input dispatch, before focus has
+        // even landed) from syncing the jumped value over it.
+        fader.dataset.committed = fader.value;
+        fader.dataset.gesture = "1";
+      });
+      fader.addEventListener("change", () => {
+        // Keyboard commits only: a range fires `change` on pointer release
+        // too — BEFORE click — and committing there handed the tap the very
+        // jumped value it exists to undo.
+        if (fader.dataset.gesture !== "1") fader.dataset.committed = fader.value;
+      });
       fader.addEventListener("click", (event) => {
-        // Swallowing the click kept the strip's own handler from ever firing,
-        // so a click on the fader — no drag — opened nothing. Select here.
         event.stopPropagation();
+        if (Math.hypot(event.clientX - downX, event.clientY - downY) < 5) {
+          const committed = Number(fader.dataset.committed ?? "1");
+          channelVolume[g.title] = committed;
+          fader.value = String(committed);
+          out.textContent = `${Math.round(committed * 100)}%`;
+          rememberVolumes();
+          push();
+        } else {
+          fader.dataset.committed = fader.value;
+        }
+        delete fader.dataset.gesture;
         if (channel !== g.title) selectChannel(g.title);
       });
+      fader.addEventListener("pointercancel", () => { delete fader.dataset.gesture; });
       mixerDom[g.title] = { input: fader, out };
       strip.appendChild(fader);
       strip.appendChild(out);
@@ -2628,6 +2667,14 @@ function paintMixerLevels(): void {
   for (const [title, dom] of Object.entries(mixerDom)) {
     const vol = volumeOf(title);
     dom.input.value = String(vol);
+    // The tap-restores-this value must follow EXTERNAL writes (a state
+    // switch), or a later click would put back a stale volume — but never
+    // mid-gesture: push() runs inside the fader's own input event, and
+    // syncing here then overwrote the pre-jump value the tap needs to
+    // restore.
+    if (dom.input.dataset.gesture !== "1") {
+      dom.input.dataset.committed = String(vol);
+    }
     dom.out.textContent = `${Math.round(vol * 100)}%`;
   }
 }
