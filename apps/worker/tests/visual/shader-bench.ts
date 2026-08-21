@@ -349,15 +349,35 @@ const sliderDom: Record<string, { input: HTMLInputElement; out: HTMLElement }> =
  */
 const storageKey = (name: string): string => `boltrig.shaderBench.${name}`;
 
+/** The newest saved version for a store key, or null. History loads async, so
+ *  before the fetch lands this answers null and the caller falls through. */
+function storeNewest(key: string): SavedVersion | null {
+  const versions = history[key]?.versions ?? [];
+  return versions.length > 0 ? versions[versions.length - 1] : null;
+}
+
+/**
+ * Where a look comes from, in order: a link's URL, this browser's edits, the
+ * store's newest saved version, the body's saved baseline, and only then the
+ * shipped table. The store steps make "Save preset" the publishing act: what
+ * was last locked in is what a fresh browser opens on, without a force-URL.
+ */
 function saved(name: string, shipped: Tuning): Tuning {
   const fromUrl = new URLSearchParams(location.search).get(name);
   const raw = fromUrl ?? localStorage.getItem(storageKey(name));
-  if (!raw) return clone(shipped);
-  try {
-    return { ...clone(shipped), ...JSON.parse(raw) } as Tuning;
-  } catch {
-    return clone(shipped);
+  if (raw) {
+    try {
+      return { ...clone(shipped), ...JSON.parse(raw) } as Tuning;
+    } catch {
+      return clone(shipped);
+    }
   }
+  const version = storeNewest(name);
+  if (version?.tuning) return { ...clone(shipped), ...version.tuning } as Tuning;
+  const which = name.slice(0, name.indexOf("."));
+  const base = storeNewest(`${which}.baseline`);
+  if (base?.tuning) return { ...clone(shipped), ...base.tuning } as Tuning;
+  return clone(shipped);
 }
 
 function rememberLfos(): void {
@@ -371,12 +391,19 @@ function rememberLfos(): void {
 function savedLfos(name: string): LfoMap {
   const fromUrl = new URLSearchParams(location.search).get(`${name}.lfo`);
   const raw = fromUrl ?? localStorage.getItem(storageKey(`${name}.lfo`));
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw) as LfoMap;
-  } catch {
-    return {};
+  if (raw) {
+    try {
+      return JSON.parse(raw) as LfoMap;
+    } catch {
+      return {};
+    }
   }
+  // The oscillators travel with the look: same chain as saved().
+  const version = storeNewest(name);
+  if (version) return { ...(version.lfos ?? {}) };
+  const which = name.slice(0, name.indexOf("."));
+  const base = storeNewest(`${which}.baseline`);
+  return { ...(base?.lfos ?? {}) };
 }
 
 function remember(name: string, value: Tuning): void {
@@ -1834,6 +1861,21 @@ async function refreshHistory(): Promise<void> {
   }
   paintHistory();
   loadBaseline();
+  // THE STORE JUST ARRIVED. The first mount ran before the fetch, so a look
+  // with no URL and no local edit was loaded from the shipped table; re-derive
+  // it now that saved() can see the store, and the bench opens on the latest
+  // locked-in look everywhere.
+  const key = slotKey(body, slot);
+  const overridden = new URLSearchParams(location.search).has(key)
+    || localStorage.getItem(storageKey(key)) !== null;
+  if (!overridden) {
+    shipped = shippedFor(body, slot);
+    tuning = saved(key, shipped);
+    lfos = savedLfos(key);
+    buildControls();
+    renderer?.transitionTo(clone(effectiveTuning()) as never);
+    paintMixerLevels();
+  }
   paintDrift();
   paintTransChoose();
   paintStates();
