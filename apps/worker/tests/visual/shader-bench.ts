@@ -220,6 +220,10 @@ const RANGE_AT: Record<string, [number, number, number]> = {
   // gain that makes them lead was not reachable from the panel at all.
   "dendriteGain:0": [0, 3, 0.05],
   "dendriteGain:1": [0, 2, 0.05],
+  // The pupil and iris terms measured 2.2 and 1.8 in canon — both past the
+  // old fallback cap.
+  "eye:0": [0, 4, 0.02],
+  "eye:1": [0, 4, 0.02],
   "eye:2": [0, 1.2, 0.01],
   // An EXPONENT, not a gain: 60 is tight and 8 is broad, so it needs a range of
   // its own or the slider tops out an order of magnitude below anything useful.
@@ -232,6 +236,27 @@ const RANGE_AT: Record<string, [number, number, number]> = {
 
 /** Slider ranges. A number with no entry gets 0..1, which is right for a gain. */
 const RANGE: Record<string, [number, number, number]> = {
+  // THE GAIN SWEEP. Every gain used to ride the [0,1] fallback, and the canon
+  // wears the proof: peaks pinned at exactly 1.0 on ringGain, drawGain, core,
+  // glyphGain and starburst (a value stuck at a wall is a capped dial), with
+  // irisGain 1.1, outerGain 1.2, lattice 1.44 and the shards 1.18 already
+  // PAST it. One uniform scale — 0..3, 0.02 — so brighter is always on the
+  // slider and equal travel means equal meaning across strips.
+  ringGain: [0, 3, 0.02],
+  glyphGain: [0, 3, 0.02],
+  glyphBGain: [0, 3, 0.02],
+  irisGain: [0, 3, 0.02],
+  linkGain: [0, 3, 0.02],
+  veinGain: [0, 3, 0.02],
+  crackGain: [0, 3, 0.02],
+  facetGain: [0, 3, 0.02],
+  drawGain: [0, 3, 0.02],
+  outerGain: [0, 3, 0.02],
+  core: [0, 3, 0.02],
+  voiceLevel: [0, 2, 0.01],
+  voiceLow: [0, 2, 0.01],
+  voiceMid: [0, 2, 0.01],
+  voiceHigh: [0, 2, 0.01],
   linkRange: [0.02, 0.60, 0.005],
   crackRange: [0.02, 0.60, 0.005],
   // The floor and step were the whole problem: canon shards live at
@@ -241,7 +266,7 @@ const RANGE: Record<string, [number, number, number]> = {
   facetSize: [0.002, 0.06, 0.001],
   shardStride: [1, 64, 1],
   clump: [0, 1, 0.005],
-  lattice: [0, 2, 0.01],
+  lattice: [0, 3, 0.01],
   bounceTrail: [0, 0.95, 0.01],
   latticeBlur: [0, 1, 0.01],
   latticeSat: [0, 2, 0.01],
@@ -291,7 +316,7 @@ const RANGE: Record<string, [number, number, number]> = {
   bead: [1, 24, 0.5],
   signal: [0, 3, 0.02],
   arc: [0, 3.2, 0.02],
-  starburst: [0, 1, 0.01],
+  starburst: [0, 2, 0.01],
   streak: [0, 0.4, 0.002],
   veinStreak: [0, 0.4, 0.002],
   // The limb pair wants headroom: the fix for "it reads as fur" was taking the
@@ -893,13 +918,13 @@ function mount(): void {
   // Free until the lattice dial gives it gain; silently absent if the file is
   // not there.
   if (body === "jarvis") {
-    (renderer as JarvisNeuralRenderer).setLatticeVideo({
-      standby: "/tests/visual/assets/jarvis-lattice.mp4",
-      listening: "/tests/visual/assets/jarvis-lattice-listening.mp4",
-      thinking: "/tests/visual/assets/jarvis-lattice-thinking.mp4",
-      working: "/tests/visual/assets/jarvis-lattice-working.mp4",
-      speaking: "/tests/visual/assets/jarvis-lattice-speaking.mp4",
-    });
+    // ONE LOOP FOR EVERY STATE, deliberately: per-state footage crossfaded on
+    // a state change, and a fade between two spins of the same lattice reads
+    // as a glitch. The state's character rides latticeSpeed instead — the
+    // transition lerps it, so working→standby is the SAME video easing back
+    // down to its resting spin, never a dissolve.
+    (renderer as JarvisNeuralRenderer).setLatticeVideo(
+      "/tests/visual/assets/jarvis-lattice.mp4");
   } else if (body === "ultron") {
     (renderer as UltronRenderer).setLatticeVideo({
       standby: "/tests/visual/assets/ultron-membrane.mp4",
@@ -1126,11 +1151,13 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "4 · Inner particle layer — the core cloud", fields: [
     "drawGain", "streak", "swirl", "drawLimb",
   ] },
-  { title: "4 · Outer particle layer — the distant shell", fields: [
+  // ONE CHANNEL for everything on the outskirts: the distant shell, the
+  // circuit shards riding it, and the debris clumping — they are one visual
+  // system and were three strips to hunt across.
+  { title: "4 · Shell — shards and debris", fields: [
     "outerShell", "outerGain", "outerStreak", "outerLimb", "outerPace",
+    "shardGain", "shardSize", "shardStride", "clump", "focus",
   ] },
-  { title: "5 · Circuit shards", fields: ["shardGain", "shardSize", "shardStride"] },
-  { title: "5 · Debris — clumping and depth", fields: ["clump", "focus"] },
   { title: "0 · Lattice loop — the baked layer", fields: [
     "lattice", "latticeBlur", "latticeSat", "latticeGlow", "latticeSpeed",
   ] },
@@ -2120,14 +2147,12 @@ const mixerDom: Record<string, { input: HTMLInputElement; out: HTMLElement }> = 
  */
 const SPATIAL_RANK: Record<string, number> = {
   "0 · Lattice loop — the baked layer": 0,
-  "4 · Outer particle layer — the distant shell": 1,
+  "4 · Shell — shards and debris": 1,
   "1 · Wheels — the orbiting beams": 2,
   "2 · Sigils — the outer inscriptions": 3,
   "2 · Glyphs — the inner inscriptions": 4,
   "5 · Crystal facets": 4,
   "4 · Veins and cracks": 5,
-  "5 · Circuit shards": 6,
-  "5 · Debris — clumping and depth": 7,
   "3 · Pathways — the neural links": 8,
   "3 · Dendrites — the neurons and their signals": 8,
   "4 · Inner particle layer — the core cloud": 9,
@@ -2143,14 +2168,12 @@ const SPATIAL_RANK: Record<string, number> = {
  */
 const STRIP_NAME: Record<string, string> = {
   "0 · Lattice loop — the baked layer": "Film",
-  "4 · Outer particle layer — the distant shell": "Shell",
+  "4 · Shell — shards and debris": "Shell",
   "1 · Wheels — the orbiting beams": "Wheels",
   "2 · Glyphs — the inner inscriptions": "Glyphs",
   "2 · Sigils — the outer inscriptions": "Sigils",
   "5 · Crystal facets": "Facets",
   "4 · Veins and cracks": "Veins",
-  "5 · Circuit shards": "Shards",
-  "5 · Debris — clumping and depth": "Debris",
   "3 · Pathways — the neural links": "Pathways",
   "3 · Dendrites — the neurons and their signals": "Neurons",
   "4 · Inner particle layer — the core cloud": "Cloud",
@@ -2435,7 +2458,12 @@ function buildMixer(): void {
         if (channel !== g.title) selectChannel(g.title);
         push();
       });
-      fader.addEventListener("click", (event) => event.stopPropagation());
+      fader.addEventListener("click", (event) => {
+        // Swallowing the click kept the strip's own handler from ever firing,
+        // so a click on the fader — no drag — opened nothing. Select here.
+        event.stopPropagation();
+        if (channel !== g.title) selectChannel(g.title);
+      });
       mixerDom[g.title] = { input: fader, out };
       strip.appendChild(fader);
       strip.appendChild(out);
