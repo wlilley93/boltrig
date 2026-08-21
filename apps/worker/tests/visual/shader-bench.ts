@@ -52,6 +52,7 @@ import { FAMILIAR_MODES } from "../../src/components/familiar/FamiliarState";
 import { JarvisNeuralRenderer } from "../../src/components/jarvis/v2/JarvisNeuralRenderer";
 import { UltronRenderer } from "../../src/components/ultron/UltronRenderer";
 import { ColossusRenderer } from "../../src/components/colossus/ColossusRenderer";
+import { JarvisWebGLRenderer } from "../../src/components/jarvis/JarvisRenderer";
 
 type Tuning = FamiliarTuning | JarvisTuning | UltronTuning;
 type Mode = "standby" | "listening" | "thinking" | "working" | "speaking" | "error";
@@ -73,7 +74,7 @@ type Mode = "standby" | "listening" | "thinking" | "working" | "speaking" | "err
  * forced an entry into the other two preset tables, and an empty entry there is
  * a state the enum claims and the body does not honour.
  */
-type Body = "familiar" | "jarvis" | "ultron" | "colossus";
+type Body = "familiar" | "jarvis" | "ultron" | "colossus" | "jarvis1";
 const FAMILIAR_ONLY_MODES = new Set<string>(["error"]);
 
 /**
@@ -496,7 +497,7 @@ let slot: Slot = "standby";
 
 /** The slots a body actually has. Only the Familiar answers for a failure. */
 function slotsFor(which: Body): readonly Slot[] {
-  if (which === "colossus") return [...BODY_MODES];
+  if (which === "colossus" || which === "jarvis1") return [...BODY_MODES];
   return which === "familiar"
     ? ["arrival", ...FAMILIAR_MODES]
     : ["arrival", ...BODY_MODES];
@@ -516,7 +517,7 @@ function shippedFor(which: Body, at: Slot): Tuning {
   // A stability report does not come in an irritated variant: he has one
   // register and therefore no numbers. Empty is the honest struct, and the
   // dial builder generates nothing from it -- which is the correct panel.
-  if (which === "colossus") return {} as Tuning;
+  if (which === "colossus" || which === "jarvis1") return {} as Tuning;
   if (at === "arrival") {
     if (which === "familiar") return FAMILIAR_ARRIVAL;
     return which === "jarvis" ? JARVIS_ARRIVAL : ULTRON_ARRIVAL;
@@ -542,7 +543,7 @@ function renderMode(at: Slot): Mode {
 /** Storage and save key. Per body AND slot: six presets, six sets of numbers. */
 const slotKey = (which: string, at: Slot): string => `${which}.${at}`;
 
-let renderer: FamiliarWebGLRenderer | JarvisNeuralRenderer | UltronRenderer | ColossusRenderer | null = null;
+let renderer: FamiliarWebGLRenderer | JarvisNeuralRenderer | UltronRenderer | ColossusRenderer | JarvisWebGLRenderer | null = null;
 /** Whether the arrival has already been shown this page load. */
 let introPlayed = false;
 let tuning: Tuning = clone(JARVIS_TUNING);
@@ -563,11 +564,16 @@ function clone<T extends Tuning>(value: T): T {
  * for watching motion it is indistinguishable from a hung renderer. Whoever is
  * tuning her has asked to see her move by opening this page.
  */
-function newRenderer(): FamiliarWebGLRenderer | JarvisNeuralRenderer | UltronRenderer | ColossusRenderer {
+function newRenderer(): FamiliarWebGLRenderer | JarvisNeuralRenderer | UltronRenderer | ColossusRenderer | JarvisWebGLRenderer {
   if (body === "familiar") return new FamiliarWebGLRenderer({ reducedMotion: false });
   // The panel of lamps. One register, no tuning struct, no arrival -- but the
   // same mount/update/frame contract, and drive()'s payload IS his state type.
   if (body === "colossus") return new ColossusRenderer();
+  // The original dial. Its rAF callback is a public-enough property named
+  // `frame` that self-reschedules through the stubbed rAF, so the bench
+  // drives it tick-by-tick exactly like the others; its state type is
+  // drive()'s payload verbatim.
+  if (body === "jarvis1") return new JarvisWebGLRenderer({ maxDevicePixelRatio: 1 });
   return body === "jarvis"
     ? new JarvisNeuralRenderer({ maxDevicePixelRatio: 1 })
     : new UltronRenderer({ maxDevicePixelRatio: 1 });
@@ -1472,6 +1478,8 @@ async function stopVoice(): Promise<void> {
 
 /** The clips for a body, by convention rather than by a list to keep in step. */
 function clipsFor(which: string): string[] {
+  // The two Jarvises are one voice.
+  if (which === "jarvis1") which = "jarvis";
   // The Familiar carries three extra purpose-built test clips: a sustained
   // line for reverb tails, staccato consonants for transients, and a
   // whisper-to-wave sweep for dynamic range.
