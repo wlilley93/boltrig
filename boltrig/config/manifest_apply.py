@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import logging
 from typing import Any
 
 from boltrig.models import Budget, ConfigRevision, NamedAgent, TenantPermissions
@@ -13,6 +14,8 @@ from .manifest_reconcile import (
     plan_capability_reconciliation,
     reconcile_capabilities,
 )
+
+log = logging.getLogger("boltrig.config.manifest_apply")
 
 
 async def _seed_call(store: Any, method: str, *args: Any) -> None:
@@ -119,10 +122,24 @@ async def _register_manifest_adapters(
         module_path = _BUILTIN_MODULES.get(adapter.id) or adapter.module_ref
         if not module_path:
             continue
-        mod_name, _, factory = module_path.partition(":")
-        module = importlib.import_module(mod_name)
-        build = getattr(module, factory or "build")
-        await kernel.register_adapter(tenant, build())
+        # One stale module_ref must not take down the whole boot: before this
+        # guard, a manifest entry naming a retired module (e.g. herdr, retired
+        # by decision 0020) raised out of apply_manifest and left the kernel
+        # unbootable. Mirror AdapterLoader.load_module: warn, mark down, and
+        # keep booting - the same catch-and-mark contract, one level up.
+        try:
+            mod_name, _, factory = module_path.partition(":")
+            module = importlib.import_module(mod_name)
+            build = getattr(module, factory or "build")
+            await kernel.register_adapter(tenant, build())
+        except Exception as exc:  # a bad manifest adapter must not kill boot
+            log.warning(
+                "manifest adapter '%s' failed to load from %s: %s; skipping it "
+                "and continuing boot",
+                adapter.id,
+                module_path,
+                exc,
+            )
 
 
 async def _permanent_state(store: Any, manifest: Any) -> tuple[Any, Any]:

@@ -253,11 +253,19 @@ async def _rehydrate_store_adapters(kernel: Kernel, tenant_id: str) -> None:
                 record.id,
             )
         elif record.module_ref != "boltrig.adapters.mcp_consumer":
+            # Not broken - undeclared: builtin rows have no spec_ref by design
+            # (the open builtin-rehydration fork, docs/findings/2026-07-25);
+            # the boot path that reconstructs builtins is the manifest
+            # `adapters:` list. The old "no honest boot reconstruction"
+            # wording misread as a defect (beelink, 2026-08-21).
             log.warning(
-                "adapter '%s' (module_ref %s) has no honest boot reconstruction; "
-                "leaving it a store-only row",
+                "adapter '%s' (module_ref %s) is not declared in the manifest "
+                "and a %s store row is not boot-reconstructible; add it to the "
+                "manifest adapters: list (or its opt-in flag) if it should be "
+                "live, else it stays a store-only row",
                 record.id,
                 record.module_ref,
+                record.source,
             )
         else:
             log.warning(
@@ -287,9 +295,13 @@ async def _seed_from_manifest(kernel: Kernel, manifest, *, model_catalogue: Any 
         # governed hands on the desktop host (DH-1), only when the add-on is turned on
         await _register_desktop_hands(kernel, manifest.tenant_id)
     await _register_consumed_mcp(kernel, manifest.tenant_id, manifest.section("mcp"))
-    await _rehydrate_store_adapters(kernel, manifest.tenant_id)
     net = manifest.network
+    # web-fetch BEFORE the rehydrate: rehydrate skips already-registered ids,
+    # so the old order warned about the 'web' row every boot and then
+    # registered it live two lines later - a pure ordering artifact that read
+    # as a dead adapter (misdiagnosed on the beelink, 2026-08-21).
     await _register_web_fetch(kernel, manifest.tenant_id, net.as_egress_config())
+    await _rehydrate_store_adapters(kernel, manifest.tenant_id)
     skills_dir = _find(_SKILLS_DIR_CANDIDATES)
     if skills_dir:
         from boltrig.skills import load_skills_dir
