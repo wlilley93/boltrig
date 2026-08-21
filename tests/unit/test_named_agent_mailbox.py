@@ -371,3 +371,38 @@ async def test_kernel_sender_is_unspoofable_and_ephemerals_have_no_mailbox_right
 
     with pytest.raises(FrozenInstanceError):
         stored.content = "mutated"  # type: ignore[misc]
+
+
+async def test_missing_to_is_invalid_not_adapter_not_found() -> None:
+    """agent.send with no recipient is a bad CALL, not a missing adapter.
+
+    An agent invoking the tool with empty input used to fall through to the
+    recipient lookup with address "" -> NOT_FOUND -> the kernel-wide
+    'adapter_not_found' status, which read as "the adapter does not exist"
+    in the chat projection (measured on the beelink, 2026-08-21). A missing
+    parameter is INVALID; NOT_FOUND stays reserved for a real address that
+    has no enabled peer, and now names the address it looked for.
+    """
+    store = await _store()
+    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["agent.send"])))
+    kernel = Kernel(store)
+    await kernel.register_adapter(T, build_agent_messages(store, events=kernel.events))
+
+    # The kernel's schema seam rejects {} outright (to/content/kind are
+    # required), so the blank-address INVALID below is defence in depth for
+    # any door that reaches the adapter without that seam.
+    with pytest.raises(SchemaValidationError):
+        await kernel.invoke("agent", "agent.send", {}, _context("alice"))
+
+    adapter = build_agent_messages(store, events=kernel.events)
+    direct = await adapter.execute("agent.send", {"to": ""}, None, _context("alice"))
+    assert not direct.ok
+    assert "requires 'to'" in str(direct.error)
+
+    with pytest.raises(AdapterFailure, match="no enabled named agent at 'nobody'"):
+        await kernel.invoke(
+            "agent",
+            "agent.send",
+            {"to": "nobody", "content": "hi", "kind": "tell"},
+            _context("alice"),
+        )
