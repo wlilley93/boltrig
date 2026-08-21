@@ -51,6 +51,7 @@ import { FamiliarWebGLRenderer } from "../../src/components/familiar/FamiliarWeb
 import { FAMILIAR_MODES } from "../../src/components/familiar/FamiliarState";
 import { JarvisNeuralRenderer } from "../../src/components/jarvis/v2/JarvisNeuralRenderer";
 import { UltronRenderer } from "../../src/components/ultron/UltronRenderer";
+import { ColossusRenderer } from "../../src/components/colossus/ColossusRenderer";
 
 type Tuning = FamiliarTuning | JarvisTuning | UltronTuning;
 type Mode = "standby" | "listening" | "thinking" | "working" | "speaking" | "error";
@@ -72,7 +73,7 @@ type Mode = "standby" | "listening" | "thinking" | "working" | "speaking" | "err
  * forced an entry into the other two preset tables, and an empty entry there is
  * a state the enum claims and the body does not honour.
  */
-type Body = "familiar" | "jarvis" | "ultron";
+type Body = "familiar" | "jarvis" | "ultron" | "colossus";
 const FAMILIAR_ONLY_MODES = new Set<string>(["error"]);
 
 /**
@@ -495,6 +496,7 @@ let slot: Slot = "standby";
 
 /** The slots a body actually has. Only the Familiar answers for a failure. */
 function slotsFor(which: Body): readonly Slot[] {
+  if (which === "colossus") return [...BODY_MODES];
   return which === "familiar"
     ? ["arrival", ...FAMILIAR_MODES]
     : ["arrival", ...BODY_MODES];
@@ -511,6 +513,10 @@ function transportSlots(): readonly Slot[] {
 
 /** The shipped numbers for a body and slot, before any local edit. */
 function shippedFor(which: Body, at: Slot): Tuning {
+  // A stability report does not come in an irritated variant: he has one
+  // register and therefore no numbers. Empty is the honest struct, and the
+  // dial builder generates nothing from it -- which is the correct panel.
+  if (which === "colossus") return {} as Tuning;
   if (at === "arrival") {
     if (which === "familiar") return FAMILIAR_ARRIVAL;
     return which === "jarvis" ? JARVIS_ARRIVAL : ULTRON_ARRIVAL;
@@ -536,7 +542,7 @@ function renderMode(at: Slot): Mode {
 /** Storage and save key. Per body AND slot: six presets, six sets of numbers. */
 const slotKey = (which: string, at: Slot): string => `${which}.${at}`;
 
-let renderer: FamiliarWebGLRenderer | JarvisNeuralRenderer | UltronRenderer | null = null;
+let renderer: FamiliarWebGLRenderer | JarvisNeuralRenderer | UltronRenderer | ColossusRenderer | null = null;
 /** Whether the arrival has already been shown this page load. */
 let introPlayed = false;
 let tuning: Tuning = clone(JARVIS_TUNING);
@@ -557,8 +563,11 @@ function clone<T extends Tuning>(value: T): T {
  * for watching motion it is indistinguishable from a hung renderer. Whoever is
  * tuning her has asked to see her move by opening this page.
  */
-function newRenderer(): FamiliarWebGLRenderer | JarvisNeuralRenderer | UltronRenderer {
+function newRenderer(): FamiliarWebGLRenderer | JarvisNeuralRenderer | UltronRenderer | ColossusRenderer {
   if (body === "familiar") return new FamiliarWebGLRenderer({ reducedMotion: false });
+  // The panel of lamps. One register, no tuning struct, no arrival -- but the
+  // same mount/update/frame contract, and drive()'s payload IS his state type.
+  if (body === "colossus") return new ColossusRenderer();
   return body === "jarvis"
     ? new JarvisNeuralRenderer({ maxDevicePixelRatio: 1 })
     : new UltronRenderer({ maxDevicePixelRatio: 1 });
@@ -724,7 +733,7 @@ function mount(): void {
   // ONCE PER PAGE. mount() also runs on a change of body, and replaying the
   // arrival there was the same complaint one level down.
   if (!introPlayed) {
-    renderer.intro();
+    (renderer as { intro?(): void }).intro?.();
     introPlayed = true;
   }
   loop();
@@ -1311,7 +1320,7 @@ function tickLfos(nowMs: number): void {
   // Pushed but NOT remembered: a swept value is a question, not a decision, and
   // writing it to the store every frame would overwrite the look you set.
   if (changed && renderer) {
-    (renderer as { setTuning(next: never): void }).setTuning(clone(effectiveTuning()) as never);
+    (renderer as { setTuning?(next: never): void }).setTuning?.(clone(effectiveTuning()) as never);
   }
 }
 
@@ -1473,7 +1482,7 @@ function push(): void {
   // remember() above stores the REAL numbers: mute and solo can never leak
   // into a saved look, which is exactly how a zeroed speaking preset once
   // happened.
-  (renderer as { setTuning(next: never): void }).setTuning(clone(effectiveTuning()) as never);
+  (renderer as { setTuning?(next: never): void }).setTuning?.(clone(effectiveTuning()) as never);
   paintMixerLevels();
   paintDrift();
 }
@@ -1498,6 +1507,9 @@ function drive(): void {
     // louder syllable, easing back through the gaps between words.
     const reachTarget = voice.el.paused ? 0 : Math.min(1, peak * 1.3);
     speechEnv += (reachTarget - speechEnv) * (reachTarget > speechEnv ? 0.45 : 0.1);
+    // The whole-body reach scope belongs to this line until its envelope
+    // lands — stopping mid-word must ease every dial home, not yank them.
+    if (!voice.el.paused) voiceHold = true;
     renderer.update({
       mode,
       level: Math.min(1, peak * 1.15),
@@ -1516,7 +1528,9 @@ function drive(): void {
     const phrase = 0.55 + 0.45 * Math.sin(t * 0.9);
     speechEnv = Math.min(1, Math.max(0, syllable * phrase));
   } else {
-    speechEnv *= 0.88;
+    // RELEASE, not a cut: with every source stopped the envelope settles over
+    // roughly a third of a second, and the modifiers ride it home.
+    speechEnv *= 0.95;
   }
   const level = Number(($("level") as HTMLInputElement).value);
   renderer.update({
@@ -1564,7 +1578,7 @@ function loop(): void {
     // A recorded journey drives its tracked fields on real time, not eased
     // time — the choreography IS the easing for those dials.
     const framed = transit.tracks ? applyTracks(mixed, transit.tracks, at) : mixed;
-    (renderer as { setTuning(next: never): void }).setTuning(framed as never);
+    (renderer as { setTuning?(next: never): void }).setTuning?.(framed as never);
     if (at >= 1) transit = null;
   } else {
     tickLfos(performance.now());
@@ -1575,7 +1589,7 @@ function loop(): void {
     if (renderer && (Object.keys(speech).length > 0 || talkTest.size > 0)
       && Math.abs(speechEnv - speechShown) > 0.003) {
       speechShown = speechEnv;
-      (renderer as { setTuning(next: never): void }).setTuning(clone(effectiveTuning()) as never);
+      (renderer as { setTuning?(next: never): void }).setTuning?.(clone(effectiveTuning()) as never);
     }
   }
   drive();
@@ -1598,6 +1612,7 @@ function cancelLoop(): void {
  * blowout ever appeared in.
  */
 function measure(): void {
+  if (!renderer) return;
   const canvas = $("stage").querySelector("canvas") as HTMLCanvasElement | null;
   const gl = canvas?.getContext("webgl2") as WebGL2RenderingContext | null;
   if (!canvas || !gl) return;
@@ -1706,6 +1721,14 @@ let channel = "";
  *  syllable envelope drives their speech reach, a stand-in for a line being
  *  spoken over standby. Solo survives; mute went — the fader at zero is mute. */
 const talkTest = new Set<string>();
+/** Channels whose talk test just STOPPED: they stay in the modifier scope
+ *  while the envelope settles, so stopping releases gently instead of
+ *  freezing the swell or snapping to base. Cleared when the envelope lands. */
+const talkRelease = new Set<string>();
+/** True from a clip's first frame until its envelope lands: the reach scope
+ *  belongs to the whole body for that long, so stopping a line lets every
+ *  dial ease home rather than yanking the non-talk channels back at once. */
+let voiceHold = false;
 /** A SET: soloing Wheels and Film together auditions the pair. */
 const soloed = new Set<string>();
 const mixerDom: Record<string, { input: HTMLInputElement; out: HTMLElement }> = {};
@@ -1846,10 +1869,13 @@ function effectiveTuning(of: Tuning = tuning): Tuning {
   // Speech reach FIRST, volumes after: the fader is the channel's master, so
   // it scales the spoken value the same way it scales the tuned one.
   if (talking) {
-    // A real line moves every reach; the talk test moves only its channels.
-    const live = voice !== null && !voice.el.paused;
-    const scoped = live ? null : new Set(
-      channelsFor().filter((g) => talkTest.has(g.title)).flatMap((g) => g.fields),
+    // A real line moves every reach — and keeps the whole scope until its
+    // envelope lands; the talk test (and its release tail) moves only its
+    // channels.
+    const scoped = voiceHold ? null : new Set(
+      channelsFor()
+        .filter((g) => talkTest.has(g.title) || talkRelease.has(g.title))
+        .flatMap((g) => g.fields),
     );
     for (const [id, end] of Object.entries(speech)) {
       const [field, indexText] = id.split(":");
@@ -1869,9 +1895,9 @@ function effectiveTuning(of: Tuning = tuning): Tuning {
     // light breathes on the envelope. Without this, osc on a channel you had
     // not yet configured did literally nothing — a button that works only
     // after invisible setup reads as broken.
-    if (!live) {
+    if (!voiceHold) {
       for (const g of channelsFor()) {
-        if (!talkTest.has(g.title)) continue;
+        if (!talkTest.has(g.title) && !talkRelease.has(g.title)) continue;
         for (const field of muteFields(g.fields)) {
           if (Object.keys(speech).some((id) => id.startsWith(`${field}:`))) continue;
           const value = record[field];
@@ -2000,8 +2026,13 @@ function buildMixer(): void {
       osc.title = "Talk test — play this channel's speech reach as if a line were being spoken";
       osc.addEventListener("click", (event) => {
         event.stopPropagation();
-        if (talkTest.has(g.title)) talkTest.delete(g.title);
-        else talkTest.add(g.title);
+        if (talkTest.has(g.title)) {
+          talkTest.delete(g.title);
+          talkRelease.add(g.title);
+        } else {
+          talkTest.add(g.title);
+          talkRelease.delete(g.title);
+        }
         paintMixer();
       });
       const halt = document.createElement("button");
@@ -2010,7 +2041,10 @@ function buildMixer(): void {
       halt.title = "Stop this channel's talk test";
       halt.addEventListener("click", (event) => {
         event.stopPropagation();
-        talkTest.delete(g.title);
+        if (talkTest.has(g.title)) {
+          talkTest.delete(g.title);
+          talkRelease.add(g.title);
+        }
         paintMixer();
       });
       ms.appendChild(solo);
@@ -2362,8 +2396,64 @@ function trim(value: number): string {
   return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(4)));
 }
 
+/**
+ * THE FRAME-VIDEO CHARACTERS. Montgomery and Maya are not shaders: each is a
+ * whole player (clip graph, live lips, its own controls) already served on
+ * this box. The bench stages them whole, in an iframe over the tailnet
+ * serve, and steps aside: the dials belong to the sphere bodies, so they are
+ * hidden rather than left mislabelling a body they cannot drive.
+ */
+const VIDEO_BODIES: Record<string, { url: string; title: string }> = {
+  montgomery: { url: "https://beelink.tailb4b671.ts.net:8902/", title: "General Montgomery" },
+  maya: { url: "https://beelink.tailb4b671.ts.net:8901/", title: "Maya" },
+};
+let videoChar: string | null = null;
+let asideHidden: HTMLElement[] = [];
+function mountVideo(name: string): void {
+  const info = VIDEO_BODIES[name];
+  cancelLoop();
+  renderer?.destroy();
+  renderer = null;
+  videoChar = name;
+  const host = $("stage");
+  host.classList.remove("square");
+  host.innerHTML = "";
+  const frame = document.createElement("iframe");
+  frame.src = info.url;
+  frame.allow = "autoplay; fullscreen";
+  frame.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0;background:#000";
+  host.appendChild(frame);
+  $("readout").textContent = "";
+  const aside = document.querySelector("aside");
+  if (aside){
+    for (const el of Array.from(aside.children) as HTMLElement[]){
+      if (el.querySelector("#body") || el.id === "videoNote") continue;
+      if (!el.hidden){ el.hidden = true; asideHidden.push(el); }
+    }
+    let note = document.getElementById("videoNote");
+    if (!note){
+      note = document.createElement("p");
+      note.id = "videoNote";
+      note.style.cssText = "color:#74747e;font-size:12px;line-height:1.5";
+      aside.appendChild(note);
+    }
+    note.textContent = info.title + " is a frame-video character: positions, bearing and "
+      + "speech live on the stage itself (tap it to wake his controls). The dials here "
+      + "belong to the shader bodies and are stood down.";
+  }
+}
+function unmountVideo(): void {
+  if (!videoChar) return;
+  videoChar = null;
+  for (const el of asideHidden) el.hidden = false;
+  asideHidden = [];
+  document.getElementById("videoNote")?.remove();
+}
 $("body").addEventListener("change", (event) => {
-  body = (event.target as HTMLSelectElement).value as Body;
+  const value = (event.target as HTMLSelectElement).value;
+  if (VIDEO_BODIES[value]) { mountVideo(value); return; }
+  unmountVideo();
+  body = value as Body;
   mount();
 });
 /**
@@ -2900,7 +2990,7 @@ function abBaseline(on: boolean): void {
   if (!baseline || !renderer || on === abActive) return;
   abActive = on;
   if (on) {
-    (renderer as { setTuning(next: never): void }).setTuning(clone(baseline.tuning) as never);
+    (renderer as { setTuning?(next: never): void }).setTuning?.(clone(baseline.tuning) as never);
     $("saved").textContent = "A/B — showing baseline";
     $("saved").className = "ok";
   } else {
