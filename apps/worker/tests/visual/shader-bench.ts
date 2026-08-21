@@ -2522,20 +2522,63 @@ function trim(value: number): string {
  */
 const VIDEO_BODIES: Record<string, { url: string; title: string; wire: boolean }> = {
   montgomery: { url: "https://beelink.tailb4b671.ts.net:8902/", title: "General Montgomery", wire: true },
-  maya: { url: "https://beelink.tailb4b671.ts.net:8901/", title: "Maya", wire: false },
+  maya: { url: "https://beelink.tailb4b671.ts.net:8903/", title: "Maya — framegraph", wire: true },
+  "maya-library": { url: "https://beelink.tailb4b671.ts.net:8901/", title: "Maya — clip library", wire: false },
 };
-const VIDEO_POSITIONS: Record<string, ReadonlyArray<readonly [string, string]>> = {
-  montgomery: [["H1", "Desk"], ["H2", "Table — far"], ["H3", "Fireplace"], ["H4", "Window"]],
+/** Friendly labels where the wire's ids are terse; unknown ids show as-is. */
+const VIDEO_LABELS: Record<string, string> = {
+  H1: "Desk", H2: "Table — far", H3: "Fireplace", H4: "Window",
 };
-const VIDEO_BEARINGS = ["composed", "patient", "reflective", "vigilant", "displeased", "wry"];
 let videoChar: string | null = null;
 let videoFrame: HTMLIFrameElement | null = null;
 let videoWant: string | null = null;
 function clipPost(msg: object): void {
   try { videoFrame?.contentWindow?.postMessage(msg, "*"); } catch { /* fine */ }
 }
-function paintVideoPanel(state: { node?: string; targetHub?: string | null;
-                                  mood?: string; wantEmotion?: string | null } = {}): void {
+type ClipState = { node?: string; targetHub?: string | null; mood?: string;
+                   wantEmotion?: string | null; positions?: string[];
+                   emotions?: { tags?: string[] } };
+let videoChips = "";
+/** The chips come FROM the character: whatever positions and emotion tags its
+ *  clip:state names, that is what the transport and the emotion row offer --
+ *  Montgomery's four rooms and six bearings, the framegraph Maya's pools,
+ *  never a list hardcoded here. Rebuilt only when the shape changes. */
+function ensureVideoChips(state: ClipState): void {
+  const positions = state.positions ?? [];
+  const tags = state.emotions?.tags ?? [];
+  const sig = positions.join(",") + "|" + tags.join(",");
+  if (sig === videoChips) return;
+  videoChips = sig;
+  const states = $("states");
+  states.innerHTML = "";
+  for (const hub of positions) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.state = hub;
+    button.textContent = VIDEO_LABELS[hub] ?? hub;
+    button.addEventListener("click", () => {
+      clipPost({ type: "clip:position", hub });
+      paintVideoPanel({ targetHub: hub });
+    });
+    states.appendChild(button);
+  }
+  const chips = $("emotions");
+  chips.innerHTML = "";
+  for (const tag of tags) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.dataset.emotion = tag;
+    chip.textContent = tag;
+    chip.addEventListener("click", () => {
+      const clearing = videoWant === tag;
+      videoWant = clearing ? null : tag;
+      clipPost({ type: "clip:emotion", tag: clearing ? null : tag });
+      paintVideoPanel({});
+    });
+    chips.appendChild(chip);
+  }
+}
+function paintVideoPanel(state: ClipState = {}): void {
   if (!videoChar) return;
   if (state.wantEmotion !== undefined) videoWant = state.wantEmotion;
   const at = state.targetHub ?? state.node;
@@ -2544,15 +2587,16 @@ function paintVideoPanel(state: { node?: string; targetHub?: string | null;
   }
   for (const b of Array.from($("emotions").querySelectorAll("button")) as HTMLElement[]) {
     b.classList.toggle("on", b.dataset.emotion === videoWant);
-    // the green edge is where his mood has DRIFTED on its own; the .on ring
-    // is the directed choice -- the same two-truths split the player draws
+    // the green edge is where the mood actually IS; the .on ring is the
+    // directed choice -- the same two-truths split the player draws
     b.style.boxShadow = b.dataset.emotion === state.mood ? "inset 0 0 0 1px #5cb87f" : "";
   }
 }
 window.addEventListener("message", (ev) => {
-  const d = ev.data as { type?: string } | null;
+  const d = ev.data as ({ type?: string } & ClipState) | null;
   if (!videoChar || !d || d.type !== "clip:state") return;
-  paintVideoPanel(d as Parameters<typeof paintVideoPanel>[0]);
+  ensureVideoChips(d);
+  paintVideoPanel(d);
 });
 function mountVideo(name: string): void {
   const info = VIDEO_BODIES[name];
@@ -2573,45 +2617,18 @@ function mountVideo(name: string): void {
   videoFrame = frame;
   frame.addEventListener("load", () => clipPost({ type: "clip:state?" }));
   $("readout").textContent = "";
-  const states = $("states");
-  states.innerHTML = "";
-  for (const [hub, label] of VIDEO_POSITIONS[name] ?? []) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.state = hub;
-    button.textContent = label;
-    button.addEventListener("click", () => {
-      clipPost({ type: "clip:position", hub });
-      paintVideoPanel({ targetHub: hub });
-    });
-    states.appendChild(button);
-  }
-  const chips = $("emotions");
-  chips.innerHTML = "";
-  if (info.wire) {
-    for (const tag of VIDEO_BEARINGS) {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.dataset.emotion = tag;
-      chip.textContent = tag;
-      chip.addEventListener("click", () => {
-        const clearing = videoWant === tag;
-        videoWant = clearing ? null : tag;
-        clipPost({ type: "clip:emotion", tag: clearing ? null : tag });
-        paintVideoPanel({});
-      });
-      chips.appendChild(chip);
-    }
-  }
+  videoChips = "";
+  $("states").innerHTML = "";
+  $("emotions").innerHTML = "";
   const mixer = $("mixer");
   mixer.innerHTML = "";
   const note = document.createElement("p");
   note.style.cssText = "color:#74747e;font-size:12px;line-height:1.5;margin:8px 2px";
   note.textContent = info.wire
-    ? info.title + " is a frame-video character: the transport is his positions, the "
-      + "emotion row is his bearing (green edge = where his mood has drifted on its own), "
-      + "and speech lives on the stage. The dials and mixer belong to the shader bodies."
-    : info.title + " is a frame-video character: her controls live on the stage itself. "
+    ? info.title + " is a frame-video character: the transport and emotion row are built "
+      + "from its own clip:state (green edge = the mood it is actually in), and speech "
+      + "lives on the stage. The dials and mixer belong to the shader bodies."
+    : info.title + " is a frame-video character: the controls live on the stage itself. "
       + "The dials and mixer belong to the shader bodies.";
   mixer.appendChild(note);
   ($("save") as HTMLButtonElement).disabled = true;
