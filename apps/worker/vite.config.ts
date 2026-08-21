@@ -219,19 +219,24 @@ function benchPresets(): Plugin {
               version.label = sent.label.trim().slice(0, 120);
             }
             const entry = asVersions(store[key]);
-            // AUTOSAVE RIDES, IT DOES NOT STACK: every touch autosaves, and a
-            // history where each drag is fifty versions is no history at all.
-            // An autosave REPLACES the previous autosave at the top of the
-            // list; a deliberate save is appended and stays a checkpoint.
-            const newest = entry.versions[entry.versions.length - 1] as
-              { autosave?: boolean } | undefined;
+            // AUTOSAVE KEEPS A SHORT TAIL, never just one. It replaced its
+            // predecessor once, and that destroyed real work: a page reload
+            // regressed the tab, the tab autosaved the regression, and the
+            // single rolling copy holding forty minutes of touches was gone.
+            // Now autosaves APPEND and only the trailing run is capped (the
+            // oldest of the run drops past eight), so history holds the last
+            // eight quiet moments — a regression can never eat the only copy.
             if ((sent as { autosave?: unknown }).autosave === true) {
               version.autosave = true;
               version.label = "autosave";
-              if (newest?.autosave === true) {
-                entry.versions[entry.versions.length - 1] = version;
-              } else {
-                entry.versions.push(version);
+              entry.versions.push(version);
+              const isAuto = (v: unknown): boolean =>
+                (v as { autosave?: boolean } | undefined)?.autosave === true;
+              let run = 0;
+              while (run < entry.versions.length
+                && isAuto(entry.versions[entry.versions.length - 1 - run])) run += 1;
+              if (run > 8) {
+                entry.versions.splice(entry.versions.length - run, 1);
               }
             } else {
               entry.versions.push(version);
