@@ -967,7 +967,7 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "6 · The eye — core and composite", fields: [
     "core", "eye", "starburst", "petal", "cloud",
   ] },
-  { title: "0 · Motion — bounce and trails", fields: ["bounce", "bounceTrail"] },
+  { title: "0 · Motion — the bounce", fields: ["bounce"] },
   { title: "6 · Voice reverberation — how speech crosses the body", fields: [
     "reverb",
   ] },
@@ -1837,7 +1837,7 @@ async function savePreset(): Promise<void> {
  *  the composite once shrank to a dot. The link* pathways are BACK on the
  *  desk (max flexibility beats the old "superseded by the iris" ruling);
  *  their shipped gain is zero, so nothing changes until raised. */
-const HIDDEN_FIELDS = new Set(["presence"]);
+const HIDDEN_FIELDS = new Set(["presence", "bounceTrail"]);
 /** Single VALUES hidden from the cards while their data stays live: the
  *  lattice pair's ×voice element is covered by the generic ×voice slider. */
 const HIDDEN_VALUES = new Set(["lattice:1"]);
@@ -1880,7 +1880,7 @@ const SPATIAL_RANK: Record<string, number> = {
   "3 · The iris — radial filaments": 10,
   "6 · The eye — core and composite": 11,
   "6 · Voice reverberation — how speech crosses the body": 90,
-  "0 · Motion — bounce and trails": 89,
+  "0 · Motion — the bounce": 89,
 };
 
 /**
@@ -1903,7 +1903,7 @@ const STRIP_NAME: Record<string, string> = {
   "3 · The iris — radial filaments": "Iris",
   "6 · The eye — core and composite": "Eye",
   "6 · Voice reverberation — how speech crosses the body": "Reverb",
-  "0 · Motion — bounce and trails": "Motion",
+  "0 · Motion — the bounce": "Motion",
   "1 · Her voice — what speech does to the body": "Voice",
   "2 · Her envelope — the shape of a syllable": "Envelope",
   "3 · Her attention — being spoken to": "Attention",
@@ -2542,7 +2542,7 @@ const VIDEO_BODIES: Record<string, { url: string; title: string; wire: boolean }
 };
 /** Friendly labels where the wire's ids are terse; unknown ids show as-is. */
 const VIDEO_LABELS: Record<string, string> = {
-  H1: "Desk", H2: "Table — far", H3: "Fireplace", H4: "Window",
+  H1: "Desk", H2: "Table — far", H3: "Fireplace", H4: "Window", H5: "Seated",
 };
 let videoChar: string | null = null;
 let videoFrame: HTMLIFrameElement | null = null;

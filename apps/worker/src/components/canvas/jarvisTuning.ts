@@ -314,7 +314,7 @@ export const JARVIS_TUNING: JarvisTuning = {
   // bob at 1.2% of the frame with a soft wake. Arrival stays still — a birth
   // should not bob.
   bounce: [0.012, 0.5],
-  bounceTrail: 0.55,
+  bounceTrail: 0,
   // Lens ring OFF (z = 0): the large screen-space circle around the body was
   // removed by request — the dial remains for anyone who wants it back, and
   // it now scales with presence when raised.

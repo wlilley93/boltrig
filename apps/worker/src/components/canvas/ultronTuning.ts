@@ -188,5 +188,5 @@ export const ULTRON_TUNING: UltronTuning = {
   // His bounce is heavier and slower than Jarvis's — a molten mass settling,
   // not an instrument keeping time. Arrival stays still.
   bounce: [0.012, 0.35],
-  bounceTrail: 0.55,
+  bounceTrail: 0,
 };
