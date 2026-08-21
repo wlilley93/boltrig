@@ -305,7 +305,10 @@ export const JARVIS_TUNING: JarvisTuning = {
   latticeGlow: 0,
   latticeSpeed: 1,
   presence: 1,
-  eye: [1, 1.5, 0.34, 15],
+  // Lens ring OFF (z = 0): the large screen-space circle around the body was
+  // removed by request — the dial remains for anyone who wants it back, and
+  // it now scales with presence when raised.
+  eye: [1, 1.5, 0, 15],
   drawLimb: [3, 3],
   linkLimb: [3, 3],
 };

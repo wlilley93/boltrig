@@ -167,7 +167,13 @@ export class NeuralPasses {
     this.simulate(d, tuning);
     this.drawScene(d, palette, tuning);
     this.bloom();
-    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), tuning.starburst, tuning.eye);
+    // The lens ring (eye.z) is drawn in SCREEN space by the composite, so it
+    // is the one radius presence's d.radius scaling cannot reach — scale it
+    // here or the ring stands still while the body grows and shrinks.
+    const eye: readonly [number, number, number, number] = [
+      tuning.eye[0], tuning.eye[1], tuning.eye[2] * tuning.presence, tuning.eye[3],
+    ];
+    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), tuning.starburst, eye);
   }
 
   destroy(): void {

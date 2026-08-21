@@ -60,7 +60,7 @@ export const JARVIS_ARRIVAL: JarvisTuning = {
   outerLimb: [3, 3],
   outerPace: 0,
   starburst: 0.32,
-  eye: [0.35, 1.8, 0.62, 9],
+  eye: [0.35, 1.8, 0, 9],
   drawLimb: [3, 3],
   linkLimb: [3, 3],
   clump: [0, 2.6],
