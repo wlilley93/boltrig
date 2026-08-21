@@ -8,6 +8,7 @@ import type {
 } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../../client";
+import { saveCompanion } from "./companionSave";
 import {
   characterFromSettings,
   characterToSettings,
@@ -283,7 +284,9 @@ function useAppearanceSettings() {
   }
 
   // Saved through the same settings bag but as its own key and call so the
-  // Stage selection keeps an independent local mirror and change event.
+  // Stage selection keeps an independent local mirror and change event. The
+  // server half (save, rollback, adoption announcement) lives in
+  // companionSave.ts so this debt file only shrinks.
   async function changeCharacter(next: CharacterId) {
     if (busy) return;
     const previous = character;
@@ -292,20 +295,7 @@ function useAppearanceSettings() {
     setCharacter(next);
     saveCharacterLocal(next);
     try {
-      const result = await client.putMeSettings({ settings: characterToSettings(next) });
-      if (result.status !== "ok") {
-        setCharacter(previous);
-        saveCharacterLocal(previous);
-        setMessage(result.reason ?? "Your companion could not be saved.");
-        return;
-      }
-      setAccount((current) => (current
-        ? { ...current, settings: { ...current.settings, ...characterToSettings(next) } }
-        : current));
-    } catch {
-      setCharacter(previous);
-      saveCharacterLocal(previous);
-      setMessage("Your companion could not be saved.");
+      await saveCompanion(next, previous, { setAccount, setCharacter, setMessage });
     } finally {
       setBusy(false);
     }

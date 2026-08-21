@@ -1373,7 +1373,7 @@
         }
       ],
       "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-20: extracted typed channel-origin facts, lowering the file 1588→1577 lines, RunsView 212→209 lines and complexity 25→23, and WorkDetail 226→218 lines and complexity 23→16.",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-20: extracted typed channel-origin facts, lowering the file 1588\u21921577 lines, RunsView 212\u2192209 lines and complexity 25\u219223, and WorkDetail 226\u2192218 lines and complexity 23\u219216.",
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/PermanentFleetTopology.tsx": {
@@ -1536,7 +1536,7 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/settings/CompactSections.tsx": {
-      "file_lines": 632,
+      "file_lines": 622,
       "max_function_lines": 144,
       "max_parameters": 3,
       "max_complexity": 23,
@@ -1544,7 +1544,7 @@
       "over_limit_functions": [
         {
           "name": "AppearanceGroup",
-          "line": 83,
+          "line": 84,
           "column": 1,
           "lines": 144,
           "parameters": 1,
@@ -1552,17 +1552,8 @@
           "nesting_depth": 1
         },
         {
-          "name": "useAppearanceSettings",
-          "line": 228,
-          "column": 1,
-          "lines": 91,
-          "parameters": 0,
-          "complexity": 1,
-          "nesting_depth": 0
-        },
-        {
           "name": "CompactReachingYouSection",
-          "line": 370,
+          "line": 360,
           "column": 1,
           "lines": 95,
           "parameters": 0,
@@ -1571,7 +1562,7 @@
         }
       ],
       "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-21 (+6): the adoption announcement fired after a successful companion save - the explicit novelty affordance; the emotion relay throttles it server-side. 2026-08-21: LOWERED 632 -> 622 - the companion save/rollback/adoption-announcement moved to companionSave.ts, which also took useAppearanceSettings back under the function floor.",
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/settings/HealthSection.tsx": {

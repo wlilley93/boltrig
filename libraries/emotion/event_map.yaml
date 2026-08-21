@@ -31,3 +31,9 @@ rules:
   - {type: voice_tone, where: {tone: subdued}, has: [tone], appraise: user_subdued, intensity: 0.7, throttle_s: 20}
   - {type: voice_tone, where: {tone: sarcastic}, has: [tone], appraise: user_sarcastic, intensity: 0.6, throttle_s: 30}
   - {type: final, appraise: task_success, intensity: 1.0}
+  # The Worker announces an adoption through POST /v1/familiar/emotion/adopted;
+  # the throttle keeps a settings browser from pumping mood by flicking skins.
+
+  # The Worker announces an adoption through POST /v1/familiar/emotion/adopted;
+  # the throttle keeps a settings browser from pumping mood by flicking skins.
+  - {type: character_adopted, appraise: character_adopted, intensity: 1.0, throttle_s: 60}

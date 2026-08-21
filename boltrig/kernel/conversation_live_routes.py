@@ -231,5 +231,7 @@ def register_worker_query_routes(
     from .familiar_phenotype_routes import register_familiar_phenotype_routes
     from .federated_search_routes import register_federated_search_routes
 
-    register_familiar_phenotype_routes(app, principal_dep=principal_dep)
+    register_familiar_phenotype_routes(
+        app, principal_dep=principal_dep, get_kernel=get_kernel
+    )
     register_federated_search_routes(app, principal_dep, get_kernel)
