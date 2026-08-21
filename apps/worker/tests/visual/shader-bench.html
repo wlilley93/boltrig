@@ -101,14 +101,14 @@
          the desk — fader travel, bus sliders — and the whole console follows,
          stage taking up the difference. */
       #splitter {
-        grid-row: 3; grid-column: 1; height: 8px; cursor: ns-resize;
-        background: rgba(11, 11, 15, .55); border-top: 1px solid #1c1c22;
+        grid-row: 3; grid-column: 1; height: 12px; cursor: ns-resize;
+        background: rgba(11, 11, 15, .3); border-top: 1px solid #1c1c22;
         display: grid; place-items: center;
       }
       #splitter::before {
-        content: ""; width: 44px; height: 3px; border-radius: 2px; background: #26262e;
+        content: ""; width: 64px; height: 4px; border-radius: 2px; background: #3a3a46;
       }
-      #splitter:hover::before { background: #6f8cff; }
+      #splitter:hover::before, #splitter:active::before { background: #6f8cff; }
       /* THE CONSOLE: transport across the top, desk and bus stacked on the
          left, the player pane full height on the right. */
       #console {
@@ -116,8 +116,8 @@
         display: grid;
         grid-template-columns: minmax(0, 1fr) 240px;
         grid-template-rows: auto auto auto;
-        background: rgba(11, 11, 15, .55);
-        backdrop-filter: blur(3px);
+        background: rgba(11, 11, 15, .34);
+        backdrop-filter: blur(2px);
       }
       #transport {
         grid-column: 1 / -1; grid-row: 1;
@@ -157,14 +157,14 @@
       .channel {
         flex: 0 0 92px; display: grid; justify-items: center; gap: 3px;
         padding: 6px 5px 5px; border: 1px solid #1c1c22; border-radius: 8px;
-        background: rgba(13, 13, 17, .5); cursor: pointer; user-select: none;
+        background: rgba(13, 13, 17, .3); cursor: pointer; user-select: none;
       }
       .channel:hover { border-color: #3a3a46; }
       .channel.selected { border-color: #6f8cff; background: #10101a; }
       .channel.muted { opacity: .45; }
       .channel .chname {
-        font-size: 9.5px; font-weight: 600; letter-spacing: .06em;
-        text-transform: uppercase; color: #8b8b95; text-align: center;
+        font-size: 11px; font-weight: 600; letter-spacing: .05em;
+        text-transform: uppercase; color: #d6d6dd; text-align: center;
         max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       .channel.selected .chname { color: #6f8cff; }
@@ -172,11 +172,11 @@
       .channel .chlamp.on { background: #6f8cff; box-shadow: 0 0 6px #6f8cff; }
       .channel .fader {
         writing-mode: vertical-lr; direction: rtl;
-        width: 22px; height: calc(84px * var(--deskScale)); margin: 2px 0; accent-color: #6f8cff;
+        width: 22px; height: calc(96px * var(--deskScale)); margin: 2px 0; accent-color: #6f8cff;
       }
       .channel b {
         font-variant-numeric: tabular-nums; font-weight: 500;
-        color: #9a9aa4; font-size: 10px;
+        color: #c9c9d2; font-size: 10.5px;
       }
       .channel .ms { display: flex; gap: 4px; }
       .channel .ms button { width: auto; min-width: 22px; height: 20px; padding: 0 4px; font-size: 10px; border-radius: 5px; }
@@ -207,7 +207,7 @@
          is, drag to find out what it does. */
       #bus .row {
         flex: 0 0 auto; margin: 0; padding: 5px 7px 4px;
-        border: 1px solid #1c1c22; border-radius: 8px; background: rgba(13, 13, 17, .5);
+        border: 1px solid #1c1c22; border-radius: 8px; background: rgba(13, 13, 17, .3);
         display: flex; flex-direction: column; align-items: center; gap: 3px;
       }
       #bus .row .vals { display: flex; gap: 5px; align-items: flex-end; }
@@ -221,7 +221,7 @@
       #bus .row label { margin: 0; text-align: center; }
       #bus .row label .code {
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        display: block; max-width: 110px; font-size: 9.5px;
+        display: block; max-width: 110px; font-size: 10px; color: #c9c9d2;
       }
       #bus .row .lfo { width: 100%; }
       @media (max-width: 900px) { #mixer, #transport { display: none; } }

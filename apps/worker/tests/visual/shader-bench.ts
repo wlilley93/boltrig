@@ -112,6 +112,11 @@ const LEGEND: Record<string, readonly string[]> = {
   glyphSize: ["mark height", "mark width"],
   glyphSpin: ["rotation SPEED", "layer counter-spin"],
   glyphDensity: ["fraction lit", "brightness variance"],
+  glyphBGain: ["sigil brightness", "×voice"],
+  glyphBRadius: ["innermost layer", "outermost layer"],
+  glyphBSize: ["mark height", "mark width"],
+  glyphBSpin: ["rotation SPEED", "layer counter-spin"],
+  glyphBDensity: ["fraction lit", "brightness variance"],
   // ---- Jarvis: the field --------------------------------------------------
   outerShell: ["radius", "population", "brightness"],
   swirl: ["flow SPEED", "×voice"],
@@ -859,8 +864,11 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
     "rings", "ringArc", "ringWidth", "ringGain", "ringRadius", "ringBeam",
     "ringSpin", "ringLife",
   ] },
-  { title: "2 · Glyph layers — the inscriptions", fields: [
+  { title: "2 · Glyphs — the inner inscriptions", fields: [
     "glyphGain", "glyphRadius", "glyphSize", "glyphSpin", "glyphDensity",
+  ] },
+  { title: "2 · Sigils — the outer inscriptions", fields: [
+    "glyphBGain", "glyphBRadius", "glyphBSize", "glyphBSpin", "glyphBDensity",
   ] },
   { title: "3 · The iris — radial filaments", fields: [
     "irisGain", "irisRadius", "irisFil", "irisFlow",
@@ -882,7 +890,6 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "0 · Lattice loop — the baked layer", fields: [
     "lattice", "latticeBlur", "latticeSat", "latticeGlow", "latticeSpeed",
   ] },
-  { title: "0 · Presence — the composite's size", fields: ["presence"] },
   { title: "5 · Crystal facets", fields: [
     "facetGain", "facetSize", "facetSpin", "facetLimb",
   ] },
@@ -931,11 +938,16 @@ const TITLES: Record<string, string> = {
   irisRadius: "Where the iris starts and ends",
   irisFil: "How many filaments, and how fine",
   irisFlow: "How fast light travels outward",
-  glyphGain: "How bright the inscriptions are",
-  glyphRadius: "Where the glyph layers sit",
-  glyphSize: "How big each mark is",
-  glyphSpin: "How fast the layers turn",
-  glyphDensity: "How many marks are lit, and how uneven",
+  glyphGain: "How bright the inner inscriptions are",
+  glyphRadius: "Where the inner pair of rings sits",
+  glyphSize: "How big each inner mark is",
+  glyphSpin: "How fast the inner pair turns",
+  glyphDensity: "How many inner marks are lit, and how uneven",
+  glyphBGain: "How bright the outer inscriptions are",
+  glyphBRadius: "Where the outer pair of rings sits",
+  glyphBSize: "How big each outer mark is",
+  glyphBSpin: "How fast the outer pair turns",
+  glyphBDensity: "How many outer marks are lit, and how uneven",
   linkGain: "How bright the pathways are",
   linkBow: "How much a pathway wanders, and how fast",
   linkRange: "Longest pathway",
@@ -1049,6 +1061,50 @@ function row(
     out.textContent = value.toFixed(3);
     readouts.push(out);
     sliderDom[lfoKey(key, index)] = { input, out };
+    // TYPE THE NUMBER. Click the readout and it becomes a field: Enter or blur
+    // commits (clamped to the slider's range), Escape walks away. A dial you
+    // can only drag cannot be set to exactly 0.5.
+    out.title = "Click to type a value";
+    out.style.cursor = "text";
+    out.addEventListener("click", () => {
+      if (out.querySelector("input")) return;
+      const was = live[index];
+      const field = document.createElement("input");
+      field.type = "number";
+      field.step = String(step);
+      field.value = was.toFixed(3);
+      field.style.width = "58px";
+      field.style.height = "18px";
+      field.style.font = "inherit";
+      out.textContent = "";
+      out.appendChild(field);
+      field.focus();
+      field.select();
+      let settled = false;
+      const done = (commit: boolean) => {
+        // Enter removes the field, and removal fires blur — one commit only.
+        if (settled) return;
+        settled = true;
+        const typed = Number(field.value);
+        field.remove();
+        const next = commit && Number.isFinite(typed)
+          ? Math.min(max, Math.max(min, typed))
+          : was;
+        live[index] = next;
+        input.value = String(next);
+        out.textContent = next.toFixed(3);
+        if (next !== was) {
+          onChange(live.slice());
+          push();
+        }
+      };
+      field.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") done(true);
+        if (event.key === "Escape") done(false);
+        event.stopPropagation();
+      });
+      field.addEventListener("blur", () => done(true));
+    });
     input.addEventListener("input", () => {
       live[index] = Number(input.value);
       readouts[index].textContent = live[index].toFixed(3);
@@ -1678,7 +1734,10 @@ async function savePreset(): Promise<void> {
 /** Superseded by the iris: present in the struct, deliberately not a channel.
  *  Hidden rather than orphaned, so the desk does not grow a warning strip for
  *  fields nothing should be editing. */
-const HIDDEN_FIELDS = new Set(["linkGain", "linkBow", "linkRange", "linkLimb"]);
+/** link* is superseded by the iris; `presence` is GLOBAL FRAMING, owned by the
+ *  topbar slider rather than a desk strip — a strip for it invited soloing
+ *  the body's size, which is how the composite once shrank to a dot. */
+const HIDDEN_FIELDS = new Set(["linkGain", "linkBow", "linkRange", "linkLimb", "presence"]);
 let channel = "";
 /** Channels auditioning their talking journey WITHOUT audio: a synthetic
  *  syllable envelope drives their speech reach, a stand-in for a line being
@@ -1697,7 +1756,8 @@ const SPATIAL_RANK: Record<string, number> = {
   "0 · Lattice loop — the baked layer": 0,
   "4 · Outer particle layer — the distant shell": 1,
   "1 · Wheels — the orbiting beams": 2,
-  "2 · Glyph layers — the inscriptions": 3,
+  "2 · Sigils — the outer inscriptions": 3,
+  "2 · Glyphs — the inner inscriptions": 4,
   "5 · Crystal facets": 4,
   "4 · Veins and cracks": 5,
   "5 · Circuit shards": 6,
@@ -1707,7 +1767,32 @@ const SPATIAL_RANK: Record<string, number> = {
   "3 · The iris — radial filaments": 10,
   "6 · The eye — core and composite": 11,
   "6 · Voice reverberation — how speech crosses the body": 90,
-  "0 · Presence — the composite's size": 91,
+};
+
+/**
+ * ONE WORD PER STRIP. The desk reads at a glance or it does not read; the
+ * full title with its prose stays on the strip's tooltip.
+ */
+const STRIP_NAME: Record<string, string> = {
+  "0 · Lattice loop — the baked layer": "Film",
+  "4 · Outer particle layer — the distant shell": "Shell",
+  "1 · Wheels — the orbiting beams": "Wheels",
+  "2 · Glyphs — the inner inscriptions": "Glyphs",
+  "2 · Sigils — the outer inscriptions": "Sigils",
+  "5 · Crystal facets": "Facets",
+  "4 · Veins and cracks": "Veins",
+  "5 · Circuit shards": "Shards",
+  "5 · Debris — clumping and depth": "Debris",
+  "3 · Dendrites — the neurons and their signals": "Neurons",
+  "4 · Inner particle layer — the core cloud": "Cloud",
+  "3 · The iris — radial filaments": "Iris",
+  "6 · The eye — core and composite": "Eye",
+  "6 · Voice reverberation — how speech crosses the body": "Reverb",
+  "1 · Her voice — what speech does to the body": "Voice",
+  "2 · Her envelope — the shape of a syllable": "Envelope",
+  "3 · Her attention — being spoken to": "Attention",
+  "4 · Her inner life — alive between events": "Life",
+  "5 · Her presence — size, light and failure": "Aura",
 };
 
 function channelsFor(): { title: string; fields: string[] }[] {
@@ -1870,7 +1955,7 @@ function buildMixer(): void {
     strip.dataset.channel = g.title;
     const name = document.createElement("div");
     name.className = "chname";
-    name.textContent = channelShortName(g.title);
+    name.textContent = STRIP_NAME[g.title] ?? channelShortName(g.title).split(" ")[0];
     name.title = g.title;
     strip.appendChild(name);
     const lamp = document.createElement("i");
@@ -3063,7 +3148,7 @@ paintDesk();
 let deskScale = ((): number => {
   try {
     const raw = Number(localStorage.getItem(storageKey("deskScale")));
-    return Number.isFinite(raw) && raw >= 0.45 && raw <= 1.8 ? raw : 1;
+    return Number.isFinite(raw) && raw >= 0.35 && raw <= 2.4 ? raw : 1;
   } catch {
     return 1;
   }
@@ -3078,7 +3163,7 @@ $("splitter").addEventListener("pointerdown", (event) => {
   const startY = event.clientY;
   const from = deskScale;
   const move = (e: PointerEvent): void => {
-    deskScale = Math.min(1.8, Math.max(0.45, from - (e.clientY - startY) / 150));
+    deskScale = Math.min(2.4, Math.max(0.35, from - (e.clientY - startY) / 110));
     paintDeskScale();
   };
   const up = (): void => {

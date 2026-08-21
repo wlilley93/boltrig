@@ -103,6 +103,15 @@ export interface JarvisTuning {
   glyphSpin: readonly [speed: number, stagger: number];
   /** What fraction of the marks are lit, and how hard the lit ones vary. */
   glyphDensity: readonly [lit: number, variance: number];
+  /** The OUTER inscription band. The four glyph rings split into two
+   *  independent pairs — these dials own rings 2 and 3, the glyph* dials own
+   *  0 and 1 — because one bank driving four rings read as two layers that
+   *  could not be told apart on the desk. */
+  glyphBGain: EnergyRamp;
+  glyphBRadius: readonly [inner: number, outer: number];
+  glyphBSize: readonly [height: number, width: number];
+  glyphBSpin: readonly [speed: number, stagger: number];
+  glyphBDensity: readonly [lit: number, variance: number];
   /** How many great circles. Six read as a sphere of wheels; three as a skirt. */
   rings: number;
   /**
@@ -260,10 +269,17 @@ export const JARVIS_TUNING: JarvisTuning = {
   // The links are superseded by the iris. Kept at zero rather than deleted: the
   // pass is sound and a network may be wanted on another body.
   glyphGain: [0.34, 0.22],
-  glyphRadius: [0.66, 0.94],
+  // The old four-ring span was [0.66, 0.94]; each band keeps its two rings
+  // exactly where they were: A at 0.66/0.753, B at 0.847/0.94.
+  glyphRadius: [0.66, 0.753],
   glyphSize: [0.055, 0.008],
   glyphSpin: [0.026, 0.55],
   glyphDensity: [0.72, 0.55],
+  glyphBGain: [0.34, 0.22],
+  glyphBRadius: [0.847, 0.94],
+  glyphBSize: [0.055, 0.008],
+  glyphBSpin: [0.026, 0.55],
+  glyphBDensity: [0.72, 0.55],
   rings: 2,
   swirl: [0.115, 0],
   linkGain: [0, 0],
