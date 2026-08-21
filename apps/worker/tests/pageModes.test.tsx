@@ -17,6 +17,7 @@ import {
   saveAppearanceLocal,
 } from "../src/theme";
 import { ThemeToggle } from "../src/components/chat/ThemeToggle";
+import { configuredApiOrigin, mountPrefix } from "../src/apiOrigin";
 
 function setPageUrl(pathAndQuery: string) {
   window.history.replaceState(null, "", pathAndQuery);
@@ -106,5 +107,34 @@ describe("?embed=1 mode", () => {
   it("only accepts embed=1, not any truthy string", () => {
     setPageUrl("/?embed=true");
     expect(isEmbedMode()).toBe(false);
+  });
+});
+
+describe("mount-derived API base (GOAL console-mounts M2/M3)", () => {
+  it("standalone at root keeps the empty same-origin base - the negative control", () => {
+    setPageUrl("/");
+    expect(mountPrefix()).toBe("");
+    expect(configuredApiOrigin()).toBe("");
+  });
+
+  it("derives the mount prefix from the document path when mounted", () => {
+    setPageUrl("/boltrig/");
+    expect(mountPrefix()).toBe("/boltrig");
+    expect(configuredApiOrigin()).toBe("/boltrig");
+  });
+
+  it("survives an index.html document path", () => {
+    setPageUrl("/boltrig/index.html");
+    expect(mountPrefix()).toBe("/boltrig");
+  });
+
+  it("treats any other document path as ROOT - the visual-harness trap", () => {
+    // The first derivation prefixed everything: served at
+    // /tests/visual/parity.html, every /v1 fixture request became
+    // /tests/visual/parity.html/v1/... and the capture missed all of them.
+    // Only a directory path (or /index.html) is a mount.
+    setPageUrl("/tests/visual/parity.html");
+    expect(mountPrefix()).toBe("");
+    expect(configuredApiOrigin()).toBe("");
   });
 });

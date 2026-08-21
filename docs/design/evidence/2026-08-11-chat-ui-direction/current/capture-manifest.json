@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-21T11:36:28.599Z",
+  "capturedAt": "2026-08-21T12:20:18.750Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "09e7433be03af8cdd5df11222ed68f5fecc5f83bd445827e5b9045501380202d",
-    "digestAfterCapture": "09e7433be03af8cdd5df11222ed68f5fecc5f83bd445827e5b9045501380202d",
+    "digestBeforeCapture": "23451d16c04835b5e6dcb19515e53edaca4b45248b896ef57a4d7691e817885b",
+    "digestAfterCapture": "23451d16c04835b5e6dcb19515e53edaca4b45248b896ef57a4d7691e817885b",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/opbox-embed",
-    "head": "a1ab724830608494eab9db88d6f879ad26b624e2",
+    "head": "e2a56f3b9cf4c89cbdf4db7e63b9f666bdc26241",
     "dirty": true
   },
   "runner": {

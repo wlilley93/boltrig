@@ -44,3 +44,34 @@ the product face.
   SDK work, not reasons to fall back to embedding.
 - The console's own branding stays as-is (admin tool); see decision 0033 for
   the product-face styling rule.
+
+## Amendment 2026-08-21: the same-origin mounted iframe is permitted
+
+Principal direction (2026-08-21, Opbox Agents panel): the Opbox right-hand
+panel embeds the REAL Worker console rather than a web-SDK rebuild, and the
+sanctioned mechanism is the subpath mount this decision already blesses -
+`<host>/boltrig` behind a stripping proxy on the tenant's own host - framed
+SAME-ORIGIN by the host app.
+
+What changes: "No iframe anywhere" narrows to "no CROSS-ORIGIN iframe
+anywhere". The UI-serving layers move `X-Frame-Options: DENY` to
+`SAMEORIGIN` and `frame-ancestors 'none'` to `'self'`
+(apps/worker/nginx.conf, deploy/Caddyfile.example; pinned by SEC-WRK-05,
+whose negative assertions now bar the relaxation ever widening to an
+allowlist). The kernel API's own headers stay `DENY`/`'none'` - fetch
+responses are never legitimately framed. The session cookie stays
+`SameSite=Strict`: a same-origin mount needs no cookie relaxation, which is
+the point of choosing it over the cross-origin embed (considered and
+declined - it would need `SameSite=None`, an ancestor allowlist, and a wider
+invariant rewrite).
+
+The Worker gained the mount-derived API base this decision's fallback
+lane assumed (`mountPrefix()` in apps/worker/src/apiOrigin.ts, GOAL
+console-mounts M2/M3): standalone-at-root is byte-identical; mounted, every
+/v1 call rides the mount. `?theme=light&embed=1` are the page modes the
+embedding host passes (per-load, never persisted).
+
+The web-SDK-native Agents tab remains the long-run direction for
+Opbox-native VIEWS; this amendment is about the panel embedding the console
+itself, which the mount makes a product face rather than only an ops
+fallback.
