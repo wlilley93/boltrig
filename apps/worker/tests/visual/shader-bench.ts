@@ -1204,6 +1204,105 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
  * source calls it -- but `crackRange` is not a description of anything, and a panel
  * you have to read the shader to use is a panel that gets used wrong.
  */
+/**
+ * The name a card WEARS. `latticeSat` means nothing at the desk; "Saturation"
+ * does. Short enough for a card, plain enough to need no manual — the full
+ * prose stays on hover, and the code name rides the tooltip for anyone
+ * matching against source.
+ */
+const READABLE: Record<string, string> = {
+  lattice: "Film level",
+  latticeBlur: "Motion blur",
+  latticeSat: "Saturation",
+  latticeGlow: "Glow",
+  latticeSpeed: "Film speed",
+  presence: "Presence",
+  bounce: "Bounce",
+  bounceTrail: "Bounce trail",
+  rings: "Wheel count",
+  ringArc: "Beams per wheel",
+  ringWidth: "Beam width",
+  ringGain: "Wheel brightness",
+  ringRadius: "Wheel placement",
+  ringBeam: "Beam spread",
+  ringSpin: "Wheel spin",
+  ringLife: "Beam fade cycle",
+  glyphGain: "Inner brightness",
+  glyphRadius: "Inner placement",
+  glyphSize: "Inner mark size",
+  glyphSpin: "Inner spin",
+  glyphDensity: "Inner density",
+  glyphBGain: "Outer brightness",
+  glyphBRadius: "Outer placement",
+  glyphBSize: "Outer mark size",
+  glyphBSpin: "Outer spin",
+  glyphBDensity: "Outer density",
+  irisGain: "Iris brightness",
+  irisRadius: "Iris placement",
+  irisFil: "Filaments",
+  irisFlow: "Flow speed",
+  linkGain: "Pathway brightness",
+  linkBow: "Pathway wander",
+  linkRange: "Pathway reach",
+  linkLimb: "Pathway rim bias",
+  dendriteGain: "Neuron brightness",
+  dendrite: "Neuron shape",
+  dendriteTip: "Tip clusters",
+  bead: "Signal marks",
+  signal: "Signal travel",
+  arc: "Terminal arcs",
+  veinGain: "Vein brightness",
+  veinStreak: "Vein length",
+  veinLimb: "Vein rim bias",
+  crackGain: "Fracture brightness",
+  crackRange: "Fracture reach",
+  crackLimb: "Fracture rim bias",
+  drawGain: "Cloud brightness",
+  streak: "Cloud trails",
+  swirl: "Flow rate",
+  drawLimb: "Cloud roundness",
+  outerShell: "Shell placement",
+  outerGain: "Shell brightness",
+  outerStreak: "Shell trails",
+  outerLimb: "Shell roundness",
+  outerPace: "Shell drift",
+  shardGain: "Shard brightness",
+  shardSize: "Shard size",
+  shardStride: "Shard count",
+  clump: "Clumping",
+  focus: "Far-side blur",
+  facetGain: "Facet brightness",
+  facetSize: "Facet size",
+  facetSpin: "Facet spin",
+  facetLimb: "Facet rim bias",
+  core: "Heart brightness",
+  eye: "The eye",
+  starburst: "Starburst",
+  petal: "Petal arms",
+  cloud: "Cloud form",
+  reverb: "Reverb",
+  voiceLevel: "Voice drive",
+  voiceLow: "Voice lows",
+  voiceMid: "Voice mids",
+  voiceHigh: "Voice highs",
+  voiceEnv: "Voice envelope",
+  voiceGate: "Silence gate",
+  beat: "Syllable weight",
+  listen: "Attentiveness",
+  gaze: "Gaze",
+  arousalLift: "Rousing",
+  idlePulse: "Idle pulse",
+  composition: "Size in frame",
+  daylight: "Daylight warmth",
+  wander: "Mood drift",
+  gesture: "Gestures",
+  errorTone: "Failure tone",
+};
+
+/** Dials whose small numbers mean MORE effect: shown with the fill inverted,
+ *  so down still reads as less. shardStride is "1 in N particles". */
+const INVERTED_DIALS = new Set(["shardStride"]);
+
 const TITLES: Record<string, string> = {
   rings: "How many wheels",
   ringArc: "Beams per wheel, and how long each is",
@@ -1343,6 +1442,10 @@ function row(
     input.max = String(max);
     input.step = String(step);
     input.value = String(value);
+    // An inverted dial (small number = more effect) flips its FILL direction
+    // natively, so down still reads as less — the number is untouched, and
+    // sweeps, typed values and the reach all stay consistent.
+    if (INVERTED_DIALS.has(key)) input.classList.add("invert");
     const out = document.createElement("b");
     out.textContent = value.toFixed(3);
     readouts[index] = out;
@@ -1577,7 +1680,7 @@ function row(
   });
   const code = document.createElement("span");
   code.className = "code";
-  code.textContent = label;
+  code.textContent = READABLE[key] ?? label;
   name.appendChild(code);
   wrap.appendChild(name);
   return wrap;

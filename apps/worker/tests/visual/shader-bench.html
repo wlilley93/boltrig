@@ -270,6 +270,9 @@
         width: 18px; height: calc(64px * var(--deskScale)); margin: 0; accent-color: #6f8cff;
       }
       #bus .row .val b { font-size: 9.5px; }
+      /* An inverted dial: the fill runs the other way, so a stride of 1
+         (every particle a shard) sits at the TOP like the maximum it is. */
+      #bus .row .val input.invert { direction: ltr; }
       #bus .row .val .vtag {
         font-size: 8.5px; line-height: 1.15; color: #9a9aa4;
         max-width: 62px; text-align: center; white-space: normal;
