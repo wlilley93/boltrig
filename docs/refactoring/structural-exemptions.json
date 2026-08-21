@@ -15,20 +15,6 @@
       "reason": "Group the desktop capability verb specifications by surface while preserving their existing schemas.",
       "expires": "2026-12-31"
     },
-    "boltrig/adapters/builtin/ms_graph.py": {
-      "max_file_lines": 395,
-      "max_function_lines": 183,
-      "over_limit_functions": [
-        {
-          "name": "MsGraphAdapter.describe",
-          "line": 62,
-          "lines": 183
-        }
-      ],
-      "owner": "adapter-maintainers",
-      "reason": "Decompose the Microsoft Graph capability description by resource while preserving its existing verb schemas.",
-      "expires": "2026-12-31"
-    },
     "boltrig/adapters/egress.py": {
       "max_file_lines": 431,
       "max_function_lines": 41,

@@ -782,6 +782,39 @@ export interface CancelRunResponse {
   reason?: string;
 }
 
+// GET /v1/runs/{run_id}/effects: the run's durable effect ledger, each step
+// with its honest undoability. POST /v1/runs/{run_id}/revert walks recorded
+// rows newest-first; an outcome of "approval_pending" carries the HITL
+// request id, and re-sending it as approvals[seq] releases the SAME inverse.
+export interface RunEffectView {
+  seq: number;
+  verb: string;
+  status: "recorded" | "not_undoable" | "reverted" | "revert_failed";
+  undoable: boolean;
+  summary: string;
+  created_at: string;
+}
+
+export interface RunEffectsResponse {
+  run_id: string;
+  effects: RunEffectView[];
+}
+
+export interface RunRevertResult extends RunEffectView {
+  outcome:
+    | "reverted"
+    | "revert_failed"
+    | "not_undoable"
+    | "already_settled"
+    | "approval_pending";
+  approval_id?: string;
+}
+
+export interface RunRevertResponse {
+  run_id: string;
+  results: RunRevertResult[];
+}
+
 // --- The streamed event union (one JSON object per SSE data line) -----------
 
 export interface ChatMessageStart {

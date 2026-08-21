@@ -787,16 +787,14 @@ POST /v1/memory/bundle
 GET /v1/memory/resolve
 """,
 )
-# The run-effect ledger (0085): what a run changed, each step with its honest
-# undoability, and the governed revert that walks it. NOT a Worker surface
-# TODAY and this row says so rather than implying it never should be: the
-# chat "Undo" affordance that would consume both is the follow-up PR (adapter
-# inverse annotations land there too - until then every row is not_undoable).
-_non_ui(
-    "governed-agent-surface",
+# The run-effect ledger (0085): the chat "Undo" affordance consumes both -
+# RunUndoPanel lists each step with its honest undoability and walks the
+# governed revert (approval_pending outcomes carry the HITL id back in).
+_surface(
+    "apps/worker/src/components/chat/RunUndoPanel.tsx",
     """
-GET /v1/runs/{run_id}/effects
-POST /v1/runs/{run_id}/revert
+GET /v1/runs/{run_id}/effects runEffects
+POST /v1/runs/{run_id}/revert revertRun
 """,
 )
 

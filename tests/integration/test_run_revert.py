@@ -185,3 +185,71 @@ async def test_an_unseen_run_is_404_even_when_rows_exist(scratch_registry):
 
     assert denied.value.status_code == 404
     assert not any(v == "msgr.delete" for v, _ in messenger.calls)
+
+
+@pytest.mark.invariant("FR-REV-02")
+async def test_a_declared_adapter_inverse_reverts_without_any_test_registration(
+    monkeypatch,
+):
+    """The whole declared path at once: the ADAPTER states the pair, kernel
+    registration composes it, dispatch records with the built inverse, and the
+    revert executes the declared undo verb - no register_inverse call anywhere
+    in this test."""
+    import boltrig.kernel.effect_inverses as module
+
+    monkeypatch.setattr(module, "_BUILDERS", {})
+
+    class _Declared(_Messenger):
+        def inverses(self):
+            return {
+                "msgr.post": lambda p, o: ("msgr.delete", {"ts": o["ts"]}),
+            }
+
+    store = InMemoryStore()
+    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
+    k = Kernel(store)
+    messenger = _Declared()
+    await k.register_adapter(T, messenger)
+    await k.invoke("msgr", "msgr.post", {"text": "declared"}, _ctx("run-5"))
+
+    await _seen_run(k, "run-5")
+    results = await _revert(k, "run-5")
+
+    assert [r["outcome"] for r in results] == ["reverted"]
+    assert [p for v, p in messenger.calls if v == "msgr.delete"] == [{"ts": "1"}]
+
+
+@pytest.mark.invariant("FR-REV-02")
+async def test_a_pending_approval_is_not_a_failure_and_the_same_grant_releases_it(
+    monkeypatch,
+):
+    """The inverse here is HIGH consequence (msgr.wipe), so the revert pends a
+    human. The row must return to ``recorded`` - not strand as revert_failed
+    with the effect still standing - and the SAME approved request, carried
+    back as approvals={seq: id}, must release the SAME inverse exactly once."""
+    import boltrig.kernel.effect_inverses as module
+
+    monkeypatch.setattr(module, "_BUILDERS", {})
+    register_inverse("msgr.post", lambda p, o: ("msgr.wipe", {"ts": o["ts"]}))
+
+    k, messenger = await _kernel_with_messenger()
+    await k.invoke("msgr", "msgr.post", {"text": "grave"}, _ctx("run-6"))
+    await _seen_run(k, "run-6")
+
+    first = await _revert(k, "run-6")
+    assert [r["outcome"] for r in first] == ["approval_pending"]
+    req_id = first[0]["approval_id"]
+    assert req_id
+    [row] = await k.store.list_run_effects(T, "run-6")
+    assert row.status == "recorded"  # NOT stranded terminal
+    assert not any(v == "msgr.wipe" for v, _ in messenger.calls)  # nothing ran
+
+    await k.hitl.answer(T, req_id, "approve", "admin@acme")
+    second = await revert_run_effects(
+        k, _Principal(), "run-6", {str(row.seq): req_id}
+    )
+
+    assert [r["outcome"] for r in second] == ["reverted"]
+    assert [p for v, p in messenger.calls if v == "msgr.wipe"] == [{"ts": "1"}]
+    [settled] = await k.store.list_run_effects(T, "run-6")
+    assert settled.status == "reverted"
