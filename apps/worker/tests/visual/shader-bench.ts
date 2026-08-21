@@ -206,6 +206,10 @@ const RANGE_AT: Record<string, [number, number, number]> = {
   "clump:1": [0.4, 8, 0.05],
   "focus:0": [0, 2, 0.01],
   // Slight is the brief: 0.06 of the frame is already a hop, not a bob.
+  // The gain slider capped at the [0,1] fallback while the canon look sits at
+  // 1.18 — "brighter" was unreachable by dial. Real headroom for both halves.
+  "shardGain:0": [0, 4, 0.02],
+  "shardGain:1": [0, 2, 0.02],
   "bounce:0": [0, 0.06, 0.001],
   "bounce:1": [0, 3, 0.01],
   // Fractional on purpose: an integer dial jumped, and easing between modes
@@ -230,7 +234,10 @@ const RANGE_AT: Record<string, [number, number, number]> = {
 const RANGE: Record<string, [number, number, number]> = {
   linkRange: [0.02, 0.60, 0.005],
   crackRange: [0.02, 0.60, 0.005],
-  shardSize: [0.002, 0.06, 0.001],
+  // The floor and step were the whole problem: canon shards live at
+  // 0.003–0.006, which the old [0.002 min, 0.001 step] scale covered in
+  // three clicks and could barely go below. Finer, lower, and no dead top.
+  shardSize: [0.0005, 0.03, 0.0002],
   facetSize: [0.002, 0.06, 0.001],
   shardStride: [1, 64, 1],
   clump: [0, 1, 0.005],
