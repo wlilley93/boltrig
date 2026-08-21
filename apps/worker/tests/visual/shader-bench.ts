@@ -1386,7 +1386,7 @@ function row(
     xv.min = String(min);
     xv.max = String(max);
     xv.step = String(step);
-    xv.title = "×voice — the value this dial reaches at full voice. Double-click to clear.";
+    xv.title = "reach — the value this dial travels to at full syllable. Double-click to clear.";
     const paintXv = () => {
       const end = speech[lfoKey(key, index)];
       xv.classList.toggle("set", end !== undefined);
@@ -1417,6 +1417,23 @@ function row(
       rememberSpeech();
       paintXv();
     });
+    // CLICK AGAIN TO LET GO: tapping the thumb of an amber slider clears the
+    // reach back to grey/anchored. The discriminator is whether any `input`
+    // fired between pointerdown and click — the thumb jump runs BEFORE the
+    // pointerdown listener (measured), so comparing values cannot tell a tap
+    // from a drag, but a true thumb-tap fires no input at all while drags and
+    // jump-taps always do.
+    let xvTouched = false;
+    xv.addEventListener("input", () => { xvTouched = true; });
+    xv.addEventListener("pointerdown", () => { xvTouched = false; });
+    xv.addEventListener("click", () => {
+      const id = lfoKey(key, index);
+      if (speech[id] === undefined || xvTouched) return;
+      delete speech[id];
+      delete envState[id];
+      rememberSpeech();
+      paintXv();
+    });
     input.addEventListener("input", () => {
       if (speech[lfoKey(key, index)] === undefined) xv.value = input.value;
     });
@@ -1424,13 +1441,13 @@ function row(
     const fxbtns = document.createElement("div");
     fxbtns.className = "fxbtns";
     fxbtns.appendChild(bind);
-    // THE ENVELOPE. ⌁ gates this value's ×voice journey per syllable —
+    // THE ENVELOPE. ⌁ gates this value's reach journey per syllable —
     // attack, decay, sustain, release — so a blown-out shell radius can snap
     // out and pump back like a speaker cone instead of riding the meter.
     const env = document.createElement("button");
     env.type = "button";
     env.className = "lfo-bind envb";
-    env.title = "ADSR — gate the ×voice journey per syllable (speaker-cone pump). Click again to clear.";
+    env.title = "ADSR — gate the reach journey per syllable (speaker-cone pump). Click again to clear.";
     env.textContent = "⌁";
     fxbtns.appendChild(env);
     val.appendChild(fxbtns);
@@ -1939,9 +1956,9 @@ function loop(): void {
       && (envMoved || Math.abs(speechEnv - speechShown) > 0.003)) {
       speechShown = speechEnv;
       (renderer as { setTuning?(next: never): void }).setTuning?.(clone(effectiveTuning()) as never);
-    } else if (renderer && rackActive()) {
-      // The rack wobbles continuously; while any unit is pinned and breathing,
-      // the monitor follows it frame by frame.
+    } else if (renderer && rackActive() && speechEnv > 0.002) {
+      // The rack rides the speech: while the body talks and any unit is
+      // pinned, the monitor follows the wobble frame by frame.
       (renderer as { setTuning?(next: never): void }).setTuning?.(clone(effectiveTuning()) as never);
     }
   }
@@ -2217,10 +2234,11 @@ function rememberVolumes(): void {
 }
 
 /**
- * THE LFO RACK. As many units as wanted, each with a rate, a depth and a set
- * of PINNED CHANNELS: the unit wobbles the light of every strip pinned to it,
- * the way a tremolo rides a mixer bus. The channels come to the LFO rather
- * than each channel owning one — the per-dial ∿ stays for precision work.
+ * THE LFO RACK, and it RIDES THE SPEECH. As many units as wanted, each with a
+ * rate, a depth and a set of PINNED CHANNELS — but the wobble is scaled by
+ * the syllable meter, so pinned strips tremolo WITH the voice and stand
+ * still in silence. The channels come to the LFO rather than each channel
+ * owning one — the per-dial ∿ stays for free-running precision work.
  * Monitor-side, per body, this browser only, like the faders.
  */
 type RackUnit = { rate: number; depth: number; channels: string[] };
@@ -2244,12 +2262,14 @@ function rackActive(): boolean {
   return lfoRack.some((u) => u.depth > 0.001 && u.channels.length > 0);
 }
 
-/** The rack's combined wobble on one strip, this instant. Never below zero. */
+/** The rack's combined wobble on one strip, this instant — scaled by the
+ *  syllable meter, so it speaks when the body speaks. Never below zero. */
 function rackFactor(title: string, seconds: number): number {
   let factor = 1;
   lfoRack.forEach((unit, index) => {
     if (unit.depth <= 0.001 || !unit.channels.includes(title)) return;
-    factor *= 1 + unit.depth * Math.sin(2 * Math.PI * unit.rate * seconds + index * 1.7);
+    factor *= 1 + unit.depth * speechEnv
+      * Math.sin(2 * Math.PI * unit.rate * seconds + index * 1.7);
   });
   return Math.max(0, factor);
 }
@@ -2261,7 +2281,7 @@ function effectiveTuning(of: Tuning = tuning): Tuning {
   const envHeld = Object.values(envState).some((e) => e.level > 0.002);
   const talking = (speechEnv > 0.002 || envHeld)
     && (Object.keys(speech).length > 0 || talkTest.size > 0);
-  const racked = rackActive();
+  const racked = rackActive() && speechEnv > 0.002;
   if (soloed.size === 0 && !faded && !talking && !racked) return of;
   const out = clone(of);
   const record = out as unknown as Record<string, number | number[]>;
@@ -2531,7 +2551,7 @@ function buildRack(desk: HTMLElement): void {
   add.type = "button";
   add.className = "rackadd";
   add.textContent = "+ LFO";
-  add.title = "Add an LFO to the rack, then pin channels to it";
+  add.title = "Add an LFO to the rack, then pin channels — it wobbles them WITH the voice";
   add.addEventListener("click", () => {
     lfoRack.push({ rate: 0.4, depth: 0.25, channels: [] });
     rememberRack();
