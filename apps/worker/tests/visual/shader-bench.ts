@@ -567,6 +567,8 @@ function mount(): void {
     (renderer as JarvisNeuralRenderer).setLatticeVideo("/tests/visual/assets/jarvis-lattice.mp4");
   } else if (body === "ultron") {
     (renderer as UltronRenderer).setLatticeVideo("/tests/visual/assets/ultron-membrane.mp4");
+  } else if (body === "familiar") {
+    (renderer as FamiliarWebGLRenderer).setLatticeVideo("/tests/visual/assets/familiar-orb.mp4");
   }
   const status = renderer.status();
   if (status.state !== "running") {

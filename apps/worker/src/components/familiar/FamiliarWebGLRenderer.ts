@@ -17,6 +17,8 @@ import fragSrc from "../../bundles/familiar/familiar.frag?raw";
 import type { FamiliarGenotype } from "@wlilley93/boltrig-web-sdk";
 import { easeFactor, easeTuning, TRANSITION_SECONDS, INTRO_SECONDS } from "../canvas/bodyModes";
 import { createProgram } from "../canvas/glResources";
+import { emotionColour, readBodyPhenotype } from "../canvas/bodyEmotion";
+import { LatticeLayer, latticeVideo } from "../canvas/latticeLayer";
 import { FAMILIAR_TUNING, type FamiliarTuning } from "../canvas/familiarTuning";
 import { FAMILIAR_ARRIVAL, familiarModeTuning } from "../canvas/familiarPresets";
 import { packFamiliarGenotype } from "./FamiliarGenotype";
@@ -82,6 +84,11 @@ export class FamiliarWebGLRenderer {
   private introLeft = 0;
 
   private packedGenotype = packFamiliarGenotype(null);
+  private prog: WebGLProgram | null = null;
+  private lattice: LatticeLayer | null = null;
+  private latticeEl: HTMLVideoElement | null = null;
+  /** The last phenotype handed in, for the baked layer's recolour. */
+  private phenoRaw: Record<string, unknown> | null = null;
 
   /** Seconds since the previous frame, published by the mood tick. Seeded to
    *  a nominal 60fps so the first frame smooths rather than dividing by zero. */
@@ -142,6 +149,7 @@ export class FamiliarWebGLRenderer {
    * calm being, never a broken one.
    */
   applyPhenotype(scalars: Partial<Record<MoodKey, number>> | null): void {
+    this.phenoRaw = scalars as Record<string, unknown> | null;
     this.mood.applyPhenotype(scalars, performance.now());
   }
 
@@ -202,6 +210,9 @@ export class FamiliarWebGLRenderer {
   }
 
   destroy(): void {
+    this.latticeEl?.remove();
+    this.latticeEl = null;
+    this.lattice?.destroy();
     cancelAnimationFrame(this.raf);
     this.gl?.getExtension("WEBGL_lose_context")?.loseContext();
     this.canvas?.remove();
@@ -240,6 +251,7 @@ export class FamiliarWebGLRenderer {
     });
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this.drawLattice(gl, w, h, tuning);
     if (!this.painted) {
       this.painted = true;
       this.onFirstPaint?.();
@@ -286,6 +298,38 @@ export class FamiliarWebGLRenderer {
   }
 
   /** The wander, with the current mode's colouring laid over it. */
+  /** Mount (or clear) the baked orb loop. See canvas/latticeLayer.ts. */
+  setLatticeVideo(url: string | null): void {
+    this.latticeEl?.remove();
+    this.latticeEl = null;
+    if (!url) return;
+    this.latticeEl = latticeVideo(url);
+  }
+
+  /**
+   * The baked layer, RECOLOURED BY MOOD. Her colour is an emotion, so the
+   * footage is shot once in blue and repainted here every frame: the emotion
+   * palette's warm multipliers act on her cobalt base, fatigue pulls the
+   * result toward its own grey, and the layer's luminance carries the colour.
+   * Additive over her own pass -- light adds in either order.
+   */
+  private drawLattice(gl: WebGL2RenderingContext, w: number, h: number, tuning: FamiliarTuning): void {
+    if (!this.lattice || !this.latticeEl) return;
+    this.lattice.upload(this.latticeEl);
+    const gain = tuning.lattice[0] + tuning.lattice[1] * this.state.level;
+    if (gain <= 0) return;
+    const e = emotionColour(readBodyPhenotype(this.phenoRaw));
+    const base: readonly [number, number, number] = [0.45, 0.72, 1.0];
+    const col = [base[0] * e.warm[0], base[1] * e.warm[1], base[2] * e.warm[2]];
+    const lum = 0.299 * col[0] + 0.587 * col[1] + 0.114 * col[2];
+    const mood = col.map((c) => c + (lum - c) * e.desaturate);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+    this.lattice.draw([w, h], mood, gain, () => gl.drawArrays(gl.TRIANGLES, 0, 3), true);
+    gl.disable(gl.BLEND);
+    if (this.prog) gl.useProgram(this.prog);
+  }
+
   private shownMood(tuning: FamiliarTuning): Mood {
     if (this.state.mode !== "error") return this.mood.cur;
     const [tension, luminosity] = tuning.errorTone;
@@ -317,6 +361,9 @@ export class FamiliarWebGLRenderer {
     // compile/link path is a second place for a shader error to be reported
     // differently, and this one already throws with the info log attached.
     const prog = createProgram(gl, VERT_SRC, fragSrc);
+    this.prog = prog;
+    this.lattice = new LatticeLayer(gl);
+    this.lattice.init();
     gl.useProgram(prog);
     for (const name of UNIFORMS) this.uniforms[name] = gl.getUniformLocation(prog, name);
 

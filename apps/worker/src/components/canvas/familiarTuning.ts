@@ -123,6 +123,13 @@ export interface FamiliarTuning {
    * the page said the call had died — the one moment she must not look serene.
    */
   errorTone: readonly [tension: number, luminosity: number];
+  /**
+   * The baked orb layer: gain on a pre-rendered loop of her light — halos,
+   * filaments, the hexagonal ghosts — RECOLOURED live by her mood, because her
+   * colour is an emotion and footage cannot know tonight's. Second component
+   * rides the voice. Zero ships. See canvas/latticeLayer.ts.
+   */
+  lattice: readonly [gain: number, byVoice: number];
 }
 
 /**
@@ -152,4 +159,5 @@ export const FAMILIAR_TUNING: FamiliarTuning = {
   wander: [6, 32],
   gesture: [30, 90],
   errorTone: [0.75, 0.28],
+  lattice: [0, 0],
 };

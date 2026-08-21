@@ -19,6 +19,11 @@ uniform sampler2D uVideo;
 uniform float uGain;
 uniform vec2 uFit;
 uniform vec3 uWarm;
+// 0 = tint toward the warm colour (a body whose footage already carries its
+// palette); 1 = RECOLOUR: luminance drives the warm colour outright, for a
+// body whose colour is her mood -- the footage is shot once in blue and the
+// emotion decides what colour that light is tonight.
+uniform float uMode;
 void main() {
   vec2 uv = (vUV - 0.5) * uFit + 0.5;
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
@@ -27,7 +32,9 @@ void main() {
   }
   vec3 c = texture(uVideo, vec2(uv.x, 1.0 - uv.y)).rgb;
   vec3 tint = mix(vec3(1.0), uWarm * 1.55, 0.45);
-  oColor = vec4(c * tint * uGain, 1.0);
+  float lum = dot(c, vec3(0.299, 0.587, 0.114));
+  vec3 shaded = uMode > 0.5 ? lum * uWarm * 2.0 : c * tint;
+  oColor = vec4(shaded * uGain, 1.0);
 }`;
 
 export class LatticeLayer {
@@ -107,6 +114,7 @@ export class LatticeLayer {
     warm: ArrayLike<number>,
     gain: number,
     fullscreen: (prog: WebGLProgram) => void,
+    recolour = false,
   ): void {
     const gl = this.gl;
     if (!this.ready || !this.tex || !this.prog || gain <= 0) return;
@@ -120,6 +128,7 @@ export class LatticeLayer {
     gl.bindTexture(gl.TEXTURE_2D, this.tex);
     setUniforms(gl, this.prog, {
       uWarm: [warm[0], warm[1], warm[2]], uGain: gain, uFit: fit,
+      uMode: recolour ? 1 : 0,
     }, { uVideo: 2 });
     fullscreen(this.prog);
     gl.activeTexture(gl.TEXTURE0);
