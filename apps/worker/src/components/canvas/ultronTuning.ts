@@ -107,6 +107,11 @@ export interface UltronTuning {
    * AND the baked layer together, so they never drift apart. 1 ships.
    */
   presence: number;
+  /** A slight bounce of the whole composite: amplitude (UV) and speed (Hz),
+   *  with trails as ghost taps of where the body just was. [0,0] and 0 ship:
+   *  perfectly still until raised. */
+  bounce: readonly [amount: number, speed: number];
+  bounceTrail: number;
   /**
    * Three concentric clouds spread into arms. Jarvis leaves this at 0.
    *
@@ -180,4 +185,6 @@ export const ULTRON_TUNING: UltronTuning = {
   latticeGlow: 0,
   latticeSpeed: 1,
   presence: 1,
+  bounce: [0, 0],
+  bounceTrail: 0,
 };

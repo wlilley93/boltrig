@@ -55,6 +55,8 @@ export const ULTRON_ARRIVAL: UltronTuning = {
   latticeGlow: 0,
   latticeSpeed: 1,
   presence: 1,
+  bounce: [0, 0],
+  bounceTrail: 0,
 };
 
 /**

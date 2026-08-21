@@ -233,6 +233,11 @@ export interface JarvisTuning {
    * AND the baked layer together, so they never drift apart. 1 ships.
    */
   presence: number;
+  /** A slight bounce of the whole composite: amplitude (UV) and speed (Hz),
+   *  with trails as ghost taps of where the body just was. [0,0] and 0 ship:
+   *  perfectly still until raised. */
+  bounce: readonly [amount: number, speed: number];
+  bounceTrail: number;
   /**
    * The eye, after familiar.frag's heart -- pupil, iris, and the lens ring.
    *
@@ -305,6 +310,8 @@ export const JARVIS_TUNING: JarvisTuning = {
   latticeGlow: 0,
   latticeSpeed: 1,
   presence: 1,
+  bounce: [0, 0],
+  bounceTrail: 0,
   // Lens ring OFF (z = 0): the large screen-space circle around the body was
   // removed by request — the dial remains for anyone who wants it back, and
   // it now scales with presence when raised.

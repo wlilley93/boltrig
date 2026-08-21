@@ -155,7 +155,8 @@ export class UltronPasses {
     this.simulate(d, tuning);
     this.drawScene(d, palette, tuning);
     this.bloom();
-    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), 0.0, tuning.eye);
+    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), 0.0, tuning.eye,
+      [tuning.bounce[0], tuning.bounce[1], tuning.bounceTrail], d.time);
   }
 
   destroy(): void {
@@ -270,6 +271,7 @@ export class UltronPasses {
     // Passed in rather than read off a field: this method has no tuning of its
     // own, and reaching for one is what made it fail to compile.
     eye: readonly number[],
+    bounce: readonly number[], time: number,
   ): void {
     const gl = this.gl;
     const [w, h] = this.size;
@@ -284,6 +286,7 @@ export class UltronPasses {
     setUniforms(gl, prog, {
       ...palette, uAspect: w / Math.max(1, h), uBloomGain: 1.05,
       uCore: core, uStarburst: starburst, uEye: eye,
+      uBounce: bounce, uTime: time,
     }, { uScene: 0, uBloom: 1 });
     this.fullscreen(prog);
     gl.activeTexture(gl.TEXTURE0);

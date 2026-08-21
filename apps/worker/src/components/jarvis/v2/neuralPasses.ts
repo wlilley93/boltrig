@@ -173,7 +173,8 @@ export class NeuralPasses {
     const eye: readonly [number, number, number, number] = [
       tuning.eye[0], tuning.eye[1], tuning.eye[2] * tuning.presence, tuning.eye[3],
     ];
-    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), tuning.starburst, eye);
+    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), tuning.starburst, eye,
+      [tuning.bounce[0], tuning.bounce[1], tuning.bounceTrail], d.time);
   }
 
   destroy(): void {
@@ -290,6 +291,7 @@ export class NeuralPasses {
     // Passed in rather than read off a field: this method has no tuning of its
     // own, and reaching for one is what made it fail to compile.
     eye: readonly number[],
+    bounce: readonly number[], time: number,
   ): void {
     const gl = this.gl;
     const [w, h] = this.size;
@@ -304,6 +306,7 @@ export class NeuralPasses {
     setUniforms(gl, prog, {
       ...palette, uAspect: w / Math.max(1, h), uBloomGain: 0.85,
       uCore: core, uStarburst: starburst, uEye: eye,
+      uBounce: bounce, uTime: time,
     }, { uScene: 0, uBloom: 1 });
     this.fullscreen(prog);
     gl.activeTexture(gl.TEXTURE0);

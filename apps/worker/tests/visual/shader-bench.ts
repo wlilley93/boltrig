@@ -95,6 +95,8 @@ const LEGEND: Record<string, readonly string[]> = {
   latticeSat: ["level"],
   latticeGlow: ["amount"],
   latticeSpeed: ["×realtime"],
+  bounce: ["amount", "speed"],
+  bounceTrail: ["persistence"],
   // ---- Jarvis: the wheels -------------------------------------------------
   ringGain: ["brightness", "×voice"],
   ringSpin: ["spin SPEED", "precess SPEED"],
@@ -203,6 +205,9 @@ const LEGEND: Record<string, readonly string[]> = {
 const RANGE_AT: Record<string, [number, number, number]> = {
   "clump:1": [0.4, 8, 0.05],
   "focus:0": [0, 2, 0.01],
+  // Slight is the brief: 0.06 of the frame is already a hop, not a bob.
+  "bounce:0": [0, 0.06, 0.001],
+  "bounce:1": [0, 3, 0.01],
   // Fractional on purpose: an integer dial jumped, and easing between modes
   // stepped through the counts in between instead of gliding.
   "ringArc:0": [0.25, 9, 0.05],
@@ -230,6 +235,7 @@ const RANGE: Record<string, [number, number, number]> = {
   shardStride: [1, 64, 1],
   clump: [0, 1, 0.005],
   lattice: [0, 2, 0.01],
+  bounceTrail: [0, 0.95, 0.01],
   latticeBlur: [0, 1, 0.01],
   latticeSat: [0, 2, 0.01],
   latticeGlow: [0, 1, 0.01],
@@ -961,6 +967,7 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "6 · The eye — core and composite", fields: [
     "core", "eye", "starburst", "petal", "cloud",
   ] },
+  { title: "0 · Motion — bounce and trails", fields: ["bounce", "bounceTrail"] },
   { title: "6 · Voice reverberation — how speech crosses the body", fields: [
     "reverb",
   ] },
@@ -1056,6 +1063,8 @@ const TITLES: Record<string, string> = {
   core: "How bright the heart is",
   eye: "The eye — pupil, iris and lens ring",
   reverb: "How the voice rings through the body",
+  bounce: "A slight bounce of the whole composite",
+  bounceTrail: "How much ghost trail the bounce leaves behind",
   starburst: "Horizontal flare across the middle",
   petal: "How many bloom lobes",
   cloud: "How cloud-formed the mass is",
@@ -1871,6 +1880,7 @@ const SPATIAL_RANK: Record<string, number> = {
   "3 · The iris — radial filaments": 10,
   "6 · The eye — core and composite": 11,
   "6 · Voice reverberation — how speech crosses the body": 90,
+  "0 · Motion — bounce and trails": 89,
 };
 
 /**
@@ -1893,6 +1903,7 @@ const STRIP_NAME: Record<string, string> = {
   "3 · The iris — radial filaments": "Iris",
   "6 · The eye — core and composite": "Eye",
   "6 · Voice reverberation — how speech crosses the body": "Reverb",
+  "0 · Motion — bounce and trails": "Motion",
   "1 · Her voice — what speech does to the body": "Voice",
   "2 · Her envelope — the shape of a syllable": "Envelope",
   "3 · Her attention — being spoken to": "Attention",

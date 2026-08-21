@@ -141,6 +141,11 @@ export interface FamiliarTuning {
    * AND the baked layer together, so they never drift apart. 1 ships.
    */
   presence: number;
+  /** A slight bounce of the whole composite: amplitude (UV) and speed (Hz),
+   *  with trails as ghost taps of where the body just was. [0,0] and 0 ship:
+   *  perfectly still until raised. */
+  bounce: readonly [amount: number, speed: number];
+  bounceTrail: number;
 }
 
 /**
@@ -176,4 +181,6 @@ export const FAMILIAR_TUNING: FamiliarTuning = {
   latticeGlow: 0,
   latticeSpeed: 1,
   presence: 1,
+  bounce: [0, 0],
+  bounceTrail: 0,
 };

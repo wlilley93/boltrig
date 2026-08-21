@@ -240,6 +240,14 @@ export class FamiliarWebGLRenderer {
 
     const t = this.reducedMotion ? 0 : (now - this.startTime) / 1000;
     const tuning = this.tick(now);
+    // HER BOUNCE IS THE CANVAS ITSELF: one transform bobs her body and her
+    // baked orb together, at no shader cost. She gets no trails — her body is
+    // procedural, not a texture to ghost-tap — so the setting is the bob.
+    const bob = tuning.bounce[0] > 0.0001 && !this.reducedMotion
+      ? Math.sin(2 * Math.PI * tuning.bounce[1] * t) * tuning.bounce[0] * canvas.clientHeight
+      : 0;
+    const lift = bob === 0 ? "" : `translateY(${(-bob).toFixed(2)}px)`;
+    if (canvas.style.transform !== lift) canvas.style.transform = lift;
     const drive = familiarDrive(this.state, this.smoothers, this.lastDt, t, tuning);
     // Presence folds into her composition, so one dial moves her and her
     // baked orb together as a composite piece.
