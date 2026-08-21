@@ -34,4 +34,9 @@ async def regeneration_inputs(
     )
     if user is None:
         raise RegenerateNotEligible("no user message to regenerate")
-    return assistant, user, conversation.agent_address if conversation is not None else None
+    agent_address = (
+        assistant.author_agent_address
+        or user.recipient_agent_address
+        or (conversation.agent_address if conversation is not None else None)
+    )
+    return assistant, user, agent_address

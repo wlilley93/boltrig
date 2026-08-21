@@ -12,6 +12,8 @@ import { InlineApproval } from "./InlineApproval";
 import { OrderedWorkTranscript } from "./OrderedWorkTranscript";
 import { PersistedDecision } from "./PersistedDecision";
 import { SubagentChips } from "./SubagentChips";
+import { DisplayObjectList } from "./display/DisplayObjectList";
+import type { DisplayObjectReply } from "./display/DecisionDisplayCards";
 import {
   attachmentIdentity,
   downloadAttachment,
@@ -20,21 +22,26 @@ import {
 
 export function Message({
   message,
+  agentLabel,
   tech,
   durationSeconds,
   onDecisionResolved,
   onOpenSubagent,
+  onDisplayReply,
 }: {
   message: ChatMessage;
+  agentLabel?: string;
   tech: boolean;
   durationSeconds?: number;
   onDecisionResolved?(): void;
   onOpenSubagent?(agent: SubagentEntry): void;
+  onDisplayReply?: DisplayObjectReply;
 }) {
   const turn = useMemo(() => normalizeEvents(message.events ?? []), [message.events]);
   return (
     <article className={`message ${message.role}`}>
       <div className="message-content">
+        {agentLabel && <p className="message-agent-label">{agentLabel}</p>}
         {turn.degraded && (
           <p className="notice" role="status">
             This response used a degraded fallback; treat its result as incomplete.
@@ -48,6 +55,7 @@ export function Message({
           settled
           durationSeconds={durationSeconds ?? null}
         />
+        <DisplayObjectList entries={turn.displayObjects ?? []} settled onReply={onDisplayReply} />
         {message.attachments?.map((item) => (
           <button
             type="button"
@@ -69,20 +77,25 @@ export function Message({
 
 export function LiveTurn({
   events,
+  agentLabel,
   turn,
   tech,
   startedAt,
   onOpenSubagent,
+  onDisplayReply,
 }: {
   events: ChatEvent[];
+  agentLabel?: string;
   turn: NormalizedTurn;
   tech: boolean;
   startedAt: number | null;
   onOpenSubagent?(agent: SubagentEntry): void;
+  onDisplayReply?: DisplayObjectReply;
 }) {
   return (
     <article className="message assistant live">
       <div className="message-content">
+        {agentLabel && <p className="message-agent-label">{agentLabel}</p>}
         <span aria-atomic="true" className="chat-live-announcement" role="status">
           {turn.ended
             ? "Response complete."
@@ -103,6 +116,7 @@ export function LiveTurn({
           turn={turn}
           startedAt={startedAt}
         />
+        <DisplayObjectList entries={turn.displayObjects ?? []} settled={turn.ended} onReply={onDisplayReply} />
         <TurnDecisions turn={turn} tech={tech} onOpenSubagent={onOpenSubagent} />
         {/* The resolved routing receipt is developer detail; the plain console
             already names the selected model in the composer chip. */}

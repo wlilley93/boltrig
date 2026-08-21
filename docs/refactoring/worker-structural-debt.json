@@ -731,16 +731,16 @@
         },
         {
           "name": "ChatView.send",
-          "line": 344,
+          "line": 341,
           "column": 3,
-          "lines": 111,
+          "lines": 109,
           "parameters": 2,
-          "complexity": 34,
+          "complexity": 32,
           "nesting_depth": 4
         },
         {
           "name": "ChatView.reattach",
-          "line": 660,
+          "line": 656,
           "column": 3,
           "lines": 67,
           "parameters": 3,
@@ -749,7 +749,7 @@
         },
         {
           "name": "ChatView.acceptLiveEvent",
-          "line": 728,
+          "line": 724,
           "column": 3,
           "lines": 61,
           "parameters": 2,
@@ -758,7 +758,7 @@
         }
       ],
       "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-20: named-agent turn selection moved into a bounded hook while ChatView stayed at the 1325-line file ratchet; send fell from 111/34 to 109/32 and the unchanged reattach/live-event functions moved with the extraction.",
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/CommandPalette.tsx": {

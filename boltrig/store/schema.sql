@@ -739,7 +739,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     id          TEXT NOT NULL,
     tenant_id   TEXT NOT NULL,
     user_id     TEXT NOT NULL,                          -- owner
-    agent_address TEXT,                                 -- nullable only for 0084 legacy reconciliation
+    agent_address TEXT,                                 -- next admitted turn; history is message-attributed
+    workspace_id TEXT,                                  -- project/workspace; NULL = unfiled/legacy
     title       TEXT,
     status      TEXT NOT NULL DEFAULT 'active',         -- active | closed
     origin      TEXT NOT NULL DEFAULT 'user'
@@ -1429,6 +1430,8 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
     role            TEXT NOT NULL,                      -- user | assistant | tool | system
     content         TEXT,
     run_id          TEXT,                               -- the fleet run this turn used
+    recipient_agent_address TEXT,                       -- immutable USER turn recipient
+    author_agent_address TEXT,                          -- immutable ASSISTANT/TOOL/SYSTEM author
     hitl_request_id TEXT,                               -- set for an inline HITL prompt
     events          JSONB,                              -- structured render data
     attachments     JSONB,                              -- inline size-capped attachment records ([2026] VJS-COUNTY 3)
@@ -1510,11 +1513,29 @@ CREATE UNIQUE INDEX IF NOT EXISTS named_agents_one_default_idx
   ON named_agents(tenant_id) WHERE default_for_intake AND enabled;
 CREATE INDEX IF NOT EXISTS conversations_agent_idx
   ON conversations(tenant_id,agent_address,updated_at DESC);
+CREATE INDEX IF NOT EXISTS conversations_workspace_idx
+  ON conversations(tenant_id,workspace_id,updated_at DESC);
 DO $$
 BEGIN
   ALTER TABLE conversations
     ADD CONSTRAINT conversations_named_agent_fkey
     FOREIGN KEY (tenant_id,agent_address)
+    REFERENCES named_agents(tenant_id,address) ON DELETE RESTRICT;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$
+BEGIN
+  ALTER TABLE conversation_messages
+    ADD CONSTRAINT conversation_messages_recipient_agent_fkey
+    FOREIGN KEY (tenant_id,recipient_agent_address)
+    REFERENCES named_agents(tenant_id,address) ON DELETE RESTRICT;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$
+BEGIN
+  ALTER TABLE conversation_messages
+    ADD CONSTRAINT conversation_messages_author_agent_fkey
+    FOREIGN KEY (tenant_id,author_agent_address)
     REFERENCES named_agents(tenant_id,address) ON DELETE RESTRICT;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
@@ -1830,6 +1851,14 @@ CREATE TABLE IF NOT EXISTS workspaces (
     PRIMARY KEY (tenant_id, id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS workspaces_slug_idx ON workspaces (slug);
+DO $$
+BEGIN
+  ALTER TABLE conversations
+    ADD CONSTRAINT conversations_workspace_fkey
+    FOREIGN KEY (tenant_id,workspace_id)
+    REFERENCES workspaces(tenant_id,id) ON DELETE RESTRICT;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- D3: organisation membership. One row per user per org; role is drawn from the
 -- existing platform role vocabulary. Tenant-scoped (RLS).

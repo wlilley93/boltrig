@@ -389,3 +389,11 @@ button.subagent-fan-row:hover .subagent-fan-name { color: var(--text); }
   white-space: pre-wrap;
   font-size: 0.95em;
 }
+
+.message-agent-label {
+  margin: 0 0 5px;
+  color: var(--text-4);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .01em;
+}

@@ -2770,13 +2770,20 @@ invariants:
       - tests/unit/test_named_agent_mailbox.py::test_continuity_compacts_only_processed_history_plus_recent_tail
       - tests/unit/test_named_agent_mailbox.py::test_long_lived_dialogue_compacts_past_the_old_thousand_message_edge
   CONV-AGENT-02:
-    description: 'Every human chat with a named tier-1 agent has one durable immutable agent address: a new chat binds either the caller-selected registered agent or the explicitly authored intake default, a roster with no default is refused as ambiguous rather than resolved by row order, legacy NULL rows are claimed through one compare-and-set, subsequent turns/regenerations keep that binding, and a conflicting address assertion is refused before any message or run write. The address is projected on list/detail/live/replay contracts so clients label provenance from server truth rather than inference.'
+    description: 'A human conversation is one chronological turn ledger whose next responder may explicitly change only at an idle turn boundary. Each USER row freezes its recipient_agent_address, each ASSISTANT/TOOL/SYSTEM row freezes its author_agent_address, and both sides of one turn share a stable run_id, so selecting Head of Legal after a CoS turn changes only future routing and the derived agent pile: it never rewrites CoS authorship or immutable peer mail. A new chat resolves either the selected registered agent or the authored intake default; a roster with no default is refused as ambiguous; disabled/unknown agents and active-turn switches are refused before any message, queue, run or selection write. Regeneration preserves the original turn author even if the next-responder projection later changes.'
     tests:
       - tests/integration/test_chat.py::test_direct_chat_runs_the_default_named_identity
-      - tests/integration/test_chat.py::test_explicit_conversation_agent_is_immutable_across_turns_and_mismatch_refuses
+      - tests/integration/test_chat.py::test_explicit_agent_switches_between_turns_without_rewriting_history
+      - tests/integration/test_chat.py::test_agent_switch_during_active_turn_is_refused_before_queue_or_mutation
       - tests/integration/test_chat.py::test_named_roster_without_authored_default_requires_explicit_agent
       - tests/integration/test_chat.py::test_disabled_named_agent_never_falls_through_to_legacy_runtime
-      - tests/store/test_store_parity.py::test_conversation_agent_binding_is_compare_and_set_on_both_stores
+      - tests/security/test_chat_regenerate.py::test_regenerate_preserves_original_turn_agent_after_next_responder_changes
+      - tests/store/test_store_parity.py::test_conversation_agent_selection_is_compare_and_set_on_both_stores
+  CONV-PROJECT-01:
+    description: 'Projects reuse the existing Workspace aggregate and belong to the human/team, never an agent. Conversation workspace membership moves through an owner-only compare-and-set that changes neither current agent nor historical messages; a target workspace must be active and visible to the owner, an active conversation cannot be dragged, and generic metadata updates cannot silently move it. Filed future turns require the same re-authorized active workspace, while project and agent sidebar piles remain alternate projections over the one conversation ledger.'
+    tests:
+      - tests/integration/test_chat.py::test_conversation_project_move_is_owner_scoped_and_future_turns_use_that_context
+      - tests/store/test_store_parity.py::test_conversation_project_membership_is_compare_and_set_on_both_stores
   DIS-1:
     description: 'A distillation corpus is tenant-fenced by refusal, not by filter: a record or target endpoint outside the corpus tenant raises rather than silently thinning the corpus (decision 0023).'
     tests:

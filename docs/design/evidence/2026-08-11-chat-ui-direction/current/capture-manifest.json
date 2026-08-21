@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-20T18:38:29.263Z",
+  "capturedAt": "2026-08-21T10:38:58.428Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,12 +17,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "c56cc3b575d161a696ba1b70aba6c0291f0962431c5c87af7935ef0226139802",
-    "digestAfterCapture": "c56cc3b575d161a696ba1b70aba6c0291f0962431c5c87af7935ef0226139802",
+    "digestBeforeCapture": "dc806317f8364e40453808740c3482bfe50f88c38193a6dd47b0e2fee54e3b45",
+    "digestAfterCapture": "dc806317f8364e40453808740c3482bfe50f88c38193a6dd47b0e2fee54e3b45",
     "sourceUnchangedDuringCapture": true,
-    "branch": "pr321-update",
-    "head": "ec1a9a95bb36faef7bff23959ac29d6169f3d753",
-    "dirty": false
+    "branch": "codex/turn-scoped-agent-chat",
+    "head": "f57919f67c476231ca4a3aedc6c8547160f4b875",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
@@ -40,7 +40,7 @@
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "015ca5a23e11535f558c5014b656121778a3c430eee6b3f6c51dbc8ab9fe9e61",
+      "sha256": "cf0c40a19d4e04b17a684bbceac833eb407754066642c74184417755e2c7c351",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -62,6 +62,8 @@
         "fixtureMisses": [],
         "contractMisses": [],
         "requestedPaths": [
+          "/v1/workspaces",
+          "/v1/named-agents",
           "/v1/conversations?limit=25&offset=0",
           "/v1/me/settings",
           "/v1/orgs/current",
@@ -75,6 +77,7 @@
           "/v1/chat/config",
           "/v1/me/settings",
           "/v1/familiar/phenotype",
+          "/v1/named-agents",
           "/v1/me/settings",
           "/v1/capabilities",
           "/v1/capabilities",

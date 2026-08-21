@@ -346,6 +346,7 @@ class ChatService(ChatQueueService):
             run_id=run_id,
             hitl_request_id=hitl_id,
             events=collected,
+            author_agent_address=agent_address,
         )
         await self._store.add_message(new_message)
         conv = await self._store.get_conversation(tenant_id, conversation_id)

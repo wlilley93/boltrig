@@ -2,6 +2,8 @@
 // Fields the kernel may add later (binding target, live verb health) are kept
 // optional so the client tolerates their absence.
 
+import type { DisplayObjectEnvelope } from "./displayObjects.js";
+
 export type AdapterHealth = "ok" | "degraded" | "down" | "unknown";
 
 export interface HealthResponse {
@@ -526,8 +528,10 @@ export interface AuditTreeResponse {
 
 export interface ConversationSummary {
   id: string;
-  /** Immutable durable identity handling this conversation. */
+  /** Named tier-1 peer selected for the next admitted turn. */
   agent_address?: string | null;
+  /** Existing Workspace id used as the human-owned project boundary. */
+  workspace_id?: string | null;
   title: string;
   status: string;
   updated_at: string;
@@ -649,6 +653,10 @@ export interface ChatMessage {
   role: ChatRole;
   content: string;
   run_id?: string | null;
+  /** Immutable recipient of this persisted input turn. */
+  recipient_agent_address?: string | null;
+  /** Immutable author of this persisted assistant/tool/system turn. */
+  author_agent_address?: string | null;
   hitl_request_id?: string | null;
   events?: ChatEvent[];
   attachments?: ChatAttachment[];
@@ -667,7 +675,7 @@ export interface ConversationModelContext {
 export interface ConversationResponse {
   conversation?: Pick<
     ConversationSummary,
-    "id" | "agent_address" | "title" | "status" | "origin" | "source_ref" | "source_run_id" | "companion_id"
+    "id" | "agent_address" | "workspace_id" | "title" | "status" | "origin" | "source_ref" | "source_run_id" | "companion_id"
   >;
   messages: ChatMessage[];
   active_run_id?: string | null;
@@ -688,6 +696,34 @@ export interface ConversationQueueReorderResponse {
   message_ids: string[];
 }
 
+export interface ConversationProjectMoveResponse {
+  status: "ok" | "conflict" | "error" | "denied";
+  id?: string;
+  workspace_id?: string | null;
+  reason?: string;
+}
+
+/** Caller-visible tier-1 peer profile. Brief/private prompt material is absent. */
+export interface NamedAgentView {
+  address: string;
+  name: string;
+  topology: "tier1_peer";
+  session: "durable_logical";
+  runtime: string;
+  model_endpoint?: string | null;
+  supported_skills: string[];
+  max_depth: number;
+  cost_tier: string;
+  purpose: string;
+  scope_id?: string | null;
+  default_for_intake: boolean;
+  enabled: boolean;
+}
+
+export interface NamedAgentsResponse {
+  named_agents: NamedAgentView[];
+}
+
 export interface ChatFollowFrame {
   cursor: number;
   event: ChatEvent;
@@ -697,8 +733,8 @@ export interface ChatFollowFrame {
 export interface ChatRequest {
   // omit to start a new conversation; the first message_start returns the id
   conversation_id?: string;
-  // Selects the durable tier-1 identity for a new conversation. For an
-  // existing conversation this can only assert its immutable binding.
+  // Selects the tier-1 peer for this turn. A different peer on an existing
+  // conversation is admitted only when idle; historical messages never change.
   agent_address?: string;
   message: string;
   // inline, size-capped attachments ({name, media_type, data:base64}); omitted
@@ -959,6 +995,13 @@ export interface ChatArtifactRejected {
   run_id?: string;
 }
 
+/** A validated visual object emitted by the named agent for this turn. */
+export interface ChatDisplayObject {
+  type: "display_object";
+  object: DisplayObjectEnvelope;
+  run_id?: string;
+}
+
 /**
  * A relay frame was intentionally withheld because it is not part of the
  * reviewed public chat vocabulary or did not satisfy that vocabulary.
@@ -988,6 +1031,7 @@ export type ChatEvent =
   | ChatModelRouting
   | ChatArtifact
   | ChatArtifactRejected
+  | ChatDisplayObject
   | ChatEventUnavailable;
 
 // POST /v1/hitl/{question_id}/answer: owner-only, fail-closed answer to an

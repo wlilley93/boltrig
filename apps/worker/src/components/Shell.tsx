@@ -430,7 +430,7 @@ export function Sidebar({
         conversations={conversations}
         conversationStatus={conversationStatus}
         hasMoreConversations={hasMoreConversations}
-        onConversation={onConversation}
+        onConversation={onConversation} onNewConversation={() => onRoute("chat")}
         onConversationArchived={onConversationArchived}
         onLoadMore={onLoadMore}
         onRetryConversations={onRetryConversations}

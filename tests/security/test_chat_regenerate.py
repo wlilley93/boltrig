@@ -16,7 +16,7 @@ from boltrig.fleet.continuity import compose_turn_task, render_transcript
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.kernel.events import EventRelay
-from boltrig.models import ConversationMessage, ConversationStatus, MessageRole
+from boltrig.models import ConversationMessage, ConversationStatus, MessageRole, NamedAgent
 from boltrig.store import InMemoryStore
 
 T = "acme"
@@ -72,6 +72,49 @@ async def test_regenerate_appends_new_reply_and_freezes_the_old():
     assert frozen.superseded_by == new_msg.id
     assert frozen.content == old_content == "first answer"
     assert frozen.run_id == old_run and frozen.created_at == old_created
+
+
+@pytest.mark.security
+@pytest.mark.invariant("CONV-AGENT-02")
+async def test_regenerate_preserves_original_turn_agent_after_next_responder_changes():
+    store, relay = InMemoryStore(), EventRelay()
+    for address in ("writer", "researcher"):
+        await store.upsert_named_agent(NamedAgent(
+            tenant_id=T,
+            address=address,
+            name=address.title(),
+            runtime="script",
+            default_for_intake=address == "writer",
+        ))
+    first = ChatService(store, relay, turn_executor=_stub_executor("first answer"))
+    async for _ in first.handle_turn(
+        tenant_id=T, user_id="alice", role="engineer", message="draft"
+    ):
+        pass
+    conversation = (await store.list_conversations(T, "alice"))[0]
+    messages = await store.list_messages(T, conversation.id)
+    assert messages[1].author_agent_address == "writer"
+    assert await store.switch_conversation_agent(
+        T, conversation.id, "writer", "researcher"
+    ) == "researcher"
+    seen: list[str | None] = []
+
+    async def executor(*, run_id, relay, agent_address=None, **kw):
+        seen.append(agent_address)
+        relay.publish(run_id, {"type": "text_delta", "delta": "regenerated"})
+
+    regenerated = ChatService(store, relay, turn_executor=executor)
+    new_message, _ = await regenerated.regenerate_turn(
+        tenant_id=T,
+        user_id="alice",
+        role="engineer",
+        conversation_id=conversation.id,
+        target_message_id=messages[1].id,
+    )
+
+    assert seen == ["writer"]
+    assert new_message.author_agent_address == "writer"
+    assert (await store.get_conversation(T, conversation.id)).agent_address == "researcher"
 
 
 @pytest.mark.security

@@ -428,7 +428,7 @@ class FleetManifest:
         # enters a caller context only after the durable tier-1 sender check;
         # adding it to this independent tenant ceiling does not grant it to a
         # human or ephemeral context.
-        allow.add("agent.send")
+        allow.update(("agent.send", "chat.present"))
         if "*" in allow:
             return GrantSet.of(["*"], deny=sorted(deny))
         return GrantSet.of(sorted(allow), deny=sorted(deny))

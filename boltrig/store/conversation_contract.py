@@ -11,10 +11,23 @@ from boltrig.models import Conversation, ConversationMessage, ConversationSummar
 class ConversationStoreContract(Protocol):
     async def create_conversation(self, conv: Conversation) -> None: ...
     async def get_conversation(self, tenant_id: str, conv_id: str) -> Conversation | None: ...
-    async def bind_conversation_agent(
-        self, tenant_id: str, conv_id: str, agent_address: str
+    async def switch_conversation_agent(
+        self,
+        tenant_id: str,
+        conv_id: str,
+        expected_address: str | None,
+        agent_address: str,
     ) -> str | None:
-        """Set a legacy NULL binding once and return the converged address."""
+        """CAS the next-turn target and return the converged address."""
+        ...
+    async def move_conversation_workspace(
+        self,
+        tenant_id: str,
+        conv_id: str,
+        expected_workspace_id: str | None,
+        workspace_id: str | None,
+    ) -> tuple[bool, str | None]:
+        """CAS project membership; return (found, converged workspace id)."""
         ...
     async def list_conversations(self, tenant_id: str, user_id: str) -> list[Conversation]: ...
 
