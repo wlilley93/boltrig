@@ -28,6 +28,8 @@ PUBLIC_MODEL_EXPORTS = [
     "NounId",
     "OrgId",
     "RunId",
+    "RunEffect",
+    "RUN_EFFECT_STATUSES",
     "SkillId",
     "TenantId",
     "UserId",

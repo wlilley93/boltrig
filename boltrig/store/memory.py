@@ -37,6 +37,7 @@ from .model_endpoints_memory import ModelEndpointStoreMem
 from .conversation_queue import ConversationQueueStoreMem
 from .conversation_binding_memory import ConversationBindingStoreMem
 from .agent_mailbox_memory import AgentMailboxStoreMem
+from .effect_ledger_memory import EffectLedgerStoreMem
 from boltrig.models import (
     AgentCapability,
     AuditEvent,
@@ -104,6 +105,7 @@ def _norm_email_key(value) -> str:
 
 
 class InMemoryStore(
+    EffectLedgerStoreMem,
     DistillationReadsMem,
     BudgetPolicyMem,
     BudgetUsageMem,
