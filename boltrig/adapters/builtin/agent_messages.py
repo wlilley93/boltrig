@@ -82,6 +82,49 @@ class AgentMessageAdapter:
             )
         ]
 
+    async def _resolve_endpoints(
+        self, params: dict, context: InvocationContext
+    ) -> tuple[Any, Any] | Result:
+        """Sender + recipient checks, or the precise refusal.
+
+        The caller never supplies ``from``. Identity comes only from the
+        kernel-stamped context, and a mailbox row proves it is a durable peer.
+        A missing ``to`` is INVALID, not NOT_FOUND: the NOT_FOUND class maps
+        to the kernel-wide 'adapter_not_found' status, so an agent calling
+        agent.send with a blank recipient surfaced as "the adapter does not
+        exist" (measured on the beelink, 2026-08-21) - misdirecting diagnosis
+        at the adapter registry instead of the call. NOT_FOUND stays reserved
+        for a real address with no enabled peer, and names the address.
+        """
+        sender = await self._store.get_named_agent(context.tenant_id, context.actor)
+        if context.actor_tier != "tier1" or sender is None or not sender.enabled:
+            return Result.failure(
+                AdapterError(ErrorClass.UNAUTHORISED, "only a named tier-1 agent can send")
+            )
+        recipient_address = str(params.get("to") or "")
+        if not recipient_address:
+            return Result.failure(
+                AdapterError(
+                    ErrorClass.INVALID,
+                    "agent.send requires 'to': the recipient's named-agent address",
+                )
+            )
+        recipient = await self._store.get_named_agent(
+            context.tenant_id, recipient_address
+        )
+        if recipient is None or not recipient.enabled:
+            return Result.failure(
+                AdapterError(
+                    ErrorClass.NOT_FOUND,
+                    f"no enabled named agent at '{recipient_address}'",
+                )
+            )
+        if sender.address == recipient.address:
+            return Result.failure(
+                AdapterError(ErrorClass.INVALID, "agent messages require a peer recipient")
+            )
+        return sender, recipient
+
     async def execute(
         self,
         verb: str,
@@ -92,25 +135,10 @@ class AgentMessageAdapter:
         del credential
         if verb != "agent.send":
             return Result.failure(AdapterError(ErrorClass.INVALID, "unknown agent verb"))
-        # The caller never supplies ``from``. Identity comes only from the
-        # kernel-stamped context, and a mailbox row proves it is a durable peer.
-        sender = await self._store.get_named_agent(context.tenant_id, context.actor)
-        if context.actor_tier != "tier1" or sender is None or not sender.enabled:
-            return Result.failure(
-                AdapterError(ErrorClass.UNAUTHORISED, "only a named tier-1 agent can send")
-            )
-        recipient_address = str(params.get("to") or "")
-        recipient = await self._store.get_named_agent(
-            context.tenant_id, recipient_address
-        )
-        if recipient is None or not recipient.enabled:
-            return Result.failure(
-                AdapterError(ErrorClass.NOT_FOUND, "named agent recipient not found")
-            )
-        if sender.address == recipient.address:
-            return Result.failure(
-                AdapterError(ErrorClass.INVALID, "agent messages require a peer recipient")
-            )
+        endpoints = await self._resolve_endpoints(params, context)
+        if isinstance(endpoints, Result):
+            return endpoints
+        sender, recipient = endpoints
         try:
             kind = AgentMessageKind(str(params.get("kind") or ""))
         except ValueError:

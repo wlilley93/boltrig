@@ -3345,6 +3345,17 @@ button.console-row-main { border: 0; background: transparent; color: inherit; cu
 :root[data-mobile-surface] .mobile-menu,
 :root[data-mobile-surface] .topbar { display: none; }
 :root[data-mobile-surface] .surface { padding: 0; }
+
+/* Embed mode (?embed=1, stamped as data-embed by applyAppearance): an
+   embedding host renders its own chrome around the pane, so the worker's
+   outer shell - nav rail, its mobile trigger, the topbar - hides and the
+   surface runs edge to edge. Same idiom as data-mobile-surface directly
+   above; the chat's own header stays (conversation controls belong to the
+   conversation, not the shell). */
+:root[data-embed] .mobile-menu,
+:root[data-embed] .sidebar-wrap,
+:root[data-embed] .topbar { display: none; }
+:root[data-embed] .surface { padding: 0; }
 .m-empty { flex: 0 0 auto; margin: 0; color: var(--m-text-3); font-size: 17px; line-height: 1.5; }
 .m-head { flex: 0 0 auto; display: flex; align-items: center; gap: 11px; padding: 6px 14px 12px; }
 .m-round {

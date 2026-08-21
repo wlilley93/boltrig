@@ -50,6 +50,36 @@ const DARK_QUERY = "(prefers-color-scheme: dark)";
 let currentAppearance: Appearance | null = null;
 let systemThemeQuery: MediaQueryList | null = null;
 
+// ── Page modes (URL-carried, per-load, never persisted) ─────────────────────
+// An embedding host (the Opbox Agents panel) opens the worker with
+// `?theme=light&embed=1`. Both are read from the real search string - the app
+// is a hash router, so the search part survives every hash navigation - and
+// both are re-read per call rather than cached: the parse is trivial and a
+// test can then drive them through location alone. They deliberately touch
+// NEITHER localStorage nor the kernel settings: the person's saved preference
+// is what they chose; a host forcing light for one pane is not a choice.
+
+/** The `?theme=` override for this page load, or null when absent/invalid. */
+export function forcedThemeOverride(): WorkerTheme | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = new URLSearchParams(window.location.search).get("theme");
+    return raw === "light" || raw === "dark" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/** True when the page was opened with `?embed=1` (host supplies the chrome). */
+export function isEmbedMode(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return new URLSearchParams(window.location.search).get("embed") === "1";
+  } catch {
+    return false;
+  }
+}
+
 function oneOf<T extends string>(value: unknown, options: readonly T[], fallback: T): T {
   return typeof value === "string" && options.includes(value as T) ? value as T : fallback;
 }
@@ -149,13 +179,19 @@ function installSystemThemeListener(): void {
 // Apply every supported axis to <html>. data-theme carries the effective
 // light/dark palette because the current console token layer is resolved;
 // data-theme-preference retains whether that palette follows the system.
+// A `?theme=` page override clamps ONLY the effective palette here - the
+// preference attr, localStorage and the kernel settings all keep the saved
+// value, so the override survives the server-settings re-apply and the
+// system-theme listener without touching either persistence path.
 export function applyAppearance(appearance: Appearance): Appearance {
   const value = normaliseAppearance(appearance);
   currentAppearance = value;
   if (typeof document === "undefined") return value;
   const root = document.documentElement;
-  root.dataset.theme = resolvedTheme(value.theme);
+  root.dataset.theme = forcedThemeOverride() ?? resolvedTheme(value.theme);
   root.dataset.themePreference = value.theme;
+  if (isEmbedMode()) root.dataset.embed = "";
+  else delete root.dataset.embed;
   root.dataset.density = value.density;
   root.dataset.contrast = value.highContrast ? "high" : "normal";
   root.style.setProperty("--font-scale", value.fontScale);
