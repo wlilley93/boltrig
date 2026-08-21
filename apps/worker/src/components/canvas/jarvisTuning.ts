@@ -103,6 +103,15 @@ export interface JarvisTuning {
   glyphSpin: readonly [speed: number, stagger: number];
   /** What fraction of the marks are lit, and how hard the lit ones vary. */
   glyphDensity: readonly [lit: number, variance: number];
+  /** The OUTER inscription band. The four glyph rings split into two
+   *  independent pairs — these dials own rings 2 and 3, the glyph* dials own
+   *  0 and 1 — because one bank driving four rings read as two layers that
+   *  could not be told apart on the desk. */
+  glyphBGain: EnergyRamp;
+  glyphBRadius: readonly [inner: number, outer: number];
+  glyphBSize: readonly [height: number, width: number];
+  glyphBSpin: readonly [speed: number, stagger: number];
+  glyphBDensity: readonly [lit: number, variance: number];
   /** How many great circles. Six read as a sphere of wheels; three as a skirt. */
   rings: number;
   /**
@@ -193,6 +202,38 @@ export interface JarvisTuning {
   outerPace: number;
   starburst: number;
   /**
+   * Debris clustering: x blends between the uniform body and one with clumps
+   * and voids, y is the cluster scale. Zero ships: the film's sphere is
+   * clustered, the product's default body stays the even one it always was.
+   */
+  clump: readonly [strength: number, scale: number];
+  /**
+   * Fake depth of field on the circuit shards: x how much a far-side chip
+   * swells, y how much it dims. Zero ships.
+   */
+  focus: readonly [farSwell: number, farDim: number];
+  /**
+   * The baked lattice layer: gain on a pre-rendered hubs-and-spokes loop
+   * composited additively UNDER the live passes, with the second component
+   * riding the voice like every other gain. The loop carries film-density
+   * structure no real-time pass can afford; the live body carries the pulse.
+   * Zero ships: without a video loaded the layer draws nothing regardless.
+   */
+  lattice: EnergyRamp;
+  /** The video channel's effects rack: motion blur (a tangential smear along
+   *  the footage's own travel), saturation, and a four-tap glow. 0/1/0 ships:
+   *  neutral until the bench decides otherwise. */
+  latticeBlur: number;
+  latticeSat: number;
+  latticeGlow: number;
+  /** Playback speed of the footage itself. 1 ships. */
+  latticeSpeed: number;
+  /**
+   * How big the whole composite sits in the frame: one scale on the live body
+   * AND the baked layer together, so they never drift apart. 1 ships.
+   */
+  presence: number;
+  /**
    * The eye, after familiar.frag's heart -- pupil, iris, and the lens ring.
    *
    * Two stacked gaussians were already here and they made a bright BLOB. What
@@ -228,10 +269,17 @@ export const JARVIS_TUNING: JarvisTuning = {
   // The links are superseded by the iris. Kept at zero rather than deleted: the
   // pass is sound and a network may be wanted on another body.
   glyphGain: [0.34, 0.22],
-  glyphRadius: [0.66, 0.94],
+  // The old four-ring span was [0.66, 0.94]; each band keeps its two rings
+  // exactly where they were: A at 0.66/0.753, B at 0.847/0.94.
+  glyphRadius: [0.66, 0.753],
   glyphSize: [0.055, 0.008],
   glyphSpin: [0.026, 0.55],
   glyphDensity: [0.72, 0.55],
+  glyphBGain: [0.34, 0.22],
+  glyphBRadius: [0.847, 0.94],
+  glyphBSize: [0.055, 0.008],
+  glyphBSpin: [0.026, 0.55],
+  glyphBDensity: [0.72, 0.55],
   rings: 2,
   swirl: [0.115, 0],
   linkGain: [0, 0],
@@ -249,6 +297,14 @@ export const JARVIS_TUNING: JarvisTuning = {
   outerLimb: [1.9, 2.3],
   outerPace: -0.55,
   starburst: 1,
+  clump: [0, 2.6],
+  focus: [0, 0],
+  lattice: [0, 0],
+  latticeBlur: 0,
+  latticeSat: 1,
+  latticeGlow: 0,
+  latticeSpeed: 1,
+  presence: 1,
   eye: [1, 1.5, 0.34, 15],
   drawLimb: [3, 3],
   linkLimb: [3, 3],

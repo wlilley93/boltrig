@@ -58,7 +58,13 @@ describe("FamiliarStage fallback ladder", () => {
       compileShader: vi.fn(),
       createProgram: vi.fn(() => ({})),
       createShader: vi.fn(() => ({})),
+      // The lattice deck owns programs and textures of its own and releases
+      // them on destroy; a fake without the delete half throws in teardown and
+      // poisons every later test in the file.
+      createTexture: vi.fn(() => ({})),
+      deleteProgram: vi.fn(),
       deleteShader: vi.fn(),
+      deleteTexture: vi.fn(),
       drawArrays: vi.fn(),
       getExtension: vi.fn(() => null),
       getProgramInfoLog: vi.fn(() => null),

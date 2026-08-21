@@ -35,9 +35,9 @@ import {
   RING_FRAG,
   RING_SEGMENTS,
   RING_VERT,
-  SHARD_FRAG,
-  SHARD_VERT,
 } from "./shadersRing";
+import { SHARD_FRAG, SHARD_VERT } from "./shadersShard";
+import { LatticeDeck } from "../../canvas/latticeLayer";
 
 /** 128x128 = 16384 particles. Chosen against the draw cost, not the sim: the
  *  simulation is one full-screen pass regardless, but every particle is two
@@ -91,6 +91,7 @@ export class NeuralPasses {
   private blurFbo: WebGLFramebuffer[] = [];
   private ping = 0;
   private size: [number, number] = [0, 0];
+  private lattice: LatticeDeck | null = null;
 
   constructor(private readonly gl: WebGL2RenderingContext) {}
 
@@ -108,6 +109,9 @@ export class NeuralPasses {
       bloom: createProgram(gl, QUAD_VERT, BLOOM_FRAG),
       comp: createProgram(gl, QUAD_VERT, COMPOSITE_FRAG),
     };
+
+    this.lattice = new LatticeDeck(gl);
+    this.lattice.init();
 
     const seed = seedParticles(PARTICLES);
     for (let i = 0; i < 2; i++) {
@@ -152,6 +156,12 @@ export class NeuralPasses {
    * `tuning` defaults to what ships, so every existing caller is unaffected and
    * the bench is the only thing that ever passes anything else.
    */
+  /** The deck behind the body: per-state loops, crossfaded. */
+  latticeDeck(): LatticeDeck | null {
+    return this.lattice;
+  }
+
+
   render(d: Drive, palette: FloatUniforms, tuning: JarvisTuning = JARVIS_TUNING): void {
     this.simulate(d, tuning);
     this.drawScene(d, palette, tuning);
@@ -163,6 +173,7 @@ export class NeuralPasses {
     const gl = this.gl;
     [...this.simFbo, ...this.blurFbo, this.sceneFbo].forEach((f) => f && gl.deleteFramebuffer(f));
     [...this.simTex, ...this.blurTex, this.sceneTex].forEach((t) => t && gl.deleteTexture(t));
+    this.lattice?.destroy();
     Object.values(this.progs).forEach((p) => gl.deleteProgram(p));
     if (this.quad) gl.deleteBuffer(this.quad);
     if (this.vao) gl.deleteVertexArray(this.vao);
@@ -228,6 +239,7 @@ export class NeuralPasses {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.simTex[this.ping]);
 
+    this.drawLattice(d, tuning, shared);
     drawRing(gl, this.progs, d, tuning, shared);
     drawGlyph(gl, this.progs, d, tuning, shared);
     drawIris(gl, this.progs, d, tuning, shared);
@@ -235,6 +247,17 @@ export class NeuralPasses {
     drawParticleLayers(gl, this.progs, d, tuning, shared);
     drawShard(gl, this.progs, d, tuning, shared);
   }
+
+  /** The baked layer, under everything. Skipped entirely at zero gain. */
+  private drawLattice(d: Drive, tuning: JarvisTuning, shared: FloatUniforms): void {
+    const gain = ramp(tuning.lattice, d.energy) * (1 + 0.35 * d.swell);
+    this.lattice?.draw({
+      size: this.size, warm: shared.uWarm as number[], gain,
+      fullscreen: (p) => this.fullscreen(p), scale: tuning.presence,
+      fx: [tuning.latticeBlur, tuning.latticeSat, tuning.latticeGlow],
+    });
+  }
+
 
   private bloom(): void {
     const gl = this.gl;

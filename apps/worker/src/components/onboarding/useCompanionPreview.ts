@@ -10,16 +10,18 @@ import { RESTING_ULTRON_STATE, type UltronStageState } from "../ultron/UltronSta
 import { currentPreviewAudio } from "./companionVoicePreview";
 import { readVoiceSignal } from "./previewAudioSignal";
 
-/** The behaviours Jarvis cycles through on the companion card.
+/** The behaviours the bodies cycle through on the companion card.
  *
- * `standby` is deliberately absent: it is what the card showed before, and it
- * demonstrates nothing about the instrument. Each entry carries the inputs that
- * mode actually reads, so the dial, the fan and the sweep each get their turn.
+ * `standby` LEADS now: it carries the baked loop and the canon look, so it is
+ * the face of the instrument rather than a blank. Scripted `speaking` is gone
+ * — he only ever speaks from standby, and fake bands demonstrated nothing a
+ * real preview line does not do better: a playing clip still overrides the
+ * cycle to speaking below, driven by its own audio.
  */
 const JARVIS_CYCLE: Array<Partial<JarvisStageState>> = [
+  { mode: "standby", level: 0.12 },
   { mode: "thinking", level: 0.18, readout: 2.4 },
   { mode: "working", level: 0.34, readout: 6.1 },
-  { mode: "speaking", level: 0.62 },
   { mode: "listening", level: 0.12, micLevel: 0.48 },
 ];
 

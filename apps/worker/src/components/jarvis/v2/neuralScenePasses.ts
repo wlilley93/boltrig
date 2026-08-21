@@ -65,20 +65,30 @@ d: Drive, tuning: JarvisTuning, shared: FloatUniforms,
   // without touching the wheels. Sharing a channel is what lost them last time.
   const glyph = progs.glyph;
   gl.useProgram(glyph);
-  setUniforms(gl, glyph, {
-    ...shared,
-    // The phenotype is already folded into `tuning` by jarvisEmotion before this
-    // is called, so there is no mood to apply again here -- doing so would apply
-    // brightness twice and make an attentive body wash out.
-    uGain: ramp(tuning.glyphGain, d.energy),
-    uGlyphRadius: tuning.glyphRadius,
-    uGlyphSize: tuning.glyphSize,
-    uGlyphSpin: tuning.glyphSpin,
-    uGlyphDensity: tuning.glyphDensity,
-    uRadius: d.radius,
-    uBands: d.bands,
-  });
-  gl.drawArrays(gl.TRIANGLES, 0, GLYPH_VERTS);
+  // TWO BANDS, one program: the inner pair then the outer, each with its own
+  // dials. The phenotype is already folded into `tuning` by jarvisEmotion
+  // before this is called, so there is no mood to apply again here -- doing so
+  // would apply brightness twice and make an attentive body wash out.
+  const bands = [
+    { base: 0, gain: tuning.glyphGain, radius: tuning.glyphRadius,
+      size: tuning.glyphSize, spin: tuning.glyphSpin, density: tuning.glyphDensity },
+    { base: 2, gain: tuning.glyphBGain, radius: tuning.glyphBRadius,
+      size: tuning.glyphBSize, spin: tuning.glyphBSpin, density: tuning.glyphBDensity },
+  ];
+  for (const band of bands) {
+    setUniforms(gl, glyph, {
+      ...shared,
+      uGain: ramp(band.gain, d.energy),
+      uGlyphRadius: band.radius,
+      uGlyphSize: band.size,
+      uGlyphSpin: band.spin,
+      uGlyphDensity: band.density,
+      uGlyphBase: band.base,
+      uRadius: d.radius,
+      uBands: d.bands,
+    });
+    gl.drawArrays(gl.TRIANGLES, 0, GLYPH_VERTS);
+  }
 }
 
 export function drawIris(
@@ -120,6 +130,7 @@ d: Drive, tuning: JarvisTuning, shared: FloatUniforms,
     uLinkRange: tuning.linkRange,
     uLimb: tuning.linkLimb,
     uLinkBow: tuning.linkBow,
+    uClump: tuning.clump,
   }, { uState: 0, uGrid: GRID });
   gl.drawArrays(gl.LINES, 0, PARTICLES * LINK_SEGMENTS * 2);
 }
@@ -150,6 +161,7 @@ d: Drive, tuning: JarvisTuning, shared: FloatUniforms,
       uStreak: ramp(outer ? tuning.outerStreak : tuning.streak, d.energy),
       uGain: ramp(outer ? tuning.outerGain : tuning.drawGain, d.energy),
       uLimb: outer ? tuning.outerLimb : tuning.drawLimb,
+      uClump: tuning.clump,
       // THE FRINGE FLOOR IS PER LAYER, and this is the third pass to be bitten
       // by it not being.
       //
@@ -185,6 +197,8 @@ d: Drive, tuning: JarvisTuning, shared: FloatUniforms,
     uSize: tuning.shardSize,
     uGain: ramp(tuning.shardGain, d.energy),
     uLimb: tuning.drawLimb,
+    uClump: tuning.clump,
+    uFocus: tuning.focus,
   }, { uState: 0, uGrid: GRID, uStride: tuning.shardStride });
   gl.drawArrays(gl.TRIANGLES, 0, shardCount(tuning.shardStride) * 6);
 }

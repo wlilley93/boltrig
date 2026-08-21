@@ -57,6 +57,7 @@
 //   BLOOM            bright-pass then a separable Gaussian at half resolution.
 //                    Additive lines alone are thin and mean.
 
+
 import {
   RESTING_PHENOTYPE,
   jarvisEmotion,
@@ -134,6 +135,8 @@ export class JarvisNeuralRenderer {
   private live: JarvisTuning = JARVIS_ARRIVAL;
   /** A bench override. Null means follow the mode, which is the shipped path. */
   private tuning: JarvisTuning | null = null;
+  /** The baked loops' source, held until the passes exist to receive it. */
+  private latticeSource: string | Partial<Record<string, string>> | null = null;
 
   constructor(private readonly opts: NeuralRendererOptions = {}) {}
 
@@ -157,6 +160,17 @@ export class JarvisNeuralRenderer {
 
   /** What it is currently drawing with, so a bench can seed its own controls. */
   currentTuning(): JarvisTuning { return this.tuning ?? JARVIS_TUNING; }
+
+  /**
+   * Mount (or clear) the baked lattice loop. The video is created muted,
+   * looping and inline, and every failure path degrades to "no layer": a body
+   * whose extra footage is missing must still be a body. The layer draws only
+   * while `tuning.lattice` gives it gain, so mounting is free until dialled in.
+   */
+  setLatticeVideo(source: string | Partial<Record<string, string>> | null): void {
+    this.latticeSource = source;
+    this.passes?.latticeDeck()?.setSource(source);
+  }
 
   /**
    * Hand the body back to its own mode logic and draw it in again.
@@ -229,6 +243,7 @@ export class JarvisNeuralRenderer {
     try {
       this.passes = new NeuralPasses(gl);
       this.passes.init();
+      this.passes.latticeDeck()?.setSource(this.latticeSource);
     } catch (err) {
       this.fail(String(err));
       return;
@@ -334,6 +349,10 @@ export class JarvisNeuralRenderer {
         ? this.live
         : applyPulses(this.live, JARVIS_PULSES[mode], this.clock.animClock);
     }
+    // PRESENCE scales the whole composite: the simulation's home radius and
+    // the baked layer read the same number, so body and footage stay one piece.
+    d.radius *= shown.presence;
+    passes.latticeDeck()?.tick(mode, this.clock.easeDt, shown.latticeSpeed);
     passes.render(d, jarvisPalette(this.opts, this.pheno), jarvisEmotion(shown, this.pheno));
   }
 

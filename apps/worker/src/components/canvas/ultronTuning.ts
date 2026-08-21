@@ -90,6 +90,24 @@ export interface UltronTuning {
    */
   eye: readonly [pupil: number, iris: number, lens: number, auraWidth: number];
   /**
+   * The baked membrane layer: gain on a pre-rendered loop of the organic
+   * outer mass — membranes, crust plates, heavy slow structure — composited
+   * additively under the live passes, voice on the second component. Zero
+   * ships. See canvas/latticeLayer.ts.
+   */
+  lattice: EnergyRamp;
+  /** The video channel's effects rack, as on Jarvis: blur / sat / glow. */
+  latticeBlur: number;
+  latticeSat: number;
+  latticeGlow: number;
+  /** Playback speed of the footage itself. 1 ships. */
+  latticeSpeed: number;
+  /**
+   * How big the whole composite sits in the frame: one scale on the live body
+   * AND the baked layer together, so they never drift apart. 1 ships.
+   */
+  presence: number;
+  /**
    * Three concentric clouds spread into arms. Jarvis leaves this at 0.
    *
    * 0.3, not 1.0. At 1.0 the arms reach far enough to read as flares around the
@@ -194,4 +212,10 @@ export const ULTRON_TUNING: UltronTuning = {
   veinLimb: [0.26, 1.35],
   crackLimb: [0.22, 1.0],
   facetLimb: [0.22, 1.05],
+  lattice: [0, 0],
+  latticeBlur: 0,
+  latticeSat: 1,
+  latticeGlow: 0,
+  latticeSpeed: 1,
+  presence: 1,
 };

@@ -56,6 +56,12 @@ export const ULTRON_ARRIVAL: UltronTuning = {
   // carries these toward the settled tuning.
   membraneGain: [0.0, 0.0],
   membrane: [0.98, 0.10, 0.16],
+  lattice: [0, 0],
+  latticeBlur: 0,
+  latticeSat: 1,
+  latticeGlow: 0,
+  latticeSpeed: 1,
+  presence: 1,
 };
 
 /**

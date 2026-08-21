@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-21T14:05:36.760Z",
+  "capturedAt": "2026-08-21T22:55:45.093Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,12 +17,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "56b42dce57665d55151ff16606fa1841f2734d38ac5ae18059a0b0e497ceb4c6",
-    "digestAfterCapture": "56b42dce57665d55151ff16606fa1841f2734d38ac5ae18059a0b0e497ceb4c6",
+    "digestBeforeCapture": "dd8eee5c0790086b78473c9e5f939f3d91ae753d77ea3a49b380ae74f13c56b4",
+    "digestAfterCapture": "dd8eee5c0790086b78473c9e5f939f3d91ae753d77ea3a49b380ae74f13c56b4",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/emotion-affordances",
-    "head": "9d06a9f930b7fc8bd86768cd9d04a6840fc372af",
-    "dirty": false
+    "branch": "feat/real-brand-mark",
+    "head": "cdb3c4fb880aa3ef4f4c8ba9c22f6e8c211a29b0",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",

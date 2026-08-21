@@ -4,6 +4,7 @@
 // centre". Streaks alone are smoke; the LINK pass is what makes it a network.
 
 import { FIELD_GLSL, FRINGE_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../../canvas/glslCommon";
+import { CLUMP_GLSL } from "./glslClump";
 
 /**
  * Segments per connection. Six is the fewest that reads as a CURVE.
@@ -47,6 +48,7 @@ out float vSpeed;
 ${FIELD_GLSL}
 ${PROJECT_GLSL}
 ${PULSE_GLSL}
+${CLUMP_GLSL}
 
 void main() {
   int id = gl_VertexID >> 1;
@@ -92,6 +94,8 @@ void main() {
   // escapees, which made the few particles outside the shell the most
   // visible things on screen -- the flares around the edge.
   vFade *= 1.0 - 0.85 * ember(p, 0.98);
+  // Clusters and voids; unity when uClump.x is zero.
+  vFade *= clumpOf(p);
   // The wavefront lights what it passes, and a held note keeps a low swell.
   vFade *= 1.0 + 2.2 * pulse(p) + 0.38 * uSwell;
 
@@ -145,6 +149,7 @@ out float vFade;
 ${FIELD_GLSL}
 ${PROJECT_GLSL}
 ${PULSE_GLSL}
+${CLUMP_GLSL}
 
 const int SEGMENTS = ${LINK_SEGMENTS};
 
@@ -188,6 +193,9 @@ void main() {
   // every other pass had just been made to leave empty -- and a shell with a
   // solid interior is a ball, not a globe.
   vFade *= limbMix(p);
+  // The network lives where the debris lives: links between two thinned
+  // regions would redraw the very uniformity the clump exists to break.
+  vFade *= clumpOf(p);
   vFade *= 1.0 + 2.4 * pulse(p) + 0.35 * uSwell;
   gl_Position = project(p, uAspect);
 }`;

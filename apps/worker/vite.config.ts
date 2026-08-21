@@ -1,11 +1,26 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
 /** Where the shader bench locks its presets in. Read by hand, ported by hand. */
 const PRESETS = path.resolve(__dirname, "tests/visual/presets.json");
+
+/** The presets store, read without the exists-then-read race: a file deleted
+ *  between the check and the read is the same as a file never written, and
+ *  anything else (including corrupt JSON) still throws as it always did. */
+function readPresetsStore(): Record<string, unknown> {
+  let text: string;
+  try {
+    text = fs.readFileSync(PRESETS, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw error;
+  }
+  return JSON.parse(text) as Record<string, unknown>;
+}
 
 /**
  * Let the shader bench write a settled preset to DISK.
@@ -112,6 +127,26 @@ function benchPresets(): Plugin {
     apply: "serve",
     configureServer(server) {
       server.middlewares.use("/__bench-presets", (req, res, next) => {
+        const reply = (code: number, payload: unknown): void => {
+          res.statusCode = code;
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify(payload));
+        };
+        // One entry per body.slot, holding a VERSION LIST: a save appends rather
+        // than overwrites, so locking a look in can never destroy the look
+        // before it. Entries written by the pre-history format (a bare object)
+        // read as a one-version list.
+        const asVersions = (entry: unknown): { versions: unknown[] } =>
+          entry !== null && typeof entry === "object"
+            && Array.isArray((entry as { versions?: unknown[] }).versions)
+            ? entry as { versions: unknown[] }
+            : { versions: entry === undefined ? [] : [entry] };
+        if (req.method === "GET") {
+          const store = readPresetsStore();
+          return reply(200, Object.fromEntries(
+            Object.entries(store).map(([key, entry]) => [key, asVersions(entry)]),
+          ));
+        }
         if (req.method !== "POST") return next();
         const chunks: Buffer[] = [];
         req.on("data", (chunk: Buffer) => {
@@ -120,14 +155,10 @@ function benchPresets(): Plugin {
           if (chunks.reduce((n, c) => n + c.length, 0) > 256 * 1024) req.destroy();
         });
         req.on("end", () => {
-          const reply = (code: number, payload: unknown): void => {
-            res.statusCode = code;
-            res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify(payload));
-          };
           try {
             const sent = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
               body?: unknown; slot?: unknown; tuning?: unknown; lfos?: unknown;
+              label?: unknown;
             };
             const bodyName = String(sent.body ?? "");
             const slot = String(sent.slot ?? "");
@@ -136,26 +167,219 @@ function benchPresets(): Plugin {
             // against that set rather than filtered for characters somebody
             // thought of.
             const bodies = ["jarvis", "ultron", "familiar", "colossus"];
-            const slots = ["arrival", "standby", "listening", "thinking", "working", "speaking"];
+            // "baseline" is a slot in the store though not a render state: the
+            // ground look every state is measured from, versioned like the rest.
+            const slots = ["arrival", "standby", "listening", "thinking", "working", "speaking", "error", "baseline"];
             if (!bodies.includes(bodyName) || !slots.includes(slot)) {
               return reply(400, { error: "unknown body or slot" });
+            }
+            // A TRANSITION take: `to` names the destination and `tracks` carry
+            // the recorded dial journeys, keyed "body.from->to" and versioned
+            // like a state, so choreography accumulates instead of overwriting.
+            const to = String((sent as { to?: unknown }).to ?? "");
+            if (to !== "") {
+              if (!slots.includes(to) || to === "baseline" || slot === "baseline" || to === slot) {
+                return reply(400, { error: "unknown destination" });
+              }
+              const tracks = (sent as { tracks?: unknown }).tracks;
+              if (typeof tracks !== "object" || tracks === null) {
+                return reply(400, { error: "no tracks" });
+              }
+              const transitStore = readPresetsStore();
+              const transitKey = `${bodyName}.${slot}->${to}`;
+              const take: Record<string, unknown> = {
+                tracks,
+                duration: Number((sent as { duration?: unknown }).duration) || 0,
+                savedAt: new Date().toISOString(),
+              };
+              if (typeof sent.label === "string" && sent.label.trim() !== "") {
+                take.label = sent.label.trim().slice(0, 120);
+              }
+              const transitEntry = asVersions(transitStore[transitKey]);
+              transitEntry.versions.push(take);
+              transitStore[transitKey] = transitEntry;
+              fs.writeFileSync(PRESETS, `${JSON.stringify(transitStore, null, 2)}\n`);
+              return reply(200, { path: "tests/visual/presets.json", versions: transitEntry.versions.length });
             }
             if (typeof sent.tuning !== "object" || sent.tuning === null) {
               return reply(400, { error: "no tuning" });
             }
-            const store = fs.existsSync(PRESETS)
-              ? JSON.parse(fs.readFileSync(PRESETS, "utf8")) as Record<string, unknown>
-              : {};
-            store[`${bodyName}.${slot}`] = {
+            const store = readPresetsStore();
+            const key = `${bodyName}.${slot}`;
+            const version: Record<string, unknown> = {
               tuning: sent.tuning,
               lfos: sent.lfos ?? {},
               savedAt: new Date().toISOString(),
             };
+            // Speech reach: per-dial end points for syllable travel, saved with
+            // the look the same way the oscillators are.
+            const speech = (sent as { speech?: unknown }).speech;
+            if (typeof speech === "object" && speech !== null) version.speech = speech;
+            // An overwrite version is a BROADCAST: "Apply to all states" marks
+            // its writes so every browser adopts them over its own local copy
+            // once, which is the only way "all states look the same" can be
+            // true beyond the browser that pressed the button.
+            if ((sent as { overwrite?: unknown }).overwrite === true) version.overwrite = true;
+            if (typeof sent.label === "string" && sent.label.trim() !== "") {
+              version.label = sent.label.trim().slice(0, 120);
+            }
+            const entry = asVersions(store[key]);
+            // AUTOSAVE RIDES, IT DOES NOT STACK: every touch autosaves, and a
+            // history where each drag is fifty versions is no history at all.
+            // An autosave REPLACES the previous autosave at the top of the
+            // list; a deliberate save is appended and stays a checkpoint.
+            const newest = entry.versions[entry.versions.length - 1] as
+              { autosave?: boolean } | undefined;
+            if ((sent as { autosave?: unknown }).autosave === true) {
+              version.autosave = true;
+              version.label = "autosave";
+              if (newest?.autosave === true) {
+                entry.versions[entry.versions.length - 1] = version;
+              } else {
+                entry.versions.push(version);
+              }
+            } else {
+              entry.versions.push(version);
+            }
+            store[key] = entry;
             fs.writeFileSync(PRESETS, `${JSON.stringify(store, null, 2)}\n`);
-            return reply(200, { path: "tests/visual/presets.json", count: Object.keys(store).length });
+            return reply(200, { path: "tests/visual/presets.json", versions: entry.versions.length });
           } catch (error) {
             return reply(400, { error: (error as Error).message });
           }
+        });
+      });
+    },
+  };
+}
+
+/**
+ * SPEAK FROM THE BENCH. pocket-voice runs on the M4 bound to loopback — by
+ * design unreachable from anything but that box — so the bench cannot call it
+ * directly. This dev-only route relays: the text rides the tailnet-keyed ssh
+ * mesh to the M4, curl speaks to 127.0.0.1:8911 THERE, and the wav streams
+ * back. The bench sees one same-origin POST; the M4's loopback stays loopback.
+ * Registered after benchAuth, so it sits behind the same token gate.
+ */
+function benchTts(): Plugin {
+  return {
+    name: "boltrig-bench-tts",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use("/__bench-tts", (req, res, next) => {
+        if (req.method !== "POST") return next();
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk: Buffer) => {
+          chunks.push(chunk);
+          if (chunks.reduce((n, c) => n + c.length, 0) > 8 * 1024) req.destroy();
+        });
+        req.on("end", () => {
+          const fail = (code: number, message: string): void => {
+            res.statusCode = code;
+            res.setHeader("content-type", "text/plain; charset=utf-8");
+            res.end(message);
+          };
+          try {
+            const sent = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+              body?: unknown; text?: unknown;
+            };
+            const voice = String(sent.body ?? "");
+            const text = String(sent.text ?? "").trim().slice(0, 400);
+            if (!["jarvis", "ultron", "familiar", "colossus"].includes(voice)) {
+              return fail(400, "unknown body");
+            }
+            if (text === "") return fail(400, "nothing to say");
+            const payload = JSON.stringify({
+              model: "pocket-tts", voice, input: text, response_format: "wav",
+            });
+            // Payload over STDIN, not argv: no quoting layer between here and
+            // the M4's shell to get wrong, and nothing in `ps` on either box.
+            // Multiplexed: the first request pays the ssh handshake, the rest
+            // ride the held master connection — Pocket TTS itself answers in
+            // ~150ms, so the transport is most of the wait worth removing.
+            const child = spawn("ssh", [
+              "-o", "ControlMaster=auto",
+              "-o", "ControlPath=/tmp/bench-tts-%r@%h", "-o", "ControlPersist=300",
+              "mac-mini-m4-pro",
+              "curl -s --max-time 90 -X POST http://127.0.0.1:8911/v1/audio/speech"
+              + " -H 'content-type: application/json' --data-binary @-",
+            ], { stdio: ["pipe", "pipe", "pipe"] });
+            const out: Buffer[] = [];
+            const err: Buffer[] = [];
+            child.stdout.on("data", (c: Buffer) => out.push(c));
+            child.stderr.on("data", (c: Buffer) => err.push(c));
+            child.on("error", (error) => fail(502, `relay failed: ${error.message}`));
+            child.on("close", (code) => {
+              const wav = Buffer.concat(out);
+              // A pocket-voice refusal comes back as small JSON, not RIFF; hand
+              // the text through rather than giving the player noise to decode.
+              if (code !== 0 || wav.length < 1000 || wav.subarray(0, 4).toString() !== "RIFF") {
+                const why = wav.toString("utf8").slice(0, 300)
+                  || Buffer.concat(err).toString("utf8").slice(0, 300);
+                return fail(502, `tts failed: ${why}`);
+              }
+              res.statusCode = 200;
+              res.setHeader("content-type", "audio/wav");
+              res.end(wav);
+            });
+            child.stdin.end(payload);
+          } catch (error) {
+            fail(400, (error as Error).message);
+          }
+        });
+      });
+    },
+  };
+}
+
+/**
+ * KEEP A RENDERED LINE. A TTS take worth reusing becomes a real wav in
+ * public/companion — the same shelf the audition clips live on — so it shows
+ * up in the player's dropdown like any other clip. Dev-only, like the preset
+ * store, and the filename is BUILT here from whitelisted parts rather than
+ * taken from the request.
+ */
+function benchClips(): Plugin {
+  const SHELF = path.resolve(__dirname, "public/companion");
+  return {
+    name: "boltrig-bench-clips",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use("/__bench-clips", (req, res, next) => {
+        const reply = (code: number, payload: unknown): void => {
+          res.statusCode = code;
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify(payload));
+        };
+        if (req.method === "GET") {
+          const kept = fs.existsSync(SHELF)
+            ? fs.readdirSync(SHELF).filter((f) => /^tts-[a-z]+-[a-z0-9-]+\.wav$/.test(f)).sort()
+            : [];
+          return reply(200, { clips: kept.map((f) => `/companion/${f}`) });
+        }
+        if (req.method !== "POST") return next();
+        const url = new URL(req.url ?? "/", "http://x");
+        const bodyName = String(url.searchParams.get("body") ?? "");
+        if (!["jarvis", "ultron", "familiar", "colossus"].includes(bodyName)) {
+          return reply(400, { error: "unknown body" });
+        }
+        const name = String(url.searchParams.get("name") ?? "")
+          .toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+        if (name === "") return reply(400, { error: "no name" });
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk: Buffer) => {
+          chunks.push(chunk);
+          // Pocket TTS at 24kHz mono: a 400-char line is well under this.
+          if (chunks.reduce((n, c) => n + c.length, 0) > 24 * 1024 * 1024) req.destroy();
+        });
+        req.on("end", () => {
+          const wav = Buffer.concat(chunks);
+          if (wav.length < 1000 || wav.subarray(0, 4).toString() !== "RIFF") {
+            return reply(400, { error: "not a wav" });
+          }
+          const file = `tts-${bodyName}-${name}.wav`;
+          fs.writeFileSync(path.join(SHELF, file), wav);
+          return reply(200, { url: `/companion/${file}` });
         });
       });
     },
@@ -178,7 +402,7 @@ export default defineConfig({
   base: "./",
   // benchAuth FIRST: a guard registered after another middleware is a guard that
   // middleware has already answered around.
-  plugins: [benchAuth(), react(), benchPresets()],
+  plugins: [benchAuth(), react(), benchPresets(), benchTts(), benchClips()],
   resolve: {
     alias: {
       "@wlilley93/boltrig-web-sdk": path.resolve(__dirname, "../../sdks/web/src/index.ts"),

@@ -65,6 +65,7 @@ export class UltronRenderer {
   private canvas: HTMLCanvasElement | null = null;
   private gl: WebGL2RenderingContext | null = null;
   private passes: UltronPasses | null = null;
+  private latticeSource: string | Partial<Record<string, string>> | null = null;
   private raf = 0;
   /** The frame clock and the speech ring, shared with JarvisNeuralRenderer. */
   private readonly clock = new BodyClock();
@@ -111,6 +112,12 @@ export class UltronRenderer {
 
   /** What it is currently drawing with, so a bench can seed its own controls. */
   currentTuning(): UltronTuning { return this.tuning ?? ULTRON_TUNING; }
+
+  /** Mount (or clear) the baked membrane loops. See canvas/latticeLayer.ts. */
+  setLatticeVideo(source: string | Partial<Record<string, string>> | null): void {
+    this.latticeSource = source;
+    this.passes?.latticeDeck()?.setSource(source);
+  }
 
   /**
    * Hand the body back to its own mode logic and draw it in again.
@@ -174,6 +181,7 @@ export class UltronRenderer {
     try {
       this.passes = new UltronPasses(gl);
       this.passes.init();
+      this.passes.latticeDeck()?.setSource(this.latticeSource);
     } catch (err) {
       this.fail(String(err));
       return;
@@ -268,6 +276,8 @@ export class UltronRenderer {
         ? this.live
         : applyPulses(this.live, ULTRON_PULSES[mode], this.clock.animClock);
     }
+    d.radius *= shown.presence;
+    passes.latticeDeck()?.tick(this.state?.mode ?? "standby", this.clock.easeDt, shown.latticeSpeed);
     passes.render(d, ultronPalette(this.opts, this.pheno), ultronEmotion(shown, this.pheno));
   }
 
