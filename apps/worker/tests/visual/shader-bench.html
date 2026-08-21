@@ -23,7 +23,7 @@
         height: 100dvh;
         font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
         color: #d6d6dd;
-        background: #08080b;
+        background: #000;
         overscroll-behavior: none;
       }
       #sheetToggle { display: none; }
@@ -110,7 +110,11 @@
       /* THE STAGE OWNS THE WHOLE HEIGHT. It spans the splitter and console
          rows, and the console floats translucent on top — so the avatar sits
          centred in the real window and resizing the desk never moves him. */
-      #stageWrap { position: relative; display: block; min-width: 0; overflow: hidden; grid-row: 2 / 5; grid-column: 1; }
+      /* TRUE BLACK behind every stage. The full-bleed bodies paint their own
+         black; the Familiar's SQUARE stage floats centred, and the surround
+         showed the page's near-black grey — a visible frame around a body
+         judged against darkness. The whole screen behind her is black now. */
+      #stageWrap { position: relative; display: block; min-width: 0; overflow: hidden; grid-row: 2 / 5; grid-column: 1; background: #000; }
       /* THE TRANSPORT. The states are the instrument's keys: standby, listening,
          thinking, working, speaking are the animated base looks, and everything
          else — voice, emotion — is a modifier layered on top. Clicking a state

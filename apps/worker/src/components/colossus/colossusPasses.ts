@@ -151,7 +151,7 @@ export class ColossusPasses {
     this.vao = null;
   }
 
-  render(drive: ColossusDrive, palette: FloatUniforms, bloomGain: number): void {
+  render(drive: ColossusDrive, palette: FloatUniforms, bloomGain: number, vignette = 0.85): void {
     const gl = this.gl;
     const [w, h] = this.size;
     if (!w || !h) return;
@@ -162,7 +162,7 @@ export class ColossusPasses {
 
     this.panel(drive, palette, aspect);
     this.bloom();
-    this.composite(drive, bloomGain, aspect);
+    this.composite(drive, bloomGain, aspect, vignette);
 
     gl.bindVertexArray(null);
   }
@@ -229,7 +229,7 @@ export class ColossusPasses {
     }
   }
 
-  private composite(drive: ColossusDrive, bloomGain: number, aspect: number): void {
+  private composite(drive: ColossusDrive, bloomGain: number, aspect: number, vignette: number): void {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.size[0], this.size[1]);
@@ -243,7 +243,7 @@ export class ColossusPasses {
       uBloomGain: bloomGain,
       uAspect: aspect,
       uTime: drive.time,
-      uVignette: 0.85,
+      uVignette: vignette,
     }, { uScene: 0, uBloom: 1 });
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }

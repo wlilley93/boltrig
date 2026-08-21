@@ -53,9 +53,12 @@ import { FAMILIAR_MODES } from "../../src/components/familiar/FamiliarState";
 import { JarvisNeuralRenderer } from "../../src/components/jarvis/v2/JarvisNeuralRenderer";
 import { UltronRenderer } from "../../src/components/ultron/UltronRenderer";
 import { ColossusRenderer } from "../../src/components/colossus/ColossusRenderer";
+import {
+  colossusModeTuning, type ColossusTuning,
+} from "../../src/components/colossus/colossusTuning";
 import { JarvisWebGLRenderer } from "../../src/components/jarvis/JarvisRenderer";
 
-type Tuning = FamiliarTuning | JarvisTuning | UltronTuning;
+type Tuning = FamiliarTuning | JarvisTuning | UltronTuning | ColossusTuning;
 type Mode = "standby" | "listening" | "thinking" | "working" | "speaking" | "error";
 
 /**
@@ -189,6 +192,17 @@ const LEGEND: Record<string, readonly string[]> = {
   wander: ["ease SECONDS", "dwell SECONDS"],
   gesture: ["min gap SECONDS", "max gap SECONDS"],
   errorTone: ["tension", "light left"],
+  // ---- Colossus: the sign -------------------------------------------------
+  energy: ["base drive", "×voice"],
+  voice: ["floor while speaking", "idle bleed"],
+  ticker: ["pace CELLS/S", "×voice"],
+  tickerScale: ["glyph scale"],
+  pitch: ["lamps across"],
+  curve: ["glass curve"],
+  decay: ["persistence"],
+  bloom: ["base", "×voice"],
+  vignette: ["corner falloff"],
+  counter: ["step threshold", "glow fade"],
   ...Object.fromEntries(PHENOTYPE_SCALARS
     .map((k) => [`pheno.${k}`, ["0 = none, 1 = full"]])),
 };
@@ -203,6 +217,11 @@ const LEGEND: Record<string, readonly string[]> = {
  * exact look the arc gating exists to break, and unreachable from the panel.
  */
 const RANGE_AT: Record<string, [number, number, number]> = {
+  // Colossus: pace and its ×voice are cells/second; the counter's halves are
+  // a 0..1 onset threshold and a per-second fade — different kinds of number.
+  "ticker:1": [0, 40, 0.5],
+  "counter:0": [0.05, 1, 0.01],
+  "counter:1": [0.5, 10, 0.1],
   "clump:1": [0.4, 8, 0.05],
   "focus:0": [0, 2, 0.01],
   // Slight is the brief: 0.06 of the frame is already a hop, not a bob.
@@ -364,6 +383,17 @@ const RANGE: Record<string, [number, number, number]> = {
   errorTone: [0, 1, 0.01],
   arousalLift: [0, 1, 0.01],
   gaze: [0, 1, 0.01],
+  // ---- Colossus: the sign ------------------------------------------------
+  energy: [0, 1, 0.01],
+  voice: [0, 1, 0.01],
+  ticker: [0, 60, 0.5],
+  tickerScale: [0.8, 4, 0.02],
+  pitch: [40, 400, 2],
+  curve: [0, 0.25, 0.001],
+  decay: [0, 0.98, 0.01],
+  bloom: [0, 1.5, 0.01],
+  vignette: [0, 1, 0.01],
+  counter: [0, 10, 0.1],
 };
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -442,21 +472,38 @@ function storeNewest(key: string): SavedVersion | null {
  * shipped table. The store steps make "Save preset" the publishing act: what
  * was last locked in is what a fresh browser opens on, without a force-URL.
  */
+/**
+ * Only the fields the SHIPPED struct declares survive a load. A stored blob
+ * can carry another body's fields — an autosave that fired across a body
+ * switch once wrote jarvis's dials into familiar.standby, and the plain
+ * spread then resurrected the union on every load, so her desk grew seven of
+ * his strips. The shipped struct is the authority on what this body IS.
+ */
+function ownFields(shipped: Tuning, stored: unknown): Partial<Tuning> {
+  if (typeof stored !== "object" || stored === null) return {};
+  const keep: Record<string, unknown> = {};
+  for (const key of Object.keys(shipped)) {
+    const value = (stored as Record<string, unknown>)[key];
+    if (value !== undefined) keep[key] = value;
+  }
+  return keep as Partial<Tuning>;
+}
+
 function saved(name: string, shipped: Tuning): Tuning {
   const fromUrl = new URLSearchParams(location.search).get(name);
   const raw = fromUrl ?? localStorage.getItem(storageKey(name));
   if (raw) {
     try {
-      return { ...clone(shipped), ...JSON.parse(raw) } as Tuning;
+      return { ...clone(shipped), ...ownFields(shipped, JSON.parse(raw)) } as Tuning;
     } catch {
       return clone(shipped);
     }
   }
   const version = storeNewest(name);
-  if (version?.tuning) return { ...clone(shipped), ...version.tuning } as Tuning;
+  if (version?.tuning) return { ...clone(shipped), ...ownFields(shipped, version.tuning) } as Tuning;
   const which = name.slice(0, name.indexOf("."));
   const base = storeNewest(`${which}.baseline`);
-  if (base?.tuning) return { ...clone(shipped), ...base.tuning } as Tuning;
+  if (base?.tuning) return { ...clone(shipped), ...ownFields(shipped, base.tuning) } as Tuning;
   return clone(shipped);
 }
 
@@ -779,10 +826,14 @@ function transportSlots(): readonly Slot[] {
 
 /** The shipped numbers for a body and slot, before any local edit. */
 function shippedFor(which: Body, at: Slot): Tuning {
-  // A stability report does not come in an irritated variant: he has one
-  // register and therefore no numbers. Empty is the honest struct, and the
-  // dial builder generates nothing from it -- which is the correct panel.
-  if (which === "colossus") return {} as Tuning;
+  // His register in a sign's vocabulary: drive, voice, ticker, glass. The
+  // per-mode tables carry what the renderer used to hardcode, so the desk
+  // starts from exactly the panel that always shipped.
+  if (which === "colossus") {
+    return colossusModeTuning(
+      at === "arrival" || at === "error" ? "standby" : at,
+    );
+  }
   // V1's surface in the V2 format: genes, accent, scale, bloom. One register,
   // so every mode ships the base and the per-state saves diverge from there.
   if (which === "jarvis1") return jarvis1ModeTuning("standby") as unknown as Tuning;
@@ -834,8 +885,9 @@ function clone<T extends Tuning>(value: T): T {
  */
 function newRenderer(): FamiliarWebGLRenderer | JarvisNeuralRenderer | UltronRenderer | ColossusRenderer | JarvisWebGLRenderer {
   if (body === "familiar") return new FamiliarWebGLRenderer({ reducedMotion: false });
-  // The panel of lamps. One register, no tuning struct, no arrival -- but the
-  // same mount/update/frame contract, and drive()'s payload IS his state type.
+  // The panel of lamps. One register and no arrival -- but the same
+  // mount/update/frame contract, and since colossusTuning.ts a real tuning
+  // struct: drive, voice, sign and glass, mixable like any other body.
   if (body === "colossus") return new ColossusRenderer();
   // The original dial. Its rAF callback is a public-enough property named
   // `frame` that self-reschedules through the stubbed rAF, so the bench
@@ -922,6 +974,11 @@ window.requestAnimationFrame = (() => 0) as typeof window.requestAnimationFrame;
 
 function mount(): void {
   cancelLoop();
+  // A pending autosave belongs to the body that scheduled it. Left running
+  // across a switch it fires 1.5s later with the NEW slot key and the OLD
+  // body's numbers — which is exactly how jarvis's dials got written into
+  // familiar.standby.
+  window.clearTimeout(autosaveTimer);
   renderer?.destroy();
   const host = $("stage");
   host.innerHTML = "";
@@ -932,7 +989,10 @@ function mount(): void {
   // buffer across a wide window and every judgement made about her shape is
   // made about a distortion the app never renders.
   $("stage").classList.toggle("square", body === "familiar");
-  document.body.classList.toggle("no-tuning", body === "colossus");
+  // Colossus is TUNABLE now — colossusTuning.ts gave him a struct — so the
+  // no-tuning veil comes off for every body. The class stays in the CSS for
+  // any future body that genuinely has no numbers.
+  document.body.classList.remove("no-tuning");
   // Draw-in is the arrival journey; a body without an arrival has nothing to
   // play, and a live-looking button that does nothing is a wiring bug.
   ($("play") as HTMLButtonElement).disabled = !slotsFor(body).includes("arrival");
@@ -970,6 +1030,23 @@ function mount(): void {
   const status = renderer.status();
   if (status.state !== "running") {
     $("readout").textContent = `FAILED — ${status.reason ?? status.state}`;
+    // THE DESK STILL CHANGES BODY. Returning bare here left the PREVIOUS
+    // body's strips standing over the failed stage — and every dial touched
+    // then wrote the wrong body's fields into the new body's slot. The data
+    // half of the swap runs regardless; only the renderer-facing half waits.
+    shipped = shippedFor(body, slot);
+    tuning = saved(slotKey(body, slot), shipped);
+    for (const id of Object.keys(sliderDom)) delete sliderDom[id];
+    lfos = savedLfos(slotKey(body, slot));
+    speech = savedSpeech(slotKey(body, slot));
+    adsr = savedAdsr(slotKey(body, slot));
+    loadBaseline();
+    loadVolumes();
+    loadRack();
+    buildControls();
+    buildMixer();
+    paintHistory();
+    paintDrift();
     return;
   }
   paintModes();
@@ -1211,6 +1288,20 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "5 · Her presence — size, light and failure", fields: [
     "composition", "daylight", "errorTone",
   ] },
+  // ---- Colossus. A sign's vocabulary: how hard the board is driven, how the
+  // voice reaches it, how fast the sentence crosses, and the tube in front.
+  { title: "1 · His board — lamps and drive", fields: [
+    "energy", "voice", "bloom",
+  ] },
+  { title: "2 · His sign — the ticker", fields: [
+    "ticker", "tickerScale",
+  ] },
+  { title: "3 · His glass — the tube", fields: [
+    "curve", "pitch", "decay", "vignette",
+  ] },
+  { title: "4 · His counter — the stepping readout", fields: [
+    "counter",
+  ] },
 ];
 
 /**
@@ -1313,6 +1404,16 @@ const READABLE: Record<string, string> = {
   wander: "Mood drift",
   gesture: "Gestures",
   errorTone: "Failure tone",
+  energy: "Drive",
+  voice: "Voice reach",
+  ticker: "Sign pace",
+  tickerScale: "Sign size",
+  pitch: "Lamp pitch",
+  curve: "Glass curve",
+  decay: "Phosphor",
+  bloom: "Bloom",
+  vignette: "Vignette",
+  counter: "Counter",
 };
 
 /** Dials whose small numbers mean MORE effect: shown with the fill inverted,
@@ -1406,6 +1507,16 @@ const TITLES: Record<string, string> = {
   wander: "How her mood drifts when nothing is happening",
   gesture: "How often she looks, nods or preens",
   errorTone: "What a dropped call does to her",
+  energy: "How hard the board is driven, and what the voice adds",
+  voice: "How the voice reaches the board: its speaking floor, its idle bleed",
+  ticker: "How fast the sentence crosses the sign",
+  tickerScale: "How big the sign's letters are",
+  pitch: "How many lamps across the panel — coarse is the reference",
+  curve: "How curved the glass in front is",
+  decay: "How long a driven lamp holds its light",
+  bloom: "How much the bright lamps flare",
+  vignette: "How hard the picture falls off toward the corners",
+  counter: "What steps the counter, and how fast its glow fades",
   ...Object.fromEntries(Object.entries(PHENO_TITLES)
     .map(([k, v]) => [`pheno.${k}`, v])),
 };
@@ -2329,6 +2440,10 @@ const STRIP_NAME: Record<string, string> = {
   "3 · Her attention — being spoken to": "Attention",
   "4 · Her inner life — alive between events": "Life",
   "5 · Her presence — size, light and failure": "Aura",
+  "1 · His board — lamps and drive": "Board",
+  "2 · His sign — the ticker": "Sign",
+  "3 · His glass — the tube": "Glass",
+  "4 · His counter — the stepping readout": "Counter",
 };
 
 function channelsFor(): { title: string; fields: string[] }[] {
@@ -2350,7 +2465,7 @@ function channelsFor(): { title: string; fields: string[] }[] {
 /** What a channel's fader drives: the pass's first master level. */
 function levelFields(fields: readonly string[]): string[] {
   const levels = fields.filter((f) => f.endsWith("Gain"));
-  for (const special of ["core", "reverb", "voiceLevel"] as const) {
+  for (const special of ["core", "reverb", "voiceLevel", "energy"] as const) {
     if (fields.includes(special)) levels.push(special);
   }
   return levels;
@@ -2359,7 +2474,7 @@ function levelFields(fields: readonly string[]): string[] {
 /** What mute silences: every field that puts light on screen for this pass.
  *  Wider than the fader, because a pass like the eye draws through `eye` and
  *  `starburst` as well as `core` — muting only the gains left it half lit. */
-const MUTE_EXTRA = new Set(["core", "eye", "starburst", "reverb", "voiceLevel", "lattice"]);
+const MUTE_EXTRA = new Set(["core", "eye", "starburst", "reverb", "voiceLevel", "lattice", "energy", "bloom"]);
 function muteFields(fields: readonly string[]): string[] {
   return fields.filter((f) => f.endsWith("Gain") || MUTE_EXTRA.has(f));
 }
