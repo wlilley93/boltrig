@@ -97,8 +97,17 @@ export class LatticeLayer {
    */
   upload(video: HTMLVideoElement | null): void {
     const gl = this.gl;
-    if (this.dead || !video || video.readyState < 2) {
+    if (this.dead || !video) {
       this.ready = false;
+      return;
+    }
+    // KEEP THE LAST FRAME through a readyState dip. At a loop wrap (and on
+    // decoder hiccups) the element can report unreadable for a single tick;
+    // blanking then made the footage cut out for exactly one frame while the
+    // texture still held a perfectly good image. Only a genuine source change
+    // resets the layer — the deck calls reset() when it swaps a slot's URL.
+    if (video.readyState < 2) {
+      if (!this.tex) this.ready = false;
       return;
     }
     // ONLY ON A NEW VIDEO FRAME. The loop runs at 60 and the video at ~24, so
@@ -142,6 +151,14 @@ export class LatticeLayer {
    *  this, so a crossfade never dims into a layer that has no pixels yet. */
   isReady(): boolean {
     return this.ready;
+  }
+
+  /** Forget the held frame. Called by the deck when a slot's SOURCE changes:
+   *  without this, keep-the-last-frame would let a crossfade land on the old
+   *  loop's stale frame while the new one is still decoding. */
+  reset(): void {
+    this.ready = false;
+    this.at = -1;
   }
 
   /**
@@ -219,6 +236,7 @@ export class LatticeDeck {
       slot.el?.remove();
       slot.el = null;
       slot.url = null;
+      slot.layer.reset();
     }
     this.map = source == null
       ? null
@@ -244,6 +262,7 @@ export class LatticeDeck {
         next.el?.remove();
         next.el = desired ? latticeVideo(desired) : null;
         next.url = desired;
+        next.layer.reset();
       } else {
         // Returning to a recently-left state: its loop is still loaded.
         void next.el?.play().catch(() => undefined);
