@@ -310,8 +310,11 @@ export const JARVIS_TUNING: JarvisTuning = {
   latticeGlow: 0,
   latticeSpeed: 1,
   presence: 1,
-  bounce: [0, 0],
-  bounceTrail: 0,
+  // The slight bounce IS his look now, not just a dial: a composed half-Hz
+  // bob at 1.2% of the frame with a soft wake. Arrival stays still — a birth
+  // should not bob.
+  bounce: [0.012, 0.5],
+  bounceTrail: 0.55,
   // Lens ring OFF (z = 0): the large screen-space circle around the body was
   // removed by request — the dial remains for anyone who wants it back, and
   // it now scales with presence when raised.
