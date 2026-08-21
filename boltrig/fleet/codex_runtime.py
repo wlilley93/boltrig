@@ -53,6 +53,9 @@ from .codex_kernel_tool_wiring import (
     CodexKernelToolWiring,
 )
 from .codex_runtime_support import (
+    ToolBudgetExhausted,
+    budget_exhausted_result,
+    tool_step_cap_from_env,
     drain_until_complete,
     empty_output_reason,
     mint_assignment,
@@ -81,6 +84,8 @@ class CodexPhaseLifecycle(Protocol):
 
     async def close_thread(self, thread: RuntimeThreadRef) -> None: ...
 
+    async def interrupt_turn(self, turn: RuntimeTurnRef) -> None: ...
+
 
 class CodexRuntime:
     """One read-only Codex phase per ``run``, mapped to a uniform ``AgentResult``."""
@@ -98,6 +103,7 @@ class CodexRuntime:
         model_endpoint_id: str | None = None,
         gateway_virtual_key: str | None = None,
         model_bindings: CodexAssignmentModelBindingRegistry | None = None,
+        max_tool_steps: int | None = None,
     ) -> None:
         if kernel_tools is not None and type(kernel_tools) is not CodexKernelToolWiring:
             raise TypeError("kernel_tools must be an exact CodexKernelToolWiring")
@@ -109,6 +115,9 @@ class CodexRuntime:
         if (model_bindings is None) != (model_id is None):
             raise ValueError("model id and binding registry must be configured together")
         self._lifecycle = lifecycle
+        self._max_tool_steps = (
+            max_tool_steps if max_tool_steps is not None else tool_step_cap_from_env()
+        )
         self._stack_root = stack_root
         self.cost_tier = cost_tier
         self._kernel_tools = kernel_tools
@@ -243,13 +252,23 @@ class CodexRuntime:
         thread: RuntimeThreadRef | None = None
         try:
             thread = await self._lifecycle.start_thread(spec)
-            await self._lifecycle.start_turn(
+            turn = await self._lifecycle.start_turn(
                 RuntimeTurnSpec(thread=thread, prompt=prompt, client_message_id=uuid.uuid4().hex)
             )
             tokens_used = await drain_until_complete(
-                self._lifecycle.events(thread), usage_seen, usage_legs, runtime_errors
+                self._lifecycle.events(thread), usage_seen, usage_legs, runtime_errors,
+                max_tool_steps=self._max_tool_steps,
             )
             text = await self._lifecycle.read_turn_output(thread)
+        except ToolBudgetExhausted as exhausted:
+            # A runaway tool loop, stopped honestly: interrupt the turn so the
+            # model stops burning wall-clock, then report the paid-for spend.
+            with contextlib.suppress(Exception):
+                await self._lifecycle.interrupt_turn(turn)
+            return budget_exhausted_result(
+                self.runtime, prompt, exhausted, usage_legs,
+                run_id=spec.assignment.phase.root_run_id,
+            )
         except Exception as error:
             # A degrade must never swallow the cause: a silent codex_turn_failed is
             # unactionable in ops. Log the full traceback and carry a short cause
