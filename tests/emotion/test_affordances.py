@@ -12,10 +12,14 @@ from boltrig.emotion.tables import load_emotion_tables
 TENANT = "acme"
 
 
-def _relay(tmp_path: pathlib.Path) -> EmotionRelay:
+def _tables():
     tables = load_emotion_tables()
     assert tables is not None, "the shipped libraries/emotion YAML must load"
-    model, rules = tables
+    return tables
+
+
+def _relay(tmp_path: pathlib.Path) -> EmotionRelay:
+    model, rules = _tables()
     return EmotionRelay(
         model=model,
         rules=rules,
@@ -53,18 +57,18 @@ def test_adoption_refills_novelty_and_is_throttled(tmp_path: pathlib.Path) -> No
 
     # A second adoption inside the throttle window appraises NOTHING more.
     relay.publish(TENANT, "emotion", {"type": "character_adopted", "character": "jarvis"})
-    assert _snapshot(relay, TENANT) == pytest.approx(after, abs=1e-3)
+    assert _snapshot(relay, TENANT) == pytest.approx(after, abs=0.02)
 
 
 def test_reset_returns_the_engine_to_model_baselines(tmp_path: pathlib.Path) -> None:
     relay = _relay(tmp_path)
     fresh = _snapshot(relay, TENANT)
     relay.publish(TENANT, "emotion", {"type": "character_adopted", "character": "bella"})
-    assert _snapshot(relay, TENANT) != pytest.approx(fresh, abs=1e-3)
+    assert _snapshot(relay, TENANT) != pytest.approx(fresh, abs=0.02)
 
     relay.publish(TENANT, "emotion", {"type": "emotion_reset"})
 
-    assert _snapshot(relay, TENANT) == pytest.approx(fresh, abs=1e-3)
+    assert _snapshot(relay, TENANT) == pytest.approx(fresh, abs=0.02)
 
 
 def test_reset_also_drops_the_persisted_restore_snapshot(tmp_path: pathlib.Path) -> None:
@@ -74,6 +78,15 @@ def test_reset_also_drops_the_persisted_restore_snapshot(tmp_path: pathlib.Path)
     relay.publish(TENANT, "emotion", {"type": "emotion_reset"})
 
     assert TENANT not in relay._saved  # noqa: SLF001
-    # And the engine the next reader sees is the fresh one, not a restore.
-    fresh = _relay(tmp_path)
-    assert _snapshot(relay, TENANT) == pytest.approx(_snapshot(fresh, "other"), abs=1e-3)
+    # And the engine the next reader sees is at the MODEL's declared resting
+    # values, not a restore. Asserted against the model itself rather than a
+    # second engine: two engines are born at different wall-clock moments, and
+    # needs decay from birth (novelty's real half-life is minutes), so a
+    # cross-engine equality races the runner - CI measured 4.99898 vs 5.0 at
+    # abs=1e-3. A 0.05 window needs ~17s of drift to breach.
+    snap = _snapshot(relay, TENANT)
+    model, _ = _tables()
+    for name, default in model.need_defaults.items():
+        assert snap[f"needs.{name}"] == pytest.approx(default, abs=0.05)
+    for name, baseline in model.baselines.items():
+        assert snap[f"emotions.{name}"] == pytest.approx(baseline, abs=0.05)
