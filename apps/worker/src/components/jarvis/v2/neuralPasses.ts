@@ -35,9 +35,8 @@ import {
   RING_FRAG,
   RING_SEGMENTS,
   RING_VERT,
-  SHARD_FRAG,
-  SHARD_VERT,
 } from "./shadersRing";
+import { SHARD_FRAG, SHARD_VERT } from "./shadersShard";
 import { LatticeDeck } from "../../canvas/latticeLayer";
 
 /** 128x128 = 16384 particles. Chosen against the draw cost, not the sim: the
@@ -252,9 +251,11 @@ export class NeuralPasses {
   /** The baked layer, under everything. Skipped entirely at zero gain. */
   private drawLattice(d: Drive, tuning: JarvisTuning, shared: FloatUniforms): void {
     const gain = ramp(tuning.lattice, d.energy) * (1 + 0.35 * d.swell);
-    this.lattice?.draw(this.size, shared.uWarm as number[], gain,
-      (p) => this.fullscreen(p), false, tuning.presence,
-      [tuning.latticeBlur, tuning.latticeSat, tuning.latticeGlow]);
+    this.lattice?.draw({
+      size: this.size, warm: shared.uWarm as number[], gain,
+      fullscreen: (p) => this.fullscreen(p), scale: tuning.presence,
+      fx: [tuning.latticeBlur, tuning.latticeSat, tuning.latticeGlow],
+    });
   }
 
 
