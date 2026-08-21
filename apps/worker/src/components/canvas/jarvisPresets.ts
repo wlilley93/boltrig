@@ -6,7 +6,7 @@ import { modeTuning, type BodyMode, type Pulse } from "./bodyModes";
 /**
  * WHERE JARVIS ARRIVES FROM.
  *
- * "Jarvis Final 1740" saved an arrival slot identical to its speaking look, so
+ * "Jarvis v2 final 1822" keeps an arrival slot near its speaking look, so
  * the birth is now an ease from the spoken body to the standby one: the film
  * bright at 1.58-gain, shards up, interior draw dark — settling into the idle
  * breathing state over INTRO_SECONDS. The old wide-hoop draw-in belonged to the
@@ -76,7 +76,7 @@ export const JARVIS_ARRIVAL: JarvisTuning = {
  * that still looks like last month.
  */
 export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
-  // The base IS the standby slot of "Jarvis Final 1740", so idle changes nothing.
+  // The base IS the standby slot of "Jarvis v2 final 1822", so idle changes nothing.
   standby: {},
   // Every particle to the shell, the interior dark, the debris clustered hard
   // (clump scale 8 is this mode's signature — nowhere else goes past 0.4) and
@@ -89,8 +89,6 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
     streak: [0, 0.4],
     shardGain: [4, 0.25],
     shardSize: 0.0005,
-    outerGain: [3, 0],
-    outerStreak: [0.05, 0.05],
     outerPace: -0.34,
     clump: [1, 8],
     drawLimb: [0, 0],
@@ -99,15 +97,17 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
   // comes back faintly with real swirl — the one mode where the field itself
   // visibly churns.
   thinking: {
-    outerShell: [2.2, 2.2, 2.2],
+    outerShell: [1.33, 2.2, 2.2],
     ringGain: [0, 1],
     swirl: [0.235, 0.035],
     drawGain: [0.32, 0.28],
     streak: [0.066, 0],
     shardGain: [1, 0.25],
     shardSize: 0.0005,
-    outerGain: [3, 0],
-    outerStreak: [0.05, 0.05],
+    // LFO centres: v2 gave thinking its own outer-layer sweeps — gain 2.25..3
+    // and 0.93..2.43, streak 0..0.0125 and 0.0375..0.05 — see JARVIS_PULSES.
+    outerGain: [2.625, 1.68],
+    outerStreak: [0.00625, 0.04375],
     outerLimb: [1, 0],
     outerPace: -0.48,
     clump: [1, 0.4],
@@ -125,7 +125,7 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
     shardGain: [1, 0.25],
     shardSize: 0.0005,
     core: [0, 0.42],
-    outerStreak: [0.05, 0.05],
+    outerGain: [0, 0],
     outerLimb: [1, 0],
     outerPace: -0.48,
     clump: [1, 0.4],
@@ -143,7 +143,7 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
     streak: [0, 0.4],
     shardGain: [1, 0.25],
     shardSize: 0.0005,
-    outerStreak: [0.05, 0.05],
+    outerGain: [0, 0],
     outerLimb: [1, 0],
     outerPace: -0.48,
     clump: [1, 0.4],
@@ -152,8 +152,8 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
 };
 
 /**
- * Jarvis's continuous modulation — the bench LFO rack of "Jarvis Final 1740",
- * translated exactly.
+ * Jarvis's continuous modulation — the bench LFO rack of "Jarvis v2 final
+ * 1822", translated exactly.
  *
  * The bench swept these fields with raised-cosine LFOs over absolute min..max
  * ranges, overriding the dial; a Pulse is a sine FRACTION of the base. The two
@@ -162,11 +162,12 @@ export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
  * back a quarter turn (0.5 - 0.5·cos(2πx) = 0.5 + 0.5·sin(2π(x - 0.25))). A
  * depth of 1 is therefore deliberate, not a typo: those sweeps bottom at zero.
  *
- * The canon ran ONE rack in every state, so four of the five tables are the
- * same six sweeps; working adds the heart (core[1] 0..0.84 at 0.15Hz), which
- * is the only per-state LFO the canon carries.
+ * The canon runs ONE shared rack of six sweeps, plus two per-state additions:
+ * working adds the heart (core[1] 0..0.84 at 0.15Hz), and v2 gave thinking
+ * four outer-layer sweeps of its own — the distant shell surges while he
+ * reads, which no other state does.
  */
-const FINAL_1740_SWEEPS: readonly Pulse[] = [
+const CANON_SWEEPS: readonly Pulse[] = [
   // irisFlow both components 0..0.2 at 0.15Hz, a quarter turn apart.
   { field: "irisFlow", index: 0, depth: 1, rate: 0.15, phase: 0.75 },
   { field: "irisFlow", index: 1, depth: 1, rate: 0.15, phase: 0.00 },
@@ -181,19 +182,27 @@ const FINAL_1740_SWEEPS: readonly Pulse[] = [
 ];
 
 export const JARVIS_PULSES: Record<BodyMode, readonly Pulse[]> = {
-  standby: FINAL_1740_SWEEPS,
-  listening: FINAL_1740_SWEEPS,
-  thinking: FINAL_1740_SWEEPS,
+  standby: CANON_SWEEPS,
+  listening: CANON_SWEEPS,
+  thinking: [
+    ...CANON_SWEEPS,
+    // The outer layer surges: gain 2.25..3 and 0.93..2.43, streak 0..0.0125
+    // and 0.0375..0.05, all at 0.15Hz with the pairs a quarter turn apart.
+    { field: "outerGain", index: 0, depth: 0.1429, rate: 0.15, phase: 0.75 },
+    { field: "outerGain", index: 1, depth: 0.4464, rate: 0.15, phase: 0.00 },
+    { field: "outerStreak", index: 0, depth: 1, rate: 0.15, phase: 0.75 },
+    { field: "outerStreak", index: 1, depth: 0.1429, rate: 0.15, phase: 0.00 },
+  ],
   working: [
-    ...FINAL_1740_SWEEPS,
+    ...CANON_SWEEPS,
     { field: "core", index: 1, depth: 1, rate: 0.15, phase: 0.00 },
   ],
-  speaking: FINAL_1740_SWEEPS,
+  speaking: CANON_SWEEPS,
 };
 
 /**
  * WHAT A SYLLABLE DOES TO THE BODY — the bench's speech-reach map, verbatim
- * from the speaking slot of "Jarvis Final 1740".
+ * from the speaking slot of "Jarvis v2 final 1822" (unchanged since 1740).
  *
  * Each entry is "field:index" → the value that dial holds at full syllable;
  * the renderer lerps from the mode's value toward it on the voice envelope, so

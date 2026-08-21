@@ -260,8 +260,9 @@ export interface JarvisTuning {
 /**
  * What ships. The bench overrides a copy; nothing mutates this.
  *
- * THIS IS "JARVIS FINAL 1740" — the look mixed and saved on the character
- * bench (2026-08-21, all seven slots). The base is the standby slot verbatim,
+ * THIS IS "JARVIS V2 FINAL 1822" — the look mixed and saved on the character
+ * bench (2026-08-21, all seven slots; v2 lit the outer shell at idle and gave
+ * thinking its own outer-layer sweeps). The base is the standby slot verbatim,
  * with one systematic exception: `irisFlow`, `focus`, `lattice[0]` and
  * `latticeGlow` were LFO-swept on the bench, so what was saved for them is a
  * mid-sweep snapshot. Those four carry the sweep's CENTRE here and the sweep
@@ -274,7 +275,7 @@ export interface JarvisTuning {
  * judging any of these numbers.
  */
 export const JARVIS_TUNING: JarvisTuning = {
-  outerShell: [0.22, 2.2, 0],
+  outerShell: [0.5, 2.2, 2.2],
   ringGain: [0.96, 1],
   ringSpin: [0.4, 0.4],
   ringRadius: [2, 0.99],
@@ -309,8 +310,8 @@ export const JARVIS_TUNING: JarvisTuning = {
   shardSize: 0.002,
   shardStride: 1,
   core: [0, 0],
-  outerGain: [0, 0],
-  outerStreak: [0, 0],
+  outerGain: [3, 0],
+  outerStreak: [0.05, 0.05],
   outerLimb: [1, 1],
   outerPace: 0.66,
   starburst: 0,
