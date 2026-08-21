@@ -38,34 +38,7 @@ import {
   SHARD_FRAG,
   SHARD_VERT,
 } from "./shadersRing";
-
-/**
- * THE BAKED LATTICE. A pre-rendered loop of the hubs and spokes, composited
- * additively under the live passes. The film's lattice density is an offline
- * render no 16ms frame can afford; a video of it can be decoded in hardware on
- * any phone -- and because it is additive light on black, the composite can
- * still answer the voice: the GAIN is live even though the geometry is baked.
- * Contain-fitted so the loop is never cropped, tinted toward the emotion's
- * warm colour so mood reaches the baked layer too.
- */
-const LATTICE_FRAG = `#version 300 es
-precision highp float;
-in vec2 vUV;
-out vec4 oColor;
-uniform sampler2D uVideo;
-uniform float uGain;
-uniform vec2 uFit;
-uniform vec3 uWarm;
-void main() {
-  vec2 uv = (vUV - 0.5) * uFit + 0.5;
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-    oColor = vec4(0.0);
-    return;
-  }
-  vec3 c = texture(uVideo, vec2(uv.x, 1.0 - uv.y)).rgb;
-  vec3 tint = mix(vec3(1.0), uWarm * 1.55, 0.45);
-  oColor = vec4(c * tint * uGain, 1.0);
-}`;
+import { LatticeLayer } from "../../canvas/latticeLayer";
 
 /** 128x128 = 16384 particles. Chosen against the draw cost, not the sim: the
  *  simulation is one full-screen pass regardless, but every particle is two
@@ -119,15 +92,7 @@ export class NeuralPasses {
   private blurFbo: WebGLFramebuffer[] = [];
   private ping = 0;
   private size: [number, number] = [0, 0];
-  private latticeTex: WebGLTexture | null = null;
-  private latticeReady = false;
-  private latticeAspect = 1;
-  private latticeAt = -1;
-  /** Set on a failed upload; the layer stands down rather than retrying into
-   *  the same failure. A CPU rasteriser (SwiftShader) LOSES THE CONTEXT on
-   *  video texImage2D — measured, not theorised — so the one thing this path
-   *  must never do is keep poking a context it may have already killed. */
-  private latticeDead = false;
+  private lattice: LatticeLayer | null = null;
 
   constructor(private readonly gl: WebGL2RenderingContext) {}
 
@@ -142,10 +107,12 @@ export class NeuralPasses {
       glyph: createProgram(gl, GLYPH_VERT, GLYPH_FRAG),
       iris: createProgram(gl, IRIS_VERT, IRIS_FRAG),
       shard: createProgram(gl, SHARD_VERT, SHARD_FRAG),
-      lattice: createProgram(gl, QUAD_VERT, LATTICE_FRAG),
       bloom: createProgram(gl, QUAD_VERT, BLOOM_FRAG),
       comp: createProgram(gl, QUAD_VERT, COMPOSITE_FRAG),
     };
+
+    this.lattice = new LatticeLayer(gl);
+    this.lattice.init();
 
     const seed = seedParticles(PARTICLES);
     for (let i = 0; i < 2; i++) {
@@ -190,53 +157,11 @@ export class NeuralPasses {
    * `tuning` defaults to what ships, so every existing caller is unaffected and
    * the bench is the only thing that ever passes anything else.
    */
-  /**
-   * Pull the current video frame into the lattice texture. Cheap to call every
-   * frame -- a paused or absent video is two early returns -- and the caller
-   * never learns GL exists.
-   */
+  /** See LatticeLayer: the baked loop's frames, pulled in per new video frame. */
   uploadLattice(video: HTMLVideoElement | null): void {
-    const gl = this.gl;
-    if (this.latticeDead || !video || video.readyState < 2) {
-      this.latticeReady = false;
-      return;
-    }
-    // ONLY ON A NEW VIDEO FRAME. The loop runs at 60 and the video at ~25, so
-    // uploading per render frame more than doubles the conversion work for
-    // identical pixels -- measured on the CPU rasteriser as the difference
-    // between a live body and a starved one.
-    if (video.currentTime === this.latticeAt && this.latticeReady) return;
-    this.latticeAt = video.currentTime;
-    // EVERYTHING ON UNIT 2, including creation. Creating the texture while
-    // unit 0 is active steals the sim texture's binding for a frame.
-    gl.activeTexture(gl.TEXTURE2);
-    if (!this.latticeTex) {
-      this.latticeTex = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, this.latticeTex);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    } else {
-      gl.bindTexture(gl.TEXTURE_2D, this.latticeTex);
-    }
-    try {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
-    } catch {
-      this.latticeDead = true;
-      this.latticeReady = false;
-      gl.activeTexture(gl.TEXTURE0);
-      return;
-    }
-    gl.activeTexture(gl.TEXTURE0);
-    if (gl.isContextLost()) {
-      this.latticeDead = true;
-      this.latticeReady = false;
-      return;
-    }
-    this.latticeAspect = video.videoWidth / Math.max(1, video.videoHeight);
-    this.latticeReady = true;
+    this.lattice?.upload(video);
   }
+
 
   render(d: Drive, palette: FloatUniforms, tuning: JarvisTuning = JARVIS_TUNING): void {
     this.simulate(d, tuning);
@@ -248,8 +173,8 @@ export class NeuralPasses {
   destroy(): void {
     const gl = this.gl;
     [...this.simFbo, ...this.blurFbo, this.sceneFbo].forEach((f) => f && gl.deleteFramebuffer(f));
-    [...this.simTex, ...this.blurTex, this.sceneTex, this.latticeTex]
-      .forEach((t) => t && gl.deleteTexture(t));
+    [...this.simTex, ...this.blurTex, this.sceneTex].forEach((t) => t && gl.deleteTexture(t));
+    this.lattice?.destroy();
     Object.values(this.progs).forEach((p) => gl.deleteProgram(p));
     if (this.quad) gl.deleteBuffer(this.quad);
     if (this.vao) gl.deleteVertexArray(this.vao);
@@ -326,24 +251,10 @@ export class NeuralPasses {
 
   /** The baked layer, under everything. Skipped entirely at zero gain. */
   private drawLattice(d: Drive, tuning: JarvisTuning, shared: FloatUniforms): void {
-    const gl = this.gl;
     const gain = ramp(tuning.lattice, d.energy) * (1 + 0.35 * d.swell);
-    if (!this.latticeReady || !this.latticeTex || gain <= 0) return;
-    const [w, h] = this.size;
-    const aspect = w / Math.max(1, h);
-    const fit: [number, number] = aspect > this.latticeAspect
-      ? [aspect / this.latticeAspect, 1]
-      : [1, this.latticeAspect / aspect];
-    const prog = this.progs.lattice;
-    gl.useProgram(prog);
-    gl.activeTexture(gl.TEXTURE2);
-    gl.bindTexture(gl.TEXTURE_2D, this.latticeTex);
-    setUniforms(gl, prog, {
-      uWarm: shared.uWarm as number[], uGain: gain, uFit: fit,
-    }, { uVideo: 2 });
-    this.fullscreen(prog);
-    gl.activeTexture(gl.TEXTURE0);
+    this.lattice?.draw(this.size, shared.uWarm as number[], gain, (p) => this.fullscreen(p));
   }
+
 
   private bloom(): void {
     const gl = this.gl;

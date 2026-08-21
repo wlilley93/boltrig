@@ -28,6 +28,7 @@ import { ULTRON_TUNING, pulsedCore, ramp, type UltronTuning } from "../canvas/bo
 import { IRIS_FRAG, IRIS_VERT, IRIS_VERTS } from "../canvas/shadersIris";
 import { BLOOM_FRAG, COMPOSITE_FRAG } from "../canvas/shadersPost";
 import { QUAD_VERT, SIM_FRAG } from "../canvas/shadersSim";
+import { LatticeLayer } from "../canvas/latticeLayer";
 import {
   DENDRITE_DEPTH,
   DENDRITE_FRAG,
@@ -89,6 +90,7 @@ export class UltronPasses {
   private blurTex: WebGLTexture[] = [];
   private blurFbo: WebGLFramebuffer[] = [];
   private ping = 0;
+  private lattice: LatticeLayer | null = null;
   private size: [number, number] = [0, 0];
 
   constructor(private readonly gl: WebGL2RenderingContext) {}
@@ -105,6 +107,9 @@ export class UltronPasses {
       comp: createProgram(gl, QUAD_VERT, COMPOSITE_FRAG),
       iris: createProgram(gl, IRIS_VERT, IRIS_FRAG),
     };
+
+    this.lattice = new LatticeLayer(gl);
+    this.lattice.init();
 
     const seed = seedParticles(PARTICLES);
     for (let i = 0; i < 2; i++) {
@@ -141,6 +146,11 @@ export class UltronPasses {
   }
 
   /** One frame. `tuning` defaults to what ships; only the bench overrides it. */
+  /** See LatticeLayer: the baked loop's frames, pulled in per new video frame. */
+  uploadLattice(video: HTMLVideoElement | null): void {
+    this.lattice?.upload(video);
+  }
+
   render(d: UltronDrive, palette: FloatUniforms, tuning: UltronTuning = ULTRON_TUNING): void {
     this.simulate(d, tuning);
     this.drawScene(d, palette, tuning);
@@ -149,6 +159,7 @@ export class UltronPasses {
   }
 
   destroy(): void {
+    this.lattice?.destroy();
     const gl = this.gl;
     [...this.simFbo, ...this.blurFbo, this.sceneFbo].forEach((f) => f && gl.deleteFramebuffer(f));
     [...this.simTex, ...this.blurTex, this.sceneTex].forEach((t) => t && gl.deleteTexture(t));
@@ -220,6 +231,10 @@ export class UltronPasses {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.simTex[this.ping]);
 
+    // The baked membrane, under everything: the heavy slow structure is
+    // footage, the electricity and the instability stay live on top.
+    this.lattice?.draw(this.size, shared.uWarm as number[],
+      ramp(tuning.lattice, d.energy) * (1 + 0.35 * d.swell), (p) => this.fullscreen(p));
     drawDendrite(gl, this.progs, d, tuning, shared);
     drawIris(gl, this.progs, d, tuning, shared);
     drawVein(gl, this.progs, d, tuning, shared);

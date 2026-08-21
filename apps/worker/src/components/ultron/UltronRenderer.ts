@@ -19,6 +19,7 @@
 // off the surface. Turning the gain up instead would have produced a louder
 // Jarvis; what reads as menace is a surface that will not hold together.
 
+import { latticeVideo } from "../canvas/latticeLayer";
 import { type FloatUniforms } from "../canvas/glResources";
 import { UltronPasses } from "./ultronPasses";
 import { BodyClock } from "../canvas/bodyClock";
@@ -65,6 +66,7 @@ export class UltronRenderer {
   private canvas: HTMLCanvasElement | null = null;
   private gl: WebGL2RenderingContext | null = null;
   private passes: UltronPasses | null = null;
+  private latticeEl: HTMLVideoElement | null = null;
   private raf = 0;
   /** The frame clock and the speech ring, shared with JarvisNeuralRenderer. */
   private readonly clock = new BodyClock();
@@ -111,6 +113,14 @@ export class UltronRenderer {
 
   /** What it is currently drawing with, so a bench can seed its own controls. */
   currentTuning(): UltronTuning { return this.tuning ?? ULTRON_TUNING; }
+
+  /** Mount (or clear) the baked membrane loop. See canvas/latticeLayer.ts. */
+  setLatticeVideo(url: string | null): void {
+    this.latticeEl?.remove();
+    this.latticeEl = null;
+    if (!url) return;
+    this.latticeEl = latticeVideo(url);
+  }
 
   /**
    * Hand the body back to its own mode logic and draw it in again.
@@ -189,6 +199,8 @@ export class UltronRenderer {
   }
 
   destroy(): void {
+    this.latticeEl?.remove();
+    this.latticeEl = null;
     cancelAnimationFrame(this.raf);
     this.raf = 0;
     this.passes?.destroy();
@@ -268,6 +280,7 @@ export class UltronRenderer {
         ? this.live
         : applyPulses(this.live, ULTRON_PULSES[mode], this.clock.animClock);
     }
+    passes.uploadLattice(this.latticeEl);
     passes.render(d, ultronPalette(this.opts, this.pheno), ultronEmotion(shown, this.pheno));
   }
 

@@ -560,10 +560,13 @@ function mount(): void {
   // made about a distortion the app never renders.
   $("stage").classList.toggle("square", body === "familiar");
   renderer.mount(host);
+  // The baked layer's loop, mounted whenever a body that has one is on stage.
+  // Free until the lattice dial gives it gain; silently absent if the file is
+  // not there.
   if (body === "jarvis") {
-    // The baked layer's loop, mounted whenever Jarvis is on stage. Free until
-    // the lattice dial gives it gain; silently absent if the file is not there.
     (renderer as JarvisNeuralRenderer).setLatticeVideo("/tests/visual/assets/jarvis-lattice.mp4");
+  } else if (body === "ultron") {
+    (renderer as UltronRenderer).setLatticeVideo("/tests/visual/assets/ultron-membrane.mp4");
   }
   const status = renderer.status();
   if (status.state !== "running") {

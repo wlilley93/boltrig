@@ -57,6 +57,7 @@
 //   BLOOM            bright-pass then a separable Gaussian at half resolution.
 //                    Additive lines alone are thin and mean.
 
+import { latticeVideo } from "../../canvas/latticeLayer";
 import {
   RESTING_PHENOTYPE,
   jarvisEmotion,
@@ -170,16 +171,7 @@ export class JarvisNeuralRenderer {
     this.latticeEl?.remove();
     this.latticeEl = null;
     if (!url) return;
-    const video = document.createElement("video");
-    video.muted = true;
-    video.loop = true;
-    video.playsInline = true;
-    video.crossOrigin = "anonymous";
-    video.src = url;
-    // Silently absent on error: the error event leaves readyState < 2, and
-    // uploadLattice already treats that as "no layer this frame".
-    void video.play().catch(() => undefined);
-    this.latticeEl = video;
+    this.latticeEl = latticeVideo(url);
   }
 
   /**
