@@ -1369,6 +1369,7 @@ function tickLfos(nowMs: number): void {
     if (!lfo.on) continue;
     const [field, indexText] = id.split(":");
     const index = Number(indexText);
+    if (field === "__proto__" || field === "constructor" || field === "prototype") continue;
     if (!ownField(tuning, field)) continue;
     const current = (tuning as unknown as Record<string, number | number[]>)[field];
     if (current === undefined) continue;
@@ -2000,6 +2001,7 @@ function effectiveTuning(of: Tuning = tuning): Tuning {
     for (const [id, end] of Object.entries(speech)) {
       const [field, indexText] = id.split(":");
       if (scoped !== null && !scoped.has(field)) continue;
+      if (field === "__proto__" || field === "constructor" || field === "prototype") continue;
       if (!ownField(record, field)) continue;
       const value = record[field];
       if (value === undefined) continue;
@@ -2647,6 +2649,7 @@ function lerpTuning(from: Tuning, to: Tuning, at: number): Tuning {
   const target = out as unknown as Record<string, number | number[]>;
   const source = from as unknown as Record<string, number | number[]>;
   for (const [key, value] of Object.entries(target)) {
+    if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
     if (!ownField(target, key) || !ownField(source, key)) continue;
     const was = source[key];
     if (was === undefined) continue;
@@ -3200,6 +3203,7 @@ $("allMin").addEventListener("click", () => {
   const record = tuning as unknown as Record<string, number | number[]>;
   for (const field of Object.keys(record)) {
     if (HIDDEN_FIELDS.has(field) || GEOMETRY_FIELDS.has(field)) continue;
+    if (field === "__proto__" || field === "constructor" || field === "prototype") continue;
     if (!ownField(record, field)) continue;
     const fallback = RANGE[field] ?? [0, 1, 0.005];
     const value = record[field];
