@@ -1161,6 +1161,16 @@ function row(
       xv.value = String(end !== undefined ? end : live[index]);
     };
     xv.addEventListener("input", () => {
+      // LEFTMOST IS THE ANCHOR, not a destination: parked at the rail's
+      // bottom the modifier is cleared and the value stays pinned to its
+      // dial — "travel all the way down during speech" is not a thing this
+      // slider says.
+      if (Number(xv.value) <= min) {
+        delete speech[lfoKey(key, index)];
+        rememberSpeech();
+        paintXv();
+        return;
+      }
       speech[lfoKey(key, index)] = Number(xv.value);
       rememberSpeech();
       xv.classList.add("set");
@@ -1586,8 +1596,18 @@ function loop(): void {
     // saved reach travels start→end on the syllable envelope, monitor-side.
     // Pushed only when the envelope actually moved, and never over a journey
     // or a take — those branches call effectiveTuning() themselves.
-    if (renderer && (Object.keys(speech).length > 0 || talkTest.size > 0)
-      && Math.abs(speechEnv - speechShown) > 0.003) {
+    const speechActive = Object.keys(speech).length > 0
+      || talkTest.size > 0 || talkRelease.size > 0 || voiceHold;
+    if (renderer && speechActive && speechEnv < 0.002 && speechShown !== 0) {
+      // THE LANDING. The release has settled: one exact push back to base, so
+      // the body ends on precisely what the dials read rather than holding a
+      // frozen sliver of swell.
+      speechEnv = 0;
+      speechShown = 0;
+      voiceHold = false;
+      talkRelease.clear();
+      (renderer as { setTuning?(next: never): void }).setTuning?.(clone(effectiveTuning()) as never);
+    } else if (renderer && speechActive && Math.abs(speechEnv - speechShown) > 0.003) {
       speechShown = speechEnv;
       (renderer as { setTuning?(next: never): void }).setTuning?.(clone(effectiveTuning()) as never);
     }
