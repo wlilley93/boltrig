@@ -100,15 +100,20 @@ s = re.sub(r'ghcr\.io/wlilley93/boltrig-ui:[^\s"]+', f'ghcr.io/wlilley93/boltrig
 open(p, 'w').write(s)
 PY
 
-  local n
+  local n expected image_lines
   n=$(diff "$src.bak-roll-$STAMP" "$src" | grep -c '^[<>]' || true)
   diff "$src.bak-roll-$STAMP" "$src" || true
-  # 6: three image lines (kernel, fleet, Worker), each contributing a `<` and a
-  # `>`. A count that only sees what it expects cannot report an omitted service.
+  # The overlays repeat images (fleet serves fleet-worker AND hatchet-worker),
+  # so the expected diff is 2 lines per MATCHING IMAGE LINE IN THIS FILE - a
+  # hardcoded 6 aborted every roll of a 4-image-line overlay and forced the
+  # hand-pin-first workaround. Counting what the regex actually rewrites keeps
+  # the property the 6 was for: an omitted service line still fails loudly.
+  image_lines=$(grep -cE 'ghcr\.io/wlilley93/boltrig-(kernel|fleet|ui):' "$src" || true)
+  expected=$((2 * image_lines))
   case "${n:-0}" in
-    6) echo "  [ok] repinned kernel, fleet and Worker image lines IN THE SOURCE ($rel)" ;;
+    "$expected") echo "  [ok] repinned $image_lines image lines IN THE SOURCE ($rel)" ;;
     0) echo "  [ok] source already pinned at $VERSION (safe no-op re-run)" ;;
-    *) die "source diff for $rel is $n changed lines; expected 6 (repin kernel+fleet+Worker) or 0 (already pinned)" ;;
+    *) die "source diff for $rel is $n changed lines; expected $expected (2 per image line) or 0 (already pinned)" ;;
   esac
   rm -f "$src.bak-roll-$STAMP"
 
@@ -137,9 +142,11 @@ PY
 }
 
 bring_up() { # $1=overlay $2=project
+  # hatchet-worker rides the fleet image and was bounced BY HAND after every
+  # roll since v0.4.32 split it out - a manual step is a forgotten step.
   ssh "$H" "cd $PROJECT_DIR && \
-    docker compose -f $COMPOSE -f $1 -p $2 pull kernel fleet-worker ui && \
-    docker compose -f $COMPOSE -f $1 -p $2 up -d --no-deps kernel fleet-worker ui" \
+    docker compose -f $COMPOSE -f $1 -p $2 pull kernel fleet-worker hatchet-worker ui && \
+    docker compose -f $COMPOSE -f $1 -p $2 up -d --no-deps kernel fleet-worker hatchet-worker ui" \
     || die "compose up failed for $2"
 }
 
