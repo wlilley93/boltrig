@@ -18,6 +18,7 @@ export {
   JARVIS_ARRIVAL,
   JARVIS_MODES,
   JARVIS_PULSES,
+  JARVIS_SPEECH,
   JARVIS1_TUNING,
   jarvisModeTuning,
   jarvis1ModeTuning,

@@ -60,6 +60,13 @@ export function useJarvisRenderer(inputs: JarvisRendererInputs) {
         labels: labels === "svg" ? "none" : "shader",
         maxDevicePixelRatio: highResolution ? 2 : 1.25,
       });
+    // The neural body's look is built ON its baked lattice film ("Jarvis Final
+    // 1740" idles the film's gain around 1.5) — a body without the loop mounted
+    // is deliberately near-empty. One loop serves every state; the per-mode
+    // latticeSpeed tuning is what makes standby drift and thinking race.
+    if (renderer instanceof JarvisNeuralRenderer) {
+      renderer.setLatticeVideo("/companion/jarvis-lattice.mp4");
+    }
     rendererRef.current = renderer;
     renderer.mount(host);
     setFallback(renderer.status().state === "failed");

@@ -77,6 +77,7 @@ import {
 import {
   JARVIS_ARRIVAL,
   JARVIS_PULSES,
+  JARVIS_SPEECH,
   jarvisModeTuning,
 } from "../../canvas/bodyPresets";
 import type { JarvisStageState } from "../JarvisState";
@@ -133,6 +134,13 @@ export class JarvisNeuralRenderer {
    */
   private introLeft = 0;
   private live: JarvisTuning = JARVIS_ARRIVAL;
+  /**
+   * The syllable envelope: a VU needle over the voice level — fast toward a
+   * louder syllable, easing back through the gaps between words. The constants
+   * are per-frame at rAF rate, matching the bench where the JARVIS_SPEECH
+   * reaches were tuned against real clips.
+   */
+  private speechEnv = 0;
   /** A bench override. Null means follow the mode, which is the shipped path. */
   private tuning: JarvisTuning | null = null;
   /** The baked loops' source, held until the passes exist to receive it. */
@@ -322,6 +330,13 @@ export class JarvisNeuralRenderer {
     // An explicit bench override replaces the target outright, which is why
     // dragging a slider is instant.
     const mode = this.state?.mode ?? "standby";
+    // The syllable meter runs on whatever voice is live (the app folds the mic
+    // into `level` outside speaking, and the body answering what it hears is
+    // this look's design). 1.13 restores the bench's headroom: it metered the
+    // reach at peak*1.3 while reporting level at peak*1.15.
+    const reachTarget = Math.min(1, (this.state?.level ?? 0) * 1.13);
+    this.speechEnv += (reachTarget - this.speechEnv)
+      * (reachTarget > this.speechEnv ? 0.45 : 0.1);
     let shown = this.live;
     if (this.introLeft > 0 && !this.reducedMotion) {
       // THE DRAW-IN, and it outranks a pinned tuning for as long as it lasts. The
@@ -347,7 +362,9 @@ export class JarvisNeuralRenderer {
         : easeTuning(this.live, target, easeFactor(this.clock.easeDt));
       shown = this.reducedMotion
         ? this.live
-        : applyPulses(this.live, JARVIS_PULSES[mode], this.clock.animClock);
+        : this.applySpeech(
+          applyPulses(this.live, JARVIS_PULSES[mode], this.clock.animClock),
+        );
     }
     // PRESENCE scales the whole composite: the simulation's home radius and
     // the baked layer read the same number, so body and footage stay one piece.
@@ -357,6 +374,33 @@ export class JarvisNeuralRenderer {
   }
 
   // ------------------------------------------------------------------ internals
+
+  /**
+   * Ride every JARVIS_SPEECH reach on the syllable envelope: each mapped dial
+   * travels from the mode's value toward its spoken one and settles back as
+   * the envelope releases. Applied on the SHIPPED path only — the bench pins
+   * its tuning and folds the same reaches in itself, so applying them here too
+   * would speak twice.
+   */
+  private applySpeech(tuning: JarvisTuning): JarvisTuning {
+    const k = this.speechEnv;
+    if (k < 0.002) return tuning;
+    const out = { ...tuning } as unknown as Record<string, number | number[]>;
+    for (const [id, reach] of Object.entries(JARVIS_SPEECH)) {
+      const [field, indexText] = id.split(":");
+      const value = out[field];
+      if (value === undefined) continue;
+      if (typeof value === "number") {
+        out[field] = value + (reach - value) * k;
+      } else {
+        const next = value.slice();
+        const index = Number(indexText);
+        next[index] = next[index] + (reach - next[index]) * k;
+        out[field] = next;
+      }
+    }
+    return out as unknown as JarvisTuning;
+  }
 
   private fail(reason: string): void {
     this._status = { state: "failed", reason };

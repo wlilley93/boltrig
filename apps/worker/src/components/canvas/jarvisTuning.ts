@@ -257,68 +257,80 @@ export interface JarvisTuning {
   linkLimb: LimbMix;
 }
 
-/** What ships. The bench overrides a copy; nothing mutates this. */
+/**
+ * What ships. The bench overrides a copy; nothing mutates this.
+ *
+ * THIS IS "JARVIS FINAL 1740" — the look mixed and saved on the character
+ * bench (2026-08-21, all seven slots). The base is the standby slot verbatim,
+ * with one systematic exception: `irisFlow`, `focus`, `lattice[0]` and
+ * `latticeGlow` were LFO-swept on the bench, so what was saved for them is a
+ * mid-sweep snapshot. Those four carry the sweep's CENTRE here and the sweep
+ * itself lives in JARVIS_PULSES, which reproduces the bench LFOs exactly.
+ *
+ * The look leans on the baked lattice film: `lattice` idles around 1.5, and
+ * most live passes (core, iris, outer shell, draw) sit at or near zero until
+ * a voice raises them through JARVIS_SPEECH. Without the film mounted this
+ * body is deliberately quiet — mount it (useJarvisRenderer does) before
+ * judging any of these numbers.
+ */
 export const JARVIS_TUNING: JarvisTuning = {
-  outerShell: [1.45, 0.34, 0.46],
-  ringGain: [0.8, 0.42],
-  ringSpin: [0.016, 0.005],
-  ringRadius: [1.02, 1.32],
-  ringBeam: 0.085,
-  ringLife: 0.05,
-  ringArc: [1.3, 0.82],
-  ringWidth: 0.145,
-  irisGain: [0.85, 0.5],
-  irisRadius: [0.05, 0.26],
-  irisFil: [0.88, 0.005],
-  irisFlow: [0.14, 0.65],
-  // The links are superseded by the iris. Kept at zero rather than deleted: the
-  // pass is sound and a network may be wanted on another body.
-  glyphGain: [0.34, 0.22],
-  // The old four-ring span was [0.66, 0.94]; each band keeps its two rings
-  // exactly where they were: A at 0.66/0.753, B at 0.847/0.94.
-  glyphRadius: [0.66, 0.753],
-  glyphSize: [0.055, 0.008],
-  glyphSpin: [0.026, 0.55],
-  glyphDensity: [0.72, 0.55],
-  glyphBGain: [0.34, 0.22],
-  glyphBRadius: [0.847, 0.94],
-  glyphBSize: [0.055, 0.008],
-  glyphBSpin: [0.026, 0.55],
-  glyphBDensity: [0.72, 0.55],
-  rings: 2,
-  swirl: [0.115, 0],
+  outerShell: [0.22, 2.2, 0],
+  ringGain: [0.96, 1],
+  ringSpin: [0.4, 0.4],
+  ringRadius: [2, 0.99],
+  ringBeam: 0.01,
+  ringLife: 0.4,
+  ringArc: [9, 1],
+  ringWidth: 0.002,
+  irisGain: [0, 0],
+  irisRadius: [0.02, 0.31],
+  irisFil: [1, 1],
+  // LFO centre: the bench sweeps both components 0..0.2 at 0.15Hz.
+  irisFlow: [0.1, 0.1],
+  glyphGain: [0, 1],
+  glyphRadius: [1.16, 1.4],
+  glyphSize: [0.16, 0.16],
+  glyphSpin: [0.062, 0],
+  glyphDensity: [1, 1],
+  glyphBGain: [0, 0],
+  glyphBRadius: [0.7, 0.95],
+  glyphBSize: [0.03, 0.525],
+  glyphBSpin: [0.19, 0.49],
+  glyphBDensity: [0.57, 1],
+  rings: 3,
+  swirl: [0.005, 0],
   linkGain: [0, 0],
-  reverb: [1.9, 0.22, 0.85, 1.35],
-  linkBow: [0.158, 0.2],
+  reverb: [0.55, 0.04, 0.1, 0.4],
+  linkBow: [0, 0],
   linkRange: 0.6,
-  drawGain: [1, 1],
-  streak: [0.004, 0],
-  shardGain: [1, 0.475],
-  shardSize: 0.003,
-  shardStride: 12,
-  core: [1, 1],
-  outerGain: [1.15, 0.55],
-  outerStreak: [0.0018, 0],
-  outerLimb: [1.9, 2.3],
-  outerPace: -0.55,
-  starburst: 1,
-  clump: [0, 2.6],
-  focus: [0, 0],
-  lattice: [0, 0],
+  drawGain: [3, 3],
+  streak: [0.188, 0.322],
+  shardGain: [0, 0.76],
+  shardSize: 0.002,
+  shardStride: 1,
+  core: [0, 0],
+  outerGain: [0, 0],
+  outerStreak: [0, 0],
+  outerLimb: [1, 1],
+  outerPace: 0.66,
+  starburst: 0,
+  clump: [0, 0.4],
+  // LFO centres: focus[0] sweeps 0.53..1.53, focus[1] 0.425..0.925.
+  focus: [1.03, 0.675],
+  // lattice[0] sweeps 0.9..2.19 — the film breathes; [1] rides the voice.
+  lattice: [1.545, 1.21],
   latticeBlur: 0,
-  latticeSat: 1,
-  latticeGlow: 0,
-  latticeSpeed: 1,
-  presence: 1,
-  // The slight bounce IS his look now, not just a dial: a composed half-Hz
-  // bob at 1.2% of the frame with a soft wake. Arrival stays still — a birth
-  // should not bob.
-  bounce: [0.012, 0.5],
-  bounceTrail: 0,
-  // Lens ring OFF (z = 0): the large screen-space circle around the body was
-  // removed by request — the dial remains for anyone who wants it back, and
-  // it now scales with presence when raised.
-  eye: [1, 1.5, 0, 15],
-  drawLimb: [3, 3],
-  linkLimb: [3, 3],
+  latticeSat: 0.62,
+  // LFO centre: sweeps 0..0.19.
+  latticeGlow: 0.095,
+  latticeSpeed: 0.6,
+  presence: 0.55,
+  bounce: [0.06, 0.1],
+  bounceTrail: 0.55,
+  // The canon predates the aura-width component, so [3] keeps the value that
+  // shipped when those slots were saved. Lens ring (z) lights on speech only,
+  // via JARVIS_SPEECH — it still scales with presence when raised.
+  eye: [3.94, 0.62, 0, 15],
+  drawLimb: [0.75, 3],
+  linkLimb: [0.05, 0],
 };

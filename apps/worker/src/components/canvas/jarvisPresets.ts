@@ -4,75 +4,67 @@ import {
 import { modeTuning, type BodyMode, type Pulse } from "./bodyModes";
 
 /**
- * WHERE JARVIS ARRIVES FROM, and it is a place rather than a fade.
+ * WHERE JARVIS ARRIVES FROM.
  *
- * A body that fades up from nothing tells you only that it is loading. The
- * reference does not do that: the hologram arrives as one wide bright hoop far
- * out with everything on the shell, and then draws IN, gathering into the thing
- * it is going to be. So this is a complete tuning like any other and the entry is
- * simply the ease from here to whatever mode he is in.
- *
- * Note the shell fraction falls from 2.2 to 0 on the way in. That is the draw:
- * the whole population starts out at twice the radius and migrates to the core.
+ * "Jarvis Final 1740" saved an arrival slot identical to its speaking look, so
+ * the birth is now an ease from the spoken body to the standby one: the film
+ * bright at 1.58-gain, shards up, interior draw dark — settling into the idle
+ * breathing state over INTRO_SECONDS. The old wide-hoop draw-in belonged to the
+ * particle-field look this canon replaced.
  */
 export const JARVIS_ARRIVAL: JarvisTuning = {
-  outerShell: [2.2, 2.2, 2.2],
-  ringGain: [0.86, 0.525],
-  ringSpin: [0.174, 0.012],
-  ringRadius: [2, 2],
-  ringBeam: 0.27,
-  ringLife: 0,
-  ringArc: [1, 1],
-  ringWidth: 0.11,
-  // The iris opens as he draws in, so the eye is the last thing to arrive.
+  outerShell: [0.135144, 0, 0],
+  ringGain: [0, 1],
+  ringSpin: [0.4, 0.4],
+  ringRadius: [2, 0.99],
+  ringBeam: 0.01,
+  ringLife: 0.4,
+  ringArc: [9, 1],
+  ringWidth: 0.002,
   irisGain: [0, 0],
-  irisRadius: [0.1, 0.44],
-  irisFil: [0.78, 0.006],
-  irisFlow: [0.14, 0.65],
-  glyphGain: [0, 0],
-  glyphRadius: [0.62, 0.80],
-  glyphSize: [0.055, 0.008],
-  glyphSpin: [0.026, 0.55],
-  glyphDensity: [0.72, 0.55],
+  irisRadius: [0.02, 0.31],
+  irisFil: [1, 1],
+  irisFlow: [0.1, 0.1],
+  glyphGain: [0, 1],
+  glyphRadius: [1.16, 1.4],
+  glyphSize: [0.16, 0.16],
+  glyphSpin: [0.062, 0],
+  glyphDensity: [1, 1],
   glyphBGain: [0, 0],
-  glyphBRadius: [0.98, 1.16],
-  glyphBSize: [0.055, 0.008],
-  glyphBSpin: [0.026, 0.55],
-  glyphBDensity: [0.72, 0.55],
-  rings: 1,
-  swirl: [0.105, 0],
+  glyphBRadius: [0.7, 0.95],
+  glyphBSize: [0.03, 0.525],
+  glyphBSpin: [0.19, 0.49],
+  glyphBDensity: [0.57, 1],
+  rings: 3,
+  swirl: [0, 0.035],
   linkGain: [0, 0],
-  // Still on arrival: the draw-in is the animation, and a wavefront crossing it
-  // would compete with the gather.
-  reverb: [0.9, 0.4, 1.2, 1.35],
-  linkBow: [0.158, 0.2],
+  reverb: [0.55, 0.04, 0.1, 0.4],
+  linkBow: [0, 0],
   linkRange: 0.6,
-  drawGain: [1, 1],
-  streak: [0.004, 0],
-  shardGain: [1, 0.475],
-  shardSize: 0.003,
-  shardStride: 12,
-  core: [1, 1],
-  // ARRIVING, the shell is the whole body: outerShell population is 2.2, so every
-  // particle is out there and the outer layer is what you see.
-  outerGain: [1.1, 0.5],
-  outerStreak: [0.004, 0],
-  outerLimb: [3, 3],
-  outerPace: 0,
-  starburst: 0.32,
-  eye: [0.35, 1.8, 0, 9],
-  drawLimb: [3, 3],
-  linkLimb: [3, 3],
-  clump: [0, 2.6],
-  focus: [0, 0],
-  lattice: [0, 0],
+  drawGain: [0, 0],
+  streak: [0, 0.4],
+  shardGain: [1, 0.25],
+  shardSize: 0.0005,
+  shardStride: 1,
+  core: [0, 0],
+  outerGain: [0, 0],
+  outerStreak: [0.05, 0.05],
+  outerLimb: [1, 0],
+  outerPace: -0.48,
+  starburst: 0,
+  eye: [3.94, 0.62, 0, 15],
+  drawLimb: [0, 0],
+  linkLimb: [0.05, 0],
+  clump: [1, 0.4],
+  focus: [1.03, 0.675],
+  lattice: [1.545, 1.21],
   latticeBlur: 0,
-  latticeSat: 1,
-  latticeGlow: 0,
-  latticeSpeed: 1,
-  presence: 1,
-  bounce: [0, 0],
-  bounceTrail: 0,
+  latticeSat: 0.62,
+  latticeGlow: 0.095,
+  latticeSpeed: 0.6,
+  presence: 0.55,
+  bounce: [0.06, 0.1],
+  bounceTrail: 0.55,
 };
 
 /**
@@ -84,205 +76,195 @@ export const JARVIS_ARRIVAL: JarvisTuning = {
  * that still looks like last month.
  */
 export const JARVIS_MODES: Record<BodyMode, Partial<JarvisTuning>> = {
-  // IDLE, AND IT BREATHES. Not "everything turned down": a body that is merely dim
-  // when idle reads as switched off, and the pulse table below gives this mode more
-  // simultaneous motion than any other precisely because there is nothing else
-  // happening to look at. The rings turn slowest here and take longest to come and
-  // go, so the silhouette changes over twenty seconds rather than five.
-  standby: {
-    swirl: [0.05, 0],
-    ringGain: [0.58, 0.2],
-    ringSpin: [0.008, 0.003],
-    ringLife: 0.028,
-    ringArc: [1.15, 0.74],
-    ringWidth: 0.125,
-    irisGain: [0.5, 0.2],
-    irisFlow: [0.05, 0.45],
-    glyphGain: [0.16, 0.1],
-    glyphBGain: [0.16, 0.1],
-    glyphDensity: [0.42, 0.62],
-    glyphBDensity: [0.42, 0.62],
-    outerGain: [0.62, 0.24],
-    outerPace: -0.72,
-    core: [0.55, 0.3],
-    shardGain: [0.42, 0.16],
-    // A slow, wide swell rather than a ring: the front barely outruns the body, so
-    // an idle pulse reads as the whole thing breathing.
-    reverb: [0.85, 0.42, 0.5, 1.3],
-  },
-  // Turned toward you. The iris opens first -- that is the part of him that looks
-  // at things -- and the rings pick up a little without hurrying.
+  // The base IS the standby slot of "Jarvis Final 1740", so idle changes nothing.
+  standby: {},
+  // Every particle to the shell, the interior dark, the debris clustered hard
+  // (clump scale 8 is this mode's signature — nowhere else goes past 0.4) and
+  // the shards at four times any other mode's gain. He turns himself outward.
   listening: {
-    swirl: [0.075, 0],
-    ringGain: [0.7, 0.3],
-    ringSpin: [0.013, 0.004],
-    ringLife: 0.04,
-    ringArc: [1.25, 0.78],
-    irisGain: [0.95, 0.55],
-    irisRadius: [0.05, 0.3],
-    irisFil: [0.92, 0.005],
-    irisFlow: [0.1, 0.6],
-    glyphGain: [0.26, 0.16],
-    glyphBGain: [0.26, 0.16],
-    glyphDensity: [0.6, 0.55],
-    glyphBDensity: [0.6, 0.55],
-    outerGain: [0.85, 0.4],
-    outerPace: -0.62,
-    core: [0.75, 0.48],
-    shardGain: [0.5, 0.24],
-    reverb: [1.25, 0.34, 0.68, 1.34],
-  },
-  // The inscriptions and the iris do the work: this is the mode that is reading
-  // something. The flow through the iris quickens and more marks light.
-  thinking: {
-    swirl: [0.115, 0],
-    ringGain: [0.92, 0.55],
-    ringSpin: [0.022, 0.007],
-    ringLife: 0.062,
-    ringArc: [1.35, 0.84],
-    ringWidth: 0.155,
-    irisGain: [1.1, 0.7],
-    irisFlow: [0.18, 0.72],
-    glyphGain: [0.4, 0.3],
-    glyphBGain: [0.4, 0.3],
-    glyphDensity: [0.78, 0.5],
-    glyphBDensity: [0.78, 0.5],
-    outerGain: [1.2, 0.62],
-    outerPace: -0.44,
-    core: [1, 1],
-    shardGain: [1, 0.475],
-    reverb: [2.2, 0.26, 0.44, 1.52],
-  },
-  // Circuitry in transit. The shards lead, the rings turn like platters and come
-  // and go fastest, and the outer shell keeps closer to the interior's pace.
-  working: {
-    swirl: [0.14, 0],
-    ringGain: [0.86, 0.46],
-    ringSpin: [0.034, 0.011],
-    ringLife: 0.085,
-    ringArc: [1.6, 0.86],
-    ringWidth: 0.16,
-    irisGain: [0.9, 0.5],
-    irisFlow: [0.2, 0.62],
-    glyphGain: [0.42, 0.28],
-    glyphBGain: [0.42, 0.28],
-    glyphSpin: [0.042, 0.6],
-    glyphBSpin: [0.042, 0.6],
-    outerGain: [1.15, 0.55],
+    outerShell: [2.2, 2.2, 2.2],
+    ringGain: [0, 1],
+    swirl: [0, 0.035],
+    drawGain: [0, 0],
+    streak: [0, 0.4],
+    shardGain: [4, 0.25],
+    shardSize: 0.0005,
+    outerGain: [3, 0],
+    outerStreak: [0.05, 0.05],
     outerPace: -0.34,
-    shardGain: [1.18, 0.6],
-    shardStride: 9,
-    core: [0.9, 0.72],
-    reverb: [2.1, 0.24, 0.88, 1.36],
+    clump: [1, 8],
+    drawLimb: [0, 0],
   },
-  // SPEAKING, AND IT REVERBERATES. The distinguishing setting is not brightness --
-  // it is the reverb's DECAY, at 0.4 against standby's 0.5 and working's 0.88. A
-  // slow decay means each front survives several reflections, so a syllable is
-  // still crossing the body when the next one arrives and the whole thing rings
-  // rather than pinging. The reach is pushed past the silhouette so the front turns
-  // around out at the shell and comes back through everything.
+  // The film races (latticeSpeed 4 against the idle 0.6) and the interior draw
+  // comes back faintly with real swirl — the one mode where the field itself
+  // visibly churns.
+  thinking: {
+    outerShell: [2.2, 2.2, 2.2],
+    ringGain: [0, 1],
+    swirl: [0.235, 0.035],
+    drawGain: [0.32, 0.28],
+    streak: [0.066, 0],
+    shardGain: [1, 0.25],
+    shardSize: 0.0005,
+    outerGain: [3, 0],
+    outerStreak: [0.05, 0.05],
+    outerLimb: [1, 0],
+    outerPace: -0.48,
+    clump: [1, 0.4],
+    latticeSpeed: 4,
+    drawLimb: [0.71, 0.25],
+  },
+  // The heart comes on and rides the voice (core[1] carries the pulse table's
+  // core sweep), and the iris aura opens to 4 — the working glow.
+  working: {
+    outerShell: [0.135144, 2.2, 2.2],
+    ringGain: [0, 1],
+    swirl: [0, 0.035],
+    drawGain: [0, 0],
+    streak: [0, 0.4],
+    shardGain: [1, 0.25],
+    shardSize: 0.0005,
+    core: [0, 0.42],
+    outerStreak: [0.05, 0.05],
+    outerLimb: [1, 0],
+    outerPace: -0.48,
+    clump: [1, 0.4],
+    eye: [3.94, 4, 0, 15],
+    drawLimb: [0, 0],
+  },
+  // Nearly bare at rest — the SPEECH map is this mode's real body: every reach
+  // in JARVIS_SPEECH blooms on the syllable envelope and settles back here in
+  // the gaps between words.
   speaking: {
-    swirl: [0.115, 0],
-    ringGain: [0.92, 0.55],
-    ringSpin: [0.022, 0.007],
-    ringLife: 0.062,
-    ringArc: [1.35, 0.84],
-    ringWidth: 0.155,
-    irisGain: [1.1, 0.7],
-    irisFlow: [0.18, 0.72],
-    glyphGain: [0.4, 0.3],
-    glyphBGain: [0.4, 0.3],
-    glyphDensity: [0.78, 0.5],
-    glyphBDensity: [0.78, 0.5],
-    outerGain: [1.2, 0.62],
-    outerPace: -0.44,
-    core: [1, 1],
-    shardGain: [1, 0.475],
-    reverb: [2.2, 0.26, 0.44, 1.52],
+    outerShell: [0.135144, 0, 0],
+    ringGain: [0, 1],
+    swirl: [0, 0.035],
+    drawGain: [0, 0],
+    streak: [0, 0.4],
+    shardGain: [1, 0.25],
+    shardSize: 0.0005,
+    outerStreak: [0.05, 0.05],
+    outerLimb: [1, 0],
+    outerPace: -0.48,
+    clump: [1, 0.4],
+    drawLimb: [0, 0],
   },
 };
 
 /**
- * Jarvis's continuous modulation. Small, many at once, and never in step.
+ * Jarvis's continuous modulation — the bench LFO rack of "Jarvis Final 1740",
+ * translated exactly.
  *
- * DEPTHS ARE NOT COMPARABLE ACROSS FIELDS. A gain is re-read every frame, so its
- * depth is what you see. `swirl`, `ringSpin` and `facetSpin` are RATES integrated
- * into particle positions, so a pulse on one keeps displacing the distribution for
- * as long as it is applied rather than acting and being done. They are held at
- * 0.04 or below on that reasoning.
+ * The bench swept these fields with raised-cosine LFOs over absolute min..max
+ * ranges, overriding the dial; a Pulse is a sine FRACTION of the base. The two
+ * meet where the base carries the sweep's centre (JARVIS_TUNING does, see its
+ * doc) and the pulse carries depth = half-range/centre with the phase shifted
+ * back a quarter turn (0.5 - 0.5·cos(2πx) = 0.5 + 0.5·sin(2π(x - 0.25))). A
+ * depth of 1 is therefore deliberate, not a typo: those sweeps bottom at zero.
  *
- * It is reasoning, NOT a measurement, and the measurement that looked like it
- * confirmed it did not: a 0.075 brightness drift first read as a 30% swing caused
- * by these, but against a pinned control the same body drifted 0.097 with every
- * number held constant. The drift is the RING LIFECYCLE fading crests in and out,
- * and the pulses add nothing on top of it. So the cap is cheap insurance and the
- * real headroom is untested -- raising these is defensible, and doing it needs the
- * pinned-control comparison rather than a look at a still frame.
- *
- * The rates are chosen to be mutually irrational-ish rather than tidy multiples.
- * Tidy multiples re-align on a short cycle and the body visibly repeats itself,
- * which is worse than not moving at all.
+ * The canon ran ONE rack in every state, so four of the five tables are the
+ * same six sweeps; working adds the heart (core[1] 0..0.84 at 0.15Hz), which
+ * is the only per-state LFO the canon carries.
  */
+const FINAL_1740_SWEEPS: readonly Pulse[] = [
+  // irisFlow both components 0..0.2 at 0.15Hz, a quarter turn apart.
+  { field: "irisFlow", index: 0, depth: 1, rate: 0.15, phase: 0.75 },
+  { field: "irisFlow", index: 1, depth: 1, rate: 0.15, phase: 0.00 },
+  // focus[0] 0.53..1.53, focus[1] 0.425..0.925 — the shard depth-of-field
+  // slowly racks in and out.
+  { field: "focus", index: 0, depth: 0.4854, rate: 0.15, phase: 0.75 },
+  { field: "focus", index: 1, depth: 0.3704, rate: 0.19, phase: 0.00 },
+  // The film breathes: lattice gain 0.9..2.19 over ten seconds.
+  { field: "lattice", index: 0, depth: 0.4175, rate: 0.10, phase: 0.75 },
+  // Its glow 0..0.19 in step with the iris.
+  { field: "latticeGlow", index: 0, depth: 1, rate: 0.15, phase: 0.75 },
+];
+
 export const JARVIS_PULSES: Record<BodyMode, readonly Pulse[]> = {
-  // THE MOST CROWDED TABLE, deliberately. Idle is the mode a person actually looks
-  // at for minutes at a time, so it needs the most things moving and the least
-  // amplitude in any of them: eight terms between 4% and 12%, on rates from a
-  // sixty-second cycle down to a twenty-second one. Nothing here is fast enough to
-  // catch the eye on its own, which is the entire point.
-  standby: [
-    { field: "ringGain", index: 0, depth: 0.12, rate: 0.023, phase: 0.00 },
-    { field: "ringWidth", index: 0, depth: 0.10, rate: 0.017, phase: 0.21 },
-    { field: "irisGain", index: 0, depth: 0.11, rate: 0.031, phase: 0.38 },
-    { field: "irisFlow", index: 0, depth: 0.09, rate: 0.019, phase: 0.57 },
-    { field: "core", index: 0, depth: 0.08, rate: 0.029, phase: 0.72 },
-    { field: "outerGain", index: 0, depth: 0.10, rate: 0.013, phase: 0.86 },
-    { field: "glyphDensity", index: 0, depth: 0.09, rate: 0.037, phase: 0.11 },
-    { field: "swirl", index: 0, depth: 0.04, rate: 0.021, phase: 0.64 },
-  ],
-  listening: [
-    { field: "irisGain", index: 0, depth: 0.12, rate: 0.053, phase: 0.00 },
-    { field: "irisFlow", index: 0, depth: 0.14, rate: 0.037, phase: 0.19 },
-    { field: "ringGain", index: 0, depth: 0.09, rate: 0.043, phase: 0.35 },
-    { field: "core", index: 0, depth: 0.09, rate: 0.029, phase: 0.52 },
-    { field: "outerGain", index: 0, depth: 0.11, rate: 0.023, phase: 0.68 },
-    { field: "glyphDensity", index: 0, depth: 0.10, rate: 0.061, phase: 0.81 },
-    { field: "ringWidth", index: 0, depth: 0.07, rate: 0.031, phase: 0.94 },
-    { field: "swirl", index: 0, depth: 0.04, rate: 0.027, phase: 0.44 },
-  ],
-  thinking: [
-    { field: "glyphDensity", index: 0, depth: 0.16, rate: 0.089, phase: 0.00 },
-    { field: "irisFlow", index: 0, depth: 0.18, rate: 0.071, phase: 0.17 },
-    { field: "irisGain", index: 0, depth: 0.12, rate: 0.047, phase: 0.31 },
-    { field: "glyphGain", index: 0, depth: 0.14, rate: 0.101, phase: 0.46 },
-    { field: "ringGain", index: 0, depth: 0.09, rate: 0.059, phase: 0.63 },
-    { field: "core", index: 0, depth: 0.11, rate: 0.037, phase: 0.77 },
-    { field: "outerGain", index: 0, depth: 0.10, rate: 0.029, phase: 0.90 },
-    { field: "shardGain", index: 0, depth: 0.12, rate: 0.113, phase: 0.08 },
-    { field: "swirl", index: 0, depth: 0.04, rate: 0.041, phase: 0.55 },
-  ],
+  standby: FINAL_1740_SWEEPS,
+  listening: FINAL_1740_SWEEPS,
+  thinking: FINAL_1740_SWEEPS,
   working: [
-    { field: "shardGain", index: 0, depth: 0.15, rate: 0.127, phase: 0.00 },
-    { field: "ringGain", index: 0, depth: 0.11, rate: 0.083, phase: 0.22 },
-    { field: "ringWidth", index: 0, depth: 0.10, rate: 0.061, phase: 0.41 },
-    { field: "glyphGain", index: 0, depth: 0.12, rate: 0.109, phase: 0.58 },
-    { field: "irisFlow", index: 0, depth: 0.13, rate: 0.091, phase: 0.73 },
-    { field: "outerGain", index: 0, depth: 0.11, rate: 0.047, phase: 0.87 },
-    { field: "core", index: 0, depth: 0.09, rate: 0.067, phase: 0.13 },
-    { field: "ringSpin", index: 0, depth: 0.04, rate: 0.053, phase: 0.36 },
+    ...FINAL_1740_SWEEPS,
+    { field: "core", index: 1, depth: 1, rate: 0.15, phase: 0.00 },
   ],
-  // Shallower than the others, and that is not an oversight. While he is speaking
-  // the REVERB is what moves the body, and a pulse table competing with it makes
-  // both read as noise. These keep the parts the wavefront does not reach alive.
-  speaking: [
-    { field: "outerPace", index: 0, depth: 0.16, rate: 0.041, phase: 0.13 },
-    { field: "ringWidth", index: 0, depth: 0.08, rate: 0.073, phase: 0.00 },
-    { field: "ringGain", index: 0, depth: 0.07, rate: 0.049, phase: 0.27 },
-    { field: "irisGain", index: 0, depth: 0.09, rate: 0.061, phase: 0.48 },
-    { field: "glyphDensity", index: 0, depth: 0.08, rate: 0.037, phase: 0.66 },
-    { field: "outerGain", index: 0, depth: 0.08, rate: 0.029, phase: 0.83 },
-    { field: "irisFlow", index: 0, depth: 0.10, rate: 0.083, phase: 0.05 },
-    { field: "swirl", index: 0, depth: 0.03, rate: 0.031, phase: 0.59 },
-  ],
+  speaking: FINAL_1740_SWEEPS,
+};
+
+/**
+ * WHAT A SYLLABLE DOES TO THE BODY — the bench's speech-reach map, verbatim
+ * from the speaking slot of "Jarvis Final 1740".
+ *
+ * Each entry is "field:index" → the value that dial holds at full syllable;
+ * the renderer lerps from the mode's value toward it on the voice envelope, so
+ * the whole body blooms on a vowel and settles home through the gaps between
+ * words. This map, not the speaking deltas above, is most of what speaking
+ * LOOKS like: the interior draw (0→3), the outer shell population (0→0.93),
+ * the wheels (ringGain 0→1.76), the lens ring (eye[2] 0→0.37) and the film's
+ * pace (0.6→1.3) all live here.
+ *
+ * The canon saved near-identical maps on every slot (standby differs in five
+ * entries, thinking in three); the speaking slot's is the one shipped because
+ * speech is when the envelope actually runs.
+ */
+export const JARVIS_SPEECH: Readonly<Record<string, number>> = {
+  "clump:0": 0.12,
+  "clump:1": 0.55,
+  "core:0": 0.02,
+  "core:1": 0.6,
+  "drawGain:0": 3,
+  "drawGain:1": 0.22,
+  "drawLimb:1": 0.67,
+  "eye:0": 4,
+  "eye:1": 0.48,
+  "eye:2": 0.37,
+  "glyphBDensity:1": 0.09,
+  "glyphBGain:0": 0.1,
+  "glyphBGain:1": 0.39,
+  "glyphBSize:1": 0.635,
+  "glyphGain:0": 0.04,
+  "glyphGain:1": 0.2,
+  "glyphRadius:0": 1.28,
+  "irisFil:0": 0.12,
+  "irisFil:1": 1,
+  "irisFlow:0": 0.14,
+  "irisFlow:1": 0.425,
+  "irisGain:0": 0.22,
+  "irisGain:1": 0.02,
+  "irisRadius:0": 0.06,
+  "irisRadius:1": 0.04,
+  "lattice:0": 2,
+  "latticeBlur:0": 0,
+  "latticeSat:0": 0.84,
+  "latticeSpeed:0": 1.3,
+  "linkBow:0": 0.04,
+  "linkBow:1": 0.002,
+  "linkGain:0": 0.28,
+  "linkGain:1": 0.04,
+  "linkLimb:0": 2.71,
+  "linkRange:0": 0.365,
+  "outerGain:0": 1.6,
+  "outerGain:1": 0.92,
+  "outerLimb:0": 0.15,
+  "outerLimb:1": 0.375,
+  "outerPace:0": 0.46,
+  "outerShell:0": 0.68,
+  "outerShell:1": 0.93,
+  "outerShell:2": 2.2,
+  "outerStreak:0": 0.041,
+  "outerStreak:1": 0.05,
+  "ringBeam:0": 0.055,
+  "ringGain:0": 1.76,
+  "ringLife:0": 0.255,
+  "ringWidth:0": 0.008,
+  "shardGain:0": 3.2,
+  "shardGain:1": 0.24,
+  "shardSize:0": 0.0007,
+  "shardStride:0": 3,
+  "starburst:0": 0.21,
+  "streak:0": 0.088,
+  "streak:1": 0.4,
+  "swirl:1": 0.04,
 };
 
 /** Jarvis's target for a mode. */

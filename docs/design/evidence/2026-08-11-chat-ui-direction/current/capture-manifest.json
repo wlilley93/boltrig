@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-21T13:40:23.220Z",
+  "capturedAt": "2026-08-21T16:56:21.681Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,30 +17,30 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "7f7e6eb18d9bd90598c27d9f37e3db14193bc7a695cb81e1a78210f67a63e0c7",
-    "digestAfterCapture": "7f7e6eb18d9bd90598c27d9f37e3db14193bc7a695cb81e1a78210f67a63e0c7",
+    "digestBeforeCapture": "f115dc50d3838db236e7e99280802ef9286f4228dba4ee123a96803eb5e2d08b",
+    "digestAfterCapture": "f115dc50d3838db236e7e99280802ef9286f4228dba4ee123a96803eb5e2d08b",
     "sourceUnchangedDuringCapture": true,
     "branch": "bench-unified",
-    "head": "997c1e32f70d20023883a98420f4180f3245cb42",
+    "head": "376a9b5c74fcd6983444e2fa968a3761767bc5d4",
     "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
     "node": "v24.15.0",
     "browser": "chromium",
-    "browserVersion": "148.0.7778.215",
-    "browserExecutable": "/usr/bin/google-chrome",
-    "origin": "http://localhost:1427",
+    "browserVersion": "151.0.7922.34",
+    "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
+    "origin": "http://localhost:1420",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
   "states": [
     {
       "state": "chat-direction",
-      "url": "http://localhost:1427/tests/visual/parity.html?state=chat-direction&theme=dark",
+      "url": "http://localhost:1420/tests/visual/parity.html?state=chat-direction&theme=dark",
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "e5b20ed32d17572e0a566a60279a15a1f102bba5d65b3b3f18e5318f4d57378d",
+      "sha256": "015ca5a23e11535f558c5014b656121778a3c430eee6b3f6c51dbc8ab9fe9e61",
       "width": 1440,
       "height": 900,
       "captureContract": {
