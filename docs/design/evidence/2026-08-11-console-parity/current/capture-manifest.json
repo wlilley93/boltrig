@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-21T10:41:29.324Z",
+  "capturedAt": "2026-08-21T12:00:31.753Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,19 +16,19 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "dc806317f8364e40453808740c3482bfe50f88c38193a6dd47b0e2fee54e3b45",
-    "digestAfterCapture": "dc806317f8364e40453808740c3482bfe50f88c38193a6dd47b0e2fee54e3b45",
+    "digestBeforeCapture": "09e7433be03af8cdd5df11222ed68f5fecc5f83bd445827e5b9045501380202d",
+    "digestAfterCapture": "09e7433be03af8cdd5df11222ed68f5fecc5f83bd445827e5b9045501380202d",
     "sourceUnchangedDuringCapture": true,
-    "branch": "codex/turn-scoped-agent-chat",
-    "head": "f57919f67c476231ca4a3aedc6c8547160f4b875",
+    "branch": "feat/opbox-embed",
+    "head": "a1ab724830608494eab9db88d6f879ad26b624e2",
     "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
     "node": "v24.15.0",
     "browser": "chromium",
-    "browserVersion": "151.0.7922.34",
-    "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
+    "browserVersion": "148.0.7778.215",
+    "browserExecutable": "/usr/bin/google-chrome",
     "origin": "http://localhost:1420",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
@@ -41,7 +41,7 @@
       "hash": "#/chat",
       "settledSelector": "html[data-visual-ready=\"new-chat\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
-      "sha256": "ad8cb5ba28670d2f0b2733fec94d2866b96c9cd4ae27ca333b3e849c8e8aa22b",
+      "sha256": "cbf54bd8ae89b770ffe48c12a9120141244d0b79c471178dbc1645b885765f8b",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -57,7 +57,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -91,7 +91,7 @@
       "hash": "#/chat/run-thread",
       "settledSelector": "html[data-visual-ready=\"chat-run\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
-      "sha256": "042a2d765040c9f274fea33b263d666a0366e05c6d850966a3f2701702974074",
+      "sha256": "9042576519047bf883e58ffbd8f108401b258c7292aa0338692d8d6c5fa1282c",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -107,7 +107,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -145,7 +145,7 @@
       "hash": "#/agents",
       "settledSelector": "html[data-visual-ready=\"agents\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/agents.png",
-      "sha256": "c1a0a7f87e5e232d4fa611b3bb66c31d0b2e6cdd5a5821461a315203a7987161",
+      "sha256": "b80a9c9b927b7c0fd4d8278d72c987a89f46598f431452ae2f4d1227d4d4386d",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -233,7 +233,7 @@
       "hash": "#/chat/run-thread",
       "settledSelector": "html[data-visual-ready=\"command-palette\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png",
-      "sha256": "66fff8cef06e06a4ebb58c19de0f0c83312bd5fe92b99548a244385e07768ac2",
+      "sha256": "643c177a8cac92d3c0893f887c504f5c7a93d52f1c4df31fc5e7829b855af2b2",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -303,7 +303,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 5,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
@@ -331,7 +331,6 @@
           "/v1/calls?limit=10",
           "/v1/calls/current?conversation_id=voice-thread",
           "/v1/calls/call-visual/events",
-          "/v1/familiar/phenotype",
           "/v1/familiar/phenotype"
         ]
       }
@@ -360,7 +359,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
