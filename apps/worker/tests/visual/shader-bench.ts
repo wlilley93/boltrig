@@ -647,6 +647,7 @@ function mount(): void {
   for (const id of Object.keys(sliderDom)) delete sliderDom[id];
   lfos = savedLfos(slotKey(body, slot));
   loadBaseline();
+  loadVolumes();
   loadDraft();
   buildControls();
   buildMixer();
@@ -1491,6 +1492,29 @@ const muted = new Set<string>();
 let soloed: string | null = null;
 const mixerDom: Record<string, { input: HTMLInputElement; out: HTMLElement }> = {};
 
+/**
+ * THE DESK READS FURTHEST-OUT TO CENTRE, left to right: the baked footage
+ * behind everything, then the distant shell, in through the structure to the
+ * eye. Non-spatial strips (voice, presence) sit at the right like a master
+ * section; anything unranked keeps its GROUPS order after the ranked.
+ */
+const SPATIAL_RANK: Record<string, number> = {
+  "0 · Lattice loop — the baked layer": 0,
+  "4 · Outer particle layer — the distant shell": 1,
+  "1 · Wheels — the orbiting beams": 2,
+  "2 · Glyph layers — the inscriptions": 3,
+  "5 · Crystal facets": 4,
+  "4 · Veins and cracks": 5,
+  "5 · Circuit shards": 6,
+  "5 · Debris — clumping and depth": 7,
+  "3 · Dendrites — the neurons and their signals": 8,
+  "4 · Inner particle layer — the core cloud": 9,
+  "3 · The iris — radial filaments": 10,
+  "6 · The eye — core and composite": 11,
+  "6 · Voice reverberation — how speech crosses the body": 90,
+  "0 · Presence — the composite's size": 91,
+};
+
 function channelsFor(): { title: string; fields: string[] }[] {
   const fields = Object.keys(tuning).filter((f) => !HIDDEN_FIELDS.has(f));
   const present = GROUPS
@@ -1501,7 +1525,10 @@ function channelsFor(): { title: string; fields: string[] }[] {
   if (orphans.length > 0) {
     present.push({ title: "UNGROUPED — add these to GROUPS", fields: orphans });
   }
-  return present;
+  return present
+    .map((g, index) => ({ g, key: SPATIAL_RANK[g.title] ?? 30 + index }))
+    .sort((a, b) => a.key - b.key)
+    .map((x) => x.g);
 }
 
 /** What a channel's fader drives: the pass's first master level. */
@@ -1516,7 +1543,7 @@ function levelFields(fields: readonly string[]): string[] {
 /** What mute silences: every field that puts light on screen for this pass.
  *  Wider than the fader, because a pass like the eye draws through `eye` and
  *  `starburst` as well as `core` — muting only the gains left it half lit. */
-const MUTE_EXTRA = new Set(["core", "eye", "starburst", "reverb", "voiceLevel"]);
+const MUTE_EXTRA = new Set(["core", "eye", "starburst", "reverb", "voiceLevel", "lattice"]);
 function muteFields(fields: readonly string[]): string[] {
   return fields.filter((f) => f.endsWith("Gain") || MUTE_EXTRA.has(f));
 }
@@ -1525,17 +1552,48 @@ function audible(title: string): boolean {
   return soloed !== null ? title === soloed : !muted.has(title);
 }
 
+/**
+ * THE FADER IS A VOLUME, NOT A DIAL. Each desk strip's slider scales the
+ * whole channel's light output — every gain the channel owns, the baked
+ * layer included — without touching the numbers underneath, so at zero the
+ * channel simply is not there and the dials still read what you tuned.
+ * Working state, per body, this browser only.
+ */
+let channelVolume: Record<string, number> = {};
+
+function loadVolumes(): void {
+  try {
+    channelVolume = JSON.parse(localStorage.getItem(storageKey(`volume.${body}`)) ?? "{}") as
+      Record<string, number>;
+  } catch {
+    channelVolume = {};
+  }
+}
+
+function volumeOf(title: string): number {
+  const v = channelVolume[title];
+  return typeof v === "number" ? Math.min(1, Math.max(0, v)) : 1;
+}
+
+function rememberVolumes(): void {
+  try {
+    localStorage.setItem(storageKey(`volume.${body}`), JSON.stringify(channelVolume));
+  } catch { /* fine */ }
+}
+
 /** The tuning the renderer hears: muted channels' levels at zero, the real
  *  numbers untouched. With nothing muted this is `tuning` itself. */
 function effectiveTuning(of: Tuning = tuning): Tuning {
-  if (muted.size === 0 && soloed === null) return of;
+  const faded = Object.keys(channelVolume).some((t) => volumeOf(t) < 1);
+  if (muted.size === 0 && soloed === null && !faded) return of;
   const out = clone(of);
   const record = out as unknown as Record<string, number | number[]>;
   for (const g of channelsFor()) {
-    if (audible(g.title)) continue;
+    const vol = audible(g.title) ? volumeOf(g.title) : 0;
+    if (vol >= 1) continue;
     for (const field of muteFields(g.fields)) {
       const value = record[field];
-      record[field] = typeof value === "number" ? 0 : value.map(() => 0);
+      record[field] = typeof value === "number" ? value * vol : value.map((x) => x * vol);
     }
   }
   return out;
@@ -1590,41 +1648,25 @@ function buildMixer(): void {
     drift.className = "chdrift";
     drift.title = "Values off the baseline in this channel";
     strip.appendChild(drift);
-    const level = levelFields(g.fields)[0] ?? g.fields[0];
-    if (level !== undefined) {
-      const record = tuning as unknown as Record<string, number | number[]>;
-      const current = record[level];
-      const at = typeof current === "number" ? current : current[0];
-      const [min, max, step] = RANGE[level] ?? [0, 1, 0.005];
+    if (muteFields(g.fields).length > 0) {
       const fader = document.createElement("input");
       fader.type = "range";
       fader.className = "fader";
-      fader.min = String(min);
-      fader.max = String(max);
-      fader.step = String(step);
-      fader.value = String(at);
-      fader.title = TITLES[level] ?? level;
+      fader.min = "0";
+      fader.max = "1";
+      fader.step = "0.01";
+      fader.value = String(volumeOf(g.title));
+      fader.title = "Channel volume — everything this channel draws, dark at zero";
       const out = document.createElement("b");
-      out.textContent = at.toFixed(3);
+      out.textContent = `${Math.round(volumeOf(g.title) * 100)}%`;
       fader.addEventListener("input", () => {
-        const live = tuning as unknown as Record<string, number | number[]>;
-        const value = live[level];
-        const next = Number(fader.value);
-        assign(level, typeof value === "number"
-          ? next
-          : [next, ...(value as number[]).slice(1)]);
-        out.textContent = next.toFixed(3);
-        // The rail's slider for the same value follows, if it is on show.
-        const rail = sliderDom[lfoKey(level, 0)];
-        if (rail) {
-          rail.input.value = fader.value;
-          rail.out.textContent = next.toFixed(3);
-        }
+        channelVolume[g.title] = Number(fader.value);
+        out.textContent = `${Math.round(Number(fader.value) * 100)}%`;
+        rememberVolumes();
         push();
       });
-      // The fader must not also select the channel mid-drag.
       fader.addEventListener("click", (event) => event.stopPropagation());
-      mixerDom[level] = { input: fader, out };
+      mixerDom[g.title] = { input: fader, out };
       strip.appendChild(fader);
       strip.appendChild(out);
       const ms = document.createElement("div");
@@ -1680,15 +1722,16 @@ function paintMixer(): void {
   }
 }
 
-/** The faders follow the numbers, wherever the numbers were changed. */
+/** The faders show each channel's volume, wherever it was last set. */
 function paintMixerLevels(): void {
-  const record = tuning as unknown as Record<string, number | number[]>;
-  for (const [field, dom] of Object.entries(mixerDom)) {
-    const value = record[field];
-    const at = typeof value === "number" ? value : value?.[0];
-    if (typeof at !== "number") continue;
-    dom.input.value = String(at);
-    dom.out.textContent = at.toFixed(3);
+  const pq = $("presenceQuick") as HTMLInputElement;
+  const at = (tuning as unknown as Record<string, number>).presence;
+  // Never write back into a slider mid-drag: the reflect fights the thumb.
+  if (typeof at === "number" && document.activeElement !== pq) pq.value = String(at);
+  for (const [title, dom] of Object.entries(mixerDom)) {
+    const vol = volumeOf(title);
+    dom.input.value = String(vol);
+    dom.out.textContent = `${Math.round(vol * 100)}%`;
   }
 }
 
@@ -2550,6 +2593,40 @@ document.addEventListener("keydown", (event) => {
   if (!Number.isInteger(index) || index < 0) return;
   const available = slotsFor(body);
   if (index < available.length) setState(available[index]);
+});
+
+/** Framing mode: fold the desk away, keep presence at hand. */
+let deskHidden = ((): boolean => {
+  try {
+    return localStorage.getItem(storageKey("deskHidden")) === "1";
+  } catch {
+    return false;
+  }
+})();
+
+function paintDesk(): void {
+  document.body.classList.toggle("desk-hidden", deskHidden);
+  $("deskToggle").classList.toggle("on", deskHidden);
+}
+
+$("deskToggle").addEventListener("click", () => {
+  deskHidden = !deskHidden;
+  try {
+    localStorage.setItem(storageKey("deskHidden"), deskHidden ? "1" : "0");
+  } catch { /* fine */ }
+  paintDesk();
+});
+paintDesk();
+
+$("presenceQuick").addEventListener("input", () => {
+  const value = Number(($("presenceQuick") as HTMLInputElement).value);
+  assign("presence", value);
+  const rail = sliderDom[lfoKey("presence", 0)];
+  if (rail) {
+    rail.input.value = String(value);
+    rail.out.textContent = value.toFixed(3);
+  }
+  push();
 });
 
 $("gear").addEventListener("click", () => $("modal").classList.add("open"));

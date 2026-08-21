@@ -78,6 +78,14 @@
       #topbar #history { max-width: 300px; }
       #topbar #baselineNote { margin: 0; white-space: nowrap; }
       #topbar #saved { margin: 0; min-height: 0; white-space: nowrap; }
+      /* Framing mode: the desk and bus fold away, the stage takes the height,
+         and presence stays live in the toolbar so the composite can be sized
+         against the real screen. */
+      body.desk-hidden #mixer, body.desk-hidden #bus { display: none; }
+      #deskToggle.on { color: #0b0b0f; background: #6f8cff; border-color: #6f8cff; }
+      #presenceQuick { width: 130px; accent-color: #6f8cff; }
+      #topbar .pq { display: flex; align-items: center; gap: 5px; }
+      #topbar .pq span { font-size: 9.5px; text-transform: uppercase; letter-spacing: .07em; color: #55555f; }
       #stageWrap { position: relative; display: block; min-width: 0; overflow: hidden; grid-row: 2; }
       /* THE TRANSPORT. The states are the instrument's keys: standby, listening,
          thinking, working, speaking are the animated base looks, and everything
@@ -114,13 +122,14 @@
          becomes that channel's effects. */
       #mixer {
         grid-row: 4;
+        padding-right: 248px;
         display: flex; gap: 6px; padding: 8px 10px;
         border-top: 1px solid #1c1c22; background: #0b0b0f;
         overflow-x: auto; overflow-y: hidden;
       }
       .channel {
-        flex: 0 0 86px; display: grid; justify-items: center; gap: 4px;
-        padding: 7px 4px 6px; border: 1px solid #1c1c22; border-radius: 8px;
+        flex: 0 0 92px; display: grid; justify-items: center; gap: 3px;
+        padding: 6px 5px 5px; border: 1px solid #1c1c22; border-radius: 8px;
         background: #0d0d11; cursor: pointer; user-select: none;
       }
       .channel:hover { border-color: #3a3a46; }
@@ -129,7 +138,7 @@
       .channel .chname {
         font-size: 9.5px; font-weight: 600; letter-spacing: .06em;
         text-transform: uppercase; color: #8b8b95; text-align: center;
-        max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       .channel.selected .chname { color: #6f8cff; }
       .channel .chlamp { width: 6px; height: 6px; border-radius: 3px; background: #1a1a22; }
@@ -155,6 +164,7 @@
          whole width and the eye never leaves the body. */
       #bus {
         grid-row: 5;
+        padding-right: 248px;
         display: flex; gap: 6px; align-items: stretch;
         padding: 6px 10px 10px; background: #0b0b0f;
         border-top: 1px solid #1c1c22;
@@ -220,6 +230,19 @@
         background: #000;
       }
       #stage canvas { display: block; width: 100%; height: 100%; }
+      /* The audition pane rides the console's right edge, over the desk and
+         bus rows, so the player is always where the mixing hand already is. */
+      #voiceDock {
+        position: fixed; right: 8px; bottom: 8px; z-index: 6;
+        width: 228px; display: grid; gap: 5px; padding: 9px;
+        background: rgba(13, 13, 17, .94); border: 1px solid #26262e;
+        border-radius: 10px; backdrop-filter: blur(6px);
+        box-shadow: 0 6px 24px rgba(0, 0, 0, .5);
+      }
+      #voiceDock select, #voiceDock button { height: 26px; font-size: 11px; }
+      #voiceDock .dockrow { display: grid; grid-template-columns: 1fr 1fr auto; gap: 5px; align-items: center; }
+      #voiceDock input[type="range"] { width: 100%; accent-color: #6f8cff; margin: 0; }
+      #voiceDock input[type="file"] { font-size: 10px; color: #74747e; }
       /* SQUARE FOR THE FAMILIAR. Her canvas sizes itself from its own width and
          draws square -- the shipped Stage is `aspect-ratio: 1` on every surface
          -- so a full-bleed host stretches the drawing buffer across a wide
@@ -360,6 +383,21 @@
       <div id="stage"></div>
       <div id="readout">starting…</div>
       <button id="sheetToggle" type="button" aria-expanded="true">Controls</button>
+      <!-- The audition dock: the voice player lives on the stage itself,
+           bottom right, so a clip is one click without opening anything. -->
+      <div id="voiceDock">
+        <select id="clip"></select>
+        <div class="dockrow">
+          <button id="voicePlay" type="button">▶</button>
+          <button id="voiceStop" type="button">■</button>
+          <label class="tick"><input id="loop" type="checkbox" checked /> loop</label>
+        </div>
+        <input id="level" type="range" min="0" max="1" step="0.01" value="0.8"
+               title="Voice level" />
+        <div class="meter"><i id="voiceMeter"></i></div>
+        <input id="clipFile" type="file" accept="audio/*" />
+        <div id="voiceState"></div>
+      </div>
     </div>
     <div id="topbar">
       <select id="body">
@@ -373,6 +411,10 @@
       <button id="driftOnly" type="button" title="Show only dials off the baseline">Δ only</button>
       <button id="abHold" type="button" title="Hold to show the baseline (or hold B)">A/B</button>
       <select id="history"></select>
+      <button id="deskToggle" type="button" title="Hide the desk and bus; presence stays live here">Desk</button>
+      <div class="pq"><span>Presence</span>
+        <input id="presenceQuick" type="range" min="0.4" max="1.8" step="0.005" value="1" />
+      </div>
       <button id="gear" type="button">⚙</button>
       <div id="baselineNote"></div>
       <div id="saved"></div>
@@ -400,19 +442,6 @@
     <div id="modal">
       <div class="card">
         <h2>Settings</h2>
-        <div class="row">
-          <label for="level">Voice level</label>
-          <input id="level" type="range" min="0" max="1" step="0.01" value="0.8" />
-        </div>
-        <div class="voice">
-          <select id="clip"></select>
-          <button id="voicePlay" type="button">▶ Speak</button>
-          <button id="voiceStop" type="button">■ Stop</button>
-          <label class="tick"><input id="loop" type="checkbox" checked /> loop</label>
-          <input id="clipFile" type="file" accept="audio/*" />
-          <div class="meter"><i id="voiceMeter"></i></div>
-          <div id="voiceState"></div>
-        </div>
         <div class="top">
           <button id="play" type="button">Play draw-in</button>
           <button id="reset" type="button">Reset to shipped</button>
