@@ -3,225 +3,168 @@ import {
 } from "./bodyTuning";
 import { modeTuning, type BodyMode, type Pulse } from "./bodyModes";
 /**
- * WHERE ULTRON ARRIVES FROM: the birth sequence, in one tuning.
+ * WHERE ULTRON ARRIVES FROM.
  *
- * Sparks first, then the neurons build. So the dendrites are the ONLY thing
- * present here -- long, spiky, sparsely beaded so they read as travelling
- * sparks rather than as finished filaments -- while the veins, cracks and facets
- * are at zero and the heart is barely a point. The shell sits at twice the radius
- * and almost invisible: the "much lighter and distant outer sphere".
- *
- * Easing to the settled look then performs the rest of the sequence on its own:
- * the crystalline cloud blooms, the outer circle takes shape and closes in, and
- * the central piece globs up out of nothing.
+ * "Ultron final 1800" saved an arrival slot identical to its standby look bar
+ * the bounce (0.012 against 0.037), so the birth is now a settle rather than a
+ * spark sequence: the membrane film is already up and the ease mostly brings
+ * the bob in. The old dendrites-first birth belonged to the particle look this
+ * canon replaced.
  */
 export const ULTRON_ARRIVAL: UltronTuning = {
-  dendriteGain: [4.14, 1.44],
-  // Long roots, a NARROW fork and heavy taper: that combination reads as sparks
-  // shooting outward. Widening the fork here turned it into a firework.
-  dendrite: [0.62, 0.30, 0.95, 0.10],
-  dendriteTip: [1.50, 0.90],
-  // Few, long beads. A dense bead train looks like a finished wire; a sparse one
-  // looks like something travelling along it.
-  bead: [4.0, 0.04],
-  signal: [1.8, 3.4, 8.0],
-  arc: [0.82, 2.5, 0.42, 0.0],
-  outerShell: [2.2, 0.90, 0.10],
-  facetSpin: [0.05, 0.10],
-  swirl: [0.05, 0],
-  veinGain: [0.0, 0.0],
-  veinStreak: [0.110, 0.085],
-  crackGain: [0.0, 0.0],
-  crackRange: 0.19,
-  facetGain: [0.0, 0.0],
-  facetSize: 0.020,
-  core: [0.101, 0.202],
-  // No iris, ever: his brief is a crystalline cloud. Width 60 is the pre-eye
-  // value, so his centre is exactly what it was.
-  eye: [1, 1, 0, 60],
-  reverb: [0.9, 0.4, 1.2, 1.4],
-  irisGain: [0, 0],
-  irisRadius: [0.04, 0.19],
-  irisFil: [0.8, 0.004],
-  irisFlow: [0.16, 0.7],
-  cloud: [0.62, 1.6],
-  petal: 0.3,
-  veinLimb: [0.30, 0.95],
-  crackLimb: [0.36, 0.88],
-  facetLimb: [0.28, 0.95],
-  lattice: [0, 0],
+  dendriteGain: [0.945, 0.75],
+  dendrite: [0.28, 0.52, 0.78, 0],
+  dendriteTip: [1.14, 1.26],
+  bead: [10, 21],
+  signal: [0.22, 2.4, 7],
+  arc: [0.82, 2.5, 0.42, 0.85],
+  outerShell: [0.57, 2.2, 2.2],
+  facetSpin: [1, 0],
+  swirl: [0, 0],
+  veinGain: [0, 0],
+  veinStreak: [0, 0],
+  crackGain: [0, 0],
+  crackRange: 0.02,
+  facetGain: [3, 3],
+  facetSize: 0.002,
+  core: [0, 0],
+  eye: [0, 0, 0, 4],
+  reverb: [0.8, 0.44, 0.48, 1.34],
+  irisGain: [3, 3],
+  irisRadius: [1.2, 1.2],
+  irisFil: [1, 1],
+  irisFlow: [0.8, 0.8],
+  cloud: [0.3, 0.7],
+  petal: 0,
+  veinLimb: [0, 0],
+  crackLimb: [0, 0],
+  facetLimb: [0.08, 0.08],
+  lattice: [2.2, 0],
   latticeBlur: 0,
-  latticeSat: 1,
+  latticeSat: 0.5,
   latticeGlow: 0,
-  latticeSpeed: 1,
-  presence: 1,
-  bounce: [0, 0],
+  latticeSpeed: 1.2,
+  presence: 0.6,
+  bounce: [0.012, 0.35],
   bounceTrail: 0,
 };
 
 /**
- * ULTRON PER MODE.
+ * ULTRON PER MODE — the per-state diffs of "Ultron final 1800".
  *
- * The brief set the shape of this directly: thinking carries the most activity,
- * standby the least, and speaking is STRUCTURED rather than frantic. That last
- * one is the interesting constraint -- the intuitive move is to make speech the
- * busiest state, and it is wrong. Something that thrashes while it talks reads as
- * agitated. Ultron talks like he already knows the answer.
+ * Far leaner than they used to be: the canon keeps one body across states and
+ * spends its differences on the heart, the eye, the film's pace and the bob.
+ * Listening and working switch the heart ON (core 0→3) — attention is when he
+ * warms — and thinking is the one state that changes the crystal itself.
  */
 export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
-  // IDLE, AND IT BREATHES -- the same principle as Jarvis, in his own vocabulary.
-  // The crystal barely turns, the neurons are quiet, and the pulse table carries
-  // eight shallow terms so that a body nobody is talking to is still plainly alive.
-  standby: {
-    dendriteGain: [2.7, 1.08],
-    dendrite: [0.30, 0.46, 0.78, 0.016],
-    bead: [7.0, 0.10],
-    signal: [0.22, 2.4, 7.0],
-    swirl: [0.08, 0.1],
-    facetSpin: [0.04, 0.12],
-    veinGain: [0.396, 0.36],
-    crackGain: [0.576, 0.432],
-    facetGain: [0.72, 0.504],
-    core: [0.353, 0.454],
-    outerShell: [1.45, 0.26, 0.46],
-    reverb: [0.8, 0.44, 0.48, 1.34],
-    irisGain: [0.3, 0.14],
-    irisFlow: [0.06, 0.5],
-    cloud: [0.3, 0.7],
-  },
+  // The base IS the standby slot, so idle changes nothing.
+  standby: {},
   listening: {
-    dendriteGain: [3.78, 1.8],
-    dendrite: [0.33, 0.5, 0.78, 0.024],
-    bead: [8.0, 0.13],
-    signal: [0.4, 2.4, 6.2],
-    swirl: [0.15, 0.22],
-    facetSpin: [0.08, 0.24],
-    veinGain: [0.648, 0.576],
-    crackGain: [0.936, 0.72],
-    facetGain: [1.08, 0.792],
-    core: [0.504, 0.655],
-    outerShell: [1.45, 0.28, 0.58],
-    reverb: [1.2, 0.36, 0.66, 1.36],
-    irisGain: [0.46, 0.28],
-    irisFlow: [0.12, 0.62],
-    cloud: [0.32, 0.9],
+    core: [3, 3],
+    eye: [4, 0.18, 0, 4],
+    bounce: [0.033, 0.35],
   },
-  // THE BUSIEST STATE. Every pass is up, the crystal turns fastest, the pathways
-  // reach furthest and wander widest, the fracture lines spread.
+  // Every particle to the shell, the facets counter-spin and coarsen, and the
+  // membrane film races (latticeSpeed 4 against the idle 1.2) while the bob
+  // stops dead — he holds still to think.
   thinking: {
-    dendriteGain: [4.86, 2.52],
-    dendrite: [0.34, 0.52, 0.78, 0.026],
-    bead: [9.0, 0.16],
-    signal: [0.6, 2.2, 5.2],
-    swirl: [0.19, 0.28],
-    facetSpin: [0.1, 0.32],
-    veinGain: [0.792, 0.72],
-    crackGain: [1.224, 0.936],
-    facetGain: [1.296, 0.936],
-    core: [0.806, 1.21],
-    reverb: [2.35, 0.16, 0.42, 1.54],
-    irisGain: [0.6, 0.4],
-    irisFlow: [0.18, 0.7],
-    cloud: [0.36, 1.1],
+    outerShell: [2.2, 2.2, 2.2],
+    facetSpin: [1, 1],
+    facetSize: 0.008,
+    facetLimb: [0.28, 0.08],
+    latticeSpeed: 4,
+    bounce: [0, 0.35],
   },
-  // Executing rather than searching: facets and fractures lead, the neurons hold.
   working: {
-    dendriteGain: [4.5, 2.232],
-    dendrite: [0.36, 0.52, 0.76, 0.03],
-    bead: [11.0, 0.18],
-    signal: [0.85, 2.8, 4.8],
-    swirl: [0.25, 0.38],
-    facetSpin: [0.14, 0.42],
-    veinGain: [0.936, 0.792],
-    crackGain: [1.44, 1.08],
-    facetGain: [1.512, 1.08],
-    facetSize: 0.024,
-    core: [0.706, 0.907],
-    reverb: [2.05, 0.26, 0.86, 1.38],
-    irisGain: [0.55, 0.34],
-    irisFlow: [0.2, 0.72],
-    cloud: [0.38, 1.2],
+    core: [3, 3],
+    eye: [0.3, 0.698739, 0, 4],
+    bounce: [0.06, 0.35],
   },
-  // STRUCTURED, AND RINGING. Calmer in its parts than thinking -- an even bead
-  // train, a steady crystal -- while the reverb's slow decay carries the voice
-  // through the whole body. Something that thrashes while it talks reads as
-  // agitated; Ultron talks like he already knows the answer.
+  // Nearly the resting body — ULTRON_SPEECH is what speaking looks like, with
+  // every reach blooming on the syllable envelope and settling back here.
   speaking: {
-    dendriteGain: [4.86, 2.52],
-    dendrite: [0.34, 0.52, 0.78, 0.026],
-    bead: [9.0, 0.16],
-    signal: [0.6, 2.2, 5.2],
-    swirl: [0.19, 0.28],
-    facetSpin: [0.1, 0.32],
-    veinGain: [0.792, 0.72],
-    crackGain: [1.224, 0.936],
-    facetGain: [1.296, 0.936],
-    core: [0.806, 1.21],
-    reverb: [2.35, 0.16, 0.42, 1.54],
+    bounce: [0.012, 0.35],
   },
 };
 
 /**
- * Ultron's continuous modulation, and there is MORE of it than Jarvis has.
- *
- * Jarvis is an instrument, so his modulation is a needle drifting. Ultron is
- * something growing, so more of him moves at once -- but each pulse is still
- * shallow. The whole point of "many things, none of them far" is that no single
- * parameter draws attention to itself as an animation; the body just never quite
- * repeats.
+ * Ultron's continuous modulation: NONE, and that is the canon, not an
+ * omission. "Ultron final 1800" was saved with an empty LFO rack — the living
+ * motion is the membrane film, the bob, and ULTRON_SPEECH riding the voice.
+ * The old eight-term tables belonged to the particle look this replaced; a
+ * pulse layered on top of the film read as flicker, not life.
  */
+const NO_PULSES: readonly Pulse[] = [];
+
 export const ULTRON_PULSES: Record<BodyMode, readonly Pulse[]> = {
-  standby: [
-    { field: "dendriteGain", index: 0, depth: 0.12, rate: 0.023, phase: 0.00 },
-    { field: "facetGain", index: 0, depth: 0.10, rate: 0.017, phase: 0.19 },
-    { field: "crackGain", index: 0, depth: 0.09, rate: 0.031, phase: 0.36 },
-    { field: "core", index: 0, depth: 0.11, rate: 0.013, phase: 0.54 },
-    { field: "bead", index: 1, depth: 0.09, rate: 0.037, phase: 0.69 },
-    { field: "outerShell", index: 2, depth: 0.10, rate: 0.019, phase: 0.83 },
-    { field: "veinGain", index: 0, depth: 0.08, rate: 0.027, phase: 0.96 },
-    { field: "swirl", index: 0, depth: 0.04, rate: 0.021, phase: 0.42 },
-  ],
-  listening: [
-    { field: "dendriteGain", index: 0, depth: 0.13, rate: 0.047, phase: 0.00 },
-    { field: "crackGain", index: 0, depth: 0.11, rate: 0.037, phase: 0.18 },
-    { field: "facetGain", index: 0, depth: 0.10, rate: 0.059, phase: 0.34 },
-    { field: "core", index: 0, depth: 0.12, rate: 0.026, phase: 0.51 },
-    { field: "outerShell", index: 2, depth: 0.13, rate: 0.031, phase: 0.67 },
-    { field: "bead", index: 0, depth: 0.08, rate: 0.043, phase: 0.82 },
-    { field: "veinGain", index: 0, depth: 0.09, rate: 0.053, phase: 0.95 },
-    { field: "swirl", index: 0, depth: 0.04, rate: 0.029, phase: 0.40 },
-  ],
-  thinking: [
-    { field: "dendriteGain", index: 0, depth: 0.17, rate: 0.097, phase: 0.00 },
-    { field: "dendrite", index: 1, depth: 0.10, rate: 0.071, phase: 0.16 },
-    { field: "dendrite", index: 3, depth: 0.08, rate: 0.113, phase: 0.31 },
-    { field: "crackGain", index: 0, depth: 0.15, rate: 0.083, phase: 0.45 },
-    { field: "crackRange", index: 0, depth: 0.11, rate: 0.059, phase: 0.59 },
-    { field: "facetGain", index: 0, depth: 0.13, rate: 0.101, phase: 0.72 },
-    { field: "veinGain", index: 0, depth: 0.14, rate: 0.067, phase: 0.85 },
-    { field: "core", index: 0, depth: 0.12, rate: 0.043, phase: 0.97 },
-    { field: "bead", index: 0, depth: 0.09, rate: 0.089, phase: 0.24 },
-  ],
-  working: [
-    { field: "facetGain", index: 0, depth: 0.14, rate: 0.109, phase: 0.00 },
-    { field: "crackGain", index: 0, depth: 0.12, rate: 0.079, phase: 0.21 },
-    { field: "facetSpin", index: 0, depth: 0.04, rate: 0.061, phase: 0.39 },
-    { field: "dendriteGain", index: 0, depth: 0.10, rate: 0.091, phase: 0.56 },
-    { field: "bead", index: 0, depth: 0.12, rate: 0.127, phase: 0.71 },
-    { field: "core", index: 0, depth: 0.09, rate: 0.047, phase: 0.85 },
-    { field: "veinStreak", index: 0, depth: 0.11, rate: 0.071, phase: 0.98 },
-    { field: "facetSize", index: 0, depth: 0.08, rate: 0.053, phase: 0.32 },
-  ],
-  // Shallow, because the reverb is what carries speech through him.
-  speaking: [
-    { field: "dendriteGain", index: 0, depth: 0.09, rate: 0.061, phase: 0.00 },
-    { field: "facetGain", index: 0, depth: 0.08, rate: 0.047, phase: 0.28 },
-    { field: "crackGain", index: 0, depth: 0.08, rate: 0.053, phase: 0.52 },
-    { field: "veinGain", index: 0, depth: 0.09, rate: 0.037, phase: 0.7 },
-    { field: "bead", index: 1, depth: 0.07, rate: 0.079, phase: 0.86 },
-    { field: "outerShell", index: 2, depth: 0.08, rate: 0.029, phase: 0.1 },
-    { field: "core", index: 0, depth: 0.07, rate: 0.043, phase: 0.63 },
-  ],
+  standby: NO_PULSES,
+  listening: NO_PULSES,
+  thinking: NO_PULSES,
+  working: NO_PULSES,
+  speaking: NO_PULSES,
+};
+
+/**
+ * WHAT A SYLLABLE DOES TO THE BODY — the bench's speech-reach map, verbatim
+ * from the speaking slot of "Ultron final 1800" (every slot saved the same
+ * map, so there is exactly one voice).
+ *
+ * Each entry is "field:index" → the value that dial holds at full syllable;
+ * the renderer lerps from the mode's value toward it on the voice envelope.
+ * The body he keeps dark at rest is all in here: veins, cracks and the heart
+ * light on a vowel (core 0→3 through its [1] ramp), the dendrites fire
+ * (dendriteGain 0.945→2.55), the membrane film surges (lattice 2.2→3 at
+ * latticeSpeed 1.2→4), and it settles back through the gaps between words.
+ */
+export const ULTRON_SPEECH: Readonly<Record<string, number>> = {
+  "arc:0": 0.42,
+  "arc:1": 0.32,
+  "arc:2": 3.2,
+  "arc:3": 3.2,
+  "bead:0": 24,
+  "bead:1": 3,
+  "core:0": 0.12,
+  "core:1": 3,
+  "crackGain:0": 0.74,
+  "crackGain:1": 0.54,
+  "crackLimb:0": 1.27,
+  "crackLimb:1": 1.05,
+  "crackRange:0": 0.065,
+  "dendrite:0": 0.01,
+  "dendrite:1": 0.11,
+  "dendrite:2": 0.08,
+  "dendrite:3": 0.11,
+  "dendriteGain:0": 2.55,
+  "dendriteGain:1": 2,
+  "dendriteTip:0": 1.08,
+  "dendriteTip:1": 0.2,
+  "eye:0": 0.22,
+  "eye:1": 0.2,
+  "eye:2": 0.14,
+  "facetGain:0": 0.72,
+  "facetGain:1": 3,
+  "facetLimb:0": 2.25,
+  "facetLimb:1": 3,
+  "facetSize:0": 0.004,
+  "facetSpin:0": 0.17,
+  "facetSpin:1": 0.35,
+  "lattice:0": 3,
+  "latticeGlow:0": 0.01,
+  "latticeSpeed:0": 4,
+  "outerShell:0": 0.57,
+  "outerShell:1": 0.02,
+  "outerShell:2": 1.28,
+  "signal:0": 3,
+  "signal:1": 0.82,
+  "signal:2": 1.58,
+  "swirl:1": 0.395,
+  "veinGain:0": 0.1,
+  "veinGain:1": 0.06,
+  "veinLimb:0": 3,
+  "veinLimb:1": 3,
+  "veinStreak:0": 0.002,
+  "veinStreak:1": 0.13,
 };
 
 /** Jarvis's target for a mode. */

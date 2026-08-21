@@ -149,44 +149,50 @@ export interface UltronTuning {
   facetLimb: LimbMix;
 }
 
+/**
+ * What ships: "Ultron final 1800" — the look mixed and saved on the character
+ * bench (2026-08-21, all seven slots), standby slot verbatim.
+ *
+ * Unlike Jarvis's canon this one runs NO continuous sweeps: the bench rack was
+ * empty when it was saved, so the living motion is the membrane film (lattice
+ * 2.2 with the deck's per-mode loops), the bounce, and ULTRON_SPEECH riding
+ * the voice. The veins, cracks and heart sit at zero at rest and bloom only
+ * on a syllable.
+ */
 export const ULTRON_TUNING: UltronTuning = {
-  dendriteGain: [4.86, 2.52],
-  dendrite: [0.34, 0.52, 0.78, 0.035],
-  dendriteTip: [0.9, 0.22],
-  bead: [9.0, 0.16],
-  signal: [0.55, 2.4, 5.5],
+  dendriteGain: [0.945, 0.75],
+  dendrite: [0.28, 0.52, 0.78, 0],
+  dendriteTip: [1.14, 1.26],
+  bead: [10, 21],
+  signal: [0.22, 2.4, 7],
   arc: [0.82, 2.5, 0.42, 0.85],
-  outerShell: [1.45, 0.20, 0.30],
-  facetSpin: [0.13, 0.40],
-  swirl: [0.26, 0.40],
-  veinGain: [0.792, 0.72],
-  veinStreak: [0.110, 0.085],
-  crackGain: [1.224, 0.936],
-  crackRange: 0.19,
-  facetGain: [1.296, 0.936],
-  facetSize: 0.020,
-  core: [0.655, 0.857],
-  eye: [1, 1, 0, 60],
-  reverb: [1.7, 0.26, 0.8, 1.4],
-  // Tighter than Jarvis's and dimmer: his is the subject of the frame, this is the
-  // thing at the middle of a much larger mass.
-  irisGain: [0.5, 0.32],
-  irisRadius: [0.04, 0.19],
-  irisFil: [0.8, 0.004],
-  irisFlow: [0.16, 0.7],
-  petal: 0.3,
-  cloud: [0.34, 1.0],
-  veinLimb: [0.30, 0.95],
-  crackLimb: [0.36, 0.88],
-  facetLimb: [0.28, 0.95],
-  lattice: [0, 0],
+  outerShell: [0.57, 2.2, 2.2],
+  facetSpin: [1, 0],
+  swirl: [0, 0],
+  veinGain: [0, 0],
+  veinStreak: [0, 0],
+  crackGain: [0, 0],
+  crackRange: 0.02,
+  facetGain: [3, 3],
+  facetSize: 0.002,
+  core: [0, 0],
+  eye: [0, 0, 0, 4],
+  reverb: [0.8, 0.44, 0.48, 1.34],
+  irisGain: [3, 3],
+  irisRadius: [1.2, 1.2],
+  irisFil: [1, 1],
+  irisFlow: [0.8, 0.8],
+  petal: 0,
+  cloud: [0.3, 0.7],
+  veinLimb: [0, 0],
+  crackLimb: [0, 0],
+  facetLimb: [0.08, 0.08],
+  lattice: [2.2, 0],
   latticeBlur: 0,
-  latticeSat: 1,
+  latticeSat: 0.5,
   latticeGlow: 0,
-  latticeSpeed: 1,
-  presence: 1,
-  // His bounce is heavier and slower than Jarvis's — a molten mass settling,
-  // not an instrument keeping time. Arrival stays still.
-  bounce: [0.012, 0.35],
+  latticeSpeed: 1.2,
+  presence: 0.6,
+  bounce: [0.037, 0.35],
   bounceTrail: 0,
 };

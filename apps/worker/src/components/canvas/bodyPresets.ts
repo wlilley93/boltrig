@@ -28,5 +28,6 @@ export {
   ULTRON_ARRIVAL,
   ULTRON_MODES,
   ULTRON_PULSES,
+  ULTRON_SPEECH,
   ultronModeTuning,
 } from "./ultronPresets";
