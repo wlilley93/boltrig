@@ -787,6 +787,18 @@ POST /v1/memory/bundle
 GET /v1/memory/resolve
 """,
 )
+# The run-effect ledger (0085): what a run changed, each step with its honest
+# undoability, and the governed revert that walks it. NOT a Worker surface
+# TODAY and this row says so rather than implying it never should be: the
+# chat "Undo" affordance that would consume both is the follow-up PR (adapter
+# inverse annotations land there too - until then every row is not_undoable).
+_non_ui(
+    "governed-agent-surface",
+    """
+GET /v1/runs/{run_id}/effects
+POST /v1/runs/{run_id}/revert
+""",
+)
 
 
 SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
@@ -828,4 +840,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 # 294 since GET /v1/me and GET /v1/branding (the product's own name, read unauthenticated by
 # the sign-in screen). An exact census, not a ratchet: it must equal the
 # routes the app actually serves, so it moves when the surface does.
-EXPECTED_ROUTE_COUNT = 302
+EXPECTED_ROUTE_COUNT = 304
