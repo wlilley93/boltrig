@@ -1283,6 +1283,16 @@ export class BoltrigClient {
     return this.json(`/v1/runs/${encodeURIComponent(runId)}/cancel`, "POST", undefined, true);
   }
 
+  /** Clear the companion's accumulated mood (never memory or data). */
+  resetEmotion(): Promise<{ status: string }> {
+    return this.json("/v1/familiar/emotion/reset", "POST", {}, true);
+  }
+
+  /** The explicit novelty affordance: announce that a companion was adopted. */
+  characterAdopted(character: string): Promise<{ status: string }> {
+    return this.json("/v1/familiar/emotion/adopted", "POST", { character }, true);
+  }
+
   /** The run's durable effect ledger: each step with its honest undoability. */
   runEffects(runId: string): Promise<RunEffectsResponse> {
     return this.request<RunEffectsResponse>(`/v1/runs/${encodeURIComponent(runId)}/effects`, {});

@@ -789,7 +789,9 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/distill/corpus_io.py:1		JSONL serialisatio
 ORDINARY	NO-SUBJECT	comment	boltrig/emotion/engine.py:141		Tension decays with a REAL 1.4 s half-life, never tempo-scaled.
 ORDINARY	NO-SUBJECT	comment	boltrig/emotion/engine.py:144		Attachment decays in REAL days, never tempo-scaled (0024): the bond
 ORDINARY	NO-SUBJECT	comment	boltrig/emotion/engine.py:70		Attachment (0024): REAL-days half-life (never tempo-scaled - the tension
-ORDINARY	NO-SUBJECT	comment	boltrig/emotion/relay.py:263		--- publisher thread (the ONLY place that touches the filesystem after init) ---
+ORDINARY	NO-SUBJECT	comment	boltrig/emotion/relay.py:225		restart cannot resurrect the old mood.
+ORDINARY	NO-SUBJECT	comment	boltrig/emotion/relay.py:227		keeping it the only writer.
+ORDINARY	NO-SUBJECT	comment	boltrig/emotion/relay.py:273		--- publisher thread (the ONLY place that touches the filesystem after init) ---
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/agent_mailbox_continuity.py:51		Return history only through this serialized turn, never later queued work.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/agent_turns.py:95		transport failure must not replace the turn's real outcome.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/anchor.py:187		needs no clause here and must not get one: _record iterates the same
@@ -1235,6 +1237,8 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/effect_inverses.py:48		The inverse 
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/events.py:100		resumed run never re-uses a seq a live cursor already passed.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/events.py:319		Select the relay explicitly;
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/events.py:95		list index would shift on every trim;
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/familiar_phenotype_routes.py:93		reset clears the companion's accumulated mood (never memory or data),
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/familiar_phenotype_routes.py:96		flicking skins in Settings cannot pump the mood.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hands_registry.py:30		A command the executor never claims (offline) or never completes (crashed
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hands_registry.py:31		mid-action) must not linger: after the TTL it is expired and swept, so a stale
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hands_registry.py:32		window action can never be picked up and executed late.

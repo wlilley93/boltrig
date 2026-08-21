@@ -68,10 +68,49 @@ def read_phenotype_projection(now: float | None = None) -> dict[str, Any]:
         return dict(_RESTING)
 
 
-def register_familiar_phenotype_routes(app: Any, *, principal_dep: Any) -> None:
+#: The companion the Worker may announce as adopted; a free-text id would let
+#: a client write arbitrary strings into the relay stream.
+_CHARACTER_ID_MAX = 64
+
+
+def register_familiar_phenotype_routes(
+    app: Any, *, principal_dep: Any, get_kernel: Any = None
+) -> None:
     principal = Depends(principal_dep)
 
     @app.get("/v1/familiar/phenotype")
     async def familiar_phenotype(p=principal):
         """Owner-scoped, cosmetic, read-only; carries no conversation content."""
         return read_phenotype_projection()
+
+    if get_kernel is None:
+        return
+
+    # The two WRITE affordances publish plain relay events; the emotion relay's
+    # tap interprets them, so this module still imports nothing from
+    # ``boltrig.emotion`` (EMO-1) and a deployment without the emotion add-on
+    # accepts them as inert frames. Both are cosmetic and tenant-scoped: the
+    # reset clears the companion's accumulated mood (never memory or data),
+    # and the adoption announcement is the explicit novelty affordance - its
+    # appraisal is throttled per (tenant, kind) by the relay's event map, so
+    # flicking skins in Settings cannot pump the mood.
+    kernel = Depends(get_kernel)
+
+    @app.post("/v1/familiar/emotion/reset")
+    async def familiar_emotion_reset(p=principal, k=kernel):
+        k.events.publish(p.tenant_id, "emotion", {"type": "emotion_reset"})
+        return {"status": "ok"}
+
+    @app.post("/v1/familiar/emotion/adopted")
+    async def familiar_emotion_adopted(body: dict, p=principal, k=kernel):
+        character = body.get("character")
+        if not isinstance(character, str) or not character.strip():
+            return {"status": "error", "reason": "character is required"}
+        if len(character) > _CHARACTER_ID_MAX:
+            return {"status": "error", "reason": "character id is too long"}
+        k.events.publish(
+            p.tenant_id,
+            "emotion",
+            {"type": "character_adopted", "character": character.strip()},
+        )
+        return {"status": "ok"}
