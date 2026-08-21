@@ -57,7 +57,7 @@
 //   BLOOM            bright-pass then a separable Gaussian at half resolution.
 //                    Additive lines alone are thin and mean.
 
-import { latticeVideo } from "../../canvas/latticeLayer";
+
 import {
   RESTING_PHENOTYPE,
   jarvisEmotion,
@@ -135,8 +135,8 @@ export class JarvisNeuralRenderer {
   private live: JarvisTuning = JARVIS_ARRIVAL;
   /** A bench override. Null means follow the mode, which is the shipped path. */
   private tuning: JarvisTuning | null = null;
-  /** The baked lattice loop, when one is mounted. See NeuralPasses.drawLattice. */
-  private latticeEl: HTMLVideoElement | null = null;
+  /** The baked loops' source, held until the passes exist to receive it. */
+  private latticeSource: string | Partial<Record<string, string>> | null = null;
 
   constructor(private readonly opts: NeuralRendererOptions = {}) {}
 
@@ -167,11 +167,9 @@ export class JarvisNeuralRenderer {
    * whose extra footage is missing must still be a body. The layer draws only
    * while `tuning.lattice` gives it gain, so mounting is free until dialled in.
    */
-  setLatticeVideo(url: string | null): void {
-    this.latticeEl?.remove();
-    this.latticeEl = null;
-    if (!url) return;
-    this.latticeEl = latticeVideo(url);
+  setLatticeVideo(source: string | Partial<Record<string, string>> | null): void {
+    this.latticeSource = source;
+    this.passes?.latticeDeck()?.setSource(source);
   }
 
   /**
@@ -245,6 +243,7 @@ export class JarvisNeuralRenderer {
     try {
       this.passes = new NeuralPasses(gl);
       this.passes.init();
+      this.passes.latticeDeck()?.setSource(this.latticeSource);
     } catch (err) {
       this.fail(String(err));
       return;
@@ -260,8 +259,6 @@ export class JarvisNeuralRenderer {
   }
 
   destroy(): void {
-    this.latticeEl?.remove();
-    this.latticeEl = null;
     cancelAnimationFrame(this.raf);
     this.raf = 0;
     this.passes?.destroy();
@@ -352,7 +349,7 @@ export class JarvisNeuralRenderer {
         ? this.live
         : applyPulses(this.live, JARVIS_PULSES[mode], this.clock.animClock);
     }
-    passes.uploadLattice(this.latticeEl);
+    passes.latticeDeck()?.tick(mode, this.clock.easeDt);
     passes.render(d, jarvisPalette(this.opts, this.pheno), jarvisEmotion(shown, this.pheno));
   }
 

@@ -38,7 +38,7 @@ import {
   SHARD_FRAG,
   SHARD_VERT,
 } from "./shadersRing";
-import { LatticeLayer } from "../../canvas/latticeLayer";
+import { LatticeDeck } from "../../canvas/latticeLayer";
 
 /** 128x128 = 16384 particles. Chosen against the draw cost, not the sim: the
  *  simulation is one full-screen pass regardless, but every particle is two
@@ -92,7 +92,7 @@ export class NeuralPasses {
   private blurFbo: WebGLFramebuffer[] = [];
   private ping = 0;
   private size: [number, number] = [0, 0];
-  private lattice: LatticeLayer | null = null;
+  private lattice: LatticeDeck | null = null;
 
   constructor(private readonly gl: WebGL2RenderingContext) {}
 
@@ -111,7 +111,7 @@ export class NeuralPasses {
       comp: createProgram(gl, QUAD_VERT, COMPOSITE_FRAG),
     };
 
-    this.lattice = new LatticeLayer(gl);
+    this.lattice = new LatticeDeck(gl);
     this.lattice.init();
 
     const seed = seedParticles(PARTICLES);
@@ -157,9 +157,9 @@ export class NeuralPasses {
    * `tuning` defaults to what ships, so every existing caller is unaffected and
    * the bench is the only thing that ever passes anything else.
    */
-  /** See LatticeLayer: the baked loop's frames, pulled in per new video frame. */
-  uploadLattice(video: HTMLVideoElement | null): void {
-    this.lattice?.upload(video);
+  /** The deck behind the body: per-state loops, crossfaded. */
+  latticeDeck(): LatticeDeck | null {
+    return this.lattice;
   }
 
 

@@ -28,7 +28,7 @@ import { ULTRON_TUNING, pulsedCore, ramp, type UltronTuning } from "../canvas/bo
 import { IRIS_FRAG, IRIS_VERT, IRIS_VERTS } from "../canvas/shadersIris";
 import { BLOOM_FRAG, COMPOSITE_FRAG } from "../canvas/shadersPost";
 import { QUAD_VERT, SIM_FRAG } from "../canvas/shadersSim";
-import { LatticeLayer } from "../canvas/latticeLayer";
+import { LatticeDeck } from "../canvas/latticeLayer";
 import {
   DENDRITE_DEPTH,
   DENDRITE_FRAG,
@@ -90,7 +90,7 @@ export class UltronPasses {
   private blurTex: WebGLTexture[] = [];
   private blurFbo: WebGLFramebuffer[] = [];
   private ping = 0;
-  private lattice: LatticeLayer | null = null;
+  private lattice: LatticeDeck | null = null;
   private size: [number, number] = [0, 0];
 
   constructor(private readonly gl: WebGL2RenderingContext) {}
@@ -108,7 +108,7 @@ export class UltronPasses {
       iris: createProgram(gl, IRIS_VERT, IRIS_FRAG),
     };
 
-    this.lattice = new LatticeLayer(gl);
+    this.lattice = new LatticeDeck(gl);
     this.lattice.init();
 
     const seed = seedParticles(PARTICLES);
@@ -146,9 +146,9 @@ export class UltronPasses {
   }
 
   /** One frame. `tuning` defaults to what ships; only the bench overrides it. */
-  /** See LatticeLayer: the baked loop's frames, pulled in per new video frame. */
-  uploadLattice(video: HTMLVideoElement | null): void {
-    this.lattice?.upload(video);
+  /** The deck behind the body: per-state loops, crossfaded. */
+  latticeDeck(): LatticeDeck | null {
+    return this.lattice;
   }
 
   render(d: UltronDrive, palette: FloatUniforms, tuning: UltronTuning = ULTRON_TUNING): void {

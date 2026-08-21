@@ -564,9 +564,21 @@ function mount(): void {
   // Free until the lattice dial gives it gain; silently absent if the file is
   // not there.
   if (body === "jarvis") {
-    (renderer as JarvisNeuralRenderer).setLatticeVideo("/tests/visual/assets/jarvis-lattice.mp4");
+    (renderer as JarvisNeuralRenderer).setLatticeVideo({
+      standby: "/tests/visual/assets/jarvis-lattice.mp4",
+      listening: "/tests/visual/assets/jarvis-lattice-listening.mp4",
+      thinking: "/tests/visual/assets/jarvis-lattice-thinking.mp4",
+      working: "/tests/visual/assets/jarvis-lattice-working.mp4",
+      speaking: "/tests/visual/assets/jarvis-lattice-speaking.mp4",
+    });
   } else if (body === "ultron") {
-    (renderer as UltronRenderer).setLatticeVideo("/tests/visual/assets/ultron-membrane.mp4");
+    (renderer as UltronRenderer).setLatticeVideo({
+      standby: "/tests/visual/assets/ultron-membrane.mp4",
+      listening: "/tests/visual/assets/ultron-membrane-listening.mp4",
+      thinking: "/tests/visual/assets/ultron-membrane-thinking.mp4",
+      working: "/tests/visual/assets/ultron-membrane-working.mp4",
+      speaking: "/tests/visual/assets/ultron-membrane-speaking.mp4",
+    });
   } else if (body === "familiar") {
     // One loop per state, standby as the understudy for any that is missing.
     (renderer as FamiliarWebGLRenderer).setLatticeVideo({

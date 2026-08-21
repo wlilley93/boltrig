@@ -143,6 +143,98 @@ export class LatticeLayer {
 }
 
 /**
+ * TWO LAYERS AND A FADE: per-state footage for one body.
+ *
+ * Each state has its own loop, and a state change must CROSSFADE the footage
+ * rather than cut it — the shader's own transition eases, and a hard video
+ * pop under an eased body would give the game away. A state's loop is still
+ * warm when the body returns to it; the retiring loop pauses once the fade
+ * lands. "standby" is every state's understudy, so a missing file degrades
+ * to the resting loop rather than to nothing.
+ */
+export class LatticeDeck {
+  private slots: { layer: LatticeLayer; el: HTMLVideoElement | null; url: string | null }[] = [];
+  private active = 0;
+  private fade = 1;
+  private map: Partial<Record<string, string>> | null = null;
+
+  constructor(private readonly gl: WebGL2RenderingContext) {}
+
+  init(): void {
+    this.slots = [0, 1].map(() => {
+      const layer = new LatticeLayer(this.gl);
+      layer.init();
+      return { layer, el: null, url: null };
+    });
+  }
+
+  /** One URL serves every state; a map gives each state its own loop. */
+  setSource(source: string | Partial<Record<string, string>> | null): void {
+    for (const slot of this.slots) {
+      slot.el?.remove();
+      slot.el = null;
+      slot.url = null;
+    }
+    this.map = source == null
+      ? null
+      : typeof source === "string" ? { standby: source } : source;
+    this.fade = 1;
+  }
+
+  /** Advance the fade and pull in video frames. Once per frame, before draw. */
+  tick(mode: string, dt: number): void {
+    if (!this.map || this.slots.length < 2) return;
+    const desired = this.map[mode] ?? this.map.standby ?? null;
+    const active = this.slots[this.active];
+    if (desired !== active.url) {
+      this.active = 1 - this.active;
+      const next = this.slots[this.active];
+      if (next.url !== desired) {
+        next.el?.remove();
+        next.el = desired ? latticeVideo(desired) : null;
+        next.url = desired;
+      } else {
+        // Returning to a recently-left state: its loop is still loaded.
+        void next.el?.play().catch(() => undefined);
+      }
+      this.fade = 0;
+    }
+    this.fade = Math.min(1, this.fade + dt / 0.8);
+    const front = this.slots[this.active];
+    const back = this.slots[1 - this.active];
+    front.layer.upload(front.el);
+    if (this.fade < 1 && back.el) back.layer.upload(back.el);
+    else if (back.el && !back.el.paused) back.el.pause();
+  }
+
+  /** Both slots, additively, fade-weighted. Gain includes tuning and voice. */
+  draw(
+    size: readonly [number, number],
+    warm: ArrayLike<number>,
+    gain: number,
+    fullscreen: (prog: WebGLProgram) => void,
+    recolour = false,
+  ): void {
+    if (!this.map || this.slots.length < 2 || gain <= 0) return;
+    const front = this.slots[this.active];
+    const back = this.slots[1 - this.active];
+    front.layer.draw(size, warm, gain * this.fade, fullscreen, recolour);
+    if (this.fade < 1 && back.el) {
+      back.layer.draw(size, warm, gain * (1 - this.fade), fullscreen, recolour);
+    }
+  }
+
+  destroy(): void {
+    for (const slot of this.slots) {
+      slot.el?.remove();
+      slot.el = null;
+      slot.layer.destroy();
+    }
+    this.slots = [];
+  }
+}
+
+/**
  * The video element for a layer. Muted, looping, inline, and every failure
  * path degrades to "no layer": a body whose extra footage is missing must
  * still be a body.
