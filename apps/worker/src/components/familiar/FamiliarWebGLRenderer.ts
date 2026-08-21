@@ -85,8 +85,17 @@ export class FamiliarWebGLRenderer {
 
   private packedGenotype = packFamiliarGenotype(null);
   private prog: WebGLProgram | null = null;
-  private lattice: LatticeLayer | null = null;
-  private latticeEl: HTMLVideoElement | null = null;
+  /**
+   * TWO SLOTS for the baked layer, because her states each have their own
+   * loop and a state change must CROSSFADE the footage rather than cut it —
+   * the shader's own transition eases, and a hard video pop under an eased
+   * body would give the game away. The retiring loop keeps playing until the
+   * fade lands, then pauses.
+   */
+  private latticeSlots: { layer: LatticeLayer; el: HTMLVideoElement | null; url: string | null }[] = [];
+  private latticeActive = 0;
+  private latticeFade = 1;
+  private latticeMap: Partial<Record<FamiliarMode, string>> | null = null;
   /** The last phenotype handed in, for the baked layer's recolour. */
   private phenoRaw: Record<string, unknown> | null = null;
 
@@ -210,9 +219,12 @@ export class FamiliarWebGLRenderer {
   }
 
   destroy(): void {
-    this.latticeEl?.remove();
-    this.latticeEl = null;
-    this.lattice?.destroy();
+    for (const slot of this.latticeSlots) {
+      slot.el?.remove();
+      slot.el = null;
+      slot.layer.destroy();
+    }
+    this.latticeSlots = [];
     cancelAnimationFrame(this.raf);
     this.gl?.getExtension("WEBGL_lose_context")?.loseContext();
     this.canvas?.remove();
@@ -298,12 +310,21 @@ export class FamiliarWebGLRenderer {
   }
 
   /** The wander, with the current mode's colouring laid over it. */
-  /** Mount (or clear) the baked orb loop. See canvas/latticeLayer.ts. */
-  setLatticeVideo(url: string | null): void {
-    this.latticeEl?.remove();
-    this.latticeEl = null;
-    if (!url) return;
-    this.latticeEl = latticeVideo(url);
+  /**
+   * Mount (or clear) the baked orb loops. A single URL serves every state; a
+   * map gives each state its own loop, with standby as the fallback for any
+   * state the map does not name. See canvas/latticeLayer.ts.
+   */
+  setLatticeVideo(source: string | Partial<Record<FamiliarMode, string>> | null): void {
+    for (const slot of this.latticeSlots) {
+      slot.el?.remove();
+      slot.el = null;
+      slot.url = null;
+    }
+    this.latticeMap = source == null
+      ? null
+      : typeof source === "string" ? { standby: source } : source;
+    this.latticeFade = 1;
   }
 
   /**
@@ -314,8 +335,24 @@ export class FamiliarWebGLRenderer {
    * Additive over her own pass -- light adds in either order.
    */
   private drawLattice(gl: WebGL2RenderingContext, w: number, h: number, tuning: FamiliarTuning): void {
-    if (!this.lattice || !this.latticeEl) return;
-    this.lattice.upload(this.latticeEl);
+    if (!this.latticeMap || this.latticeSlots.length < 2) return;
+    // Which loop this state wants; standby is every state's understudy.
+    const desired = this.latticeMap[this.state.mode] ?? this.latticeMap.standby ?? null;
+    const active = this.latticeSlots[this.latticeActive];
+    if (desired !== active.url) {
+      this.latticeActive = 1 - this.latticeActive;
+      const next = this.latticeSlots[this.latticeActive];
+      if (next.url !== desired) {
+        next.el?.remove();
+        next.el = desired ? latticeVideo(desired) : null;
+        next.url = desired;
+      } else {
+        // Returning to a recently-left state: its loop is still loaded.
+        void next.el?.play().catch(() => undefined);
+      }
+      this.latticeFade = 0;
+    }
+    this.latticeFade = Math.min(1, this.latticeFade + this.lastDt / 0.8);
     const gain = tuning.lattice[0] + tuning.lattice[1] * this.state.level;
     if (gain <= 0) return;
     const e = emotionColour(readBodyPhenotype(this.phenoRaw));
@@ -325,7 +362,18 @@ export class FamiliarWebGLRenderer {
     const mood = col.map((c) => c + (lum - c) * e.desaturate);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-    this.lattice.draw([w, h], mood, gain, () => gl.drawArrays(gl.TRIANGLES, 0, 3), true);
+    const front = this.latticeSlots[this.latticeActive];
+    const back = this.latticeSlots[1 - this.latticeActive];
+    front.layer.upload(front.el);
+    front.layer.draw([w, h], mood, gain * this.latticeFade,
+      () => gl.drawArrays(gl.TRIANGLES, 0, 3), true);
+    if (this.latticeFade < 1 && back.el) {
+      back.layer.upload(back.el);
+      back.layer.draw([w, h], mood, gain * (1 - this.latticeFade),
+        () => gl.drawArrays(gl.TRIANGLES, 0, 3), true);
+    } else if (back.el && !back.el.paused) {
+      back.el.pause();
+    }
     gl.disable(gl.BLEND);
     if (this.prog) gl.useProgram(this.prog);
   }
@@ -362,8 +410,11 @@ export class FamiliarWebGLRenderer {
     // differently, and this one already throws with the info log attached.
     const prog = createProgram(gl, VERT_SRC, fragSrc);
     this.prog = prog;
-    this.lattice = new LatticeLayer(gl);
-    this.lattice.init();
+    this.latticeSlots = [0, 1].map(() => {
+      const layer = new LatticeLayer(gl);
+      layer.init();
+      return { layer, el: null, url: null };
+    });
     gl.useProgram(prog);
     for (const name of UNIFORMS) this.uniforms[name] = gl.getUniformLocation(prog, name);
 

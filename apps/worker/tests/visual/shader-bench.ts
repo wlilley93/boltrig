@@ -568,7 +568,15 @@ function mount(): void {
   } else if (body === "ultron") {
     (renderer as UltronRenderer).setLatticeVideo("/tests/visual/assets/ultron-membrane.mp4");
   } else if (body === "familiar") {
-    (renderer as FamiliarWebGLRenderer).setLatticeVideo("/tests/visual/assets/familiar-orb.mp4");
+    // One loop per state, standby as the understudy for any that is missing.
+    (renderer as FamiliarWebGLRenderer).setLatticeVideo({
+      standby: "/tests/visual/assets/familiar-orb.mp4",
+      listening: "/tests/visual/assets/familiar-orb-listening.mp4",
+      thinking: "/tests/visual/assets/familiar-orb-thinking.mp4",
+      working: "/tests/visual/assets/familiar-orb-working.mp4",
+      speaking: "/tests/visual/assets/familiar-orb-speaking.mp4",
+      error: "/tests/visual/assets/familiar-orb-error.mp4",
+    });
   }
   const status = renderer.status();
   if (status.state !== "running") {
