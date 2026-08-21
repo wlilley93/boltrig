@@ -217,6 +217,28 @@
         font-size: 9px; color: #ffb060; font-variant-numeric: tabular-nums;
       }
       .channel { position: relative; }
+      /* THE RACK: LFO cards at the desk's right, channels pinned by chip. */
+      .rackcard {
+        flex: 0 0 150px; position: relative; display: grid; gap: 3px;
+        padding: 6px 7px 5px; border: 1px solid #2a2a36; border-radius: 8px;
+        background: rgba(15, 15, 22, .4);
+      }
+      .rackcard .rackkill {
+        position: absolute; top: 2px; right: 4px; width: 20px; height: 18px;
+        padding: 0; font-size: 11px; border: 0; background: transparent; color: #74747e;
+      }
+      .rackcard .rackdial { display: grid; gap: 1px; font-size: 8.5px; margin: 0; }
+      .rackcard .rackdial input { width: 100%; margin: 0; accent-color: #6f8cff; }
+      .rackchips { display: flex; flex-wrap: wrap; gap: 3px; }
+      .rackchips button {
+        width: auto; height: 16px; padding: 0 5px; font-size: 8.5px;
+        border-radius: 8px; text-transform: uppercase; letter-spacing: .04em;
+      }
+      .rackchips button.on { color: #0b0b0f; background: #6f8cff; border-color: #6f8cff; }
+      .rackadd {
+        flex: 0 0 auto; width: auto; padding: 0 12px; align-self: center;
+        height: 28px; border-radius: 14px; font-size: 11px;
+      }
       /* The video channel wears its film mark top right; its drift count
          steps aside rather than fighting for the corner. */
       .channel .chvid { position: absolute; top: 3px; right: 5px; font-size: 9px; color: #6f8cff; }
@@ -533,6 +555,7 @@ body.video-char :is(#saveState, #pace, #deskMin, #bus, .sep) { display: none; }
       <button id="save" type="button" class="primary"
               title="Every state of this body, and its baseline, to the file">Save everything</button>
       <button id="applyAll" type="button">Apply to all states</button>
+      <button id="undo" type="button" title="Undo the last edit gesture (Ctrl+Z)">↩</button>
       <button id="fromBaseline" type="button">Load baseline</button>
       <button id="allMin" type="button"
               title="Every slider to its minimum — build by eye, raising one at a time">All → min</button>

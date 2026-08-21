@@ -207,6 +207,9 @@ function benchPresets(): Plugin {
             // the look the same way the oscillators are.
             const speech = (sent as { speech?: unknown }).speech;
             if (typeof speech === "object" && speech !== null) version.speech = speech;
+            // Per-value ADSR envelopes ride with the look, like the reach.
+            const adsr = (sent as { adsr?: unknown }).adsr;
+            if (typeof adsr === "object" && adsr !== null) version.adsr = adsr;
             // An overwrite version is a BROADCAST: "Apply to all states" marks
             // its writes so every browser adopts them over its own local copy
             // once, which is the only way "all states look the same" can be

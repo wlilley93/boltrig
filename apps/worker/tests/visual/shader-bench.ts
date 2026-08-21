@@ -440,6 +440,18 @@ function savedLfos(name: string): LfoMap {
  * and settles back to exactly what was tuned.
  */
 let speech: Record<string, number> = {};
+/**
+ * PER-VALUE ADSR, shaping the ×voice journey. [attack, decay, sustain,
+ * release] — seconds, seconds, level 0..1, seconds. A value with an envelope
+ * no longer rides the syllable meter directly: each syllable GATES it, so a
+ * blown-out shell radius can snap out and pump back like a speaker cone.
+ * Keyed like the reach; saved with the look.
+ */
+let adsr: Record<string, [number, number, number, number]> = {};
+/** Live envelope integrators, monitor-side only. */
+const envState: Record<string, { level: number; stage: "idle" | "attack" | "decay" | "sustain" | "release" }> = {};
+let envGate = false;
+let envClock = 0;
 /** Smoothed syllable envelope, 0..1 — fast up, slow down, like a VU needle. */
 let speechEnv = 0;
 let speechShown = 0;
@@ -452,6 +464,78 @@ function rememberSpeech(): void {
     // A full or blocked store is not a reason to stop rendering.
   }
   scheduleAutosave();
+}
+
+/**
+ * Advance every gated envelope one frame. The syllable meter is the GATE —
+ * with hysteresis, so a held vowel is one gate and the gap between words is a
+ * release — and each value's [attack, decay, sustain, release] shapes what
+ * its journey does inside that gate. Returns whether anything moved enough
+ * to be worth a push.
+ */
+function tickAdsr(nowMs: number): boolean {
+  const dt = Math.min(0.1, Math.max(0.001, (nowMs - envClock) / 1000));
+  envClock = nowMs;
+  envGate = speechEnv > (envGate ? 0.16 : 0.3);
+  let moved = false;
+  for (const [id, shape] of Object.entries(adsr)) {
+    if (speech[id] === undefined) continue;
+    const [a, d, s, r] = shape;
+    const st = envState[id] ?? (envState[id] = { level: 0, stage: "idle" });
+    const was = st.level;
+    if (envGate) {
+      if (st.stage === "idle" || st.stage === "release") st.stage = "attack";
+      if (st.stage === "attack") {
+        st.level += dt / Math.max(a, 0.005);
+        if (st.level >= 1) {
+          st.level = 1;
+          st.stage = "decay";
+        }
+      } else if (st.stage === "decay") {
+        st.level -= dt * (1 - s) / Math.max(d, 0.005);
+        if (st.level <= s) {
+          st.level = s;
+          st.stage = "sustain";
+        }
+      } else if (st.stage === "sustain") {
+        st.level = s;
+      }
+    } else if (st.level > 0) {
+      st.stage = "release";
+      st.level = Math.max(0, st.level - dt / Math.max(r, 0.005));
+      if (st.level === 0) st.stage = "idle";
+    }
+    if (Math.abs(st.level - was) > 0.002) moved = true;
+  }
+  return moved;
+}
+
+function rememberAdsr(): void {
+  try {
+    localStorage.setItem(storageKey(`${slotKey(body, slot)}.adsr`), JSON.stringify(adsr));
+  } catch {
+    // A full or blocked store is not a reason to stop rendering.
+  }
+  scheduleAutosave();
+}
+
+function savedAdsr(name: string): Record<string, [number, number, number, number]> {
+  const raw = localStorage.getItem(storageKey(`${name}.adsr`));
+  if (raw) {
+    try {
+      return JSON.parse(raw) as Record<string, [number, number, number, number]>;
+    } catch {
+      return {};
+    }
+  }
+  // The envelopes travel with the look: same chain as savedSpeech().
+  const version = storeNewest(name) as
+    { adsr?: Record<string, [number, number, number, number]> } | undefined;
+  if (version) return { ...(version.adsr ?? {}) };
+  const which = name.slice(0, name.indexOf("."));
+  const base = storeNewest(`${which}.baseline`) as
+    { adsr?: Record<string, [number, number, number, number]> } | undefined;
+  return { ...(base?.adsr ?? {}) };
 }
 
 function savedSpeech(name: string): Record<string, number> {
@@ -471,12 +555,91 @@ function savedSpeech(name: string): Record<string, number> {
   return { ...(base?.speech ?? {}) };
 }
 
+/**
+ * UNDO, per gesture. Autosave replaces itself, so the store's history only
+ * holds deliberate checkpoints — it cannot answer "put back what I had three
+ * touches ago". This stack can: a snapshot is taken at the START of each edit
+ * burst (600ms of quiet ends one), Ctrl+Z or ↩ walks back through them. It
+ * lives for the current tab of the current body and clears on switch —
+ * predictable beats deep.
+ */
+type UndoSnap = {
+  tuning: Tuning;
+  lfos: LfoMap;
+  speech: Record<string, number>;
+  adsr: Record<string, [number, number, number, number]>;
+};
+const undoStack: UndoSnap[] = [];
+let undoSettled: UndoSnap | null = null;
+let undoEditAt = 0;
+let undoSettleTimer = 0;
+/** True while a restore (or a state/body load) writes through remember():
+ *  those writes are not gestures and must not feed the stack. */
+let undoSuppress = false;
+
+function undoSnap(): UndoSnap {
+  return {
+    tuning: clone(tuning),
+    lfos: JSON.parse(JSON.stringify(lfos)) as LfoMap,
+    speech: { ...speech },
+    adsr: JSON.parse(JSON.stringify(adsr)) as UndoSnap["adsr"],
+  };
+}
+
+function undoResetBaseline(): void {
+  undoStack.length = 0;
+  undoSettled = undoSnap();
+}
+
+function undoMark(): void {
+  if (undoSuppress) return;
+  const now = performance.now();
+  if (now - undoEditAt > 600 && undoSettled) {
+    undoStack.push(undoSettled);
+    if (undoStack.length > 50) undoStack.shift();
+  }
+  undoEditAt = now;
+  window.clearTimeout(undoSettleTimer);
+  undoSettleTimer = window.setTimeout(() => { undoSettled = undoSnap(); }, 700);
+}
+
+function undoPop(): void {
+  const snap = undoStack.pop();
+  if (!snap) {
+    $("saved").textContent = "nothing to undo";
+    $("saved").className = "";
+    return;
+  }
+  tuning = clone(snap.tuning);
+  lfos = { ...snap.lfos };
+  speech = { ...snap.speech };
+  adsr = { ...snap.adsr };
+  undoSettled = undoSnap();
+  undoSuppress = true;
+  try {
+    buildControls();
+    remember(slotKey(body, slot), tuning);
+    rememberLfos();
+    rememberSpeech();
+    rememberAdsr();
+    push();
+  } finally {
+    undoSuppress = false;
+  }
+  paintMixerLevels();
+  paintMixer();
+  paintDrift();
+  $("saved").textContent = `undone — ${undoStack.length} step${undoStack.length === 1 ? "" : "s"} left`;
+  $("saved").className = "ok";
+}
+
 function remember(name: string, value: Tuning): void {
   try {
     localStorage.setItem(storageKey(name), JSON.stringify(value));
   } catch {
     // A full or blocked store is not a reason to stop rendering.
   }
+  undoMark();
   scheduleAutosave();
 }
 
@@ -500,7 +663,7 @@ async function autosaveNow(): Promise<void> {
       body: JSON.stringify({
         body, slot, tuning,
         lfos: Object.fromEntries(Object.entries(lfos).filter(([, l]) => l.on)),
-        speech,
+        speech, adsr,
         autosave: true,
       }),
     });
@@ -778,14 +941,17 @@ function mount(): void {
   for (const id of Object.keys(sliderDom)) delete sliderDom[id];
   lfos = savedLfos(slotKey(body, slot));
   speech = savedSpeech(slotKey(body, slot));
+  adsr = savedAdsr(slotKey(body, slot));
   reachArming = null;
   loadBaseline();
   loadVolumes();
+  loadRack();
   buildControls();
   buildMixer();
   paintHistory();
   paintDrift();
   push();
+  undoResetBaseline();
   // THE INTRO, on every mount. `push()` first so the renderer knows what it is
   // easing TOWARD -- the saved look if there is one, not the shipped preset -- and
   // then the draw-in runs from the arrival state to that. Skipping the push would
@@ -1258,11 +1424,68 @@ function row(
     const fxbtns = document.createElement("div");
     fxbtns.className = "fxbtns";
     fxbtns.appendChild(bind);
+    // THE ENVELOPE. ⌁ gates this value's ×voice journey per syllable —
+    // attack, decay, sustain, release — so a blown-out shell radius can snap
+    // out and pump back like a speaker cone instead of riding the meter.
+    const env = document.createElement("button");
+    env.type = "button";
+    env.className = "lfo-bind envb";
+    env.title = "ADSR — gate the ×voice journey per syllable (speaker-cone pump). Click again to clear.";
+    env.textContent = "⌁";
+    fxbtns.appendChild(env);
     val.appendChild(fxbtns);
     vals.appendChild(val);
 
     const panel = lfoPanel(key, index, live, min, max, onChange);
     wrap.appendChild(panel);
+    const envPanel = document.createElement("div");
+    envPanel.className = "lfo adsrp";
+    wrap.appendChild(envPanel);
+    const paintEnv = () => {
+      const on = adsr[lfoKey(key, index)] !== undefined;
+      env.classList.toggle("on", on);
+      envPanel.classList.toggle("open", on);
+    };
+    const buildEnvFields = () => {
+      envPanel.innerHTML = "";
+      const shape = adsr[lfoKey(key, index)];
+      if (!shape) return;
+      const names = ["attack ms", "decay ms", "sustain", "release ms"];
+      shape.forEach((at, slotIndex) => {
+        const holder = document.createElement("label");
+        holder.textContent = names[slotIndex];
+        const field = document.createElement("input");
+        field.type = "number";
+        field.step = slotIndex === 2 ? "0.05" : "5";
+        field.value = slotIndex === 2 ? String(at) : String(Math.round(at * 1000));
+        field.addEventListener("change", () => {
+          const typed = Number(field.value);
+          const current = adsr[lfoKey(key, index)];
+          if (!Number.isFinite(typed) || !current) return;
+          current[slotIndex] = slotIndex === 2
+            ? Math.min(1, Math.max(0, typed))
+            : Math.max(0.005, typed / 1000);
+          rememberAdsr();
+        });
+        holder.appendChild(field);
+        envPanel.appendChild(holder);
+      });
+    };
+    env.addEventListener("click", () => {
+      const id = lfoKey(key, index);
+      if (adsr[id]) {
+        delete adsr[id];
+        delete envState[id];
+      } else {
+        // Speaker-cone defaults: fast out, quick settle, modest hold.
+        adsr[id] = [0.03, 0.08, 0.45, 0.12];
+      }
+      rememberAdsr();
+      buildEnvFields();
+      paintEnv();
+    });
+    buildEnvFields();
+    paintEnv();
     paintXv();
     const paint = () => {
       const on = lfos[lfoKey(key, index)]?.on === true;
@@ -1699,9 +1922,11 @@ function loop(): void {
     // saved reach travels start→end on the syllable envelope, monitor-side.
     // Pushed only when the envelope actually moved, and never over a journey
     // or a take — those branches call effectiveTuning() themselves.
+    const envMoved = tickAdsr(performance.now());
+    const envAlive = Object.values(envState).some((e) => e.level > 0.002);
     const speechActive = Object.keys(speech).length > 0
       || talkTest.size > 0 || talkRelease.size > 0 || voiceHold;
-    if (renderer && speechActive && speechEnv < 0.002 && speechShown !== 0) {
+    if (renderer && speechActive && speechEnv < 0.002 && !envAlive && speechShown !== 0) {
       // THE LANDING. The release has settled: one exact push back to base, so
       // the body ends on precisely what the dials read rather than holding a
       // frozen sliver of swell.
@@ -1710,8 +1935,13 @@ function loop(): void {
       voiceHold = false;
       talkRelease.clear();
       (renderer as { setTuning?(next: never): void }).setTuning?.(clone(effectiveTuning()) as never);
-    } else if (renderer && speechActive && Math.abs(speechEnv - speechShown) > 0.003) {
+    } else if (renderer && speechActive
+      && (envMoved || Math.abs(speechEnv - speechShown) > 0.003)) {
       speechShown = speechEnv;
+      (renderer as { setTuning?(next: never): void }).setTuning?.(clone(effectiveTuning()) as never);
+    } else if (renderer && rackActive()) {
+      // The rack wobbles continuously; while any unit is pinned and breathing,
+      // the monitor follows it frame by frame.
       (renderer as { setTuning?(next: never): void }).setTuning?.(clone(effectiveTuning()) as never);
     }
   }
@@ -1797,7 +2027,7 @@ async function savePreset(): Promise<void> {
     slot,
     tuning,
     lfos: Object.fromEntries(Object.entries(lfos).filter(([, l]) => l.on)),
-    speech,
+    speech, adsr,
     ...(label.trim() === "" ? {} : { label: label.trim() }),
   };
   try {
@@ -1986,13 +2216,53 @@ function rememberVolumes(): void {
   } catch { /* fine */ }
 }
 
+/**
+ * THE LFO RACK. As many units as wanted, each with a rate, a depth and a set
+ * of PINNED CHANNELS: the unit wobbles the light of every strip pinned to it,
+ * the way a tremolo rides a mixer bus. The channels come to the LFO rather
+ * than each channel owning one — the per-dial ∿ stays for precision work.
+ * Monitor-side, per body, this browser only, like the faders.
+ */
+type RackUnit = { rate: number; depth: number; channels: string[] };
+let lfoRack: RackUnit[] = [];
+
+function loadRack(): void {
+  try {
+    lfoRack = JSON.parse(localStorage.getItem(storageKey(`rack.${body}`)) ?? "[]") as RackUnit[];
+  } catch {
+    lfoRack = [];
+  }
+}
+
+function rememberRack(): void {
+  try {
+    localStorage.setItem(storageKey(`rack.${body}`), JSON.stringify(lfoRack));
+  } catch { /* fine */ }
+}
+
+function rackActive(): boolean {
+  return lfoRack.some((u) => u.depth > 0.001 && u.channels.length > 0);
+}
+
+/** The rack's combined wobble on one strip, this instant. Never below zero. */
+function rackFactor(title: string, seconds: number): number {
+  let factor = 1;
+  lfoRack.forEach((unit, index) => {
+    if (unit.depth <= 0.001 || !unit.channels.includes(title)) return;
+    factor *= 1 + unit.depth * Math.sin(2 * Math.PI * unit.rate * seconds + index * 1.7);
+  });
+  return Math.max(0, factor);
+}
+
 /** The tuning the renderer hears: muted channels' levels at zero, the real
  *  numbers untouched. With nothing muted this is `tuning` itself. */
 function effectiveTuning(of: Tuning = tuning): Tuning {
   const faded = Object.keys(channelVolume).some((t) => volumeOf(t) < 1);
-  const talking = speechEnv > 0.002
+  const envHeld = Object.values(envState).some((e) => e.level > 0.002);
+  const talking = (speechEnv > 0.002 || envHeld)
     && (Object.keys(speech).length > 0 || talkTest.size > 0);
-  if (soloed.size === 0 && !faded && !talking) return of;
+  const racked = rackActive();
+  if (soloed.size === 0 && !faded && !talking && !racked) return of;
   const out = clone(of);
   const record = out as unknown as Record<string, number | number[]>;
   // Speech reach FIRST, volumes after: the fader is the channel's master, so
@@ -2011,12 +2281,15 @@ function effectiveTuning(of: Tuning = tuning): Tuning {
       if (scoped !== null && !scoped.has(field)) continue;
       const value = record[field];
       if (value === undefined) continue;
+      // A value with an ADSR rides its own gated envelope — snapping out on
+      // each syllable and pumping back like a cone — instead of the meter.
+      const k = adsr[id] ? (envState[id]?.level ?? 0) : speechEnv;
       if (typeof value === "number") {
-        record[field] = value + (end - value) * speechEnv;
+        record[field] = value + (end - value) * k;
       } else {
         const next = value.slice();
         const index = Number(indexText);
-        next[index] = next[index] + (end - next[index]) * speechEnv;
+        next[index] = next[index] + (end - next[index]) * k;
         record[field] = next;
       }
     }
@@ -2041,8 +2314,11 @@ function effectiveTuning(of: Tuning = tuning): Tuning {
   }
   for (const g of channelsFor()) {
     if (!fadeable(g.fields)) continue;
-    const vol = audible(g.title) ? volumeOf(g.title) : 0;
-    if (vol >= 1) continue;
+    const wobble = racked ? rackFactor(g.title, performance.now() / 1000) : 1;
+    const vol = (audible(g.title) ? volumeOf(g.title) : 0) * wobble;
+    // The rack's up-swing pushes PAST unity — a tremolo has a top half — so
+    // only an exactly-neutral channel is skipped.
+    if (Math.abs(vol - 1) < 1e-6) continue;
     // A channel with no light of its own (Debris, the envelopes) scales its
     // EFFECT instead: every field fades, so zero still means "not there" —
     // except geometry, which no volume is allowed to touch.
@@ -2127,6 +2403,9 @@ function buildMixer(): void {
         channelVolume[g.title] = Number(fader.value);
         out.textContent = `${Math.round(Number(fader.value) * 100)}%`;
         rememberVolumes();
+        // Touching a fader SELECTS its channel: the hand is already on this
+        // strip, so the bus should be showing its effects before the drag ends.
+        if (channel !== g.title) selectChannel(g.title);
         push();
       });
       fader.addEventListener("click", (event) => event.stopPropagation());
@@ -2184,7 +2463,81 @@ function buildMixer(): void {
     strip.addEventListener("click", () => selectChannel(g.title));
     desk.appendChild(strip);
   }
+  buildRack(desk);
   paintMixer();
+}
+
+/** The rack, at the desk's right: one card per LFO, channels pinned by chip. */
+function buildRack(desk: HTMLElement): void {
+  const titles = channelsFor().map((g) => g.title);
+  lfoRack.forEach((unit, index) => {
+    const card = document.createElement("div");
+    card.className = "rackcard";
+    const head = document.createElement("div");
+    head.className = "chname";
+    head.textContent = `LFO ${index + 1}`;
+    const kill = document.createElement("button");
+    kill.type = "button";
+    kill.className = "rackkill";
+    kill.textContent = "×";
+    kill.title = "Remove this LFO";
+    kill.addEventListener("click", () => {
+      lfoRack.splice(index, 1);
+      rememberRack();
+      buildMixer();
+    });
+    card.appendChild(head);
+    card.appendChild(kill);
+    const dial = (label: string, min: number, max: number, step: number,
+      value: number, apply: (v: number) => void) => {
+      const holder = document.createElement("label");
+      holder.className = "rackdial";
+      holder.textContent = label;
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = String(min);
+      input.max = String(max);
+      input.step = String(step);
+      input.value = String(value);
+      input.addEventListener("input", () => {
+        apply(Number(input.value));
+        rememberRack();
+      });
+      holder.appendChild(input);
+      card.appendChild(holder);
+    };
+    dial("rate", 0.05, 3, 0.01, unit.rate, (v) => { unit.rate = v; });
+    dial("depth", 0, 1, 0.01, unit.depth, (v) => { unit.depth = v; });
+    const chips = document.createElement("div");
+    chips.className = "rackchips";
+    for (const title of titles) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.textContent = STRIP_NAME[title] ?? channelShortName(title).split(" ")[0];
+      chip.classList.toggle("on", unit.channels.includes(title));
+      chip.addEventListener("click", () => {
+        const at = unit.channels.indexOf(title);
+        if (at >= 0) unit.channels.splice(at, 1);
+        else unit.channels.push(title);
+        chip.classList.toggle("on", at < 0);
+        rememberRack();
+      });
+      chips.appendChild(chip);
+    }
+    card.appendChild(chips);
+    desk.appendChild(card);
+  });
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "rackadd";
+  add.textContent = "+ LFO";
+  add.title = "Add an LFO to the rack, then pin channels to it";
+  add.addEventListener("click", () => {
+    lfoRack.push({ rate: 0.4, depth: 0.25, channels: [] });
+    rememberRack();
+    buildMixer();
+  });
+  desk.appendChild(add);
 }
 
 function paintMixer(): void {
@@ -2335,6 +2688,7 @@ $("applyAll").addEventListener("click", () => {
       localStorage.setItem(storageKey(slotKey(body, at)), JSON.stringify(ground.tuning));
       localStorage.setItem(storageKey(`${slotKey(body, at)}.lfo`), JSON.stringify(ground.lfos));
       localStorage.setItem(storageKey(`${slotKey(body, at)}.speech`), JSON.stringify(speech));
+      localStorage.setItem(storageKey(`${slotKey(body, at)}.adsr`), JSON.stringify(adsr));
     }
   } catch { /* a blocked store is not a reason to stop rendering */ }
   // And to the FILE — one OVERWRITE version per state plus the baseline — so
@@ -2350,7 +2704,7 @@ $("applyAll").addEventListener("click", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        body, slot: at, tuning: ground.tuning, lfos: ground.lfos, speech,
+        body, slot: at, tuning: ground.tuning, lfos: ground.lfos, speech, adsr,
         overwrite: true, label,
       }),
     }).then((response) => {
@@ -2400,6 +2754,7 @@ $("fromBaseline").addEventListener("click", () => {
 type SavedVersion = {
   tuning: Partial<Tuning>; lfos?: LfoMap; speech?: Record<string, number>;
   savedAt?: string; label?: string; overwrite?: boolean; autosave?: boolean;
+  adsr?: Record<string, [number, number, number, number]>;
 };
 let history: Record<string, { versions: SavedVersion[] }> = {};
 
@@ -2431,6 +2786,7 @@ function adoptOverwrites(): boolean {
         localStorage.setItem(storageKey(key), JSON.stringify(newest.tuning));
         localStorage.setItem(storageKey(`${key}.lfo`), JSON.stringify(newest.lfos ?? {}));
         localStorage.setItem(storageKey(`${key}.speech`), JSON.stringify(newest.speech ?? {}));
+        localStorage.setItem(storageKey(`${key}.adsr`), JSON.stringify(newest.adsr ?? {}));
       }
       localStorage.setItem(seenKey, String(at));
       adopted = true;
@@ -2466,6 +2822,7 @@ async function refreshHistory(): Promise<void> {
     tuning = saved(key, shipped);
     lfos = savedLfos(key);
     speech = savedSpeech(key);
+    adsr = savedAdsr(key);
     buildControls();
     renderer?.transitionTo(clone(effectiveTuning()) as never);
     paintMixerLevels();
@@ -2766,6 +3123,7 @@ function setState(next: Slot): void {
   for (const id of Object.keys(sliderDom)) delete sliderDom[id];
   lfos = savedLfos(slotKey(body, slot));
   speech = savedSpeech(slotKey(body, slot));
+  adsr = savedAdsr(slotKey(body, slot));
   reachArming = null;
   buildControls();
   remember(slotKey(body, slot), tuning);
@@ -2774,6 +3132,7 @@ function setState(next: Slot): void {
   paintMixer();
   paintHistory();
   paintDrift();
+  undoResetBaseline();
   const paceName = ($("pace") as HTMLSelectElement).value;
   // A RECORDED transition is the legal path between this pair: it plays at its
   // own length scaled by the pace, and the lerp carries any untracked field.
@@ -2807,7 +3166,7 @@ async function saveEverything(): Promise<void> {
     status.className = "";
     return;
   }
-  const jobs: { at: string; tuning: unknown; lfos: unknown; speech: unknown }[] =
+  const jobs: { at: string; tuning: unknown; lfos: unknown; speech: unknown; adsr?: unknown }[] =
     slotsFor(body).map((at) => ({
       at: at as string,
       tuning: at === slot ? tuning : saved(slotKey(body, at), shippedFor(body, at)),
@@ -2815,6 +3174,7 @@ async function saveEverything(): Promise<void> {
         ? Object.fromEntries(Object.entries(lfos).filter(([, l]) => l.on))
         : savedLfos(slotKey(body, at)),
       speech: at === slot ? speech : savedSpeech(slotKey(body, at)),
+      adsr: at === slot ? adsr : savedAdsr(slotKey(body, at)),
     }));
   if (baseline) {
     jobs.push({ at: "baseline", tuning: baseline.tuning, lfos: baseline.lfos, speech: {} });
@@ -2825,7 +3185,7 @@ async function saveEverything(): Promise<void> {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          body, slot: job.at, tuning: job.tuning, lfos: job.lfos, speech: job.speech,
+          body, slot: job.at, tuning: job.tuning, lfos: job.lfos, speech: job.speech, adsr: job.adsr,
           ...(label.trim() === "" ? {} : { label: label.trim() }),
         }),
       });
@@ -2857,6 +3217,7 @@ $("history").addEventListener("change", (event) => {
   tuning = { ...clone(shipped), ...version.tuning } as Tuning;
   lfos = { ...(version.lfos ?? {}) };
   speech = { ...(version.speech ?? {}) };
+  adsr = { ...(version.adsr ?? {}) };
   buildControls();
   remember(slotKey(body, slot), tuning);
   rememberLfos();
@@ -3226,11 +3587,17 @@ document.addEventListener("keydown", (event) => {
     abBaseline(true);
     return;
   }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+    event.preventDefault();
+    undoPop();
+    return;
+  }
   const index = Number(event.key) - 1;
   if (!Number.isInteger(index) || index < 0) return;
   const available = transportSlots();
   if (index < available.length) setState(available[index]);
 });
+$("undo").addEventListener("click", undoPop);
 
 /** Framing mode: fold the desk away, keep presence at hand. */
 let deskHidden = ((): boolean => {
