@@ -14,8 +14,8 @@
       body {
         margin: 0;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 380px;
-        grid-template-rows: minmax(0, 1fr) auto auto;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr) auto auto auto;
         height: 100vh;
         height: 100dvh;
         font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
@@ -23,7 +23,6 @@
         background: #08080b;
         overscroll-behavior: none;
       }
-      /* Desktop keeps the sidebar; the sheet handle is for touch only. */
       #sheetToggle { display: none; }
 
       @media (max-width: 900px) {
@@ -67,13 +66,25 @@
         h1, p.lede { display: none; }
         .top { grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
       }
-      #stageWrap { position: relative; display: block; min-width: 0; overflow: hidden; grid-column: 1; grid-row: 1; }
+      /* THE CONSOLE: toolbar, stage, transport, desk, effects bus - one column,
+         the stage taking what is left after the console rows claim theirs. */
+      #topbar {
+        grid-row: 1;
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 10px; background: #0b0b0f; border-bottom: 1px solid #1c1c22;
+        overflow-x: auto;
+      }
+      #topbar select, #topbar button { width: auto; height: 28px; font-size: 11px; border-radius: 6px; padding: 0 10px; }
+      #topbar #history { max-width: 300px; }
+      #topbar #baselineNote { margin: 0; white-space: nowrap; }
+      #topbar #saved { margin: 0; min-height: 0; white-space: nowrap; }
+      #stageWrap { position: relative; display: block; min-width: 0; overflow: hidden; grid-row: 2; }
       /* THE TRANSPORT. The states are the instrument's keys: standby, listening,
          thinking, working, speaking are the animated base looks, and everything
          else — voice, emotion — is a modifier layered on top. Clicking a state
          eases the body there at the chosen pace. */
       #transport {
-        grid-column: 1; grid-row: 2;
+        grid-row: 3;
         display: flex; align-items: center; gap: 10px;
         padding: 8px 10px 2px; background: #0b0b0f;
         border-top: 1px solid #1c1c22;
@@ -102,7 +113,7 @@
          a lamp when an LFO is sweeping it. Click a strip and the right rail
          becomes that channel's effects. */
       #mixer {
-        grid-column: 1; grid-row: 3;
+        grid-row: 4;
         display: flex; gap: 6px; padding: 8px 10px;
         border-top: 1px solid #1c1c22; background: #0b0b0f;
         overflow-x: auto; overflow-y: hidden;
@@ -139,6 +150,31 @@
         font-size: 9px; color: #ffb060; font-variant-numeric: tabular-nums;
       }
       .channel { position: relative; }
+      /* THE EFFECTS BUS. The selected channel's dials run horizontally under
+         the desk - one card per dial, console-style - so the stage keeps the
+         whole width and the eye never leaves the body. */
+      #bus {
+        grid-row: 5;
+        display: flex; gap: 6px; align-items: stretch;
+        padding: 6px 10px 10px; background: #0b0b0f;
+        border-top: 1px solid #1c1c22;
+        overflow-x: auto; overflow-y: hidden;
+        min-height: 86px;
+      }
+      #bus h3.group {
+        margin: 0; padding: 0 10px 0 2px; border: 0;
+        writing-mode: vertical-rl; transform: rotate(180deg);
+        font-size: 9px; align-self: center; cursor: default; user-select: text;
+      }
+      #bus h3.group::before { content: ""; }
+      #bus .row {
+        flex: 0 0 190px; margin: 0; padding: 6px 8px;
+        border: 1px solid #1c1c22; border-radius: 8px; background: #0d0d11;
+        align-content: start;
+      }
+      #bus .row label { margin-bottom: 2px; }
+      #bus .row label strong { font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+      #bus .row label .code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
       @media (max-width: 900px) { #mixer, #transport { display: none; } }
       /* Values sitting off the baseline are marked, so "how far have we gone"
          is a glance rather than an audit. */
@@ -325,6 +361,22 @@
       <div id="readout">starting…</div>
       <button id="sheetToggle" type="button" aria-expanded="true">Controls</button>
     </div>
+    <div id="topbar">
+      <select id="body">
+        <option value="jarvis">Jarvis V2</option>
+        <option value="ultron">Ultron</option>
+        <option value="familiar">Familiar</option>
+      </select>
+      <button id="save" type="button" class="primary">Save preset</button>
+      <button id="applyAll" type="button">Apply to all states</button>
+      <button id="fromBaseline" type="button">Load baseline</button>
+      <button id="driftOnly" type="button" title="Show only dials off the baseline">Δ only</button>
+      <button id="abHold" type="button" title="Hold to show the baseline (or hold B)">A/B</button>
+      <select id="history"></select>
+      <button id="gear" type="button">⚙</button>
+      <div id="baselineNote"></div>
+      <div id="saved"></div>
+    </div>
     <div id="transport">
       <div id="states"></div>
       <select id="pace" title="How fast the body travels between states">
@@ -375,44 +427,7 @@
         </div>
       </div>
     </div>
-    <aside>
-      <h1>Shader bench</h1>
-      <div class="top">
-        <div>
-          <label for="body">Body</label>
-          <select id="body">
-            <option value="jarvis">Jarvis V2</option>
-            <option value="ultron">Ultron</option>
-            <option value="familiar">Familiar</option>
-          </select>
-        </div>
-        <div>
-          <label>&nbsp;</label>
-          <button id="gear" type="button">⚙ Settings</button>
-        </div>
-      </div>
-      <div class="top">
-        <button id="save" type="button" class="primary">Save preset</button>
-        <!-- The baseline: copy this state's look to every state of the body, so
-             each one is edited FROM the same ground and drift is measurable. -->
-        <button id="applyAll" type="button">Apply to all states</button>
-      </div>
-      <div class="top">
-        <button id="fromBaseline" type="button">Load baseline</button>
-        <button id="driftOnly" type="button" title="Show only dials off the baseline">Δ only</button>
-      </div>
-      <div class="top" style="grid-template-columns: 1fr">
-        <button id="abHold" type="button" title="Hold to show the baseline; release to return (or hold B)">A/B baseline — hold</button>
-      </div>
-      <div class="top" style="grid-template-columns: 1fr">
-        <!-- Every version ever locked in for the body and state on stage; saving
-             appends rather than overwrites. Choosing one loads it into the dials. -->
-        <select id="history"></select>
-      </div>
-      <div id="baselineNote"></div>
-      <div id="controls"></div>
-      <div id="saved"></div>
-    </aside>
+    <div id="bus"><div id="controls" style="display:contents"></div></div>
     <script type="module" src="/tests/visual/shader-bench.ts"></script>
   </body>
 </html>
