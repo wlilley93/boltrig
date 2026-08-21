@@ -78,7 +78,9 @@ export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
   },
   working: {
     core: [3, 3],
-    eye: [0.3, 0.698739, 0, 4],
+    // LFO centre: the eye's aura sweeps 0..0.84 at 0.15Hz — the ONE sweep the
+    // canon carries, and it is per-state. See ULTRON_PULSES.
+    eye: [0.3, 0.42, 0, 4],
     bounce: [0.06, 0.35],
   },
   // Nearly the resting body — ULTRON_SPEECH is what speaking looks like, with
@@ -89,11 +91,18 @@ export const ULTRON_MODES: Record<BodyMode, Partial<UltronTuning>> = {
 };
 
 /**
- * Ultron's continuous modulation: NONE, and that is the canon, not an
- * omission. "Ultron final 1800" was saved with an empty LFO rack — the living
- * motion is the membrane film, the bob, and ULTRON_SPEECH riding the voice.
- * The old eight-term tables belonged to the particle look this replaced; a
- * pulse layered on top of the film read as flicker, not life.
+ * Ultron's continuous modulation: ONE sweep, in one state.
+ *
+ * "Ultron final 1800" saved an empty LFO rack in six of its seven slots — the
+ * living motion is the membrane film, the bob, and ULTRON_SPEECH riding the
+ * voice, and a pulse layered on top of the film reads as flicker rather than
+ * life. WORKING is the exception: its eye aura breathes 0..0.84 at 0.15Hz,
+ * which is why that state has an eye at all.
+ *
+ * Translated the same way as Jarvis's rack — the base carries the sweep's
+ * centre and the pulse carries depth = half-range/centre with the phase
+ * shifted back a quarter turn. Depth 1 is deliberate: the sweep bottoms at
+ * zero, so the aura goes fully dark at the trough.
  */
 const NO_PULSES: readonly Pulse[] = [];
 
@@ -101,7 +110,7 @@ export const ULTRON_PULSES: Record<BodyMode, readonly Pulse[]> = {
   standby: NO_PULSES,
   listening: NO_PULSES,
   thinking: NO_PULSES,
-  working: NO_PULSES,
+  working: [{ field: "eye", index: 1, depth: 1, rate: 0.15, phase: 0.00 }],
   speaking: NO_PULSES,
 };
 
