@@ -15,18 +15,23 @@
 // prefix, and prefixing the empty same-origin base with it routes every /v1
 // call back through the same mount.
 //
-// Only a directory path (or its /index.html) is a mount. Any other document
-// path means ROOT: the first derivation prefixed everything, and the visual
-// harness - served at /tests/visual/parity.html with root-relative /v1
-// fixtures - missed every fixture (the M3 "breaks the standalone" trap,
-// caught by the capture run 2026-08-21). A mount deep-link without the
-// trailing slash is the stripping proxy's job to normalise.
+// A directory path, its /index.html, or an EXTENSIONLESS path is a mount. A
+// document path (a final segment with a dot) means ROOT: the first
+// derivation prefixed everything, and the visual harness - served at
+// /tests/visual/parity.html with root-relative /v1 fixtures - missed every
+// fixture (the M3 "breaks the standalone" trap, pinned below). The
+// extensionless case exists because a host framework can normalise the
+// trailing slash away BEFORE its proxy runs (Next.js 308-strips it, measured
+// on the opbox mount 2026-08-21), so /boltrig - not /boltrig/ - is what the
+// document actually sees; an extensionless path is never a real file here.
 export function mountPrefix(): string {
   if (typeof window === "undefined") return "";
   try {
     const path = window.location.pathname;
     if (path.endsWith("/")) return path.replace(/\/$/, "");
     if (path.endsWith("/index.html")) return path.slice(0, -"/index.html".length);
+    const finalSegment = path.slice(path.lastIndexOf("/") + 1);
+    if (!finalSegment.includes(".")) return path;
     return "";
   } catch {
     return "";
