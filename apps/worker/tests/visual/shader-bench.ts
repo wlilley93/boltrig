@@ -1049,6 +1049,11 @@ function row(
   const live = values.slice();
   const readouts: HTMLElement[] = [];
   values.forEach((value, index) => {
+    // A hidden VALUE, not a hidden field: lattice's dedicated ×voice pair
+    // element is redundant now that every value carries the generic ×voice
+    // slider. The number stays in the data — the shipped renderer still
+    // reads it — it just no longer takes a fader.
+    if (HIDDEN_VALUES.has(lfoKey(key, index))) return;
     const [min, max, step] = RANGE_AT[lfoKey(key, index)] ?? fallback;
     const input = document.createElement("input");
     input.type = "range";
@@ -1058,7 +1063,7 @@ function row(
     input.value = String(value);
     const out = document.createElement("b");
     out.textContent = value.toFixed(3);
-    readouts.push(out);
+    readouts[index] = out;
     sliderDom[lfoKey(key, index)] = { input, out };
     // TYPE THE NUMBER. Click the readout and it becomes a field: Enter or blur
     // commits (clamped to the slider's range), Escape walks away. A dial you
@@ -1118,15 +1123,6 @@ function row(
     bind.className = "lfo-bind";
     bind.title = "Sweep this value";
     bind.textContent = "∿";
-    // SPEECH REACH, next to the oscillator: click to arm, drag the slider to
-    // the far point speech should pulse to, click again to set. The dial then
-    // walks back to where it was — that setting is the start of the journey,
-    // the saved point is the end, and the syllables drive the travel.
-    const reach = document.createElement("button");
-    reach.type = "button";
-    reach.className = "lfo-bind reach";
-    reach.title = "Speech reach — click, drag the slider to the far point, click again to set. Shift-click clears.";
-    reach.textContent = "◉";
     const val = document.createElement("div");
     val.className = "val";
     val.title = `${TITLES[key] ?? label} — ${named[index]}`;
@@ -1139,48 +1135,45 @@ function row(
     tag.className = "vtag";
     tag.textContent = named[index];
     val.appendChild(tag);
+    // ×VOICE FOR EVERY VALUE. The same data as the ◉ reach — speech[id] is
+    // "this value at full voice" — worn as a slider so setting it is one
+    // drag. Unset, it shadows the dial and modulates nothing; amber, it is
+    // the far end of the syllable journey. Double-click clears.
+    const xv = document.createElement("input");
+    xv.type = "range";
+    xv.className = "xv";
+    xv.min = String(min);
+    xv.max = String(max);
+    xv.step = String(step);
+    xv.title = "×voice — the value this dial reaches at full voice. Double-click to clear.";
+    const paintXv = () => {
+      const end = speech[lfoKey(key, index)];
+      xv.classList.toggle("set", end !== undefined);
+      xv.value = String(end !== undefined ? end : live[index]);
+    };
+    xv.addEventListener("input", () => {
+      speech[lfoKey(key, index)] = Number(xv.value);
+      rememberSpeech();
+      xv.classList.add("set");
+    });
+    xv.addEventListener("dblclick", () => {
+      delete speech[lfoKey(key, index)];
+      rememberSpeech();
+      paintXv();
+    });
+    input.addEventListener("input", () => {
+      if (speech[lfoKey(key, index)] === undefined) xv.value = input.value;
+    });
+    val.appendChild(xv);
     const fxbtns = document.createElement("div");
     fxbtns.className = "fxbtns";
     fxbtns.appendChild(bind);
-    fxbtns.appendChild(reach);
     val.appendChild(fxbtns);
     vals.appendChild(val);
 
     const panel = lfoPanel(key, index, live, min, max, onChange);
     wrap.appendChild(panel);
-    const paintReach = () => {
-      const id = lfoKey(key, index);
-      reach.classList.toggle("arm", reachArming?.id === id);
-      reach.classList.toggle("on", reachArming?.id !== id && speech[id] !== undefined);
-    };
-    reach.addEventListener("click", (event) => {
-      const id = lfoKey(key, index);
-      if (event.shiftKey) {
-        delete speech[id];
-        if (reachArming?.id === id) reachArming = null;
-        rememberSpeech();
-        paintReach();
-        return;
-      }
-      if (reachArming?.id === id) {
-        // Second press: the slider stands at the far point. Save it as the
-        // end of the journey and walk the dial back to the start.
-        speech[id] = live[index];
-        const from = reachArming.from;
-        reachArming = null;
-        live[index] = from;
-        input.value = String(from);
-        out.textContent = from.toFixed(3);
-        onChange(live.slice());
-        push();
-        rememberSpeech();
-        paintReach();
-        return;
-      }
-      reachArming = { id, from: live[index] };
-      paintReach();
-    });
-    paintReach();
+    paintXv();
     const paint = () => {
       const on = lfos[lfoKey(key, index)]?.on === true;
       bind.classList.toggle("on", on);
@@ -1705,6 +1698,9 @@ async function savePreset(): Promise<void> {
  *  topbar slider rather than a desk strip — a strip for it invited soloing
  *  the body's size, which is how the composite once shrank to a dot. */
 const HIDDEN_FIELDS = new Set(["linkGain", "linkBow", "linkRange", "linkLimb", "presence"]);
+/** Single VALUES hidden from the cards while their data stays live: the
+ *  lattice pair's ×voice element is covered by the generic ×voice slider. */
+const HIDDEN_VALUES = new Set(["lattice:1"]);
 let channel = "";
 /** Channels auditioning their talking journey WITHOUT audio: a synthetic
  *  syllable envelope drives their speech reach, a stand-in for a line being
@@ -2951,15 +2947,19 @@ let deskHidden = ((): boolean => {
 function paintDesk(): void {
   document.body.classList.toggle("desk-hidden", deskHidden);
   $("deskToggle").classList.toggle("on", deskHidden);
+  $("deskMin").textContent = deskHidden ? "▴" : "▾";
+  $("deskMin").title = deskHidden ? "Restore the desk" : "Minimise the desk";
 }
 
-$("deskToggle").addEventListener("click", () => {
+function toggleDesk(): void {
   deskHidden = !deskHidden;
   try {
     localStorage.setItem(storageKey("deskHidden"), deskHidden ? "1" : "0");
   } catch { /* fine */ }
   paintDesk();
-});
+}
+$("deskToggle").addEventListener("click", toggleDesk);
+$("deskMin").addEventListener("click", toggleDesk);
 paintDesk();
 
 /** The console's physical size, dragged from the grip above the transport.

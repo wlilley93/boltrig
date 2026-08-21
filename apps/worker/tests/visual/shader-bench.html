@@ -105,6 +105,10 @@
       /* THE GRIP. A thin bar between stage and console; dragging it rescales
          the desk — fader travel, bus sliders — and the whole console follows,
          stage taking up the difference. */
+      /* ABOVE THE STAGE. #stage is positioned (inset 0) and so paints over
+         later static siblings — without a z-index of their own the grip and
+         the console are underneath the canvas and never see a pointer. */
+      #splitter, #console { position: relative; z-index: 2; }
       #splitter {
         grid-row: 3; grid-column: 1; height: 12px; cursor: ns-resize;
         background: rgba(11, 11, 15, .3); border-top: 1px solid #1c1c22;
@@ -135,6 +139,11 @@
       #saveState {
         width: auto; flex: 0 0 auto; padding: 0 12px; height: 30px;
         border-radius: 15px; font-size: 11px;
+      }
+      /* Minimise/maximise the desk, top right of the console. */
+      #deskMin {
+        margin-left: auto; width: 30px; flex: 0 0 auto; height: 30px;
+        border-radius: 15px; font-size: 12px;
       }
       #states button {
         width: auto; padding: 0 14px; height: 30px; border-radius: 15px;
@@ -230,6 +239,13 @@
         font-size: 8.5px; line-height: 1.15; color: #9a9aa4;
         max-width: 62px; text-align: center; white-space: normal;
       }
+      /* ×voice: dim while shadowing the dial, amber once it names a journey.
+         input.xv, so this outweighs the vertical-fader rule above it. */
+      #bus .row .val input.xv {
+        writing-mode: horizontal-tb; direction: ltr;
+        width: 46px; height: 12px; margin: 1px 0 0; accent-color: #3a3a46;
+      }
+      #bus .row .val input.xv.set { accent-color: #ffb060; }
       /* The LFO panel folds inside the card instead of stretching it flat. */
       #bus .row .lfo { flex-wrap: wrap; max-width: 210px; justify-content: center; }
       #bus .row .lfo input { width: 58px; }
@@ -520,6 +536,7 @@
       <span class="sep"></span>
       <span class="tlabel">Emotion</span>
       <div id="emotions"></div>
+      <button id="deskMin" type="button" title="Minimise or restore the desk">▾</button>
     </div>
     <div id="mixer"></div>
     <div id="modal">

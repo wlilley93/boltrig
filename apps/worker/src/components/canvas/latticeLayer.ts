@@ -138,6 +138,12 @@ export class LatticeLayer {
     this.ready = true;
   }
 
+  /** Whether a frame is actually on the texture — the deck's fade waits for
+   *  this, so a crossfade never dims into a layer that has no pixels yet. */
+  isReady(): boolean {
+    return this.ready;
+  }
+
   /**
    * The layer, under everything. Skipped entirely at zero gain, contain-fitted
    * so the loop is never cropped. `fullscreen` is the owning passes' triangle
@@ -244,10 +250,16 @@ export class LatticeDeck {
       }
       this.fade = 0;
     }
-    this.fade = Math.min(1, this.fade + dt / 0.8);
     const front = this.slots[this.active];
     const back = this.slots[1 - this.active];
     front.layer.upload(front.el);
+    // THE FADE WAITS FOR PIXELS. Advancing it while the incoming loop is
+    // still decoding faded the retiring loop into a hole — a visible blink
+    // on every state change. The retiring loop holds at full weight until
+    // the new one has a frame on its texture; only then does the cross run.
+    if (this.fade < 1 && (front.layer.isReady() || front.el === null)) {
+      this.fade = Math.min(1, this.fade + dt / 0.8);
+    }
     if (this.fade < 1 && back.el) back.layer.upload(back.el);
     else if (back.el && !back.el.paused) back.el.pause();
   }
@@ -265,9 +277,12 @@ export class LatticeDeck {
     if (!this.map || this.slots.length < 2 || gain <= 0) return;
     const front = this.slots[this.active];
     const back = this.slots[1 - this.active];
-    front.layer.draw(size, warm, gain * this.fade, fullscreen, recolour, scale, fx);
+    // A raised cosine, so the cross leaves and arrives gently rather than
+    // snapping at both ends of a linear ramp.
+    const eased = 0.5 - 0.5 * Math.cos(Math.PI * this.fade);
+    front.layer.draw(size, warm, gain * eased, fullscreen, recolour, scale, fx);
     if (this.fade < 1 && back.el) {
-      back.layer.draw(size, warm, gain * (1 - this.fade), fullscreen, recolour, scale, fx);
+      back.layer.draw(size, warm, gain * (1 - eased), fullscreen, recolour, scale, fx);
     }
   }
 
