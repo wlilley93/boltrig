@@ -57,12 +57,14 @@ from .audit_read_contract import AuditReadContract
 from .workflow_trigger_contract import WorkflowTriggerStoreContract
 from .workflow_schedule_contract import WorkflowScheduleStoreContract
 from .authored_definitions_contract import AuthoredDefinitionStoreContract
+from .capability_routing_contract import CapabilityRoutingStoreContract
 from .eval_cases import EvalCaseStoreContract
 from .execution_search_contract import ExecutionSearchContract
 from .credential_references import CredentialReferenceContract
 from .ai_key_proposals import AiKeyProposalStoreContract
 from .channel_gateway_contract import ChannelGatewayStateContract
 from .conversation_contract import ConversationStoreContract
+from .agent_mailbox_contract import AgentMailboxStoreContract
 from .mcp_lifecycle import McpLifecycleStoreContract
 from .model_endpoint_contract import ModelEndpointStoreContract
 # List pages clamp to MAX_WORK_PAGE/DEFAULT_WORK_PAGE so growing tenants stay bounded.
@@ -95,16 +97,15 @@ def clamp_observability_page(limit: int) -> int:
 def clamp_memory_list(limit: int) -> int:
     """Clamp a caller-supplied memory-list page size into [1, MAX_MEMORY_LIST]."""
     return max(1, min(int(limit), MAX_MEMORY_LIST))
-
 @runtime_checkable
 class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStoreContract,
             BackgroundJobStoreContract, AuditReadContract, IdempotencyStoreContract, GuardedWritesContract,
             CapabilityStoreContract, RealtimeCallStoreContract, PasswordResetStoreContract,
             WorkflowTriggerStoreContract, WorkflowScheduleStoreContract,
-            AuthoredDefinitionStoreContract,
+            AuthoredDefinitionStoreContract, CapabilityRoutingStoreContract,
             EvalCaseStoreContract, ExecutionSearchContract,
             CredentialReferenceContract, AiKeyProposalStoreContract,
-            ChannelGatewayStateContract, ConversationStoreContract,
+            ChannelGatewayStateContract, ConversationStoreContract, AgentMailboxStoreContract,
             McpLifecycleStoreContract, ModelEndpointStoreContract, Protocol):
     # --- permissions ---
     async def get_tenant_permissions(self, tenant_id: str) -> TenantPermissions: ...
@@ -158,6 +159,18 @@ class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStore
     ) -> bool: ...
     async def transition_work_item_status(
         self, tenant_id: str, item_id: str, *, expected: WorkStatus, new_status: WorkStatus
+    ) -> bool: ...
+    # The status CAS with payload: also clears the lease and stamps ``result``
+    # in the SAME conditional write, so a sweeper settling an item can carry its
+    # cancel reason without the read-then-write window of update_work_item.
+    async def transition_work_item_settled(
+        self,
+        tenant_id: str,
+        item_id: str,
+        *,
+        expected: WorkStatus,
+        new_status: WorkStatus,
+        result: dict[str, object],
     ) -> bool: ...
     async def list_work_items(
         self,
@@ -240,6 +253,7 @@ class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStore
     async def create_hitl_request(self, req: HITLRequest) -> None: ...
     async def get_hitl_request(self, tenant_id: str, req_id: str) -> HITLRequest | None: ...
     async def list_pending_hitl(self, tenant_id: str) -> list[HITLRequest]: ...
+    async def list_answered_hitl(self, tenant_id: str) -> list[HITLRequest]: ...
     async def list_hitl_requests_for_requester(
         self,
         tenant_id: str,
@@ -259,6 +273,18 @@ class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStore
     # --- audit (hash chain head + append + query) ---
     async def audit_head(self, tenant_id: str) -> tuple[int, str | None]: ...
     async def audit_append(self, event: AuditEvent) -> None: ...
+    # The durable audit outbox (SEC-16): an append that faulted durably defers
+    # its (already-scrubbed, chain-field-free) payload; the janitor drains it.
+    async def audit_outbox_enqueue(
+        self, tenant_id: str, payload: dict[str, Any], append_error: str | None
+    ) -> None: ...
+    async def audit_outbox_due(
+        self, tenant_id: str, now: datetime, limit: int = 100
+    ) -> list[Any]: ...
+    async def audit_outbox_delete(self, outbox_id: int) -> None: ...
+    async def audit_outbox_mark_failed(
+        self, outbox_id: int, append_error: str, next_retry_at: datetime
+    ) -> None: ...
     async def audit_query(
         self, tenant_id: str, run_id: str | None = None, limit: int = 200
     ) -> list[AuditEvent]: ...
@@ -302,8 +328,7 @@ class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStore
     async def latest_audit_anchor(
         self, tenant_id: str, workspace_id: str | None = None
     ) -> AuditRollupAnchor | None: ...
-    async def list_audit_anchors(
-        self, tenant_id: str, workspace_id: str | None = None, limit: int = 200
+    async def list_audit_anchors(        self, tenant_id: str, workspace_id: str | None = None, limit: int = 200
     ) -> list[AuditRollupAnchor]: ...
 
     # --- budgets ---

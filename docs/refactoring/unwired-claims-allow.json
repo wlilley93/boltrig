@@ -11,7 +11,8 @@
     "which nothing had ever started). These five are the remainder.",
     "2026-07-26: entries gained owner/expires, matching structural-exemptions.json and health-claim-exemptions.json. They had neither, which made every one an ETERNAL SILENT waiver - the shape this whole programme exists to remove, in the file that waives its own gate.",
     "2026-07-30: the gate gained PART 3, manifest knobs - a config key the record offers that no Python reads. It found on_session_end's four siblings. They are waived to a NEAR expiry, not the file's usual year-end, because two of them are live UI switches and a lying switch should not sit behind a twelve-month waiver.",
-    "2026-08-18: three names the gate had been reporting on the default branch. None is a false claim - two are inversion points with no in-tree caller by design, and the third is a documented deferral the source itself states in prose. Waived rather than deleted because each is exercised by tests that pin real behaviour."
+    "2026-08-18: three names the gate had been reporting on the default branch. None is a false claim - two are inversion points with no in-tree caller by design, and the third is a documented deferral the source itself states in prose. Waived rather than deleted because each is exercised by tests that pin real behaviour.",
+    "2026-08-19: the provenance store's two halves, arriving with capability doctrine step 3 (e39c2c1d). Both are implemented, fenced by RLS and pinned by a parity test that drives the Mem and PG stores through the same cases; neither has a production caller yet because the model-facing read that would mint and resolve refs is the next step of the same programme. Waived to a NEAR expiry rather than the file's usual year-end, because a deferral inside an in-flight programme should come back while that programme is still in flight. Waived by the merge pen-holder, not by their author, who was interrupted; if the intended caller differs from the one named here, correct the blocker rather than the expiry."
   ],
   "allow": {
     "accept_once": {
@@ -80,12 +81,6 @@
       "blocker": "principal:PRINCIPAL-2026-07-27-ROUTE-BY-INTENT",
       "reason": "Intent-based retrieval. The whole chain below it is unreached: this function has no production caller, `WorkflowLibrary.match` has only this one, and `learn_from_success` is gated on GENERATED_WORKFLOW_KEY, which nothing writes. Production selects a workflow by explicit id. Waived expressly by [2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001, whose exceptions clause names it, against the Principal question at docs/decisions/0019-route-by-intent-is-the-principals.md: should the pump route an unaddressed item by intent at all? That changes what runs for a tenant, so it is not an engineering call. On expiry without an answer the order's ratio applies with no further order: retire."
     },
-    "redact": {
-      "owner": "kernel-maintainers",
-      "expires": "2026-10-31",
-      "reason": "`pii.redact` has NO caller in boltrig/ - found by the transitive reachability gate, which was the first thing to look past the first hop. It is not dead code in the ordinary sense: it works, it is unit-tested, and SEC-13 advertised it as \"PII is detected and redacted before it leaves the boundary\", which no path enforced. SEC-13's description has been corrected to what is true rather than the function deleted, because WHICH boundary should redact is a genuine design question and not a gap to close on the way past: `manifest.privacy.pii_redaction` and `redact_fields` are already parsed and stored, so the operator-facing knob exists and reads as live. Note the audit path is separately and really scrubbed by `redact_identity` (SEC-42), so this is an unapplied capability, not an unprotected one.",
-      "blocker": "design:which-outbound-boundary-redacts"
-    },
     "incremental": {
       "owner": "memory-maintainers",
       "expires": "2026-09-30",
@@ -109,6 +104,18 @@
       "expires": "2026-12-31",
       "reason": "The out-of-tree character hook, called at import by a private bundle that is not in this repository - the same inversion as a manifest module_ref resolving an adapter's build() factory, which reachability-roots.json already records for the cloud_audio builders. It lives in the hand-written personas.py precisely so a regeneration of the GENERATED personas_shipped.py cannot destroy it (personas_shipped.py:7-9). Its refusals - a blank id, a blank system prompt, and overwriting a shipped character - are pinned by tests/test_chat_persona.py:244-257. BLOCKER design: an in-tree caller would defeat the point, since the hook exists so a private character need not be shipped inside the kernel container.",
       "blocker": "design:out-of-tree-character-inversion"
+    },
+    "observe_entities": {
+      "owner": "store-maintainers",
+      "expires": "2026-10-31",
+      "reason": "The minting half of the opaque record ref. Records a sighting and returns brref_<type>_<opaque>, deterministic through a unique index rather than derivation - e39c2c1d explains why a derived ref would be an offline confirmation oracle. Exercised by tests/store/test_provenance_store_parity.py, which drives Mem and PG through identical cases, and composed into CapabilityRoutingStore (boltrig/store/capability_routing.py:82,158) so the seam is reachable rather than orphaned. BLOCKER caller: the model-facing capability read that would record a sighting is doctrine step 3/4 work and is not built; agent_capabilities.py is where it would attach.",
+      "blocker": "caller:boltrig/kernel/platform_routes/agent_capabilities.py:1"
+    },
+    "resolve_entity_ref": {
+      "owner": "store-maintainers",
+      "expires": "2026-10-31",
+      "reason": "The resolving half, and the record already names it as mandatory rather than optional: boltrig/models/provenance.py:83 says it 'is the only thing that answers' whether a ref exists, belongs to this tenant and points anywhere, and that a positive is_ref() is never authorisation to skip it. So this is a deferred CALLER, not a false claim - the prose that defers it is in the tree and checkable. Exercised by tests/store/test_provenance_store_parity.py. BLOCKER caller: the same unbuilt model-facing read as observe_entities; the two land together or neither does.",
+      "blocker": "caller:boltrig/kernel/platform_routes/agent_capabilities.py:1"
     }
   }
 }

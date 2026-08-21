@@ -43,6 +43,8 @@ import {
   FACET_FRAG,
   FACET_STRIDE,
   FACET_VERT,
+  MEMBRANE_FRAG,
+  MEMBRANE_VERT,
   VEIN_FRAG,
   VEIN_VERT,
 } from "./shadersUltron";
@@ -74,6 +76,7 @@ export interface UltronDrive {
 import {
   drawDendrite,
   drawIris,
+  drawMembrane,
   drawVein,
   drawCrack,
   drawFacet,
@@ -99,6 +102,7 @@ export class UltronPasses {
     const gl = this.gl;
     this.progs = {
       sim: createProgram(gl, QUAD_VERT, SIM_FRAG),
+      membrane: createProgram(gl, MEMBRANE_VERT, MEMBRANE_FRAG),
       dendrite: createProgram(gl, DENDRITE_VERT, DENDRITE_FRAG),
       vein: createProgram(gl, VEIN_VERT, VEIN_FRAG),
       crack: createProgram(gl, CRACK_VERT, CRACK_FRAG),
@@ -155,7 +159,7 @@ export class UltronPasses {
     this.simulate(d, tuning);
     this.drawScene(d, palette, tuning);
     this.bloom();
-    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), 0.0, tuning.eye);
+    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), 0.0, tuning.eye, tuning.knee);
   }
 
   destroy(): void {
@@ -201,6 +205,9 @@ export class UltronPasses {
       // shares canvas/shadersSim.ts, so the uniform exists in his program too.
       uLayerPace: [0, 0],
       uOuter: tuning.outerShell,
+      // The anchoring pull that dissolves the vein-density combs; see the
+      // uniform's own comment in shadersSim.
+      uHomePull: tuning.homePull,
     }, { uState: 0 });
     this.fullscreen(prog);
     this.ping = 1 - this.ping;
@@ -237,6 +244,7 @@ export class UltronPasses {
       ramp(tuning.lattice, d.energy) * (1 + 0.35 * d.swell),
       (p) => this.fullscreen(p), false, tuning.presence,
       [tuning.latticeBlur, tuning.latticeSat, tuning.latticeGlow]);
+    drawMembrane(gl, this.progs, d, tuning, shared);
     drawDendrite(gl, this.progs, d, tuning, shared);
     drawIris(gl, this.progs, d, tuning, shared);
     drawVein(gl, this.progs, d, tuning, shared);
@@ -270,6 +278,7 @@ export class UltronPasses {
     // Passed in rather than read off a field: this method has no tuning of its
     // own, and reaching for one is what made it fail to compile.
     eye: readonly number[],
+    knee: number,
   ): void {
     const gl = this.gl;
     const [w, h] = this.size;
@@ -284,6 +293,8 @@ export class UltronPasses {
     setUniforms(gl, prog, {
       ...palette, uAspect: w / Math.max(1, h), uBloomGain: 1.05,
       uCore: core, uStarburst: starburst, uEye: eye,
+      // Pre-knee compression for the additive pile-ups; 0 is the identity.
+      uKnee: knee,
     }, { uScene: 0, uBloom: 1 });
     this.fullscreen(prog);
     gl.activeTexture(gl.TEXTURE0);

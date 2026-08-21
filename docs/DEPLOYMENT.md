@@ -12,8 +12,8 @@ generic `latest` image tag.
 
 | Surface | Update source | Promotion rule | Rollback |
 | --- | --- | --- | --- |
-| `dev.boltrig.io` | a reviewed commit on the development branch | explicit atomic static-directory swap on Jellytot | restore the previous `dist.rollback-*` directory |
-| `app.boltrig.io` and other hosted Worker stacks | the `worker-ui@sha256` entry in a protected release's `boltrig-images.env` | exact semantic-tag checkout, `release-validate`, then `release-up` | previous protected tag plus its four digest refs |
+| `dev.boltrig.ai` | a reviewed commit on the development branch | explicit atomic static-directory swap on Jellytot | restore the previous `dist.rollback-*` directory |
+| `app.boltrig.ai` and other hosted Worker stacks | the `ui@sha256` entry in a protected release's `boltrig-images.env` | exact semantic-tag checkout, `release-validate`, then `release-up` | previous protected tag plus its four digest refs |
 | already-installed signed desktop apps | `latest.json` attached to the latest stable **full** GitHub release | Tauri verifies the selected platform package with the public key compiled into the app | install a previous signed package explicitly; the updater never follows an image or branch |
 | pinned server products such as Opbox | operator-selected protected release tag and that release's `boltrig-images.env` | explicit maintenance-window validation and restart | retain and reapply the previous tag/environment pair |
 
@@ -34,7 +34,7 @@ Pinned server products deliberately have no automatic “follow latest” mode.
 Automation may notify an operator that a newer protected tag exists, but it must
 not download or start it without selecting the tag, verifying the image/SBOM/
 provenance set, and retaining the previous tag as rollback. This keeps an Opbox
-deployment reproducible even when `dev.boltrig.io` advances several times a day.
+deployment reproducible even when `dev.boltrig.ai` advances several times a day.
 
 ## Deploy a signed release
 
@@ -84,9 +84,53 @@ The old Operator application, image, deployment overlay and browser path have
 been removed. The kernel, dispatcher, database, identities, conversations and
 run state remain unchanged by this presentation cleanup.
 
+### Public hostnames
+
+`boltrig.ai` is the product domain as of 2026-08-18. The routing lives in the
+host Caddy on `jellytot-prod` at `/etc/caddy/Caddyfile`, which is **not in this
+repository**, so the table is restated here and `scripts/cf-wire-boltrig.py`
+carries the same list for the DNS and tunnel side.
+
+| Hostname | Serves |
+| --- | --- |
+| `boltrig.ai`, `www.boltrig.ai` | the marketing site from `/srv/boltrig-marketing` |
+| `app.boltrig.ai` | Worker on `127.0.0.1:8622`, with Operator on `:8620` as a declared fallback |
+| `dev.boltrig.ai` | the preview: `:1420` static, `:8629` for `/v1`, `/healthz`, `/readyz` |
+| `boltrig.io`, `www.boltrig.io`, `boltrig.dev`, `www.boltrig.dev` | 301 to `https://boltrig.ai{uri}` |
+| `app.boltrig.io` | 301 to `https://app.boltrig.ai{uri}` |
+| `dev.boltrig.io` | 301 to `https://dev.boltrig.ai{uri}`, **except** the API legs |
+
+A REDIRECT SOURCE STILL NEEDS ITS DNS RECORD AND ITS INGRESS RULE. Caddy issues
+the 301 on the box, so the request has to arrive before it can be redirected;
+removing a retired hostname from `cf-wire-boltrig.py` breaks it rather than
+retiring it.
+
+`dev.boltrig.io` keeps `/v1`, `/healthz` and `/readyz` proxied rather than
+redirected, and that exception is load-bearing. `VITE_API_BASE` is baked into
+the bundle as an absolute URL, and `dist` deliberately keeps the previous
+release's chunks alongside the current one so an open tab survives a release.
+Those older chunks call `https://dev.boltrig.io/v1`. Redirecting the API would
+break exactly the tabs that compatibility copy protects: a browser does not
+follow a redirect on a CORS preflight, and several clients downgrade a
+redirected POST to GET. The exception can go once
+
+```bash
+grep -rl dev.boltrig.io /home/jellytot/boltrig-dev/dist/assets/
+```
+
+returns nothing. Until then the kernel names both hostnames in
+`BOLTRIG_ALLOWED_HOSTS`, so the leg is allow-listed rather than smuggled through
+on a `Host` header rewritten to a value the kernel already trusts.
+
+**`docker restart` does not reload an `--env-file`.** It replays the container's
+baked environment; the file is read once, at create time. Editing
+`/home/jellytot/boltrig-dev/backend.env` and restarting leaves the old values in
+place while `/healthz` goes green, so the change looks like it silently did
+nothing. Recreate the container instead.
+
 ### Jellytot development preview
 
-`dev.boltrig.io` is a development deployment on `jellytot-prod`; it is not a
+`dev.boltrig.ai` is a development deployment on `jellytot-prod`; it is not a
 production release path. From the development Mac, Jellytot is reached through
 the existing cable relay:
 
@@ -135,9 +179,9 @@ candidate aside, restore the rollback directory, and restart.
 Acceptance requires all three public endpoints to return HTTP 200:
 
 ```text
-https://dev.boltrig.io/
-https://dev.boltrig.io/healthz
-https://dev.boltrig.io/readyz
+https://dev.boltrig.ai/
+https://dev.boltrig.ai/healthz
+https://dev.boltrig.ai/readyz
 ```
 
 Keep the static rollback and the separately named backend rollback until the
@@ -752,7 +796,7 @@ For a full release, configure the protected release-environment variable:
 BOLTRIG_DESKTOP_DOWNLOAD_URL=https://<reviewed-release-page>
 ```
 
-The candidate build accepts this only for the `worker-ui` image, requires an
+The candidate build accepts this only for the `ui` image, requires an
 absolute HTTPS URL without embedded credentials, and compiles it into that
 authenticated UI. A `core` release deliberately bakes an empty value because it
 ships no desktop packages. Local Compose development can use the same variable;

@@ -231,7 +231,7 @@ function FleetModalShell({
         if (active && event.target === event.currentTarget) onClose();
       }}
       role="presentation"
-      {...(active ? {} : { inert: "" })}
+      inert={!(active)}
     >
       <section
         aria-label={ariaLabel}
@@ -567,7 +567,7 @@ export function PermanentFleetTopology({
           event.preventDefault();
           event.stopPropagation();
         } : undefined}
-        {...(hasOverlay ? { inert: "" } : {})}
+        inert={hasOverlay}
       >
       <div className="fleet-summary">
         <div className="fleet-spend-summary">

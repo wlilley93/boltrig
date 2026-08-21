@@ -1,9 +1,13 @@
 import { useState } from "react";
 
-import { appliedTheme, toggleTheme } from "../../theme";
+import { appliedTheme, forcedThemeOverride, toggleTheme } from "../../theme";
 
 export function ThemeToggle() {
   const [theme, setTheme] = useState(appliedTheme);
+  // A `?theme=` page override clamps the palette for this load; toggling from
+  // a forced state would silently WRITE a real preference the person never
+  // chose (toggleTheme derives from the stamped attr), so the control hides.
+  if (forcedThemeOverride()) return null;
   return (
     <button
       aria-label="Toggle theme"

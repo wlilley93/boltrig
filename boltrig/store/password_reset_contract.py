@@ -26,3 +26,9 @@ class PasswordResetStoreContract(Protocol):
     ) -> PasswordResetResult | None:
         """Atomically consume, rotate password, clear clamp, and revoke sessions."""
         ...
+
+    async def revoke_user_sessions(
+        self, tenant_id: str, user_id: str, *, keep_token_hash: str | None = None
+    ) -> int:
+        """Revoke the identity's other sessions after a self-service rotation."""
+        ...

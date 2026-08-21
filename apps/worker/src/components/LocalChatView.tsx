@@ -109,13 +109,15 @@ function LocalChatContent({
         {composer}
       </Welcome>}
       {controller.messages.map((message) => (
-        <Message key={message.id} message={message} tech={false} />
+        <Message key={message.id} message={message} tech={false}
+          onDisplayReply={(text) => controller.send(text, [])} />
       ))}
       {controller.events.length > 0 && <LiveTurn
         events={controller.events}
         turn={live}
         tech={false}
         startedAt={null}
+        onDisplayReply={(text) => controller.send(text, [])}
       />}
       {controller.error && <p className="notice" role="alert">{controller.error}</p>}
       {speechError && <p className="notice" role="status">{speechError}</p>}
@@ -146,6 +148,10 @@ function LocalComposer({
     attachmentLimits={LOCAL_ATTACHMENT_LIMITS}
     attachmentsDisabled
     agentRuntime="local"
+    agents={[]}
+    agentAddress=""
+    agentReady
+    agentSelectionLocked
     busy={controller.busy}
     closed={false}
     conversationKey={conversationId}
@@ -161,6 +167,7 @@ function LocalComposer({
     onChange={controller.setDraft}
     onCommandPalette={onCommandPalette}
     onModelChoice={() => undefined}
+    onAgentAddress={() => undefined}
     onSend={(message, attachments) => {
       onPrimeSpeech();
       return controller.send(message, attachments);

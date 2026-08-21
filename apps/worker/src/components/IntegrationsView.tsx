@@ -24,6 +24,7 @@ import {
   governedResultReason,
   useExactApprovalFinalizer,
 } from "./ExactApprovalFinalizer";
+import { ConnectionSurfaceList, connectionRowMeta } from "./integrations/ConnectionSurface";
 import { ManualSecretSetup } from "./integrations/ManualSecretSetup";
 import {
   AddPluginModal,
@@ -848,7 +849,6 @@ function IntegrationRow({
   const health = connection ? integrationHealthPresentation(connection.health) : null;
   const certification = certificationPresentation(entry.certification);
   const method = connectionMethod(entry);
-  const enabledTools = connection?.enabled_tools ?? [];
   const canStart = canStartIntegrationSetup(entry, apiState);
   const detailId = `plugin-detail-${safeDomId(entry.id)}`;
 
@@ -877,8 +877,8 @@ function IntegrationRow({
           </span>
         </span>
         <span className="plugins-row-status">
-          {connected && enabledTools.length > 0 && (
-            <span className="plugins-row-meta">{enabledTools.length} {enabledTools.length === 1 ? "verb" : "verbs"}</span>
+          {connected && connectionRowMeta(connection) && (
+            <span className="plugins-row-meta">{connectionRowMeta(connection)}</span>
           )}
           {health ? (
             <>
@@ -896,14 +896,7 @@ function IntegrationRow({
         <div className="plugins-row-detail" id={detailId} role="region" aria-label={`${entry.label} details`}>
           <p className="plugins-access-copy">{entry.access_copy ?? entry.description}</p>
 
-          {enabledTools.length > 0 && (
-            <div className="plugins-tool-list">
-              <span>Enabled tools</span>
-              <div>
-                {enabledTools.map((tool) => <code key={tool}>{tool}</code>)}
-              </div>
-            </div>
-          )}
+          <ConnectionSurfaceList connection={connection} />
 
           <div className="plugins-facts">
             <Fact label="certification" value={certificationFact(entry)} />

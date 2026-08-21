@@ -51,7 +51,7 @@ jobs:
         run: make python-audit sast iac-scan PY=python
 
       - name: Scan complete Git history for secrets
-        run: make secret-scan
+        run: make secret-scan PY=python
 
       - name: Lint GitHub Actions workflows
         run: make actionlint
@@ -74,14 +74,14 @@ jobs:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           languages: ${{ matrix.language }}
           build-mode: none
           queries: security-extended
 
       - name: Analyze
-        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           category: /language:${{ matrix.language }}
 
@@ -99,7 +99,7 @@ jobs:
           - image: fleet
             dockerfile: deploy/fleet.Dockerfile
             context: .
-          - image: worker-ui
+          - image: ui
             dockerfile: apps/worker/Dockerfile
             context: .
           - image: backup

@@ -181,10 +181,16 @@ def test_authenticated_projection_is_redacted_and_marks_every_separate_surface(
         "http_adapters",
         "model_providers_and_embeddings",
     }
-    assert all(
-        item["manifest_network_policy"] == "not_applied"
-        for item in coverage.values()
+    # the manifest air-gap / domain-list posture now BINDS the http-adapter and
+    # external-MCP legs (SEC-52); browser and provider transports still run
+    # their own policies, and the projection must say so either way.
+    assert coverage["browser"]["manifest_network_policy"] == "not_applied"
+    assert (
+        coverage["model_providers_and_embeddings"]["manifest_network_policy"]
+        == "not_applied"
     )
+    assert coverage["external_mcp"]["manifest_network_policy"] == "applied"
+    assert coverage["http_adapters"]["manifest_network_policy"] == "applied"
 
     client = TestClient(create_app(kernel, platform={}))
     response = client.get(
@@ -214,7 +220,8 @@ def test_worker_contract_refuses_universal_coverage_or_raw_network_authoring():
     sdk = (ROOT / "sdks/web/src/types.ts").read_text(encoding="utf-8")
     bootstrap = (ROOT / "boltrig/api/bootstrap.py").read_text(encoding="utf-8")
 
-    assert '"ca_bundle": net.ca_bundle' in bootstrap
+    assert "net.as_egress_config()" in bootstrap  # the manifest network section
+    # reaches web.fetch (and the other adapter legs) as one typed projection
     assert "universal_egress_control: false;" in sdk
     assert "sensitive_values_redacted: true;" in sdk
     assert "not a universal egress firewall" in worker

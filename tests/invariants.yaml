@@ -265,11 +265,18 @@ invariants:
       - tests/security/test_channel_discord_roundtrip.py::test_discord_adapter_round_trip_against_a_test_kernel
       - tests/security/test_channel_signal_roundtrip.py::test_signal_adapter_round_trip_against_a_test_kernel
       - tests/security/test_channel_xai_voice_roundtrip.py::test_voice_adapter_round_trip_against_a_test_kernel
+  CHAN-PROV-01:
+    description: 'Every accepted human-channel work item carries a kernel-authored provenance stamp that binds the authenticated channel/provider, internal subject, resolved named-agent target and complete reply route while treating provider metadata as bounded untrusted data. The public API/SDK projection supplies human-readable provider/channel/from/to labels without raw provider user, message or conversation identifiers; agent prompts receive only the safe projection inside an untrusted envelope. Slack root and threaded events preserve complete outbound targets, so provenance and round-trip delivery cannot disagree.'
+    tests:
+      - tests/unit/test_channel_provenance.py::test_kernel_stamp_overwrites_forgery_and_public_view_omits_provider_ids
+      - tests/unit/test_channel_provenance.py::test_channel_context_enters_the_prompt_as_untrusted_data
+      - tests/security/test_channel_slack_roundtrip.py::test_slack_adapter_round_trip_against_a_test_kernel
   SEC-178:
-    description: 'Channel addressing is routing data, not authority - intake resolves the target (explicit sender target, else the channel config chat->target mapping, else the tier-1 CoS default) and stamps it plus the reply route on the work item; identity stays binding-row-authoritative. Governed authoring validates targets against a backend-owned, caller-scoped catalogue of CoS, visible permanent departments and active workspace-visible workflows; existing unknown values project as stale_or_unsupported and arbitrary capability/agent pinning is never advertised. A target of the form "workflow:<wf_id>" is honored by the pump BEFORE any CoS routing: the named workflow is triggered through the durable library path (checkpointed, engine task) under the SENDER''s grants - every step chokepoint-checked - and an unknown workflow fails closed exactly like an unroutable department (parked AWAITING_HUMAN with a HITL filed), never a silent fallthrough to CoS routing.'
+    description: 'Channel addressing is routing data, not authority. Intake resolves one target in this order: explicit safe address, exact channel/thread rule, channel default, tenant-authored enabled named-agent default, then legacy cos only when no named-agent roster exists; a roster with no default parks as system:unassigned rather than selecting by row order or reviving legacy topology. Identity remains binding-row-authoritative. Governed authoring validates targets against a backend-owned caller-scoped catalogue of enabled visible named agents and active workspace-visible workflows; disabled/hidden agents are not leaked. A workflow:<wf_id> target is honored before agent routing through the durable governed path, and unknown workflows park for human review rather than falling through.'
     tests:
       - tests/security/test_channel_addressing.py::test_intake_defaults_to_the_tier1_chief_of_staff
-      - tests/security/test_channel_addressing.py::test_an_explicit_target_addresses_a_tier2_subagent
+      - tests/security/test_channel_addressing.py::test_an_explicit_target_addresses_a_named_agent
+      - tests/security/test_channel_addressing.py::test_named_roster_uses_only_authored_default_and_otherwise_parks_unassigned
       - tests/security/test_channel_addressing.py::test_the_channel_config_maps_a_chat_to_a_target
       - tests/security/test_channel_addressing.py::test_a_config_mapped_workflow_target_triggers_the_workflow
       - tests/security/test_channel_addressing.py::test_an_unknown_workflow_target_parks_for_a_human
@@ -755,6 +762,9 @@ invariants:
       - tests/security/test_sensitive_routing.py::test_sensitive_data_routes_to_local_endpoint
       - tests/security/test_sensitive_routing.py::test_spawn_blocks_sensitive_on_hosted_capability
       - tests/security/test_sensitive_routing.py::test_ai_key_profile_cannot_override_governed_model_endpoint
+      - tests/security/test_sensitive_routing.py::test_pii_bearing_payload_routes_local_despite_caller_classification
+      - tests/security/test_sensitive_routing.py::test_clean_payload_still_routes_hosted
+      - tests/security/test_sensitive_routing.py::test_pii_bearing_payload_without_local_endpoint_fails_closed
   SEC-15:
     description: 'Idempotent replay is tenant-, authenticated actor/delegation-, noun/verb-, workspace-, and canonical-request-bound; one atomic owner executes while concurrent reuse fails closed, completed non-secret results replay before execution-side gates, expired pre-execution claims are reclaimable, expired executing claims become reconciliation-required uncertainty, and secret-shaped results are completed uncacheable without persisting bearer material.'
     tests:
@@ -886,7 +896,7 @@ invariants:
       - tests/security/test_rls_auth_binding.py::test_provision_user_binds_tenant_before_the_first_read
       - tests/integration/test_migration_parity.py::test_data_bearing_rls_database_upgrades_from_previous_head
   SEC-13:
-    description: 'A PII redactor exists, detects the catalogued patterns and substitutes [REDACTED:<kind>] for them. It is NOT applied at an outbound boundary: `pii.redact` has no production caller, and `manifest.privacy.pii_redaction` is parsed and stored but read by nothing. This description used to say "before it leaves the boundary", which was a security guarantee nothing enforced. The audit path IS scrubbed, by `pii.redact_identity` under SEC-42 and CC-OPBOX 4; that is a different, real control. See the `redact` entry in docs/refactoring/unwired-claims-allow.json.'
+    description: 'A PII redactor exists, detects the catalogued patterns and substitutes [REDACTED:<kind>] for them. The detector IS consulted on model egress for ROUTING: at the model-gateway seam (fleet/model_router.outbound_text_classifies_sensitive, fed the outbound prompt by the runtime resolver) a detection classifies the request sensitive and forces the local route even when no caller classified the payload. That wiring classifies only and never mutates - no egress path redacts or rewrites payload text, and `manifest.privacy.pii_redaction` is parsed and stored but read by nothing. The audit path IS scrubbed, by `pii.redact_identity` under SEC-42 and CC-OPBOX 4; that is a different, real control.'
     tests:
       - tests/security/test_budget_and_pii.py::test_pii_redaction
   SEC-14:
@@ -1266,10 +1276,11 @@ invariants:
       - tests/security/test_round_seventeen.py::test_app_containers_are_hardened
       - tests/security/test_round_seventeen.py::test_app_images_run_non_root
   SEC-66:
-    description: 'Inbound webhook replay is defeated - the timestamp is bound into the signed HMAC (t.body) so a captured signature cannot replay under a rewritten timestamp, a signing secret makes a timestamp mandatory, and a stable delivery id dedups a genuine replay so it never mints a second work item (M3).'
+    description: 'Inbound webhook replay is defeated - the timestamp is bound into the signed HMAC (t.body) so a captured signature cannot replay under a rewritten timestamp, the boltrig-native scheme makes a timestamp mandatory, a platform raw-bytes scheme that supplies one (Stripe t=) binds and window-checks it the same way over the raw body, and a stable delivery id dedups a genuine replay so it never mints a second work item (M3).'
     tests:
       - tests/security/test_channel_inbound.py::test_webhook_replay_with_rewritten_timestamp_rejected
       - tests/security/test_channel_inbound.py::test_duplicate_delivery_not_double_ingested
+      - tests/security/test_channel_inbound.py::test_stripe_style_platform_signature_binds_timestamp_to_raw_body
   SEC-67:
     description: 'Inbound channel intake is rate-limited before a work item is minted - per-channel and per-(channel, sender) fixed-window limits return 429 without creating a work item, so an abusive channel or sender cannot drive unbounded model spend (M5; per-tenant intake budget is the follow-on #81).'
     tests:
@@ -1706,9 +1717,10 @@ invariants:
     tests:
       - tests/security/test_ai_keys.py::test_set_key_route_is_role_scoped
   FR-AIKEY-03:
-    description: 'An explicitly approved scoped AI key is reconciled into a server-owned Bifrost provider-key plus exact-model virtual-key binding before it becomes a runnable chat default. The response exposes only gateway_ready; chat projects the exact personal model after reload instead of an invented Automatic choice, and an already-approved sealed row can be reconciled without resubmitting plaintext.'
+    description: 'An approved scoped AI key is reconciled into a server-owned Bifrost provider-key plus exact-model virtual-key binding before it becomes a runnable chat default. A member''s OWN user-level key completes inside the submit call - the kernel answers the approval its requester would be asked for, with sealing, single consumption and keys-only audit unchanged - while any shared scope still parks as pending_human for the explicit approve route. The response exposes only gateway_ready; chat projects the exact personal model after reload instead of an invented Automatic choice, and an already-approved sealed row can be reconciled without resubmitting plaintext.'
     tests:
-      - tests/security/test_ai_keys.py::test_onboarding_approval_is_explicit_and_activates_the_exact_saved_model
+      - tests/security/test_ai_keys.py::test_onboarding_connects_your_own_provider_in_one_press
+      - tests/security/test_ai_keys.py::test_org_level_key_still_pends_and_the_approve_route_finalizes_it
       - tests/security/test_ai_keys.py::test_existing_approved_key_can_be_reconciled_without_resubmitting_secret
       - tests/security/test_bifrost_user_binding.py::test_scoped_key_provisions_exact_virtual_key_and_seals_it
       - tests/security/test_chat_model_choices.py::test_personal_model_is_the_exact_available_default_after_refresh
@@ -2354,7 +2366,7 @@ invariants:
     tests:
       - tests/security/test_worker_surface_boundary.py::test_worker_only_decision_is_landed_with_attribution
   WRK-02:
-    description: 'Worker is the sole default first-party browser surface: Caddy routes to worker-ui, the old frontend image and cutover overlay do not exist, the retired browser path returns 404, and Worker is produced by the same protected release workflow as every first-party service using a digest-pinned signed image reference.'
+    description: 'Worker is the sole default first-party browser surface: Caddy routes to ui, the old frontend image and cutover overlay do not exist, the retired browser path returns 404, and Worker is produced by the same protected release workflow as every first-party service using a digest-pinned signed image reference.'
     tests:
       - tests/security/test_worker_surface_boundary.py::test_worker_is_the_default_edge_presentation
       - tests/security/test_worker_surface_boundary.py::test_worker_is_a_signed_digest_pinned_first_party_release_image
@@ -2702,7 +2714,7 @@ invariants:
     tests:
       - tests/security/test_model_endpoint_lifecycle.py::test_agent_model_routes_keep_voice_directions_separate_and_credential_free
   SEC-WRK-27:
-    description: 'The permanent fleet has one closed, versioned desired hierarchy and a separate worker-observation contract. Non-ephemeral capability rows are persistent profiles, never liveness evidence. A governed edit appends desired state only, round-trips through Admin manifest export, and reports restart plus next-manifest-apply projection honestly; profile and budget reconciliation remains at that safe boundary and preserves governed rows and spend. At startup build_org consumes the exact Chief/Department routing identity, supported skills, purpose, brief, runtime, model endpoint, depth and cost policy into lazy permanent runtime profiles. Runtime resolution remains per-call, pinned, metered and audited, so startup observations report construction with runtime liveness explicitly unknown and never imply a hot apply, a current worker, a reachable endpoint or an admitted Codex cell. Observation persistence is tenant-scoped and equivalent in memory and PostgreSQL.'
+    description: 'The permanent-fleet authoring surface remains a closed, versioned compatibility bridge with a separate worker-observation contract. Non-ephemeral capability rows are persistent profiles, never liveness evidence. A governed legacy edit appends desired state only, round-trips through Admin manifest export, and reports restart plus next-manifest-apply projection honestly; profile and budget reconciliation remains at that safe boundary and preserves governed rows and spend. Live build_org normalises that input into the flat named roster rather than reconstructing Chief/Department authority. Runtime resolution remains per-call, pinned, metered and audited, so startup observations report construction with runtime liveness explicitly unknown and never imply a hot apply, a current worker, a reachable endpoint or an admitted Codex cell. Observation persistence is tenant-scoped and equivalent in memory and PostgreSQL.'
     tests:
       - tests/security/test_permanent_fleet.py::test_desired_write_is_single_revision_and_projects_only_on_manifest_apply
       - tests/security/test_permanent_fleet.py::test_startup_snapshot_never_claims_current_worker_liveness_or_inactive_fields
@@ -2714,6 +2726,64 @@ invariants:
       - tests/unit/test_permanent_fleet_store.py::test_memory_observation_is_tenant_scoped_and_latest_per_worker
       - tests/unit/test_permanent_fleet_store.py::test_observation_contract_rejects_false_or_overlapping_evidence
       - tests/store/test_postgres_store.py::test_pg_permanent_fleet_observation_is_tenant_scoped_and_upserted
+  FR-REV-01:
+    description: 'Every consequential verb a run completes is appended to the durable run-effect ledger with the exact inverse invocation built at record time, or an honest not_undoable row when no inverse exists; a verb the inverse registry does not know fails closed to not-undoable, and a revert run records nothing (an undo cannot re-enter the ledger).'
+    tests:
+      - tests/unit/test_run_effect_ledger.py::test_gated_success_records_with_its_inverse
+      - tests/unit/test_run_effect_ledger.py::test_unknown_verbs_fail_closed_to_not_undoable
+      - tests/unit/test_run_effect_ledger.py::test_a_revert_run_records_nothing
+  FR-REV-02:
+    description: 'Reverting a run walks its recorded effects newest-first and executes each inverse through the dispatch chokepoint (granted, gated, audited like the forward call); each row is settled by compare-and-swap before its inverse runs so a concurrent revert cannot execute the same inverse twice, and not_undoable rows are reported, never attempted.'
+    tests:
+      - tests/integration/test_run_revert.py::test_revert_executes_inverses_lifo_through_dispatch
+      - tests/integration/test_run_revert.py::test_not_undoable_rows_are_reported_never_attempted
+  FLT-PEER-01:
+    description: 'Live serving composition is a flat roster: every declared named agent is a durable addressable tier-1 peer, the declared default only receives unaddressed intake and has no structural authority, explicit addresses route directly, unknown addresses park, and the old Chief/Department shape is accepted only as a manifest migration input. Named peers own final synthesis and delegate bounded work only to one-task ephemeral children.'
+    tests:
+      - tests/unit/test_named_agent_mailbox.py::test_build_org_composes_only_flat_tier1_named_peers
+      - tests/unit/test_named_agent_mailbox.py::test_ask_commits_one_reply_and_reply_does_not_loop
+      - tests/integration/test_chat.py::test_direct_chat_runs_the_default_named_identity
+      - tests/security/test_channel_addressing.py::test_named_roster_uses_only_authored_default_and_otherwise_parks_unassigned
+  FLT-PEER-02:
+    description: 'Ephemeral workers are task-scoped leaves, not identities: they have no named-agent registry row or mailbox address, agent.send derives its sender only from a kernel-stamped durable tier-1 context, and even an ephemeral whose actor string collides with a named address is refused.'
+    tests:
+      - tests/unit/test_named_agent_mailbox.py::test_kernel_sender_is_unspoofable_and_ephemerals_have_no_mailbox_right
+  SEC-AGENT-01:
+    description: 'Peer messages cross the one governed kernel chokepoint and are tenant-bound, sender-unspoofable immutable envelopes. The authored sender is derived from the tier-1 invocation context, both endpoints must be registered in the same tenant, arbitrary from/reply fields are schema-closed, captured authority is validated again at delivery, explicit denies and the independent tenant ceiling still dominate, and the authority envelope is never exposed by mailbox reads.'
+    tests:
+      - tests/unit/test_named_agent_mailbox.py::test_kernel_sender_is_unspoofable_and_ephemerals_have_no_mailbox_right
+  REL-AGENT-01:
+    description: 'A per-identity turn lease serializes named-agent turns across workers. Delivery attempts carry an unguessable lease token and heartbeat both the turn and delivery fences; a stale worker cannot complete or publish a reply after lease loss. The winning completion atomically settles the immutable input and inserts at most one deterministic reply, so crash replay cannot create duplicate answers.'
+    tests:
+      - tests/unit/test_named_agent_mailbox.py::test_recipient_lease_serializes_workers_and_fences_stale_reply
+      - tests/store/test_store_parity.py::test_named_agent_turn_scheduling_and_delivery_match_on_both_stores
+  REL-AGENT-02:
+    description: 'All wake sources share one transport-neutral named-agent scheduler. Interactive turns outrank queued peer mail, peer mail outranks background work, FIFO breaks ties within a lane, and expired waiters cannot block an identity forever. The same reusable lease seam is used by chat, peer delivery, and filed work, so a logical long-lived agent never runs two model turns concurrently merely because they arrived through different products.'
+    tests:
+      - tests/unit/test_named_agent_mailbox.py::test_turn_scheduler_orders_interactive_peer_then_background
+      - tests/store/test_store_parity.py::test_named_agent_turn_scheduling_and_delivery_match_on_both_stores
+      - tests/integration/test_chat.py::test_direct_chat_runs_the_default_named_identity
+  CONV-AGENT-01:
+    description: 'A named-agent session is durable logical state rather than a resident model process: immutable peer messages are replayed in order through the current serialized turn, every authored body and derived summary re-enters the model in an untrusted envelope, later queued turns are excluded, and long history compacts into append-only summary checkpoints plus a recent verbatim tail. ASK creates one REPLY while TELL and REPLY never auto-reply.'
+    tests:
+      - tests/unit/test_named_agent_mailbox.py::test_ask_commits_one_reply_and_reply_does_not_loop
+      - tests/unit/test_named_agent_mailbox.py::test_continuity_compacts_only_processed_history_plus_recent_tail
+      - tests/unit/test_named_agent_mailbox.py::test_long_lived_dialogue_compacts_past_the_old_thousand_message_edge
+  CONV-AGENT-02:
+    description: 'A human conversation is one chronological turn ledger whose next responder may explicitly change only at an idle turn boundary. Each USER row freezes its recipient_agent_address, each ASSISTANT/TOOL/SYSTEM row freezes its author_agent_address, and both sides of one turn share a stable run_id, so selecting Head of Legal after a CoS turn changes only future routing and the derived agent pile: it never rewrites CoS authorship or immutable peer mail. A new chat resolves either the selected registered agent or the authored intake default; a roster with no default is refused as ambiguous; disabled/unknown agents and active-turn switches are refused before any message, queue, run or selection write. Regeneration preserves the original turn author even if the next-responder projection later changes.'
+    tests:
+      - tests/integration/test_chat.py::test_direct_chat_runs_the_default_named_identity
+      - tests/integration/test_chat.py::test_explicit_agent_switches_between_turns_without_rewriting_history
+      - tests/integration/test_chat.py::test_agent_switch_during_active_turn_is_refused_before_queue_or_mutation
+      - tests/integration/test_chat.py::test_named_roster_without_authored_default_requires_explicit_agent
+      - tests/integration/test_chat.py::test_disabled_named_agent_never_falls_through_to_legacy_runtime
+      - tests/security/test_chat_regenerate.py::test_regenerate_preserves_original_turn_agent_after_next_responder_changes
+      - tests/store/test_store_parity.py::test_conversation_agent_selection_is_compare_and_set_on_both_stores
+  CONV-PROJECT-01:
+    description: 'Projects reuse the existing Workspace aggregate and belong to the human/team, never an agent. Conversation workspace membership moves through an owner-only compare-and-set that changes neither current agent nor historical messages; a target workspace must be active and visible to the owner, an active conversation cannot be dragged, and generic metadata updates cannot silently move it. Filed future turns require the same re-authorized active workspace, while project and agent sidebar piles remain alternate projections over the one conversation ledger.'
+    tests:
+      - tests/integration/test_chat.py::test_conversation_project_move_is_owner_scoped_and_future_turns_use_that_context
+      - tests/store/test_store_parity.py::test_conversation_project_membership_is_compare_and_set_on_both_stores
   DIS-1:
     description: 'A distillation corpus is tenant-fenced by refusal, not by filter: a record or target endpoint outside the corpus tenant raises rather than silently thinning the corpus (decision 0023).'
     tests:

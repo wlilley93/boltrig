@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-19T12:39:22.110Z",
+  "capturedAt": "2026-08-21T14:05:46.316Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,11 +16,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "5be1b5db272ea90b98b60d2d9eea91d8dce923526d8a53be0b35d9794a50c7ca",
-    "digestAfterCapture": "5be1b5db272ea90b98b60d2d9eea91d8dce923526d8a53be0b35d9794a50c7ca",
+    "digestBeforeCapture": "56b42dce57665d55151ff16606fa1841f2734d38ac5ae18059a0b0e497ceb4c6",
+    "digestAfterCapture": "56b42dce57665d55151ff16606fa1841f2734d38ac5ae18059a0b0e497ceb4c6",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/real-brand-mark",
-    "head": "effce8bde5a706e2de7a7df7bcc9a0377c43f367",
+    "branch": "feat/emotion-affordances",
+    "head": "9d06a9f930b7fc8bd86768cd9d04a6840fc372af",
     "dirty": false
   },
   "runner": {
@@ -41,7 +41,7 @@
       "hash": "#/chat",
       "settledSelector": "html[data-visual-ready=\"new-chat\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/new-chat.png",
-      "sha256": "4ccfda1826322a822c94dbc5c946cc3ea64ba24e21096c939f14116b5bffaffb",
+      "sha256": "ad8cb5ba28670d2f0b2733fec94d2866b96c9cd4ae27ca333b3e849c8e8aa22b",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -63,6 +63,8 @@
         "fixtureMisses": [],
         "contractMisses": [],
         "requestedPaths": [
+          "/v1/workspaces",
+          "/v1/named-agents",
           "/v1/conversations?limit=25&offset=0",
           "/v1/me/settings",
           "/v1/orgs/current",
@@ -75,6 +77,7 @@
           "/v1/chat/config",
           "/v1/me/settings",
           "/v1/familiar/phenotype",
+          "/v1/named-agents",
           "/v1/me/settings",
           "/v1/capabilities"
         ]
@@ -88,7 +91,7 @@
       "hash": "#/chat/run-thread",
       "settledSelector": "html[data-visual-ready=\"chat-run\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
-      "sha256": "1cdfba9f3b32158fc5d980fffc8b29fc10c2aac06b328b994f9c7f4607454d32",
+      "sha256": "f7675275b05df42f25d4fc81821f9f4e19a0a0e63f031e60d4e2bb5472a4696e",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -104,12 +107,14 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
         "contractMisses": [],
         "requestedPaths": [
+          "/v1/workspaces",
+          "/v1/named-agents",
           "/v1/conversations?limit=25&offset=0",
           "/v1/me/settings",
           "/v1/orgs/current",
@@ -123,6 +128,7 @@
           "/v1/chat/config",
           "/v1/me/settings",
           "/v1/familiar/phenotype",
+          "/v1/named-agents",
           "/v1/me/settings",
           "/v1/capabilities",
           "/v1/capabilities",
@@ -139,7 +145,7 @@
       "hash": "#/agents",
       "settledSelector": "html[data-visual-ready=\"agents\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/agents.png",
-      "sha256": "1a714bf2ec1fcb9f2c8fe5f158349b3288761288da5196f54e9c743c967acb5b",
+      "sha256": "c1a0a7f87e5e232d4fa611b3bb66c31d0b2e6cdd5a5821461a315203a7987161",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -161,6 +167,8 @@
         "fixtureMisses": [],
         "contractMisses": [],
         "requestedPaths": [
+          "/v1/workspaces",
+          "/v1/named-agents",
           "/v1/conversations?limit=25&offset=0",
           "/v1/me/settings",
           "/v1/orgs/current",
@@ -181,7 +189,7 @@
       "hash": "#/integrations",
       "settledSelector": "html[data-visual-ready=\"plugins\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
-      "sha256": "536d74139264fb187fa29c3abdd32c4dea058e1fcdb2452df256457b6d8e0855",
+      "sha256": "9479e3cd83b628c4f34f85aa6df9e3eabc1c746a801e0803d36c1cb68743d8f3",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -197,12 +205,14 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/plugins.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 5,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
         "contractMisses": [],
         "requestedPaths": [
+          "/v1/workspaces",
+          "/v1/named-agents",
           "/v1/conversations?limit=25&offset=0",
           "/v1/me/settings",
           "/v1/orgs/current",
@@ -223,7 +233,7 @@
       "hash": "#/chat/run-thread",
       "settledSelector": "html[data-visual-ready=\"command-palette\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png",
-      "sha256": "81e9cb386d907768536f029c11a0380303afbff38bfd20c1c2373c93412d397d",
+      "sha256": "90e7718b781787b7185ab792453c679d751eb2b94ea79c805b2265c5d4154787",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -245,6 +255,8 @@
         "fixtureMisses": [],
         "contractMisses": [],
         "requestedPaths": [
+          "/v1/workspaces",
+          "/v1/named-agents",
           "/v1/conversations?limit=25&offset=0",
           "/v1/me/settings",
           "/v1/orgs/current",
@@ -258,6 +270,7 @@
           "/v1/chat/config",
           "/v1/me/settings",
           "/v1/familiar/phenotype",
+          "/v1/named-agents",
           "/v1/me/settings",
           "/v1/capabilities",
           "/v1/capabilities",
@@ -274,7 +287,7 @@
       "hash": "#/chat/voice-thread",
       "settledSelector": "html[data-visual-ready=\"call\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/call.png",
-      "sha256": "7e33a98ebf5e5a0fc03e76f09502af17299dad83e03978c11e65eb77a3cbff0f",
+      "sha256": "732b3f53526f1fd15d7fcc2650ca14f9593d33a6c688b34ad320982ddcc97c92",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -296,6 +309,8 @@
         "fixtureMisses": [],
         "contractMisses": [],
         "requestedPaths": [
+          "/v1/workspaces",
+          "/v1/named-agents",
           "/v1/conversations?limit=25&offset=0",
           "/v1/me/settings",
           "/v1/orgs/current",
@@ -309,6 +324,7 @@
           "/v1/chat/config",
           "/v1/me/settings",
           "/v1/familiar/phenotype",
+          "/v1/named-agents",
           "/v1/me/settings",
           "/v1/capabilities",
           "/v1/capabilities",
@@ -327,7 +343,7 @@
       "hash": "#/settings/you",
       "settledSelector": "html[data-visual-ready=\"settings-you\"]",
       "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/settings-you.png",
-      "sha256": "db963e55be441a5f9520fe754d9c2a334499059e07b621011cb8a4c9cd88f45e",
+      "sha256": "26f26522462797baf4ced4394057308efdb1b9f92c935921d289a75b95b5e2db",
       "width": 1440,
       "height": 900,
       "captureContract": {

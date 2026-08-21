@@ -47,6 +47,16 @@ class RespondBody(BaseModel):
 class ChatBody(BaseModel):
     message: str
     conversation_id: str | None = None
+    # The tier-1 identity requested for THIS turn. On a new conversation it
+    # chooses the initial responder. On an existing conversation a different
+    # enabled peer becomes the next responder only at an idle turn boundary;
+    # persisted message authorship is immutable and an active turn is refused.
+    agent_address: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=63,
+        pattern=r"^[a-z0-9][a-z0-9_-]{0,62}$",
+    )
     # Inline, size-capped attachments ([2026] VJS-COUNTY 3): each is a record
     # {name, media_type, data (base64)}. Caps are enforced fail-closed at intake
     # from ChatConfig; an over-cap turn is refused whole before anything persists.
@@ -74,6 +84,16 @@ class ChatBody(BaseModel):
     # selects the handling department. Unusable values are dropped, never a
     # reason to refuse someone's message. Absent => today's behaviour (NULL).
     origin: str | None = None
+    # OPTIONAL host context (A2): where the person was and what they pointed at,
+    # so a chat embedded in another product does not lose page awareness or
+    # @-mentions when it moves here. Both are POINTERS, never grants - the agent
+    # still fetches through a granted verb - and both are rendered in the
+    # untrusted band (fleet/chat_caller_context).
+    page_context: dict[str, Any] | None = None
+    references: list[dict[str, Any]] = Field(default_factory=list)
+    # OPTIONAL "chat" | "plan". A closed set, so an unknown value degrades to
+    # chat rather than refusing someone's message.
+    mode: str | None = None
     # Optional caller preference among administrator-approved profiles. It is a
     # request, never authority: the runtime resolver looks it up only in
     # server-held profile data and residency/availability policy may override it.
@@ -86,6 +106,18 @@ class ChatBody(BaseModel):
         max_length=160,
         pattern=r"^[!-~]+$",
     )
+
+    @property
+    def caller_context(self) -> Any:
+        """Where the caller was, as one value, or None if they sent nothing.
+
+        On the body rather than at the door because the body IS this contract,
+        and because ``kernel/app.py`` sits at its structural ratchet: a field
+        the request declares should not cost the app factory an import to read.
+        """
+        from boltrig.models.chat_context import CallerContext
+
+        return CallerContext.from_body(self)
 
     @field_validator("model_choice_id")
     @classmethod

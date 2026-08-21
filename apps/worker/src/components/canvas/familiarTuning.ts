@@ -94,12 +94,14 @@ export interface FamiliarTuning {
   /** How far a working turn and a spoken turn lift arousal above the baseline. */
   arousalLift: readonly [working: number, speaking: number];
   /**
-   * The idle oscillator: depth and rate in Hz.
+   * The idle breath: depth, and rate in breaths per second.
    *
    * What drives the body during a WORKING turn, where there is no voice to
-   * follow. It is a stand-in for embodiment rather than embodiment, and it is a
-   * dial so that the difference between "thinking" and "twitching" can be found
-   * by eye instead of argued about.
+   * follow. One shaped swell on both drive channels in phase, resting near
+   * zero -- she pulses TOWARD the viewer rather than churning in place. The
+   * rate is now literally Hz of the whole breath cycle (0.2 is a five-second
+   * breath); the old form multiplied it by two unrelated constants, which is
+   * how 0.49 quietly meant half-second flicker.
    */
   idlePulse: readonly [depth: number, rate: number];
   /**
@@ -164,7 +166,7 @@ export const FAMILIAR_TUNING: FamiliarTuning = {
   listen: [0.22, 0.9],
   gaze: [0, 1],
   arousalLift: [0.25, 0],
-  idlePulse: [0.15, 0.49],
+  idlePulse: [0.16, 0.2],
   composition: [0.34, 0.5],
   daylight: [0.15, 0.85],
   wander: [6, 32],

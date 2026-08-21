@@ -103,7 +103,7 @@ async def test_agent_invoker_runtime_failure_is_marked_degraded_not_echoed(monke
         async def run(self, prompt, context, *, tools):
             raise RuntimeError("gateway exploded")
 
-    async def _boom_runtime_for(self, tenant_id, capability, context=None):
+    async def _boom_runtime_for(self, tenant_id, capability, context=None, *, outbound_text=None):
         return _Boom()
 
     monkeypatch.setattr(Spawner, "_runtime_for", _boom_runtime_for)

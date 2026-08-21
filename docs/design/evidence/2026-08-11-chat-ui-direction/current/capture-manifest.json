@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-21T12:16:45.893Z",
+  "capturedAt": "2026-08-21T14:05:36.760Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,30 +17,30 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "92c46c43edd7e49cf6aa2dce74b6a771eccbe04f5c91ff9fb8fe2ab12dcaa2fc",
-    "digestAfterCapture": "92c46c43edd7e49cf6aa2dce74b6a771eccbe04f5c91ff9fb8fe2ab12dcaa2fc",
+    "digestBeforeCapture": "56b42dce57665d55151ff16606fa1841f2734d38ac5ae18059a0b0e497ceb4c6",
+    "digestAfterCapture": "56b42dce57665d55151ff16606fa1841f2734d38ac5ae18059a0b0e497ceb4c6",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/real-brand-mark",
-    "head": "7c7c8c18518d18dd7e454eda6ea3a0e76ed27bc3",
-    "dirty": true
+    "branch": "feat/emotion-affordances",
+    "head": "9d06a9f930b7fc8bd86768cd9d04a6840fc372af",
+    "dirty": false
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
     "node": "v24.15.0",
     "browser": "chromium",
-    "browserVersion": "148.0.7778.215",
-    "browserExecutable": "/usr/bin/google-chrome",
-    "origin": "http://localhost:1427",
+    "browserVersion": "151.0.7922.34",
+    "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
+    "origin": "http://localhost:1420",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
   "states": [
     {
       "state": "chat-direction",
-      "url": "http://localhost:1427/tests/visual/parity.html?state=chat-direction&theme=dark",
+      "url": "http://localhost:1420/tests/visual/parity.html?state=chat-direction&theme=dark",
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "e5b20ed32d17572e0a566a60279a15a1f102bba5d65b3b3f18e5318f4d57378d",
+      "sha256": "c66d6f153e87a58f0763d9147260f75905e74a0b923752bc8dec73dc88318f2d",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -56,12 +56,14 @@
         "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
         "contractMisses": [],
         "requestedPaths": [
+          "/v1/workspaces",
+          "/v1/named-agents",
           "/v1/conversations?limit=25&offset=0",
           "/v1/me/settings",
           "/v1/orgs/current",
@@ -75,6 +77,7 @@
           "/v1/chat/config",
           "/v1/me/settings",
           "/v1/familiar/phenotype",
+          "/v1/named-agents",
           "/v1/me/settings",
           "/v1/capabilities",
           "/v1/capabilities",

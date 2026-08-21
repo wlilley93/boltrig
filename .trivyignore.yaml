@@ -96,6 +96,79 @@ vulnerabilities:
     purls: *chromium_purls
     expired_at: 2026-09-11
     statement: *chromium_statement
+  # August 2026 chromium wave (11 CVEs, all HIGH, all fixed upstream in
+  # 151.0.7922.169-1~deb12u1). DIFFERENT SHAPE from the block above: here the
+  # fixed version IS a real Debian package version, announced but NOT YET
+  # PUBLISHED - measured 2026-08-21, deb.debian.org/debian-security
+  # bookworm-security serves exactly the installed 151.0.7922.137-1~deb12u1,
+  # so `apt-get update && install` on a cache-less rebuild (verified twice on
+  # CI runners) still takes .137 and there is nothing to upgrade to TODAY.
+  # These entries become inert the moment the archive publishes .169 (the
+  # Dockerfile installs chromium unpinned, so the next image build takes the
+  # fix with no change here); delete them at that point rather than letting
+  # them ride to expiry. Expiry deliberately SHARES 2026-09-11 with the block
+  # above - the wave has earned no extra time.
+  - id: CVE-2026-76033
+    purls: *chromium_purls
+    expired_at: 2026-09-11
+    statement: &chromium_wave2_statement >-
+      SCOPED BY EXACT PURL - NO WILDCARDS - both chromium and chromium-common,
+      per the measurement recorded in the statement above this block. Fixed
+      version 151.0.7922.169-1~deb12u1 is announced in the advisory data but
+      not yet published: measured 2026-08-21, bookworm-security's
+      binary-amd64 Packages index offers exactly the installed
+      151.0.7922.137-1~deb12u1, and two cache-less CI rebuilds
+      (`docker build --pull`, fresh runners) both installed it. No rebuild or
+      base change can take a package the archive does not serve. Follows the
+      ratio of [2026] VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001:
+      accept only where the fix cannot be taken, and only as a record.
+      Reachability and compensating controls are unchanged from the entries
+      above (browser-cli activated on one tenant, zero invocations of any
+      browser verb in its audit_log, HITL-gated at the chokepoint, read-only
+      root filesystem) and are recorded per-CVE in
+      docs/security/accepted-advisories.json. The image installs chromium
+      unpinned, so the first build after the archive publishes .169 carries
+      the fix with no change here - delete this block then.
+  - id: CVE-2026-76036
+    purls: *chromium_purls
+    expired_at: 2026-09-11
+    statement: *chromium_wave2_statement
+  - id: CVE-2026-76037
+    purls: *chromium_purls
+    expired_at: 2026-09-11
+    statement: *chromium_wave2_statement
+  - id: CVE-2026-76038
+    purls: *chromium_purls
+    expired_at: 2026-09-11
+    statement: *chromium_wave2_statement
+  - id: CVE-2026-76039
+    purls: *chromium_purls
+    expired_at: 2026-09-11
+    statement: *chromium_wave2_statement
+  - id: CVE-2026-76040
+    purls: *chromium_purls
+    expired_at: 2026-09-11
+    statement: *chromium_wave2_statement
+  - id: CVE-2026-76041
+    purls: *chromium_purls
+    expired_at: 2026-09-11
+    statement: *chromium_wave2_statement
+  - id: CVE-2026-76043
+    purls: *chromium_purls
+    expired_at: 2026-09-11
+    statement: *chromium_wave2_statement
+  - id: CVE-2026-76044
+    purls: *chromium_purls
+    expired_at: 2026-09-11
+    statement: *chromium_wave2_statement
+  - id: CVE-2026-76045
+    purls: *chromium_purls
+    expired_at: 2026-09-11
+    statement: *chromium_wave2_statement
+  - id: CVE-2026-76047
+    purls: *chromium_purls
+    expired_at: 2026-09-11
+    statement: *chromium_wave2_statement
   - id: GHSA-hrxh-6v49-42gf
     paths:
       - usr/local/bin/rclone

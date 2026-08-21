@@ -66,10 +66,14 @@ class RedisCounter:
     async def incr(self, key: str, window_seconds: int) -> int:
         window = int(time.time() // window_seconds)
         rkey = f"boltrig:rl:{key}:{window}"
-        count = await self._r.incr(rkey)
-        if count == 1:
-            await self._r.expire(rkey, window_seconds)
-        return count
+        # TTL with the counter, atomically: INCR-then-EXPIRE left a TTL-less
+        # key behind whenever the process died between the two, and the keys
+        # are window-scoped, so the counts were right but the keys never left.
+        pipe = self._r.pipeline(transaction=False)
+        pipe.set(rkey, 0, ex=window_seconds, nx=True)
+        pipe.incr(rkey)
+        _, count = await pipe.execute()
+        return int(count)
 
 
 def build_counter(redis_url: str | None, *, timeout_s: float = 2.0) -> Counter:

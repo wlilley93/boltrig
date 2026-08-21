@@ -53,7 +53,15 @@ class DistillAdapter(HttpAdapter):
         timeout: float = 600.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        super().__init__(base_url=base_url, timeout=timeout)
+        super().__init__(
+            base_url=base_url,
+            timeout=timeout,
+            # The sidecar is internal by design (the ``_call`` waiver below);
+            # the pinned-client construction needs the same one flag so
+            # fail-closed construction (SEC-61) keeps this fixed
+            # operator-owned target reachable and nothing else.
+            network_config={"allow_internal": True},
+        )
         self._store = store
         self._audit = audit
         self._cost = cost

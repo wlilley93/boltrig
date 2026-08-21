@@ -19,6 +19,8 @@ from .codex_model_selection import (
     resolve_base_model,
     resolve_codex_model,
 )
+from boltrig.kernel.capability_offer import offer_candidates
+
 from .model_gateway import ModelGateway, gateway_config
 from .runtime import Runtime, build_runtime
 from .runtime_endpoint_policy import (
@@ -60,6 +62,8 @@ class RuntimeResolver:
         *,
         pinned_policy: bool = False,
         allow_kernel_tools: bool = True,
+        force_kernel_tools: bool = False,
+        outbound_text: str | None = None,
     ) -> Runtime:
         """Resolve one runtime under either caller-routing or pinned profile policy.
 
@@ -74,13 +78,17 @@ class RuntimeResolver:
         read-only Codex phase; permanent routing/decomposition uses that posture
         because its authored skills govern child selection, not side effects in
         the routing call itself.
-        """
+
+        ``outbound_text`` is the egress payload text; the PII scanner classifies
+        it before the destination is decided (SEC-13), so a detection forces the
+        sensitive route exactly as a caller classification would."""
         endpoint, model_route, gateway_virtual_key = (
             await self._resolve_runtime_policy_with_binding(
                 tenant_id,
                 capability,
                 context,
                 pinned_policy=pinned_policy,
+                outbound_text=outbound_text,
             )
         )
         self._require_pinned_codex_model(
@@ -94,6 +102,7 @@ class RuntimeResolver:
             model_route,
             gateway_virtual_key=gateway_virtual_key,
             allow_kernel_tools=allow_kernel_tools,
+            force_kernel_tools=force_kernel_tools,
         )
         self._attach_model_route(runtime, endpoint, model_route)
         return runtime
@@ -105,6 +114,7 @@ class RuntimeResolver:
         context: InvocationContext | None,
         *,
         pinned_policy: bool,
+        outbound_text: str | None = None,
     ) -> tuple[ModelEndpoint | None, dict[str, str] | None, str | None]:
         (
             sensitive,
@@ -119,6 +129,7 @@ class RuntimeResolver:
             context=context,
             pinned_policy=pinned_policy,
             sensitive_endpoint_id=self._sensitive_endpoint_id,
+            outbound_text=outbound_text,
         )
         model_route: dict[str, str] | None = None
         gateway_virtual_key: str | None = None
@@ -247,6 +258,7 @@ class RuntimeResolver:
         *,
         gateway_virtual_key: str | None,
         allow_kernel_tools: bool,
+        force_kernel_tools: bool,
     ) -> Runtime:
         def lookup(endpoint_id: str) -> ModelEndpoint | None:
             if endpoint is not None and endpoint.id == endpoint_id:
@@ -264,6 +276,7 @@ class RuntimeResolver:
                 ),
                 gateway_virtual_key=gateway_virtual_key,
                 allow_kernel_tools=allow_kernel_tools,
+                force_kernel_tools=force_kernel_tools,
             ),
         )
 
@@ -327,6 +340,7 @@ class RuntimeResolver:
         model_endpoint_id: str | None = None,
         gateway_virtual_key: str | None = None,
         allow_kernel_tools: bool = True,
+        force_kernel_tools: bool = False,
     ) -> dict[str, Any] | None:
         """The injected trusted-Codex config, gated ONLY on ``capability.runtime``.
 
@@ -351,7 +365,9 @@ class RuntimeResolver:
             cfg["model_id"] = model_id
         cfg["model_endpoint_id"] = model_endpoint_id
         cfg["gateway_virtual_key"] = gateway_virtual_key
-        cfg["kernel_tools"] = allow_kernel_tools and "*" in (capability.supported_skills or [])
+        cfg["kernel_tools"] = allow_kernel_tools and (
+            force_kernel_tools or "*" in (capability.supported_skills or [])
+        )
         cfg["issue_token"] = self._kernel.mcp.issue_run_token
         cfg["revoke_token"] = self._kernel.mcp.revoke
         cfg["mcp_url"] = (
@@ -365,14 +381,17 @@ class RuntimeResolver:
     async def _compile_codex_tool_ceiling(self, tenant_id: str, grants: Any) -> tuple[str, ...]:
         """The run's effective kernel tool set: tenant ceiling ∩ run grants.
 
-        Byte-for-byte the kernel MCP face's ``tools/list`` derivation
+        THE SAME derivation as the kernel MCP face's ``tools/list``
         (FR-MCP-02), so the admission-compiled proxy ceiling and the tools the
-        kernel will actually advertise to the cell are the same set.
+        kernel will actually advertise to the cell are the same set. It used to
+        be a byte-for-byte COPY of it, which is the same claim held up by hand;
+        both now call ``offer_candidates``, so the face cannot advertise a
+        canonical capability this ceiling would refuse.
         """
         permissions = await self._kernel.store.get_tenant_permissions(tenant_id)
-        verbs = await self._kernel.store.list_verbs(tenant_id)
-        return tuple(
-            verb.id
-            for verb in verbs
-            if permissions.grants.permits(verb.id) and grants.permits(verb.id)
+        candidates = await offer_candidates(
+            self._kernel.store,
+            tenant_id,
+            permits=lambda name: permissions.grants.permits(name) and grants.permits(name),
         )
+        return tuple(verb.id for verb in candidates)

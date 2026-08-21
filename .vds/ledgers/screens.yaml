@@ -1,5 +1,5 @@
 schema_version: 1
-generated_at: 2026-08-19T13:03:28Z
+generated_at: 2026-08-21T14:05:53Z
 generated_by: vds ledger screens
 source_globs:
 - apps/worker/src/components/*View.tsx
@@ -7,11 +7,11 @@ source_globs:
 - apps/worker/src/components/PermanentFleetTopology.tsx
 - apps/worker/src/components/SettingsSurface.tsx
 - apps/worker/src/components/VoiceCall.tsx
-source_digest: sha256:7420a8cc9c953afd0b02b822076c75986eadc0560e39f188083b401cad6f94f3
-content_digest: sha256:3d0367f659b3667a8e9eb9bd1c364d976b78bff1d9b728109a8b084400b14797
+source_digest: sha256:ceb6fbc2b6efc0d4ead0392af079b062d76ff488cf855b9239c2616f62fe8b4c
+content_digest: sha256:1ee8750e7a337afdba8e6bc65d163dd476a6c13eb57fcd7a7ad42e4e80024d70
 screens:
 - route: apps/worker/src/components/AccountView.tsx
-  digest: sha256:de974d81b5f02bd734d36b61476d72dbe60a8c12931d6b3084f396dd446825ac
+  digest: sha256:a0c87b3a1ca42e62c595f9a1a951bab8fc27367180e0c1d89862cefc74da90ab
   references:
   - name: div
     root: div
@@ -183,8 +183,8 @@ screens:
     export_name: ActiveContext
     namespace_member: false
     kind: component
-    import_path: ./AccountSecuritySections
-    resolved_path: apps/worker/src/components/AccountSecuritySections
+    import_path: ./account/ActiveContext
+    resolved_path: apps/worker/src/components/account/ActiveContext
     line: 86
   - name: NotificationPreferences
     root: NotificationPreferences
@@ -217,7 +217,7 @@ screens:
     import_path: null
     line: 93
 - route: apps/worker/src/components/AutomationView.tsx
-  digest: sha256:8fb098cbb6bcad595108b9061f7fc92137d53925b027dae8361a678d21ab16cd
+  digest: sha256:cf8941e50a7a0f747b6ac99871be76dcbcee62275bd033a2650495e12c65eb1a
   references:
   - name: div
     root: div
@@ -4070,7 +4070,7 @@ screens:
     import_path: null
     line: 2138
 - route: apps/worker/src/components/ChatView.tsx
-  digest: sha256:ed7dca759021c15fe8d28cae2effe3323881cb3fb5f54723025572e4a65cef48
+  digest: sha256:32359bd839fca1b3778d5e90d33fc5dafe9253f5c6262dea8375ee04c4280f2d
   references:
   - name: Composer
     root: Composer
@@ -4079,14 +4079,14 @@ screens:
     kind: component
     import_path: ./chat/Composer
     resolved_path: apps/worker/src/components/chat/Composer
-    line: 900
+    line: 897
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 927
+    line: 925
   - name: VoiceCall
     root: VoiceCall
     export_name: VoiceCall
@@ -4094,14 +4094,14 @@ screens:
     kind: component
     import_path: ./VoiceCall
     resolved_path: apps/worker/src/components/VoiceCall
-    line: 928
+    line: 926
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 943
+    line: 941
   - name: VoiceBanner
     root: VoiceBanner
     export_name: VoiceBanner
@@ -4109,7 +4109,7 @@ screens:
     kind: component
     import_path: ./chat/VoiceBanner
     resolved_path: apps/worker/src/components/chat/VoiceBanner
-    line: 945
+    line: 943
   - name: StageBody
     root: StageBody
     export_name: StageBody
@@ -4117,14 +4117,14 @@ screens:
     kind: component
     import_path: ./StageBody
     resolved_path: apps/worker/src/components/StageBody
-    line: 948
+    line: 946
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 980
+    line: 978
   - name: MobileChat
     root: MobileChat
     export_name: MobileChat
@@ -4132,7 +4132,7 @@ screens:
     kind: component
     import_path: ./MobileChat
     resolved_path: apps/worker/src/components/MobileChat
-    line: 991
+    line: 989
   - name: TaskInspector
     root: TaskInspector
     export_name: TaskInspector
@@ -4140,14 +4140,14 @@ screens:
     kind: component
     import_path: ./chat/TaskInspector
     resolved_path: apps/worker/src/components/chat/TaskInspector
-    line: 1058
+    line: 1056
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1091
+    line: 1089
   - name: RunSectionView
     root: RunSectionView
     export_name: RunSectionView
@@ -4155,56 +4155,56 @@ screens:
     kind: component
     import_path: ./chat/RunSectionView
     resolved_path: apps/worker/src/components/chat/RunSectionView
-    line: 1108
+    line: 1106
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1123
+    line: 1121
   - name: main
     root: main
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1128
+    line: 1126
   - name: header
     root: header
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
+    line: 1128
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1129
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
     line: 1130
-  - name: div
-    root: div
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1131
-  - name: div
-    root: div
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1132
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1133
+    line: 1131
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1145
+    line: 1143
   - name: FamiliarBadge
     root: FamiliarBadge
     export_name: FamiliarBadge
@@ -4212,28 +4212,28 @@ screens:
     kind: component
     import_path: ./familiar/FamiliarBadge
     resolved_path: apps/worker/src/components/familiar/FamiliarBadge
-    line: 1146
+    line: 1144
   - name: h1
     root: h1
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1151
+    line: 1149
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1158
+    line: 1156
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1163
+    line: 1161
   - name: ThemeToggle
     root: ThemeToggle
     export_name: ThemeToggle
@@ -4241,42 +4241,42 @@ screens:
     kind: component
     import_path: ./chat/ThemeToggle
     resolved_path: apps/worker/src/components/chat/ThemeToggle
-    line: 1164
+    line: 1162
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1169
+    line: 1167
   - name: svg
     root: svg
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1179
+    line: 1177
   - name: rect
     root: rect
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1180
+    line: 1178
   - name: line
     root: line
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1181
+    line: 1179
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1188
+    line: 1186
   - name: Welcome
     root: Welcome
     export_name: Welcome
@@ -4284,28 +4284,28 @@ screens:
     kind: component
     import_path: ./chat/Welcome
     resolved_path: apps/worker/src/components/chat/Welcome
-    line: 1198
+    line: 1196
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1201
+    line: 1199
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1204
+    line: 1202
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1206
+    line: 1204
   - name: RoutineRunBanner
     root: RoutineRunBanner
     export_name: RoutineRunBanner
@@ -4313,7 +4313,7 @@ screens:
     kind: component
     import_path: ./chat/RoutineRunBanner
     resolved_path: apps/worker/src/components/chat/RoutineRunBanner
-    line: 1215
+    line: 1213
   - name: TranscriptBody
     root: TranscriptBody
     export_name: TranscriptBody
@@ -4321,7 +4321,7 @@ screens:
     kind: component
     import_path: ./chat/TranscriptBody
     resolved_path: apps/worker/src/components/chat/TranscriptBody
-    line: 1216
+    line: 1214
   - name: Message
     root: Message
     export_name: Message
@@ -4329,7 +4329,7 @@ screens:
     kind: component
     import_path: ./chat/ChatMessages
     resolved_path: apps/worker/src/components/chat/ChatMessages
-    line: 1221
+    line: 1219
   - name: LiveTurn
     root: LiveTurn
     export_name: LiveTurn
@@ -4337,7 +4337,7 @@ screens:
     kind: component
     import_path: ./chat/ChatMessages
     resolved_path: apps/worker/src/components/chat/ChatMessages
-    line: 1230
+    line: 1229
   - name: p
     root: p
     export_name: null
@@ -5423,7 +5423,7 @@ screens:
     import_path: null
     line: 505
 - route: apps/worker/src/components/IntegrationsView.tsx
-  digest: sha256:2348172281ecfa071a194b62ae34ba850d7f5363d1cf0a62300ae2627cf5aa62
+  digest: sha256:9545f2809e9d50e0c54343f790e9d56211dca86ef14f844ffa0eb18584213efc
   references:
   - name: div
     root: div
@@ -5431,14 +5431,14 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 605
+    line: 606
   - name: main
     root: main
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 606
+    line: 607
   - name: PluginPageHeading
     root: PluginPageHeading
     export_name: PluginPageHeading
@@ -5446,23 +5446,16 @@ screens:
     kind: component
     import_path: ./integrations/PluginPicker
     resolved_path: apps/worker/src/components/integrations/PluginPicker
-    line: 607
+    line: 608
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 609
+    line: 610
   - name: aside
     root: aside
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 611
-  - name: span
-    root: span
     export_name: null
     namespace_member: false
     kind: element
@@ -5475,76 +5468,83 @@ screens:
     kind: element
     import_path: null
     line: 613
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 614
   - name: strong
     root: strong
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 614
+    line: 615
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 619
+    line: 620
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 621
+    line: 622
   - name: section
     root: section
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 627
+    line: 628
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 628
+    line: 629
   - name: h2
     root: h2
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 629
+    line: 630
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 630
+    line: 631
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 633
+    line: 634
   - name: label
     root: label
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 634
+    line: 635
   - name: SearchIcon
     root: SearchIcon
     export_name: null
     namespace_member: false
     kind: component
     import_path: null
-    line: 635
+    line: 636
     unresolved_because: '"SearchIcon" is not imported in this file, so it is defined locally or comes from a global'
   - name: span
     root: span
@@ -5552,42 +5552,42 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 636
+    line: 637
   - name: input
     root: input
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 637
+    line: 638
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 644
+    line: 645
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 650
+    line: 651
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 651
+    line: 652
   - name: FilterIcon
     root: FilterIcon
     export_name: null
     namespace_member: false
     kind: component
     import_path: null
-    line: 657
+    line: 658
     unresolved_because: '"FilterIcon" is not imported in this file, so it is defined locally or comes from a global'
   - name: span
     root: span
@@ -5595,21 +5595,14 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 658
+    line: 659
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 659
-  - name: div
-    root: div
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 663
+    line: 660
   - name: div
     root: div
     export_name: null
@@ -5617,34 +5610,34 @@ screens:
     kind: element
     import_path: null
     line: 664
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 665
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 665
+    line: 666
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 666
+    line: 667
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 672
-  - name: div
-    root: div
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 685
+    line: 673
   - name: div
     root: div
     export_name: null
@@ -5652,31 +5645,31 @@ screens:
     kind: element
     import_path: null
     line: 686
-  - name: CategoryFilterRow
-    root: CategoryFilterRow
-    export_name: null
-    namespace_member: false
-    kind: component
-    import_path: null
-    line: 687
-    unresolved_because: '"CategoryFilterRow" is not imported in this file, so it is defined locally or comes from a global'
-  - name: CategoryFilterRow
-    root: CategoryFilterRow
-    export_name: null
-    namespace_member: false
-    kind: component
-    import_path: null
-    line: 697
-    unresolved_because: '"CategoryFilterRow" is not imported in this file, so it is defined locally or comes from a global'
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 707
-  - name: button
-    root: button
+    line: 687
+  - name: CategoryFilterRow
+    root: CategoryFilterRow
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 688
+    unresolved_because: '"CategoryFilterRow" is not imported in this file, so it is defined locally or comes from a global'
+  - name: CategoryFilterRow
+    root: CategoryFilterRow
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 698
+    unresolved_because: '"CategoryFilterRow" is not imported in this file, so it is defined locally or comes from a global'
+  - name: div
+    root: div
     export_name: null
     namespace_member: false
     kind: element
@@ -5688,7 +5681,14 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 716
+    line: 709
+  - name: button
+    root: button
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 717
   - name: PluginInventoryStatus
     root: PluginInventoryStatus
     export_name: PluginInventoryStatus
@@ -5696,14 +5696,14 @@ screens:
     kind: component
     import_path: ./integrations/PluginPicker
     resolved_path: apps/worker/src/components/integrations/PluginPicker
-    line: 725
+    line: 726
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 730
+    line: 731
   - name: ExactApprovalFinalizer
     root: ExactApprovalFinalizer
     export_name: ExactApprovalFinalizer
@@ -5711,56 +5711,56 @@ screens:
     kind: component
     import_path: ./ExactApprovalFinalizer
     resolved_path: apps/worker/src/components/ExactApprovalFinalizer
-    line: 731
+    line: 732
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 733
+    line: 734
   - name: section
     root: section
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 735
+    line: 736
   - name: header
     root: header
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 736
+    line: 737
   - name: h3
     root: h3
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 737
+    line: 738
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 738
+    line: 739
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 744
+    line: 745
   - name: IntegrationRow
     root: IntegrationRow
     export_name: null
     namespace_member: false
     kind: component
     import_path: null
-    line: 746
+    line: 747
     unresolved_because: '"IntegrationRow" is not imported in this file, so it is defined locally or comes from a global'
   - name: McpRow
     root: McpRow
@@ -5768,7 +5768,7 @@ screens:
     namespace_member: false
     kind: component
     import_path: null
-    line: 768
+    line: 769
     unresolved_because: '"McpRow" is not imported in this file, so it is defined locally or comes from a global'
   - name: p
     root: p
@@ -5776,42 +5776,42 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 780
+    line: 781
   - name: details
     root: details
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 788
+    line: 789
   - name: summary
     root: summary
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 789
+    line: 790
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 790
+    line: 791
   - name: small
     root: small
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 791
+    line: 792
   - name: RuntimeAddons
     root: RuntimeAddons
     export_name: null
     namespace_member: false
     kind: component
     import_path: null
-    line: 793
+    line: 794
     unresolved_because: '"RuntimeAddons" is not imported in this file, so it is defined locally or comes from a global'
   - name: AddPluginModal
     root: AddPluginModal
@@ -5820,7 +5820,7 @@ screens:
     kind: component
     import_path: ./integrations/PluginPicker
     resolved_path: apps/worker/src/components/integrations/PluginPicker
-    line: 797
+    line: 798
   - name: article
     root: article
     export_name: null
@@ -5941,48 +5941,36 @@ screens:
     kind: element
     import_path: null
     line: 897
+  - name: ConnectionSurfaceList
+    root: ConnectionSurfaceList
+    export_name: ConnectionSurfaceList
+    namespace_member: false
+    kind: component
+    import_path: ./integrations/ConnectionSurface
+    resolved_path: apps/worker/src/components/integrations/ConnectionSurface
+    line: 899
   - name: div
     root: div
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 900
-  - name: span
-    root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
     line: 901
-  - name: div
-    root: div
+  - name: Fact
+    root: Fact
     export_name: null
     namespace_member: false
-    kind: element
+    kind: component
     import_path: null
     line: 902
-  - name: code
-    root: code
+    unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  - name: Fact
+    root: Fact
     export_name: null
     namespace_member: false
-    kind: element
+    kind: component
     import_path: null
     line: 903
-  - name: div
-    root: div
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 908
-  - name: Fact
-    root: Fact
-    export_name: null
-    namespace_member: false
-    kind: component
-    import_path: null
-    line: 909
     unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
   - name: Fact
     root: Fact
@@ -5990,7 +5978,7 @@ screens:
     namespace_member: false
     kind: component
     import_path: null
-    line: 910
+    line: 904
     unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
   - name: Fact
     root: Fact
@@ -5998,7 +5986,15 @@ screens:
     namespace_member: false
     kind: component
     import_path: null
-    line: 911
+    line: 905
+    unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  - name: Fact
+    root: Fact
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 907
     unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
   - name: Fact
     root: Fact
@@ -6014,31 +6010,15 @@ screens:
     namespace_member: false
     kind: component
     import_path: null
+    line: 913
+    unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  - name: Fact
+    root: Fact
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
     line: 914
-    unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
-  - name: Fact
-    root: Fact
-    export_name: null
-    namespace_member: false
-    kind: component
-    import_path: null
-    line: 919
-    unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
-  - name: Fact
-    root: Fact
-    export_name: null
-    namespace_member: false
-    kind: component
-    import_path: null
-    line: 920
-    unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
-  - name: Fact
-    root: Fact
-    export_name: null
-    namespace_member: false
-    kind: component
-    import_path: null
-    line: 921
     unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
   - name: div
     root: div
@@ -6046,49 +6026,49 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 924
+    line: 917
   - name: strong
     root: strong
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 925
+    line: 918
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 926
+    line: 919
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 932
+    line: 925
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 936
+    line: 929
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 937
+    line: 930
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 945
+    line: 938
   - name: ManualSecretSetup
     root: ManualSecretSetup
     export_name: ManualSecretSetup
@@ -6096,56 +6076,56 @@ screens:
     kind: component
     import_path: ./integrations/ManualSecretSetup
     resolved_path: apps/worker/src/components/integrations/ManualSecretSetup
-    line: 955
+    line: 948
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 962
+    line: 955
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 963
+    line: 956
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 972
+    line: 965
   - name: article
     root: article
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 998
+    line: 991
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 999
+    line: 992
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1007
+    line: 1000
   - name: PluginGlyph
     root: PluginGlyph
     export_name: null
     namespace_member: false
     kind: component
     import_path: null
-    line: 1008
+    line: 1001
     unresolved_because: '"PluginGlyph" is not imported in this file, so it is defined locally or comes from a global'
   - name: span
     root: span
@@ -6153,14 +6133,42 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 1010
+    line: 1003
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1011
+    line: 1004
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1004
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1005
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1007
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1009
   - name: span
     root: span
     export_name: null
@@ -6181,63 +6189,35 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 1014
-  - name: span
-    root: span
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1016
-  - name: span
-    root: span
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1018
-  - name: span
-    root: span
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1019
-  - name: span
-    root: span
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1020
+    line: 1013
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1025
+    line: 1018
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1026
+    line: 1019
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1027
+    line: 1020
   - name: Fact
     root: Fact
     export_name: null
     namespace_member: false
     kind: component
     import_path: null
-    line: 1028
+    line: 1021
     unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
   - name: Fact
     root: Fact
@@ -6245,7 +6225,23 @@ screens:
     namespace_member: false
     kind: component
     import_path: null
-    line: 1029
+    line: 1022
+    unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  - name: Fact
+    root: Fact
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1023
+    unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
+  - name: Fact
+    root: Fact
+    export_name: null
+    namespace_member: false
+    kind: component
+    import_path: null
+    line: 1028
     unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
   - name: Fact
     root: Fact
@@ -6261,23 +6257,7 @@ screens:
     namespace_member: false
     kind: component
     import_path: null
-    line: 1035
-    unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
-  - name: Fact
-    root: Fact
-    export_name: null
-    namespace_member: false
-    kind: component
-    import_path: null
-    line: 1037
-    unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
-  - name: Fact
-    root: Fact
-    export_name: null
-    namespace_member: false
-    kind: component
-    import_path: null
-    line: 1041
+    line: 1034
     unresolved_because: '"Fact" is not imported in this file, so it is defined locally or comes from a global'
   - name: div
     root: div
@@ -6285,100 +6265,128 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 1043
+    line: 1036
   - name: strong
     root: strong
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1044
+    line: 1037
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1045
+    line: 1038
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1051
+    line: 1044
   - name: a
     root: a
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1052
+    line: 1045
   - name: button
     root: button
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1072
+    line: 1065
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1073
+    line: 1066
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1074
+    line: 1067
   - name: small
     root: small
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1075
+    line: 1068
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1090
+    line: 1083
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1091
+    line: 1084
   - name: strong
     root: strong
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1092
+    line: 1085
   - name: section
     root: section
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1105
+    line: 1098
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1106
+    line: 1099
   - name: div
     root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1100
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1101
+  - name: h2
+    root: h2
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1102
+  - name: small
+    root: small
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1104
+  - name: p
+    root: p
     export_name: null
     namespace_member: false
     kind: element
@@ -6390,91 +6398,91 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 1108
-  - name: h2
-    root: h2
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1109
-  - name: small
-    root: small
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1111
+    line: 1110
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1114
+    line: 1115
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1117
-  - name: p
-    root: p
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1122
-  - name: p
-    root: p
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1125
+    line: 1118
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1128
+    line: 1121
   - name: article
     root: article
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1130
+    line: 1123
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1131
+    line: 1124
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1132
+    line: 1125
   - name: h3
     root: h3
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1133
+    line: 1126
   - name: small
     root: small
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
+    line: 1127
+  - name: span
+    root: span
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1129
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1133
+  - name: p
+    root: p
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
     line: 1134
+  - name: div
+    root: div
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1135
   - name: span
     root: span
     export_name: null
@@ -6482,106 +6490,78 @@ screens:
     kind: element
     import_path: null
     line: 1136
-  - name: p
-    root: p
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1140
-  - name: p
-    root: p
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1141
-  - name: div
-    root: div
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1142
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1143
+    line: 1137
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1144
+    line: 1138
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1145
-  - name: span
-    root: span
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1146
+    line: 1139
   - name: svg
     root: svg
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1507
+    line: 1500
   - name: circle
     root: circle
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1508
+    line: 1501
   - name: path
     root: path
+    export_name: null
+    namespace_member: false
+    kind: element
+    import_path: null
+    line: 1502
+  - name: svg
+    root: svg
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
     line: 1509
-  - name: svg
-    root: svg
-    export_name: null
-    namespace_member: false
-    kind: element
-    import_path: null
-    line: 1516
   - name: path
     root: path
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1517
+    line: 1510
   - name: svg
     root: svg
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1529
+    line: 1522
   - name: path
     root: path
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 1530
+    line: 1523
 - route: apps/worker/src/components/LocalChatView.tsx
-  digest: sha256:29c2908534186a52e9fd812dcbe9bc279227b670e3b962d72a1d60ebe3ee9ef0
+  digest: sha256:389ffcdbcc33f6d47a11e6c3a2856d4c36d37be1bd1ee778f82da7faf86a736c
   references:
   - name: div
     root: div
@@ -6659,21 +6639,21 @@ screens:
     kind: component
     import_path: ./chat/ChatMessages
     resolved_path: apps/worker/src/components/chat/ChatMessages
-    line: 114
+    line: 115
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 120
+    line: 122
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 121
+    line: 123
   - name: TranscriptNavigation
     root: TranscriptNavigation
     export_name: TranscriptNavigation
@@ -6681,7 +6661,7 @@ screens:
     kind: component
     import_path: ./chat/TranscriptNavigation
     resolved_path: apps/worker/src/components/chat/TranscriptNavigation
-    line: 123
+    line: 125
   - name: Composer
     root: Composer
     export_name: Composer
@@ -6689,35 +6669,35 @@ screens:
     kind: component
     import_path: ./chat/Composer
     resolved_path: apps/worker/src/components/chat/Composer
-    line: 145
+    line: 147
   - name: header
     root: header
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 175
+    line: 182
   - name: div
     root: div
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 176
+    line: 183
   - name: h1
     root: h1
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 177
+    line: 184
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 178
+    line: 185
   - name: ThemeToggle
     root: ThemeToggle
     export_name: ThemeToggle
@@ -6725,42 +6705,42 @@ screens:
     kind: component
     import_path: ./chat/ThemeToggle
     resolved_path: apps/worker/src/components/chat/ThemeToggle
-    line: 182
+    line: 189
   - name: p
     root: p
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 191
+    line: 198
   - name: label
     root: label
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 194
+    line: 201
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 195
+    line: 202
   - name: select
     root: select
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 196
+    line: 203
   - name: option
     root: option
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 197
+    line: 204
 - route: apps/worker/src/components/OperationsView.tsx
   digest: sha256:0644af99d49bb92a6a37bb7cc146b59550d83c490cf246a312713a9ec373049e
   references:
@@ -9467,7 +9447,7 @@ screens:
     resolved_path: apps/worker/src/components/Shell
     line: 90
 - route: apps/worker/src/components/PermanentFleetTopology.tsx
-  digest: sha256:1e0570b6e4e92281a3466e894cc55c0ebe370a6030434b40d111eab9323d4e11
+  digest: sha256:11adb4356a8d323b92893f4a08281cfbfd6f0d28e8d15f778b9a9e50505561e2
   references:
   - name: div
     root: div

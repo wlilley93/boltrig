@@ -31,6 +31,7 @@ function sampleVerbs(): VerbDef[] {
       name: "inventory.adjust",
       description: "Adjust stock.",
       consequence: "high",
+      implements: "inventory.stock.adjust",
       schema: { type: "object", properties: { delta: { type: "integer" } } },
       handler: () => {
         throw new Error("boom: internal detail");
@@ -79,6 +80,16 @@ test("validation: requires description, object schema, handler", () => {
     () => validateVerbTable([{ ...base, consequence: "spicy" as never }]),
     /consequence/,
   );
+  assert.throws(
+    () => validateVerbTable([{ ...base, implements: "not a capability" }]),
+    /implements/,
+  );
+  // A pinned claim is refused rather than reinterpreted: a version this side has
+  // not agreed to must not be silently read as the one it has.
+  assert.throws(
+    () => validateVerbTable([{ ...base, implements: "crm.contact.search@2" }]),
+    /pin a version/,
+  );
 });
 
 test("server refuses to start without its token env var (fail closed)", async () => {
@@ -114,9 +125,18 @@ test("tools/list maps the verb table to MCP tools with inputSchema", async () =>
   // High consequence surfaces as the consumer's per-tool hint AND an annotation.
   assert.equal(adjust.consequence, "high");
   assert.equal((adjust.annotations as Record<string, unknown>).destructiveHint, true);
-  // Unmarked verbs default to "low".
+  // The capability claim travels too, unpinned. Boltrig records it as a PROPOSED
+  // binding: it routes nothing and governs nothing until a human approves it.
+  assert.equal(adjust.implements, "inventory.stock.adjust");
+  assert.equal("implements" in (tools.find((t) => t.name === "orders.list") ?? {}), false);
+  // An UNMARKED verb sends no consequence at all. It used to default to "low"
+  // here, which turned "the app declared nothing" into a positive claim of
+  // safety on the wire - and the consumer takes an explicit consequence at its
+  // word, so that silently defeated its fail-closed rule (a tool publishing no
+  // evidence reads HIGH and gets the human gate).
   const list = tools.find((t) => t.name === "orders.list") as Record<string, unknown>;
-  assert.equal(list.consequence, "low");
+  assert.equal("consequence" in list, false);
+  assert.equal(list.consequence, undefined);
 });
 
 test("tools/call success wraps output in the _boltrig envelope", async () => {

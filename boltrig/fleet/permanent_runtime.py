@@ -1,14 +1,7 @@
-"""Governed lazy runtime binding for permanent Chief/Department profiles.
+"""Governed lazy runtime binding for durable named-agent profiles.
 
-Permanent agents are constructed at worker startup, but a constructed profile is
-not evidence that a model process is live.  This adapter therefore resolves the
-runtime only when the Chief or a Department Head actually reasons.  Resolution
-uses the same process-owned resolver as ephemeral spawning and every call is
-budgeted and audited. Permanent routing/decomposition stays on the read-only
-Codex phase: the profile's supported skills govern child selection and never
-become an incidental tool surface for the routing call. Any unavailable or
-refused runtime becomes a typed degraded result, which the permanent agents
-already turn into their deterministic routing/decomposition fallback.
+Profiles resolve only when they reason; every call remains budgeted and audited.
+Legacy hierarchy records are an input-only replay compatibility seam.
 """
 
 from __future__ import annotations
@@ -32,10 +25,11 @@ from .result import AgentResult
 from .spawn_budget import budget_scope_ids, estimate
 
 if TYPE_CHECKING:
-    from boltrig.config.manifest import FleetManifest, HierarchyTier
+    from boltrig.config.manifest import HierarchyTier, NamedAgentConfig
     from boltrig.kernel.cost import BudgetReservation
 
     from .spawn import Spawner
+    from .permanent_runtime_factories import chief, head, named
 
 _PUBLIC_ROUTE_KEYS = frozenset(
     {"choice_id", "profile", "provider", "model", "runtime", "tier"}
@@ -89,6 +83,36 @@ class PermanentAgentRuntime:
             purpose=tier.purpose,
             brief=tier.brief,
             department=department,
+            actor_address=capability.name,
+        )
+
+    @classmethod
+    def from_named_agent(
+        cls,
+        spawner: Spawner,
+        agent: NamedAgentConfig,
+        tenant_id: str,
+    ) -> PermanentAgentRuntime:
+        """Construct one flat durable peer; every named agent is tier-1."""
+        capability = AgentCapability(
+            name=agent.name,
+            tenant_id=tenant_id,
+            runtime=agent.runtime,
+            supported_skills=list(agent.supported_skills),
+            max_depth=agent.max_depth,
+            is_ephemeral=False,
+            cost_tier=agent.cost_tier,
+            model_endpoint=agent.model_endpoint,
+            source="manifest",
+        )
+        return cls(
+            spawner,
+            capability,
+            role="tier1",
+            purpose=agent.purpose,
+            brief=agent.brief,
+            department=agent.scope_id,
+            actor_address=agent.address,
         )
 
     def __init__(
@@ -100,6 +124,7 @@ class PermanentAgentRuntime:
         purpose: str,
         brief: str,
         department: str | None,
+        actor_address: str | None = None,
     ) -> None:
         if capability.is_ephemeral:
             raise ValueError("permanent runtime requires a non-ephemeral capability")
@@ -111,13 +136,35 @@ class PermanentAgentRuntime:
         self.purpose = str(purpose or "").strip()
         self.brief = str(brief or "").strip()
         self.department = department
+        self.actor_address = actor_address or capability.name
         self.runtime = capability.runtime
         self.cost_tier = capability.cost_tier
 
     async def run(
         self, prompt: str, context: InvocationContext, *, tools: list[str]
     ) -> AgentResult:
-        """Resolve and run one permanent reasoning phase under its exact policy."""
+        """Run a read-only planning/decomposition phase."""
+        return await self._run(
+            prompt, context, tools=tools, allow_kernel_tools=False
+        )
+
+    async def run_agent_turn(
+        self, prompt: str, context: InvocationContext, *, tools: list[str]
+    ) -> AgentResult:
+        """Run a peer turn; the resolver still compiles its exact tool ceiling."""
+        return await self._run(
+            prompt, context, tools=tools, allow_kernel_tools=True
+        )
+
+    async def _run(
+        self,
+        prompt: str,
+        context: InvocationContext,
+        *,
+        tools: list[str],
+        allow_kernel_tools: bool,
+    ) -> AgentResult:
+        """Resolve and run one permanent reasoning phase under exact policy."""
         if refused := self._preflight(prompt, context):
             return refused
         phase_id, phase_context = self._phase_context(context)
@@ -149,6 +196,7 @@ class PermanentAgentRuntime:
             tokens_est=tokens_est,
             micros_est=micros_est,
             started=started,
+            allow_kernel_tools=allow_kernel_tools,
         )
 
     def _preflight(
@@ -180,7 +228,7 @@ class PermanentAgentRuntime:
                 context.workspace_id
                 or (phase_id if self.capability.runtime == "codex" else None)
             ),
-            actor=self.capability.name,
+            actor=self.actor_address,
             actor_tier=self.role,
         )
 
@@ -219,15 +267,20 @@ class PermanentAgentRuntime:
         tokens_est: int,
         micros_est: int,
         started: float,
+        allow_kernel_tools: bool,
     ) -> AgentResult:
         model_route: dict[str, Any] | None = None
         try:
+            # The prompt is the egress payload; the routing seam scans it for
+            # PII classification before the destination is decided (SEC-13).
             runtime = await self._spawner._runtime_resolver.runtime_for(
                 context.tenant_id,
                 self.capability,
                 phase_context,
                 pinned_policy=True,
-                allow_kernel_tools=False,
+                allow_kernel_tools=allow_kernel_tools,
+                force_kernel_tools=allow_kernel_tools,
+                outbound_text=prompt,
             )
             model_route = getattr(runtime, "model_route", None)
             result = await runtime.run(prompt, phase_context, tools=list(tools))
@@ -320,7 +373,7 @@ class PermanentAgentRuntime:
                 ts=utcnow(),
                 run_id=run_id,
                 parent_run_id=parent.run_id,
-                actor=self.capability.name,
+                actor=self.actor_address,
                 actor_tier=self.role,
                 depth=parent.depth,
                 action_type=ActionType.MODEL_CALL,
@@ -335,38 +388,12 @@ class PermanentAgentRuntime:
         )
 
 
-def head(
-    spawner: Spawner,
-    manifest: FleetManifest,
-    tier: HierarchyTier,
-    department: str,
-) -> PermanentAgentRuntime:
-    """Construct one lazy department-head profile from its manifest tier."""
-    return PermanentAgentRuntime.from_manifest(
-        spawner,
-        tier,
-        manifest.tenant_id,
-        role="tier2",
-        department=department,
-    )
+def __getattr__(name: str) -> Any:
+    if name in {"chief", "head", "named"}:
+        from . import permanent_runtime_factories
+
+        return getattr(permanent_runtime_factories, name)
+    raise AttributeError(name)
 
 
-def chief(
-    spawner: Spawner,
-    manifest: FleetManifest | None,
-) -> PermanentAgentRuntime | None:
-    """Construct the lazy Chief profile, or no profile for the default org."""
-    tier = manifest.hierarchy.tier1 if manifest is not None else None
-    if tier is None:
-        return None
-    assert manifest is not None
-    return PermanentAgentRuntime.from_manifest(
-        spawner,
-        tier,
-        manifest.tenant_id,
-        role="tier1",
-        department=None,
-    )
-
-
-__all__ = ["PermanentAgentRuntime", "chief", "head"]
+__all__ = ["PermanentAgentRuntime", "chief", "head", "named"]

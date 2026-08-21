@@ -20,6 +20,7 @@ const EMPTY_TURN: NormalizedTurn = {
   subagents: [],
   hitls: [],
   questions: [],
+  displayObjects: [],
   steps: [],
   timeline: [],
   ended: false,

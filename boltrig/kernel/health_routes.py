@@ -1,4 +1,10 @@
-"""Unauthenticated liveness and deployment-readiness routes."""
+"""The unauthenticated routes, all of them, in one file.
+
+Liveness, deployment readiness, and the product's own name. Kept together
+deliberately: "what can be reached without a session" is a question somebody
+has to be able to answer by reading one file, and a second module of public
+routes elsewhere is how that answer stops being reliable.
+"""
 
 from __future__ import annotations
 
@@ -7,11 +13,20 @@ import asyncio
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 
+from boltrig.branding import product_identity
 from boltrig.kernel import Kernel
 
 
 def register_health_routes(app, *, get_kernel) -> None:
     readiness_service_lock = asyncio.Lock()
+
+    @app.get("/v1/branding")
+    async def branding() -> dict:
+        # Unauthenticated because the sign-in screen is the first surface that
+        # needs the product's name and it renders before anyone has a session.
+        # It discloses which shape this deployment is, which the login page's
+        # own branding would show anyway.
+        return product_identity()
 
     @app.get("/healthz")
     async def healthz(k: Kernel = Depends(get_kernel)) -> dict:

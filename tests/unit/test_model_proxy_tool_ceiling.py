@@ -84,9 +84,22 @@ def test_reasoning_effort_ceiling_requires_the_exact_pinned_wire_value() -> None
 
     with pytest.raises(ToolCeilingViolation, match="reasoning effort"):
         enforce_reasoning_effort_ceiling(body, "medium")
+    # An ABSENT reasoning block is below the ceiling, never outside it: codex
+    # only sends the block for models it recognises as reasoning models, so
+    # demanding it refused every plain model's first call (2026-08-20).
+    absent = _body({"model": "glm-4.6", "input": "hi"})
+    assert enforce_reasoning_effort_ceiling(absent, "high") is absent
+    # But a PRESENT effort still cannot escalate past the admitted value.
     with pytest.raises(ToolCeilingViolation, match="reasoning effort"):
         enforce_reasoning_effort_ceiling(
-            _body({"model": "gpt-5.2-codex", "input": "hi"}), "high"
+            _body(
+                {
+                    "model": "glm-4.6",
+                    "input": "hi",
+                    "reasoning": {"effort": "xhigh"},
+                }
+            ),
+            "high",
         )
 
 

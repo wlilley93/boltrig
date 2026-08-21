@@ -12,9 +12,8 @@ async def test_list_shaped_tool_output_is_not_rejected():
     """
     from boltrig.adapters.mcp_consumer import McpConsumerAdapter
 
-    adapter = McpConsumerAdapter("opbox", url="http://opbox.invalid/", allow_internal=True)
 
-    async def fake_call(payload, bearer):  # noqa: ANN001 - test double
+    async def fake_rpc(payload):  # noqa: ANN001 - test double
         return {
             "result": {
                 "tools": [
@@ -29,7 +28,13 @@ async def test_list_shaped_tool_output_is_not_rejected():
             }
         }
 
-    adapter._call = fake_call  # type: ignore[assignment]
+    # Injected through the CONSTRUCTOR seam rather than by replacing a private
+    # method: discovery holds one connection across a page walk now, so it no
+    # longer routes each request through _call, and a stub of that name would be
+    # dead code the test could not notice.
+    adapter = McpConsumerAdapter(
+        "opbox", url="http://opbox.invalid/", allow_internal=True, rpc=fake_rpc
+    )
     specs = {s.verb_id: s for s in await adapter.connect(None)}
 
     # No declared outputSchema => accept any JSON (an array must pass).

@@ -197,6 +197,11 @@
 .plugins-alert-copy strong {
   font-size: 13.5px;
   font-weight: 500;
+  /* PINNED (see the inventory-heading pin below for the doctrine): 13.5px at
+     `normal` is 16px on macOS and 15px on Linux, which left the alert box -
+     and everything below it - 1px short off-platform against the contracted
+     .plugins-alert height of 64.125. */
+  line-height: 16px;
 }
 
 .plugins-alert-copy span {
@@ -244,14 +249,19 @@
   font-weight: 400;
   /* PINNED, and it has to be. With no line-height this box fell back to
      `normal`, which the engine derives from the font metrics and rounds
-     differently per platform: 2px shorter on Linux than on macOS. Everything
-     below inherited the shift, so .plugins-search landed at y=254 instead of
-     the contracted 256 and the governed geometry check failed.
+     differently per platform, and everything below inherits the shift, so
+     .plugins-search left its contracted y=256. A geometry contract that
+     depends on `normal` cannot be reproduced on another machine. That was
+     invisible while every capture happened on the same Mac, and moving the
+     build to the beelink is what exposed it.
 
-     A geometry contract that depends on `normal` cannot be reproduced on
-     another machine. That was invisible while every capture happened on the
-     same Mac, and moving the build to the beelink is what exposed it. */
-  line-height: 17px;
+     CORRECTED 2026-08-16: the pin landed as 17px, which does NOT reproduce
+     the contract - it moved macOS itself to y=258 (measured on both rigs at
+     chrome-for-testing 151.0.7922.34). 15px is the value macOS `normal`
+     actually computed for this box before the pin, verified by bisect: the
+     parent of the pin commit renders y=256 on macOS with `normal`, and 15px
+     reproduces that on both platforms. */
+  line-height: 15px;
 }
 
 .plugins-inventory-heading > span {
@@ -955,4 +965,125 @@
   .plugins-row-detail { padding-inline: 12px; }
   .plugins-system-details > summary { align-items: flex-start; flex-direction: column; gap: 3px; }
   .plugins-system-details > summary::before { display: none; }
+}
+
+/* ---------------------------------------------------------------------------
+ * The capability-layer tabs (Connections / Capabilities / Rules / Review).
+ *
+ * Every value below is an existing token or an existing rung of this
+ * stylesheet. No new colour is introduced: `--text-2/3/4`, `--border`,
+ * `--card`, `--accent` are the same ones the connections list already uses, so
+ * the tabs cannot drift from the page they sit on and the control boundary
+ * keeps whatever contrast the token gate already measured for it.
+ * ------------------------------------------------------------------------ */
+
+.plugins-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.plugins-tab {
+  padding: 7px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.plugins-tab:hover { color: var(--text-2); }
+
+.plugins-tab.active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+.plugins-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.capability-filter {
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.capability-filter.active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.capability-filter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.capability-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.capability-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--card);
+}
+
+.capability-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.capability-row-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.capability-row-name .plugins-health { min-width: 0; text-align: left; }
+
+.capability-row-sub {
+  color: var(--text-3);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.capability-row-sub.muted { color: var(--text-4); }
+
+/* Provider-authored text. It is rendered as data and never as instruction, so
+ * it is clamped rather than allowed to set the height of the queue. */
+.capability-row-evidence {
+  max-width: 72ch;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.capability-row-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
 }

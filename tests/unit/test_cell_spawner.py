@@ -340,3 +340,55 @@ def test_THE_POSITIVE_CONTROL_a_real_cell_environment_is_still_accepted() -> Non
     assert parsed.env == env
     # And the stack root itself is a legitimate value, not an off-by-one refusal.
     parse_spawn_request(_request(env={"CODEX_HOME": _STACK, "PATH": "/usr/bin"}), _policy())
+
+
+@pytest.mark.unit
+def test_the_cell_actually_runs_in_the_requested_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The exec path must APPLY the cwd it so carefully validated.
+
+    THE BUG THIS PINS. Until 2026-08-20 `_exec_cell` validated `cwd`
+    exhaustively and then never chdir'd: every cell inherited the kernel's own
+    working directory, codex reported that as `auth.cwd`, and the surface
+    attestation refused every cell ("Codex provider auth differs from its
+    receipt") - chat degraded on every turn, with the cause swallowed.
+
+    The privilege drop is stubbed (tests do not run as root); the fork, the
+    chdir and the exec are real: the pinned binary is `pwd`, so the child's
+    stdout IS the working directory the cell actually got.
+    """
+    from boltrig.fleet.infrastructure import cell_spawner
+
+    pwd_binary = next(
+        (candidate for candidate in ("/bin/pwd", "/usr/bin/pwd") if os.path.exists(candidate)),
+        None,
+    )
+    assert pwd_binary is not None, "no pwd binary on this host"
+    workspace = tmp_path / "cell-1" / "workspace"
+    workspace.mkdir(parents=True)
+    policy = SpawnPolicy(binary=Path(pwd_binary), stack_root=tmp_path)
+    request = parse_spawn_request(
+        json.dumps(
+            {
+                "uid": 20001,
+                "gid": 20001,
+                "argv": [pwd_binary],
+                "cwd": workspace.as_posix(),
+                "env": {"PATH": "/usr/bin:/bin"},
+            }
+        ).encode("utf-8"),
+        policy,
+    )
+    monkeypatch.setattr(cell_spawner, "drop_privileges", lambda uid, gid: None)
+    pid, (stdin_w, stdout_r, stderr_r) = cell_spawner.spawn_cell(request, policy)
+    try:
+        os.close(stdin_w)
+        output = b""
+        while chunk := os.read(stdout_r, 4096):
+            output += chunk
+    finally:
+        os.close(stdout_r)
+        os.close(stderr_r)
+        os.waitpid(pid, 0)
+    assert output.decode().strip() == workspace.as_posix()

@@ -3,6 +3,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { providerApiBaseUrl, providerNeedsBaseUrl } from "../src/components/onboarding/providerCatalogue";
+
 const api = vi.hoisted(() => ({
   activateAiKey: vi.fn(),
   aiKeys: vi.fn(),
@@ -337,7 +339,7 @@ describe("first-run onboarding", () => {
     expect(localStorage.getItem("boltrig.character")).toBe("jarvis");
   });
 
-  it("searches the full provider catalogue, includes Llama, and gates model choice on a key", async () => {
+  it("searches the bindable provider catalogue and gates model choice on a key", async () => {
     render(
       <OnboardingGate initialAccount={{
         profile,
@@ -354,18 +356,56 @@ describe("first-run onboarding", () => {
     expect((await screen.findByRole("button", { name: "Enter your API key first" }) as HTMLButtonElement).disabled)
       .toBe(true);
 
+    // Was Llama. Meta's Llama API is in the models.dev snapshot but is not one
+    // of the providers Bifrost binds, so offering it produced a picker entry
+    // that failed at submit. The search is exercised with a provider that can
+    // actually complete.
     await clickWhenReady("OpenAI");
-    fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "llama" } });
-    fireEvent.click(screen.getByRole("option", { name: /Llama Meta’s Llama API/ }));
-    expect(screen.getByRole("button", { name: "Llama" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "groq" } });
+    fireEvent.click(screen.getByRole("option", { name: /Groq/ }));
+    expect(screen.getByRole("button", { name: "Groq" })).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("Provider API key"), { target: { value: "llama-key" } });
+    fireEvent.change(screen.getByLabelText("Provider API key"), { target: { value: "groq-key" } });
     await clickWhenReady("Choose a model");
-    fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "Maverick" } });
     expect(screen.getAllByRole("option").length).toBeGreaterThan(0);
   });
 
-  it("offers Ollama Cloud and secured self-hosted Ollama without exposing localhost", async () => {
+  it("offers the full catalogue again, now that the kernel custom-binds it", async () => {
+    // HISTORY, because this test has said opposite things and both were right
+    // at the time. The picker once offered the whole snapshot while the kernel
+    // bound 23, so these three providers failed AT SUBMIT and this test pinned
+    // their ABSENCE. The kernel now binds any catalogue provider as an
+    // OpenAI-compatible custom provider through its published base URL, so
+    // their absence would be the defect. Each must be findable and carry a
+    // real address for the silent-submit path.
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
+    expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
+
+    await clickWhenReady("OpenAI");
+    for (const present of ["deepseek", "togetherai", "moonshotai"]) {
+      fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: present } });
+      expect(screen.queryAllByRole("option").length).toBeGreaterThan(0);
+      // The custom binding needs an address one way or the other: models.dev
+      // publishes one (submitted silently - deepseek, moonshotai), or it does
+      // not and the picker must ask (togetherai). Neither is optional.
+      const published = providerApiBaseUrl(present);
+      if (published) expect(published).toMatch(/^https:\/\//);
+      else expect(providerNeedsBaseUrl(present)).toBe(true);
+    }
+  });
+
+  it("offers self-hosted Ollama and Ollama Cloud as distinct options, without exposing localhost", async () => {
     render(
       <OnboardingGate initialAccount={{
         profile,
@@ -382,7 +422,11 @@ describe("first-run onboarding", () => {
 
     await clickWhenReady("OpenAI");
     fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "ollama" } });
-    expect(screen.getByRole("option", { name: /Ollama Cloud ollama-cloud/ })).toBeTruthy();
+    // Ollama Cloud stands as its own CUSTOM provider now - hosted API, its own
+    // base URL, a real key - rather than being dropped or aliased onto the
+    // self-hosted entry. What must never come back is the aliasing: the two
+    // remain distinct options with distinct addresses.
+    expect(screen.getByRole("option", { name: /Ollama Cloud/ })).toBeTruthy();
     const selfHosted = screen.getByRole("option", { name: /Ollama Self-hosted/ });
     const guidance = "Hosted Boltrig can use Ollama through a secured public HTTPS endpoint. Never expose an unauthenticated Ollama port. Use Boltrig Desktop to keep Ollama local to your computer.";
     expect(screen.getByTitle(guidance)).toBeTruthy();
@@ -475,7 +519,7 @@ describe("first-run onboarding", () => {
     expect(api.setAiKey).not.toHaveBeenCalled();
   });
 
-  it("does not finish onboarding until a pending provider setup is explicitly approved", async () => {
+  it("answers a parked provider approval inside the same Continue press", async () => {
     api.setAiKey.mockResolvedValueOnce({
       status: "pending_human",
       proposal: {
@@ -510,18 +554,115 @@ describe("first-run onboarding", () => {
     fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
     await clickWhenReady("Continue");
 
-    expect(await screen.findByText("Select Continue again to approve this provider and model."))
-      .toBeTruthy();
-    expect(screen.getByText("Choose your AI provider")).toBeTruthy();
-    expect(api.approveAiKeyProposal).not.toHaveBeenCalled();
-    await clickWhenReady("Continue");
-
+    // One press covers the whole journey: a parked approval is answered inside
+    // the same Continue, never by asking the person to press it twice.
     await waitFor(() => expect(api.approveAiKeyProposal).toHaveBeenCalledWith("proposal-1"));
     expect(await screen.findByText("Add vision")).toBeTruthy();
     await clickWhenReady("Skip for now");
     expect(await screen.findByText("Add voice")).toBeTruthy();
     await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
+  });
+
+  it("waits with a plain sentence when the approval belongs to an administrator", async () => {
+    api.setAiKey.mockResolvedValueOnce({
+      status: "pending_human",
+      proposal: {
+        id: "proposal-2",
+        level: "org",
+        scope_id: "acme",
+        provider: "openai",
+        model: "openai/gpt-5.4",
+        modality: "text",
+        status: "pending",
+        created_at: "2026-08-15T09:00:00Z",
+        expires_at: "2026-08-15T09:15:00Z",
+      },
+    });
+    api.approveAiKeyProposal.mockResolvedValue({
+      status: "pending",
+      reason: "This connection is waiting for an administrator's approval.",
+    });
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
+    fireEvent.change(await screen.findByLabelText("Provider API key"), {
+      target: { value: "provider-secret" },
+    });
+    await clickWhenReady("Choose a model");
+    fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "GPT-5.4" } });
+    fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
+    await clickWhenReady("Continue");
+
+    await waitFor(() => expect(api.approveAiKeyProposal).toHaveBeenCalledWith("proposal-2"));
+    expect(await screen.findByText(
+      "This connection is waiting for an administrator's approval.",
+    )).toBeTruthy();
+    expect(screen.getByText("Choose your AI provider")).toBeTruthy();
+
+    // The next press re-checks the SAME request rather than resubmitting.
+    await clickWhenReady("Continue");
+    await waitFor(() => expect(api.approveAiKeyProposal).toHaveBeenCalledTimes(2));
+    expect(api.setAiKey).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds the provider step when the saved key does not reach its provider", async () => {
+    // THE DEFECT THIS PINS. A key saved with base_url https://<host>:11434 was
+    // accepted, sealed and stored, so intake answered `ok` and onboarding said
+    // "Provider connected." and moved on. Ollama serves plain HTTP on that
+    // port, so nothing ever reached it. `ok` is a fact about the write; only
+    // gateway_ready is a fact about the provider, and the step now reads it.
+    api.setAiKey.mockResolvedValueOnce({ status: "ok" });
+    api.aiKeys
+      .mockResolvedValueOnce({ allow_own_ai_keys: true, ai_keys: [] })
+      .mockResolvedValue({
+        allow_own_ai_keys: true,
+        ai_keys: [{
+          level: "user",
+          scope_id: "owner",
+          provider: "openai",
+          model: "openai/gpt-5.4",
+          modality: "text",
+          has_key: true,
+          gateway_ready: false,
+        }],
+      });
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
+    fireEvent.change(await screen.findByLabelText("Provider API key"), {
+      target: { value: "provider-secret" },
+    });
+    await clickWhenReady("Choose a model");
+    fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "GPT-5.4" } });
+    fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
+    await clickWhenReady("Continue");
+
+    await waitFor(() => expect(api.setAiKey).toHaveBeenCalled());
+    expect(await screen.findByText(/did not answer/)).toBeTruthy();
+    expect(screen.getByText(/usually http, not https/)).toBeTruthy();
+    // Still on the provider step, and never claimed success.
+    expect(screen.getByText("Choose your AI provider")).toBeTruthy();
+    expect(screen.queryByText("Provider connected.")).toBeNull();
+    expect(screen.queryByText("Add vision")).toBeNull();
   });
 
   it("reconciles an approved saved model before allowing onboarding to finish", async () => {
