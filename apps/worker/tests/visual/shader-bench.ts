@@ -712,13 +712,8 @@ function mount(): void {
   reachArming = null;
   loadBaseline();
   loadVolumes();
-  loadDraft();
   buildControls();
   buildMixer();
-  paintTransTo();
-  paintTransChoose();
-  paintRec();
-  transStatus(draft ? `draft: ${Object.keys(draft.tracks).length} track(s) from ${draft.from}` : "");
   paintHistory();
   paintDrift();
   push();
@@ -848,6 +843,10 @@ function buildControls(): void {
   // names the channel, and a rotated title only made the bus taller. The
   // UNGROUPED warning still surfaces — on its desk strip.
   for (const key of active.fields) add(key);
+  // Every rebuild wipes sliderDom; presence's topbar controls re-register so
+  // its sweep keeps a slider to move.
+  registerPresenceDom();
+  paintPresenceCtl();
 }
 
 /**
@@ -1133,6 +1132,13 @@ function row(
     val.title = `${TITLES[key] ?? label} — ${named[index]}`;
     val.appendChild(input);
     val.appendChild(out);
+    // The legend stays VISIBLE. Hover-only names made a pair of identical
+    // sliders anonymous — which of these is precess speed is not a question
+    // a desk should make you ask by pointing at things.
+    const tag = document.createElement("span");
+    tag.className = "vtag";
+    tag.textContent = named[index];
+    val.appendChild(tag);
     const fxbtns = document.createElement("div");
     fxbtns.className = "fxbtns";
     fxbtns.appendChild(bind);
@@ -1462,35 +1468,12 @@ function clipsFor(which: string): string[] {
 }
 
 function assign(key: string, value: number | number[]): void {
-  // The recorder taps every dial here — rail sliders and desk faders alike.
-  if (recState === "armed") {
-    recClock = performance.now();
-    recState = "recording";
-    transStatus("recording…");
-    paintRec();
-  }
-  if (recState === "recording" || recState === "overdub") {
-    const now = performance.now();
-    const at = recState === "recording"
-      ? now - recClock
-      : (draft ? ((now - recClock) % draft.duration) / draft.duration : 0);
-    const dup = (x: number | number[]): number | number[] =>
-      typeof x === "number" ? x : x.slice();
-    if (!takeTouched.has(key)) {
-      takeTouched.add(key);
-      const prev = (tuning as unknown as Record<string, number | number[]>)[key];
-      // The dial's resting value holds from the start of the take until the
-      // first movement — without this seed the journey would begin mid-air.
-      takeTracks[key] = [{ t: recState === "recording" ? 0 : Math.max(0, at - 0.001), v: dup(prev) }];
-    }
-    takeTracks[key].push({ t: at, v: dup(value) });
-  }
   (tuning as unknown as Record<string, unknown>)[key] = value;
 }
 
 function push(): void {
   if (!renderer) return;
-  if (recState === "idle") remember(slotKey(body, slot), tuning);
+  remember(slotKey(body, slot), tuning);
   // Cast at the seam: the page holds one union and each renderer takes its own
   // half of it, which the body switch above already guarantees.
   // The renderer hears effectiveTuning() — the desk's monitor mix — while
@@ -1580,22 +1563,6 @@ function loop(): void {
   frames += 1;
   if (abActive) {
     // The reference holds the stage; sweeps and journeys wait their turn.
-  } else if (looping && renderer) {
-    // LOOP PREVIEW: journey, hold at the destination, go again. The base is
-    // the live tuning, so dials keep answering while the loop plays.
-    const hold = looping.dest ? 700 : 0;
-    const cycle = (performance.now() - looping.start) % (looping.duration + hold);
-    const at = Math.min(1, cycle / looping.duration);
-    const eased = 0.5 - 0.5 * Math.cos(Math.PI * at);
-    const base = looping.dest ? lerpTuning(tuning, looping.dest, eased) : tuning;
-    (renderer as { setTuning(next: never): void })
-      .setTuning(effectiveTuning(applyTracks(base, looping.tracks, at)) as never);
-  } else if (recState === "overdub" && draft && renderer) {
-    // The existing tracks replay on a loop while new dial moves record on top;
-    // a field being re-recorded stops replaying the moment it is touched.
-    const at = ((performance.now() - recClock) % draft.duration) / draft.duration;
-    (renderer as { setTuning(next: never): void })
-      .setTuning(effectiveTuning(applyTracks(tuning, draft.tracks, at, takeTouched)) as never);
   } else if (transit && renderer) {
     const at = Math.min(1, (performance.now() - transit.start) / transit.ms);
     // A raised cosine, so the journey leaves and arrives gently.
@@ -1612,7 +1579,7 @@ function loop(): void {
     // saved reach travels start→end on the syllable envelope, monitor-side.
     // Pushed only when the envelope actually moved, and never over a journey
     // or a take — those branches call effectiveTuning() themselves.
-    if (renderer && Object.keys(speech).length > 0
+    if (renderer && (Object.keys(speech).length > 0 || talkTest.size > 0)
       && Math.abs(speechEnv - speechShown) > 0.003) {
       speechShown = speechEnv;
       (renderer as { setTuning(next: never): void }).setTuning(clone(effectiveTuning()) as never);
@@ -1743,7 +1710,8 @@ let channel = "";
  *  syllable envelope drives their speech reach, a stand-in for a line being
  *  spoken over standby. Solo survives; mute went — the fader at zero is mute. */
 const talkTest = new Set<string>();
-let soloed: string | null = null;
+/** A SET: soloing Wheels and Film together auditions the pair. */
+const soloed = new Set<string>();
 const mixerDom: Record<string, { input: HTMLInputElement; out: HTMLElement }> = {};
 
 /**
@@ -1838,7 +1806,7 @@ function fadeable(fields: readonly string[]): boolean {
 }
 
 function audible(title: string): boolean {
-  return soloed === null || title === soloed;
+  return soloed.size === 0 || soloed.has(title);
 }
 
 /**
@@ -1874,8 +1842,9 @@ function rememberVolumes(): void {
  *  numbers untouched. With nothing muted this is `tuning` itself. */
 function effectiveTuning(of: Tuning = tuning): Tuning {
   const faded = Object.keys(channelVolume).some((t) => volumeOf(t) < 1);
-  const talking = speechEnv > 0.002 && Object.keys(speech).length > 0;
-  if (soloed === null && !faded && !talking) return of;
+  const talking = speechEnv > 0.002
+    && (Object.keys(speech).length > 0 || talkTest.size > 0);
+  if (soloed.size === 0 && !faded && !talking) return of;
   const out = clone(of);
   const record = out as unknown as Record<string, number | number[]>;
   // Speech reach FIRST, volumes after: the fader is the channel's master, so
@@ -1898,6 +1867,24 @@ function effectiveTuning(of: Tuning = tuning): Tuning {
         const index = Number(indexText);
         next[index] = next[index] + (end - next[index]) * speechEnv;
         record[field] = next;
+      }
+    }
+    // A talk-tested channel with NO reach points still shows something: its
+    // light breathes on the envelope. Without this, osc on a channel you had
+    // not yet configured did literally nothing — a button that works only
+    // after invisible setup reads as broken.
+    if (!live) {
+      for (const g of channelsFor()) {
+        if (!talkTest.has(g.title)) continue;
+        for (const field of muteFields(g.fields)) {
+          if (Object.keys(speech).some((id) => id.startsWith(`${field}:`))) continue;
+          const value = record[field];
+          if (value === undefined) continue;
+          const swell = 1 + 0.35 * speechEnv;
+          record[field] = typeof value === "number"
+            ? value * swell
+            : value.map((x) => x * swell);
+        }
       }
     }
   }
@@ -2003,7 +1990,8 @@ function buildMixer(): void {
       solo.title = "Solo — silence every other channel";
       solo.addEventListener("click", (event) => {
         event.stopPropagation();
-        soloed = soloed === g.title ? null : g.title;
+        if (soloed.has(g.title)) soloed.delete(g.title);
+        else soloed.add(g.title);
         paintMixer();
         push();
       });
@@ -2055,7 +2043,7 @@ function paintMixer(): void {
     const badge = strip.querySelector(".chdrift");
     if (badge) badge.textContent = off > 0 ? `Δ${off}` : "";
     const [solo, osc] = Array.from(strip.querySelectorAll(".ms button"));
-    solo?.classList.toggle("on", soloed === title);
+    solo?.classList.toggle("on", soloed.has(title));
     osc?.classList.toggle("on", talkTest.has(title));
   }
 }
@@ -2065,7 +2053,11 @@ function paintMixerLevels(): void {
   const pq = $("presenceQuick") as HTMLInputElement;
   const at = (tuning as unknown as Record<string, number>).presence;
   // Never write back into a slider mid-drag: the reflect fights the thumb.
-  if (typeof at === "number" && document.activeElement !== pq) pq.value = String(at);
+  if (typeof at === "number" && document.activeElement !== pq) {
+    pq.value = String(at);
+    const out = $("presenceOut");
+    if (!out.querySelector("input")) out.textContent = at.toFixed(3);
+  }
   for (const [title, dom] of Object.entries(mixerDom)) {
     const vol = volumeOf(title);
     dom.input.value = String(vol);
@@ -2320,7 +2312,6 @@ async function refreshHistory(): Promise<void> {
     paintMixerLevels();
   }
   paintDrift();
-  paintTransChoose();
   paintStates();
 }
 
@@ -2464,8 +2455,6 @@ function lerpTuning(from: Tuning, to: Tuning, at: number): Tuning {
 
 function setState(next: Slot): void {
   if (next === slot) return;
-  if (recState !== "idle") finishTake("recording cancelled — state changed");
-  if (looping) stopLoop();
   const recorded = ((): Tracks | undefined => {
     const versions = history[`${body}.${slot}->${next}`]?.versions ?? [];
     const newest = versions[versions.length - 1] as unknown as
@@ -2492,7 +2481,6 @@ function setState(next: Slot): void {
   paintMixer();
   paintHistory();
   paintDrift();
-  paintTransChoose();
   const paceName = ($("pace") as HTMLSelectElement).value;
   // A RECORDED transition is the legal path between this pair: it plays at its
   // own length scaled by the pace, and the lerp carries any untracked field.
@@ -2515,7 +2503,52 @@ $("pace").addEventListener("change", () => {
     localStorage.setItem(storageKey("pace"), ($("pace") as HTMLSelectElement).value);
   } catch { /* fine */ }
 });
-$("save").addEventListener("click", () => { void savePreset(); });
+/** The whole body to the file: every state as it would load right now — the
+ *  stage's live dials for the current slot, local edits for the rest — plus
+ *  the baseline. One label covers the snapshot. */
+async function saveEverything(): Promise<void> {
+  const status = $("saved");
+  const label = window.prompt(`Label this full ${body} snapshot (optional)`, "");
+  if (label === null) {
+    status.textContent = "save cancelled";
+    status.className = "";
+    return;
+  }
+  const jobs: { at: string; tuning: unknown; lfos: unknown; speech: unknown }[] =
+    slotsFor(body).map((at) => ({
+      at: at as string,
+      tuning: at === slot ? tuning : saved(slotKey(body, at), shippedFor(body, at)),
+      lfos: at === slot
+        ? Object.fromEntries(Object.entries(lfos).filter(([, l]) => l.on))
+        : savedLfos(slotKey(body, at)),
+      speech: at === slot ? speech : savedSpeech(slotKey(body, at)),
+    }));
+  if (baseline) {
+    jobs.push({ at: "baseline", tuning: baseline.tuning, lfos: baseline.lfos, speech: {} });
+  }
+  try {
+    for (const job of jobs) {
+      const response = await fetch("/__bench-presets", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          body, slot: job.at, tuning: job.tuning, lfos: job.lfos, speech: job.speech,
+          ...(label.trim() === "" ? {} : { label: label.trim() }),
+        }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status} on ${job.at}`);
+    }
+    status.textContent = `saved everything — ${jobs.length} slots of ${body}`;
+    status.className = "ok";
+    void refreshHistory();
+  } catch (error) {
+    status.textContent = `SAVE FAILED — ${(error as Error).message}`;
+    status.className = "bad";
+  }
+}
+
+$("save").addEventListener("click", () => { void saveEverything(); });
+$("saveState").addEventListener("click", () => { void savePreset(); });
 $("history").addEventListener("change", (event) => {
   const select = event.target as HTMLSelectElement;
   const raw = select.value;
@@ -2804,38 +2837,14 @@ $("driftOnly").addEventListener("click", () => {
  * THE TRANSITION RECORDER. A transition is choreography between two states,
  * captured the way a looper captures music: arm record, move a dial, stop —
  * that is a take. Record again and the take plays back while you move another
- * dial on top; layer until the journey is complete, then bind it to a
- * destination. Saving writes the take to the file AND commits the end values
- * into the destination state, so arriving there IS the look you built toward
- * — and marks the pair as a legal transition the state buttons will play.
+ * THE RECORDER IS GONE; its takes remain. Transitions ease automatically now
+ * (lerpTuning on the pace), and any journey already recorded into the store
+ * still plays when its pair of states is travelled — these types and the two
+ * functions below are the playback half of a machine whose authoring half
+ * was deliberately removed.
  */
 type Sample = { t: number; v: number | number[] };
 type Tracks = Record<string, Sample[]>;
-let recState: "idle" | "armed" | "recording" | "overdub" = "idle";
-let recClock = 0;
-let takeTracks: Tracks = {};
-const takeTouched = new Set<string>();
-let preTake: Tuning | null = null;
-let draft: { from: Slot; duration: number; tracks: Tracks } | null = null;
-let looping: { tracks: Tracks; duration: number; dest: Tuning | null; start: number } | null = null;
-
-function draftKey(): string {
-  return storageKey(`transitdraft.${body}`);
-}
-function saveDraft(): void {
-  try {
-    if (draft) localStorage.setItem(draftKey(), JSON.stringify(draft));
-    else localStorage.removeItem(draftKey());
-  } catch { /* fine */ }
-}
-function loadDraft(): void {
-  try {
-    const raw = localStorage.getItem(draftKey());
-    draft = raw ? JSON.parse(raw) as typeof draft : null;
-  } catch {
-    draft = null;
-  }
-}
 
 /** The take's value at phase p — hold before the first sample and after the
  *  last, linear between neighbours: the dial replays exactly as it was moved. */
@@ -2883,195 +2892,6 @@ function applyTracks(base: Tuning, tracks: Tracks, p: number, skip?: Set<string>
   return out;
 }
 
-function transStatus(text: string): void {
-  $("transStatus").textContent = text;
-}
-
-function paintRec(): void {
-  const rec = $("rec");
-  rec.classList.toggle("armed", recState === "armed");
-  rec.classList.toggle("live", recState === "recording" || recState === "overdub");
-  $("transSave").style.display = draft ? "" : "none";
-  $("transTo").style.display = draft ? "" : "none";
-  $("transLoop").classList.toggle("on", looping !== null);
-}
-
-function paintTransTo(): void {
-  const select = $("transTo") as HTMLSelectElement;
-  const keep = select.value;
-  select.innerHTML = "";
-  const head = document.createElement("option");
-  head.value = "";
-  head.textContent = "→ destination…";
-  select.appendChild(head);
-  if (!draft) return;
-  for (const at of transportSlots()) {
-    if (at === "arrival" || at === "error" || at === draft.from) continue;
-    const option = document.createElement("option");
-    option.value = at;
-    option.textContent = `→ ${at}`;
-    option.selected = at === keep;
-    select.appendChild(option);
-  }
-}
-
-/** Saved transitions leaving the state on stage, for the loop preview. */
-function transitionsFrom(at: Slot): string[] {
-  return Object.keys(history)
-    .filter((key) => key.startsWith(`${body}.${at}->`));
-}
-
-function paintTransChoose(): void {
-  const select = $("transChoose") as HTMLSelectElement;
-  const keep = select.value;
-  const from = transitionsFrom(slot);
-  select.innerHTML = "";
-  for (const key of from) {
-    const option = document.createElement("option");
-    option.value = key;
-    option.textContent = `⟳ ${key.slice(body.length + 1)}`;
-    option.selected = key === keep;
-    select.appendChild(option);
-  }
-  select.style.display = from.length > 0 ? "" : "none";
-}
-
-function stopLoop(): void {
-  looping = null;
-  paintRec();
-  push();
-}
-
-$("rec").addEventListener("click", () => {
-  if (recState === "armed") {
-    recState = "idle";
-    preTake = null;
-    transStatus(draft ? `draft: ${Object.keys(draft.tracks).length} tracks` : "");
-    paintRec();
-    return;
-  }
-  if (recState === "recording") {
-    // End of take one. Time ran from the first dial move to this click.
-    const duration = Math.max(400, performance.now() - recClock);
-    for (const samples of Object.values(takeTracks)) {
-      for (const sample of samples) sample.t = Math.min(1, Math.max(0, sample.t / duration));
-      samples.sort((a, b) => a.t - b.t);
-    }
-    draft = { from: slot, duration, tracks: takeTracks };
-    saveDraft();
-    finishTake(`take saved — ${Object.keys(takeTracks).length} track(s), ${(duration / 1000).toFixed(1)}s. Choose a destination, or record again to layer.`);
-    return;
-  }
-  if (recState === "overdub") {
-    for (const [field, samples] of Object.entries(takeTracks)) {
-      samples.sort((a, b) => a.t - b.t);
-      if (draft) draft.tracks[field] = samples;
-    }
-    saveDraft();
-    finishTake(`layered — now ${draft ? Object.keys(draft.tracks).length : 0} track(s)`);
-    return;
-  }
-  // Idle. Arm a first take, or roll an overdub pass over the draft.
-  if (recState === "idle" && draft && draft.from === slot) {
-    preTake = clone(tuning);
-    takeTracks = {};
-    takeTouched.clear();
-    recClock = performance.now();
-    recState = "overdub";
-    transStatus("overdubbing — existing tracks play, move a dial to layer");
-    paintRec();
-    return;
-  }
-  preTake = clone(tuning);
-  takeTracks = {};
-  takeTouched.clear();
-  recState = "armed";
-  transStatus("record armed — move a dial to start the take");
-  paintRec();
-});
-
-function finishTake(message: string): void {
-  recState = "idle";
-  if (preTake) {
-    // The origin look is restored: a transition is choreography, and
-    // recording one must not quietly rewrite the state it leaves from.
-    tuning = preTake;
-    preTake = null;
-    buildControls();
-    push();
-  }
-  transStatus(message);
-  paintTransTo();
-  paintRec();
-}
-
-$("transSave").addEventListener("click", () => {
-  const to = ($("transTo") as HTMLSelectElement).value as Slot | "";
-  if (!draft || to === "") {
-    transStatus("choose a destination first");
-    return;
-  }
-  const from = draft.from;
-  const origin = saved(slotKey(body, from), shippedFor(body, from));
-  // The arrival: the origin look with every track at its final value. This is
-  // the whole point of the layering — the end of the journey IS the next state.
-  const arrival = applyTracks(origin, draft.tracks, 1);
-  const label = `${Object.keys(draft.tracks).length} tracks, ${(draft.duration / 1000).toFixed(1)}s`;
-  void fetch("/__bench-presets", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ body, slot: from, to, tracks: draft.tracks, duration: draft.duration, label }),
-  }).then(async (response) => {
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    try {
-      localStorage.setItem(storageKey(slotKey(body, to)), JSON.stringify(arrival));
-    } catch { /* fine */ }
-    await fetch("/__bench-presets", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ body, slot: to, tuning: arrival, lfos: {}, label: `arrival via ${from}->${to}` }),
-    });
-    draft = null;
-    saveDraft();
-    paintTransTo();
-    paintRec();
-    transStatus(`saved ${from}->${to} — arrival committed into ${to}`);
-    void refreshHistory();
-  }).catch((error: Error) => {
-    transStatus(`SAVE FAILED — ${error.message}`);
-  });
-});
-
-$("transLoop").addEventListener("click", () => {
-  if (looping) {
-    stopLoop();
-    transStatus(draft ? `draft: ${Object.keys(draft.tracks).length} tracks` : "");
-    return;
-  }
-  if (draft && draft.from === slot) {
-    looping = { tracks: draft.tracks, duration: draft.duration, dest: null, start: performance.now() };
-    transStatus("looping the draft — dials stay live");
-    paintRec();
-    return;
-  }
-  const key = ($("transChoose") as HTMLSelectElement).value;
-  const versions = history[key]?.versions ?? [];
-  const newest = versions[versions.length - 1] as unknown as
-    { tracks?: Tracks; duration?: number } | undefined;
-  if (!newest?.tracks) {
-    transStatus("no transition to loop from this state");
-    return;
-  }
-  const destSlot = key.slice(key.indexOf("->") + 2) as Slot;
-  looping = {
-    tracks: newest.tracks,
-    duration: newest.duration || 1200,
-    dest: saved(slotKey(body, destSlot), shippedFor(body, destSlot)),
-    start: performance.now(),
-  };
-  transStatus(`looping ${key.slice(body.length + 1)} — dials stay live`);
-  paintRec();
-});
 
 /**
  * A/B AGAINST THE GROUND. Hold the button (or the B key) to hear the baseline;
@@ -3181,13 +3001,117 @@ paintDeskScale();
 $("presenceQuick").addEventListener("input", () => {
   const value = Number(($("presenceQuick") as HTMLInputElement).value);
   assign("presence", value);
-  const rail = sliderDom[lfoKey("presence", 0)];
-  if (rail) {
-    rail.input.value = String(value);
-    rail.out.textContent = value.toFixed(3);
-  }
+  $("presenceOut").textContent = value.toFixed(3);
   push();
 });
+
+/**
+ * PRESENCE'S GRANULAR CONTROLS, topbar edition. Its desk strip went — size is
+ * framing, not a channel — but the strip had carried the sweep, the speech
+ * reach and the typed value, and those must not go with it.
+ */
+function registerPresenceDom(): void {
+  sliderDom[lfoKey("presence", 0)] = {
+    input: $("presenceQuick") as HTMLInputElement,
+    out: $("presenceOut"),
+  };
+}
+
+function paintPresenceCtl(): void {
+  const on = lfos[lfoKey("presence", 0)]?.on === true;
+  $("presenceOsc").classList.toggle("on", on);
+  ($("presenceQuick") as HTMLInputElement).disabled = on;
+  const id = lfoKey("presence", 0);
+  $("presenceReach").classList.toggle("arm", reachArming?.id === id);
+  $("presenceReach").classList.toggle("on", reachArming?.id !== id && speech[id] !== undefined);
+}
+
+$("presenceOsc").addEventListener("click", () => {
+  const id = lfoKey("presence", 0);
+  const [min, max] = RANGE.presence ?? [0.4, 1.8, 0.005];
+  const at = (tuning as unknown as Record<string, number>).presence ?? 1;
+  const existing = lfos[id];
+  if (existing?.on) {
+    lfos[id] = { ...existing, on: false };
+  } else {
+    const span = (max - min) * 0.25;
+    lfos[id] = existing ? { ...existing, on: true } : {
+      on: true, rate: 0.15,
+      min: Math.max(min, at - span), max: Math.min(max, at + span), phase: 0,
+    };
+  }
+  rememberLfos();
+  paintPresenceCtl();
+});
+
+$("presenceReach").addEventListener("click", (event) => {
+  const id = lfoKey("presence", 0);
+  const pq = $("presenceQuick") as HTMLInputElement;
+  if ((event as MouseEvent).shiftKey) {
+    delete speech[id];
+    if (reachArming?.id === id) reachArming = null;
+    rememberSpeech();
+    paintPresenceCtl();
+    return;
+  }
+  const at = (tuning as unknown as Record<string, number>).presence ?? 1;
+  if (reachArming?.id === id) {
+    speech[id] = at;
+    const from = reachArming.from;
+    reachArming = null;
+    assign("presence", from);
+    pq.value = String(from);
+    $("presenceOut").textContent = from.toFixed(3);
+    push();
+    rememberSpeech();
+    paintPresenceCtl();
+    return;
+  }
+  reachArming = { id, from: at };
+  paintPresenceCtl();
+});
+
+$("presenceOut").addEventListener("click", () => {
+  const out = $("presenceOut");
+  if (out.querySelector("input")) return;
+  const pq = $("presenceQuick") as HTMLInputElement;
+  const was = Number(pq.value);
+  const field = document.createElement("input");
+  field.type = "number";
+  field.step = "0.005";
+  field.value = was.toFixed(3);
+  field.style.width = "58px";
+  field.style.height = "20px";
+  field.style.font = "inherit";
+  out.textContent = "";
+  out.appendChild(field);
+  field.focus();
+  field.select();
+  let settled = false;
+  const done = (commit: boolean) => {
+    if (settled) return;
+    settled = true;
+    const typed = Number(field.value);
+    field.remove();
+    const next = commit && Number.isFinite(typed)
+      ? Math.min(1.8, Math.max(0.4, typed))
+      : was;
+    pq.value = String(next);
+    out.textContent = next.toFixed(3);
+    if (next !== was) {
+      assign("presence", next);
+      push();
+    }
+  };
+  field.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") done(true);
+    if (event.key === "Escape") done(false);
+    event.stopPropagation();
+  });
+  field.addEventListener("blur", () => done(true));
+});
+registerPresenceDom();
+paintPresenceCtl();
 
 $("gear").addEventListener("click", () => $("modal").classList.add("open"));
 $("modalClose").addEventListener("click", () => $("modal").classList.remove("open"));

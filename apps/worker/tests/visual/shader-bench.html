@@ -88,6 +88,11 @@
       #deskToggle.on { color: #0b0b0f; background: #6f8cff; border-color: #6f8cff; }
       #presenceQuick { width: 130px; accent-color: #6f8cff; }
       #topbar .pq { display: flex; align-items: center; gap: 5px; }
+      #topbar .pq b {
+        font-variant-numeric: tabular-nums; font-weight: 500;
+        color: #c9c9d2; font-size: 10.5px; cursor: text; min-width: 34px;
+      }
+      #topbar .pq .lfo-bind { width: 24px; height: 24px; }
       #topbar .pq span { font-size: 9.5px; text-transform: uppercase; letter-spacing: .07em; color: #55555f; }
       /* THE STAGE OWNS THE WHOLE HEIGHT. It spans the splitter and console
          rows, and the console floats translucent on top — so the avatar sits
@@ -127,6 +132,10 @@
         overflow-x: auto;
       }
       #states { display: flex; gap: 6px; }
+      #saveState {
+        width: auto; flex: 0 0 auto; padding: 0 12px; height: 30px;
+        border-radius: 15px; font-size: 11px;
+      }
       #states button {
         width: auto; padding: 0 14px; height: 30px; border-radius: 15px;
         font-size: 11.5px; letter-spacing: .02em; white-space: nowrap;
@@ -217,6 +226,13 @@
         width: 18px; height: calc(64px * var(--deskScale)); margin: 0; accent-color: #6f8cff;
       }
       #bus .row .val b { font-size: 9.5px; }
+      #bus .row .val .vtag {
+        font-size: 8.5px; line-height: 1.15; color: #9a9aa4;
+        max-width: 62px; text-align: center; white-space: normal;
+      }
+      /* The LFO panel folds inside the card instead of stretching it flat. */
+      #bus .row .lfo { flex-wrap: wrap; max-width: 210px; justify-content: center; }
+      #bus .row .lfo input { width: 58px; }
       #bus .row .val .fxbtns { display: flex; gap: 2px; }
       #bus .row label { margin: 0; text-align: center; }
       #bus .row label .code {
@@ -470,7 +486,8 @@
         <option value="ultron">Ultron</option>
         <option value="familiar">Familiar</option>
       </select>
-      <button id="save" type="button" class="primary">Save preset</button>
+      <button id="save" type="button" class="primary"
+              title="Every state of this body, and its baseline, to the file">Save everything</button>
       <button id="applyAll" type="button">Apply to all states</button>
       <button id="fromBaseline" type="button">Load baseline</button>
       <button id="driftOnly" type="button" title="Show only dials off the baseline">Δ only</button>
@@ -479,6 +496,10 @@
       <button id="deskToggle" type="button" title="Hide the desk and bus; presence stays live here">Desk</button>
       <div class="pq"><span>Presence</span>
         <input id="presenceQuick" type="range" min="0.4" max="1.8" step="0.005" value="1" />
+        <b id="presenceOut" title="Click to type a value">1.000</b>
+        <button id="presenceOsc" type="button" class="lfo-bind" title="Sweep presence">∿</button>
+        <button id="presenceReach" type="button" class="lfo-bind reach"
+                title="Speech reach — click, drag to the far size, click again to set. Shift-click clears.">◉</button>
       </div>
       <button id="gear" type="button">⚙</button>
       <div id="baselineNote"></div>
@@ -488,6 +509,8 @@
     <div id="console">
     <div id="transport">
       <div id="states"></div>
+      <button id="saveState" type="button" class="primary"
+              title="Save just the state on stage">Save state</button>
       <select id="pace" title="How fast the body travels between states">
         <option value="instant">instant</option>
         <option value="fast">fast</option>
@@ -497,13 +520,6 @@
       <span class="sep"></span>
       <span class="tlabel">Emotion</span>
       <div id="emotions"></div>
-      <span class="sep"></span>
-      <button id="rec" type="button" title="Record a transition take — arm, move dials, click again to stop">●</button>
-      <select id="transTo" style="display:none"></select>
-      <button id="transSave" type="button" style="display:none">Save transition</button>
-      <button id="transLoop" type="button" title="Loop a transition; dials stay live">⟳</button>
-      <select id="transChoose" style="display:none"></select>
-      <span id="transStatus" class="tlabel"></span>
     </div>
     <div id="mixer"></div>
     <div id="modal">
