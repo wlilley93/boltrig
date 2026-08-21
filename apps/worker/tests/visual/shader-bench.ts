@@ -1354,12 +1354,22 @@ function buildLfoFields(
  * panel lying about what is being rendered, which is the one thing a bench must
  * never do -- Copy settings would print a number nothing was drawing.
  */
+/** The one gate for writing a tuning field by parsed name: the name must be a
+ *  field the record already owns, and never a prototype climber. Saved looks
+ *  and URL state are user-provided, so a bare record[field] write would let a
+ *  crafted id reach __proto__. */
+function ownField(record: object, field: string): boolean {
+  if (field === "__proto__" || field === "constructor" || field === "prototype") return false;
+  return Object.prototype.hasOwnProperty.call(record, field);
+}
+
 function tickLfos(nowMs: number): void {
   let changed = false;
   for (const [id, lfo] of Object.entries(lfos)) {
     if (!lfo.on) continue;
     const [field, indexText] = id.split(":");
     const index = Number(indexText);
+    if (!ownField(tuning, field)) continue;
     const current = (tuning as unknown as Record<string, number | number[]>)[field];
     if (current === undefined) continue;
     const turns = (nowMs / 1000) * lfo.rate + lfo.phase;
@@ -1990,6 +2000,7 @@ function effectiveTuning(of: Tuning = tuning): Tuning {
     for (const [id, end] of Object.entries(speech)) {
       const [field, indexText] = id.split(":");
       if (scoped !== null && !scoped.has(field)) continue;
+      if (!ownField(record, field)) continue;
       const value = record[field];
       if (value === undefined) continue;
       if (typeof value === "number") {
@@ -2636,6 +2647,7 @@ function lerpTuning(from: Tuning, to: Tuning, at: number): Tuning {
   const target = out as unknown as Record<string, number | number[]>;
   const source = from as unknown as Record<string, number | number[]>;
   for (const [key, value] of Object.entries(target)) {
+    if (!ownField(target, key) || !ownField(source, key)) continue;
     const was = source[key];
     if (was === undefined) continue;
     if (typeof value === "number" && typeof was === "number") {
@@ -3188,6 +3200,7 @@ $("allMin").addEventListener("click", () => {
   const record = tuning as unknown as Record<string, number | number[]>;
   for (const field of Object.keys(record)) {
     if (HIDDEN_FIELDS.has(field) || GEOMETRY_FIELDS.has(field)) continue;
+    if (!ownField(record, field)) continue;
     const fallback = RANGE[field] ?? [0, 1, 0.005];
     const value = record[field];
     if (typeof value === "number") {

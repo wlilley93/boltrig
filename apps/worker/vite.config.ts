@@ -8,6 +8,20 @@ import path from "node:path";
 /** Where the shader bench locks its presets in. Read by hand, ported by hand. */
 const PRESETS = path.resolve(__dirname, "tests/visual/presets.json");
 
+/** The presets store, read without the exists-then-read race: a file deleted
+ *  between the check and the read is the same as a file never written, and
+ *  anything else (including corrupt JSON) still throws as it always did. */
+function readPresetsStore(): Record<string, unknown> {
+  let text: string;
+  try {
+    text = fs.readFileSync(PRESETS, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw error;
+  }
+  return JSON.parse(text) as Record<string, unknown>;
+}
+
 /**
  * Let the shader bench write a settled preset to DISK.
  *
@@ -128,9 +142,7 @@ function benchPresets(): Plugin {
             ? entry as { versions: unknown[] }
             : { versions: entry === undefined ? [] : [entry] };
         if (req.method === "GET") {
-          const store = fs.existsSync(PRESETS)
-            ? JSON.parse(fs.readFileSync(PRESETS, "utf8")) as Record<string, unknown>
-            : {};
+          const store = readPresetsStore();
           return reply(200, Object.fromEntries(
             Object.entries(store).map(([key, entry]) => [key, asVersions(entry)]),
           ));
@@ -173,9 +185,7 @@ function benchPresets(): Plugin {
               if (typeof tracks !== "object" || tracks === null) {
                 return reply(400, { error: "no tracks" });
               }
-              const transitStore = fs.existsSync(PRESETS)
-                ? JSON.parse(fs.readFileSync(PRESETS, "utf8")) as Record<string, unknown>
-                : {};
+              const transitStore = readPresetsStore();
               const transitKey = `${bodyName}.${slot}->${to}`;
               const take: Record<string, unknown> = {
                 tracks,
@@ -194,9 +204,7 @@ function benchPresets(): Plugin {
             if (typeof sent.tuning !== "object" || sent.tuning === null) {
               return reply(400, { error: "no tuning" });
             }
-            const store = fs.existsSync(PRESETS)
-              ? JSON.parse(fs.readFileSync(PRESETS, "utf8")) as Record<string, unknown>
-              : {};
+            const store = readPresetsStore();
             const key = `${bodyName}.${slot}`;
             const version: Record<string, unknown> = {
               tuning: sent.tuning,

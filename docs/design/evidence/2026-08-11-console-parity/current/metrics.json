@@ -1,13 +1,13 @@
 {
   "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-  "captureManifestSha256": "23339b1f5acbb4edc88c927954d1a781c0214d631b4d9209ffaf31a6010354d3",
+  "captureManifestSha256": "5ce773839a57f038413ebc81303048411196db1ad278ecf06dfda6f8b81aa311",
   "captureSourceBinding": {
     "branch": "feat/real-brand-mark",
-    "digestAfterCapture": "2b470a3af60a29fc1267e13c3897d09c0743df11e7cd7790f0b14e7c03fb6c22",
+    "digestAfterCapture": "adbc1513b08876c21c122de27b5547791955aeb99e6dd92cfabb8e808ff8f6f9",
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "2b470a3af60a29fc1267e13c3897d09c0743df11e7cd7790f0b14e7c03fb6c22",
-    "dirty": false,
-    "head": "d2bdcbae4988f4f4cdb1e75feedb763aa1c612fc",
+    "digestBeforeCapture": "adbc1513b08876c21c122de27b5547791955aeb99e6dd92cfabb8e808ff8f6f9",
+    "dirty": true,
+    "head": "bac8c45d3f5f398e4073eb6f0c2aede82bc4df75",
     "scope": [
       "apps/worker/src",
       "apps/worker/tests/visual"
