@@ -211,6 +211,12 @@ export interface JarvisTuning {
    * Zero ships: without a video loaded the layer draws nothing regardless.
    */
   lattice: EnergyRamp;
+  /** The video channel's effects rack: motion blur (a tangential smear along
+   *  the footage's own travel), saturation, and a four-tap glow. 0/1/0 ships:
+   *  neutral until the bench decides otherwise. */
+  latticeBlur: number;
+  latticeSat: number;
+  latticeGlow: number;
   /**
    * How big the whole composite sits in the frame: one scale on the live body
    * AND the baked layer together, so they never drift apart. 1 ships.
@@ -276,6 +282,9 @@ export const JARVIS_TUNING: JarvisTuning = {
   clump: [0, 2.6],
   focus: [0, 0],
   lattice: [0, 0],
+  latticeBlur: 0,
+  latticeSat: 1,
+  latticeGlow: 0,
   presence: 1,
   eye: [1, 1.5, 0.34, 15],
   drawLimb: [3, 3],

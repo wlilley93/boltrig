@@ -96,6 +96,10 @@ export interface UltronTuning {
    * ships. See canvas/latticeLayer.ts.
    */
   lattice: EnergyRamp;
+  /** The video channel's effects rack, as on Jarvis: blur / sat / glow. */
+  latticeBlur: number;
+  latticeSat: number;
+  latticeGlow: number;
   /**
    * How big the whole composite sits in the frame: one scale on the live body
    * AND the baked layer together, so they never drift apart. 1 ships.
@@ -169,5 +173,8 @@ export const ULTRON_TUNING: UltronTuning = {
   crackLimb: [0.36, 0.88],
   facetLimb: [0.28, 0.95],
   lattice: [0, 0],
+  latticeBlur: 0,
+  latticeSat: 1,
+  latticeGlow: 0,
   presence: 1,
 };

@@ -24,18 +24,52 @@ uniform vec3 uWarm;
 // body whose colour is her mood -- the footage is shot once in blue and the
 // emotion decides what colour that light is tonight.
 uniform float uMode;
+// The video channel's effects rack: x = motion blur (a tangential smear, so a
+// turning lattice streaks along its own travel), y = saturation, z = glow (a
+// four-tap halo, bloom at video prices). All neutral at [0, 1, 0].
+uniform vec3 uFx;
 void main() {
   vec2 uv = (vUV - 0.5) * uFit + 0.5;
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
     oColor = vec4(0.0);
     return;
   }
-  vec3 c = texture(uVideo, vec2(uv.x, 1.0 - uv.y)).rgb;
-  vec3 tint = mix(vec3(1.0), uWarm * 1.55, 0.45);
+  vec2 tuv = vec2(uv.x, 1.0 - uv.y);
+  vec3 c = texture(uVideo, tuv).rgb;
+  if (uFx.x > 0.001) {
+    vec2 rel = tuv - 0.5;
+    vec2 dir = vec2(-rel.y, rel.x);
+    vec3 acc = c;
+    float wsum = 1.0;
+    for (int i = 1; i <= 4; i++) {
+      float t = float(i) / 4.0;
+      vec2 o = dir * uFx.x * 0.14 * t;
+      float w = 1.0 - 0.55 * t;
+      acc += texture(uVideo, tuv + o).rgb * w;
+      acc += texture(uVideo, tuv - o).rgb * w;
+      wsum += 2.0 * w;
+    }
+    c = acc / wsum;
+  }
   float lum = dot(c, vec3(0.299, 0.587, 0.114));
-  vec3 shaded = uMode > 0.5 ? lum * uWarm * 2.0 : c * tint;
+  c = clamp(mix(vec3(lum), c, uFx.y), 0.0, 4.0);
+  if (uFx.z > 0.001) {
+    vec3 halo = texture(uVideo, tuv + vec2(0.014, 0.0)).rgb
+      + texture(uVideo, tuv - vec2(0.014, 0.0)).rgb
+      + texture(uVideo, tuv + vec2(0.0, 0.014)).rgb
+      + texture(uVideo, tuv - vec2(0.0, 0.014)).rgb;
+    c += halo * 0.3 * uFx.z;
+  }
+  vec3 tint = mix(vec3(1.0), uWarm * 1.55, 0.45);
+  // Recolour reads the FINAL luminance, so blur and glow reach her too.
+  float lumOut = dot(c, vec3(0.299, 0.587, 0.114));
+  vec3 shaded = uMode > 0.5 ? lumOut * uWarm * 2.0 : c * tint;
   oColor = vec4(shaded * uGain, 1.0);
 }`;
+
+/** blur / saturation / glow, in slider terms. Neutral is [0, 1, 0]. */
+export type LatticeFx = readonly [number, number, number];
+const NEUTRAL_FX: LatticeFx = [0, 1, 0];
 
 export class LatticeLayer {
   private tex: WebGLTexture | null = null;
@@ -116,6 +150,7 @@ export class LatticeLayer {
     fullscreen: (prog: WebGLProgram) => void,
     recolour = false,
     scale = 1,
+    fx: LatticeFx = NEUTRAL_FX,
   ): void {
     const gl = this.gl;
     if (!this.ready || !this.tex || !this.prog || gain <= 0) return;
@@ -132,7 +167,7 @@ export class LatticeLayer {
     gl.bindTexture(gl.TEXTURE_2D, this.tex);
     setUniforms(gl, this.prog, {
       uWarm: [warm[0], warm[1], warm[2]], uGain: gain, uFit: fit,
-      uMode: recolour ? 1 : 0,
+      uMode: recolour ? 1 : 0, uFx: [fx[0], fx[1], fx[2]],
     }, { uVideo: 2 });
     fullscreen(this.prog);
     gl.activeTexture(gl.TEXTURE0);
@@ -219,13 +254,14 @@ export class LatticeDeck {
     fullscreen: (prog: WebGLProgram) => void,
     recolour = false,
     scale = 1,
+    fx: LatticeFx = NEUTRAL_FX,
   ): void {
     if (!this.map || this.slots.length < 2 || gain <= 0) return;
     const front = this.slots[this.active];
     const back = this.slots[1 - this.active];
-    front.layer.draw(size, warm, gain * this.fade, fullscreen, recolour, scale);
+    front.layer.draw(size, warm, gain * this.fade, fullscreen, recolour, scale, fx);
     if (this.fade < 1 && back.el) {
-      back.layer.draw(size, warm, gain * (1 - this.fade), fullscreen, recolour, scale);
+      back.layer.draw(size, warm, gain * (1 - this.fade), fullscreen, recolour, scale, fx);
     }
   }
 

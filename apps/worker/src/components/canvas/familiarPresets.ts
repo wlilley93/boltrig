@@ -28,6 +28,9 @@ export const FAMILIAR_ARRIVAL: FamiliarTuning = {
   wander: [9, 40],
   gesture: [40, 120],
   lattice: [0, 0],
+  latticeBlur: 0,
+  latticeSat: 1,
+  latticeGlow: 0,
   presence: 1,
 };
 

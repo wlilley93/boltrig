@@ -235,7 +235,8 @@ export class UltronPasses {
     // footage, the electricity and the instability stay live on top.
     this.lattice?.draw(this.size, shared.uWarm as number[],
       ramp(tuning.lattice, d.energy) * (1 + 0.35 * d.swell),
-      (p) => this.fullscreen(p), false, tuning.presence);
+      (p) => this.fullscreen(p), false, tuning.presence,
+      [tuning.latticeBlur, tuning.latticeSat, tuning.latticeGlow]);
     drawDendrite(gl, this.progs, d, tuning, shared);
     drawIris(gl, this.progs, d, tuning, shared);
     drawVein(gl, this.progs, d, tuning, shared);

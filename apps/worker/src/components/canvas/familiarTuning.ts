@@ -130,6 +130,10 @@ export interface FamiliarTuning {
    * rides the voice. Zero ships. See canvas/latticeLayer.ts.
    */
   lattice: readonly [gain: number, byVoice: number];
+  /** The video channel's effects rack, as on the others: blur / sat / glow. */
+  latticeBlur: number;
+  latticeSat: number;
+  latticeGlow: number;
   /**
    * How big the whole composite sits in the frame: one scale on the live body
    * AND the baked layer together, so they never drift apart. 1 ships.
@@ -165,5 +169,8 @@ export const FAMILIAR_TUNING: FamiliarTuning = {
   gesture: [30, 90],
   errorTone: [0.75, 0.28],
   lattice: [0, 0],
+  latticeBlur: 0,
+  latticeSat: 1,
+  latticeGlow: 0,
   presence: 1,
 };

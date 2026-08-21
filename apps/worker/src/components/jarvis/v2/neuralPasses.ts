@@ -253,7 +253,8 @@ export class NeuralPasses {
   private drawLattice(d: Drive, tuning: JarvisTuning, shared: FloatUniforms): void {
     const gain = ramp(tuning.lattice, d.energy) * (1 + 0.35 * d.swell);
     this.lattice?.draw(this.size, shared.uWarm as number[], gain,
-      (p) => this.fullscreen(p), false, tuning.presence);
+      (p) => this.fullscreen(p), false, tuning.presence,
+      [tuning.latticeBlur, tuning.latticeSat, tuning.latticeGlow]);
   }
 
 

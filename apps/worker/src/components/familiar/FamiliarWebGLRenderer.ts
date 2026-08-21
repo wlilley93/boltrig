@@ -332,7 +332,8 @@ export class FamiliarWebGLRenderer {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
     this.latticeDeck.draw([w, h], mood, gain,
-      () => gl.drawArrays(gl.TRIANGLES, 0, 3), true, tuning.presence);
+      () => gl.drawArrays(gl.TRIANGLES, 0, 3), true, tuning.presence,
+      [tuning.latticeBlur, tuning.latticeSat, tuning.latticeGlow]);
     gl.disable(gl.BLEND);
     if (this.prog) gl.useProgram(this.prog);
   }
