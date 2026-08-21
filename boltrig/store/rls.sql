@@ -109,6 +109,11 @@ DECLARE
     'channel_gateway_leases',
     'run_checkpoints','fanout_counters',
     'run_cancel_requests',
+    -- The run-effect ledger (0085): what a run changed and how to undo it.
+    -- inverse_params carry real identifiers (message ts, ticket ids), so an
+    -- unfenced row would hand one tenant the handles to revert another's
+    -- actions. Same generic tenant_id policy, fail-closed on a null GUC.
+    'run_effects',
     -- Decision 0003 Phase 2: durable intake dedup markers + the socket-class
     -- outbound hand-off. Both carry a real tenant_id resolved from the VERIFIED
     -- channel before the write, so the generic tenant_id policy fences them.

@@ -64,6 +64,7 @@ from .credentials import CredentialResolver
 from .grants import GrantChecker
 from .approval_gate import enforce_approval
 from .held_call import record_held_call
+from .run_effect_recorder import record_run_effect
 from .hitl import HITLManager, hitl_scope_fields
 from .idempotency import (
     IdempotencyCoordinator,
@@ -390,6 +391,8 @@ class Dispatcher:
             output = await self._invoke_inner(
                 noun, verb, params, context, idempotency_key, approval_id, meta
             )
+            await record_run_effect(self._store, verb, params, output,
+                                    context, meta, summarise=_summarise_params)
             return output
         except PendingHuman as e:
             status = "pending_human"
@@ -520,6 +523,7 @@ class Dispatcher:
         gated = await requires_approval(
             self._store, self._blocking_verbs, verb, verb_def, binding, plan, context
         )
+        meta["gated"] = gated  # the run-effect ledger reuses the gate's verdict
         # 6. rate limit (FR-KER-05). The gate SPENDS the approval it is handed
         # (atomic ANSWERED -> CONSUMED, single-use) and nothing can hand it back,
         # so on the leg that carries one the throttle must decide FIRST: a

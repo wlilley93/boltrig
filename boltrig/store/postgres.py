@@ -15,6 +15,7 @@ from pathlib import Path
 
 import asyncpg
 
+from .effect_ledger_postgres import EffectLedgerStorePG
 from .channels import ChannelStorePG
 from .channel_dedup import ChannelDedupStorePG
 from .channel_outbox import ChannelOutboxStorePG
@@ -131,6 +132,7 @@ async def _init_conn(conn: asyncpg.Connection) -> None:
     )
 @bind_tenant_on_store_methods
 class PostgresStore(
+    EffectLedgerStorePG,
     ControlPlaneReadsPG,
     DistillationReadsPG,
     BudgetPolicyPG, BudgetUsagePG, WorkItemReadsPG, IdempotencyStorePG, GuardedWritesPG,

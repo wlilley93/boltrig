@@ -2838,3 +2838,26 @@ CREATE INDEX IF NOT EXISTS trajectory_events_recent
 CREATE INDEX IF NOT EXISTS trajectory_events_expiry
     ON trajectory_events (expires_at)
     WHERE expires_at IS NOT NULL;
+
+-- 0085: the durable run-effect ledger. One row per consequential verb a run
+-- completed; inverse NULL = not_undoable (recorded honestly, never omitted);
+-- revert walks seq DESC through dispatch.
+CREATE TABLE IF NOT EXISTS run_effects (
+    tenant_id       TEXT NOT NULL,
+    run_id          TEXT NOT NULL,
+    seq             INTEGER NOT NULL,
+    verb_id         TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'recorded',
+    inverse_verb    TEXT,
+    inverse_params  JSONB NOT NULL DEFAULT '{}'::jsonb,
+    summary         TEXT NOT NULL DEFAULT '',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, run_id, seq),
+    CHECK (status IN ('recorded','not_undoable','reverted','revert_failed')),
+    CHECK ((inverse_verb IS NULL) = (status = 'not_undoable')
+           OR status IN ('reverted','revert_failed')),
+    CHECK (octet_length(summary) <= 512),
+    CHECK (pg_column_size(inverse_params) <= 16384)
+);
+CREATE INDEX IF NOT EXISTS run_effects_revert_idx
+  ON run_effects(tenant_id, run_id, status, seq DESC);
