@@ -396,7 +396,23 @@ type LfoMap = Record<string, Lfo>;
 let lfos: LfoMap = {};
 const lfoKey = (field: string, index: number): string => `${field}:${index}`;
 /** The DOM the LFO has to move, so a swept value is visible and not just felt. */
-const sliderDom: Record<string, { input: HTMLInputElement; out: HTMLElement }> = {};
+/** Every card slider registers here with `set`, the ONE way to write it
+ *  from outside: sliders live in curved position space (travel spent where
+ *  the response is), and `set` encodes value → position so sweeps, journeys
+ *  and mirrors never need to know the curve exists. */
+const sliderDom: Record<string, {
+  input: HTMLInputElement; out: HTMLElement; set?: (value: number) => void;
+}> = {};
+
+function writeSlider(dom: { input: HTMLInputElement; out: HTMLElement; set?: (value: number) => void },
+  value: number): void {
+  if (dom.set) {
+    dom.set(value);
+  } else {
+    dom.input.value = String(value);
+    dom.out.textContent = value.toFixed(3);
+  }
+}
 
 /**
  * A tuning survives a reload, and can be handed to someone else as a link.
@@ -1436,12 +1452,31 @@ function row(
     // reads it — it just no longer takes a fader.
     if (HIDDEN_VALUES.has(lfoKey(key, index))) return;
     const [min, max, step] = RANGE_AT[lfoKey(key, index)] ?? fallback;
+    // THE CURVE. A linear slider over a wide range spends nine-tenths of its
+    // travel where nothing happens: on a 0..3 gain the whole character of the
+    // look lives below 0.5, so a nudge was a leap. Position space runs 0..1000
+    // through a γ curve — half the travel covers the sensitive low end, the
+    // top still reaches the ceiling — and every write goes through toPos /
+    // fromPos so the VALUES (readouts, saves, sweeps, reach) never change
+    // meaning. Signed ranges stay linear: a curve around zero would lie.
+    const GAMMA = 2.2;
+    const curved = min >= 0 && max > min;
+    const snap = (raw: number): number => {
+      const stepped = Math.round((raw - min) / step) * step + min;
+      return Number(Math.min(max, Math.max(min, stepped)).toFixed(6));
+    };
+    const toPos = (v: number): number => curved
+      ? Math.round(1000 * Math.pow((Math.min(max, Math.max(min, v)) - min) / (max - min), 1 / GAMMA))
+      : v;
+    const fromPos = (p: number): number => curved
+      ? snap(min + (max - min) * Math.pow(p / 1000, GAMMA))
+      : snap(p);
     const input = document.createElement("input");
     input.type = "range";
-    input.min = String(min);
-    input.max = String(max);
-    input.step = String(step);
-    input.value = String(value);
+    input.min = curved ? "0" : String(min);
+    input.max = curved ? "1000" : String(max);
+    input.step = curved ? "1" : String(step);
+    input.value = String(toPos(value));
     // An inverted dial (small number = more effect) flips its FILL direction
     // natively, so down still reads as less — the number is untouched, and
     // sweeps, typed values and the reach all stay consistent.
@@ -1449,7 +1484,13 @@ function row(
     const out = document.createElement("b");
     out.textContent = value.toFixed(3);
     readouts[index] = out;
-    sliderDom[lfoKey(key, index)] = { input, out };
+    sliderDom[lfoKey(key, index)] = {
+      input, out,
+      set: (v: number) => {
+        input.value = String(toPos(v));
+        out.textContent = v.toFixed(3);
+      },
+    };
     // TYPE THE NUMBER. Click the readout and it becomes a field: Enter or blur
     // commits (clamped to the slider's range), Escape walks away. A dial you
     // can only drag cannot be set to exactly 0.5.
@@ -1480,7 +1521,7 @@ function row(
           ? Math.min(max, Math.max(min, typed))
           : was;
         live[index] = next;
-        input.value = String(next);
+        input.value = String(toPos(next));
         out.textContent = next.toFixed(3);
         if (next !== was) {
           onChange(live.slice());
@@ -1495,7 +1536,7 @@ function row(
       field.addEventListener("blur", () => done(true));
     });
     input.addEventListener("input", () => {
-      live[index] = Number(input.value);
+      live[index] = fromPos(Number(input.value));
       readouts[index].textContent = live[index].toFixed(3);
       onChange(live.slice());
       push();
@@ -1527,31 +1568,31 @@ function row(
     const xv = document.createElement("input");
     xv.type = "range";
     xv.className = "xv";
-    xv.min = String(min);
-    xv.max = String(max);
-    xv.step = String(step);
+    xv.min = curved ? "0" : String(min);
+    xv.max = curved ? "1000" : String(max);
+    xv.step = curved ? "1" : String(step);
     xv.title = "reach — the value this dial travels to at full syllable. Double-click to clear.";
     const paintXv = () => {
       const end = speech[lfoKey(key, index)];
       xv.classList.toggle("set", end !== undefined);
-      xv.value = String(end !== undefined ? end : live[index]);
+      xv.value = String(toPos(end !== undefined ? end : live[index]));
     };
     xv.addEventListener("input", () => {
       // LEFTMOST IS THE ANCHOR, not a destination: parked at the rail's
       // bottom the modifier is cleared and the value stays pinned to its
       // dial — "travel all the way down during speech" is not a thing this
       // slider says.
-      if (Number(xv.value) <= min) {
+      if (fromPos(Number(xv.value)) <= min) {
         delete speech[lfoKey(key, index)];
         rememberSpeech();
         paintXv();
         return;
       }
-      speech[lfoKey(key, index)] = Number(xv.value);
+      speech[lfoKey(key, index)] = fromPos(Number(xv.value));
       // Locked colour holds the voice modifiers at parity too: setting one
       // colour field's ×voice sets them all.
       if (colourLock && COLOUR_FIELDS.has(key)) {
-        for (const field of COLOUR_FIELDS) speech[lfoKey(field, 0)] = Number(xv.value);
+        for (const field of COLOUR_FIELDS) speech[lfoKey(field, 0)] = fromPos(Number(xv.value));
       }
       rememberSpeech();
       xv.classList.add("set");
@@ -1776,10 +1817,7 @@ function tickLfos(nowMs: number): void {
       (tuning as unknown as Record<string, number[]>)[field] = next;
     }
     const dom = sliderDom[id];
-    if (dom) {
-      dom.input.value = String(value);
-      dom.out.textContent = value.toFixed(3);
-    }
+    if (dom) writeSlider(dom, value);
     changed = true;
   }
   // Pushed but NOT remembered: a swept value is a question, not a decision, and
@@ -1961,10 +1999,7 @@ function assign(key: string, value: number | number[]): void {
       const id = lfoKey(field, 0);
       if (speech[id] !== undefined) speech[id] = flat;
       const dom = sliderDom[id];
-      if (dom && field !== key) {
-        dom.input.value = String(flat);
-        dom.out.textContent = flat.toFixed(3);
-      }
+      if (dom && field !== key) writeSlider(dom, flat);
     }
     rememberSpeech();
   }
@@ -3741,10 +3776,7 @@ function applyTracks(base: Tuning, tracks: Tracks, p: number, skip?: Set<string>
     const parts = typeof value === "number" ? [value] : value;
     parts.forEach((part, index) => {
       const dom = sliderDom[lfoKey(field, index)];
-      if (dom) {
-        dom.input.value = String(part);
-        dom.out.textContent = part.toFixed(3);
-      }
+      if (dom) writeSlider(dom, part);
     });
   }
   return out;
