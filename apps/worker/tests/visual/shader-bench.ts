@@ -404,6 +404,7 @@ function rememberLfos(): void {
   } catch {
     // A full or blocked store is not a reason to stop rendering.
   }
+  scheduleAutosave();
 }
 
 function savedLfos(name: string): LfoMap {
@@ -443,6 +444,7 @@ function rememberSpeech(): void {
   } catch {
     // A full or blocked store is not a reason to stop rendering.
   }
+  scheduleAutosave();
 }
 
 function savedSpeech(name: string): Record<string, number> {
@@ -467,6 +469,44 @@ function remember(name: string, value: Tuning): void {
     localStorage.setItem(storageKey(name), JSON.stringify(value));
   } catch {
     // A full or blocked store is not a reason to stop rendering.
+  }
+  scheduleAutosave();
+}
+
+/**
+ * EVERY TOUCH AUTOSAVES. A settled edit (1.5s of quiet) posts to the file as
+ * an `autosave` version that REPLACES the previous autosave rather than
+ * stacking, so the store follows the hands without drowning the deliberate
+ * checkpoints. Save state / Save everything remain the named milestones.
+ */
+let autosaveTimer = 0;
+function scheduleAutosave(): void {
+  window.clearTimeout(autosaveTimer);
+  autosaveTimer = window.setTimeout(() => { void autosaveNow(); }, 1500);
+}
+
+async function autosaveNow(): Promise<void> {
+  try {
+    const response = await fetch("/__bench-presets", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        body, slot, tuning,
+        lfos: Object.fromEntries(Object.entries(lfos).filter(([, l]) => l.on)),
+        speech,
+        autosave: true,
+      }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const status = $("saved");
+    // Quiet, and never over a louder message: a failure or a deliberate
+    // save's confirmation outranks a heartbeat.
+    if (status.className === "" || status.textContent?.startsWith("autosaved")) {
+      status.textContent = `autosaved ${new Date().toLocaleTimeString()}`;
+    }
+  } catch (error) {
+    $("saved").textContent = `AUTOSAVE FAILED — ${(error as Error).message}`;
+    $("saved").className = "bad";
   }
 }
 
@@ -887,6 +927,9 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "3 · The iris — radial filaments", fields: [
     "irisGain", "irisRadius", "irisFil", "irisFlow",
   ] },
+  { title: "3 · Pathways — the neural links", fields: [
+    "linkGain", "linkBow", "linkRange", "linkLimb",
+  ] },
   { title: "3 · Dendrites — the neurons and their signals", fields: [
     "dendriteGain", "dendrite", "dendriteTip", "bead", "signal", "arc",
   ] },
@@ -1178,6 +1221,11 @@ function row(
         return;
       }
       speech[lfoKey(key, index)] = Number(xv.value);
+      // Locked colour holds the voice modifiers at parity too: setting one
+      // colour field's ×voice sets them all.
+      if (colourLock && COLOUR_FIELDS.has(key)) {
+        for (const field of COLOUR_FIELDS) speech[lfoKey(field, 0)] = Number(xv.value);
+      }
       rememberSpeech();
       xv.classList.add("set");
     });
@@ -1487,8 +1535,38 @@ function clipsFor(which: string): string[] {
   return Array.from({ length: count }, (_, i) => `/companion/${which}-${i + 1}.wav`);
 }
 
+/** The dials that decide COLOURISATION. One member today; the lock's contract
+ *  is written against the set, so a future colour dial joins by being named. */
+const COLOUR_FIELDS = new Set(["latticeSat"]);
+let colourLock = ((): boolean => {
+  try {
+    return localStorage.getItem(storageKey("colourLock")) === "1";
+  } catch {
+    return false;
+  }
+})();
+
 function assign(key: string, value: number | number[]): void {
   (tuning as unknown as Record<string, unknown>)[key] = value;
+  // LOCKED COLOUR: every colour dial takes the same value, and so does each
+  // one's voice modifier — parity means speech cannot shift the
+  // colourisation, only the light.
+  if (colourLock && COLOUR_FIELDS.has(key)) {
+    const flat = typeof value === "number" ? value : value[0];
+    const record = tuning as unknown as Record<string, number | number[]>;
+    for (const field of COLOUR_FIELDS) {
+      if (record[field] === undefined) continue;
+      record[field] = typeof record[field] === "number" ? flat : value;
+      const id = lfoKey(field, 0);
+      if (speech[id] !== undefined) speech[id] = flat;
+      const dom = sliderDom[id];
+      if (dom && field !== key) {
+        dom.input.value = String(flat);
+        dom.out.textContent = flat.toFixed(3);
+      }
+    }
+    rememberSpeech();
+  }
 }
 
 function push(): void {
@@ -1737,10 +1815,12 @@ async function savePreset(): Promise<void> {
 /** Superseded by the iris: present in the struct, deliberately not a channel.
  *  Hidden rather than orphaned, so the desk does not grow a warning strip for
  *  fields nothing should be editing. */
-/** link* is superseded by the iris; `presence` is GLOBAL FRAMING, owned by the
- *  topbar slider rather than a desk strip — a strip for it invited soloing
- *  the body's size, which is how the composite once shrank to a dot. */
-const HIDDEN_FIELDS = new Set(["linkGain", "linkBow", "linkRange", "linkLimb", "presence"]);
+/** `presence` is GLOBAL FRAMING, owned by the topbar slider rather than a
+ *  desk strip — a strip for it invited soloing the body's size, which is how
+ *  the composite once shrank to a dot. The link* pathways are BACK on the
+ *  desk (max flexibility beats the old "superseded by the iris" ruling);
+ *  their shipped gain is zero, so nothing changes until raised. */
+const HIDDEN_FIELDS = new Set(["presence"]);
 /** Single VALUES hidden from the cards while their data stays live: the
  *  lattice pair's ×voice element is covered by the generic ×voice slider. */
 const HIDDEN_VALUES = new Set(["lattice:1"]);
@@ -1777,6 +1857,7 @@ const SPATIAL_RANK: Record<string, number> = {
   "4 · Veins and cracks": 5,
   "5 · Circuit shards": 6,
   "5 · Debris — clumping and depth": 7,
+  "3 · Pathways — the neural links": 8,
   "3 · Dendrites — the neurons and their signals": 8,
   "4 · Inner particle layer — the core cloud": 9,
   "3 · The iris — radial filaments": 10,
@@ -1798,6 +1879,7 @@ const STRIP_NAME: Record<string, string> = {
   "4 · Veins and cracks": "Veins",
   "5 · Circuit shards": "Shards",
   "5 · Debris — clumping and depth": "Debris",
+  "3 · Pathways — the neural links": "Pathways",
   "3 · Dendrites — the neurons and their signals": "Neurons",
   "4 · Inner particle layer — the core cloud": "Cloud",
   "3 · The iris — radial filaments": "Iris",
@@ -2298,7 +2380,7 @@ $("fromBaseline").addEventListener("click", () => {
  */
 type SavedVersion = {
   tuning: Partial<Tuning>; lfos?: LfoMap; speech?: Record<string, number>;
-  savedAt?: string; label?: string; overwrite?: boolean;
+  savedAt?: string; label?: string; overwrite?: boolean; autosave?: boolean;
 };
 let history: Record<string, { versions: SavedVersion[] }> = {};
 
@@ -3080,6 +3162,48 @@ $("deskToggle").addEventListener("click", toggleDesk);
 $("deskMin").addEventListener("click", toggleDesk);
 paintDesk();
 
+$("lockColour").addEventListener("click", () => {
+  colourLock = !colourLock;
+  try {
+    localStorage.setItem(storageKey("colourLock"), colourLock ? "1" : "0");
+  } catch { /* fine */ }
+  $("lockColour").classList.toggle("on", colourLock);
+  if (colourLock) {
+    // Locking snaps the set to parity NOW, led by the video's saturation.
+    const record = tuning as unknown as Record<string, number | number[]>;
+    const lead = record.latticeSat;
+    if (typeof lead === "number") assign("latticeSat", lead);
+    push();
+  }
+});
+$("lockColour").classList.toggle("on", colourLock);
+
+/** Build by eye: everything to its minimum, then raise dials one at a time.
+ *  Geometry (presence) is framing, not light, and keeps its value. */
+$("allMin").addEventListener("click", () => {
+  const sure = window.confirm(
+    `Set every ${body}.${slot} slider to its minimum? (autosave will follow; history keeps the look before this)`,
+  );
+  if (!sure) return;
+  const record = tuning as unknown as Record<string, number | number[]>;
+  for (const field of Object.keys(record)) {
+    if (HIDDEN_FIELDS.has(field) || GEOMETRY_FIELDS.has(field)) continue;
+    const fallback = RANGE[field] ?? [0, 1, 0.005];
+    const value = record[field];
+    if (typeof value === "number") {
+      record[field] = (RANGE_AT[lfoKey(field, 0)] ?? fallback)[0];
+    } else {
+      record[field] = value.map((_, i) => (RANGE_AT[lfoKey(field, i)] ?? fallback)[0]);
+    }
+  }
+  buildControls();
+  push();
+  paintMixerLevels();
+  paintDrift();
+  $("saved").textContent = "all sliders at minimum — raise them one at a time";
+  $("saved").className = "ok";
+});
+
 /** The console's physical size, dragged from the grip above the transport.
  *  Dragging DOWN shrinks the desk — transport, mixer and bus all move down
  *  and the stage takes the height; dragging up grows it again. */
@@ -3117,6 +3241,14 @@ $("splitter").addEventListener("pointerdown", (event) => {
 paintDeskScale();
 
 $("presenceQuick").addEventListener("input", () => {
+  // Touching the slider takes control back from a running sweep — a sweep
+  // that fights the hand is a slider that "does not slide".
+  const id = lfoKey("presence", 0);
+  if (lfos[id]?.on) {
+    lfos[id] = { ...lfos[id], on: false };
+    rememberLfos();
+    paintPresenceCtl();
+  }
   const value = Number(($("presenceQuick") as HTMLInputElement).value);
   assign("presence", value);
   $("presenceOut").textContent = value.toFixed(3);
@@ -3138,7 +3270,8 @@ function registerPresenceDom(): void {
 function paintPresenceCtl(): void {
   const on = lfos[lfoKey("presence", 0)]?.on === true;
   $("presenceOsc").classList.toggle("on", on);
-  ($("presenceQuick") as HTMLInputElement).disabled = on;
+  // NEVER DISABLED. A sweep left on (perhaps days ago, in a saved state)
+  // made this read as a dead slider; grabbing it takes control back instead.
   const id = lfoKey("presence", 0);
   $("presenceReach").classList.toggle("arm", reachArming?.id === id);
   $("presenceReach").classList.toggle("on", reachArming?.id !== id && speech[id] !== undefined);

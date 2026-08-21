@@ -216,7 +216,23 @@ function benchPresets(): Plugin {
               version.label = sent.label.trim().slice(0, 120);
             }
             const entry = asVersions(store[key]);
-            entry.versions.push(version);
+            // AUTOSAVE RIDES, IT DOES NOT STACK: every touch autosaves, and a
+            // history where each drag is fifty versions is no history at all.
+            // An autosave REPLACES the previous autosave at the top of the
+            // list; a deliberate save is appended and stays a checkpoint.
+            const newest = entry.versions[entry.versions.length - 1] as
+              { autosave?: boolean } | undefined;
+            if ((sent as { autosave?: unknown }).autosave === true) {
+              version.autosave = true;
+              version.label = "autosave";
+              if (newest?.autosave === true) {
+                entry.versions[entry.versions.length - 1] = version;
+              } else {
+                entry.versions.push(version);
+              }
+            } else {
+              entry.versions.push(version);
+            }
             store[key] = entry;
             fs.writeFileSync(PRESETS, `${JSON.stringify(store, null, 2)}\n`);
             return reply(200, { path: "tests/visual/presets.json", versions: entry.versions.length });
