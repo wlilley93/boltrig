@@ -12,6 +12,7 @@ something and nobody can remember why, the answer is in the long document.
 | Colossus | [colossus.md](colossus.md) | `apps/worker/src/bundles/colossus/character.json` |
 | Jarvis | [jarvis.md](jarvis.md) | `apps/worker/src/bundles/jarvis/character.json` |
 | Ultron | [ultron.md](ultron.md) | `apps/worker/src/bundles/ultron/character.json` |
+| General Montgomery | [general_montgomery.md](general_montgomery.md) | bundle root `character-bundles/general_montgomery/character.json` (companion lane; verbatim-held by boltrig-companion `tests/test_montgomery_persona.py`) |
 
 **Every shipped character's document is now here, and the bundle is checked
 against it.** `test_the_bundle_carries_its_document_section_VERBATIM` asserts
