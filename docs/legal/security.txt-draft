@@ -1,0 +1,6 @@
+# Draft for https://boltrig.ai/.well-known/security.txt once a mailbox exists.
+Contact: mailto:[security mailbox]
+Expires: [one year from publication, RFC 3339]
+Preferred-Languages: en
+Canonical: https://boltrig.ai/.well-known/security.txt
+Policy: https://boltrig.ai/security

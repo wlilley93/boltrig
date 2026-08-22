@@ -58,6 +58,13 @@ The presence is the worker's own shader, built into one self-contained page and 
 `Boltrig/Resources/FamiliarIsland/familiar-island.html` with a manifest beside it. Rebuild it
 from the repository root with `make familiar-island` after a renderer change;
 `make familiar-island-check` (part of `worker-quality`) fails when the bundled page is stale.
+For simulator captures, debug builds take launch arguments: `-boltrigPreview -boltrigTab
+today|chat|settings -boltrigEmptyChat` for the signed-in screens, and `-boltrigOnboarding
+-boltrigStep name|provider|vision|ready` for first-run setup against a stub server. A live run
+against a real instance is `BoltrigTests/LiveContractTests` with
+`TEST_RUNNER_BOLTRIG_LIVE_EMAIL` and `TEST_RUNNER_BOLTRIG_LIVE_PASSWORD` set (it skips itself
+otherwise; use a throwaway account, it switches the companion to Familiar and sends one turn).
+
 The page reports `ready`, `fallback` and frame rates to the unified log under the
 `ai.boltrig.app` subsystem (`log show --info --predicate 'subsystem == "ai.boltrig.app"'`).
 When the page is missing or reports no WebGL, the SwiftUI badge shows instead.

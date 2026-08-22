@@ -34,12 +34,15 @@ struct RootView: View {
     @State private var onboarding: OnboardingStore?
     #if DEBUG
     @State private var previewWorkspace: AppStore?
+    @State private var previewSetup: OnboardingStore?
     #endif
 
     var body: some View {
         Group {
             #if DEBUG
-            if let previewWorkspace {
+            if let previewSetup {
+                OnboardingFlowView(store: previewSetup)
+            } else if let previewWorkspace {
                 ContentView(onLeavePreview: { self.previewWorkspace = nil })
                     .environmentObject(previewWorkspace)
             } else {
@@ -52,7 +55,16 @@ struct RootView: View {
         .task {
             #if DEBUG
             // Launch arguments for simulator captures: -boltrigPreview opens the preview
-            // workspace without a session; -boltrigTab today|chat|settings picks the tab.
+            // workspace without a session; -boltrigTab today|chat|settings picks the tab;
+            // -boltrigOnboarding shows first-run setup against a stub, -boltrigStep picks the step.
+            if CommandLine.arguments.contains("-boltrigOnboarding") {
+                var step: String?
+                if let index = CommandLine.arguments.firstIndex(of: "-boltrigStep"), index + 1 < CommandLine.arguments.count {
+                    step = CommandLine.arguments[index + 1]
+                }
+                previewSetup = SetupPreview.store(step: step)
+                return
+            }
             if CommandLine.arguments.contains("-boltrigPreview") {
                 let store = AppStore.preview()
                 if let index = CommandLine.arguments.firstIndex(of: "-boltrigTab"), index + 1 < CommandLine.arguments.count {
