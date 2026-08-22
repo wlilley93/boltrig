@@ -28,6 +28,10 @@ final class ChatSession: ObservableObject {
     @Published private(set) var historyError: String?
     @Published private(set) var attachments: [ChatAttachment] = []
     @Published private(set) var limits = AttachmentLimits()
+    /// The one line under the composer about attachments: a refusal, or a limit that was hit.
+    @Published private(set) var attachmentNotice: String?
+    static let attachmentsRejectedCopy = "Boltrig could not accept those files. Remove one and try again."
+    static let attachmentsFootnote = "Only text files are read. Photos and other files are kept with the message."
     /// Driven by the speaker: Familiar is reading a reply aloud, and how loudly.
     @Published var speaking = false
     @Published var speakingLevel: Double = 0
@@ -150,6 +154,7 @@ final class ChatSession: ObservableObject {
         pendingQuestion = nil
         let sending = attachments
         attachments = []
+        attachmentNotice = nil
         guard let client else {
             isSending = true
             try? await Task.sleep(nanoseconds: 650_000_000)
@@ -172,7 +177,8 @@ final class ChatSession: ObservableObject {
                 }
                 self.finishTurn(reason: nil)
             } catch {
-                let copy = (error as? BoltrigError)?.errorDescription ?? BoltrigError(kind: .unreachable, status: 0).errorDescription
+                var copy = (error as? BoltrigError)?.errorDescription ?? BoltrigError(kind: .unreachable, status: 0).errorDescription
+                if (error as? BoltrigError)?.status == 413 { copy = Self.attachmentsRejectedCopy }
                 self.finishTurn(reason: copy)
             }
         }
@@ -263,11 +269,20 @@ final class ChatSession: ObservableObject {
         return nil
     }
 
+    /// Takes what the importer produced: a ready file goes in within the limits, a refusal is shown.
+    func attach(_ outcome: AttachmentImporter.Outcome) {
+        switch outcome {
+        case let .ready(attachment): attachmentNotice = addAttachment(attachment)
+        case let .refused(reason): attachmentNotice = reason
+        }
+    }
+
     func removeAttachment(named name: String) {
+        attachmentNotice = nil
         attachments.removeAll { $0.name == name }
     }
 
-    static func size(_ bytes: Int) -> String {
+    nonisolated static func size(_ bytes: Int) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .binary)
     }
 
