@@ -526,3 +526,66 @@ change) and `ios/BoltrigTests/ClientAndParsingTests.swift` (instance parsing, er
 sign-in decoding, account decoding, SSE framing, event mapping, streamed and queued chat,
 conversation and approval decoding, Keychain round trip). All run against an in-memory
 URLProtocol stub, no network.
+
+
+---
+
+# Part 3: the Familiar-only plan, and what landed the same day (2026-08-22, later)
+
+Will decided the iPhone ships **only Familiar**; the approved plan lives in the session record
+and is summarised here with what shipped on `feat/ios-app`:
+
+- **S1 Familiar only**: the bundle names no other companion; an account whose companion is
+  unset or another character is switched to Familiar the first time the phone loads it
+  (`PUT /v1/me/settings {"agent.character":"familiar"}`, then `POST /v1/familiar/emotion/adopted`,
+  re-read, one plain notice; retried next launch on failure). Will chose "always switch".
+- **S2 the Familiar island**: `apps/worker/familiar-island/` builds the vendored shader plus its
+  host logic into one self-contained html (163 KB, CSP-hash pinned, byte deterministic),
+  synced into `ios/Boltrig/Resources/FamiliarIsland/` with a manifest; `make familiar-island`
+  rebuilds, `make familiar-island-check` guards staleness inside `worker-quality`.
+- **S3 presence**: `ios/Boltrig/Familiar/` holds the bridge (state in, reports out), the one
+  web view controller (claim per surface, 30 Hz coalescing, file-only navigation, badge fallback,
+  unified-log reports), a SwiftUI port of the SVG badge with the genotype rules, and the
+  presence on Chat (hero when empty, conversation above the thread) and Today (header).
+  Evidence: `docs/design/evidence/2026-08-ios-familiar/`.
+- **S4 chat completeness**: `ChatSession` owns history (`GET /v1/conversations/{id}`), the
+  follow stream with cursors (409 idle is quiet), stop (cooperative cancel), inline questions,
+  receipts, attachment limits from `/v1/chat/config`. A stale `active_run_id` cannot loop.
+- **S4b the linked computer** (Will's change: "the iPhone is a remote link to the DMG"): Today
+  and Settings show the computers signed in with Boltrig Desktop (`GET /v1/devices`), a
+  download link, and Disconnect (`DELETE /v1/devices/{id}`).
+
+Measured: 43 XCTest cases pass on the iPhone 17 simulator; worker suites for the island 41
+pass; `make worker-quality` gates (typecheck, structure, build, island check) pass; the
+additive evidence receipt was re-captured for the renderer edit.
+
+## The desktop link, precisely
+
+What the repository says about "the phone as a remote for the desktop" (read 2026-08-22):
+
+- Boltrig Desktop enrols itself automatically after signing in with the account; there is no
+  pairing code anywhere (`docs/decisions/0027-browser-cloud-desktop-local-agent.md`). The
+  natural link is "same account". The phone therefore links by signing in, and sees the desktop
+  in `GET /v1/devices` (label, presence, `last_seen_at` refreshed every 3 s while the desktop
+  runs, roots).
+- A chat turn never runs on the desktop: decision 0027 makes it a surface boundary with no
+  fallback (`boltrig/fleet` has no device reference). Desktop work is reached only through the
+  `device.*` verbs with an explicit device and root, behind an approval that a DIFFERENT person
+  must give (`boltrig/device_leases.py` offers no sole-author relief), so a single-human tenant
+  cannot materialise a device lease from any surface today. Command output is never returned,
+  only exit codes and digests.
+- The DMG lives on GitHub Releases; the web app's download link is a build-time constant, and
+  no kernel route publishes it. The phone points at the releases page for now.
+
+So the phone IS a remote for the account the desktop is signed in to (see it, approve for it,
+disconnect it) and is NOT yet a remote control of work on that computer. Making it one needs
+three decisions that are Will's: (1) let a phone-originated turn target the desktop executor
+(contradicts 0027 as written), (2) sole-author relief or a device-bound approval for
+single-person tenants, (3) a server-published desktop download address and, if wanted, a
+pairing code flow the desktop can consume.
+
+## What is next, in order
+
+S5 spoken replies in Familiar's voice, S6 presence polish and budgets, S7 native onboarding
+(Familiar only), S8 attachments UI, S9 settings subset, S10 docs; the non-code track in
+`docs/IOS-LAUNCH-READINESS.md`. Build and test only on the M4; `ios/README.md` has the commands.
