@@ -9,12 +9,14 @@ import "./characterPlugins";
 import { AuthGate } from "./components/AuthGate";
 import { WorkerErrorBoundary } from "./components/WorkerErrorBoundary";
 import { WorkerGlobalContextProvider } from "./components/WorkerGlobalContext";
+import { bootstrapProductName } from "./productName";
 import { bootstrapAppearance } from "./theme";
 import "./styles.css";
 import "./components/settings/appearance.css";
 
 bootstrapAppearance();
 bootstrapCharacter();
+bootstrapProductName();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("root element #root not found");

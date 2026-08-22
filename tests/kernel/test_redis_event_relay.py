@@ -64,18 +64,14 @@ async def test_relay_backends_preserve_bounded_cursor_and_reopen_semantics(
         "two",
         "three",
     ]
-    assert [item["delta"] for item in relay.snapshot("acme", "run-1", since=2)] == [
-        "three"
-    ]
+    assert [item["delta"] for item in relay.snapshot("acme", "run-1", since=2)] == ["three"]
     assert original == {"type": "text_delta", "delta": "one"}
 
     relay.close("acme", "run-1")
-    assert [
-        seq
-        async for seq, _event in relay.subscribe_with_seq(
-            "acme", "run-1", since=1
-        )
-    ] == [2, 3]
+    assert [seq async for seq, _event in relay.subscribe_with_seq("acme", "run-1", since=1)] == [
+        2,
+        3,
+    ]
     relay.reopen("acme", "run-1")
     relay.publish("acme", "run-1", {"type": "text_delta", "delta": "four"})
     assert relay.seq_bounds("acme", "run-1") == (3, 4)
@@ -108,12 +104,8 @@ async def test_two_redis_replicas_share_replay_live_close_and_active_run_truth()
         assert replica_b.active_run("acme", "conversation-1") is None
         replica_a.set_active_run("acme", "conversation-1", "run-1")
     assert replica_b.active_run("acme", "conversation-1") == "run-1"
-    assert not replica_b.clear_active_run(
-        "acme", "conversation-1", expected="another-run"
-    )
-    assert replica_b.clear_active_run(
-        "acme", "conversation-1", expected="run-1"
-    )
+    assert not replica_b.clear_active_run("acme", "conversation-1", expected="another-run")
+    assert replica_b.clear_active_run("acme", "conversation-1", expected="run-1")
 
 
 @pytest.mark.invariant("NFR-CONV-03")
@@ -138,26 +130,17 @@ async def test_chat_projection_on_replica_b_follows_replica_a_canonical_run() ->
         chat_a._set_active_run(  # noqa: SLF001
             "acme", "conversation-1", "run-1"
         )
-    replica_a.publish(
-        "acme", "run-1", {"type": "text_delta", "delta": "from replica A"}
-    )
+    replica_a.publish("acme", "run-1", {"type": "text_delta", "delta": "from replica A"})
 
     projection = chat_b.live_projection()
-    assert (
-        await projection.active_run_for(
-            "acme", "alice", "engineer", "conversation-1"
-        )
-        == "run-1"
-    )
+    assert await projection.active_run_for("acme", "alice", "engineer", "conversation-1") == "run-1"
     follower = projection.follow("acme", "conversation-1", "run-1")
     assert await anext(follower) == (
         1,
         {"type": "text_delta", "delta": "from replica A"},
     )
     replica_a.close("acme", "run-1")
-    replica_a.clear_active_run(
-        "acme", "conversation-1", expected="run-1"
-    )
+    replica_a.clear_active_run("acme", "conversation-1", expected="run-1")
     with pytest.raises(StopAsyncIteration):
         await asyncio.wait_for(anext(follower), timeout=1)
 
@@ -184,9 +167,7 @@ async def test_two_chat_replicas_admit_one_turn_and_durably_queue_the_steer() ->
         entered.set()
         if len(calls) == 1:
             await gate.wait()
-        relay.publish(
-            run_id, {"type": "text_delta", "delta": f"reply:{message}"}
-        )
+        relay.publish(run_id, {"type": "text_delta", "delta": f"reply:{message}"})
 
     chat_a = ChatService(store, replica_a, turn_executor=executor)
     chat_b = ChatService(store, replica_b, turn_executor=executor)
@@ -235,11 +216,7 @@ async def test_direct_input_is_durable_before_another_replica_can_append_a_steer
             self._gated = False
 
         async def add_message(self, message):
-            if (
-                not self._gated
-                and message.role == MessageRole.USER
-                and message.run_id is not None
-            ):
+            if not self._gated and message.role == MessageRole.USER and message.run_id is not None:
                 self._gated = True
                 self.direct_started.set()
                 await self.release_direct.wait()
@@ -259,12 +236,8 @@ async def test_direct_input_is_durable_before_another_replica_can_append_a_steer
             await release_executor.wait()
         relay.publish(run_id, {"type": "text_delta", "delta": message})
 
-    chat_a = ChatService(
-        store, _fake_pair(server, namespace=namespace), turn_executor=executor
-    )
-    chat_b = ChatService(
-        store, _fake_pair(server, namespace=namespace), turn_executor=executor
-    )
+    chat_a = ChatService(store, _fake_pair(server, namespace=namespace), turn_executor=executor)
+    chat_b = ChatService(store, _fake_pair(server, namespace=namespace), turn_executor=executor)
     first = asyncio.create_task(
         _collect_turn(
             chat_a.handle_turn(
@@ -300,9 +273,11 @@ async def test_direct_input_is_durable_before_another_replica_can_append_a_steer
     messages = await store.list_messages("acme", conversation.id)
     assert [(item.content, item.run_id) for item in messages] == [
         ("first", messages[0].run_id),
-        ("second", None),
+        ("second", messages[1].run_id),
     ]
     assert messages[0].run_id is not None
+    assert messages[1].run_id is not None
+    assert messages[1].run_id != messages[0].run_id
 
     release_executor.set()
     await asyncio.wait_for(first, timeout=2)
@@ -313,9 +288,7 @@ async def test_direct_input_is_durable_before_another_replica_can_append_a_steer
 @pytest.mark.invariant("US-CHAT-15")
 async def test_turn_admission_rolls_back_cleanly_at_each_storage_boundary() -> None:
     class FailingClaimRelay(EventRelay):
-        def set_active_run(
-            self, tenant_id: str, conversation_id: str, run_id: str
-        ) -> None:
+        def set_active_run(self, tenant_id: str, conversation_id: str, run_id: str) -> None:
             raise RuntimeError("redis unavailable")
 
     store_before_claim = InMemoryStore()
@@ -386,10 +359,7 @@ async def test_evicted_closed_stream_keeps_a_bounded_completion_tombstone() -> N
         relay.close("acme", run_id)
 
     assert relay.snapshot("acme", "run-1") == []
-    ended = [
-        item
-        async for item in relay.subscribe_with_seq("acme", "run-1")
-    ]
+    ended = [item async for item in relay.subscribe_with_seq("acme", "run-1")]
     assert ended == []
 
 
@@ -446,9 +416,7 @@ async def test_conversation_lock_renews_while_a_store_write_is_slow() -> None:
 async def test_next_turn_never_overwrites_a_successor_after_lease_loss() -> None:
     store = InMemoryStore()
     relay = EventRelay()
-    conversation = Conversation(
-        id="conversation", tenant_id="acme", user_id="alice"
-    )
+    conversation = Conversation(id="conversation", tenant_id="acme", user_id="alice")
     await store.create_conversation(conversation)
     await store.add_message(
         ConversationMessage(
@@ -492,12 +460,8 @@ async def test_stale_run_stops_when_active_lease_refresh_loses_ownership() -> No
         origin=None,
         model_profile_id=None,
     )
-    conversation = Conversation(
-        id="conversation", tenant_id="acme", user_id="alice"
-    )
-    stream = _stream_one(
-        chat, request, conversation, "run-1", "stale", [], None, []
-    )
+    conversation = Conversation(id="conversation", tenant_id="acme", user_id="alice")
+    stream = _stream_one(chat, request, conversation, "run-1", "stale", [], None, [], None)
     assert (await anext(stream))["type"] == "message_start"
     with pytest.raises(RuntimeError, match="conversation_run_ownership_lost"):
         await anext(stream)
@@ -540,9 +504,7 @@ async def test_real_redis_two_client_continuity() -> None:
         follower = replica_b.subscribe_with_seq("acceptance", "run")
         waiting = asyncio.create_task(anext(follower))
         await asyncio.sleep(0.05)
-        replica_a.publish(
-            "acceptance", "run", {"type": "text_delta", "delta": "cross-replica"}
-        )
+        replica_a.publish("acceptance", "run", {"type": "text_delta", "delta": "cross-replica"})
         assert await asyncio.wait_for(waiting, timeout=3) == (
             1,
             {"type": "text_delta", "delta": "cross-replica"},

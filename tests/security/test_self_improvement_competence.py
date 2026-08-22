@@ -226,6 +226,17 @@ async def test_reflection_is_opt_in_through_the_chokepoint():
     assert len(lessons) == 1
     rows = await kernel.store.audit_query(T)
     assert any(r.verb == "memory.remember" and r.status == "ok" for r in rows)
+    # Decision 0029: the same terminal run also proposes ONE typed episode
+    # (memory.propose, same seat, same opt-in gate) whose retrieval text
+    # embeds the problem representation - the intent and how it ended - never
+    # a resolution alone.
+    episodes = await kernel.store.list_memory_facts(T, ["user:chief-of-staff"], kind="episodic")
+    assert len(episodes) == 1
+    retrieval = (episodes[0].payload or {}).get("retrieval_text", "")
+    assert "close the ticket" in retrieval and "ended as done" in retrieval
+    assert (episodes[0].payload or {}).get("outcome") == "succeeded"
+    assert episodes[0].status == "active"
+    assert any(r.verb == "memory.propose" and r.status == "ok" for r in rows)
 
     # DISABLED: the same run stores NO lesson (opt-in; the per-item write is asked
     # for, never default-on).

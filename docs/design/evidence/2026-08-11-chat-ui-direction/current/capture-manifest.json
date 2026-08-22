@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-16T20:24:42.571Z",
+  "capturedAt": "2026-08-22T06:36:37.679Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "93964ff03cd7e0927e321d4c936b539851cf92670659a60cfb8eee03638ae06d",
-    "digestAfterCapture": "93964ff03cd7e0927e321d4c936b539851cf92670659a60cfb8eee03638ae06d",
+    "digestBeforeCapture": "1ac9eddf528da3c80516af67796a9c8d414d46ec607109b6037a39d4c4d2c953",
+    "digestAfterCapture": "1ac9eddf528da3c80516af67796a9c8d414d46ec607109b6037a39d4c4d2c953",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/jarvis-arc-reactor",
-    "head": "e8be88c8bd47e4e03b93790f71f4b538c57cf7e5",
+    "branch": "bench-unified-land",
+    "head": "b452551ad7d0ee3421977239726a2e7c46d37d8d",
     "dirty": true
   },
   "runner": {
@@ -40,7 +40,7 @@
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "015ca5a23e11535f558c5014b656121778a3c430eee6b3f6c51dbc8ab9fe9e61",
+      "sha256": "c66d6f153e87a58f0763d9147260f75905e74a0b923752bc8dec73dc88318f2d",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -56,12 +56,14 @@
         "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
         "contractMisses": [],
         "requestedPaths": [
+          "/v1/workspaces",
+          "/v1/named-agents",
           "/v1/conversations?limit=25&offset=0",
           "/v1/me/settings",
           "/v1/orgs/current",
@@ -74,6 +76,8 @@
           "/v1/chat/model-choices",
           "/v1/chat/config",
           "/v1/me/settings",
+          "/v1/familiar/phenotype",
+          "/v1/named-agents",
           "/v1/me/settings",
           "/v1/capabilities",
           "/v1/capabilities",

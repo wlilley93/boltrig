@@ -300,8 +300,37 @@ workspace owner/admin + allow_own; user = self + allow_own).
 | **SEC-112** | `allow_own_ai_keys=False` makes a workspace/user AI key IGNORED at resolution (D5) - when the org forbids member-owned keys, `resolve_ai_key` skips any workspace/user row and uses only the org key (or the env default when the org has none), so a member cannot bring their own key unless the org opts in. | `tests/security/test_ai_keys.py::test_allow_own_false_ignores_workspace_and_user_keys` |
 | **SEC-113** | An AI key is stored only as a sealed credential ref and never returned or audited in plaintext. `PUT /v1/ai-keys` envelope-seals it before approval under an opaque proposal; neither proposal nor `ai_configs` has a plaintext field, response/list views never echo it, and audit remains keys-only. After exact approval, material is retrievable only kernel-side from the sealed store. | `tests/security/test_ai_keys.py::test_ai_key_is_sealed_never_returned_or_audited` |
 | **SEC-114** | `ai_config` reads are tenant-scoped and never cross tenants (D5, SEC-08) - get/list of an AI-config are keyed on `tenant_id`, so a caller can never read another org/workspace's AI key (a lookup/list under a different tenant is None/empty) and a cross-tenant delete is a no-op. | `tests/store/test_ai_config.py::test_ai_config_reads_are_tenant_scoped` |
+
+### Per-user integration credentials
+
+An org has one shared connection per integration and any member may connect
+their OWN. Connection rows live in `integration_connections` keyed by
+`(tenant_id, adapter_id, level, scope_id)` while active (level = org / user);
+an org row's `scope_id` IS the tenant id, the same convention `ai_configs` uses.
+`resolve_for_adapter(tenant_id, adapter_id, owner)` chooses with precedence
+**own -> org -> env/manifest binding**, gated by the org's
+`allow_own_integration_credentials`: when the org forbids member-owned
+credentials a user row is IGNORED, so turning the policy off is sufficient on
+its own and turning it back on restores the personal credential with no row
+surgery. `owner` is `on_behalf_of or actor`, because `on_behalf_of` names the
+human an AGENT is acting for and is None for a person logged in directly - a
+credential sealed under one identity and fetched under another would simply
+never resolve, and the org credential would serve silently. The scope is sealed
+INTO the credential and compared on read, so a connection pointing at another
+scope's sealed row fails closed; a reference sealed before scoping existed
+carries no level, is treated as the org row it necessarily was, and keeps
+working. `level` is deliberately org/user only - a workspace row would need a
+live membership re-check at resolve time and `Principal.context()` sets no
+`workspace_id` for the connect path.
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **FR-INTCRED-01** | Setup and dispatch derive the same acting identity, so a personal credential is looked up under the id it was filed under. | `tests/security/test_integration_scope.py::test_setup_and_dispatch_derive_the_same_acting_identity` |
+| **FR-INTCRED-02** | One active connection per adapter PER SCOPE - an org row and a member's own coexist; a duplicate within one scope fails closed. | `tests/security/test_integration_scope.py::test_an_org_and_a_user_connection_coexist_but_a_scope_cannot_duplicate`, `::test_the_env_manifest_binding_answers_for_the_org`, `::test_pick_connection_prefers_the_owner_row_by_level_not_by_order` |
+| **SEC-200** | `allow_own_integration_credentials=False` makes a member's own connection IGNORED at resolution; the org connection serves, and no owner reproduces the pre-scoping behaviour exactly. | `tests/security/test_integration_scope.py::test_own_credential_wins_only_when_the_org_allows_it`, `::test_a_user_without_their_own_connection_gets_the_org_one`, `::test_no_owner_reproduces_the_pre_scoping_behaviour_exactly` |
+| **SEC-201** | A sealed credential resolves only for its own scope, a pre-scoping reference still resolves for the org, and a personal connection is visible only to its owner. | `tests/security/test_integration_scope.py::test_a_sealed_credential_refuses_a_different_scope`, `::test_a_credential_sealed_before_scoping_still_resolves_for_the_org`, `::test_a_personal_connection_is_visible_only_to_its_owner` |
 | **SEC-115** | The governed set-key route is role-scoped (D5, SEC-36) - `PUT /v1/ai-keys` refuses an org-level key from a non-admin, a workspace-level key from a non-owner/admin of that workspace, and a user-level key for anyone but the caller; workspace/user levels additionally require the org `allow_own_ai_keys` gate, while the org may always set its own key. | `tests/security/test_ai_keys.py::test_set_key_route_is_role_scoped` |
-| **FR-AIKEY-03** | An explicitly approved scoped AI key is reconciled into a server-owned Bifrost provider-key plus exact-model virtual-key binding before it becomes a runnable chat default. Reads expose only `gateway_ready`; refresh projects the exact personal model rather than an invented Automatic choice, and an existing sealed row can be reconciled without plaintext resubmission. | `tests/security/test_ai_keys.py::test_onboarding_approval_is_explicit_and_activates_the_exact_saved_model`, `::test_existing_approved_key_can_be_reconciled_without_resubmitting_secret`, `tests/security/test_bifrost_user_binding.py::test_scoped_key_provisions_exact_virtual_key_and_seals_it`, `tests/security/test_chat_model_choices.py::test_personal_model_is_the_exact_available_default_after_refresh` |
+| **FR-AIKEY-03** | An approved scoped AI key is reconciled into a server-owned Bifrost provider-key plus exact-model virtual-key binding before it becomes a runnable chat default. A member's OWN user-level key completes inside the submit call (the kernel answers the approval the requester would be asked for; sealing, single consumption and keys-only audit unchanged), while any shared scope still parks as `pending_human` for the explicit approve route. Reads expose only `gateway_ready`; refresh projects the exact personal model rather than an invented Automatic choice, and an existing sealed row can be reconciled without plaintext resubmission. | `tests/security/test_ai_keys.py::test_onboarding_connects_your_own_provider_in_one_press`, `::test_org_level_key_still_pends_and_the_approve_route_finalizes_it`, `::test_existing_approved_key_can_be_reconciled_without_resubmitting_secret`, `tests/security/test_bifrost_user_binding.py::test_scoped_key_provisions_exact_virtual_key_and_seals_it`, `tests/security/test_chat_model_choices.py::test_personal_model_is_the_exact_available_default_after_refresh` |
 | **KNO-05** | Cognee reuses the caller's normal scoped chat model route through a Bifrost virtual key, never a second browser secret or a process-global tenant key; local embeddings remain keyless. | `tests/security/test_cognee_model_binding.py`, `tests/integration/test_cognee_engine.py::test_runtime_model_is_forwarded_request_locally_to_cognee` |
 | **SEC-AIKEY-01** | Scoped Bifrost BYOK material stays kernel-confined and replacement-safe: tenant/scope identity bounds stable records, replacement updates or rotates the correct record, removal revokes external bindings first, and only the virtual key reaches the model proxy while the provider credential and cell bearer do not. | `tests/security/test_bifrost_user_binding.py::test_replacement_rotates_the_stable_scope_in_place_and_revoke_cleans_it`, `::test_binding_ids_are_tenant_and_credential_scoped`, `tests/unit/test_runtime_resolver_codex.py::test_personal_default_carries_only_the_scoped_virtual_key_to_codex`, `tests/unit/test_codex_model_proxy_server.py::test_scoped_virtual_key_is_injected_without_forwarding_the_cell_bearer` |
 

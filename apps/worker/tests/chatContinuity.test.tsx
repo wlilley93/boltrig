@@ -663,20 +663,32 @@ describe("Worker chat continuity", () => {
     await waitFor(() => expect(api.artifacts).toHaveBeenCalledTimes(2));
   });
 
-  it("shows the exact summary boundary used for the next model turn", async () => {
+  it("marks the compaction AT the boundary message, not after everything", async () => {
+    // The disclosure used to sit at the end of the transcript. Compaction is an
+    // event at a POINT -- above it the model receives a summary, below it the
+    // turns arrive verbatim -- and a note after the last message cannot say
+    // where that point is, though the payload has always carried the id.
     api.conversation.mockResolvedValue({
-      messages: [{
-        id: "assistant-a",
-        role: "assistant",
-        content: "Durable answer.",
-        created_at: "2026-01-01T00:00:00Z",
-      }],
+      messages: [
+        {
+          id: "older-turn",
+          role: "assistant",
+          content: "Summarised answer.",
+          created_at: "2026-01-01T00:00:00Z",
+        },
+        {
+          id: "recent-turn",
+          role: "assistant",
+          content: "Durable answer.",
+          created_at: "2026-01-01T00:05:00Z",
+        },
+      ],
       active_run_id: null,
       model_context: {
         compacted: true,
         covered_count: 18,
         recent_exact_count: 6,
-        up_to_message_id: "message-boundary",
+        up_to_message_id: "older-turn",
         summary: "Earlier decisions, constraints, and open questions.",
       },
     });
@@ -689,15 +701,90 @@ describe("Worker chat continuity", () => {
       />,
     );
 
-    expect(await screen.findByText(
-      /Model context uses a summary of 18 earlier messages plus 6 recent messages verbatim/,
-    )).toBeTruthy();
-    fireEvent.click(screen.getByText(
-      /Model context uses a summary of 18 earlier messages plus 6 recent messages verbatim/,
-    ));
+    const marker = await screen.findByText("Context automatically compacted");
+    const line = marker.closest("details");
+    expect(line).toBeTruthy();
+
+    // POSITION is the claim: after the covered message, before the verbatim one.
+    const covered = screen.getByText("Summarised answer.");
+    const verbatim = screen.getByText("Durable answer.");
+    const after = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(after(covered, line as Element)).toBe(true);
+    expect(after(line as Element, verbatim)).toBe(true);
+
+    // The derived summary the model actually receives stays one click away --
+    // a disclosure that cannot show its own evidence is only a reassurance.
+    fireEvent.click(marker);
+    expect(screen.getByText("Earlier decisions, constraints, and open questions."))
+      .toBeTruthy();
+    expect(screen.getByText(/18 messages above this point/)).toBeTruthy();
+  });
+
+  it("still discloses compaction when the boundary message is not in view", async () => {
+    // A regeneration can supersede the boundary message, and an older
+    // conversation may not carry it at all. Rendering inline ONLY would drop
+    // the disclosure entirely in that case -- compaction happening silently,
+    // which is the outcome worse than showing it in the wrong place.
+    api.conversation.mockResolvedValue({
+      messages: [{
+        id: "assistant-a",
+        role: "assistant",
+        content: "Durable answer.",
+        created_at: "2026-01-01T00:00:00Z",
+      }],
+      active_run_id: null,
+      model_context: {
+        compacted: true,
+        covered_count: 18,
+        recent_exact_count: 6,
+        up_to_message_id: "a-message-this-transcript-does-not-hold",
+        summary: "Earlier decisions, constraints, and open questions.",
+      },
+    });
+
+    render(
+      <ChatView
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onChanged={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(await screen.findByText("Context automatically compacted"));
     expect(screen.getByText("Earlier decisions, constraints, and open questions."))
       .toBeTruthy();
     expect(screen.getByText("Durable answer.")).toBeTruthy();
+  });
+
+  it("says nothing at all when compaction has not happened", async () => {
+    api.conversation.mockResolvedValue({
+      messages: [{
+        id: "assistant-a",
+        role: "assistant",
+        content: "Durable answer.",
+        created_at: "2026-01-01T00:00:00Z",
+      }],
+      active_run_id: null,
+      model_context: {
+        compacted: false,
+        covered_count: 0,
+        recent_exact_count: 1,
+        up_to_message_id: null,
+        summary: null,
+      },
+    });
+
+    render(
+      <ChatView
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onChanged={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("Durable answer.")).toBeTruthy();
+    expect(screen.queryByText("Context automatically compacted")).toBeNull();
   });
 
   it("keeps the composer open for a canonical same-surface steer", async () => {

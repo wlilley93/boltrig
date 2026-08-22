@@ -113,6 +113,6 @@ services:
   # Publish the Worker surface on the VM's external interface so OrbStack
   # forwards it to the Mac. The base binding is loopback-only inside the VM,
   # which is correct for the ordinary VM stack but unreachable by the tunnel.
-  worker-ui:
+  ui:
     ports: !override
       - "0.0.0.0:${VM_WORKER_PORT:-8080}:8080"

@@ -114,7 +114,11 @@ async def _run_bound_agent(
     micros_est: int,
 ) -> AgentResult:
     try:
-        runtime = await spawner._runtime_for(context.tenant_id, cap, context)
+        # The prompt is the egress payload; the routing seam scans it for PII
+        # classification before the destination is decided (SEC-13).
+        runtime = await spawner._runtime_for(
+            context.tenant_id, cap, context, outbound_text=prompt
+        )
         result = await runtime.run(prompt, context, tools=list(context.grants.allow))
     except Exception:
         with contextlib.suppress(Exception):
@@ -172,7 +176,10 @@ def make_agent_invoker(
     ) -> Result:
         prompt = f"Verb: {verb}\nParams: {json.dumps(params, default=str, sort_keys=True)}"
         cap, retired = await bound_capability_status(
-            kernel.store, context.tenant_id, agent_capability
+            kernel.store,
+            context.tenant_id,
+            agent_capability,
+            workspace_id=context.workspace_id,
         )
         if retired:
             return Result.failure(

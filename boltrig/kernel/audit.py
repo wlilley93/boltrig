@@ -13,14 +13,17 @@ import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import os
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from boltrig.models import AuditEvent, utcnow
+from boltrig.models import ActionType, AuditEvent, utcnow
 from boltrig.store import Store
 
 from . import pii
+
+_audit_log = logging.getLogger("boltrig.audit")
 
 _HMAC_KEY = os.environ.get("BOLTRIG_AUDIT_HMAC_KEY", "dev-insecure-audit-key").encode()
 _PREVIEW_LEN = 256
@@ -143,6 +146,24 @@ def _canonical(event: AuditEvent) -> str:
     return json.dumps(body, sort_keys=True, separators=(",", ":"))
 
 
+def _scrub_free_text(value: str | None, *, field: str) -> str | None:
+    """Scrub a single free-text CHAIN FIELD, staying a string (K-20).
+
+    ``_scrub`` covers ``detail`` only; ``user_agent`` is the raw
+    attacker-controlled header and entered the chain verbatim, so a UA string
+    carrying a bearer token or PII defeated the keys-only rule in BOTH
+    append-only streams. A dict digest (as ``_scrub_value`` returns) would
+    change the column shape, so a tainted value collapses to the same stable
+    string marker ``_scrub_key`` uses."""
+    if value is None:
+        return None
+    if kind := pii.contains_secret(value):
+        return f"[scrubbed:{kind}]"
+    if pii.contains_identity(value):
+        value = pii.redact_identity(value)
+    return value[:_PREVIEW_LEN]
+
+
 def _scrub(detail: dict) -> dict:
     """Bounded-observability scrub (K-20). Any string value carrying a secret or
     identity pattern is replaced by a digest + size + bounded preview, so the
@@ -253,6 +274,44 @@ async def verify_chain(
         after = nxt
 
 
+def _outbox_payload(event: AuditEvent, exc: Exception) -> dict[str, Any]:
+    """The JSONB-safe, chain-field-free payload of a deferred audit event.
+
+    Keys-only (K-20) twice over: the event was already scrubbed, and the
+    deferral marker records only the exception TYPE - never its message, which
+    for a DB error can quote constraint names, values and DSN fragments."""
+    from dataclasses import asdict
+
+    payload = asdict(event)
+    payload["ts"] = event.ts.isoformat() if event.ts else None
+    payload["detail"] = {
+        **(event.detail or {}),
+        "outbox_deferred": {
+            "append_error": type(exc).__name__,
+        },
+    }
+    return payload
+
+
+def audit_event_from_payload(payload: dict[str, Any]) -> AuditEvent:
+    """Rebuild an AuditEvent from an outbox payload (the janitor's read side).
+
+    Chain fields are ignored on purpose: they are re-derived at drain time.
+    Unknown extra keys (the deferral marker rides in ``detail``) are dropped so
+    a payload written by a newer writer still rehydrates."""
+    known = {
+        f for f in AuditEvent.__dataclass_fields__  # type: ignore[attr-defined]
+        if f not in ("seq", "prev_hash", "hash")
+    }
+    kwargs = {k: v for k, v in payload.items() if k in known}
+    if isinstance(kwargs.get("ts"), str):
+        from datetime import datetime
+
+        kwargs["ts"] = datetime.fromisoformat(kwargs["ts"])
+    kwargs["action_type"] = ActionType(kwargs["action_type"])
+    return AuditEvent(**kwargs)
+
+
 class AuditWriter:
     def __init__(self, store: Store) -> None:
         self._store = store
@@ -273,14 +332,58 @@ class AuditWriter:
     async def write(self, event: AuditEvent) -> AuditEvent:
         """Scrub, chain, and append. Returns the persisted event with seq/hash.
         The chain step is serialised per tenant so concurrent writes do not collide
-        on the seq (SEC-16)."""
+        on the seq (SEC-16).
+
+        DURABLE DEFERRAL (SEC-16 audit-always, 2026-08-16): an append fault is
+        not an option to drop the event over. On failure the (scrubbed) payload
+        is enqueued to the audit outbox and the event returns WITHOUT seq/hash
+        - the janitor re-chains it against the then-current head once the fault
+        clears, so the chain stays contiguous. Only when the outbox write ITSELF
+        fails does this raise: that is the genuinely-unaudited case, and the
+        dispatch-side guard logs it as the governance incident it is."""
         event.detail = _scrub(event.detail)
+        event.user_agent = _scrub_free_text(event.user_agent, field="user_agent")
+        try:
+            async with self._lock(event.tenant_id):
+                head_seq, prev_hash = await self._store.audit_head(event.tenant_id)
+                event.seq = head_seq + 1
+                event.prev_hash = prev_hash
+                if event.ts is None:
+                    event.ts = utcnow()
+                digest = hmac.new(_HMAC_KEY, _canonical(event).encode(), hashlib.sha256).hexdigest()
+                event.hash = digest
+                await self._store.audit_append(event)
+        except Exception as exc:
+            # The deferred row must not carry stale chain fields: the janitor
+            # re-derives seq/prev_hash/hash at drain time against the head as of
+            # THEN, which is what keeps the chain contiguous.
+            event.seq = None
+            event.prev_hash = None
+            event.hash = None
+            payload = _outbox_payload(event, exc)
+            await self._store.audit_outbox_enqueue(
+                event.tenant_id, payload, type(exc).__name__
+            )
+            _audit_log.warning(
+                "audit append FAILED for %s.%s (%s: %s) - deferred to the outbox; "
+                "the action is effectful and NOT yet in the chain (SEC-16)",
+                event.noun, event.verb, type(exc).__name__, exc,
+            )
+        return event
+
+    async def write_now(self, event: AuditEvent) -> AuditEvent:
+        """Scrub, chain, and append with NO deferral: raise on any fault.
+
+        The outbox janitor's primitive. It must not re-defer (that would fork a
+        second outbox row for an event that already has one); the janitor owns
+        the retry bookkeeping - on success it deletes the row, on failure it
+        bumps attempts and schedules the backoff."""
+        event.detail = _scrub(event.detail)
+        event.user_agent = _scrub_free_text(event.user_agent, field="user_agent")
         async with self._lock(event.tenant_id):
             head_seq, prev_hash = await self._store.audit_head(event.tenant_id)
             event.seq = head_seq + 1
             event.prev_hash = prev_hash
-            if event.ts is None:
-                event.ts = utcnow()
             digest = hmac.new(_HMAC_KEY, _canonical(event).encode(), hashlib.sha256).hexdigest()
             event.hash = digest
             await self._store.audit_append(event)

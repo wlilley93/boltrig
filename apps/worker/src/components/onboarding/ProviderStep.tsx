@@ -220,11 +220,19 @@ function OllamaModelFields({
     <div className="onboarding-custom-fields">
       <label>
         <span>API address</span>
+        {/*
+          http and port 11434, which is what self-hosted Ollama actually serves.
+          The placeholder used to read `https://ollama.example.com/v1` and every
+          part of that was wrong for the common case: Ollama has no TLS of its
+          own, listens on 11434, and does not want the /v1 suffix here. Someone
+          followed it, saved `https://<host>:11434`, and every request died in
+          the TLS handshake with the UI still saying the provider was connected.
+        */}
         <input
           aria-label="Ollama API address"
           inputMode="url"
           onChange={(event) => setup.setBaseUrl(event.target.value)}
-          placeholder="https://ollama.example.com/v1"
+          placeholder="http://localhost:11434"
           required
           value={setup.baseUrl}
         />

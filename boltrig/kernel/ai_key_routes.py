@@ -11,10 +11,13 @@ from fastapi.responses import JSONResponse
 
 from boltrig.kernel.ai_key_proposal_routes import (
     activate_ai_key_config,
+    approve_owned_proposal,
+    finalize_owned_proposal,
     proposal_audit,
     proposal_params,
     proposal_view,
     register_ai_key_proposal_routes,
+    state_reason,
 )
 from boltrig.kernel.control_routes import dispatch_control_route
 from boltrig.models import AI_CONFIG_LEVELS, AI_CONFIG_MODALITIES, AiKeySecretProposal, utcnow
@@ -36,7 +39,10 @@ async def _authorize_ai_key(
         return None
     org = await kernel.store.get_org(principal.tenant_id)
     if org is None or not org.allow_own_ai_keys:
-        return _denied("organisation does not allow own AI keys")
+        return _denied(
+            "Your organisation manages AI providers centrally. "
+            "Ask your administrator to update them."
+        )
     if level == "workspace" and not is_org_admin:
         member = await kernel.store.get_workspace_member(
             principal.tenant_id, scope_id, principal.subject
@@ -80,11 +86,37 @@ def _parse_ai_key_intake(body: dict, principal):
         return None, _invalid("modality must be text or vision")
     if not scope_id or not provider or not model:
         return None, _invalid("scope_id, provider and model are required")
+    model, invalid = _normalized_model(provider, model)
+    if invalid is not None:
+        return None, invalid
     if not api_key and provider not in _KEYLESS_PROVIDERS:
         return None, _invalid("an API key is required for this provider")
     if not api_key:
         api_key = _KEYLESS_PLACEHOLDER
     return (level, scope_id, provider, model, modality, api_key, base_url), None
+
+
+def _normalized_model(provider: str, model: str):
+    """Vet the model name at the door, in the provider's own spelling.
+
+    Validated HERE so a bad name is one sentence at submit time, not a failure
+    after the secret is sealed and approved (measured 2026-08-20: a name this
+    intake accepted crashed activation three screens later). Self-hosted
+    providers list every model under a tag and treat a bare name as
+    ``:latest``, so the same default is applied for them rather than taught.
+    """
+    from boltrig.models.model_id_policy import user_model_id
+
+    head, separator, raw = model.rpartition("/")
+    if provider in _KEYLESS_PROVIDERS and raw and ":" not in raw:
+        model = f"{head}{separator}{raw}:latest"
+    try:
+        return user_model_id(model), None
+    except ValueError:
+        return model, _invalid(
+            "That model name is not valid. Use the exact name your provider "
+            "lists, e.g. qwen3vl-abliterated:latest."
+        )
 
 
 def _invalid(reason):
@@ -140,6 +172,7 @@ async def _dispatch_staged(kernel, principal, proposal, secret):
 
 
 async def _bind_pending(kernel, principal, proposal, pending, audit):
+    """Attach the raised approval to the sealed proposal: (response, attached)."""
     pending_body = json.loads(bytes(pending.body))
     approval_id = str(pending_body.get("hitl_request_id") or "")
     attached = (
@@ -159,12 +192,17 @@ async def _bind_pending(kernel, principal, proposal, pending, audit):
             "invalidated",
             utcnow(),
         )
-        return JSONResponse(
-            {
-                "status": "unavailable",
-                "reason": "sealed proposal could not be bound to approval",
-            },
-            status_code=503,
+        return (
+            JSONResponse(
+                {
+                    "status": "unavailable",
+                    "reason": (
+                        "The request could not be saved. Submit the provider again."
+                    ),
+                },
+                status_code=503,
+            ),
+            None,
         )
     await audit(
         kernel,
@@ -173,9 +211,16 @@ async def _bind_pending(kernel, principal, proposal, pending, audit):
         proposal_audit(attached),
         status="pending",
     )
-    return JSONResponse(
-        {"status": "pending_human", "proposal": proposal_view(attached, "pending")},
-        status_code=202,
+    return (
+        JSONResponse(
+            {
+                "status": "pending_human",
+                "reason": state_reason("pending"),
+                "proposal": proposal_view(attached, "pending"),
+            },
+            status_code=202,
+        ),
+        attached,
     )
 
 
@@ -245,7 +290,21 @@ def _register_ai_key_set_route(app, P, K, audit, admin_roles, workspace_admin_ro
         _, pending = await _dispatch_staged(k, p, proposal, secret)
         secret = ""
         if pending is not None:
-            return await _bind_pending(k, p, proposal, pending, audit)
+            bound, attached = await _bind_pending(k, p, proposal, pending, audit)
+            # Someone connecting their OWN provider is the person any approval
+            # would ask, so the answer is folded into the same press: the
+            # proposal, approval and audit rows all still land. A refusal from
+            # approve_owned_proposal means the decision belongs to somebody
+            # else, and the staged pending response stands unchanged.
+            if attached is None or level != "user" or scope_id != p.subject:
+                return bound
+            refused = await approve_owned_proposal(k, p, attached)
+            if refused is not None:
+                return bound
+            return await finalize_owned_proposal(
+                k, p, attached.id, audit, _authorize_ai_key,
+                admin_roles, workspace_admin_roles,
+            )
         await audit(k, p, "ai_key.set", proposal_audit(proposal))
         activated = await activate_ai_key_config(
             k, p, proposal.level, proposal.scope_id, proposal.modality

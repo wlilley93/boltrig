@@ -30,6 +30,16 @@ async def safe_exec(service, kwargs: dict) -> None:
         service._relay.close(kwargs["tenant_id"], run_id)  # noqa: SLF001
 
 
+async def _pump_events(service, tenant_id, run_id, queue, done) -> None:
+    try:
+        async for event in service._relay.subscribe(  # noqa: SLF001
+            tenant_id, run_id, replay=True
+        ):
+            await queue.put(event)
+    finally:
+        await queue.put(done)
+
+
 async def drive_turn_events(
     service,
     *,
@@ -41,6 +51,7 @@ async def drive_turn_events(
     role,
     grants,
     attachments,
+    agent_address,
     heartbeat,
     workspace_id,
     scope,
@@ -48,6 +59,7 @@ async def drive_turn_events(
     origin,
     model_profile_id,
     model_choice_id,
+    caller_context=None,
 ):
     if service._exec is None:  # noqa: SLF001
         yield {"type": "text_delta", "delta": "(no runtime configured)"}
@@ -62,12 +74,14 @@ async def drive_turn_events(
             role=role,
             grants=grants,
             attachments=attachments or [],
+            agent_address=agent_address,
             workspace_id=workspace_id,
             scope=scope,
             on_behalf_bearer=on_behalf_bearer,
             origin=origin,
             model_profile_id=model_profile_id,
             model_choice_id=model_choice_id,
+            caller_context=caller_context,
         )
     )
     interval = service._cfg.heartbeat_seconds if heartbeat else 0  # noqa: SLF001
@@ -79,16 +93,7 @@ async def drive_turn_events(
     queue: asyncio.Queue = asyncio.Queue()
     done = object()
 
-    async def pump_events() -> None:
-        try:
-            async for event in service._relay.subscribe(  # noqa: SLF001
-                tenant_id, run_id, replay=True
-            ):
-                await queue.put(event)
-        finally:
-            await queue.put(done)
-
-    pump = asyncio.create_task(pump_events())
+    pump = asyncio.create_task(_pump_events(service, tenant_id, run_id, queue, done))
     try:
         while True:
             try:

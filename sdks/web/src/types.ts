@@ -2,6 +2,8 @@
 // Fields the kernel may add later (binding target, live verb health) are kept
 // optional so the client tolerates their absence.
 
+import type { DisplayObjectEnvelope } from "./displayObjects.js";
+
 export type AdapterHealth = "ok" | "degraded" | "down" | "unknown";
 
 export interface HealthResponse {
@@ -339,6 +341,29 @@ export type WorkStatus =
   | "failed"
   | "cancelled";
 
+/** Caller-safe, kernel-authored channel origin. Exact provider ids stay private. */
+export interface ChannelMessageProvenance {
+  schema: "channel_message_v1";
+  kind: "channel_message";
+  direction: "inbound";
+  provider: string;
+  provider_label: string;
+  channel_id?: string | null;
+  channel_label: string;
+  display_label: string;
+  from: {
+    kind: "authenticated_subject";
+    subject?: string | null;
+    label?: string | null;
+  };
+  to: {
+    kind: "routing_target";
+    address?: string | null;
+    label?: string | null;
+  };
+  threaded: boolean;
+}
+
 export interface WorkItem {
   id: string;
   intent: string;
@@ -352,6 +377,7 @@ export interface WorkItem {
   on_behalf_of?: string | null;
   depth?: number;
   workspace_id?: string | null;
+  provenance?: ChannelMessageProvenance | null;
 }
 
 export interface WorkResponse {
@@ -502,6 +528,10 @@ export interface AuditTreeResponse {
 
 export interface ConversationSummary {
   id: string;
+  /** Named tier-1 peer selected for the next admitted turn. */
+  agent_address?: string | null;
+  /** Existing Workspace id used as the human-owned project boundary. */
+  workspace_id?: string | null;
   title: string;
   status: string;
   updated_at: string;
@@ -623,6 +653,10 @@ export interface ChatMessage {
   role: ChatRole;
   content: string;
   run_id?: string | null;
+  /** Immutable recipient of this persisted input turn. */
+  recipient_agent_address?: string | null;
+  /** Immutable author of this persisted assistant/tool/system turn. */
+  author_agent_address?: string | null;
   hitl_request_id?: string | null;
   events?: ChatEvent[];
   attachments?: ChatAttachment[];
@@ -641,7 +675,7 @@ export interface ConversationModelContext {
 export interface ConversationResponse {
   conversation?: Pick<
     ConversationSummary,
-    "id" | "title" | "status" | "origin" | "source_ref" | "source_run_id" | "companion_id"
+    "id" | "agent_address" | "workspace_id" | "title" | "status" | "origin" | "source_ref" | "source_run_id" | "companion_id"
   >;
   messages: ChatMessage[];
   active_run_id?: string | null;
@@ -662,6 +696,34 @@ export interface ConversationQueueReorderResponse {
   message_ids: string[];
 }
 
+export interface ConversationProjectMoveResponse {
+  status: "ok" | "conflict" | "error" | "denied";
+  id?: string;
+  workspace_id?: string | null;
+  reason?: string;
+}
+
+/** Caller-visible tier-1 peer profile. Brief/private prompt material is absent. */
+export interface NamedAgentView {
+  address: string;
+  name: string;
+  topology: "tier1_peer";
+  session: "durable_logical";
+  runtime: string;
+  model_endpoint?: string | null;
+  supported_skills: string[];
+  max_depth: number;
+  cost_tier: string;
+  purpose: string;
+  scope_id?: string | null;
+  default_for_intake: boolean;
+  enabled: boolean;
+}
+
+export interface NamedAgentsResponse {
+  named_agents: NamedAgentView[];
+}
+
 export interface ChatFollowFrame {
   cursor: number;
   event: ChatEvent;
@@ -671,6 +733,9 @@ export interface ChatFollowFrame {
 export interface ChatRequest {
   // omit to start a new conversation; the first message_start returns the id
   conversation_id?: string;
+  // Selects the tier-1 peer for this turn. A different peer on an existing
+  // conversation is admitted only when idle; historical messages never change.
+  agent_address?: string;
   message: string;
   // inline, size-capped attachments ({name, media_type, data:base64}); omitted
   // when the turn carries none.
@@ -717,12 +782,46 @@ export interface CancelRunResponse {
   reason?: string;
 }
 
+// GET /v1/runs/{run_id}/effects: the run's durable effect ledger, each step
+// with its honest undoability. POST /v1/runs/{run_id}/revert walks recorded
+// rows newest-first; an outcome of "approval_pending" carries the HITL
+// request id, and re-sending it as approvals[seq] releases the SAME inverse.
+export interface RunEffectView {
+  seq: number;
+  verb: string;
+  status: "recorded" | "not_undoable" | "reverted" | "revert_failed";
+  undoable: boolean;
+  summary: string;
+  created_at: string;
+}
+
+export interface RunEffectsResponse {
+  run_id: string;
+  effects: RunEffectView[];
+}
+
+export interface RunRevertResult extends RunEffectView {
+  outcome:
+    | "reverted"
+    | "revert_failed"
+    | "not_undoable"
+    | "already_settled"
+    | "approval_pending";
+  approval_id?: string;
+}
+
+export interface RunRevertResponse {
+  run_id: string;
+  results: RunRevertResult[];
+}
+
 // --- The streamed event union (one JSON object per SSE data line) -----------
 
 export interface ChatMessageStart {
   type: "message_start";
   run_id: string;
   conversation_id: string;
+  agent_address?: string;
 }
 export interface ChatTextDelta {
   type: "text_delta";
@@ -900,6 +999,7 @@ export interface ChatSteerQueued {
   run_id?: string;
   conversation_id?: string;
   message_id?: string;
+  agent_address?: string;
 }
 
 /** A queued steer being consumed as its own run. Carries no turn content. */
@@ -908,6 +1008,7 @@ export interface ChatSteerConsumed {
   run_id?: string;
   conversation_id?: string;
   message_id?: string;
+  agent_address?: string;
 }
 
 /** A newly persisted output is ready to fetch through the governed artifact API. */
@@ -924,6 +1025,13 @@ export interface ChatArtifact {
 export interface ChatArtifactRejected {
   type: "artifact_rejected";
   count: number;
+  run_id?: string;
+}
+
+/** A validated visual object emitted by the named agent for this turn. */
+export interface ChatDisplayObject {
+  type: "display_object";
+  object: DisplayObjectEnvelope;
   run_id?: string;
 }
 
@@ -956,6 +1064,7 @@ export type ChatEvent =
   | ChatModelRouting
   | ChatArtifact
   | ChatArtifactRejected
+  | ChatDisplayObject
   | ChatEventUnavailable;
 
 // POST /v1/hitl/{question_id}/answer: owner-only, fail-closed answer to an
@@ -1880,6 +1989,18 @@ export interface AddonRequirement {
   evidence: AddonRequirementEvidence;
 }
 
+/**
+ * What this deployment calls itself. "Boltrig" alone, "Opbox Agents" where the
+ * Opbox addon is active. Unauthenticated, because the sign-in screen is the
+ * first surface that needs it.
+ */
+export interface BrandingResponse {
+  product_name: string;
+  /** The mark's core breathes on either setup. Reported so the client keeps no
+   *  second copy of the policy. */
+  pulse: boolean;
+}
+
 export interface RuntimeAddon {
   id: string;
   version: string;
@@ -1973,14 +2094,29 @@ export interface IntegrationAccount {
   selected: boolean;
 }
 
+/** Whose credential a connection is: the org's shared one, or a member's own. */
+export type IntegrationConnectionLevel = "org" | "user";
+
 export interface IntegrationConnection {
   id: string;
   integration_id: string;
   label: string;
   health: IntegrationConnectionHealth;
   credential_ref_present: boolean;
+  level: IntegrationConnectionLevel;
+  /** Opaque to the client: the tenant for an org row, the owning user for a personal one. */
+  scope_id: string;
+  /** True when this row belongs to the caller, so the UI can say "yours" without comparing ids. */
+  is_own: boolean;
   accounts: IntegrationAccount[];
   enabled_tools: string[];
+  /**
+   * The canonical capabilities this connection actually serves, from APPROVED
+   * bindings only. `enabled_tools` counts raw provider verb ids; this counts
+   * what a model is ever offered, which is a different and usually smaller
+   * number. Optional because a kernel older than the capability layer omits it.
+   */
+  enabled_capabilities?: string[];
   last_checked_at?: string | null;
   created_at: string;
 }
@@ -1989,13 +2125,132 @@ export interface IntegrationConnectionsResponse {
   connections: IntegrationConnection[];
 }
 
+/** A binding's status, matching the kernel's BINDING_STATUS vocabulary. */
+export type CapabilityBindingStatus =
+  | "proposed"
+  | "approved"
+  | "disabled"
+  | "retired";
+
+export interface CapabilityBindingSourceOperation {
+  id: string;
+  provider: string;
+  title: string | null;
+  description: string;
+  consequence_hint: string | null;
+}
+
+export interface CapabilityBindingConnection {
+  id: string;
+  label: string;
+  provider: string;
+  status: string;
+  health: string;
+  eligible: boolean;
+}
+
+export interface CapabilityBindingView {
+  binding_id: string;
+  /** The pinned form, `matter.open@1`. */
+  capability: string;
+  /** The UNPINNED id, which is what every governance path reads. */
+  capability_id: string;
+  capability_version: number;
+  status: CapabilityBindingStatus;
+  trust_level: string;
+  priority: number;
+  created_from: string;
+  reviewed_by: string | null;
+  workspace_predicate: string | null;
+  source_operation_id: string;
+  source_operation: CapabilityBindingSourceOperation | null;
+  /**
+   * Whether the binding is pinned to a source schema at all, and whether that
+   * pin still matches the operation. A drifted binding had its approval
+   * withdrawn, so a reviewer needs both answers and neither digest.
+   */
+  schema_pinned: boolean;
+  schema_current: boolean;
+  connection: CapabilityBindingConnection | null;
+}
+
+export interface CapabilityBindingsResponse {
+  status: CapabilityBindingStatus | null;
+  bindings: CapabilityBindingView[];
+  needs_review: number;
+  /** Present only when the requested status filter was not a known status. */
+  reason?: string;
+}
+
+export interface CapabilityCatalogueEntry {
+  capability_id: string;
+  implementations: number;
+  approved: number;
+  needs_review: number;
+  providers: string[];
+  routing_policies: number;
+}
+
+export interface CapabilityCatalogueResponse {
+  capabilities: CapabilityCatalogueEntry[];
+}
+
+export interface RoutingPolicyView {
+  id: string;
+  capability_id: string;
+  binding_id: string;
+  operation_class: "read" | "create" | "update" | "delete";
+  capability_version: number | null;
+  scope: "tenant" | "workspace";
+  workspace_id: string | null;
+  precedence: number;
+}
+
+export interface RoutingPoliciesResponse {
+  routing_policies: RoutingPolicyView[];
+}
+
 export interface IntegrationConnectionResponse {
   connection: IntegrationConnection;
+}
+
+/**
+ * Another member's personal connection, as an ADMINISTRATOR sees it while
+ * offboarding them.
+ *
+ * Deliberately not an IntegrationConnection: `accounts` is absent, because it
+ * carries the member's identity at the provider and administering a row is not a
+ * reason to read it. `owner` is the same value `scope_id` holds on the fuller
+ * type, named for what it means on this one.
+ */
+export interface MemberIntegrationConnection {
+  id: string;
+  integration_id: string;
+  label: string;
+  health: IntegrationConnectionHealth;
+  credential_ref_present: boolean;
+  level: IntegrationConnectionLevel;
+  owner: string;
+  last_checked_at?: string | null;
+  created_at: string;
+}
+
+export interface MemberIntegrationConnectionsResponse {
+  connections: MemberIntegrationConnection[];
 }
 
 export interface IntegrationSecretSubmission {
   fields: Record<string, string>;
   label?: string;
+  /**
+   * Which scope to connect at. Omitted means "org", which is what every caller
+   * predating per-user credentials meant.
+   *
+   * There is deliberately NO scope_id here. The server derives it from the
+   * authenticated principal, so a caller cannot name another member's scope and
+   * have a credential recorded against them.
+   */
+  level?: IntegrationConnectionLevel;
 }
 
 export interface IntegrationSetupResponse {
@@ -2616,9 +2871,10 @@ export interface NetworkPolicyCoverageItem {
   surface: string;
   status:
     | "separate_policy"
+    | "shared_policy"
     | "partial_shared_controls"
     | "provider_transport_only";
-  manifest_network_policy: "not_applied";
+  manifest_network_policy: "not_applied" | "applied";
   controls: string[];
   limitation: string;
 }
@@ -3034,6 +3290,7 @@ export interface RunRow {
   // opaque external reference, so it is also the filter key:
   // GET /v1/runs?external_ref=opbox. A label: it reaches no authority decision.
   external_ref?: string | null;
+  provenance?: ChannelMessageProvenance | null;
 }
 
 export interface RunsResponse {
@@ -3062,6 +3319,7 @@ export interface RunTopologyNode {
   on_behalf_of?: string | null;
   attempts: number;
   degraded: boolean;
+  provenance?: ChannelMessageProvenance | null;
   cycle?: boolean;
   children: RunTopologyNode[];
 }

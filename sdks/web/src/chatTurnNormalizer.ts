@@ -6,6 +6,7 @@
 
 import type {
   ChatCancelled,
+  ChatDisplayObject,
   ChatEvent,
   ChatHitlEvent,
   ChatMessageEnd,
@@ -22,6 +23,7 @@ import type {
 } from "./types.js";
 import type {
   HitlEntry,
+  DisplayObjectEntry,
   NormalizedTurn,
   QuestionEntry,
   StepEntry,
@@ -33,6 +35,7 @@ import type {
 interface Accumulator {
   runId?: string;
   conversationId?: string;
+  agentAddress?: string;
   text: string;
   reasoning: string;
   ended: boolean;
@@ -42,6 +45,7 @@ interface Accumulator {
   subagents: SubagentEntry[];
   hitls: HitlEntry[];
   questions: QuestionEntry[];
+  displayObjects: DisplayObjectEntry[];
   steps: StepEntry[];
   stepIndex: Map<string, StepEntry>;
   timeline: TimelineEntry[];
@@ -78,6 +82,9 @@ export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
         break;
       case "question":
         handleQuestion(ev, acc);
+        break;
+      case "display_object":
+        handleDisplayObject(ev, i, acc);
         break;
       case "workflow_step":
         handleWorkflowStep(ev, i, acc);
@@ -121,6 +128,7 @@ function createAccumulator(): Accumulator {
     subagents: [],
     hitls: [],
     questions: [],
+    displayObjects: [],
     steps: [],
     stepIndex: new Map(),
     timeline: [],
@@ -131,12 +139,14 @@ function buildTurn(acc: Accumulator): NormalizedTurn {
   return {
     runId: acc.runId,
     conversationId: acc.conversationId,
+    agentAddress: acc.agentAddress,
     text: acc.text,
     reasoning: acc.reasoning,
     tools: acc.tools,
     subagents: acc.subagents,
     hitls: acc.hitls,
     questions: acc.questions,
+    displayObjects: acc.displayObjects,
     steps: acc.steps,
     timeline: acc.timeline,
     ended: acc.ended,
@@ -146,9 +156,19 @@ function buildTurn(acc: Accumulator): NormalizedTurn {
   };
 }
 
+function handleDisplayObject(ev: ChatDisplayObject, index: number, acc: Accumulator) {
+  const entry: DisplayObjectEntry = {
+    key: `d${index}:${ev.object.id}:${ev.object.revision ?? 1}`,
+    object: ev.object,
+  };
+  acc.displayObjects.push(entry);
+  acc.timeline.push({ kind: "display_object", key: entry.key, entry });
+}
+
 function handleMessageStart(ev: ChatMessageStart, acc: Accumulator) {
   acc.runId = ev.run_id;
   acc.conversationId = ev.conversation_id;
+  acc.agentAddress = ev.agent_address;
 }
 
 function handleTextDelta(ev: ChatTextDelta, acc: Accumulator) {

@@ -77,6 +77,11 @@ MANIFEST_FEATURES: dict[str, FeatureCoverage] = {
         ("worker", "missing", "worker", "worker", "missing"),
         "Endpoints are managed in Worker; process-start sensitive routing and price policy are projected, while mutation/rollback and the parsed-only default role remain incomplete.",
     ),
+    "named_agents": _coverage(
+        "boltrig/config/manifest.py:NamedAgentsConfig",
+        ("worker", "deployment", "worker", "worker", "deployment"),
+        "Worker can inspect the durable peer roster and inboxes; manifest authoring and restart recovery remain deployment-owned.",
+    ),
     "hierarchy": _coverage(
         "boltrig/config/manifest.py:HierarchyConfig",
         ("worker", "worker", "worker", "worker", "deployment"),
@@ -253,6 +258,20 @@ _nested(
     "boltrig/config/manifest.py",
     ("worker", "worker", "worker", "worker", "deployment"),
     "Desired hierarchy is separate from startup-observed runtime evidence.",
+)
+_nested(
+    "NamedAgentsConfig",
+    "default members",
+    "boltrig/config/manifest.py",
+    ("worker", "deployment", "worker", "worker", "deployment"),
+    "The flat roster and its intake default are projected for operators; manifest mutation and restart recovery remain deployment-owned.",
+)
+_nested(
+    "NamedAgentConfig",
+    "name address runtime model_endpoint max_depth supported_skills cost_tier scope_id budget purpose brief",
+    "boltrig/config/manifest.py",
+    ("worker", "deployment", "worker", "worker", "deployment"),
+    "Each durable peer profile is observable and operable through governed serving; declarative profile mutation remains deployment-owned.",
 )
 _nested(
     "EphemeralRuntime",
@@ -498,6 +517,11 @@ BACKGROUND_FEATURES: dict[str, FeatureCoverage] = {
         "boltrig/fleet/anchor.py:run_anchor_forever",
         ("worker", "deployment", "deployment", "worker", "operator"),
         "Anchor evidence is visible; interval/manual forcing stays operational.",
+    ),
+    "audit-outbox-janitor": _coverage(
+        "boltrig/kernel/audit_outbox.py:run_audit_outbox_forever",
+        ("worker", "deployment", "worker", "worker", "operator"),
+        "Deferred audit rows re-chain once the fault clears; the chain stays contiguous and verify() passes over drained rows.",
     ),
     "hitl-expiry-janitor": _coverage(
         "boltrig/kernel/hitl_expiry.py:run_hitl_expiry_forever",
@@ -885,7 +909,7 @@ _governed_controls(
         "OrganisationDirectorySections.tsx OrganisationWorkspaceSections.tsx "
         "OperationsView.tsx AgentProfileEditor.tsx PermanentFleetTopology.tsx "
         "build/ModelEndpointsBuild.tsx build/RegistryBuild.tsx "
-        "build/SkillsBuild.tsx ParityViews.tsx "
+        "build/SkillsBuild.tsx ParityViews.tsx MemorySurface.tsx "
         "knowledge/KnowledgeView.tsx knowledge/RemembersTab.tsx "
         "settings/ModelSettingsSection.tsx"
     ),
@@ -896,6 +920,11 @@ _governed_controls(
     "ChatView.tsx chat/WorkDisclosure.tsx chat/ToolReceiptDetails.tsx",
     ("worker", "worker", "worker", "worker", "worker"),
     "The chat surface renders HITL requests raised BY a turn: it shows the question and the options the kernel supplied, and replays the operator's decision through the same respondHitl method. Its explicitly opened tool disclosure reads only the caller-visible, server-redacted run snapshot and settles nothing. It composes no approval of its own, retains only bounded display state or the request id, and a decision that never reaches the kernel leaves the turn parked, which is the correct failure.",
+)
+_governed_controls(
+    "integrations/MemberConnections.tsx",
+    ("worker", "worker", "worker", "worker", "worker"),
+    "Offboarding: an administrator destroys a departed member's personal integration credential. It retains only the connection id it sent plus the internal approval id, replays the same SDK method through the exact-approval finalizer, and reports a pending_human receipt as waiting rather than as done. Its projection is deliberately narrower than the member's own view of the same row - the server omits the provider accounts, so administering a connection never becomes a way to read whose account it is - and the whole section is absent for a caller the author-only route refuses.",
 )
 _governed_controls(
     "settings/KnowledgeToggle.tsx",

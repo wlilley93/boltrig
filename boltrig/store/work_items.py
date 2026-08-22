@@ -13,8 +13,8 @@ from .work_item_rows import (
     work_item_from_row,
 )
 from .workspace_scope import (
-    append_work_workspace_clause,
-    work_item_workspace_visible,
+    append_workspace_scope_clause,
+    workspace_scope_visible,
 )
 
 
@@ -25,7 +25,7 @@ class WorkItemReadsMem(ExecutionSearchMem):
         item = self._work.get((tenant_id, item_id))
         if item is None:
             return None
-        return _detached(item) if work_item_workspace_visible(item, workspace_id, enforce_workspace) else None
+        return _detached(item) if workspace_scope_visible(item, workspace_id, enforce_workspace) else None
 
     async def get_work_item_by_run_id(
         self, tenant_id, run_id, workspace_id=None, enforce_workspace=False
@@ -34,7 +34,7 @@ class WorkItemReadsMem(ExecutionSearchMem):
         if direct is not None:
             return (
                 _detached(direct)
-                if work_item_workspace_visible(direct, workspace_id, enforce_workspace)
+                if workspace_scope_visible(direct, workspace_id, enforce_workspace)
                 else None
             )
         return _detached(next(
@@ -43,7 +43,7 @@ class WorkItemReadsMem(ExecutionSearchMem):
                 for (tenant, _), item in self._work.items()
                 if tenant == tenant_id
                 and item.hatchet_run_id == run_id
-                and work_item_workspace_visible(item, workspace_id, enforce_workspace)
+                and workspace_scope_visible(item, workspace_id, enforce_workspace)
             ),
             None,
         ))
@@ -71,7 +71,7 @@ class WorkItemReadsMem(ExecutionSearchMem):
             out = [
                 item
                 for item in out
-                if work_item_workspace_visible(item, workspace_id, True)
+                if workspace_scope_visible(item, workspace_id, True)
             ]
         out.sort(key=lambda item: item.id)
         if cursor is not None:
@@ -109,7 +109,7 @@ class WorkItemReadsMem(ExecutionSearchMem):
 
         def _visible(w) -> bool:
             dept_ok = allowed is None or w.owner_member in allowed
-            return dept_ok and work_item_workspace_visible(w, workspace_id, True)
+            return dept_ok and workspace_scope_visible(w, workspace_id, True)
 
         # The RunScope hidden-wins rule: a run ref owned by ANY non-visible item
         # hides every item carrying that ref, visible aliases included.
@@ -143,7 +143,7 @@ class WorkItemReadsPG(ExecutionSearchPG):
     ):
         clauses = ["tenant_id=$1", "id=$2"]
         args: list[Any] = [tenant_id, item_id]
-        append_work_workspace_clause(clauses, args, workspace_id, enforce_workspace)
+        append_workspace_scope_clause(clauses, args, workspace_id, enforce_workspace)
         row = await self._pool.fetchrow(
             f"SELECT * FROM work_items WHERE {' AND '.join(clauses)}", *args
         )
@@ -159,7 +159,7 @@ class WorkItemReadsPG(ExecutionSearchPG):
             "WHERE direct.tenant_id=$1 AND direct.id=$2)))",
         ]
         args: list[Any] = [tenant_id, run_id]
-        append_work_workspace_clause(clauses, args, workspace_id, enforce_workspace)
+        append_workspace_scope_clause(clauses, args, workspace_id, enforce_workspace)
         row = await self._pool.fetchrow(
             f"""SELECT * FROM work_items WHERE {' AND '.join(clauses)}
                 ORDER BY CASE WHEN id=$2 THEN 0 ELSE 1 END LIMIT 1""",
@@ -189,7 +189,7 @@ class WorkItemReadsPG(ExecutionSearchPG):
         if departments is not None:
             args.append(list(departments))
             clauses.append(f"owner_member = ANY(${len(args)}::text[])")
-        append_work_workspace_clause(clauses, args, workspace_id, enforce_workspace)
+        append_workspace_scope_clause(clauses, args, workspace_id, enforce_workspace)
         if cursor is not None:
             args.append(cursor)
             clauses.append(f"id > ${len(args)}")
@@ -233,7 +233,7 @@ class WorkItemReadsPG(ExecutionSearchPG):
         if departments is not None:
             args.append(list(departments))
             visible_clauses.append(f"owner_member = ANY(${len(args)}::text[])")
-        append_work_workspace_clause(visible_clauses, args, workspace_id, True)
+        append_workspace_scope_clause(visible_clauses, args, workspace_id, True)
         visible_sql = " AND ".join(visible_clauses)
         clauses = ["w.tenant_id=$1", visible_sql]
         # RunScope hidden-wins: a ref owned by ANY non-visible item hides the

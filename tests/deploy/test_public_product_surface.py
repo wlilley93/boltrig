@@ -17,8 +17,11 @@ _INPUTS = (
     "apps/worker/package.json",
     "apps/worker/pnpm-lock.yaml",
     "apps/worker/src/characterPlugins.ts",
+    "apps/worker/src/bundles/colossus/character.json",
     "apps/worker/src/bundles/familiar/character.json",
     "apps/worker/src/bundles/familiar/familiar.frag",
+    "apps/worker/src/bundles/jarvis/character.json",
+    "apps/worker/src/bundles/ultron/character.json",
     "apps/worker/src/components/characters.ts",
     "apps/worker/src/main.tsx",
 )
@@ -32,8 +35,14 @@ def _public_fixture(root: Path) -> None:
 
 
 @pytest.mark.security
-def test_public_product_template_is_byo_and_familiar_jarvis_only() -> None:
-    """Keep personal deployment values and third-party companion chunks out."""
+def test_public_product_template_is_byo_and_first_party_only() -> None:
+    """Keep personal deployment values and third-party companion chunks out.
+
+    The closed set is Familiar, Jarvis and Ultron. Ultron joined it when he was
+    built (base branch 51f79c7f) without this gate being told, which is why it
+    was red: the gate is the record of what the public package contains, so
+    adding a body is not finished until it says so.
+    """
     validate()
 
 

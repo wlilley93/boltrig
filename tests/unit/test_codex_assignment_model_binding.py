@@ -64,11 +64,11 @@ def test_binding_refuses_cross_tenant_or_mutable_model_alias() -> None:
             tenant_id="another-tenant",
             model_id="provider/model",
         )
-    with pytest.raises(CodexAssignmentModelBindingError, match="mutable"):
+    with pytest.raises(CodexAssignmentModelBindingError, match="path"):
         CodexAssignmentModelBinding(
             assignment=exact_assignment,
             tenant_id=exact_assignment.phase.principal.tenant_id,
-            model_id="provider/latest",
+            model_id="provider//latest",
         )
     with pytest.raises(CodexAssignmentModelBindingError, match="URL-safe"):
         CodexAssignmentModelBinding(

@@ -8,6 +8,8 @@
 export * from "./types.js";
 export * from "./capabilityInvocation.js";
 export * from "./chatTurnTypes.js";
+export * from "./displayObjects.js";
+export { parseDisplayObject } from "./displayObjectValidation.js";
 export { normalizeEvents } from "./chatTurnNormalizer.js";
 export {
   BoltrigApiError,
@@ -48,6 +50,8 @@ export {
   CHARACTER_BUNDLE_SCHEMA_VERSION,
   CharacterBundleError,
   bundleReadsPhenotype,
+  bundleSkins,
+  bundleTone,
   bundleVoiceId,
   bundleWantsBudgets,
   bundleWantsCamera,
@@ -65,12 +69,15 @@ export type {
   CharacterBundlePhenotype,
   CharacterBundlePrompts,
   CharacterBundleShaderVisual,
+  CharacterBundleSkin,
+  CharacterBundleToneFilter,
   CharacterBundleType,
   CharacterBundleVisual,
 } from "./characterBundle.js";
 export type {
   Character,
   CharacterId,
+  CharacterSkin,
   CharacterPresentationMode,
   CharacterRenderProps,
   CharacterStageState,

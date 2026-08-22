@@ -128,7 +128,7 @@ export const StorySection = ({ data, side }: StorySectionProps) => {
         {/* CTA: bracketed terminal link; `href` defaults to the governed console */}
         {data.cta && (
           <a
-            href={data.cta.href ?? "https://app.boltrig.io"}
+            href={data.cta.href ?? "https://app.boltrig.ai"}
             className="pointer-events-auto mt-10 inline-flex items-center gap-2.5 border border-brain-sky/50 bg-brain-sky/10 px-7 py-3.5 text-xs font-semibold uppercase tracking-[0.28em] text-brain-sky backdrop-blur-md transition-colors hover:border-brain-sky hover:bg-brain-sky/20 hover:text-white"
           >
             <span aria-hidden>&#9656;</span>

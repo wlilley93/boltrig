@@ -467,7 +467,7 @@ async def test_standalone_worker_shares_one_codex_provider_with_its_spawner(
     monkeypatch.setattr(worker, "load_settings", Mock(return_value=object()))
     monkeypatch.setattr(worker, "build_codex_execution_stack", Mock(return_value=None))
     monkeypatch.setattr(worker, "_start_anchor_janitor", lambda *_args: None)
-    monkeypatch.setattr(worker, "_start_hitl_expiry_janitor", lambda *_args: None)
+    monkeypatch.setattr(worker, "_start_hitl_expiry_janitor", lambda *_args, **_kw: None)
     monkeypatch.setattr(worker, "_start_retention_janitor", lambda *_args: None)
     monkeypatch.delenv("REDIS_URL", raising=False)
 

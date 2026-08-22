@@ -261,6 +261,17 @@ class HITLManager:
         except Exception:
             pass
 
+    async def refire_resume(self, tenant_id: str, request_id: str) -> None:
+        """Re-run ``_fire_resume`` for an ANSWERED request (reconciliation).
+
+        The ONLY trigger outside answer() itself: the expiry sweep's
+        reconciliation pass, for a request whose answer was committed but whose
+        resume notification was lost (process death between the answer commit
+        and the notifier). Safe by the same NFR-REL-03 argument - every resume
+        leg is CAS-guarded or idempotent - and a no-op when the request was
+        already consumed."""
+        await self._fire_resume(tenant_id, request_id)
+
     async def is_approved(self, tenant_id: str, request_id: str) -> bool:
         """True iff the request was answered with an approving decision (read-only;
         does NOT consume). The dispatch gate uses ``consume_approved_by``

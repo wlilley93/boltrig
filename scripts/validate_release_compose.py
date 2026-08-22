@@ -30,7 +30,7 @@ FIRST_PARTY_SERVICES = (
     "fleet-worker",
     "browser-executor",
     "hatchet-worker",
-    "worker-ui",
+    "ui",
     "backup",
 )
 _UNADMITTED_CHANNEL_SERVICES = frozenset({"channel-gateway", "whatsapp-bridge"})

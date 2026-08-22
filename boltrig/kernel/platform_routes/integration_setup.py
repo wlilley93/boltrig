@@ -45,7 +45,7 @@ def _error(reason: str, status_code: int = 400) -> JSONResponse:
 def _validate_fields(
     contract: IntegrationSecretContract, body: object
 ) -> tuple[dict[str, str] | None, str | None]:
-    if not isinstance(body, dict) or set(body) - {"fields", "label"}:
+    if not isinstance(body, dict) or set(body) - {"fields", "label", "level"}:
         return None, "invalid_setup_shape"
     submitted = body.get("fields")
     return validate_integration_secret_fields(contract, submitted)
@@ -59,13 +59,23 @@ def _connection_label(item, body: dict) -> str | None:
     return value if 1 <= len(value) <= 200 else None
 
 
-async def _setup_ready(kernel, tenant_id: str, item) -> str | None:
+def _requested_level(body: object) -> str:
+    """Which scope the caller is connecting at. Absent means org, which is what
+    every caller predating per-user credentials meant."""
+    if not isinstance(body, dict):
+        return "org"
+    return str(body.get("level") or "org")
+
+
+async def _setup_ready(kernel, tenant_id: str, item, level: str, scope_id: str) -> str | None:
     return await integration_setup_refusal(
         kernel.store,
         kernel.loader,
         kernel.credentials,
         tenant_id,
         item,
+        level,
+        scope_id,
     )
 
 
@@ -80,7 +90,13 @@ async def _submit_manual_secret(
     item = await kernel.store.get_integration_catalogue(principal.tenant_id, integration_id)
     if item is None:
         return _error("not_found", 404)
-    refusal = await _setup_ready(kernel, principal.tenant_id, item)
+    level = _requested_level(body)
+    # principal.subject, never principal.on_behalf_of: on_behalf_of names the
+    # human an AGENT is acting for and is None for a person logged in directly.
+    # Principal.context() sets actor=self.subject, so this is the same identity
+    # the control handler derives and dispatch later looks the credential up by.
+    scope_id = "" if level == "org" else str(principal.subject or "")
+    refusal = await _setup_ready(kernel, principal.tenant_id, item, level, scope_id)
     if refusal is not None:
         return JSONResponse(
             {
@@ -107,6 +123,7 @@ async def _submit_manual_secret(
             "integration_id": item.id,
             "label": label,
             "secret": fields,
+            "level": level,
         },
         request=request,
     )
@@ -119,7 +136,9 @@ async def _submit_manual_secret(
     return JSONResponse(
         {
             "status": "connected",
-            "connection": await connection_view(kernel, principal.tenant_id, connection),
+            "connection": await connection_view(
+                kernel, principal.tenant_id, connection, str(principal.subject or "")
+            ),
         },
         status_code=201,
     )
@@ -148,7 +167,10 @@ def register_integration_setup(app, P, K, *, connection_view) -> None:
     async def submit_secret(
         integration_id: str, body: dict, request: Request, k=K, p=P
     ) -> JSONResponse:
-        require_author(p)
+        if _requested_level(body) == "org":
+            require_author(p)
+        elif not str(getattr(p, "subject", "") or ""):
+            return _error("user_scope_requires_human_identity", 403)
         return await _submit_manual_secret(integration_id, body, k, p, connection_view, request)
 
 

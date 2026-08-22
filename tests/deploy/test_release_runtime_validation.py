@@ -24,7 +24,7 @@ def _image_environment(path: Path) -> Path:
             (
                 f"BOLTRIG_KERNEL_IMAGE=ghcr.io/{EXPECTED_REPOSITORY}-kernel@sha256:{'1' * 64}",
                 f"BOLTRIG_FLEET_IMAGE=ghcr.io/{EXPECTED_REPOSITORY}-fleet@sha256:{'2' * 64}",
-                f"BOLTRIG_WORKER_UI_IMAGE=ghcr.io/{EXPECTED_REPOSITORY}-worker-ui@sha256:{'3' * 64}",
+                f"BOLTRIG_UI_IMAGE=ghcr.io/{EXPECTED_REPOSITORY}-ui@sha256:{'3' * 64}",
                 f"BOLTRIG_BACKUP_IMAGE=ghcr.io/{EXPECTED_REPOSITORY}-backup@sha256:{'4' * 64}",
             )
         )

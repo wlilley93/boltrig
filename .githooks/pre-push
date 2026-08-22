@@ -104,12 +104,50 @@ case "$hooks_path" in
     ;;
 esac
 
+# ONE HEAVY JOB PER BOX, ACROSS ALL REPOS.
+# 2026-08-19 12:18:17: an opbox `next build --webpack` reached 9.3GB beside a
+# pre-push gate at 1.9GB on this 18GB machine. The kernel OOM-killer fired, systemd
+# marked the tmux-spawn scope the build died in `Failed with result 'oom-kill'`, and
+# the scope teardown took the PANE with it - two Claude sessions vanished mid-turn.
+# opbox had a machine-wide lock the whole time; only its `docker build` and
+# `npm run build` took it, so its own gates raced its own build and this repo took
+# no lock at all. A lock one repo honours is a convention with one participant.
+#
+# heavy-job.sh is that lock, plus the floor the lock never had: it will not START a
+# gate unless MemAvailable clears a threshold. Installed by VJS
+# (scripts/install-resource-guards.sh) into .vjs/bin/.
+#
+# ITS ABSENCE IS ANNOUNCED, NOT ASSUMED. Degrading silently to "no guard" is how a
+# box ends up believing it is protected while every gate runs unmetered.
+HEAVY_GUARD=""
+if [ -x ".vjs/bin/heavy-job.sh" ]; then
+  HEAVY_GUARD="$PWD/.vjs/bin/heavy-job.sh"
+else
+  echo "[pre-push] NOTE: .vjs/bin/heavy-job.sh is absent — gates run UNGUARDED."
+  echo "[pre-push]   Concurrent heavy jobs on this box can OOM the machine and kill tmux panes."
+  echo "[pre-push]   Install: <vjs>/scripts/install-resource-guards.sh $PWD"
+fi
+
 run_gate() { # run_gate "<name>" <make target> [make args...]
-  local name="$1" target="$2" start
+  local name="$1" target="$2" start rc=0
   shift 2
   printf '\n[pre-push] === %s ===\n' "$name"
   start=$(date +%s)
-  if ! make "$target" "$@"; then
+  if [ -n "$HEAVY_GUARD" ]; then
+    "$HEAVY_GUARD" --label "$name" -- make "$target" "$@" || rc=$?
+  else
+    make "$target" "$@" || rc=$?
+  fi
+  # 75 is EX_TEMPFAIL from heavy-job.sh: the gate was REFUSED for lack of memory and
+  # never ran. Reporting that as "$name FAILED" would be a gate naming its own cause
+  # wrong, and would send someone hunting a lint error that does not exist.
+  if [ "$rc" -eq 75 ]; then
+    echo ""
+    echo "  $name did NOT RUN — the box was out of memory. Push blocked."
+    echo "  Nothing was tested, so nothing failed. Free memory and push again."
+    exit 1
+  fi
+  if [ "$rc" -ne 0 ]; then
     echo ""
     echo "  $name FAILED — push blocked."
     echo "  Fix it, or in a real hurry: git push --no-verify"

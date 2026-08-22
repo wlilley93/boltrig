@@ -8,14 +8,15 @@ import type {
 } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../../client";
+import { saveCompanion } from "./companionSave";
 import {
   characterFromSettings,
   characterToSettings,
   loadCharacter,
   saveCharacterLocal,
+  saveSkinLocal,
   type CharacterId,
 } from "../../character";
-import { useCharacterOptions } from "../characters";
 import { isDesktop } from "../../desktop";
 import {
   appearanceFromSettings,
@@ -38,6 +39,7 @@ import {
   StateWord,
   type Tone,
 } from "./rowKit";
+import { CompanionRows } from "./CompanionRows";
 import { ReadRepliesSetting } from "./ReadRepliesSetting";
 // Compact row-idiom panes for the identity, organisation, knowledge and
 // advanced settings sections. Every row reads real SDK data; the larger
@@ -96,7 +98,6 @@ function AppearanceGroup({
   onChangeCharacter(next: CharacterId): void;
   titles?: Set<string>;
 }) {
-  const { options: bodyOptions, values: bodyValues } = useCharacterOptions();
   const showTheme = !titles || titles.has("Theme");
   // Companion remains searchable but outside the three-row Look card. That
   // preserves the target's Theme/Density/Text-size stack and its exact fold.
@@ -184,19 +185,10 @@ function AppearanceGroup({
         />
       )}
       {showBody && (
-        <SettingsRow
-          control={(
-            <SettingsSegmented
-              disabled={busy}
-              label="Companion"
-              onChange={(label) => onChangeCharacter(bodyValues[label] ?? "familiar")}
-              options={bodyOptions}
-              value={labelFor(character, bodyValues, "Familiar")}
-            />
-          )}
-          desc="Choose the body shown on the Stage. The Familiar has a private animated presence; Jarvis visualises measured runtime state."
-          tech="agent.character"
-          title="Companion"
+        <CompanionRows
+          busy={busy}
+          character={character}
+          onChangeCharacter={onChangeCharacter}
         />
       )}
       {showDensity && (
@@ -292,7 +284,9 @@ function useAppearanceSettings() {
   }
 
   // Saved through the same settings bag but as its own key and call so the
-  // Stage selection keeps an independent local mirror and change event.
+  // Stage selection keeps an independent local mirror and change event. The
+  // server half (save, rollback, adoption announcement) lives in
+  // companionSave.ts so this debt file only shrinks.
   async function changeCharacter(next: CharacterId) {
     if (busy) return;
     const previous = character;
@@ -301,20 +295,7 @@ function useAppearanceSettings() {
     setCharacter(next);
     saveCharacterLocal(next);
     try {
-      const result = await client.putMeSettings({ settings: characterToSettings(next) });
-      if (result.status !== "ok") {
-        setCharacter(previous);
-        saveCharacterLocal(previous);
-        setMessage(result.reason ?? "Your companion could not be saved.");
-        return;
-      }
-      setAccount((current) => (current
-        ? { ...current, settings: { ...current.settings, ...characterToSettings(next) } }
-        : current));
-    } catch {
-      setCharacter(previous);
-      saveCharacterLocal(previous);
-      setMessage("Your companion could not be saved.");
+      await saveCompanion(next, previous, { setAccount, setCharacter, setMessage });
     } finally {
       setBusy(false);
     }

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { bundleVoiceId, parseCharacterBundle } from "@wlilley93/boltrig-web-sdk";
+import { bundleTone, bundleVoiceId, parseCharacterBundle } from "@wlilley93/boltrig-web-sdk";
 import familiarBundle from "../src/bundles/familiar/character.json";
 import jarvisBundle from "../src/bundles/jarvis/character.json";
 import {
@@ -19,6 +19,10 @@ const jarvisSource: CharacterCanvasSource = {
   id: "boltrig.canvas.jarvis",
   type: "shader",
   supplies: [...JARVIS_UNIFORMS, "uGene"],
+  // Both bodies the real source can draw: the instrument dial and the neural
+  // field. A source that named neither would now be refused, which is the
+  // point of declaring them.
+  skins: ["default", "ultron"],
   render: () => null,
 };
 
@@ -39,6 +43,28 @@ describe("Jarvis as a character bundle", () => {
     // The two he DID ask for, unlike Familiar.
     expect(jarvis.readsPhenotype).toBe(true);
     expect(jarvis.wantsBudgets).toBe(true);
+    // Two bodies, one character. The default is FIRST, so an install that has
+    // never heard of skins keeps rendering what it always rendered.
+    expect(jarvis.skins?.map((skin) => skin.id)).toEqual(["default", "ultron"]);
+    expect(jarvis.skins?.[0].name).toBe("Instrument");
+  });
+
+  // A skin the canvas cannot draw must be refused BY NAME. Collapsing it to the
+  // default would offer a look in the picker and then silently not draw it,
+  // which is indistinguishable from the feature being broken.
+  it("refuses a skin the bound canvas source cannot draw", () => {
+    const oneBody = { ...jarvisSource, skins: ["default"] };
+    expect(() => characterFromBundle(jarvisBundle, [oneBody]))
+      .toThrow(CharacterBundleUnsupported);
+    expect(() => characterFromBundle(jarvisBundle, [oneBody]))
+      .toThrow(/cannot draw skin ultron/);
+  });
+
+  // Familiar has one body and says so by SAYING NOTHING. An array of one would
+  // imply a choice, and every picker would have to special-case it.
+  it("leaves a character with one look carrying no skins at all", () => {
+    const familiar = characterFromBundle(familiarBundle, [familiarSource]);
+    expect(familiar.skins).toBeUndefined();
   });
 
   // The manifest names the shader by digest. If the vendored .frag moves under
@@ -48,6 +74,12 @@ describe("Jarvis as a character bundle", () => {
     const visual = parseCharacterBundle(jarvisBundle).visual;
     expect(visual.type).toBe("shader");
     if (visual.type !== "shader") return;
+    // PRESENT, not merely correct. `fragment` became optional so a character
+    // drawn by host machinery could ship no shader file; this one DOES ship
+    // one, and asserting its presence is what stops "optional" turning into
+    // "absent everywhere" and the digest check covering nothing.
+    expect(visual.fragment).toBeDefined();
+    if (!visual.fragment) return;
     expect(visual.fragment.file).toBe("jarvis.frag");
     expect(visual.fragment.sha256).toBe(digest);
   });
@@ -82,6 +114,56 @@ describe("Jarvis as a character bundle", () => {
   });
 });
 
+describe("Jarvis's declared tone", () => {
+  const manifest = parseCharacterBundle(jarvisBundle);
+
+  it("brings his own shaping, with a stated reason for each filter", () => {
+    // A character BRINGS this; nothing in the shared stack knows his name. The
+    // automatic loudness and tilt stages run for everyone regardless.
+    const tone = bundleTone(manifest);
+    expect(tone).toHaveLength(2);
+    expect(tone.map((t) => `${t.type}@${t.frequency}`))
+      .toEqual(["peaking@3000", "peaking@350"]);
+    for (const filter of tone) {
+      expect(filter.reason.trim().length).toBeGreaterThan(20);
+      expect(Math.abs(filter.gainDb)).toBeLessThanOrEqual(12);
+    }
+  });
+
+  it("asks for presence and cuts boxiness, which is what his pitch needs", () => {
+    const tone = bundleTone(manifest);
+    const presence = tone.find((t) => t.frequency === 3000)!;
+    const boxiness = tone.find((t) => t.frequency === 350)!;
+    expect(presence.gainDb).toBeGreaterThan(0);
+    expect(boxiness.gainDb).toBeLessThan(0);
+  });
+
+  it("gives a character that declares nothing exactly nothing", () => {
+    // Absence is never a licence to substitute -- the same rule bundleVoiceId
+    // follows. Familiar declares no tone and must get none, not Jarvis's.
+    expect(bundleTone(parseCharacterBundle(familiarBundle))).toEqual([]);
+  });
+
+  it("drops a malformed filter instead of silencing the character", () => {
+    const mangled = {
+      ...jarvisBundle,
+      voice: {
+        ...(jarvisBundle as { voice: Record<string, unknown> }).voice,
+        tone: [
+          { type: "peaking", frequency: 3000, gainDb: 5, reason: "kept" },
+          { type: "peaking", frequency: 3000, gainDb: 5 },          // no reason
+          { type: "peaking", frequency: 3000, gainDb: 40, reason: "too loud" },
+          { type: "notch", frequency: 3000, gainDb: 5, reason: "unknown type" },
+          null,
+        ],
+      },
+    };
+    const tone = bundleTone(parseCharacterBundle(mangled));
+    expect(tone).toHaveLength(1);
+    expect(tone[0]!.reason).toBe("kept");
+  });
+});
+
 describe("Jarvis's voice", () => {
   // Two providers doing two different jobs, and the distinction is the point:
   // `fish` GENERATED the register references and is not called at runtime;
@@ -101,8 +183,14 @@ describe("Jarvis's voice", () => {
     expect(bundleVoiceId(manifest, "xai")).toBeUndefined();
   });
 
-  it("says nothing for the Familiar, who declares no voice at all", () => {
+  it("reads the Familiar's own fish id rather than Jarvis's", () => {
+    // She declares one now, where she used to declare nothing. The point of the
+    // assertion is unchanged: bundleVoiceId must answer from the manifest it was
+    // handed. Returning Jarvis's id here would be the failure, and it is a live
+    // possibility precisely because both bundles now name the same provider.
     const manifest = parseCharacterBundle(familiarBundle);
-    expect(bundleVoiceId(manifest, "fish")).toBeUndefined();
+    const jarvis = parseCharacterBundle(jarvisBundle);
+    expect(bundleVoiceId(manifest, "fish")).toBe("c8f64deb39914cfca7f47ccfc3bca82f");
+    expect(bundleVoiceId(manifest, "fish")).not.toBe(bundleVoiceId(jarvis, "fish"));
   });
 });

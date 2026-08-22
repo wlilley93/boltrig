@@ -35,6 +35,8 @@ def _connection(row: Any) -> IntegrationConnection | None:
         revoked_at=row["revoked_at"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        level=row["level"],
+        scope_id=row["scope_id"],
     )
 
 
@@ -75,9 +77,10 @@ async def create_pg(pool: Any, connection: IntegrationConnection, credential: di
                     """INSERT INTO integration_connections
                          (id,tenant_id,integration_id,adapter_id,label,health,
                           credential_ref,credential_owned,accounts,
-                          last_checked_at,revoked_at,created_at,updated_at)
+                          last_checked_at,revoked_at,created_at,updated_at,
+                          level,scope_id)
                        VALUES
-                         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+                         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
                        ON CONFLICT DO NOTHING
                        RETURNING id""",
                     connection.id,
@@ -93,6 +96,8 @@ async def create_pg(pool: Any, connection: IntegrationConnection, credential: di
                     connection.revoked_at,
                     connection.created_at,
                     connection.updated_at,
+                    connection.level,
+                    connection.scope_id,
                 )
                 if row is None:
                     raise _CreateConflict
@@ -101,19 +106,61 @@ async def create_pg(pool: Any, connection: IntegrationConnection, credential: di
     return True
 
 
+def _one_per_scope(connections: list, adapter_id: str) -> list:
+    """``_one_per_scope`` still fails closed on ambiguity, but PER SCOPE.
+
+    Two active rows at the same (level, scope_id) is the corruption the old
+    adapter-wide check was really guarding against, and the partial unique index
+    makes it unreachable on Postgres. An org row and a user row together is the
+    intended state, not a conflict.
+    """
+    seen: set[tuple[str, str]] = set()
+    for connection in connections:
+        key = (connection.level, connection.scope_id)
+        if key in seen:
+            raise CredentialResolution(
+                f"adapter '{adapter_id}' has multiple active integration "
+                f"connections at scope {connection.level}"
+            )
+        seen.add(key)
+    return connections
+
+
 async def active_pg(pool: Any, tenant_id: str, adapter_id: str):
+    """The ORG connection for an adapter. Unchanged meaning: before scoping
+    existed every connection was org-wide, so this is what callers already had.
+    """
     rows = await pool.fetch(
         """SELECT * FROM integration_connections
             WHERE tenant_id=$1 AND adapter_id=$2 AND health<>'revoked'
+              AND level='org'
             LIMIT 2""",
         tenant_id,
         adapter_id,
     )
-    if len(rows) > 1:
-        raise CredentialResolution(
-            f"adapter '{adapter_id}' has multiple active integration connections"
-        )
-    return _connection(rows[0]) if rows else None
+    found = _one_per_scope([_connection(row) for row in rows], adapter_id)
+    return found[0] if found else None
+
+
+async def applicable_pg(pool: Any, tenant_id: str, adapter_id: str, owner: str | None):
+    """Every active connection that could serve ``owner``: theirs and the org's.
+
+    ONE query, deliberately. At most two rows can apply, so fetching both costs
+    what fetching the org row alone used to -- and this runs on every adapter
+    dispatch, where a second round trip per call would be a real cost. The
+    caller picks between them because the precedence needs the org policy flag,
+    which is not the store's business.
+    """
+    rows = await pool.fetch(
+        """SELECT * FROM integration_connections
+            WHERE tenant_id=$1 AND adapter_id=$2 AND health<>'revoked'
+              AND (level='org' OR (level='user' AND scope_id=$3))
+            LIMIT 4""",
+        tenant_id,
+        adapter_id,
+        owner or "",
+    )
+    return _one_per_scope([_connection(row) for row in rows], adapter_id)
 
 
 async def revoke_pg(pool: Any, tenant_id: str, connection_id: str):
@@ -164,6 +211,8 @@ def create_mem(
     conflict = conflict or any(
         row.tenant_id == connection.tenant_id
         and row.adapter_id == connection.adapter_id
+        and row.level == connection.level
+        and row.scope_id == connection.scope_id
         and row.health != "revoked"
         for row in connections.values()
     )
@@ -178,19 +227,35 @@ def create_mem(
     return True
 
 
-def active_mem(connections: dict, tenant_id: str, adapter_id: str):
-    matches = [
+def _active_mem_rows(connections: dict, tenant_id: str, adapter_id: str):
+    return [
         row
         for row in connections.values()
         if row.tenant_id == tenant_id and row.adapter_id == adapter_id and row.health != "revoked"
     ]
-    if len(matches) > 1:
-        raise CredentialResolution(
-            f"adapter '{adapter_id}' has multiple active integration connections"
-        )
-    if not matches:
-        return None
-    return replace(matches[0], accounts=[dict(item) for item in matches[0].accounts])
+
+
+def _copied(row):
+    return replace(row, accounts=[dict(item) for item in row.accounts])
+
+
+def active_mem(connections: dict, tenant_id: str, adapter_id: str):
+    """The ORG connection, matching active_pg."""
+    matches = [
+        row for row in _active_mem_rows(connections, tenant_id, adapter_id) if row.level == "org"
+    ]
+    found = _one_per_scope(matches, adapter_id)
+    return _copied(found[0]) if found else None
+
+
+def applicable_mem(connections: dict, tenant_id: str, adapter_id: str, owner: str | None):
+    """The memory twin of applicable_pg: the caller's own row and the org's."""
+    matches = [
+        row
+        for row in _active_mem_rows(connections, tenant_id, adapter_id)
+        if row.level == "org" or (row.level == "user" and row.scope_id == (owner or ""))
+    ]
+    return [_copied(row) for row in _one_per_scope(matches, adapter_id)]
 
 
 def revoke_mem(connections: dict, credentials: dict, tenant_id: str, connection_id: str):

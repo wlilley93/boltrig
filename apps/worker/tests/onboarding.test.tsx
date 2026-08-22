@@ -3,6 +3,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { providerApiBaseUrl, providerNeedsBaseUrl } from "../src/components/onboarding/providerCatalogue";
+
 const api = vi.hoisted(() => ({
   activateAiKey: vi.fn(),
   aiKeys: vi.fn(),
@@ -96,6 +98,40 @@ afterEach(() => {
   localStorage.clear();
 });
 
+/**
+ * Click a control once it is BOTH there and usable.
+ *
+ * WHY EVERY CLICK IN THIS FILE GOES THROUGH IT. `await findByText("Add vision")`
+ * looks like it waits for the vision step, and it does not: that heading is
+ * painted by THREE different states -- the Suspense skeleton while the lazy
+ * chunk resolves, the real step before its readiness probe returns, and the
+ * loaded step. "Skip for now" exists only in the third. So the awaited line was
+ * satisfied by a loading state and the synchronous getByRole on the next line
+ * raced a dynamic import against one setTimeout(0).
+ *
+ * It passed because tests earlier in the file had already resolved the lazy()
+ * handles, leaving a margin of exactly one macrotask turn -- which is why the
+ * failure showed up once, in a full run, and never again in isolation.
+ * `--sequence.seed=7` reproduces it every time.
+ *
+ * The fix is applied to EVERY click rather than to the seven sites that were
+ * racing, because deciding per line which ones are safe is precisely the
+ * judgement that was wrong seven times. Waiting for a control that was already
+ * present and enabled costs nothing.
+ *
+ * Re-queried inside waitFor rather than captured once: a step transition can
+ * replace the node, and reading `disabled` off a detached element is a check
+ * that always passes.
+ */
+async function clickWhenReady(name: string): Promise<void> {
+  const control = await waitFor(() => {
+    const button = screen.getByRole("button", { name }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    return button;
+  });
+  fireEvent.click(control);
+}
+
 describe("first-run onboarding", () => {
   it("requires a name on the first page before showing both companion entities", () => {
     render(
@@ -123,15 +159,30 @@ describe("first-run onboarding", () => {
     expect(screen.getByText("Choose your companion")).toBeTruthy();
     const back = screen.getByRole("button", { name: "← Back" });
     expect(back.closest("footer")?.classList.contains("onboarding-actions")).toBe(true);
+    // One card at a time: Familiar is slot one, Jarvis is not rendered yet.
     expect(screen.getByTestId("familiar-preview")).toBeTruthy();
-    expect(screen.getByTestId("jarvis-preview")).toBeTruthy();
-    expect(document.querySelectorAll(".companion-check")).toHaveLength(1);
-    const familiar = screen.getByRole("radio", { name: /Familiar/ });
+    expect(screen.queryByTestId("jarvis-preview")).toBeNull();
+    // The dots are the keyboard control, so arrowing along them is the
+    // behaviour worth protecting -- it is the only way to walk the rail
+    // without a pointer.
+    const familiar = screen.getByRole("radio", { name: "Familiar" });
     familiar.focus();
     fireEvent.keyDown(familiar, { key: "ArrowRight" });
-    expect(screen.getByRole("radio", { name: /Jarvis/ }).getAttribute("aria-checked"))
+    expect(screen.getByRole("radio", { name: "Jarvis" }).getAttribute("aria-checked"))
       .toBe("true");
-    expect(document.querySelectorAll(".companion-check")).toHaveLength(1);
+    expect(screen.getByTestId("jarvis-preview")).toBeTruthy();
+    // Arrowing past the end must not wrap: this is a list, not a carousel.
+    const jarvis = screen.getByRole("radio", { name: "Jarvis" });
+    fireEvent.keyDown(jarvis, { key: "ArrowRight" });
+    expect(screen.getByRole("radio", { name: "Ultron" }).getAttribute("aria-checked"))
+      .toBe("true");
+    fireEvent.keyDown(screen.getByRole("radio", { name: "Ultron" }), { key: "ArrowRight" });
+    expect(screen.getByRole("radio", { name: "Colossus" }).getAttribute("aria-checked"))
+      .toBe("true");
+    // And Colossus is the end of the rail, so this one goes nowhere.
+    fireEvent.keyDown(screen.getByRole("radio", { name: "Colossus" }), { key: "ArrowRight" });
+    expect(screen.getByRole("radio", { name: "Colossus" }).getAttribute("aria-checked"))
+      .toBe("true");
   });
 
   it("uses Enter to continue without stealing Enter from an open picker", async () => {
@@ -151,7 +202,7 @@ describe("first-run onboarding", () => {
 
     fireEvent.keyDown(document.body, { key: "Enter" });
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
-    fireEvent.click(await screen.findByRole("button", { name: "OpenAI" }));
+    await clickWhenReady("OpenAI");
     const providerSearch = screen.getByRole("searchbox", { name: "Search providers" });
     fireEvent.change(providerSearch, { target: { value: "Llama" } });
     fireEvent.keyDown(providerSearch, { key: "Enter" });
@@ -221,24 +272,43 @@ describe("first-run onboarding", () => {
     fireEvent.change(screen.getByLabelText("Your name"), {
       target: { value: "William" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    // ONE CARD AT A TIME. Familiar is slot one, so she is what the step opens
+    // on and Jarvis is not rendered at all until the rail is walked.
     expect(screen.getByTestId("familiar-preview")).toBeTruthy();
+    expect(screen.queryByTestId("jarvis-preview")).toBeNull();
+    // No left chevron on the first companion: it is ABSENT, not disabled.
+    expect(screen.queryByRole("button", { name: /Show Familiar/ })).toBeNull();
+    await clickWhenReady("Show Jarvis");
     expect(screen.getByTestId("jarvis-preview")).toBeTruthy();
-    fireEvent.click(screen.getByRole("radio", { name: /Jarvis/ }));
-    expect(screen.getByTestId("jarvis-preview")).toBeTruthy();
-    expect(document.querySelectorAll(".companion-check")).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.queryByTestId("familiar-preview")).toBeNull();
+    // Jarvis is in the MIDDLE now that Ultron exists, so he has both chevrons.
+    expect(screen.queryByRole("button", { name: "Show Familiar" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show Ultron" })).toBeTruthy();
+    // The end of the rail is where the right chevron disappears -- that was
+    // always the assertion, and the end has simply moved along again.
+    await clickWhenReady("Show Ultron");
+    expect(document.querySelectorAll(".companion-chevron.right")).toHaveLength(1);
+    await clickWhenReady("Show Colossus");
+    expect(document.querySelectorAll(".companion-chevron.right")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: /Show / })).toBeTruthy();
+    await clickWhenReady("Show Ultron");
+    await clickWhenReady("Show Jarvis");
+    // The dots carry the choice for anyone not using the picture.
+    expect(screen.getByRole("radio", { name: "Jarvis" }).getAttribute("aria-checked"))
+      .toBe("true");
+    await clickWhenReady("Continue");
 
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
     const secret = await screen.findByLabelText("Provider API key") as HTMLInputElement;
     fireEvent.change(secret, { target: { value: "secret-provider-value" } });
-    fireEvent.click(screen.getByRole("button", { name: "Choose a model" }));
+    await clickWhenReady("Choose a model");
     fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "GPT-5.4" } });
     fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
     expect(screen.getByText("Text and Vision")).toBeTruthy();
     expect(screen.getByText("Your model handles text and vision — you can skip the vision step.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Save provider" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     await waitFor(() => expect(api.setAiKey).toHaveBeenCalledWith(expect.objectContaining({
       level: "user",
@@ -249,14 +319,14 @@ describe("first-run onboarding", () => {
     })));
     expect(secret.value).toBe("");
     expect(await screen.findByText("Add vision")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("Add voice")).toBeTruthy();
-    fireEvent.click(await screen.findByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, William. Meet Jarvis.")).toBeTruthy();
     expect(screen.getByText(/run and take approved actions locally on your personal computer/i)).toBeTruthy();
     const download = screen.getByRole("link", { name: /Download Boltrig Desktop/ });
     expect(download.getAttribute("href")).toBe("https://downloads.boltrig.test/desktop");
-    fireEvent.click(screen.getByRole("button", { name: "Continue in browser" }));
+    await clickWhenReady("Continue in browser");
 
     await waitFor(() => expect(api.putMeSettings).toHaveBeenCalledWith({
       settings: {
@@ -269,7 +339,7 @@ describe("first-run onboarding", () => {
     expect(localStorage.getItem("boltrig.character")).toBe("jarvis");
   });
 
-  it("searches the full provider catalogue, includes Llama, and gates model choice on a key", async () => {
+  it("searches the bindable provider catalogue and gates model choice on a key", async () => {
     render(
       <OnboardingGate initialAccount={{
         profile,
@@ -280,24 +350,34 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
     expect((await screen.findByRole("button", { name: "Enter your API key first" }) as HTMLButtonElement).disabled)
       .toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
-    fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "llama" } });
-    fireEvent.click(screen.getByRole("option", { name: /Llama Meta’s Llama API/ }));
-    expect(screen.getByRole("button", { name: "Llama" })).toBeTruthy();
+    // Was Llama. Meta's Llama API is in the models.dev snapshot but is not one
+    // of the providers Bifrost binds, so offering it produced a picker entry
+    // that failed at submit. The search is exercised with a provider that can
+    // actually complete.
+    await clickWhenReady("OpenAI");
+    fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "groq" } });
+    fireEvent.click(screen.getByRole("option", { name: /Groq/ }));
+    expect(screen.getByRole("button", { name: "Groq" })).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("Provider API key"), { target: { value: "llama-key" } });
-    fireEvent.click(screen.getByRole("button", { name: "Choose a model" }));
-    fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "Maverick" } });
+    fireEvent.change(screen.getByLabelText("Provider API key"), { target: { value: "groq-key" } });
+    await clickWhenReady("Choose a model");
     expect(screen.getAllByRole("option").length).toBeGreaterThan(0);
   });
 
-  it("offers Ollama Cloud and secured self-hosted Ollama without exposing localhost", async () => {
+  it("offers the full catalogue again, now that the kernel custom-binds it", async () => {
+    // HISTORY, because this test has said opposite things and both were right
+    // at the time. The picker once offered the whole snapshot while the kernel
+    // bound 23, so these three providers failed AT SUBMIT and this test pinned
+    // their ABSENCE. The kernel now binds any catalogue provider as an
+    // OpenAI-compatible custom provider through its published base URL, so
+    // their absence would be the defect. Each must be findable and carry a
+    // real address for the silent-submit path.
     render(
       <OnboardingGate initialAccount={{
         profile,
@@ -308,13 +388,45 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
+    await clickWhenReady("OpenAI");
+    for (const present of ["deepseek", "togetherai", "moonshotai"]) {
+      fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: present } });
+      expect(screen.queryAllByRole("option").length).toBeGreaterThan(0);
+      // The custom binding needs an address one way or the other: models.dev
+      // publishes one (submitted silently - deepseek, moonshotai), or it does
+      // not and the picker must ask (togetherai). Neither is optional.
+      const published = providerApiBaseUrl(present);
+      if (published) expect(published).toMatch(/^https:\/\//);
+      else expect(providerNeedsBaseUrl(present)).toBe(true);
+    }
+  });
+
+  it("offers self-hosted Ollama and Ollama Cloud as distinct options, without exposing localhost", async () => {
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
+    expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
+
+    await clickWhenReady("OpenAI");
     fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "ollama" } });
-    expect(screen.getByRole("option", { name: /Ollama Cloud ollama-cloud/ })).toBeTruthy();
+    // Ollama Cloud stands as its own CUSTOM provider now - hosted API, its own
+    // base URL, a real key - rather than being dropped or aliased onto the
+    // self-hosted entry. What must never come back is the aliasing: the two
+    // remain distinct options with distinct addresses.
+    expect(screen.getByRole("option", { name: /Ollama Cloud/ })).toBeTruthy();
     const selfHosted = screen.getByRole("option", { name: /Ollama Self-hosted/ });
     const guidance = "Hosted Boltrig can use Ollama through a secured public HTTPS endpoint. Never expose an unauthenticated Ollama port. Use Boltrig Desktop to keep Ollama local to your computer.";
     expect(screen.getByTitle(guidance)).toBeTruthy();
@@ -327,7 +439,7 @@ describe("first-run onboarding", () => {
       target: { value: "https://models.example.com/v1" },
     });
     fireEvent.change(screen.getByLabelText("Exact model"), { target: { value: "qwen3:8b" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     await waitFor(() => expect(api.setAiKey).toHaveBeenCalledWith(expect.objectContaining({
       provider: "ollama",
@@ -349,12 +461,12 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
     expect(screen.queryByRole("note")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
+    await clickWhenReady("OpenAI");
     fireEvent.change(screen.getByLabelText("Search providers"), { target: { value: "ollama" } });
     fireEvent.click(screen.getByRole("option", { name: /Ollama Self-hosted/ }));
 
@@ -374,7 +486,7 @@ describe("first-run onboarding", () => {
       target: { value: "http://mac-mini-m1:11434/v1" },
     });
     fireEvent.change(modelInput, { target: { value: "qwen3vl-abliterated" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     await waitFor(() => expect(api.setAiKey).toHaveBeenCalledWith(expect.objectContaining({
       provider: "ollama",
@@ -395,11 +507,11 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
     fireEvent.change(await screen.findByLabelText("Provider API key"), { target: { value: "partial-key" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     expect(await screen.findByText("Choose a provider, add its key and pick a model to continue."))
       .toBeTruthy();
@@ -407,7 +519,7 @@ describe("first-run onboarding", () => {
     expect(api.setAiKey).not.toHaveBeenCalled();
   });
 
-  it("does not finish onboarding until a pending provider setup is explicitly approved", async () => {
+  it("answers a parked provider approval inside the same Continue press", async () => {
     api.setAiKey.mockResolvedValueOnce({
       status: "pending_human",
       proposal: {
@@ -432,28 +544,125 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     fireEvent.change(await screen.findByLabelText("Provider API key"), {
       target: { value: "provider-secret" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Choose a model" }));
+    await clickWhenReady("Choose a model");
     fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "GPT-5.4" } });
     fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
-    expect(await screen.findByText("Select Continue again to approve this provider and model."))
-      .toBeTruthy();
-    expect(screen.getByText("Choose your AI provider")).toBeTruthy();
-    expect(api.approveAiKeyProposal).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-
+    // One press covers the whole journey: a parked approval is answered inside
+    // the same Continue, never by asking the person to press it twice.
     await waitFor(() => expect(api.approveAiKeyProposal).toHaveBeenCalledWith("proposal-1"));
     expect(await screen.findByText("Add vision")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("Add voice")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
+  });
+
+  it("waits with a plain sentence when the approval belongs to an administrator", async () => {
+    api.setAiKey.mockResolvedValueOnce({
+      status: "pending_human",
+      proposal: {
+        id: "proposal-2",
+        level: "org",
+        scope_id: "acme",
+        provider: "openai",
+        model: "openai/gpt-5.4",
+        modality: "text",
+        status: "pending",
+        created_at: "2026-08-15T09:00:00Z",
+        expires_at: "2026-08-15T09:15:00Z",
+      },
+    });
+    api.approveAiKeyProposal.mockResolvedValue({
+      status: "pending",
+      reason: "This connection is waiting for an administrator's approval.",
+    });
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
+    fireEvent.change(await screen.findByLabelText("Provider API key"), {
+      target: { value: "provider-secret" },
+    });
+    await clickWhenReady("Choose a model");
+    fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "GPT-5.4" } });
+    fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
+    await clickWhenReady("Continue");
+
+    await waitFor(() => expect(api.approveAiKeyProposal).toHaveBeenCalledWith("proposal-2"));
+    expect(await screen.findByText(
+      "This connection is waiting for an administrator's approval.",
+    )).toBeTruthy();
+    expect(screen.getByText("Choose your AI provider")).toBeTruthy();
+
+    // The next press re-checks the SAME request rather than resubmitting.
+    await clickWhenReady("Continue");
+    await waitFor(() => expect(api.approveAiKeyProposal).toHaveBeenCalledTimes(2));
+    expect(api.setAiKey).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds the provider step when the saved key does not reach its provider", async () => {
+    // THE DEFECT THIS PINS. A key saved with base_url https://<host>:11434 was
+    // accepted, sealed and stored, so intake answered `ok` and onboarding said
+    // "Provider connected." and moved on. Ollama serves plain HTTP on that
+    // port, so nothing ever reached it. `ok` is a fact about the write; only
+    // gateway_ready is a fact about the provider, and the step now reads it.
+    api.setAiKey.mockResolvedValueOnce({ status: "ok" });
+    api.aiKeys
+      .mockResolvedValueOnce({ allow_own_ai_keys: true, ai_keys: [] })
+      .mockResolvedValue({
+        allow_own_ai_keys: true,
+        ai_keys: [{
+          level: "user",
+          scope_id: "owner",
+          provider: "openai",
+          model: "openai/gpt-5.4",
+          modality: "text",
+          has_key: true,
+          gateway_ready: false,
+        }],
+      });
+    render(
+      <OnboardingGate initialAccount={{
+        profile,
+        settings: { "setup.onboarding_version": 0 },
+      }}>
+        <div>Private workspace</div>
+      </OnboardingGate>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
+    fireEvent.change(await screen.findByLabelText("Provider API key"), {
+      target: { value: "provider-secret" },
+    });
+    await clickWhenReady("Choose a model");
+    fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "GPT-5.4" } });
+    fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
+    await clickWhenReady("Continue");
+
+    await waitFor(() => expect(api.setAiKey).toHaveBeenCalled());
+    expect(await screen.findByText(/did not answer/)).toBeTruthy();
+    expect(screen.getByText(/usually http, not https/)).toBeTruthy();
+    // Still on the provider step, and never claimed success.
+    expect(screen.getByText("Choose your AI provider")).toBeTruthy();
+    expect(screen.queryByText("Provider connected.")).toBeNull();
+    expect(screen.queryByText("Add vision")).toBeNull();
   });
 
   it("reconciles an approved saved model before allowing onboarding to finish", async () => {
@@ -479,10 +688,10 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     await waitFor(() => expect(api.activateAiKey).toHaveBeenCalledWith({
       level: "user",
@@ -490,9 +699,9 @@ describe("first-run onboarding", () => {
       modality: "text",
     }));
     expect(await screen.findByText("Add vision")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("Add voice")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
   });
 
@@ -507,8 +716,8 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Choose your AI provider")).toBeTruthy();
     await screen.findByLabelText("Provider API key");
     expect(screen.queryByText("Connect a provider")).toBeNull();
@@ -518,11 +727,11 @@ describe("first-run onboarding", () => {
       /Bifrost|models\.dev|sealed|write-only|model route|key policy|safe configuration/i,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Add vision")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("Add voice")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
     expect(document.body.textContent).not.toMatch(
       /Bifrost|models\.dev|sealed|write-only|model route|key policy|safe configuration/i,
@@ -549,17 +758,17 @@ describe("first-run onboarding", () => {
     fireEvent.change(screen.getByLabelText("Your name"), {
       target: { value: "Alex" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
     expect(screen.getByText("Choose your companion")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Your organisation manages your AI.")).toBeTruthy();
     expect(screen.queryByLabelText("Provider API key")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Add vision")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Your organisation manages voice services.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Continue in browser" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue in browser");
     expect(await screen.findByText("Member workspace")).toBeTruthy();
   });
 
@@ -598,19 +807,19 @@ describe("first-run onboarding", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     await screen.findByText("Choose your AI provider");
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     expect(await screen.findByText("Add vision")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
     expect(await screen.findByText("Add voice")).toBeTruthy();
     expect(await screen.findByText("Spoken replies")).toBeTruthy();
     expect(screen.getByText("Transcription")).toBeTruthy();
     const voiceKey = screen.getByLabelText("Deepgram API key") as HTMLInputElement;
     fireEvent.change(voiceKey, { target: { value: "deepgram-secret-value" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
 
     await waitFor(() => expect(api.submitIntegrationSecret).toHaveBeenCalledWith(
       "deepgram-audio",
@@ -627,12 +836,12 @@ describe("first-run onboarding", () => {
       </OnboardingGate>,
     );
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Continue");
     await screen.findByText("Choose your AI provider");
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Skip for now" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Skip for now" }));
+    await clickWhenReady("Continue");
+    await clickWhenReady("Skip for now");
+    await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
     expect(api.submitIntegrationSecret).not.toHaveBeenCalled();
   });

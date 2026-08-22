@@ -45,7 +45,7 @@ def _typescript_without_comments(text: str) -> str:
     )
 
 
-def validate(root: Path = ROOT) -> None:
+def validate(root: Path = ROOT) -> list[str]:
     root = root.resolve()
     manifest = _read("manifest.example.yaml", root=root)
     env = _read(".env.example", root=root)
@@ -60,6 +60,9 @@ def validate(root: Path = ROOT) -> None:
     familiar_manifest_text = familiar_manifest_path.read_text(encoding="utf-8")
     familiar_manifest = json.loads(familiar_manifest_text)
     familiar_shader = familiar_manifest_path.parent / "familiar.frag"
+    ultron_manifest_path = root / "apps/worker/src/bundles/ultron/character.json"
+    ultron_manifest_text = ultron_manifest_path.read_text(encoding="utf-8")
+    ultron_manifest = json.loads(ultron_manifest_text)
 
     # These are known values from the local deployment history. A public
     # template must not make them part of another operator's installation.
@@ -84,6 +87,7 @@ def validate(root: Path = ROOT) -> None:
         _forbid(manifest, marker, label="manifest.example.yaml")
         _forbid(env, marker, label=".env.example")
         _forbid(familiar_manifest_text, marker, label="Familiar stock bundle")
+        _forbid(ultron_manifest_text, marker, label="Ultron stock bundle")
     _forbid(
         familiar_manifest_text,
         "wlilley93/beelink-desktop",
@@ -115,16 +119,49 @@ def validate(root: Path = ROOT) -> None:
             if value:
                 raise ValueError(".env.example bundles a webhook value")
 
-    # The production registry is deliberately closed: Familiar and Jarvis are
-    # first-party. A private distribution can own a separate entrypoint, but the
-    # public package graph, lockfile, and stock plugin join must be hermetic.
+    # The production registry is deliberately closed. A private distribution can
+    # own a separate entrypoint, but the public package graph, lockfile and stock
+    # plugin join must be hermetic.
+    #
+    # THE LIST IS NO LONGER HARDCODED, and the reason is that the hardcoded one
+    # went stale twice without anyone noticing: it still read Familiar-then-
+    # Jarvis two characters after Ultron shipped, so the gate failed on every
+    # run and stopped being read. A gate that is always red protects nothing.
+    #
+    # What it checks instead is the property that actually matters: every
+    # character the stock path registers must be a bundle in this repository
+    # that DECLARES it ships. That refuses the thing the closed list existed to
+    # refuse -- a private character registered on the public path -- and it
+    # keeps working when a fifth first-party body is added, because adding one
+    # means committing a bundle that says ships=true.
     registrations = re.findall(
         r"(?m)^\s*registerCharacter\(([A-Z][A-Z0-9_]*)\);\s*$", characters
     )
-    if registrations != ["FAMILIAR", "JARVIS"]:
-        raise ValueError(
-            "character registry must register exactly Familiar then Jarvis"
+    if not registrations:
+        raise ValueError("character registry registers no character")
+    if len(set(registrations)) != len(registrations):
+        raise ValueError("character registry registers the same character twice")
+    for symbol in registrations:
+        bundle_id = symbol.lower()
+        bundle_path = (
+            root / "apps/worker/src/bundles" / bundle_id / "character.json"
         )
+        if not bundle_path.is_file():
+            raise ValueError(
+                f"stock registry registers {bundle_id} with no in-repo bundle"
+            )
+        bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+        if bundle.get("id") != bundle_id:
+            raise ValueError(f"stock bundle {bundle_id} does not own its id")
+        if bundle.get("provenance", {}).get("ships") is not True:
+            raise ValueError(
+                f"stock registry registers {bundle_id}, whose bundle does not "
+                "declare ships=true"
+            )
+    # Familiar stays first: she is the default character, and `characterFor`
+    # falls back to whatever DEFAULT_CHARACTER resolves to.
+    if registrations[0] != "FAMILIAR":
+        raise ValueError("character registry must register Familiar first")
     if familiar_manifest.get("id") != "familiar":
         raise ValueError("stock Familiar bundle must keep the familiar id")
     if familiar_manifest.get("provenance", {}).get("ships") is not True:
@@ -137,6 +174,22 @@ def validate(root: Path = ROOT) -> None:
     shader_digest = hashlib.sha256(familiar_shader.read_bytes()).hexdigest()
     if fragment.get("sha256") != shader_digest:
         raise ValueError("stock Familiar bundle shader digest does not match its file")
+    if ultron_manifest.get("id") != "ultron":
+        raise ValueError("stock Ultron bundle must keep the ultron id")
+    if ultron_manifest.get("provenance", {}).get("ships") is not True:
+        raise ValueError("stock Ultron bundle must declare ships=true")
+    if ultron_manifest.get("provenance", {}).get("upstream") != "boltrig-stock:ultron":
+        raise ValueError("stock Ultron bundle must declare the stock upstream")
+    # Deliberately NO shader-digest check, and the absence is the assertion:
+    # Ultron carries no .frag because he is a simulation and four passes rather
+    # than one shader (his manifest says so). Demanding a fragment here would
+    # refuse a body the product ships; pinning nothing at all would let one
+    # appear unnoticed. So the manifest must keep saying it has none.
+    if ultron_manifest.get("visual", {}).get("fragment") is not None:
+        raise ValueError(
+            "stock Ultron bundle declares a fragment - pin its digest the way "
+            "Familiar's is, or drop it"
+        )
     if "import.meta.glob" in characters:
         raise ValueError("character registry uses a bundler glob that ships external companions")
     if _typescript_without_comments(character_plugins) != "export {};":
@@ -185,15 +238,22 @@ def validate(root: Path = ROOT) -> None:
         "Published Worker images always ship the stock companion set",
         label="Worker Dockerfile",
     )
+    return [symbol.lower() for symbol in registrations]
 
 
 def main() -> int:
     try:
-        validate()
+        shipped = validate()
     except (OSError, ValueError) as exc:
         print(f"public-product: FAIL: {exc}", file=sys.stderr)
         return 1
-    print("public-product: PASS (BYO Bifrost; Familiar + Jarvis only)")
+    # DERIVED, not written. This line used to read "Familiar + Jarvis only" as a
+    # literal. The CHECK above had already been rewritten to derive the set from
+    # what the stock registry actually registers, but the sentence reporting the
+    # result had not, so the gate went green while naming two characters on a
+    # tree that ships three. A pass that states a fact it did not measure is the
+    # same defect the derived check was written to remove, one line further down.
+    print(f"public-product: PASS (BYO Bifrost; {', '.join(shipped)})")
     return 0
 
 

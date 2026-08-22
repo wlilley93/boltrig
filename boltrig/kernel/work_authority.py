@@ -6,10 +6,15 @@ from copy import deepcopy
 from typing import Any
 
 from boltrig.models import GrantSet, WorkItem
+from boltrig.work.channel_provenance import CHANNEL_MESSAGE_PROVENANCE_KEY
 
 CHANNEL_THREAD_CEILING_KEY = "_channel_thread_ceiling"
 CREATOR_GRANT_CEILING_KEY = "_creator_grant_ceiling"
-_PROPAGATED_KEYS = (CHANNEL_THREAD_CEILING_KEY, CREATOR_GRANT_CEILING_KEY)
+_PROPAGATED_KEYS = (
+    CHANNEL_THREAD_CEILING_KEY,
+    CREATOR_GRANT_CEILING_KEY,
+    CHANNEL_MESSAGE_PROVENANCE_KEY,
+)
 
 
 def _grant_document(grants: GrantSet) -> dict[str, list[str]]:
@@ -49,7 +54,13 @@ def creator_ceiling_from_item(item: WorkItem) -> GrantSet | None:
 
 
 def inherit_work_authority(parent: WorkItem, child: WorkItem) -> None:
-    """Replace model/source-provided reserved values with the parent's ceilings."""
+    """Replace model/source-provided reserved values with trusted parent state.
+
+    Alongside the two narrowing authority ceilings, descendants retain the
+    kernel-authored channel-origin stamp.  That lets every child/run render the
+    same safe origin while exact provider identifiers remain in the private
+    constraint and never enter the public projection.
+    """
 
     for key in _PROPAGATED_KEYS:
         child.constraints.pop(key, None)

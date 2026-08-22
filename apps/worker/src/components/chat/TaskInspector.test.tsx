@@ -58,7 +58,7 @@ const TURN: NormalizedTurn = {
     status: "ok",
   }],
   hitls: [],
-  questions: [],
+  questions: [], displayObjects: [],
   steps: [],
   timeline: [
     { kind: "tool", key: "tool-background", entry: {

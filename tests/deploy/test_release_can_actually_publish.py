@@ -84,7 +84,7 @@ def test_core_release_is_explicit_and_keeps_all_server_evidence() -> None:
 
     candidates = _WORKFLOW["jobs"]["candidates"]
     images = {entry["image"] for entry in candidates["strategy"]["matrix"]["include"]}
-    assert images == {"kernel", "fleet", "worker-ui", "backup"}
+    assert images == {"kernel", "fleet", "ui", "backup"}
 
     desktop = _WORKFLOW["jobs"]["desktop-candidates"]
     assert desktop["if"] == "${{ needs.preflight.outputs.release-mode == 'full' }}"
@@ -110,15 +110,15 @@ def test_core_release_is_explicit_and_keeps_all_server_evidence() -> None:
         "release-metadata.json",
         "image-ref-kernel.txt",
         "image-ref-fleet.txt",
-        "image-ref-worker-ui.txt",
+        "image-ref-ui.txt",
         "image-ref-backup.txt",
         "sbom-kernel.cdx.json",
         "sbom-fleet.cdx.json",
-        "sbom-worker-ui.cdx.json",
+        "sbom-ui.cdx.json",
         "sbom-backup.cdx.json",
         "provenance-kernel.intoto.json",
         "provenance-fleet.intoto.json",
-        "provenance-worker-ui.intoto.json",
+        "provenance-ui.intoto.json",
         "provenance-backup.intoto.json",
     ):
         assert f'"{server_asset}"' in evidence
@@ -359,7 +359,7 @@ def test_full_release_bakes_only_a_reviewed_desktop_download_into_worker() -> No
         "${{ vars.BOLTRIG_DESKTOP_DOWNLOAD_URL }}"
     )
     build = _step("candidates", "Build release candidate locally")["run"]
-    assert 'if [ "$IMAGE" = worker-ui ]' in build
+    assert 'if [ "$IMAGE" = ui ]' in build
     assert 'if [ "$RELEASE_MODE" = full ]' in build
     assert 'parsed.scheme != "https"' in build
     assert 'parsed.username is not None' in build

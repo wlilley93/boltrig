@@ -1,0 +1,40 @@
+# The Opbox mapping pack (SPEC §5 level 2, decision 0031).
+#
+# Ships inside every Boltrig and is DORMANT until an Opbox door is registered:
+# a pack applies only where a connection for its provider exists, so a
+# Boltrig-only box carries this file and never acts on it.
+#
+# EVERY operation id below was read from a live Opbox door (the Classical Visas
+# deployment, 2026-08-18, `select id from verbs where id like 'opbox.%'` - 443
+# verbs registered). None is invented, and a name that does not exist would map
+# nothing rather than fail loudly, which is why they were read rather than
+# guessed.
+#
+# This is a STARTER pack over the matter domain, not the whole surface. The
+# doctrine's own worked example names matter.open, and the matter domain is the
+# one whose canonical shape §4 already states. Mapping all 443 is curation work
+# that wants a human per domain, not a bulk assertion.
+#
+# WHAT IS DELIBERATELY ABSENT, AND WHY IT MATTERS:
+#   opbox.get_matter_by_number  is the same capability as opbox.get_matter with
+#   a different lookup key. Mapping both to matter.get@1 today would put two
+#   bindings with DIFFERENT input schemas under one capability, which SPEC
+#   §11.9 records as a real hazard until canonical input transforms land
+#   (doctrine step 3) - and routing would refuse the read as ambiguous anyway.
+#   It joins the pack when transforms can reconcile the two inputs.
+pack: opbox
+version: 1
+provider: opbox
+mappings:
+  - operation: opbox.create_matter
+    implements: matter.open@1
+  - operation: opbox.get_matter
+    implements: matter.get@1
+  - operation: opbox.list_matters
+    implements: matter.list@1
+  - operation: opbox.search_matters
+    implements: matter.search@1
+  - operation: opbox.update_matter
+    implements: matter.update@1
+  - operation: opbox.get_ubos
+    implements: beneficial_owner.list@1

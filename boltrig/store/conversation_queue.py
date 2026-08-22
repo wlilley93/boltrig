@@ -105,8 +105,9 @@ class ConversationQueueStorePG:
             await conn.execute(
                 """INSERT INTO conversation_messages
                      (id, conversation_id, tenant_id, role, content, run_id,
-                      hitl_request_id, events, attachments, superseded_by, created_at)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                      recipient_agent_address, author_agent_address, hitl_request_id,
+                      events, attachments, superseded_by, created_at)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
                    ON CONFLICT (tenant_id, id) DO NOTHING""",
                 message.id,
                 message.conversation_id,
@@ -114,6 +115,8 @@ class ConversationQueueStorePG:
                 message.role.value,
                 message.content,
                 message.run_id,
+                message.recipient_agent_address,
+                message.author_agent_address,
                 message.hitl_request_id,
                 message.events,
                 message.attachments,
@@ -134,7 +137,7 @@ class ConversationQueueStorePG:
                    WHERE EXISTS (
                      SELECT 1 FROM conversation_messages
                      WHERE tenant_id=$1 AND conversation_id=$2 AND id=$3
-                       AND role='user' AND run_id IS NULL
+                       AND role='user'
                    )
                    ON CONFLICT (tenant_id, message_id) DO NOTHING""",
                 message.tenant_id,
@@ -171,8 +174,10 @@ class ConversationQueueStorePG:
                      LIMIT 1 FOR UPDATE
                    ), claimed AS (
                      UPDATE conversation_steer_queue AS queue
-                     SET claimed_run_id=$3, claimed_at=now()
+                     SET claimed_run_id=COALESCE(message.run_id,$3), claimed_at=now()
                      FROM next_item
+                     JOIN conversation_messages AS message
+                       ON message.tenant_id=$1 AND message.id=next_item.message_id
                      WHERE queue.tenant_id=$1 AND queue.message_id=next_item.message_id
                      RETURNING queue.message_id
                    )

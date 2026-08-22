@@ -82,6 +82,7 @@ def _tenancy_specs() -> list[VerbSpec]:
                 "slug": _STRING,
                 "settings": _OBJ,
                 "allow_own_ai_keys": _BOOL,
+                "allow_own_integration_credentials": _BOOL,
                 "require_two_factor": _BOOL,
             },
             (),
@@ -215,6 +216,11 @@ def compatibility_specs() -> list[VerbSpec]:
                 # the adapter. This secret-shaped key makes the dispatcher
                 # redact the entire submitted contract from projections.
                 "secret": _OBJ,
+                # Whose credential this is: "org" (default) or "user". There is
+                # deliberately no scope_id here -- identity is
+                # authenticated-by-construction (K-3), so the kernel derives the
+                # owner from the caller rather than believing the request.
+                "level": _STRING,
             },
             ("integration_id", "label", "secret"),
             "Seal a certified provider contract and bind one integration connection",
@@ -227,6 +233,13 @@ def compatibility_specs() -> list[VerbSpec]:
             {"connection_id": _STRING},
             ("connection_id",),
             "Revoke an integration connection and detach its owned credential reference",
+            additional=False,
+        ),
+        _spec(
+            "control.integration.revoke_member",
+            {"connection_id": _STRING},
+            ("connection_id",),
+            "Revoke another member's personal integration connection as an administrator",
             additional=False,
         ),
         _spec(

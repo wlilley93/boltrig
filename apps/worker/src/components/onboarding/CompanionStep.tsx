@@ -1,31 +1,18 @@
+import { useEffect, useRef } from "react";
+
 import type { CharacterId } from "../../character";
+import { saveSkinLocal } from "../../character";
+import { skinFor, useCharacter, useSkin } from "../characters";
 import { FamiliarStage } from "../familiar/FamiliarStage";
 import { JarvisStage } from "../jarvis/JarvisStage";
-import { playFamiliarPreview } from "./familiarVoicePreview";
+import { ColossusStage } from "../colossus/ColossusStage";
+import { UltronStage } from "../ultron/UltronStage";
+import { CompanionCarousel } from "./CompanionCarousel";
+import { COMPANIONS, companionIndex } from "./companionCatalogue";
+import { playCompanionPreview } from "./companionVoicePreview";
+import { SkinPicker } from "./SkinPicker";
 import type { CompanionPreview } from "./useCompanionPreview";
 import { useCompanionPreview } from "./useCompanionPreview";
-
-interface CompanionChoice {
-  id: CharacterId;
-  name: string;
-  blurb: string;
-  note: string;
-}
-
-const CHOICES: CompanionChoice[] = [
-  {
-    id: "familiar",
-    name: "Familiar",
-    blurb: "A living presence with a private inner life.",
-    note: "Warm, organic and quietly expressive.",
-  },
-  {
-    id: "jarvis",
-    name: "Jarvis",
-    blurb: "An instrument for the machine's measured state.",
-    note: "Precise, technical and visibly connected to the work.",
-  },
-];
 
 export function CompanionStep({
   selected,
@@ -35,6 +22,21 @@ export function CompanionStep({
   onSelect: (id: CharacterId) => void;
 }) {
   const preview = useCompanionPreview();
+  const index = companionIndex(selected);
+  const character = useCharacter(selected);
+  const skin = skinFor(character, useSkin());
+
+  // ARRIVING somewhere plays that voice, which is not the same as CLICKING.
+  // Chevrons, dots and arrow keys all arrive, and each used to be silent while
+  // only a click spoke. Keyed on the id rather than the index so a rail
+  // reordering cannot make it replay the wrong companion.
+  const spoken = useRef<CharacterId | null>(null);
+  useEffect(() => {
+    if (spoken.current === selected) return;
+    spoken.current = selected;
+    playCompanionPreview(selected);
+  }, [selected]);
+
   return (
     <div className="onboarding-step companion-step">
       <div className="onboarding-heading onboarding-rise">
@@ -42,63 +44,44 @@ export function CompanionStep({
         <h1>Choose your companion</h1>
         <p>Choose who you’d like to work with. You can switch at any time.</p>
       </div>
-      <p className="companion-prompt onboarding-rise" style={{ "--onboarding-delay": "70ms" } as React.CSSProperties}>Meet them both.</p>
-      <div className="companion-grid" role="radiogroup" aria-label="Companion">
-        {CHOICES.map((choice, index) => {
-          const active = selected === choice.id;
-          return (
-            <button
-              aria-checked={active}
-              className={`companion-card onboarding-rise${active ? " selected" : ""}`}
-              key={choice.id}
-              data-companion={choice.id}
-              onKeyDown={(event) => handleCompanionKey(event, onSelect)}
-              onClick={() => {
-                onSelect(choice.id);
-                if (choice.id === "familiar") playFamiliarPreview();
-              }}
-              role="radio"
-              style={{ "--onboarding-delay": `${150 + index * 90}ms` } as React.CSSProperties}
-              tabIndex={active ? 0 : -1}
-              type="button"
-            >
-              <span className={`companion-art ${choice.id}`} aria-hidden="true">
-                <CompanionArt id={choice.id} preview={preview} />
-              </span>
-              <span className="companion-copy">
-                <strong>{choice.name}</strong>
-                <span>{choice.blurb}</span>
-                <small>{choice.note}</small>
-              </span>
-              {active ? <span className="companion-check" aria-hidden="true">✓</span> : null}
-            </button>
-          );
-        })}
-      </div>
+      <CompanionCarousel
+        art={<CompanionArt id={selected} preview={preview} skin={skin} />}
+        footer={
+          <SkinPicker
+            onSelect={(next) => saveSkinLocal(next)}
+            selected={skin}
+            skins={character.skins}
+          />
+        }
+        index={index}
+        items={COMPANIONS}
+        onIndex={(next) => onSelect(COMPANIONS[next].id)}
+        skin={skin}
+      />
     </div>
   );
 }
 
-function handleCompanionKey(
-  event: React.KeyboardEvent<HTMLButtonElement>,
-  onSelect: (id: CharacterId) => void,
-) {
-  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
-  event.preventDefault();
-  const cards = Array.from(
-    event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[data-companion]") ?? [],
-  );
-  const current = cards.indexOf(event.currentTarget);
-  const backwards = event.key === "ArrowLeft" || event.key === "ArrowUp";
-  const next = cards[(current + (backwards ? -1 : 1) + cards.length) % cards.length];
-  const id = next?.dataset.companion;
-  if (id === "familiar" || id === "jarvis") onSelect(id);
-  next?.focus();
-}
-
-function CompanionArt({ id, preview }: { id: CharacterId; preview: CompanionPreview }) {
+function CompanionArt({
+  id,
+  preview,
+  skin,
+}: {
+  id: CharacterId;
+  preview: CompanionPreview;
+  skin: string;
+}) {
   if (id === "familiar") {
     return <FamiliarStage mode="hero" state={preview.familiar} label="Familiar preview" />;
   }
-  return <JarvisStage labels="shader" state={preview.jarvis} suspended={false} />;
+  if (id === "ultron") {
+    return <UltronStage state={preview.ultron} suspended={false} />;
+  }
+  if (id === "colossus") {
+    return <ColossusStage state={preview.colossus} suspended={false} />;
+  }
+  // `labels="shader"` keeps the DOM overlay off the preview: the onboarding card
+  // is a portrait, and a HUD's legends over it read as chrome rather than as the
+  // body. The neural skin has no labels either way.
+  return <JarvisStage labels="shader" skin={skin} state={preview.jarvis} suspended={false} />;
 }

@@ -81,7 +81,7 @@ async def test_worker_correlates_both_jobs_with_one_random_process_identity(
     monkeypatch.setenv("BOLTRIG_HITL_EXPIRY_INTERVAL", "60")
     monkeypatch.setenv("BOLTRIG_RETENTION_INTERVAL", "3600")
 
-    async def hitl_forever(store, *, interval, process_instance_identity):
+    async def hitl_forever(store, *, interval, process_instance_identity, kernel=None):
         seen["hitl_expiry"] = process_instance_identity
         await asyncio.Event().wait()
 
@@ -198,7 +198,7 @@ def test_authenticated_platform_projection_is_tenant_scoped_and_opaque():
         # authenticated payload's bound, which is a deliberate decision and not a
         # side effect - exactly what keeping this a literal is for.
         # len(BACKGROUND_JOB_NAMES) * 4; 28 since reflection joined (#29)
-        "max_returned_receipts": 28,
+        "max_returned_receipts": 32,
     }
     assert [row["process_instance_identity"] for row in body["background_jobs"]] == [
         PROCESS

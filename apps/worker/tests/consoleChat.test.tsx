@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   createCall: vi.fn(),
   invokeApprovalState: vi.fn(),
   modelProfiles: vi.fn(),
+  namedAgents: vi.fn(),
   putApprovalPosture: vi.fn(),
   respondHitl: vi.fn(),
   runEvents: vi.fn(),
@@ -138,6 +139,22 @@ beforeEach(() => {
     }],
   });
   api.modelProfiles.mockResolvedValue({ profiles: [] });
+  api.namedAgents.mockResolvedValue({
+    named_agents: [
+      {
+        address: "chief-of-staff",
+        name: "Chief of Staff",
+        enabled: true,
+        default_for_intake: true,
+      },
+      {
+        address: "head-of-legal",
+        name: "Head of Legal",
+        enabled: true,
+        default_for_intake: false,
+      },
+    ],
+  });
   api.runEvents.mockResolvedValue([]);
   replySpeech.prime.mockReset();
   replySpeech.readReply.mockReset().mockResolvedValue(undefined);
@@ -240,8 +257,10 @@ describe("console chat surface", () => {
     // At 30px the canonical ladder uses its glossy Stage, not the flat badge.
     // No chief genotype exists in this route's contract, so the renderer must
     // state that absence instead of borrowing a child identity.
+    // The NAME is the identity alone: the state moved to a live region beside
+    // the body, because an aria-label changing on a role="img" is not announced.
     const voiceFamiliar = screen.getByRole("img", {
-      name: "chief of staff Familiar · ready",
+      name: "chief of staff Familiar",
     });
     expect(voiceFamiliar.classList.contains("familiar-stage")).toBeTruthy();
     expect(voiceFamiliar.classList.contains("conversation")).toBeTruthy();
@@ -426,6 +445,69 @@ describe("console chat surface", () => {
     expect(request).not.toHaveProperty("model_profile_id");
   });
 
+  it("addresses each new turn to the selected named agent with a human label", async () => {
+    api.streamChat.mockResolvedValue(undefined);
+    renderChat(null);
+
+    const agent = await screen.findByRole("combobox", { name: "Agent for the next turn" });
+    expect((agent as HTMLSelectElement).value).toBe("chief-of-staff");
+    fireEvent.change(agent, { target: { value: "head-of-legal" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Task instructions" }), {
+      target: { value: "Review this contract" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send ↑" }));
+
+    await waitFor(() => expect(api.streamChat).toHaveBeenCalledOnce());
+    expect(api.streamChat.mock.calls[0]![0]).toMatchObject({
+      agent_address: "head-of-legal",
+      message: "Review this contract",
+    });
+  });
+
+  it("renders immutable per-turn recipients and authors instead of relabelling history", async () => {
+    api.conversation.mockResolvedValue({
+      conversation: { agent_address: "head-of-legal" },
+      messages: [
+        {
+          id: "user-cos",
+          role: "user",
+          content: "Start with operations",
+          recipient_agent_address: "chief-of-staff",
+        },
+        {
+          id: "assistant-cos",
+          role: "assistant",
+          content: "Operations view",
+          author_agent_address: "chief-of-staff",
+        },
+        {
+          id: "user-legal",
+          role: "user",
+          content: "Now review the contract",
+          recipient_agent_address: "head-of-legal",
+        },
+        {
+          id: "assistant-legal",
+          role: "assistant",
+          content: "Legal view",
+          author_agent_address: "head-of-legal",
+        },
+      ],
+      active_run_id: null,
+    });
+    renderChat("conversation-a");
+
+    expect(await screen.findByText("To Chief of Staff")).toBeTruthy();
+    const labels = [...document.querySelectorAll(".message-agent-label")]
+      .map((element) => element.textContent);
+    expect(labels).toEqual([
+      "To Chief of Staff", "Chief of Staff", "To Head of Legal", "Head of Legal",
+    ]);
+    expect((screen.getByRole("combobox", {
+      name: "Agent for the next turn",
+    }) as HTMLSelectElement).value).toBe("head-of-legal");
+  });
+
   it("primes audio on submit and reads a newly completed reply once", async () => {
     api.conversation.mockResolvedValue({
       messages: [{ id: "assistant-a", role: "assistant", content: "Finished reply" }],
@@ -481,15 +563,15 @@ describe("console chat surface", () => {
     });
     const send = screen.getByRole("button", { name: "Send ↑" }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
-    expect(send.title).toBe("The model gateway is unavailable.");
+    expect(send.title).toBe("Models can't be reached right now.");
     fireEvent.click(send);
     expect(api.streamChat).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Model" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Choose model" }));
-    const automaticOption = screen.getAllByRole("option")[0]!;
+    const automaticOption = within(screen.getByRole("listbox")).getAllByRole("option")[0]!;
     expect(within(automaticOption).getByText("Unavailable").title)
-      .toBe("The model gateway is unavailable.");
+      .toBe("Models can't be reached right now.");
     fireEvent.click(screen.getByRole("option", {
       name: "anthropic/claude-sonnet-4-5",
     }));

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { NormalizedTurn, ToolEntry } from "@wlilley93/boltrig-web-sdk";
 
+import { RunUndoPanel } from "./RunUndoPanel";
 import { ToolReceiptDetails } from "./ToolReceiptDetails";
 import {
   toolGlyphKind,
@@ -125,7 +126,12 @@ export function WorkDisclosure({ turn, runId = turn.runId }: WorkDisclosureProps
           <small data-tone={summary.state.tone}>{summary.state.label}</small>
         )}
       </summary>
-      {expanded && <ToolReceiptDetails runId={runId} tools={turn.tools} />}
+      {expanded && (
+        <>
+          <ToolReceiptDetails runId={runId} tools={turn.tools} />
+          {runId ? <RunUndoPanel runId={runId} /> : null}
+        </>
+      )}
     </details>
   );
 }

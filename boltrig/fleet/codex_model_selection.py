@@ -16,7 +16,11 @@ from boltrig.models import (
 )
 from boltrig.models.model_id_policy import exact_model_id
 
-from .model_router import endpoint_id_for_modality, select_model_endpoint
+from .model_router import (
+    endpoint_id_for_modality,
+    outbound_text_classifies_sensitive,
+    select_model_endpoint,
+)
 
 
 def requested_model_choice_id(context: InvocationContext | None) -> str | None:
@@ -52,10 +56,21 @@ async def resolve_base_model(
     context: InvocationContext | None,
     pinned_policy: bool,
     sensitive_endpoint_id: str | None,
+    outbound_text: str | None = None,
 ) -> tuple[bool, str, str | None, str | None, ModelEndpoint | None]:
-    """Resolve request classification and the capability default endpoint."""
+    """Resolve request classification and the capability default endpoint.
+
+    ``outbound_text`` is the egress payload text (the composed prompt handed to
+    the runtime). The deterministic PII scanner runs over it at this seam, so a
+    detection classifies the request sensitive BEFORE the routing decision
+    (SEC-13) - classification only, the text is never mutated."""
 
     sensitive = bool(context is not None and context.extra.get("data_class") == "sensitive")
+    # The caller-supplied classification is not trusted alone here (SEC-13):
+    # scanner detection overrides a missing/false classification so existing
+    # sensitive policy (local endpoint, or the audited misroute refusal when
+    # none is configured - SEC-12) applies unchanged. Fail closed, never open.
+    sensitive = sensitive or outbound_text_classifies_sensitive(outbound_text)
     modality = str((context.extra if context is not None else {}).get("input_modality") or "text")
     choice_id = requested_model_choice_id(context)
     validate_model_choice_scope(
@@ -91,10 +106,28 @@ def trusted_codex_configured(config: dict[str, Any] | None) -> bool:
     )
 
 
+def _same_model_declaration(
+    endpoint: ModelEndpoint | None, model_id: str
+) -> tuple[str, ...] | None:
+    """The store row's declaration counts only when it names this exact model."""
+
+    if endpoint is not None and endpoint.model == model_id:
+        return endpoint.modalities
+    return None
+
+
 async def require_catalogue_model(
-    catalogue: Any, model_id: str, required_modalities: tuple[str, ...]
+    catalogue: Any,
+    model_id: str,
+    required_modalities: tuple[str, ...],
+    declared_modalities: tuple[str, ...] | None = None,
 ) -> None:
-    """Re-prove exact Bifrost support at the runtime admission boundary."""
+    """Re-prove exact Bifrost support at the runtime admission boundary.
+
+    ``declared_modalities`` is the store endpoint's own declaration for this
+    exact model; the shared policy lets it stand in only when the gateway
+    lists the model as a bare row with no ``input_modalities`` key at all.
+    """
 
     if catalogue is None:
         raise ModelCatalogueUnavailable("the Bifrost model catalogue is unavailable")
@@ -102,7 +135,7 @@ async def require_catalogue_model(
         result = await catalogue.list_models()
     except Exception:
         raise ModelCatalogueUnavailable("the Bifrost model catalogue is unavailable") from None
-    reason = catalogue_model_reason(result, model_id, required_modalities)
+    reason = catalogue_model_reason(result, model_id, required_modalities, declared_modalities)
     if reason == "catalogue_unavailable":
         raise ModelCatalogueUnavailable("the Bifrost model catalogue is unavailable")
     if reason is not None:
@@ -149,7 +182,12 @@ async def resolve_codex_model(
                 "model choice uses an unsupported immutable model id"
             ) from None
         required_modalities = tuple(dict.fromkeys(("text", modality)))
-        await require_catalogue_model(model_catalogue, selected.model, required_modalities)
+        await require_catalogue_model(
+            model_catalogue,
+            selected.model,
+            required_modalities,
+            declared_modalities=selected.modalities,
+        )
         return replace(selected, kind="bifrost", base_url=gateway_url)
     if pinned_policy:
         return endpoint
@@ -162,7 +200,12 @@ async def resolve_codex_model(
     except ValueError:
         return None
     required_modalities = tuple(dict.fromkeys(("text", modality)))
-    await require_catalogue_model(model_catalogue, model_id, required_modalities)
+    await require_catalogue_model(
+        model_catalogue,
+        model_id,
+        required_modalities,
+        declared_modalities=_same_model_declaration(endpoint, model_id),
+    )
     if endpoint is None:
         return ModelEndpoint(
             id="codex-process-default",

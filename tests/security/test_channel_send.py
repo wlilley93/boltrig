@@ -114,3 +114,41 @@ def test_comment_is_approver_only_and_never_rides_the_outbox():
         assert "approver note" not in json.dumps(msg.payload)
 
     asyncio.run(go())
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-52")
+def test_the_manifest_network_posture_binds_the_outbound_webhook_leg(monkeypatch):
+    """The outbound_url POST is ordinary egress: an air-gapped (or allow-listed)
+    manifest posture must refuse it before anything is put on the wire, not just
+    govern web.fetch."""
+
+    async def go():
+        monkeypatch.setattr(
+            "boltrig.adapters.egress.resolve_host", lambda host: ["93.184.216.34"]
+        )
+        store = InMemoryStore()
+        await store.upsert_channel(
+            Channel(
+                id="ch-1",
+                tenant_id=T,
+                platform="webhook",
+                name="Ops",
+                transport="webhook",
+                enabled=True,
+                config={"outbound_url": "https://real.example/hook"},
+            )
+        )
+        a = build_channel_send(store, network_config={"air_gapped": True})
+        ctx = InvocationContext(tenant_id=T)
+
+        result = await a.execute(
+            "channel.send", {"channel_id": "ch-1", "text": "hi"}, None, ctx
+        )
+
+        assert not result.ok
+        assert result.error is not None
+        assert result.error.error_class.value == "invalid"
+        assert "air-gapped" in result.error.message
+
+    asyncio.run(go())

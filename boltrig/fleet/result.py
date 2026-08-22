@@ -135,7 +135,11 @@ class AgentResult:
                 "prompt_sha256": hashlib.sha256(prompt_bytes).hexdigest(),
                 "prompt_bytes": len(prompt_bytes),
             },
-            summary=summary or f"degraded ({runtime}: {reason})",
+            # The summary is what the person sees when a degraded turn has no
+            # output text, so it reads as a sentence, never as a code; the
+            # machine cause stays structured in output._degraded and the logs.
+            summary=summary
+            or "The assistant could not respond just now. Please try again shortly.",
             degraded=True,
             tokens_used=max(0, int(tokens_used or 0)),
             input_tokens=max(0, int(input_tokens or 0)),

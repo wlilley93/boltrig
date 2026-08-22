@@ -158,15 +158,26 @@ class AuthoredDefinitionStorePG:
         )
         await self._pool.execute(
             """INSERT INTO verb_bindings (
-                 verb_id, tenant_id, target_type, target_ref, rate_limit
+                 verb_id, tenant_id, target_type, target_ref, rate_limit,
+                 internal_source_operation_id, canonical_capability_id,
+                 model_display_name, connection_label
                )
-               VALUES ($1,$2,$3,$4,$5)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
                ON CONFLICT (verb_id, tenant_id) DO UPDATE SET
                  target_type=EXCLUDED.target_type,
                  target_ref=EXCLUDED.target_ref,
-                 rate_limit=EXCLUDED.rate_limit, updated_at=now()""",
+                 rate_limit=EXCLUDED.rate_limit,
+                 internal_source_operation_id=EXCLUDED.internal_source_operation_id,
+                 canonical_capability_id=EXCLUDED.canonical_capability_id,
+                 model_display_name=EXCLUDED.model_display_name,
+                 connection_label=EXCLUDED.connection_label,
+                 updated_at=now()""",
             binding.verb_id, binding.tenant_id, binding.target_type.value,
             binding.target_ref, rate_limit,
+            binding.internal_source_operation_id,
+            binding.canonical_capability_id,
+            binding.model_display_name,
+            binding.connection_label,
         )
 
     async def delete_noun(self, tenant_id, noun_id):

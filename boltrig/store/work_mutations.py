@@ -8,7 +8,7 @@ from typing import Any
 from boltrig.models import WorkItem, WorkStatus, utcnow
 
 from .work_items import work_item_from_row
-from .workspace_scope import work_item_workspace_visible
+from .workspace_scope import workspace_scope_visible
 
 MAX_GOVERNED_WORK_DEPTH = 32
 MANUAL_STATUS_TRANSITIONS: dict[WorkStatus, frozenset[WorkStatus]] = {
@@ -46,7 +46,7 @@ def work_item_visible(
     workspace_id: str | None,
     departments: list[str] | None,
 ) -> bool:
-    if item is None or not work_item_workspace_visible(item, workspace_id, True):
+    if item is None or not workspace_scope_visible(item, workspace_id, True):
         return False
     return departments is None or item.owner_member in set(departments)
 def work_item_active(item: WorkItem) -> bool:

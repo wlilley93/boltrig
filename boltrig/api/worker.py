@@ -64,6 +64,8 @@ _POLL_SECONDS = 5.0
 def _start_hitl_expiry_janitor(
     store: Store,
     process_instance_identity: str | None = None,
+    *,
+    kernel: Any = None,
 ) -> "asyncio.Task[None] | None":
     """Start the HITL expiry janitor (SEC-14), or None when disabled.
 
@@ -74,7 +76,11 @@ def _start_hitl_expiry_janitor(
     (P9). Off when BOLTRIG_HITL_EXPIRY_INTERVAL is <= 0; one-minute default
     (the lazy 409 layer already fails overdue answers closed, so this is
     hygiene). Held in a name so the task is not garbage-collected mid-flight.
-    """
+
+    With ``kernel`` the same sweep also reconciles ANSWERED requests whose
+    resume notification was lost between the answer commit and the notifier
+    (process death) - without it an approved write can silently never execute
+    while the human saw their answer accepted."""
     from boltrig.kernel.hitl_expiry import (
         hitl_expiry_interval_from_env,
         run_hitl_expiry_forever,
@@ -90,6 +96,7 @@ def _start_hitl_expiry_janitor(
             store,
             interval=interval,
             process_instance_identity=process_instance_identity,
+            kernel=kernel,
         ),
         name="hitl-expiry-janitor",
     )
@@ -112,6 +119,37 @@ def _start_anchor_janitor(store: Store, anchorer: Any) -> "asyncio.Task[None] | 
     return asyncio.create_task(
         run_anchor_forever(store, anchorer, interval=interval),
         name="audit-anchor-janitor",
+    )
+
+
+def _start_audit_outbox_janitor(
+    store: Store, process_instance_identity: str | None = None
+) -> "asyncio.Task[None] | None":
+    """Start the audit-outbox janitor (SEC-16), or None when disabled.
+
+    Drains the durable audit outbox: events whose append faulted were deferred
+    there by AuditWriter.write, and this re-chains them into the audit stream
+    once the fault clears (seq/hash re-derived at drain time, so the chain stays
+    contiguous). Same worker-side loop shape as the anchor janitor - never
+    crashes boot (P9). Off when BOLTRIG_AUDIT_OUTBOX_INTERVAL is <= 0;
+    one-minute default."""
+    from boltrig.kernel.audit_outbox import (
+        audit_outbox_interval_from_env,
+        run_audit_outbox_forever,
+    )
+
+    interval = audit_outbox_interval_from_env()
+    if interval <= 0:
+        log.info("audit-outbox janitor disabled (interval<=0)")
+        return None
+    log.info("audit-outbox janitor live (interval=%ss)", interval)
+    return asyncio.create_task(
+        run_audit_outbox_forever(
+            store,
+            interval=interval,
+            process_instance_identity=process_instance_identity,
+        ),
+        name="audit-outbox-janitor",
     )
 
 
@@ -288,9 +326,22 @@ def _start_background_tasks(
     from boltrig.observability.background_jobs import new_background_process_identity
 
     process_identity = new_background_process_identity()
+    # The worker-side resume notifier: the API process fires one on every
+    # answer(), but the expiry sweep's reconciliation pass ALSO runs here and
+    # needs a notifier to re-fire for ANSWERED requests whose original
+    # notification was lost. Every leg is CAS-guarded/idempotent (NFR-REL-03),
+    # so a second notifier racing the API's is harmless by construction.
+    # Guarded like every boot step (P9): a kernel without a wired HITL manager
+    # (offline harnesses, stub compositions) skips the notifier, and the
+    # reconciliation pass simply has nothing to re-fire.
+    if getattr(kernel, "hitl", None) is not None:
+        from boltrig.api.bootstrap import wire_hitl_resume
+
+        wire_hitl_resume(kernel, executor=executor)
     return (
         _start_anchor_janitor(kernel.store, kernel.anchorer),
-        _start_hitl_expiry_janitor(kernel.store, process_identity),
+        _start_hitl_expiry_janitor(kernel.store, process_identity, kernel=kernel),
+        _start_audit_outbox_janitor(kernel.store, process_identity),
         stack_health_task,
         _start_retention_janitor(kernel.store, tenant, manifest, process_identity),
         _start_workflow_scheduler(kernel, tenant, executor),

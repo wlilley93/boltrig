@@ -139,7 +139,9 @@ async def test_a_native_child_cannot_select_another_model() -> None:
         await server.aclose()
 
 
-async def test_root_and_native_child_requests_must_carry_the_pinned_effort() -> None:
+async def test_a_present_reasoning_effort_cannot_leave_the_pinned_ceiling() -> None:
+    """Absence is BELOW the ceiling (codex omits the block for plain models;
+    2026-08-20), so only a PRESENT, different effort is refused."""
     captured: dict[str, Any] = {}
 
     async def verify(token: str) -> bool:
@@ -156,21 +158,24 @@ async def test_root_and_native_child_requests_must_carry_the_pinned_effort() -> 
     port = await server.start()
     try:
         async with httpx.AsyncClient() as caller:
-            for body in (
-                b'{"model":"gpt-5.2-codex","input":"hi"}',
-                (
+            escalated = await caller.post(
+                f"http://127.0.0.1:{port}/v1/responses",
+                headers={"authorization": "Bearer good-bearer"},
+                content=(
                     b'{"model":"gpt-5.2-codex","input":"hi",'
                     b'"reasoning":{"effort":"medium"}}'
                 ),
-            ):
-                response = await caller.post(
-                    f"http://127.0.0.1:{port}/v1/responses",
-                    headers={"authorization": "Bearer good-bearer"},
-                    content=body,
-                )
-                assert response.status_code == 400
-                assert response.json() == {"error": "reasoning_effort_ceiling"}
-                assert "url" not in captured
+            )
+            assert escalated.status_code == 400
+            assert escalated.json() == {"error": "reasoning_effort_ceiling"}
+            assert "url" not in captured
+
+            absent = await caller.post(
+                f"http://127.0.0.1:{port}/v1/responses",
+                headers={"authorization": "Bearer good-bearer"},
+                content=b'{"model":"gpt-5.2-codex","input":"hi"}',
+            )
+            assert absent.status_code == 200
 
             accepted = await caller.post(
                 f"http://127.0.0.1:{port}/v1/responses",

@@ -100,3 +100,21 @@ async def test_the_shared_counter_survives_a_kernel_restart():
             await second.enforce("acme", "auth.2fa.challenge.id:alice", LIMIT)
     finally:
         await redis.aclose()
+
+
+@pytest.mark.invariant("FR-KER-05")
+async def test_every_redis_rate_key_carries_a_ttl():
+    # INCR-then-EXPIRE left a TTL-less key behind whenever the process died
+    # between the two calls; the keys are window-scoped so the counts stayed
+    # correct, but Redis accumulated orphaned keys forever. The TTL now rides
+    # the same pipeline as the increment.
+    redis = _fake_redis()
+    try:
+        counter = RedisCounter(redis)
+        await counter.incr("probe", 60)
+        keys = [k async for k in redis.scan_iter(match="boltrig:rl:probe:*")]
+        assert len(keys) == 1
+        ttl = await redis.ttl(keys[0])
+        assert 0 < ttl <= 60
+    finally:
+        await redis.aclose()

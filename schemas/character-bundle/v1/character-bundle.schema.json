@@ -5,76 +5,126 @@
   "description": "A character is a portable bundle of DATA plus DECLARED behaviour (docs/SPEC-character-bundle.md). This manifest is the contract; the directory containing it is the bundle root. A bundle ships CONFIGURATION ONLY -- never executable code -- so that installing a stranger's character can never run a process that watches you. Every capability a character wants is REQUESTED here and GOVERNED by Boltrig.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "id", "name", "blurb", "type", "visual"],
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "blurb",
+    "type",
+    "visual"
+  ],
   "properties": {
-    "$schema": { "type": "string" },
-
+    "$schema": {
+      "type": "string"
+    },
     "schemaVersion": {
       "const": 1,
       "description": "Manifest format version. A host that does not know this version must refuse the bundle visibly, never load it partially."
     },
-
     "id": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]{0,63}$",
       "description": "Stable registry id. The grammar is the SDK's isCharacterId(), shared by registration and the persisted agent.character setting, so a bundle id and a stored setting can never disagree about shape."
     },
-
     "name": {
       "type": "string",
       "minLength": 1,
       "maxLength": 64,
       "description": "Display name. Unique case-insensitively across installed characters: two bundles claiming one name is a registration failure, not a last-writer-wins."
     },
-
     "blurb": {
       "type": "string",
       "minLength": 1,
       "maxLength": 240,
       "description": "One line for the settings surface. REQUIRED here although docs/SPEC-character-bundle.md lists only {id, display name, prompts} as required -- the registry (sdks/web/src/characters.ts registerCharacter) throws without a safe blurb, so a bundle carrying only the spec's required triple cannot in fact be installed. The schema states the real floor rather than letting a spec-conformant bundle fail at registration."
     },
-
     "type": {
-      "enum": ["shader", "companion"],
+      "enum": [
+        "shader",
+        "companion"
+      ],
       "description": "What the character IS. 'shader' -- the character is a fragment shader (Familiar, Jarvis); the bundle brings the .frag and names its uniforms. 'companion' -- the character is a rendered likeness; the bundle brings a .frame.mp4 and its segment manifest. The canvas is ONE surface with a source interface, so this is a flag, not a fork in the architecture: neither kind is a degraded case of the other."
     },
-
     "visual": {
       "description": "How the character reaches the canvas. It names a canvas SOURCE by id and declares what that source must be able to supply. It never carries a renderer: the loop, the uniform drive and the segment machinery are Boltrig's.",
       "oneOf": [
-        { "$ref": "#/$defs/shaderVisual" },
-        { "$ref": "#/$defs/companionVisual" }
+        {
+          "$ref": "#/$defs/shaderVisual"
+        },
+        {
+          "$ref": "#/$defs/companionVisual"
+        }
       ]
     },
-
     "prompts": {
       "$ref": "#/$defs/prompts",
       "description": "OPTIONAL, deliberately -- the spec lists prompts as required and neither shipped character has any. Familiar and Jarvis are BODIES: apps/worker/src/character.ts states the contract is presentational, not carried in Chat requests and not able to alter dispatch. Requiring prompts would force inventing a persona for a character that has none, which is exactly the smuggled assumption Familiar exists to catch."
     },
-
     "phenotype": {
       "$ref": "#/$defs/phenotype",
       "description": "OPTIONAL, and its ABSENCE is meaningful: a character with no phenotype omits this field entirely rather than carrying an empty one. Absence means readsPhenotype=false -- the appraisal engine is not this character's source of truth, so handing it one would attribute the machine's mood to a creature with no access to it."
     },
-
+    "skins": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Selectable LOOKS for this one character -- not separate characters. PRESENTATION ONLY: a skin never changes prompts, dispatch, capabilities or voice, so choosing one is a change of clothes and not a change of who you are talking to. The FIRST entry is the default, so adding skins to a shipped bundle cannot change what an existing install renders. ABSENT means the character has exactly one look, which is why an array of one is pointless rather than merely redundant. The host must REFUSE a skin its canvas source cannot draw, by name, the same way it refuses an unsupplied uniform.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$",
+            "description": "Stable id, persisted beside the character setting. Same grammar as a character id because it is stored the same way."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Shown in a picker. Absent falls back to the character's own name."
+          },
+          "blurb": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "description": "One line describing what this look is."
+          }
+        }
+      }
+    },
     "emotion": {
       "$ref": "#/$defs/emotion",
       "description": "The character's own affective model, if it has one. Named, not implemented, here: the model name must be one the bound canvas source declares it supports, so an unsupported model is refused at registration instead of silently rendering as stillness."
     },
-
-    "identity": { "$ref": "#/$defs/identity" },
-    "voice": { "$ref": "#/$defs/voice" },
-    "capabilities": { "$ref": "#/$defs/capabilities" },
-    "distillation": { "$ref": "#/$defs/distillation" },
-    "credentials": { "$ref": "#/$defs/credentials" },
-
+    "identity": {
+      "$ref": "#/$defs/identity"
+    },
+    "voice": {
+      "$ref": "#/$defs/voice"
+    },
+    "capabilities": {
+      "$ref": "#/$defs/capabilities"
+    },
+    "distillation": {
+      "$ref": "#/$defs/distillation"
+    },
+    "credentials": {
+      "$ref": "#/$defs/credentials"
+    },
     "provenance": {
       "type": "object",
       "additionalProperties": false,
       "description": "Where the bundle's assets came from. Free-form record for humans and drift checks; nothing selects behaviour from it.",
       "properties": {
-        "upstream": { "type": "string" },
-        "note": { "type": "string" },
+        "upstream": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
         "ships": {
           "type": "boolean",
           "description": "True when this bundle is registered by the STOCK entrypoint (Boltrig ships it). False or absent means it is installed by a private entrypoint and must never appear in apps/worker/src/characterPlugins.ts, apps/worker/package.json or manifest.yaml."
@@ -82,87 +132,133 @@
       }
     }
   },
-
   "$defs": {
     "assetRef": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["file", "sha256"],
+      "required": [
+        "file",
+        "sha256"
+      ],
       "description": "A file inside the bundle root, with its digest. Paths are relative and may not escape the root: a bundle must be copyable as a directory.",
       "properties": {
         "file": {
           "type": "string",
           "pattern": "^(?!/)(?!.*\\.\\.(/|$)).+$"
         },
-        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
       }
     },
-
     "shaderVisual": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "source", "fragment"],
+      "required": [
+        "type",
+        "source"
+      ],
       "properties": {
-        "type": { "const": "shader" },
+        "type": {
+          "const": "shader"
+        },
         "source": {
           "type": "string",
           "minLength": 1,
           "description": "Id of the canvas source that draws this character. The public build ships the shader source; the companion source (the proprietary .frame.mp4 reader) registers the way a character does, from the private entrypoint. An id nobody registered is refused by name -- never substituted with a source that happens to be present."
         },
-        "fragment": { "$ref": "#/$defs/assetRef" },
+        "fragment": {
+          "$ref": "#/$defs/assetRef",
+          "description": "The fragment shader this bundle SHIPS, pinned by sha256 so a vendored file moving under its manifest fails at registration rather than at first paint on someone else's machine. OPTIONAL, and its absence is meaningful: a character drawn entirely by host MACHINERY -- a simulation and several passes rather than one fragment -- ships no file and therefore has nothing to pin. Pin what you ship. Requiring a digest from a bundle that carries no shader would mean inventing a .frag solely to be hashed, which nobody compiles and which would drift silently from the passes it claims to describe: a pin that lies is worse than no pin. Such a character is still checked against what its named canvas source can supply, which is the check that prevents a wrong body being drawn."
+        },
         "uniforms": {
           "type": "array",
-          "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
           "uniqueItems": true,
           "description": "Uniform names the fragment shader NEEDS. Checked against what the bound source declares it can supply, so a shader asking for a channel this canvas cannot drive fails loudly at registration rather than rendering a wrong being."
         }
       }
     },
-
     "companionVisual": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "source", "frame"],
+      "required": [
+        "type",
+        "source",
+        "frame"
+      ],
       "properties": {
-        "type": { "const": "companion" },
-        "source": { "type": "string", "minLength": 1 },
-        "frame": { "$ref": "#/$defs/assetRef" },
-        "segments": { "$ref": "#/$defs/assetRef" },
+        "type": {
+          "const": "companion"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "frame": {
+          "$ref": "#/$defs/assetRef"
+        },
+        "segments": {
+          "$ref": "#/$defs/assetRef"
+        },
         "directions": {
           "type": "array",
-          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}$" },
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+          },
           "uniqueItems": true,
           "description": "The closed vocabulary the model may emit alongside its text. The bundle declares the set; constrained decoding keeps the model inside it; the player owns the machinery. Configuration, not code."
         },
         "restrictedScene": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["frame", "permission"],
+          "required": [
+            "frame",
+            "permission"
+          ],
           "description": "OPTIONAL second scene. PERMISSION is a kernel user setting -- binary, explicit, revocable, checked at selection time. Emotional state SELECTS within what permission already allows; it never unlocks.",
           "properties": {
-            "frame": { "$ref": "#/$defs/assetRef" },
-            "segments": { "$ref": "#/$defs/assetRef" },
-            "permission": { "type": "string", "minLength": 1 }
+            "frame": {
+              "$ref": "#/$defs/assetRef"
+            },
+            "segments": {
+              "$ref": "#/$defs/assetRef"
+            },
+            "permission": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         }
       }
     },
-
     "prompts": {
       "type": "object",
       "additionalProperties": false,
       "minProperties": 1,
       "properties": {
-        "persona": { "type": "string" },
-        "system": { "type": "string" },
-        "style": { "type": "string" }
+        "persona": {
+          "type": "string"
+        },
+        "system": {
+          "type": "string"
+        },
+        "style": {
+          "type": "string"
+        }
       }
     },
-
     "phenotype": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["reads"],
+      "required": [
+        "reads"
+      ],
       "properties": {
         "reads": {
           "type": "boolean",
@@ -175,18 +271,24 @@
         },
         "state": {
           "type": "object",
-          "additionalProperties": { "type": "number" },
+          "additionalProperties": {
+            "type": "number"
+          },
           "description": "Current scalar state, carried as DATA so continuity survives a reinstall."
         }
       }
     },
-
     "emotion": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["model"],
+      "required": [
+        "model"
+      ],
       "properties": {
-        "model": { "type": "string", "minLength": 1 },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
         "travels": {
           "type": "boolean",
           "default": true,
@@ -194,22 +296,34 @@
         },
         "state": {
           "type": "object",
-          "additionalProperties": { "type": "number" }
+          "additionalProperties": {
+            "type": "number"
+          }
         }
       }
     },
-
     "identity": {
       "type": "object",
       "additionalProperties": false,
       "description": "The CHARACTER's likeness. Never the user's: an enrolled face is kernel data under the kernel's consent and retention rules and must never be exportable inside a bundle.",
       "properties": {
-        "anchorImages": { "type": "array", "items": { "$ref": "#/$defs/assetRef" } },
-        "visualLora": { "$ref": "#/$defs/assetRef" },
-        "exampleClips": { "type": "array", "items": { "$ref": "#/$defs/assetRef" } }
+        "anchorImages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/assetRef"
+          }
+        },
+        "visualLora": {
+          "$ref": "#/$defs/assetRef"
+        },
+        "exampleClips": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/assetRef"
+          }
+        }
       }
     },
-
     "voice": {
       "type": "object",
       "additionalProperties": false,
@@ -219,18 +333,40 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "referenceAudio": { "$ref": "#/$defs/assetRef" },
-            "lora": { "$ref": "#/$defs/assetRef" }
+            "referenceAudio": {
+              "$ref": "#/$defs/assetRef"
+            },
+            "lora": {
+              "$ref": "#/$defs/assetRef"
+            }
           }
         },
         "fallbackVoiceIds": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
+          "additionalProperties": {
+            "type": "string"
+          },
           "description": "Provider -> voice id. What makes a bundle portable to an install with no local TTS. Ids only; never keys."
+        },
+        "tone": {
+          "type": "array",
+          "maxItems": 6,
+          "description": "OPTIONAL spectral shaping this character asks for, applied AFTER the automatic loudness and tilt stages. Absence means none -- never a default and never another character's. For shaping that is about who the character IS; a dull or harsh clone is a reference problem and must be fixed there, not masked here.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "frequency", "gainDb", "reason"],
+            "properties": {
+              "type": { "enum": ["peaking", "highshelf", "lowshelf"] },
+              "frequency": { "type": "number", "minimum": 20, "maximum": 20000 },
+              "gainDb": { "type": "number", "minimum": -12, "maximum": 12, "description": "Bounded so a bundle cannot ship something that damages hearing or clips the output." },
+              "q": { "type": "number", "minimum": 0.1, "maximum": 10 },
+              "reason": { "type": "string", "minLength": 1, "description": "REQUIRED. An unexplained filter is how a measured correction rots into an undocumented fudge." }
+            }
+          }
         }
       }
     },
-
     "capabilities": {
       "type": "object",
       "additionalProperties": false,
@@ -239,59 +375,97 @@
         "camera": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["wanted"],
+          "required": [
+            "wanted"
+          ],
           "properties": {
-            "wanted": { "type": "boolean" },
+            "wanted": {
+              "type": "boolean"
+            },
             "prompt": {
               "type": "string",
               "description": "The question this character asks ABOUT a frame. The daemon, the change detection, quiet hours, the dark threshold, the stop gesture and retention are Boltrig's and identical for every character."
             },
-            "diary": { "type": "string" },
-            "observations": { "type": "array", "items": { "type": "string" } }
+            "diary": {
+              "type": "string"
+            },
+            "observations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
         "presence": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["wanted"],
-          "properties": { "wanted": { "type": "boolean" } }
+          "required": [
+            "wanted"
+          ],
+          "properties": {
+            "wanted": {
+              "type": "boolean"
+            }
+          }
         },
         "budgets": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["wanted"],
+          "required": [
+            "wanted"
+          ],
           "description": "Polling budgets costs a request; a body nobody chose must not make one.",
-          "properties": { "wanted": { "type": "boolean" } }
+          "properties": {
+            "wanted": {
+              "type": "boolean"
+            }
+          }
         },
         "automations": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "uniqueItems": true
         }
       }
     },
-
     "distillation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled"],
+      "required": [
+        "enabled"
+      ],
       "description": "The per-character nightly training loop. It lives with the character because what it trains on is the character's.",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "schedule": { "type": "string" },
-        "corpus": { "type": "array", "items": { "type": "string" } }
+        "enabled": {
+          "type": "boolean"
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "corpus": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
-
     "credentials": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["providers"],
+      "required": [
+        "providers"
+      ],
       "description": "The set of providers the character WISHES to use. Names only. A bundle never ships keys; the operator supplies them.",
       "properties": {
         "providers": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "uniqueItems": true
         }
       }

@@ -51,7 +51,11 @@ def _register_recall_and_propose(app, P, K) -> None:
         out = await _governed_mutation(k, p, "memory.propose", body, request)
         if isinstance(out, JSONResponse):
             return out
-        return JSONResponse({"status": "ok", **out})
+        # The envelope owns "status"; a persisted fact's lifecycle state rides
+        # under its own key so a success always reads status="ok".
+        payload = dict(out)
+        payload["fact_status"] = payload.pop("status", None)
+        return JSONResponse({"status": "ok", **payload})
 
 
 def _register_bundle_route(app, P, K) -> None:
@@ -84,7 +88,11 @@ def _register_candidate_review_route(app, P, K) -> None:
         )
         if isinstance(out, JSONResponse):
             return out
-        return JSONResponse({"status": "ok", **out})
+        # The envelope owns "status"; the candidate's lifecycle state rides
+        # under its own key so a success always reads status="ok".
+        payload = dict(out)
+        payload["candidate_status"] = payload.pop("status", None)
+        return JSONResponse({"status": "ok", **payload})
 
 
 def _register_fact_mutation_routes(app, P, K) -> None:

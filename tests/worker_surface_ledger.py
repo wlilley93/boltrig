@@ -39,6 +39,17 @@ def _surface(source: str, declarations: str) -> None:
         WORKER_ROUTES[route] = WorkerSurface(sdk_method=sdk_method, source=source)
 
 
+# Unauthenticated, and read at bootstrap rather than by a component: the
+# sign-in screen is the first surface that needs the product's name and it
+# renders before anyone has a session.
+_surface(
+    "apps/worker/src/productName.ts",
+    """
+GET /v1/branding branding
+""",
+)
+
+
 _surface(
     "apps/worker/src/components/shell/useConversationDirectory.ts",
     """
@@ -57,6 +68,30 @@ _surface(
 POST /v1/search federatedSearch
 """,
 )
+# The doctrine's own review surface (A5/B). These were classified operator-only
+# for exactly one commit, while the routes existed and nothing read them; the
+# Integrations page's Capabilities / Rules / Review tabs read them now.
+_surface(
+    # The hook, not the panel: the queue's state and its governed decision lane
+    # were extracted so the approval handling could be read on its own, and the
+    # read lives with them.
+    "apps/worker/src/components/integrations/useCapabilityReviewQueue.ts",
+    """
+GET /v1/capability-bindings capabilityBindings
+""",
+)
+_surface(
+    "apps/worker/src/components/integrations/CapabilityCataloguePanel.tsx",
+    """
+GET /v1/capability-catalogue capabilityCatalogue
+""",
+)
+_surface(
+    "apps/worker/src/components/integrations/RoutingRulesPanel.tsx",
+    """
+GET /v1/routing-policies routingPolicies
+""",
+)
 _surface(
     "apps/worker/src/components/ChatView.tsx",
     """
@@ -71,6 +106,18 @@ _surface(
     "apps/worker/src/components/chat/useConversationQueue.ts",
     """
 PUT /v1/conversations/{conversation_id}/queue reorderConversationQueue
+""",
+)
+_surface(
+    "apps/worker/src/components/shell/useTaskListModel.ts",
+    """
+PATCH /v1/me/conversations/{conversation_id}/project moveConversationProject
+""",
+)
+_surface(
+    "apps/worker/src/components/shell/useDirectoryMetadata.ts",
+    """
+GET /v1/named-agents namedAgents
 """,
 )
 _surface(
@@ -174,6 +221,16 @@ POST /v1/me/tokens mintToken
 DELETE /v1/me/tokens/{token_id} revokeToken
 GET /v1/me/sessions meSessions
 DELETE /v1/me/sessions/{session_id} revokeSession
+""",
+)
+# The only control that changes what the WHOLE application is looking at, which
+# is why it is its own component now: a successful switch reloads, because at
+# least four things move with it (grants, the agent roster, the companion, and
+# which canonical capabilities are offered) and nothing in the shell re-reads
+# any of them.
+_surface(
+    "apps/worker/src/components/account/useActiveContext.ts",
+    """
 POST /v1/me/active-context switchActiveContext
 POST /v1/me/active-org switchActiveOrg
 GET /v1/me/orgs myOrganisations
@@ -339,6 +396,18 @@ POST /v1/memory/improve memoryImprove
 POST /v1/memory/forget memoryForget
 POST /v1/memory/ingest memoryIngest
 GET /v1/memory/ingestions memoryIngestions
+""",
+)
+_surface(
+    # The candidate review queue was extracted out of `ParityViews` when the
+    # capability-doctrine merge pushed `MemoryView` past the Worker structural
+    # ratchet. Exactly these three routes moved with it and nothing else did:
+    # the rest of the memory surface still reads and writes from `ParityViews`.
+    "apps/worker/src/components/MemorySurface.tsx",
+    """
+GET /v1/memory/candidates memoryCandidates
+GET /v1/memory/timeline memoryTimeline
+POST /v1/memory/candidates/{candidate_id}/review memoryCandidateReview
 """,
 )
 _surface(
@@ -533,6 +602,13 @@ DELETE /v1/integrations/connections/{connection_id} disconnectIntegration
 """,
 )
 _surface(
+    "apps/worker/src/components/integrations/MemberConnections.tsx",
+    """
+GET /v1/integrations/member-connections memberIntegrationConnections
+DELETE /v1/integrations/member-connections/{connection_id} revokeMemberIntegrationConnection
+""",
+)
+_surface(
     "apps/worker/src/components/DeviceSettings.tsx",
     """
 GET /v1/devices devices
@@ -608,6 +684,16 @@ def _non_ui(classification: str, declarations: str) -> None:
 
 
 _non_ui("service-probe", "GET /healthz")
+# The identity contract a HOST APPLICATION reads instead of trusting its own
+# session (Opbox is the first). Not a Worker surface: the Worker already holds
+# the resolved principal from its own session, so nothing in apps/worker calls
+# this. It is service-native because the consumer is another product.
+_non_ui("service-native", "GET /v1/me")
+# The question a host asks instead of reimplementing GrantSet.permits. Same
+# consumer and the same reason as GET /v1/me: the Worker holds its own resolved
+# grants and has nothing to ask. It is a POST because the ask is a list, and a
+# read either way.
+_non_ui("service-native", "POST /v1/me/permits")
 _non_ui(
     "operator-only",
     """
@@ -662,6 +748,23 @@ GET /v1/devices/{device_id}/camera-bindings
 GET /v1/devices/{device_id}/camera-leases
 """,
 )
+# The desktop install census (A4). An author-gated administrator read over the
+# whole tenant's `devices` rows, where every other device route is scoped to the
+# caller's own machines. NOT a Worker surface TODAY and this row says so rather
+# than implying it never should be: the admin console tab that would consume it
+# is Track B, and classifying it here is what keeps the route from being
+# invisible in the meantime.
+_non_ui("operator-only", "GET /v1/admin/devices")
+
+_non_ui(
+    "operator-only",
+    """
+GET /v1/trajectory
+GET /v1/trajectory/{run_id}
+DELETE /v1/trajectory/{run_id}
+GET /v1/trajectory/{run_id}/export
+""",
+)
 _non_ui("internal-composition", "POST /v1/knowledge/context")
 _non_ui(
     "legacy-superseded",
@@ -671,18 +774,42 @@ GET /v1/model-profiles
 """,
 )
 _non_ui("advanced-compatibility", "POST /v1/spawn")
-# Typed memory planes (decision 0029): headless, governed agent/operator surface.
-# The Worker has no typed-memory UI yet (candidates queue + slot timeline are
-# future work per the decision's honesty section).
+# Typed memory planes (decision 0029): the agent/operator API surface with no
+# Worker UI yet (the LLM-side propose lane and the bundle/resolve recall
+# contracts). The candidate queue, slot timeline and review live on the Memory
+# route's Review tab.
 _non_ui(
     "governed-agent-surface",
     """
+GET /v1/named-agents/{address}/inbox
 POST /v1/memory/propose
 POST /v1/memory/bundle
 GET /v1/memory/resolve
-GET /v1/memory/candidates
-GET /v1/memory/timeline
-POST /v1/memory/candidates/{candidate_id}/review
+""",
+)
+# The run-effect ledger (0085): the chat "Undo" affordance consumes both -
+# RunUndoPanel lists each step with its honest undoability and walks the
+# governed revert (approval_pending outcomes carry the HITL id back in).
+_surface(
+    "apps/worker/src/components/chat/RunUndoPanel.tsx",
+    """
+GET /v1/runs/{run_id}/effects runEffects
+POST /v1/runs/{run_id}/revert revertRun
+""",
+)
+# The two mood affordances (2026-08-21): the explicit Settings reset, and the
+# adoption announcement fired when a companion save succeeds. Both publish
+# plain relay frames; the emotion relay's tap is the only interpreter.
+_surface(
+    "apps/worker/src/components/settings/CompanionRows.tsx",
+    """
+POST /v1/familiar/emotion/reset resetEmotion
+""",
+)
+_surface(
+    "apps/worker/src/components/settings/companionSave.ts",
+    """
+POST /v1/familiar/emotion/adopted characterAdopted
 """,
 )
 
@@ -699,22 +826,6 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
     "getCall": (
         "superseded-read",
         "calls/currentCall already return the complete call projection.",
-    ),
-    # Typed memory planes (decision 0029). The kernel routes and the web SDK
-    # both carry the candidate queue, the slot timeline and the review call; the
-    # Worker has no UI for any of them yet, which the decision's own honesty
-    # section states outright.
-    "memoryCandidateReview": (
-        "advanced-compatibility",
-        "Governed agent/operator surface; no typed-memory review UI in the Worker yet.",
-    ),
-    "memoryCandidates": (
-        "advanced-compatibility",
-        "Governed agent/operator surface; no typed-memory queue UI in the Worker yet.",
-    ),
-    "memoryTimeline": (
-        "advanced-compatibility",
-        "Governed agent/operator surface; no slot-timeline UI in the Worker yet.",
     ),
     "refreshCallMedia": (
         "compatibility-helper",
@@ -739,4 +850,7 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 }
 
 
-EXPECTED_ROUTE_COUNT = 286
+# 294 since GET /v1/me and GET /v1/branding (the product's own name, read unauthenticated by
+# the sign-in screen). An exact census, not a ratchet: it must equal the
+# routes the app actually serves, so it moves when the surface does.
+EXPECTED_ROUTE_COUNT = 306

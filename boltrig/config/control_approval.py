@@ -28,6 +28,7 @@ from .control_approval_model_endpoints import (
     model_endpoint_context,
     model_endpoint_upsert_context,
 )
+from .control_routing_policy_specs import ROUTING_POLICY_ACTIONS
 from .control_approval_workflows import (
     CAPABILITY_ACTIONS,
     EVAL_CASE_ACTIONS,
@@ -63,6 +64,23 @@ async def _require_active_human_author(
         or user.status != "active"
     ):
         raise PermissionError(message)
+
+
+async def _revoking_your_own(store: Any, params: dict[str, Any], context: Any) -> bool:
+    """Whether this revocation is the caller disconnecting their OWN personal
+    integration credential -- which is operating their own seat, not
+    administering the organisation, and so does not need an author role.
+
+    Without the exemption, connecting is a ONE-WAY DOOR. ``control.integration.connect``
+    is low consequence, so any member may seal a personal credential; every
+    high-consequence ``control.integration.*`` verb is gated on ``can_author``, so
+    the same member could never destroy it. Revoking the organisation's shared row
+    stays author-only, and another member's row is reachable only through
+    ``control.integration.revoke_member``.
+    """
+    from boltrig.kernel.integration_scope import is_own_personal_connection
+
+    return await is_own_personal_connection(store, params, context)
 
 
 async def _preauthorize_high_consequence(
@@ -115,6 +133,10 @@ async def _preauthorize_high_consequence(
             context,
             "workflow occurrence retry requires an active human author",
         )
+        return
+    if verb == "control.integration.revoke" and await _revoking_your_own(
+        store, params, context
+    ):
         return
     if verb.startswith(
         (
@@ -228,6 +250,11 @@ async def _resource_context(
         return await capability_context(store, params, context)
     if verb == "control.capability.upsert":
         return await capability_upsert_context(store, params, context)
+    if verb in ROUTING_POLICY_ACTIONS:
+        from .control_routing_policies import routing_policy_context
+
+        return await routing_policy_context(store, verb, params, context)
+
     if verb == "control.permanent_fleet.apply":
         from .permanent_fleet import latest_permanent_fleet_revision
 
@@ -253,7 +280,7 @@ async def _resource_context(
     definition = await _definition_context(store, verb, params, context)
     if definition is not None:
         return definition
-    if verb == "control.integration.revoke":
+    if verb in {"control.integration.revoke", "control.integration.revoke_member"}:
         return await integration_context(store, params, context)
     if verb in MCP_LIFECYCLE_ACTIONS:
         return await mcp_server_context(

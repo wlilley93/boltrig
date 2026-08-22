@@ -23,8 +23,8 @@ from .audit_read_contract import (
 from .base import clamp_observability_page
 from .rows import _audit, _security
 from .workspace_scope import (
-    append_work_workspace_clause,
-    work_item_workspace_visible,
+    append_workspace_scope_clause,
+    workspace_scope_visible,
 )
 
 
@@ -64,7 +64,7 @@ class ObservabilityReadsMem:
 
         def _visible(w) -> bool:
             return (allowed is None or w.owner_member in allowed) and (
-                work_item_workspace_visible(w, workspace_id, True)
+                workspace_scope_visible(w, workspace_id, True)
             )
 
         visible = {_run_ref(w) for w in items if _visible(w)}
@@ -171,7 +171,7 @@ class ObservabilityReadsPG:
         if departments is not None:
             args.append(list(departments))
             visible_clauses.append(f"w.owner_member = ANY(${len(args)}::text[])")
-        append_work_workspace_clause(visible_clauses, args, workspace_id, True)
+        append_workspace_scope_clause(visible_clauses, args, workspace_id, True)
         visible_sql = " AND ".join(visible_clauses)
         clauses = ["a.tenant_id = $1"]
         args.append(workspace_id)

@@ -30,18 +30,21 @@ from boltrig.models import EMPTY_GRANTS, GrantSet, InvocationContext, WorkItem
 
 log = logging.getLogger("boltrig.fleet.authority")
 
-# The ONE verb post-run reflection writes through (US-WFL-07). Reflection is the
-# pump's OWN bookkeeping, not the requesting principal's act: it writes a bland,
-# deterministic, templated lesson into the Chief of Staff's own memory scope
-# (``user:chief-of-staff``), and the principal cannot steer it. It is the same class
-# of system write as the cancel audit row, which likewise does not draw on a
-# principal's grants. So it carries a system seat of EXACTLY this verb: never the
-# principal's grants (a principal holding no memory verb must not stop the org
-# learning from a run, and a system-originated item has no principal at all), and
-# never the tenant ceiling (that is the escalation this module exists to close).
-# One verb, no fan-out, no dispatch of anything else; the tenant ceiling still binds
-# it at dispatch, as it binds every verb.
-REFLECTION_GRANTS = GrantSet.of(["memory.remember"])
+# The two memory verbs post-run reflection writes through (US-WFL-07 +
+# decision 0029): ``memory.remember`` for the bland templated lesson, and
+# ``memory.propose`` for the terminal-run EPISODE - the typed write gate
+# decides whether that becomes durable; the proposal itself changes nothing.
+# Reflection is the pump's OWN bookkeeping, not the requesting principal's
+# act: both writes land in the Chief of Staff's own memory scope
+# (``user:chief-of-staff``), and the principal cannot steer them. They are the
+# same class of system write as the cancel audit row, which likewise does not
+# draw on a principal's grants. So the seat carries exactly these two verbs:
+# never the principal's grants (a principal holding no memory verb must not
+# stop the org learning from a run, and a system-originated item has no
+# principal at all), and never the tenant ceiling (that is the escalation this
+# module exists to close). No fan-out, no dispatch of anything else; the
+# tenant ceiling still binds both at dispatch, as it binds every verb.
+REFLECTION_GRANTS = GrantSet.of(["memory.remember", "memory.propose"])
 
 
 async def principal_grants_for_item(store: Any, item: WorkItem) -> GrantSet:
@@ -114,10 +117,11 @@ async def context_for(store: Any, item: WorkItem, run_id: str) -> InvocationCont
 def reflection_context(item: WorkItem, run_id: str) -> InvocationContext:
     """The narrow system context a post-run reflection write carries (US-WFL-07).
 
-    See ``REFLECTION_GRANTS``: exactly ``memory.remember``, and nothing else.
-    Deliberately NOT the execution context - reflection is the pump's own bookkeeping,
-    so it rides neither the principal's authority nor the tenant's. The tenant ceiling
-    still binds it, enforced independently at dispatch as for any other verb.
+    See ``REFLECTION_GRANTS``: exactly ``memory.remember`` and
+    ``memory.propose``, and nothing else. Deliberately NOT the execution
+    context - reflection is the pump's own bookkeeping, so it rides neither
+    the principal's authority nor the tenant's. The tenant ceiling still
+    binds it, enforced independently at dispatch as for any other verb.
     """
     return _context(item, run_id, REFLECTION_GRANTS)
 

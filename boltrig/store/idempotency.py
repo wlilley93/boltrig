@@ -89,8 +89,17 @@ class IdempotencyStoreMem:
         return True
 
     async def idempotency_release(self, tenant_id, key, owner_token):
+        # 'executing' is releasable too: dispatch releases on ANY raise after
+        # start (the comment above the post-start except block in dispatch.py
+        # promises exactly that), and a release that only matched 'claimed'
+        # silently no-opped, parking the key as IN_PROGRESS until lease expiry
+        # and then as UNCERTAIN - a permanent conflict for a transient failure.
         record = self._idem.get((tenant_id, key))
-        if not _owned(record, owner_token, "claimed"):
+        if (
+            record is None
+            or record["owner_token"] != owner_token
+            or record["status"] not in {"claimed", "executing"}
+        ):
             return False
         del self._idem[(tenant_id, key)]
         return True
@@ -240,9 +249,15 @@ class IdempotencyStorePG:
         )
 
     async def idempotency_release(self, tenant_id, key, owner_token):
+        # status IN ('claimed','executing'): dispatch releases on any raise,
+        # including AFTER start() flipped the row to 'executing' - a release
+        # that only matched 'claimed' parked the key as IN_PROGRESS until
+        # lease expiry and then flipped it to UNCERTAIN (permanent conflict)
+        # for what was a transient adapter/gate failure.
         return await self._transition(
             """DELETE FROM idempotency_keys
-                WHERE tenant_id=$1 AND key=$2 AND status='claimed' AND owner_token=$3
+                WHERE tenant_id=$1 AND key=$2
+                  AND status IN ('claimed','executing') AND owner_token=$3
                 RETURNING key""",
             tenant_id,
             key,
