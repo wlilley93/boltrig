@@ -53,8 +53,12 @@ struct FamiliarPresenceView: View {
         }
         .onChange(of: mode) { _, _ in push() }
         .onChange(of: level) { _, _ in push() }
-        .onChange(of: scenePhase) { _, _ in push() }
+        .onChange(of: scenePhase) { _, phase in
+            island.setSceneActive(phase == .active)
+            push()
+        }
         .onChange(of: island.isReady) { _, _ in push() }
+        .onChange(of: island.phenotype) { _, _ in push() }
         .onChange(of: colorScheme) { _, _ in push() }
     }
 
@@ -67,7 +71,8 @@ struct FamiliarPresenceView: View {
             presentation: active ? presentation : .minimised,
             reducedMotion: reduceMotion,
             appearance: colorScheme == .dark ? .dark : .light,
-            dprCap: min(Double(UIScreen.main.scale), 2)
+            dprCap: min(Double(UIScreen.main.scale), 2),
+            phenotype: island.phenotype
         ))
     }
 

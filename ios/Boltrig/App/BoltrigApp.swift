@@ -18,6 +18,7 @@ struct BoltrigApp: App {
 /// until the server has confirmed who is signed in.
 struct RootView: View {
     @EnvironmentObject private var session: SessionStore
+    @EnvironmentObject private var island: FamiliarIslandController
     @State private var workspace: AppStore?
     #if DEBUG
     @State private var previewWorkspace: AppStore?
@@ -75,13 +76,17 @@ struct RootView: View {
             }
         default:
             AuthFlowView(onExplorePreview: explorePreview)
-                .onAppear { workspace = nil }
+                .onAppear {
+                    workspace = nil
+                    island.phenotypeSource = nil
+                }
         }
     }
 
     private func makeWorkspace() {
         guard let client = session.apiClient, let account = session.account else { return }
         workspace = AppStore(client: client, account: account)
+        island.phenotypeSource = client
     }
 
     private func explorePreview() {

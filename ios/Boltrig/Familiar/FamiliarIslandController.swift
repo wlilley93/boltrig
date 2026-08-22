@@ -18,6 +18,14 @@ final class FamiliarIslandController: NSObject, ObservableObject {
 
     private(set) lazy var webView: WKWebView = makeWebView()
     private(set) var reports: [String] = []
+    /// Where Familiar's inner life is read from while a surface shows her; nil means she wanders.
+    var phenotypeSource: BoltrigClient? {
+        didSet { restartPhenotypePoll() }
+    }
+    @Published private(set) var phenotype: [String: Double]?
+    private var phenotypePoll: Task<Void, Never>?
+    private var sceneActive = true
+    static let phenotypeInterval: TimeInterval = 3
     private var pending: FamiliarIslandState?
     private var lastSentJSON: String?
     private var flushScheduled = false
@@ -30,8 +38,10 @@ final class FamiliarIslandController: NSObject, ObservableObject {
     /// page loading; the web view is created on demand, never before a surface wants it.
     func claim(_ surface: String) -> Bool {
         if owner == nil || owner == surface {
+            let fresh = owner == nil
             owner = surface
             _ = webView
+            if fresh { restartPhenotypePoll() }
             return true
         }
         return false
@@ -41,6 +51,33 @@ final class FamiliarIslandController: NSObject, ObservableObject {
         if owner == surface {
             owner = nil
             apply(FamiliarIslandState(presentation: .minimised))
+            restartPhenotypePoll()
+        }
+    }
+
+    /// The presence views tell the controller whether the scene is active; the poll runs only then.
+    func setSceneActive(_ active: Bool) {
+        guard sceneActive != active else { return }
+        sceneActive = active
+        restartPhenotypePoll()
+    }
+
+    /// Polls the server's projection every few seconds while someone is looking; a stale or
+    /// missing reading hands `nil` to the island, which then wanders on its own.
+    private func restartPhenotypePoll() {
+        phenotypePoll?.cancel()
+        phenotypePoll = nil
+        guard let client = phenotypeSource, owner != nil, sceneActive else {
+            phenotype = nil
+            return
+        }
+        phenotypePoll = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let reading = try? await client.familiarPhenotype()
+                self.phenotype = reading?.values
+                try? await Task.sleep(nanoseconds: UInt64(Self.phenotypeInterval * 1_000_000_000))
+            }
         }
     }
 
