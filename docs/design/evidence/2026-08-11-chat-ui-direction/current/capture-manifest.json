@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-21T22:29:09.283Z",
+  "capturedAt": "2026-08-22T05:48:44.850Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "5102f3fb2d48835210d3683e700c85d1b43ef850343540a5c83826377955ac66",
-    "digestAfterCapture": "5102f3fb2d48835210d3683e700c85d1b43ef850343540a5c83826377955ac66",
+    "digestBeforeCapture": "a503c2c7474922e27e969595e74d5cbfcd9f5a3d8623bc16546461058013cac5",
+    "digestAfterCapture": "a503c2c7474922e27e969595e74d5cbfcd9f5a3d8623bc16546461058013cac5",
     "sourceUnchangedDuringCapture": true,
     "branch": "bench-unified",
-    "head": "93f41441fb6bf8963e831ea21c67baa21b97e0b4",
+    "head": "9263442039e6f638dae1daf2dd4a481efec76323",
     "dirty": true
   },
   "runner": {
