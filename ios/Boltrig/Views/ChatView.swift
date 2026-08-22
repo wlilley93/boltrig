@@ -83,13 +83,13 @@ private struct ChatThread: View {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     if chat.messages.isEmpty && chat.liveReply.isEmpty && !chat.isLoadingHistory {
                         VStack(spacing: 18) {
-                            FamiliarPresenceView(surface: "chat", presentation: .hero, mode: chat.presenceMode, size: 220)
+                            FamiliarPresenceView(surface: "chat", presentation: .hero, mode: chat.presenceMode, level: chat.speakingLevel, size: 220)
                             Text("Ask Familiar to research, organise, or move work forward.")
                                 .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
                         }
                         .frame(maxWidth: .infinity).padding(.top, 48)
                     } else {
-                        FamiliarPresenceView(surface: "chat", presentation: .conversation, mode: chat.presenceMode, size: 96)
+                        FamiliarPresenceView(surface: "chat", presentation: .conversation, mode: chat.presenceMode, level: chat.speakingLevel, size: 96)
                             .frame(maxWidth: .infinity).padding(.bottom, 4)
                         if chat.isLoadingHistory {
                             ProgressView().frame(maxWidth: .infinity).padding(.vertical, 12)

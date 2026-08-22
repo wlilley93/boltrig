@@ -28,12 +28,17 @@ final class ChatSession: ObservableObject {
     @Published private(set) var historyError: String?
     @Published private(set) var attachments: [ChatAttachment] = []
     @Published private(set) var limits = AttachmentLimits()
+    /// Driven by the speaker: Familiar is reading a reply aloud, and how loudly.
+    @Published var speaking = false
+    @Published var speakingLevel: Double = 0
+    /// Set by the workspace; the session stops speech when the person moves on.
+    weak var speaker: ReplySpeaker?
 
     let isPreview: Bool
     private let client: BoltrigClient?
     private var turn: Task<Void, Never>?
     private var followCursor = 0
-    private var onTurnEnded: ((String) -> Void)?
+    private var onTurnEnded: ((String, String?) -> Void)?
 
     init(client: BoltrigClient) {
         self.client = client
@@ -56,13 +61,13 @@ final class ChatSession: ObservableObject {
 
     /// What Familiar's body shows, by the same precedence the web uses.
     var presenceMode: FamiliarIslandState.Mode {
-        FamiliarModeResolver.mode(failed: turnFailed, speaking: false, listening: false,
+        FamiliarModeResolver.mode(failed: turnFailed, speaking: speaking, listening: false,
                                   streaming: (isSending || isReconnecting) && !liveReply.isEmpty,
                                   loading: (isSending || isReconnecting || isLoadingHistory) && liveReply.isEmpty)
     }
 
-    /// Called with the finished reply text; the speaker hooks in here later.
-    func setTurnEndedHandler(_ handler: @escaping (String) -> Void) {
+    /// Called with the finished reply text and the run it belongs to; the speaker hooks in here.
+    func setTurnEndedHandler(_ handler: @escaping (String, String?) -> Void) {
         onTurnEnded = handler
     }
 
@@ -70,6 +75,7 @@ final class ChatSession: ObservableObject {
 
     func open(_ conversation: ConversationSummary) async {
         if conversationID != conversation.id {
+            speaker?.reset()
             stopTurn(cancelOnServer: false)
             conversationID = conversation.id
             title = conversation.title
@@ -85,6 +91,7 @@ final class ChatSession: ObservableObject {
     }
 
     func startNew() {
+        speaker?.reset()
         stopTurn(cancelOnServer: false)
         conversationID = nil
         title = "Boltrig"
@@ -137,6 +144,7 @@ final class ChatSession: ObservableObject {
         let message = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty, !isSending else { return }
         messages.append(ChatMessage(role: .user, content: message, createdAt: Date()))
+        speaker?.stop()
         needsYouDuringTurn = false
         turnFailed = false
         pendingQuestion = nil
@@ -215,6 +223,7 @@ final class ChatSession: ObservableObject {
 
     /// Stops following and asks the server to stop the run at its next step.
     func stopTurn(cancelOnServer: Bool = true) {
+        if cancelOnServer { speaker?.stop() }
         turn?.cancel()
         turn = nil
         if cancelOnServer, let client, let runID = activeRunID {
@@ -304,7 +313,7 @@ final class ChatSession: ObservableObject {
         let reply = liveReply.trimmingCharacters(in: .whitespacesAndNewlines)
         if !reply.isEmpty {
             messages.append(ChatMessage(role: .assistant, content: reply, createdAt: Date()))
-            onTurnEnded?(reply)
+            onTurnEnded?(reply, activeRunID)
         } else if let reason {
             messages.append(ChatMessage(role: .assistant, content: reason, createdAt: Date()))
             turnFailed = true

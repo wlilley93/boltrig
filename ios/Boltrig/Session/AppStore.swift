@@ -18,16 +18,20 @@ final class AppStore: ObservableObject {
     let account: Account
     let isPreview: Bool
     let chat: ChatSession
+    let speaker: ReplySpeaker
     private let client: BoltrigClient?
     private var loadedOnce = false
     private var needsYouObserver: NSObjectProtocol?
+    private var speechSinks: Set<AnyCancellable> = []
 
-    init(client: BoltrigClient, account: Account) {
+    init(client: BoltrigClient, account: Account, player: AudioPlaying = SystemAudioPlayer()) {
         self.client = client
         self.account = account
         self.isPreview = false
         self.chat = ChatSession(client: client)
+        self.speaker = ReplySpeaker(client: client, player: player)
         observeNeedsYou()
+        wireSpeech()
     }
 
     #if DEBUG
@@ -44,6 +48,7 @@ final class AppStore: ObservableObject {
         self.account = previewAccount
         self.isPreview = true
         self.chat = ChatSession.preview()
+        self.speaker = ReplySpeaker(client: nil, player: SystemAudioPlayer())
     }
     #endif
 
@@ -62,6 +67,24 @@ final class AppStore: ObservableObject {
         loadedOnce = true
         await refresh()
         await chat.loadLimitsIfNeeded()
+        await resolveSpeech()
+    }
+
+    /// Reads which voice provider is bound and whether replies are read aloud.
+    func resolveSpeech() async {
+        guard let client else { return }
+        let capabilities = try? await client.capabilities()
+        speaker.resolution = SpeechResolution.resolve(account: account, capabilities: capabilities)
+    }
+
+    private func wireSpeech() {
+        chat.speaker = speaker
+        chat.setTurnEndedHandler { [weak self] text, runID in
+            guard let self else { return }
+            Task { await self.speaker.speak(runID: runID ?? UUID().uuidString, markdown: text) }
+        }
+        speaker.$isSpeaking.sink { [weak self] value in self?.chat.speaking = value }.store(in: &speechSinks)
+        speaker.$level.sink { [weak self] value in self?.chat.speakingLevel = value }.store(in: &speechSinks)
     }
 
     func refresh() async {
