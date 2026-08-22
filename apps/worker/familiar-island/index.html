@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <!-- Rewritten by the build: the shipped page carries its inlined script's sha256. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:" />
+    <title>Familiar</title>
+    <style>
+      html, body { margin: 0; background: transparent; overflow: hidden; }
+      #familiar { width: 100vw; height: 100vh; display: grid; place-items: center; }
+      /* The body draws square from its own width, as the web Stage does. */
+      .familiar-stage-canvas { width: min(100vw, 100vh); height: min(100vw, 100vh); display: block; }
+    </style>
+  </head>
+  <body>
+    <div id="familiar"></div>
+    <script type="module" src="../src/familiarIsland/main.ts"></script>
+  </body>
+</html>

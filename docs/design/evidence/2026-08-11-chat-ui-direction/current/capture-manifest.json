@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-21T22:55:45.093Z",
+  "capturedAt": "2026-08-22T10:40:48.397Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "dd8eee5c0790086b78473c9e5f939f3d91ae753d77ea3a49b380ae74f13c56b4",
-    "digestAfterCapture": "dd8eee5c0790086b78473c9e5f939f3d91ae753d77ea3a49b380ae74f13c56b4",
+    "digestBeforeCapture": "80ed73c8983cfc3b4efecd41a7bb727584016702c0a412cea78fb3a276df76dd",
+    "digestAfterCapture": "80ed73c8983cfc3b4efecd41a7bb727584016702c0a412cea78fb3a276df76dd",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/real-brand-mark",
-    "head": "cdb3c4fb880aa3ef4f4c8ba9c22f6e8c211a29b0",
+    "branch": "feat/ios-app",
+    "head": "e08a83368321a3890255dfbc67f4d63ce8018c01",
     "dirty": true
   },
   "runner": {

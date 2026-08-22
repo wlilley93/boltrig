@@ -24,11 +24,7 @@ import { FAMILIAR_ARRIVAL, familiarModeTuning } from "../canvas/familiarPresets"
 import { packFamiliarGenotype } from "./FamiliarGenotype";
 import { BeatImpulse, VoiceEnvelope, familiarDrive } from "./familiarDrive";
 import { AmbientGesture, FamiliarMood, GESTURE, type Mood, type MoodKey } from "./familiarMood";
-import {
-  pushFamiliarUniforms,
-  UNIFORMS,
-  type UniformMap,
-} from "./familiarUniforms";
+import { pushFamiliarUniforms, UNIFORMS, type UniformMap } from "./familiarUniforms";
 import {
   clampStageState,
   RESTING_STAGE_STATE,
@@ -60,6 +56,8 @@ export class FamiliarWebGLRenderer {
   private lastReducedFrame = -Infinity;
   private readonly reducedMotion: boolean;
   private readonly onFirstPaint?: () => void;
+  /** A host-chosen ceiling on the device pixel ratio; absent means the mode decides. */
+  private readonly dprCap?: number;
   private painted = false;
   private mode: FamiliarPresentationMode = "hero";
 
@@ -94,13 +92,14 @@ export class FamiliarWebGLRenderer {
    *  a nominal 60fps so the first frame smooths rather than dividing by zero. */
   private lastDt = 1 / 60;
 
-  constructor(options?: { reducedMotion?: boolean; onFirstPaint?: () => void }) {
+  constructor(options?: { reducedMotion?: boolean; onFirstPaint?: () => void; dprCap?: number }) {
     this.reducedMotion = options?.reducedMotion
       ?? (typeof window !== "undefined"
         && ((typeof window.matchMedia === "function"
           && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
           || document.documentElement.classList.contains("reduce-motion")));
     this.onFirstPaint = options?.onFirstPaint;
+    this.dprCap = options?.dprCap;
   }
 
   mount(container: HTMLElement): void {
@@ -302,7 +301,6 @@ export class FamiliarWebGLRenderer {
     return this.pinned ?? this.live;
   }
 
-  /** The wander, with the current mode's colouring laid over it. */
   /**
    * Mount (or clear) the baked orb loops. A single URL serves every state; a
    * map gives each state its own loop, with standby as the fallback for any
@@ -340,7 +338,6 @@ export class FamiliarWebGLRenderer {
     gl.disable(gl.BLEND);
     if (this.prog) gl.useProgram(this.prog);
   }
-
 
   private shownMood(tuning: FamiliarTuning): Mood {
     if (this.state.mode !== "error") return this.mood.cur;
@@ -389,7 +386,8 @@ export class FamiliarWebGLRenderer {
     const canvas = this.canvas;
     if (!canvas) return;
     const css = canvas.clientWidth || 1;
-    const scale = Math.min(window.devicePixelRatio || 1, this.mode === "voice" ? 2 : 1.25);
+    const cap = this.dprCap ?? (this.mode === "voice" ? 2 : 1.25);
+    const scale = Math.min(window.devicePixelRatio || 1, cap);
     const size = Math.max(1, Math.round(css * scale));
     if (canvas.width !== size || canvas.height !== size) {
       canvas.width = size;
