@@ -39,6 +39,22 @@ struct MintedAccessToken: Equatable {
 
 /// The signed-in account as the server describes it, read from the account route.
 struct Account: Equatable {
+    init(id: String, email: String, displayName: String, role: String, activeWorkspaceID: String?, onboardingComplete: Bool,
+         characterID: String?, readReplies: Bool = false, voiceOverrides: [String: String] = [:],
+         appearance: AppearanceSettings = AppearanceSettings(), settings: [String: Any] = [:]) {
+        self.id = id
+        self.email = email
+        self.displayName = displayName
+        self.role = role
+        self.activeWorkspaceID = activeWorkspaceID
+        self.onboardingComplete = onboardingComplete
+        self.characterID = characterID
+        self.readReplies = readReplies
+        self.voiceOverrides = voiceOverrides
+        self.appearance = appearance
+        self.settings = settings
+    }
+
     let id: String
     let email: String
     let displayName: String
@@ -49,6 +65,21 @@ struct Account: Equatable {
     /// The companion id stored on the account, or nil when none is set yet. The phone
     /// never displays an id: see `CompanionPresence`.
     let characterID: String?
+    /// Finished replies are read aloud (the web's `voice.read_replies`).
+    let readReplies: Bool
+    /// Per-character voice overrides (`agent.voice`), only meaningful for the local voice provider.
+    let voiceOverrides: [String: String]
+    /// The five appearance keys the web writes together.
+    let appearance: AppearanceSettings
+    /// The raw settings bag, for sections that read further keys.
+    let settings: [String: Any]
+
+    static func == (lhs: Account, rhs: Account) -> Bool {
+        lhs.id == rhs.id && lhs.email == rhs.email && lhs.displayName == rhs.displayName && lhs.role == rhs.role
+            && lhs.activeWorkspaceID == rhs.activeWorkspaceID && lhs.onboardingComplete == rhs.onboardingComplete
+            && lhs.characterID == rhs.characterID && lhs.readReplies == rhs.readReplies
+            && lhs.voiceOverrides == rhs.voiceOverrides && lhs.appearance == rhs.appearance
+    }
 
     var nameForDisplay: String {
         displayName.isEmpty ? email : displayName
@@ -92,8 +123,20 @@ struct Account: Equatable {
             characterID: (settings["agent.character"] as? String).flatMap { value in
                 let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                 return trimmed.isEmpty ? nil : trimmed
-            }
+            },
+            readReplies: Self.flag(settings["voice.read_replies"]),
+            voiceOverrides: (settings["agent.voice"] as? [String: Any] ?? [:]).compactMapValues { $0 as? String },
+            appearance: AppearanceSettings(settings: settings),
+            settings: settings
         )
+    }
+
+    /// The web accepts true, "true" and "1" for a boolean setting; so does the phone.
+    static func flag(_ value: Any?) -> Bool {
+        if let value = value as? Bool { return value }
+        if let value = value as? Int { return value != 0 }
+        if let value = value as? String { return ["true", "1", "yes", "on"].contains(value.lowercased()) }
+        return false
     }
 }
 
@@ -104,4 +147,36 @@ struct StoredSession: Codable, Equatable {
     let tokenID: String
     let secret: String
     let createdAt: Date
+}
+
+
+/// The appearance keys the web app stores, with its defaults and tolerance for strings.
+struct AppearanceSettings: Equatable {
+    enum Theme: String { case system, dark, light }
+    enum Density: String { case comfortable, compact }
+
+    var theme: Theme = .dark
+    var density: Density = .comfortable
+    var fontScale: String = "1"
+    var reducedMotion: Bool = false
+    var highContrast: Bool = false
+
+    static let fontScales = ["0.9", "1", "1.1", "1.25"]
+
+    init() {}
+
+    init(settings: [String: Any]) {
+        if let raw = settings["theme"] as? String, let value = Theme(rawValue: raw) { theme = value }
+        if let raw = settings["density"] as? String, let value = Density(rawValue: raw) { density = value }
+        if let raw = settings["font_scale"] as? String, Self.fontScales.contains(raw) { fontScale = raw }
+        if let raw = settings["font_scale"] as? Double, Self.fontScales.contains(String(raw)) { fontScale = String(raw) }
+        reducedMotion = Account.flag(settings["a11y.reduced_motion"])
+        highContrast = Account.flag(settings["a11y.high_contrast"])
+    }
+
+    /// The five keys in one write, as the web does.
+    var wireForm: [String: Any] {
+        ["theme": theme.rawValue, "density": density.rawValue, "font_scale": fontScale,
+         "a11y.reduced_motion": reducedMotion, "a11y.high_contrast": highContrast]
+    }
 }
