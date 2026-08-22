@@ -62,8 +62,14 @@ struct TodayView: View {
         }
     }
 
+    private var presenceMode: FamiliarIslandState.Mode {
+        store.workingConversation == nil ? .standby : .working
+    }
+
     private var header: some View {
-        HStack(alignment: .bottom, spacing: 12) {
+        HStack(alignment: .bottom, spacing: 14) {
+            FamiliarPresenceView(surface: "today", presentation: .conversation, mode: presenceMode, size: 64)
+                .padding(.bottom, 2)
             VStack(alignment: .leading, spacing: 2) {
                 Text(store.isPreview ? "Preview workspace" : store.account.nameForDisplay)
                     .font(.subheadline)
@@ -156,7 +162,7 @@ struct TodayView: View {
                         store.openConversation(conversation)
                     } label: {
                         HStack(spacing: 11) {
-                            FamiliarBadge(working: working, label: conversation.title)
+                            FamiliarBadgeView(working: working, size: 42, label: conversation.title)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(conversation.title)
                                     .font(.body)

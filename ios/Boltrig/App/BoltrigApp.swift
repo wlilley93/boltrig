@@ -3,11 +3,13 @@ import SwiftUI
 @main
 struct BoltrigApp: App {
     @StateObject private var session = SessionStore()
+    @StateObject private var island = FamiliarIslandController()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(session)
+                .environmentObject(island)
         }
     }
 }
@@ -35,6 +37,22 @@ struct RootView: View {
             #endif
         }
         .task {
+            #if DEBUG
+            // Launch arguments for simulator captures: -boltrigPreview opens the preview
+            // workspace without a session; -boltrigTab today|chat|settings picks the tab.
+            if CommandLine.arguments.contains("-boltrigPreview") {
+                let store = AppStore.preview()
+                if let index = CommandLine.arguments.firstIndex(of: "-boltrigTab"), index + 1 < CommandLine.arguments.count {
+                    switch CommandLine.arguments[index + 1] {
+                    case "chat": store.selectedTab = .chat
+                    case "settings": store.selectedTab = .settings
+                    default: store.selectedTab = .today
+                    }
+                }
+                previewWorkspace = store
+                return
+            }
+            #endif
             await session.restore()
         }
     }

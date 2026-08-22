@@ -13,48 +13,6 @@ enum BoltrigTheme {
     static let cardSecondary = Color(uiColor: .tertiarySystemGroupedBackground)
 }
 
-/// The small round badge beside a conversation. A working badge breathes.
-struct FamiliarBadge: View {
-    let working: Bool
-    let label: String
-    @State private var isBreathing = false
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    AngularGradient(
-                        colors: [
-                            BoltrigTheme.accent,
-                            Color(red: 0.40, green: 0.72, blue: 0.97),
-                            Color(red: 0.58, green: 0.38, blue: 0.90),
-                            BoltrigTheme.accent,
-                        ],
-                        center: .center
-                    )
-                )
-                .overlay {
-                    Circle().stroke(.white.opacity(0.42), lineWidth: 1)
-                }
-                .shadow(color: BoltrigTheme.accent.opacity(working ? 0.35 : 0.14), radius: working ? 10 : 5)
-                .scaleEffect(isBreathing && working ? 1.05 : 1)
-
-            Circle()
-                .fill(.white.opacity(0.20))
-                .frame(width: 11, height: 11)
-                .offset(x: -7, y: -8)
-        }
-        .frame(width: 42, height: 42)
-        .accessibilityLabel(label)
-        .onAppear {
-            guard working else { return }
-            withAnimation(.easeInOut(duration: 2.1).repeatForever(autoreverses: true)) {
-                isBreathing = true
-            }
-        }
-    }
-}
-
 struct StatusDot: View {
     let color: Color
 

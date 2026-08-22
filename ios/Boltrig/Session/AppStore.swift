@@ -18,6 +18,13 @@ final class AppStore: ObservableObject {
     @Published var notice: String?
     @Published private(set) var loadError: String?
     @Published private(set) var needsYouDuringTurn = false
+    @Published private(set) var turnFailed = false
+
+    /// What Familiar's body shows, by the same precedence the web uses.
+    var presenceMode: FamiliarIslandState.Mode {
+        FamiliarModeResolver.mode(failed: turnFailed, speaking: false, listening: false,
+                                  streaming: isSending && !liveReply.isEmpty, loading: isSending && liveReply.isEmpty)
+    }
 
     let account: Account
     let isPreview: Bool
@@ -134,6 +141,7 @@ final class AppStore: ObservableObject {
         guard !message.isEmpty, !isSending else { return }
         messages.append(ChatMessage(role: .user, content: message, createdAt: Date()))
         needsYouDuringTurn = false
+        turnFailed = false
         guard let client else {
             isSending = true
             try? await Task.sleep(nanoseconds: 650_000_000)
@@ -193,6 +201,7 @@ final class AppStore: ObservableObject {
             messages.append(ChatMessage(role: .assistant, content: reply, createdAt: Date()))
         } else if let reason {
             messages.append(ChatMessage(role: .assistant, content: reason, createdAt: Date()))
+            turnFailed = true
         }
         liveReply = ""
         isSending = false

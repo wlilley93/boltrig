@@ -39,14 +39,19 @@ struct ChatView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 16) {
                             if store.messages.isEmpty && store.liveReply.isEmpty {
-                                ContentUnavailableView(
-                                    "Start a conversation",
-                                    systemImage: "bubble.left.and.bubble.right",
-                                    description: Text("Ask Boltrig to research, organise, or move work forward.")
-                                )
+                                VStack(spacing: 18) {
+                                    FamiliarPresenceView(surface: "chat", presentation: .hero, mode: store.presenceMode, size: 220)
+                                    Text("Ask Familiar to research, organise, or move work forward.")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .multilineTextAlignment(.center)
+                                }
                                 .frame(maxWidth: .infinity)
-                                .padding(.top, 80)
+                                .padding(.top, 48)
                             } else {
+                                FamiliarPresenceView(surface: "chat", presentation: .conversation, mode: store.presenceMode, size: 96)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.bottom, 4)
                                 ForEach(store.messages) { message in
                                     MessageBubble(role: message.role, text: message.content)
                                         .id(message.id)
