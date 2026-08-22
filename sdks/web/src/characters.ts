@@ -72,6 +72,15 @@ export interface CharacterTurnInput {
    * empty sign.
    */
   speechTakeaway?: string | null;
+  /**
+   * A short tail of the model's live reasoning, for a body that shows what
+   * the machine is doing WHILE it thinks. The same privacy rule as
+   * speechTakeaway: one bounded phrase, produced and capped by the host at
+   * the point it is made — never the stream, never the reply. A host with
+   * no live reasoning omits it, and a body that receives nothing falls back
+   * to its own copy.
+   */
+  thinkingTrace?: string | null;
 }
 
 /** Short name used by character add-ins. */

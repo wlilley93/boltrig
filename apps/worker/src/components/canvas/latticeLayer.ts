@@ -109,8 +109,17 @@ export class LatticeLayer {
    */
   upload(video: HTMLVideoElement | null): void {
     const gl = this.gl;
-    if (this.dead || !video || video.readyState < 2) {
+    if (this.dead || !video) {
       this.ready = false;
+      return;
+    }
+    // KEEP THE LAST FRAME through a readyState dip. At a loop wrap (and on
+    // decoder hiccups) the element can report unreadable for a single tick;
+    // blanking then made the footage cut out for exactly one frame while the
+    // texture still held a perfectly good image. Only a genuine source change
+    // resets the layer — the deck calls reset() when it swaps a slot's URL.
+    if (video.readyState < 2) {
+      if (!this.tex) this.ready = false;
       return;
     }
     // ONLY ON A NEW VIDEO FRAME. The loop runs at 60 and the video at ~24, so
@@ -154,6 +163,14 @@ export class LatticeLayer {
    *  this, so a crossfade never dims into a layer that has no pixels yet. */
   isReady(): boolean {
     return this.ready;
+  }
+
+  /** Forget the held frame. Called by the deck when a slot's SOURCE changes:
+   *  without this, keep-the-last-frame would let a crossfade land on the old
+   *  loop's stale frame while the new one is still decoding. */
+  reset(): void {
+    this.ready = false;
+    this.at = -1;
   }
 
   /**
@@ -224,6 +241,7 @@ export class LatticeDeck {
       slot.el?.remove();
       slot.el = null;
       slot.url = null;
+      slot.layer.reset();
     }
     this.map = source == null
       ? null
@@ -231,11 +249,9 @@ export class LatticeDeck {
     this.fade = 1;
   }
 
-  /** Advance the fade and pull in video frames. Once per frame, before draw.
-   *  `rate` is the footage's playback speed — half-time membrane, double-time
-   *  lattice — applied to both slots so a crossfade never runs two clocks. */
   /** The footage clock, clamped, on both slots — a crossfade never runs two
-   *  speeds. */
+   *  speeds. `rate` is the footage's playback speed — half-time membrane,
+   *  double-time lattice. */
   private setRate(rate: number): void {
     const speed = Math.min(4, Math.max(0.25, rate));
     for (const slot of this.slots) {
@@ -251,6 +267,7 @@ export class LatticeDeck {
       next.el?.remove();
       next.el = desired ? latticeVideo(desired) : null;
       next.url = desired;
+      next.layer.reset();
     } else {
       // Returning to a recently-left state: its loop is still loaded.
       void next.el?.play().catch(() => undefined);
@@ -258,6 +275,7 @@ export class LatticeDeck {
     this.fade = 0;
   }
 
+  /** Advance the fade and pull in video frames. Once per frame, before draw. */
   tick(mode: string, dt: number, rate = 1): void {
     if (!this.map || this.slots.length < 2) return;
     this.setRate(rate);

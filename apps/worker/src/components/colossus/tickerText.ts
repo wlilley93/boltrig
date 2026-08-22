@@ -69,8 +69,10 @@ const SPACE = glyphIds(" ")[0];
  * than an exception (see glyphAtlas), so a phrase with an em dash or an
  * apostrophe in it degrades to a gap and never throws over a sign.
  *
- * A takeaway is only ever passed for `speaking`. With none -- a live call,
- * where audio arrives with no text -- this is exactly what it always was.
+ * The phrase is the reply's own summary while he SPEAKS and the reasoning
+ * trace while he THINKS or WORKS -- ColossusState gates which crosses when.
+ * With none -- a live call, where audio arrives with no text, or a thought
+ * the host cannot see -- this is exactly what it always was.
  */
 export function tickerFor(mode: ColossusMode, takeaway?: string | null): TickerBuffer {
   const quoted = takeaway?.trim();

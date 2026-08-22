@@ -13,6 +13,7 @@
 // renderer itself, on sliders, without a single line of the vendored shader
 // moving. A bench that rebuilt the recipe would drift from it, and then it
 // would be tuning something nobody ships.
+import { applyCanvasBob } from "../canvas/canvasBob";
 import fragSrc from "../../bundles/familiar/familiar.frag?raw";
 import type { FamiliarGenotype } from "@wlilley93/boltrig-web-sdk";
 import { easeFactor, easeTuning, TRANSITION_SECONDS, INTRO_SECONDS } from "../canvas/bodyModes";
@@ -240,13 +241,13 @@ export class FamiliarWebGLRenderer {
 
     const t = this.reducedMotion ? 0 : (now - this.startTime) / 1000;
     const tuning = this.tick(now);
+    // HER BOUNCE IS THE CANVAS ITSELF — see canvas/canvasBob.ts.
+    applyCanvasBob(canvas, tuning.bounce, t, this.reducedMotion);
     const drive = familiarDrive(this.state, this.smoothers, this.lastDt, t, tuning);
     // Presence folds into her composition, so one dial moves her and her
     // baked orb together as a composite piece.
-    const sized = tuning.presence === 1 ? tuning : {
-      ...tuning,
-      composition: [tuning.composition[0] * tuning.presence, tuning.composition[1]] as const,
-    };
+    const sized = tuning.presence === 1 ? tuning : { ...tuning,
+      composition: [tuning.composition[0] * tuning.presence, tuning.composition[1]] as const };
     pushFamiliarUniforms(gl, this.uniforms, {
       w, h, t, drive, tuning: sized,
       mood: this.shownMood(tuning),
@@ -340,7 +341,6 @@ export class FamiliarWebGLRenderer {
     gl.disable(gl.BLEND);
     if (this.prog) gl.useProgram(this.prog);
   }
-
 
   private shownMood(tuning: FamiliarTuning): Mood {
     if (this.state.mode !== "error") return this.mood.cur;

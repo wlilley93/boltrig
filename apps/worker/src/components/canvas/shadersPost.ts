@@ -99,6 +99,13 @@ uniform vec3 uHot;
 uniform float uCore;
 uniform float uStarburst;
 uniform vec4 uEye;
+/** BOUNCE, WITH TRAILS. x amplitude (UV), y speed (Hz), z trail persistence
+ *  0..0.95. The whole composited body bobs on a sine, and the trail is
+ *  ghost taps of the scene at where the body just was — the offsets are
+ *  analytic, so no feedback buffer exists to smear or leak. Zero (an unset
+ *  uniform) is byte-identical to the pre-bounce composite. */
+uniform vec3 uBounce;
+uniform float uTime;
 // PRE-KNEE HIGHLIGHT COMPRESSION, for additive pile-ups. The filmic knee below
 // maps everything far above 1.5 to the same white, so wherever thousands of
 // additive streaks stack (a density knot, a hot syllable) the hue is gone
@@ -113,11 +120,30 @@ void main() {
   // Clamped on read, for the reason FINITE_CEILING gives: an Inf reaching the
   // tone curve below becomes NaN, and NaN is a black hole in the middle of the
   // frame rather than a bright spot.
-  vec3 c = min(texture(uScene, vUV).rgb, CEIL)
-         + min(texture(uBloom, vUV).rgb, CEIL) * uBloomGain;
+  float bob = uBounce.x * sin(6.28318530718 * uBounce.y * uTime);
+  vec3 c;
+  if (uBounce.x > 0.0001) {
+    c = vec3(0.0);
+    float wsum = 0.0;
+    for (int k = 0; k < 5; k++) {
+      float w = k == 0 ? 1.0 : pow(clamp(uBounce.z, 0.0, 0.95), float(k));
+      if (w < 0.004) break;
+      float past = uTime - float(k) * 0.055;
+      vec2 uvk = vUV - vec2(0.0, uBounce.x * sin(6.28318530718 * uBounce.y * past));
+      c += (min(texture(uScene, uvk).rgb, CEIL)
+          + min(texture(uBloom, uvk).rgb, CEIL) * uBloomGain) * w;
+      wsum += w;
+    }
+    c /= max(wsum, 0.001);
+  } else {
+    c = min(texture(uScene, vUV).rgb, CEIL)
+      + min(texture(uBloom, vUV).rgb, CEIL) * uBloomGain;
+  }
   c = c / (1.0 + uKnee * c);
 
-  vec2 d = (vUV - 0.5) * vec2(max(uAspect, 0.001), 1.0);
+  // The heart, starburst and eye are drawn HERE, not sampled from the scene,
+  // so they ride the current bounce explicitly — trails are texture-only.
+  vec2 d = (vUV - vec2(0.5, 0.5 - bob)) * vec2(max(uAspect, 0.001), 1.0);
   float r = length(d);
 
   // THE CENTRAL HEART. Both references put one at the middle -- Territory call
