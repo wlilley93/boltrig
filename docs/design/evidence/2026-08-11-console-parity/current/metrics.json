@@ -1,13 +1,13 @@
 {
   "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-  "captureManifestSha256": "0f40e88299ad0ffb4d7568e8ea9800b1fb3867ca37ebf3526a22288119870c64",
+  "captureManifestSha256": "32ce298004e3670c7ae19f5f50ab306efe681b1db21c9ae60b28d43c3849062e",
   "captureSourceBinding": {
-    "branch": "feat/ios-app-land",
-    "digestAfterCapture": "53133a032c597835df8e679c2542ddb24aca4997d0f0d72e9b59678390ced6f0",
+    "branch": "harden/desktop-origin-land",
+    "digestAfterCapture": "6fb160ab00879702e20ed0219182f4213d0bb02695ac4390bd7b4b16b9509036",
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "53133a032c597835df8e679c2542ddb24aca4997d0f0d72e9b59678390ced6f0",
+    "digestBeforeCapture": "6fb160ab00879702e20ed0219182f4213d0bb02695ac4390bd7b4b16b9509036",
     "dirty": false,
-    "head": "d0f6283357ef7b53d987c9b988ca1c9fa32dd7bb",
+    "head": "d6e3f20705dd13583c1ed4bcf1a043e9bd7f75a2",
     "scope": [
       "apps/worker/src",
       "apps/worker/tests/visual"
