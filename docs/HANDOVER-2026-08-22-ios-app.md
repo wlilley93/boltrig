@@ -578,11 +578,17 @@ What the repository says about "the phone as a remote for the desktop" (read 202
   no kernel route publishes it. The phone points at the releases page for now.
 
 So the phone IS a remote for the account the desktop is signed in to (see it, approve for it,
-disconnect it) and is NOT yet a remote control of work on that computer. Making it one needs
-three decisions that are Will's: (1) let a phone-originated turn target the desktop executor
-(contradicts 0027 as written), (2) sole-author relief or a device-bound approval for
-single-person tenants, (3) a server-published desktop download address and, if wanted, a
-pairing code flow the desktop can consume.
+disconnect it) and is NOT yet a remote control of work on that computer.
+
+**Will's direction (2026-08-22, later):** "the phone is a proxy for the desktop. Maybe it needs
+a device lease, but the permissions should be exactly the same, and the phone is just an
+extension of the monitor remotely." Recorded as the proposed decision
+`docs/decisions/0040-phone-as-remote-monitor-of-the-desktop.md`: a phone-originated task on a
+linked desktop is a local task in 0027's sense, under the desktop's own device-side posture,
+admitted by a signed remote-session lease that needs no independent approver (the
+`device.command.run` rule is untouched), with approvals and receipts mirrored to the phone and
+typed absence when the computer is off. The record lists what it needs, in order; none of it is
+built yet.
 
 ## What landed after Part 3 (S5 to S9, the same day, later still)
 
@@ -646,12 +652,15 @@ account-deletion route; crash reporting; live voice calls; a Metal port of the s
 
 1. The non-code track in `docs/IOS-LAUNCH-READINESS.md` (support and privacy mailbox, legal
    pages at the linked URLs, the App Store Connect record, internal TestFlight on Will's phone,
-   the review demo account, error tracking, the `DELETE /v1/me` route).
+   the review demo account, error tracking, the `DELETE /v1/me` route). The build and upload
+   steps, the App Privacy answers and the review notes are prepared in
+   `docs/IOS-TESTFLIGHT-RUNBOOK.md`; only the upload itself needs Will's Apple login.
 2. A live run against the hosted instance with a test account whose web choice is another
    character: confirm the switch, a spoken reply with `voice.read_replies` on, a queued turn
    and a cancel, and first-run setup end to end.
-3. The three desktop-link decisions above (0027, sole-author relief, a published download
-   address) if the phone is to drive work on the computer.
+3. Decision 0040 (the phone as the desktop's remote monitor): the kernel lease and task
+   channel, sole-author relief for that lease kind only, the phone's "Work on {computer}"
+   choice and mirrored approvals, a published download address.
 4. Measure `ready` and memory on a real iPhone; the simulator numbers above are the floor.
 
 Build and test only on the M4; `ios/README.md` has the commands.

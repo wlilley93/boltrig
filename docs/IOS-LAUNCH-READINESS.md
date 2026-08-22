@@ -247,7 +247,7 @@ must be declared and both must honour the consent the cookie banner promises.
 7. Create the App Store Connect record (`ai.boltrig.app`), internal TestFlight with your own
    phones, then external TestFlight with invitees, collecting crashes and feedback.
 8. Provision the review account, write the review notes, answer App Privacy from the privacy
-   manifest (`ios/Boltrig/PrivacyInfo.xcprivacy`) and the policy, submit as unlisted.
+   manifest (`ios/Boltrig/PrivacyInfo.xcprivacy`) and the policy, submit as unlisted. The archive and export steps, the App Privacy table and a review-notes draft are in `docs/IOS-TESTFLIGHT-RUNBOOK.md` (prepared 2026-08-22).
 
 Items 3 to 6 are parallel with the native work in `docs/HANDOVER-2026-08-22-ios-app.md`; items 2
 and 6 are the ones only Will can move.
