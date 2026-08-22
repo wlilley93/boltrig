@@ -14,12 +14,24 @@ struct BoltrigApp: App {
     }
 }
 
+/// Where a signed-in account goes: first-run setup until the account records the web's
+/// onboarding version, the workspace after.
+enum RootDestination: Equatable {
+    case workspace
+    case onboarding
+
+    static func resolve(_ account: Account) -> RootDestination {
+        account.onboardingComplete ? .workspace : .onboarding
+    }
+}
+
 /// Decides what the person sees from the session state alone. Nothing private renders
 /// until the server has confirmed who is signed in.
 struct RootView: View {
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var island: FamiliarIslandController
     @State private var workspace: AppStore?
+    @State private var onboarding: OnboardingStore?
     #if DEBUG
     @State private var previewWorkspace: AppStore?
     #endif
@@ -66,18 +78,32 @@ struct RootView: View {
             LaunchView()
         case .unreachable:
             UnreachableView()
-        case .signedIn:
-            if let workspace {
-                ContentView(onLeavePreview: nil)
-                    .environmentObject(workspace)
-            } else {
-                LaunchView()
-                    .onAppear { makeWorkspace() }
+        case let .signedIn(account):
+            switch RootDestination.resolve(account) {
+            case .onboarding:
+                if let onboarding {
+                    OnboardingFlowView(store: onboarding)
+                } else {
+                    LaunchView()
+                        .onAppear { makeOnboarding() }
+                }
+            case .workspace:
+                if let workspace {
+                    ContentView(onLeavePreview: nil)
+                        .environmentObject(workspace)
+                } else {
+                    LaunchView()
+                        .onAppear {
+                            onboarding = nil
+                            makeWorkspace()
+                        }
+                }
             }
         default:
             AuthFlowView(onExplorePreview: explorePreview)
                 .onAppear {
                     workspace = nil
+                    onboarding = nil
                     island.phenotypeSource = nil
                 }
         }
@@ -86,6 +112,17 @@ struct RootView: View {
     private func makeWorkspace() {
         guard let client = session.apiClient, let account = session.account else { return }
         workspace = AppStore(client: client, account: account)
+        island.phenotypeSource = client
+    }
+
+    /// First-run setup runs against the signed-in client; pressing Start re-reads the account,
+    /// which flips the destination to the workspace.
+    private func makeOnboarding() {
+        guard let client = session.apiClient, let account = session.account else { return }
+        let session = self.session
+        let store = OnboardingStore(client: client, account: account)
+        store.onFinished = { Task { await session.refreshAccount() } }
+        onboarding = store
         island.phenotypeSource = client
     }
 

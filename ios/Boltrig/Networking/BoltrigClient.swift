@@ -283,7 +283,7 @@ struct BoltrigClient {
         case 400..<500:
             return BoltrigError(kind: .rejected(reason: reason ?? ""), status: status)
         default:
-            return BoltrigError(kind: .server(status: status), status: status)
+            return BoltrigError(kind: .server(status: status, reason: reason), status: status)
         }
     }
 

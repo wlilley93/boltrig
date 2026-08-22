@@ -17,8 +17,9 @@ struct BoltrigError: Error, Equatable {
         case throttled
         /// Another 4xx whose body carried a reason.
         case rejected(reason: String)
-        /// 5xx, or a 2xx whose body could not be read.
-        case server(status: Int)
+        /// 5xx, or a 2xx whose body could not be read. `reason` is the server's own
+        /// sentence when the body carried one (a 503 from provider setup says what to do).
+        case server(status: Int, reason: String? = nil)
         case invalidResponse
     }
 
@@ -43,12 +44,15 @@ extension BoltrigError: LocalizedError {
             return "Too many attempts. Wait a minute and try again."
         case let .rejected(reason):
             return BoltrigError.plainCopy(for: reason)
-        case let .server(status):
+        case let .server(status, _):
             return "Boltrig had a problem (HTTP \(status)). Try again in a moment."
         case .invalidResponse:
             return "Boltrig returned something this app could not read."
         }
     }
+
+    /// The reason the profile route gives for a name it will not keep.
+    static let displayNameReason = "display_name must be 1-80 safe characters"
 
     /// The server's reasons are short and mostly plain; the ones a person meets while
     /// signing in get a friendlier sentence, the rest are shown as written.
@@ -70,6 +74,8 @@ extension BoltrigError: LocalizedError {
             return "Two-step verification is not on for this account."
         case "not_found":
             return "That could not be found."
+        case displayNameReason:
+            return "Your name must be 1 to 80 ordinary characters."
         case "":
             return "Boltrig could not complete that."
         default:
