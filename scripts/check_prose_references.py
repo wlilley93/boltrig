@@ -229,6 +229,31 @@ _PROSPECTIVE_RE = re.compile(
 
 ALLOW: dict[tuple[str, str], str] = {
     (
+        "docs/characters/README.md",
+        "tests/test_montgomery_persona.py",
+    ): (
+        "General Montgomery ships from the boltrig-companion repository; the verbatim "
+        "test the table cites lives THERE, not here. The row exists so this repo's "
+        "character census is complete, and the citation names the companion repo's "
+        "net rather than pretending this repo holds one."
+    ),
+    (
+        "docs/characters/frame-video-bodies.md",
+        "scripts/agents/general_montgomery/generate_ambient_loop.py",
+    ): (
+        "The ambient-loop generator lives in the boltrig-companion repository "
+        "alongside the frame graphs it renders; this document is the contract both "
+        "repos share, so it must be able to name the other side's tooling."
+    ),
+    (
+        "docs/characters/general_montgomery.md",
+        "docs/MONTGOMERY-GRAPH.md",
+    ): (
+        "The clip-graph document is FrameGraph Studio's, in its own repository; "
+        "Montgomery's constitution cites it as the authority on his move set and "
+        "says whose document it is in the same sentence."
+    ),
+    (
         "scripts/check_commit_trailers.py",
         "docs/proposals/DEV-POSTURE-001-draft.yaml",
     ): (
