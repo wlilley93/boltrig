@@ -46,7 +46,13 @@ function inlineIsland(): Plugin {
       if (chunk.code.includes("<!--")) {
         throw new Error("familiar island: the bundle contains '<!--', unsafe in an inline script");
       }
-      const code = chunk.code.replace(/<\/script/gi, "<\\/script");
+      // Escaped to a fixpoint, not once: a single replace is the shape the
+      // scanner rightly distrusts, even though the input here is our own bundle.
+      let code = chunk.code;
+      for (let previous = ""; previous !== code;) {
+        previous = code;
+        code = code.replace(/<\/script/gi, "<\\/script");
+      }
       const hash = crypto.createHash("sha256").update(code, "utf8").digest("base64");
       const csp = `default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src data:`;
 
