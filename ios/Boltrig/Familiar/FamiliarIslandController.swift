@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import OSLog
 import WebKit
 
 /// Owns the one web view that runs Familiar's shader (the island) and the narrow message
@@ -16,17 +17,21 @@ final class FamiliarIslandController: NSObject, ObservableObject {
     @Published private(set) var lastError: String?
 
     private(set) lazy var webView: WKWebView = makeWebView()
+    private(set) var reports: [String] = []
     private var pending: FamiliarIslandState?
     private var lastSentJSON: String?
     private var flushScheduled = false
     private static let sendInterval: TimeInterval = 1.0 / 30.0
 
     static let messageName = "familiar"
+    private static let log = Logger(subsystem: "ai.boltrig.app", category: "familiar-island")
 
-    /// A surface asks to host the island. Only one may at a time.
+    /// A surface asks to host the island. Only one may at a time. The first claim starts the
+    /// page loading; the web view is created on demand, never before a surface wants it.
     func claim(_ surface: String) -> Bool {
         if owner == nil || owner == surface {
             owner = surface
+            _ = webView
             return true
         }
         return false
@@ -79,8 +84,10 @@ final class FamiliarIslandController: NSObject, ObservableObject {
         view.navigationDelegate = self
         view.accessibilityElementsHidden = true
         if let url = Bundle.main.url(forResource: "familiar-island", withExtension: "html") {
+            Self.log.info("island loading from bundle")
             view.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         } else {
+            Self.log.error("island page missing from the bundle; badge only")
             isAvailable = false
         }
         return view
@@ -88,6 +95,9 @@ final class FamiliarIslandController: NSObject, ObservableObject {
 
     fileprivate func receive(_ message: Any) {
         guard let report = FamiliarIslandReport(message: message) else { return }
+        reports.append(String(describing: report))
+        if reports.count > 20 { reports.removeFirst() }
+        Self.log.info("island report: \(String(describing: report), privacy: .public)")
         switch report {
         case .ready:
             isReady = true
@@ -118,8 +128,31 @@ extension FamiliarIslandController: WKNavigationDelegate {
 
     nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         Task { @MainActor in
+            Self.log.error("island navigation failed: \(error.localizedDescription, privacy: .public)")
             self.isFallback = true
             self.lastError = error.localizedDescription
+        }
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        Task { @MainActor in
+            Self.log.error("island provisional navigation failed: \(error.localizedDescription, privacy: .public)")
+            self.isFallback = true
+            self.lastError = error.localizedDescription
+        }
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        Task { @MainActor in
+            Self.log.info("island page loaded")
+        }
+    }
+
+    nonisolated func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        Task { @MainActor in
+            Self.log.error("island content process ended; reloading")
+            self.isReady = false
+            webView.reload()
         }
     }
 }

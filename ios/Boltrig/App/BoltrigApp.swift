@@ -49,6 +49,7 @@ struct RootView: View {
                     default: store.selectedTab = .today
                     }
                 }
+                if CommandLine.arguments.contains("-boltrigEmptyChat") { store.startNewChat() }
                 previewWorkspace = store
                 return
             }

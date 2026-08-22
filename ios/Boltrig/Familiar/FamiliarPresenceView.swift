@@ -16,18 +16,26 @@ struct FamiliarPresenceView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var holdsIsland = false
 
+    /// The web view must be in the view hierarchy to load and paint, so it is attached as
+    /// soon as this surface holds the island and shown once the island says it is ready.
+    private var hostsIsland: Bool {
+        holdsIsland && island.isAvailable && !island.isFallback
+    }
+
     private var showsIsland: Bool {
-        holdsIsland && island.isAvailable && island.isReady && !island.isFallback
+        hostsIsland && island.isReady
     }
 
     var body: some View {
         ZStack {
-            if showsIsland {
+            if hostsIsland {
                 IslandHostView(webView: island.webView)
                     .frame(width: size, height: size)
                     .clipShape(Circle())
-                    .transition(.opacity)
-            } else {
+                    .opacity(showsIsland ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.4), value: showsIsland)
+            }
+            if !showsIsland {
                 FamiliarBadgeView(working: mode == .working || mode == .thinking, size: size)
             }
         }
