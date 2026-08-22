@@ -664,3 +664,121 @@ account-deletion route; crash reporting; live voice calls; a Metal port of the s
 4. Measure `ready` and memory on a real iPhone; the simulator numbers above are the floor.
 
 Build and test only on the M4; `ios/README.md` has the commands.
+
+
+---
+
+# Part 4: handover at the end of 2026-08-22
+
+Written for whoever picks this up next, Will included. Everything below was true when written;
+the pull requests named here are the way to check what has moved since.
+
+## Where the code is
+
+| What | Where | State |
+| --- | --- | --- |
+| The iPhone app, Familiar only, slices S1 to S10 | `ios/` on `main` | merged, PR #339 at 8765e3d5 |
+| TestFlight runbook, export options, decision 0040, manifest declares photos | `docs/IOS-TESTFLIGHT-RUNBOOK.md`, `ios/ExportOptions.plist`, `docs/decisions/0040-phone-as-remote-monitor-of-the-desktop.md`, `ios/Boltrig/PrivacyInfo.xcprivacy` | merged, PR #344 at 673d042f |
+| Web defects from Part 1 (Today's working flag and cap, Ready step names, gate fallback) | `apps/worker/src/components/MobileToday.tsx`, `MobileTodaySections.tsx`, `onboarding/ReadyStep.tsx`, `onboarding/OnboardingGate.tsx`, `onboarding/companionCatalogue.ts` | open, PR #345 |
+| Setup preview for captures, gated live contract test, legal drafts | `ios/Boltrig/Support/SetupPreview.swift`, `ios/BoltrigTests/LiveContractTests.swift`, `docs/legal/` | open, PR #346 |
+
+Both merged PRs ride v0.4.45 with two hardening PRs from another session; `ios/` is inert to the
+container images, so a kernel or web roll never ships the phone app. The phone app ships only
+through TestFlight and the App Store.
+
+## How to work on it
+
+- **Build and test only on the M4** (the beelink has no Xcode). Sync `ios/` to the Mac, then
+  `xcodebuild -project Boltrig.xcodeproj -scheme Boltrig -destination 'platform=iOS
+  Simulator,name=iPhone 17' test` with signing left on (the Keychain test needs it). The suite is
+  95 tests, of which one skips itself without a live credential. `ios/README.md` has the commands
+  and the layout.
+- **Captures**: debug builds take `-boltrigPreview -boltrigTab today|chat|settings
+  -boltrigEmptyChat` for the signed-in screens and `-boltrigOnboarding -boltrigStep
+  name|provider|vision|ready` for first-run setup against a stub server. Captures live in
+  `docs/design/evidence/2026-08-ios-familiar/`, with the README there listing each one.
+- **The live run**: `ios/BoltrigTests/LiveContractTests.swift` signs in, confirms the Familiar
+  switch, performs the first-screen reads, sends one short chat turn and signs out, when
+  `TEST_RUNNER_BOLTRIG_LIVE_EMAIL` and `TEST_RUNNER_BOLTRIG_LIVE_PASSWORD` (optionally
+  `TEST_RUNNER_BOLTRIG_LIVE_INSTANCE`) are set on the `xcodebuild test` command. Use a throwaway
+  account: the phone switches the account's companion to Familiar by design. It has not yet been
+  run live; see "Blocked" below.
+- **Familiar's island**: `make familiar-island` rebuilds the shader page after a renderer change;
+  `make familiar-island-check` (inside `worker-quality`) fails when the bundled page is stale.
+  Frame reports are INFO level in the unified log: `log show --info --predicate 'subsystem ==
+  "ai.boltrig.app"'`. Budgets measured on the simulator are in the section "What landed after
+  Part 3" above.
+- **The provider catalogue** on the phone is the web's models.dev snapshot, byte for byte:
+  `ios/scripts/sync-provider-catalogue.sh --check` fails when they differ, and
+  `ios/BoltrigTests/OnboardingTests.swift` pins the revision.
+- **Worker gates that bite a small change**: `pnpm exec vitest run`, `pnpm exec tsc --noEmit`,
+  `pnpm run test:structure` (the debt catalogue is `docs/refactoring/worker-structural-debt.json`;
+  an improved file must have its ratchet lowered or its entry removed in the same change), and the
+  additive evidence receipt, which binds a digest of the worker source and must be recaptured after
+  any source edit with `node apps/worker/tests/visual/capture-current.mjs --additive-evidence
+  --playwright /home/jellytot/Projects/opbox-build-main/node_modules/playwright/index.mjs`
+  (playwright is not in the worker's own node_modules).
+- **Docs gate**: `python3 scripts/check_prose_references.py` must PASS; every cited path resolves.
+
+## Decisions in force
+
+- Familiar only on the phone; an account whose companion is unset or another character is
+  switched to Familiar on the first sign-in, with one notice (Will: "always switch").
+- Credential: cookie sign-in, then a per-phone access token in the Keychain; the token is what
+  every request carries; sign out revokes it.
+- The instance is an address (hosted by default); a self-hosted box works over https.
+- Approval posture and sensing are read-only on the phone: those routes refuse a personal access
+  token by design.
+- The phone is a remote for the account the computer is signed in to today; Will's direction that
+  it becomes the desktop's remote monitor with exactly the desktop's permissions is decision 0040
+  (proposed, nothing built).
+- The account's web theme applies on the phone; the web default is dark.
+- Delete account is behind `BoltrigEnvironment.accountDeletionAvailable = false` until the server
+  route exists.
+
+## Blocked, and on what
+
+1. **The live run** waits on a throwaway dev account. Dev has one active user (Will's superadmin).
+   Will chose to mint it himself: on jellytot-prod, `docker exec boltrig-dev-kernel boltrig
+   mint-token --email <superadmin> --name ios-live --ttl-days 1`, then `POST /v1/admin/invitations`
+   with the token for a `@dev.invalid` address, then the public `POST /v1/auth/accept-invite
+   {token, password}` (12 characters or more). The credential then goes to whoever runs the test,
+   by a channel Will trusts; the test revokes the phone's token at the end, and the account can be
+   deactivated afterwards.
+2. **The Apple record and the upload** need Will's Apple login; `docs/IOS-TESTFLIGHT-RUNBOOK.md`
+   is the sequence, sections 1 and 2 marked [WILL]. The code side is ready for the internal build.
+3. **Publication of the legal pages** needs the entity, the addresses, a mailbox that is read and
+   a lawyer's review of `docs/legal/`; external TestFlight waits on the privacy policy URL.
+4. **Server routes**: `DELETE /v1/me` (account deletion), error tracking, a published desktop
+   download address (decision 0040's list). None exists.
+
+## Next, in order
+
+1. Merge PR #345 and PR #346 once their CI is green.
+2. Mint the dev account and run the live test; fix whatever it finds before anything else.
+3. App Store Connect record, internal TestFlight on Will's phone (the runbook).
+4. Mailbox, legal pages published, support URL; then external TestFlight.
+5. `DELETE /v1/me` and the in-app entry (flip the flag); error tracking on both sides.
+6. Decision 0040: accept or amend, then the kernel lease and task channel, the phone's
+   "Work on {computer}" choice and mirrored approvals.
+7. Measure `ready` and memory on a real iPhone; the simulator numbers are the floor.
+
+## Traps met on the way, so nobody meets them twice
+
+`URLSession.AsyncBytes.lines` drops the blank lines that delimit SSE frames (split by hand); a
+`WKWebView` must be attached to the view hierarchy to load and paint (attach on claim, fade in on
+ready; the first claim must touch the lazy web view); a stale `active_run_id` must not re-trigger a
+reconnect after an idle follow (it looped once and hung the suite); iOS maps `.md` to
+`text/x-markdown` (assert the `text/` family); a `@MainActor` type's helpers used from
+nonisolated code need `nonisolated`; macOS has no `timeout` (kill with `pkill -f xcodebuild`); the
+simulator can die mid-run ("server died": boot it again, the code was fine); DNS to GitHub flakes
+from the sandbox (retry pushes); another session may land `main` into the feature branch and push,
+so fetch and merge before every push and never force; a stale `index.lock` with no git process
+alive can be removed.
+
+## Two open questions for Will
+
+- Decision 0040: is a lease needed at all when the phone and the desktop hold the same account?
+  The record proposes one for per-phone revocation and signed verification on the desktop.
+- "Ship only Tauri and iPhone" (Part 2) is still open; the web app remains the onboarding and
+  administration surface today.
