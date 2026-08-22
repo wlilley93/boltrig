@@ -80,9 +80,9 @@ struct TodayView: View {
             } label: {
                 Text(store.account.initials)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(BoltrigTheme.onControl)
                     .frame(width: 34, height: 34)
-                    .background(BoltrigTheme.accent, in: Circle())
+                    .background(BoltrigTheme.control, in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
@@ -126,10 +126,10 @@ struct TodayView: View {
                 Button {
                     Task { await store.respond(to: approval, decision: "approve") }
                 } label: {
-                    Text("Approve").frame(maxWidth: .infinity)
+                    Text("Approve").frame(maxWidth: .infinity).foregroundStyle(BoltrigTheme.onControl)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(BoltrigTheme.accent)
+                .tint(BoltrigTheme.control)
 
                 Button {
                     Task { await store.respond(to: approval, decision: "decline") }

@@ -1,9 +1,13 @@
 import SwiftUI
 
 enum BoltrigTheme {
-    /// The accent colour is the brand core cyan from the asset catalog, so it follows
-    /// the one definition in assets/brand.
+    /// The accent comes from the asset catalog: the brand core cyan (assets/brand) in dark
+    /// mode, a darker teal of the same hue in light mode so links and icons stay readable on white.
     static let accent = Color.accentColor
+    /// Filled controls use the system primary colour (ink in light, white in dark) so their
+    /// labels stay readable; the cyan accent is for marks, links and icons.
+    static let control = Color.primary
+    static let onControl = Color(uiColor: .systemBackground)
     static let groupedBackground = Color(uiColor: .systemGroupedBackground)
     static let card = Color(uiColor: .secondarySystemGroupedBackground)
     static let cardSecondary = Color(uiColor: .tertiarySystemGroupedBackground)

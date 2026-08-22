@@ -23,9 +23,9 @@ struct SettingsView: View {
                     HStack(spacing: 14) {
                         Text(store.account.initials)
                             .font(.body.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(BoltrigTheme.onControl)
                             .frame(width: 44, height: 44)
-                            .background(BoltrigTheme.accent, in: Circle())
+                            .background(BoltrigTheme.control, in: Circle())
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(store.account.nameForDisplay)

@@ -131,18 +131,18 @@ struct ChatView: View {
                 } label: {
                     Image(systemName: "stop.fill")
                         .font(.body.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(BoltrigTheme.onControl)
                         .frame(width: 42, height: 42)
-                        .background(Color.primary.opacity(0.7), in: Circle())
+                        .background(BoltrigTheme.control.opacity(0.8), in: Circle())
                 }
                 .accessibilityLabel("Stop")
             } else {
                 Button(action: send) {
                     Image(systemName: "arrow.up")
                         .font(.body.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(BoltrigTheme.onControl)
                         .frame(width: 42, height: 42)
-                        .background(BoltrigTheme.accent, in: Circle())
+                        .background(BoltrigTheme.control, in: Circle())
                 }
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
@@ -172,12 +172,12 @@ private struct MessageBubble: View {
 
             Text(text)
                 .font(.body)
-                .foregroundStyle(role == .user ? .white : .primary)
+                .foregroundStyle(role == .user ? BoltrigTheme.onControl : Color.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 15)
                 .padding(.vertical, 12)
                 .background(
-                    role == .user ? BoltrigTheme.accent : BoltrigTheme.card,
+                    role == .user ? BoltrigTheme.control : BoltrigTheme.card,
                     in: RoundedRectangle(cornerRadius: 18, style: .continuous)
                 )
                 .textSelection(.enabled)

@@ -102,14 +102,15 @@ private struct PrimaryButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                if busy { ProgressView().controlSize(.small).tint(.white) }
+                if busy { ProgressView().controlSize(.small).tint(BoltrigTheme.onControl) }
                 Text(busy ? "One moment" : title)
             }
+            .foregroundStyle(BoltrigTheme.onControl)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
         }
         .buttonStyle(.borderedProminent)
-        .tint(BoltrigTheme.accent)
+        .tint(BoltrigTheme.control)
         .disabled(busy)
     }
 }
