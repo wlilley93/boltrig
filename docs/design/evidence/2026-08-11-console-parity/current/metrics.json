@@ -1,13 +1,13 @@
 {
   "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-  "captureManifestSha256": "e442b8c35908c8c59ccdf40f44dd82f82c66fcae17d9f7c5c47e767d7de80191",
+  "captureManifestSha256": "82f9185fdea0a9baa588b6e55feac9953145bada316bb7e52f146c989977ef07",
   "captureSourceBinding": {
-    "branch": "feat/jarvis-arc-reactor-land",
-    "digestAfterCapture": "47a97440ccce183870281984dc418a3d375daaae49bd3f1c1c512789771e4fc5",
+    "branch": "harden/desktop-origin-land",
+    "digestAfterCapture": "b43cdc1f4b6e5df173147eeaf24960d278c953998c162db254eec6599c1c3ac4",
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "47a97440ccce183870281984dc418a3d375daaae49bd3f1c1c512789771e4fc5",
+    "digestBeforeCapture": "b43cdc1f4b6e5df173147eeaf24960d278c953998c162db254eec6599c1c3ac4",
     "dirty": false,
-    "head": "c66a112d2093d80a61e5cffaa43e015487734bdc",
+    "head": "779a64ed01226e4c29ad194a882622071e293076",
     "scope": [
       "apps/worker/src",
       "apps/worker/tests/visual"
