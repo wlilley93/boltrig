@@ -3264,6 +3264,10 @@ const VIDEO_BODIES: Record<string, { url: string; title: string; wire: boolean }
   maya: { url: "https://beelink.tailb4b671.ts.net:8903/", title: "Maya — framegraph", wire: true },
   "maya-library": { url: "https://beelink.tailb4b671.ts.net:8901/", title: "Maya — clip library", wire: false },
 };
+const VIDEO_ORIGINS = new Set(
+  Object.values(VIDEO_BODIES).map((body) => new URL(body.url).origin),
+);
+let videoOrigin: string | null = null;
 /** Friendly labels where the wire's ids are terse; unknown ids show as-is. */
 const VIDEO_LABELS: Record<string, string> = {
   H1: "Desk", H2: "Table — far", H3: "Fireplace", H4: "Window", H5: "Seated",
@@ -3272,7 +3276,7 @@ let videoChar: string | null = null;
 let videoFrame: HTMLIFrameElement | null = null;
 let videoWant: string | null = null;
 function clipPost(msg: object): void {
-  try { videoFrame?.contentWindow?.postMessage(msg, "*"); } catch { /* fine */ }
+  try { if (videoOrigin) videoFrame?.contentWindow?.postMessage(msg, videoOrigin); } catch { /* fine */ }
 }
 type ClipState = { node?: string; targetHub?: string | null; mood?: string;
                    wantEmotion?: string | null; positions?: string[];
@@ -3332,6 +3336,9 @@ function paintVideoPanel(state: ClipState = {}): void {
   }
 }
 window.addEventListener("message", (ev) => {
+  // The players are DECLARED cross-origin bodies (VIDEO_BODIES). Only their
+  // origins speak clip state; anyone else's messages are not ours to parse.
+  if (!VIDEO_ORIGINS.has(ev.origin)) return;
   const d = ev.data as ({ type?: string } & ClipState) | null;
   if (!videoChar || !d || d.type !== "clip:state") return;
   ensureVideoChips(d);
@@ -3339,6 +3346,7 @@ window.addEventListener("message", (ev) => {
 });
 function mountVideo(name: string): void {
   const info = VIDEO_BODIES[name];
+  videoOrigin = new URL(info.url).origin;
   cancelLoop();
   renderer?.destroy();
   renderer = null;
@@ -3376,6 +3384,7 @@ function unmountVideo(): void {
   if (!videoChar) return;
   videoChar = null;
   videoFrame = null;
+  videoOrigin = null;
   document.body.classList.remove("video-char");
   ($("save") as HTMLButtonElement).disabled = false;
   $("mixer").innerHTML = "";
