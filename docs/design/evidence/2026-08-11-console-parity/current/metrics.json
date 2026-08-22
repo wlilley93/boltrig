@@ -1,13 +1,13 @@
 {
   "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-  "captureManifestSha256": "44943988eef0d9cee66706f94e478e7f0cb17ae74994efe465007d3db92193b4",
+  "captureManifestSha256": "e442b8c35908c8c59ccdf40f44dd82f82c66fcae17d9f7c5c47e767d7de80191",
   "captureSourceBinding": {
-    "branch": "bench-unified-land",
-    "digestAfterCapture": "1ac9eddf528da3c80516af67796a9c8d414d46ec607109b6037a39d4c4d2c953",
+    "branch": "feat/jarvis-arc-reactor-land",
+    "digestAfterCapture": "47a97440ccce183870281984dc418a3d375daaae49bd3f1c1c512789771e4fc5",
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "1ac9eddf528da3c80516af67796a9c8d414d46ec607109b6037a39d4c4d2c953",
-    "dirty": true,
-    "head": "b452551ad7d0ee3421977239726a2e7c46d37d8d",
+    "digestBeforeCapture": "47a97440ccce183870281984dc418a3d375daaae49bd3f1c1c512789771e4fc5",
+    "dirty": false,
+    "head": "c66a112d2093d80a61e5cffaa43e015487734bdc",
     "scope": [
       "apps/worker/src",
       "apps/worker/tests/visual"
