@@ -13,6 +13,10 @@ The onboarding provider and model picker includes a bounded projection of the
 open-source models.dev catalogue. The snapshot records its upstream commit in
 `apps/worker/src/components/onboarding/modelsDevCatalogue.json`; it contains
 provider/model names and declared input modalities only.
+The iOS app bundles the same snapshot verbatim at
+`ios/Boltrig/Resources/ProviderCatalogue.json` (kept identical by
+`ios/scripts/sync-provider-catalogue.sh --check`; `ios/BoltrigTests/OnboardingTests.swift`
+pins its revision).
 
 MIT License
 

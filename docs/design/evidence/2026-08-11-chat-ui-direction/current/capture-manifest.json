@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-22T10:14:22.096Z",
+  "capturedAt": "2026-08-22T13:22:25.487Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "47a97440ccce183870281984dc418a3d375daaae49bd3f1c1c512789771e4fc5",
-    "digestAfterCapture": "47a97440ccce183870281984dc418a3d375daaae49bd3f1c1c512789771e4fc5",
+    "digestBeforeCapture": "53133a032c597835df8e679c2542ddb24aca4997d0f0d72e9b59678390ced6f0",
+    "digestAfterCapture": "53133a032c597835df8e679c2542ddb24aca4997d0f0d72e9b59678390ced6f0",
     "sourceUnchangedDuringCapture": true,
-    "branch": "feat/jarvis-arc-reactor-land",
-    "head": "c66a112d2093d80a61e5cffaa43e015487734bdc",
+    "branch": "feat/ios-app-land",
+    "head": "d0f6283357ef7b53d987c9b988ca1c9fa32dd7bb",
     "dirty": false
   },
   "runner": {

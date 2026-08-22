@@ -15,6 +15,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --reporter=dot",
     "test:structure": "node --test scripts/check-structure.node.mjs",
+    "build:island": "vite build --config familiar-island/vite.config.ts",
+    "island:sync": "node scripts/sync-familiar-island.mjs",
+    "island:check": "node scripts/sync-familiar-island.mjs --check",
     "tauri": "tauri"
   },
   "dependencies": {
