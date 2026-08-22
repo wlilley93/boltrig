@@ -39,3 +39,13 @@ surface, unchanged.
   duplicated or cross-tested.
 - If the trigger fires, the Files half is bounded work; the editor half
   should still be resisted on these numbers.
+
+## Correction (2026-08-22)
+
+The Context above says documents are "written via kernel table verbs". Verified
+against the opbox kernel: the SoR write goes through the kernel `tables.*`
+(plural) verb family in `verbs/table_ext.rs`, reached from the frontend's
+`src/lib/tables/table-kernel-writes.ts`. The kernel's `table.*`/`row.*`/`cell.*`
+verbs are a different, fact-per-cell data plane the frontend never reads. There
+is no verb named `table.write`; that string is a capability on the `tables.*`
+family. The decision itself is unchanged.
