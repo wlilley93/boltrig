@@ -48,7 +48,8 @@ async def _unpublish_owned_verbs(
     owned: list[Verb] = []
     for verb in await store.list_all_verbs(tenant_id):
         binding = await store.get_binding(tenant_id, verb.id)
-        if binding is not None and binding.target_ref == adapter_id:
+        # The same predicate registration now applies, so the two cannot drift.
+        if binding is not None and binding.owned_by(adapter_id):
             owned.append(verb)
     for verb in owned:
         await store.delete_binding(tenant_id, verb.id)

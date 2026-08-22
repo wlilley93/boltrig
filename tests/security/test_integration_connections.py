@@ -31,12 +31,17 @@ from tests.approval import approved_request
 T = "integration-tenant"
 
 
-def _headers(tenant: str = T, subject: str = "alice", role: str = "org-admin") -> dict[str, str]:
+def _headers(
+    tenant: str = T,
+    subject: str = "alice",
+    role: str = "org-admin",
+    grants: str = "*",
+) -> dict[str, str]:
     return {
         "x-boltrig-tenant": tenant,
         "x-boltrig-subject": subject,
         "x-boltrig-role": role,
-        "x-boltrig-grants": "*",
+        "x-boltrig-grants": grants,
     }
 
 
@@ -271,8 +276,12 @@ def test_certified_manual_contract_seals_once_and_projects_only_account_metadata
         and event.status == "ok"
         and event.detail["params"]
         == {
-            "keys": ["integration_id", "label", "secret"],
-            "count": 3,
+            # level joins the keys-only audit projection: it is routing,
+            # not secret, and only NAMES are recorded here anyway. scope_id
+            # is deliberately absent -- it never crosses the wire, because the
+            # kernel derives the owner from the authenticated caller.
+            "keys": ["integration_id", "label", "level", "secret"],
+            "count": 4,
         }
         for event in asyncio.run(store.audit_query(T))
     )
@@ -430,6 +439,8 @@ async def test_atomic_setup_failure_leaves_neither_connection_nor_credential(
         "api_key",
         "tickets_v1",
         {"opaque": "MUST-NOT-PERSIST"},
+        level="org",
+        scope_id="acme",
     )
 
     def fail_seal(_credential):
@@ -593,3 +604,58 @@ def test_health_probe_cannot_resurrect_a_connection_revoked_while_refreshing(
     assert asyncio.run(
         store.get_credential_ref(T, "integration:tickets:credential")
     ) is None
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-06")
+def test_a_connection_is_listed_only_to_someone_who_can_use_it():
+    """The list answers "what can I use", not "what has this tenant wired up".
+
+    Hardening `route_required` so an ungranted caller could not enumerate the
+    tenant's connected systems left this door open one module over: the same
+    labels, accounts and tool lists were readable by any authenticated member,
+    with no grant or role check at all (SPEC 11.11). An author still sees
+    everything, because administering connections is the job.
+    """
+    kernel, _ = asyncio.run(_kernel())
+    client = TestClient(create_app(kernel))
+
+    author = client.get("/v1/integrations/connections", headers=_headers()).json()
+    assert [row["label"] for row in author["connections"]] == ["Operations tickets"]
+
+    granted = client.get(
+        "/v1/integrations/connections",
+        headers=_headers(role="member", grants="ticket.read"),
+    ).json()
+    assert [row["label"] for row in granted["connections"]] == ["Operations tickets"]
+
+    stranger = client.get(
+        "/v1/integrations/connections",
+        headers=_headers(role="member", grants="unrelated.verb"),
+    ).json()
+    assert stranger["connections"] == []
+    # ... and the refusal is a true empty answer, not an error the console has
+    # to special-case.
+    assert "Operations tickets" not in repr(stranger)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-06")
+def test_the_catalogue_stays_a_shelf_but_stops_naming_tools_you_cannot_call():
+    """Knowing an integration is SUPPORTED discloses nothing about this tenant,
+    so the shelf stays visible to a member. Which tools it has bound does, so
+    that field narrows to what the caller may actually call."""
+    kernel, _ = asyncio.run(_kernel())
+    client = TestClient(create_app(kernel))
+
+    author = client.get("/v1/integrations/catalogue", headers=_headers()).json()
+    assert author["integrations"][0]["enabled_tools"] == ["ticket.create", "ticket.read"]
+
+    member = client.get(
+        "/v1/integrations/catalogue",
+        headers=_headers(role="member", grants="ticket.read"),
+    ).json()
+    # The shelf entry is still there - "Reviewed tickets" is the CATALOGUE label,
+    # not the connection's - and only its tool list narrowed.
+    assert [row["label"] for row in member["integrations"]] == ["Reviewed tickets"]
+    assert member["integrations"][0]["enabled_tools"] == ["ticket.read"]

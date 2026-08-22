@@ -6,14 +6,34 @@ import logging
 
 from boltrig.kernel import Kernel
 from boltrig.kernel.work_read_adapter import build_work_read_adapter
+from boltrig.models import NamedAgent
 from boltrig.skills.shelf import build_skill_shelf_adapter
 
 log = logging.getLogger("boltrig.bootstrap")
 
 
 async def register_agent_support(kernel: Kernel, tenant_id: str) -> None:
-    """Register progressive skill discovery and read-only canonical Work access."""
+    """Register the tools and durable identity substrate every agent uses."""
+
+    from boltrig.adapters.builtin.agent_messages import build as build_agent_messages
+    from boltrig.adapters.builtin.chat_present import build as build_chat_present
 
     await kernel.register_adapter(tenant_id, build_skill_shelf_adapter(kernel.store))
     await kernel.register_adapter(tenant_id, build_work_read_adapter(kernel.store))
-    log.info("agent support registered (skill.search/describe/load, work.list/get)")
+    await kernel.register_adapter(
+        tenant_id, build_agent_messages(kernel.store, events=kernel.events)
+    )
+    await kernel.register_adapter(tenant_id, build_chat_present(events=kernel.events))
+    if not await kernel.store.list_named_agents(tenant_id):
+        await kernel.store.upsert_named_agent(
+            NamedAgent(
+                tenant_id=tenant_id,
+                address="general",
+                name="general",
+                runtime="script",
+                default_for_intake=True,
+            )
+        )
+    log.info(
+        "agent support registered (skills, work reads, peer messaging, chat presentation)"
+    )

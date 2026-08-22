@@ -25,7 +25,10 @@ from urllib.parse import quote, unquote
 
 from boltrig.adapters.base import McpResourceSpec
 
-from boltrig.kernel import mcp_errors, tool_disclosure
+from boltrig.kernel import mcp_errors
+from boltrig.kernel.mcp_errors import err as _err
+from boltrig.kernel.mcp_errors import ok as _ok
+from boltrig.kernel.mcp_tools_list import list_tools
 from boltrig.models import (
     GrantSet,
     InvocationContext,
@@ -37,12 +40,6 @@ from boltrig.models import (
 _PROTOCOL_VERSION = "2024-11-05"
 
 
-def _ok(rid, result: dict) -> dict:
-    return {"jsonrpc": "2.0", "id": rid, "result": result}
-
-
-def _err(rid, code: int, message: str) -> dict:
-    return {"jsonrpc": "2.0", "id": rid, "error": {"code": code, "message": message}}
 
 
 @dataclass(frozen=True)
@@ -54,6 +51,7 @@ class RunToken:
     grants: GrantSet
     run_id: str | None = None
     actor: str = "ephemeral"
+    actor_tier: str = "ephemeral"
     skills: tuple[str, ...] = field(default_factory=tuple)
     # The active WORKSPACE the MCP caller operates in ([2026] VJS-COUNTY 9, D2), so
     # an MCP-initiated audit row carries org/workspace at the SAME depth as a human
@@ -109,7 +107,7 @@ class McpFace:
     # --- token lifecycle (issued by the fleet per run) ---
     def issue_run_token(
         self, tenant_id: str, grants: GrantSet, *, run_id=None, actor="ephemeral",
-        skills=(), workspace_id=None, on_behalf_of=None, parent_run_id=None,
+        actor_tier="ephemeral", skills=(), workspace_id=None, on_behalf_of=None, parent_run_id=None,
         extra=None, ttl_seconds=300,
     ) -> str:
         if (
@@ -122,7 +120,7 @@ class McpFace:
         now = self._clock()
         self._tokens[self._token_key(token)] = RunToken(
             lease_id=uuid.uuid4().hex, tenant_id=tenant_id, grants=grants, run_id=run_id,
-            actor=actor, skills=tuple(skills), workspace_id=workspace_id,
+            actor=actor, actor_tier=actor_tier, skills=tuple(skills), workspace_id=workspace_id,
             on_behalf_of=on_behalf_of, parent_run_id=parent_run_id,
             extra=dict(extra or {}),
             issued_at=now, expires_at=now + timedelta(seconds=ttl_seconds),
@@ -151,7 +149,7 @@ class McpFace:
         # to the same depth (the chokepoint stamps them onto the audit row).
         return InvocationContext(
             tenant_id=rt.tenant_id, grants=rt.grants, actor=rt.actor,
-            actor_tier="ephemeral", run_id=rt.run_id, skills_loaded=rt.skills,
+            actor_tier=rt.actor_tier, run_id=rt.run_id, skills_loaded=rt.skills,
             workspace_id=rt.workspace_id, ip_address=ip_address, user_agent=user_agent,
             on_behalf_of=rt.on_behalf_of, parent_run_id=rt.parent_run_id,
             extra=dict(rt.extra),
@@ -191,6 +189,7 @@ class McpFace:
         rt = RunToken(
             lease_id="user-request", tenant_id=principal.tenant_id, grants=principal.grants,
             run_id=None, actor=principal.subject, skills=(),
+            actor_tier=principal.actor_tier,
             workspace_id=getattr(principal, "active_workspace_id", None),
             on_behalf_of=getattr(principal, "on_behalf_of", None),
             extra={
@@ -218,7 +217,13 @@ class McpFace:
         set_current_tenant(rt.tenant_id)
         rid = request.get("id")
         method = request.get("method")
-        params = request.get("params") or {}
+        # JSON-RPC allows positional params, and a string or number survives a
+        # truthiness test. Every branch here reads params as an object, so the
+        # type check belongs at the door: without it `tools/list` with
+        # `"params": "x"` raised AttributeError out of an unguarded route and
+        # became an HTTP 500 with no JSON-RPC frame at all.
+        raw_params = request.get("params")
+        params = raw_params if isinstance(raw_params, dict) else {}
         if method == "initialize":
             capabilities: dict = {"tools": {"listChanged": False}}
             if self._resource_specs(rt.tenant_id):
@@ -231,7 +236,7 @@ class McpFace:
         if method in ("notifications/initialized", "ping"):
             return _ok(rid, {})
         if method == "tools/list":
-            return _ok(rid, {"tools": await self._list_tools(rt)})
+            return await list_tools(self._kernel, rt, rid, params.get("cursor"))
         if method == "tools/call":
             return _ok(rid, await self._call_tool(
                 rt, params, ip_address=ip_address, user_agent=user_agent
@@ -354,14 +359,6 @@ class McpFace:
                 break
             return [{"uri": uri, "mimeType": media_type, "blob": blob}]
         raise ValueError("resource not found")
-
-    async def _list_tools(self, rt: RunToken) -> list[dict]:
-        """Granted-only and RANKED: tenant ceiling ∩ run grants (SEC-23, FR-MCP-02)."""
-        perms = await self._kernel.store.get_tenant_permissions(rt.tenant_id)
-        verbs = await self._kernel.store.list_verbs(rt.tenant_id)
-        return tool_disclosure.offer_payload(
-            [v for v in verbs if perms.grants.permits(v.id)], rt.grants, rt.skills
-        )
 
     async def _call_tool(
         self, rt: RunToken, params: dict, *,

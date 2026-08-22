@@ -1,98 +1,12 @@
-// The GLSL chunks every pass shares: the curl-noise field, the projection, and
-// the fringe-colour rule.
-//
-// SHARED AS STRINGS, NOT COPY-PASTED. The simulation advects a particle along
-// curl(p); the draw pass places the particle's TAIL by walking backwards along
-// the same curl(p). If the two ever disagree -- one octave retuned, one
-// frequency changed -- the streak stops lying on the path the particle is
-// actually taking and the motion blur points the wrong way. It is a subtle,
-// entirely silent defect, and it was live: this text existed twice, identically,
-// with nothing keeping the copies in step.
+// The GLSL chunks every pass shares. The curl-noise field itself lives in
+// ./glslField.ts and is re-exported here, so importers and the eager-glob
+// uniform census in ultronBundle.test.ts both still see it on this module.
 
-/** Hash-based value noise plus curl. Prepend to any fragment/vertex shader. */
-export const FIELD_GLSL = `
-// Hash-based value noise. Cheap and adequate: curl only needs the FIELD to be
-// smooth, not to be high quality, because the derivative is what is used.
-float hash(vec3 p) {
-  p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
-  p *= 17.0;
-  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
-}
-float noise(vec3 x) {
-  vec3 i = floor(x), f = fract(x);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(
-    mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
-        mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
-    mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
-        mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
-}
+export { FIELD_GLSL } from "./glslField";
 
-// Two octaves. The frequencies are higher than the first cut used (1.5/3.1):
-// at that scale the filaments bundled into a few thick ropes instead of reading
-// as many fine fibres, which is most of why the first render looked like fog.
-vec3 potential(vec3 p, float time) {
-  float t = time * 0.08;
-  return vec3(
-    noise(p * 2.3 + vec3(0.0, t, 0.0)) + 0.5 * noise(p * 5.2 + vec3(5.2, t * 1.7, 1.3)),
-    noise(p * 2.3 + vec3(4.7, 2.1, t)) + 0.5 * noise(p * 5.2 + vec3(1.9, t * 1.3, 8.4)),
-    noise(p * 2.3 + vec3(t, 9.2, 3.8)) + 0.5 * noise(p * 5.2 + vec3(t * 1.1, 6.6, 2.2)));
-}
-
-// Curl by central differences on the potential. e is a compromise: smaller and
-// the hash noise's own quantisation shows up as jitter in the curl.
-vec3 curl(vec3 p, float time) {
-  const float e = 0.08;
-  vec3 dx = vec3(e, 0.0, 0.0), dy = vec3(0.0, e, 0.0), dz = vec3(0.0, 0.0, e);
-  vec3 px0 = potential(p - dx, time), px1 = potential(p + dx, time);
-  vec3 py0 = potential(p - dy, time), py1 = potential(p + dy, time);
-  vec3 pz0 = potential(p - dz, time), pz1 = potential(p + dz, time);
-  return vec3(
-    (py1.z - py0.z) - (pz1.y - pz0.y),
-    (pz1.x - pz0.x) - (px1.z - px0.z),
-    (px1.y - px0.y) - (py1.x - py0.x)) / (2.0 * e);
-}
-
-// A particle's role and home radius, derived from its texel rather than stored.
-//
-// The simulation state is ONE RGBA32F texel per particle -- xyz position, w
-// life -- and there is no room in it for a shell index. Deriving the role from
-// a stable hash of the texel coordinate costs nothing, needs no second texture,
-// and gives the same answer in the simulation and in every draw pass without
-// them having to agree about a layout.
-//
-// Most particles live in the INTERIOR (r < 0.55): that is the "internal network
-// of connections within the spherical centre". A minority MIGRATE out toward
-// the ring band and back, which is the traffic between the layers.
-// MOSTLY A SHELL. The film frame is a globe of orange lines that is BRIGHT AT
-// THE LIMB and sparse through the middle -- which is what a shell does under
-// projection, because the line of sight crosses far more of it at the edge than
-// at the centre. An earlier cut put the whole field in the interior on the
-// strength of Ebb's "internal network within the spherical centre" and it read
-// as a dandelion: no silhouette, no limb, no globe. Both things are true, and
-// the shell is the one that carries the shape.
-float homeRadius(vec2 uv, float time) {
-  float role = hash(vec3(uv * 57.3, 11.0));
-  float jitter = hash(vec3(uv * 23.9, 3.0));
-  if (role > 0.92) {
-    float phase = hash(vec3(uv * 77.1, 5.0));
-    // Cosine rather than a sawtooth: a migrating particle should ease out and
-    // ease back, not snap home when its phase wraps.
-    float s = 0.5 - 0.5 * cos(6.28318530718 * fract(time * 0.06 + phase));
-    return mix(0.32, 1.0, s);
-  }
-  // The surface: a thin band, so the limb is a limb rather than a haze.
-  if (role > 0.28) return 0.88 + 0.10 * jitter;
-  // The interior network, kept sparse -- it should be visible THROUGH the shell,
-  // not compete with it.
-  return 0.24 + 0.46 * jitter;
-}
-
-/** True for the ~8% of particles that cross between the interior and the rings. */
-bool isMigrating(vec2 uv) {
-  return hash(vec3(uv * 57.3, 11.0)) > 0.92;
-}
-`;
+// Debris clustering (CLUMP_GLSL) moved to jarvis/v2/glslClump.ts: it is a
+// Jarvis-only chunk, and the Ultron bundle's uniform census counts every
+// uniform declared in this module as one his passes must drive.
 
 // Shared by every pass that puts a 3D point on screen. The reference is a
 // hologram seen head-on, so this is orthographic with only a gentle divide --
@@ -110,6 +24,64 @@ vec4 project(vec3 p, float aspect) {
 // far side of the sphere falls to 0.18 so the near side reads as in front of it.
 float depthFade(vec3 p) {
   return mix(0.18, 1.0, clamp(depthOf(p) * 1.35 - 0.28, 0.0, 1.0));
+}
+
+// THE BODY, after familiar.frag -- a lit normal and a fresnel rim, applied to
+// particles rather than to a drawn sphere. She builds an orb from a ray-sphere
+// gate, a lit normal and a fresnel term, with embers thrown off the rim; these
+// two are not orbs, so they take the LIGHTING and leave the geometry.
+//
+// 1 at the silhouette, 0 facing the viewer. The edge of the body is bright and
+// the middle is see-through, which is what gives a cloud of points a surface.
+float limb(vec3 p) {
+  vec3 n = normalize(p + 1e-5);
+  return pow(1.0 - abs(n.z), 2.2);
+}
+
+// THE SILHOUETTE, as a uniform rather than two literals per pass.
+//
+// x is what a face-on particle keeps and y is what the rim adds, so the RATIO
+// between them is how hard the body reads as a sphere. It was 0.34 + 0.90 --
+// an edge only 3.6x the middle, which is not enough contrast to carve a sphere
+// out of sixteen thousand streaks, and the render was fur. It wants an order of
+// magnitude, and it wants to be adjustable while looking at it, which is why it
+// is a uniform now: see tests/visual/shader-bench.html.
+//
+// Declared here beside limb() so every pass that includes PROJECT_GLSL gets it.
+// setUniforms skips a uniform a program did not declare, so a pass that never
+// calls limbMix costs nothing.
+uniform vec2 uLimb;
+
+#ifndef UOUTER_DECLARED
+#define UOUTER_DECLARED
+// THE DISTANT OUTER SPHERE. x its radius, y what fraction of the particles live
+// on it, z how bright it is against the body.
+//
+// Guarded, because homeRadius needs it in FIELD_GLSL for the simulation and
+// limbMix needs it in PROJECT_GLSL for the draws, and several shaders include
+// both. A duplicate uniform declaration is a compile error, and on these
+// SILENT -- the canvas is removed and the stage reads as a CSS problem.
+uniform vec3 uOuter;
+#endif
+
+// FAR AND FAINT, read from WHERE a particle is rather than which one it is.
+//
+// Anything past the body's own shell is the outer sphere by definition, so
+// position is enough -- and taking it from position means this reaches every
+// draw pass through limbMix, instead of threading a texel coordinate into four
+// more shaders that never needed one.
+float outerFade(vec3 p) {
+  return mix(1.0, uOuter.z, smoothstep(1.02, max(1.05, uOuter.x * 0.92), length(p)));
+}
+
+float limbMix(vec3 p) { return (uLimb.x + uLimb.y * limb(p)) * outerFade(p); }
+
+
+// How far outside its home shell a particle has drifted, 0..1. Familiar spawns
+// embers as their own pass; here they are DERIVED, so the things that glint are
+// exactly the things that have left the body.
+float ember(vec3 p, float home) {
+  return clamp((length(p) - home) * 3.2, 0.0, 1.0);
 }
 `;
 
@@ -151,5 +123,68 @@ vec3 fringeShade(float a, vec3 core) {
   float visible = step(outer, a);
   float lit = smoothstep(outer, inner, a);
   return mix(uFringe * uFringeGain, core, lit) * visible;
+}
+`;
+
+/** The voice, as a wavefront leaving the centre.
+ *
+ * Included by DRAW passes only -- SIM_FRAG declares these two itself, because it
+ * uses the same numbers as a force rather than as light. `uWaveT` is seconds
+ * since the last speech onset, so the front is at radius t*speed and the
+ * gaussian makes it a narrow shell rather than a filled sphere. */
+export const PULSE_GLSL = `
+uniform float uWaveT;
+uniform float uWaveAmp;
+uniform float uSwell;
+
+/**
+ * x speed, y echo spacing in seconds, z decay rate, w the radius it reflects off.
+ *
+ * Self-contained rather than reading uOuter, because PULSE_GLSL is included by
+ * shaders that do not include FIELD_GLSL -- depending on a uniform from another
+ * chunk is how a pass ends up compiling everywhere and behaving correctly nowhere.
+ */
+uniform vec4 uReverb;
+
+/**
+ * THE VOICE, REVERBERATING, rather than one front leaving and never returning.
+ *
+ * It was a single narrow shell travelling outward at a fixed 1.35 and fading as it
+ * went. That reads as a ping: something leaves the middle, crosses the body once,
+ * and is gone. A voice in a cavity does not do that -- it reaches the wall, comes
+ * BACK, and keeps doing so more quietly each time, which is the whole difference
+ * between a body that pings when spoken to and a body that rings.
+ *
+ * Two mechanisms, and both matter:
+ *
+ *   THE BOUNCE. The front's position is a triangle wave rather than a ramp, so at
+ *   the reflecting radius it turns around and travels inward again. One front
+ *   therefore crosses the body many times. A ramp put the front outside the
+ *   silhouette after about a second and everything went still while the voice was
+ *   still going.
+ *
+ *   THE ECHOES. Three fronts, each starting a little later and at half the
+ *   amplitude of the last. One bouncing front is a single ripple sloshing; three
+ *   overlapping ones interfere, which is what fills the body with motion instead of
+ *   sweeping a bright band across it.
+ */
+float pulse(vec3 p) {
+  float r = length(p);
+  // A floor on the reflecting radius: at zero the triangle wave collapses and every
+  // front sits at the origin, which would put a static blob in the middle of any
+  // body that had not set this yet.
+  float reach = max(0.35, uReverb.w);
+  float sum = 0.0;
+  for (int i = 0; i < 3; i += 1) {
+    float t = uWaveT - float(i) * uReverb.y;
+    if (t <= 0.0) continue;
+    float travel = mod(t * uReverb.x, 2.0 * reach);
+    float front = travel > reach ? 2.0 * reach - travel : travel;
+    float d = r - front;
+    // Narrow, and it fades as it travels: a front as bright at the rim as at the
+    // core reads as the whole body flashing rather than as something crossing it.
+    sum += exp(-d * d * 22.0) * exp(-t * uReverb.z) * pow(0.5, float(i));
+  }
+  return sum * uWaveAmp;
 }
 `;

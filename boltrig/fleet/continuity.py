@@ -163,7 +163,7 @@ def _tool_work_line(message: ConversationMessage, config: Any = None) -> str | N
 
 
 def _render_message(message: ConversationMessage, config: Any = None) -> str:
-    label = _ROLE_LABEL.get(message.role, str(getattr(message.role, "value", message.role)))
+    label = _message_label(message)
     # A fixed, content-stable frame per message. The label ("User:" / "Assistant:")
     # is trusted framing we add; the message *body* is untrusted conversation data,
     # so it is wrapped in a typed envelope (M1 / SEC-72) - a prior turn cannot smuggle
@@ -178,6 +178,21 @@ def _render_message(message: ConversationMessage, config: Any = None) -> str:
     if work is not None:
         body += " " + wrap_untrusted("tool_work", "prior_turn", work)
     return f"{label}: {body}\n\n"
+
+
+def _message_label(message: ConversationMessage) -> str:
+    """Trusted framing that preserves who handled each historical turn.
+
+    Agent addresses are registry-validated routing identifiers. They remain
+    framing rather than message content, so a newly selected peer never inherits
+    another peer's old assistant prose as though it authored it.
+    """
+    role = _ROLE_LABEL.get(message.role, str(getattr(message.role, "value", message.role)))
+    if message.role == MessageRole.USER and message.recipient_agent_address:
+        return f"{role} to {message.recipient_agent_address}"
+    if message.author_agent_address:
+        return f"{role} by {message.author_agent_address}"
+    return role
 
 
 def render_transcript(messages: list[ConversationMessage], config: Any = None) -> str:
@@ -244,7 +259,7 @@ def summarize_messages(messages: list[ConversationMessage], config: Any = None) 
     re-read the store or add authority - it only compresses text it was handed."""
     lines: list[str] = []
     for m in messages:
-        label = _ROLE_LABEL.get(m.role, str(getattr(m.role, "value", m.role)))
+        label = _message_label(m)
         snippet = " ".join((m.content or "").split())
         if len(snippet) > _SUMMARY_SNIPPET_CHARS:
             snippet = snippet[: _SUMMARY_SNIPPET_CHARS - 3].rstrip() + "..."

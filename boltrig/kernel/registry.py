@@ -8,6 +8,8 @@ verbs a caller is scoped to see (P4, role-scoped).
 
 from __future__ import annotations
 
+import logging
+from functools import partial
 from typing import Any
 
 from boltrig.adapters.base import Adapter
@@ -25,42 +27,221 @@ from boltrig.models import (
 )
 from boltrig.store import Store
 
+from .capability_records import (
+    apply_mapping_pack,
+    capability_connection,
+    declare_capability,
+    reconcile_binding_schemas,
+    record_source_operation,
+)
+from boltrig.capabilities.mapping_packs import load_packs
+
+from .revertible import EffectLog
+
+log = logging.getLogger("boltrig.kernel.registry")
+
+
+def _is_external_provider(adapter: Any) -> bool:
+    """Whether this adapter's operations are somebody else's API catalogue.
+
+    ``source`` is ``builtin`` for the adapters that ship inside the image and
+    ``generated`` or ``manual`` for everything consumed or hand-authored, which
+    is the same attribute :func:`capability_connection` already reads to decide
+    trust. Reading it here too keeps one definition of "external" rather than
+    two that can disagree, and defaults to builtin so an adapter that declares
+    nothing about itself is treated as ours and ingests nothing.
+    """
+    return getattr(adapter, "source", "builtin") != "builtin"
+
 
 class KernelRegistry:
     def __init__(self, store: Store) -> None:
         self._store = store
 
-    async def register_adapter_verbs(self, tenant_id: str, adapter: Adapter) -> list[str]:
-        """Register every verb an adapter provides. Returns the registered ids."""
+    async def register_adapter_verbs(
+        self,
+        tenant_id: str,
+        adapter: Adapter,
+        *,
+        effects: EffectLog | None = None,
+    ) -> list[str]:
+        """Register every verb an adapter provides. Returns the registered ids.
+
+        DOES NOT OVERWRITE A BINDING IT DOES NOT OWN. Re-registration happens on
+        every startup, and it used to upsert an ADAPTER binding unconditionally
+        -- so a verb deliberately re-pointed at a reasoning agent by
+        `bind_verb_to_agent` silently reverted the next time the process came
+        up. Deactivation already declined to touch other people's bindings
+        (VerbBinding.owned_by); this now declines on the way in too.
+
+        Pass ``effects`` to receive an inverse for everything this call changes,
+        built while what was displaced is still known. Absent, the behaviour is
+        exactly as before minus the clobbering, so existing callers need no
+        change.
+
+        A spec declaring ``implements`` records the doctrine's three routing
+        records - a provider connection, the source operation, and the binding
+        that claims a canonical capability (SPEC-capability-doctrine.md §5 level
+        1).
+
+        An EXTERNAL provider's operations are recorded as source operations even
+        when they claim nothing (SPEC §10 step 4). Until they were, an operation
+        was invisible to the capability layer until somebody had already mapped
+        it, which left the compiler, the review queue and every mapping pack
+        with nothing to work on: the Opbox door publishes 633 verbs and declares
+        ``implements`` on none of them.
+
+        BUILTINS ARE DELIBERATELY EXCLUDED. They are Boltrig's own verbs rather
+        than a provider's catalogue, they are already first-class, and ingesting
+        all thirty adapters' operations on every tenant at every startup is a
+        cost with no reader today. Their declared specs still record, exactly as
+        before, so this only ever adds rows for adapters that represent someone
+        else's API.
+        """
         registered: list[str] = []
-        for spec in adapter.describe():
-            if await self._store.get_noun(tenant_id, spec.noun_id) is None:
-                await self._store.upsert_noun(Noun(id=spec.noun_id, tenant_id=tenant_id))
-            await self._store.upsert_verb(
-                Verb(
-                    id=spec.verb_id,
-                    tenant_id=tenant_id,
-                    noun_id=spec.noun_id,
-                    input_schema=spec.input_schema,
-                    output_schema=spec.output_schema,
-                    description=spec.description,
-                    consequence=Consequence(spec.consequence),
-                    degraded_mode=spec.degraded_mode,
-                    idempotency_mode=IdempotencyMode(spec.idempotency_mode),
-                )
-            )
-            rl = spec.rate_limit
-            await self._store.upsert_binding(
-                VerbBinding(
-                    verb_id=spec.verb_id,
-                    tenant_id=tenant_id,
-                    target_type=TargetType.ADAPTER,
-                    target_ref=adapter.id,
-                    rate_limit=RateLimit(**rl) if rl else None,
-                )
-            )
+        specs = list(adapter.describe())
+        declared = [spec for spec in specs if spec.implements]
+        catalogue = specs if _is_external_provider(adapter) else declared
+        connection = (
+            await capability_connection(self._store, tenant_id, adapter)
+            if (declared or catalogue)
+            else None
+        )
+        for spec in specs:
+            await self._register_spec(tenant_id, adapter, spec, effects)
             registered.append(spec.verb_id)
+        digests: dict[str, str] = {}
+        for spec in catalogue:
+            assert connection is not None
+            digests[spec.verb_id] = await record_source_operation(
+                self._store, tenant_id, connection, spec
+            )
+        if digests:
+            # One pass over the tenant's bindings rather than a read per
+            # operation: an Opbox door is 443 of them.
+            demoted = await reconcile_binding_schemas(self._store, tenant_id, digests)
+            if demoted:
+                log.warning(
+                    "capability bindings returned to review after a schema change: %d",
+                    len(demoted),
+                )
+        if connection is not None:
+            pack = load_packs().get(connection.provider)
+            if pack is not None:
+                await apply_mapping_pack(self._store, tenant_id, connection, specs, pack)
+        for spec in declared:
+            assert connection is not None
+            await declare_capability(self._store, tenant_id, connection, spec)
         return registered
+
+    async def _register_spec(
+        self, tenant_id: str, adapter: Adapter, spec: Any, effects: EffectLog | None
+    ) -> None:
+        """Noun, verb and binding for ONE spec, plus the inverse of each.
+
+        Extracted because the caller was a loop around exactly this, and at 86
+        lines it broke the structural floor. Nothing here changed in the move.
+        """
+        if await self._store.get_noun(tenant_id, spec.noun_id) is None:
+            await self._store.upsert_noun(Noun(id=spec.noun_id, tenant_id=tenant_id))
+            if effects is not None:
+                noun_id = spec.noun_id
+                effects.record(
+                    f"noun {noun_id}",
+                    partial(self._store.delete_noun, tenant_id, noun_id),
+                )
+        previous_verb = await self._store.get_verb(tenant_id, spec.verb_id)
+        await self._store.upsert_verb(
+            Verb(
+                id=spec.verb_id,
+                tenant_id=tenant_id,
+                noun_id=spec.noun_id,
+                input_schema=spec.input_schema,
+                output_schema=spec.output_schema,
+                description=spec.description,
+                consequence=Consequence(spec.consequence),
+                degraded_mode=spec.degraded_mode,
+                idempotency_mode=IdempotencyMode(spec.idempotency_mode),
+            )
+        )
+        if effects is not None:
+            self._record_verb_inverse(effects, tenant_id, spec.verb_id, previous_verb)
+
+        existing = await self._store.get_binding(tenant_id, spec.verb_id)
+        if existing is not None and existing.target_type is TargetType.AGENT:
+            # AN AGENT BINDING IS NEVER AN ADAPTER'S TO REPLACE.
+            #
+            # Two things produce one, and an adapter must not undo either: a
+            # deliberate `bind_verb_to_agent` re-point, which used to revert
+            # on the next restart because this loop upserted over it; and
+            # `questions.py`'s `native:questions`, which the chokepoint
+            # intercepts in-kernel, so overwriting it would quietly disable
+            # the human-question pause.
+            #
+            # ADAPTER-over-ADAPTER is deliberately still allowed. Several
+            # adapters publish the same verb on purpose -- jira and
+            # memory-tickets both publish ticket.create, five audio adapters
+            # publish voice.speak -- and last-registration-wins is how
+            # manifest order picks the provider. Refusing that too booted
+            # the stack onto whichever adapter happened to register first.
+            log.info(
+                "adapter %s left verb %s bound to agent:%s",
+                adapter.id, spec.verb_id, existing.target_ref,
+            )
+            return
+
+        rl = spec.rate_limit
+        await self._store.upsert_binding(
+            VerbBinding(
+                verb_id=spec.verb_id,
+                tenant_id=tenant_id,
+                target_type=TargetType.ADAPTER,
+                target_ref=adapter.id,
+                rate_limit=RateLimit(**rl) if rl else None,
+            )
+        )
+        if effects is not None:
+            self._record_binding_inverse(effects, tenant_id, spec.verb_id, existing)
+
+    def _record_verb_inverse(
+        self, effects: EffectLog, tenant_id: str, verb_id: str, previous: Verb | None
+    ) -> None:
+        """Put back the verb that was there, or remove the one we added."""
+        if previous is None:
+            effects.record(
+                f"verb {verb_id}",
+                lambda: self._store.delete_verb(tenant_id, verb_id),
+            )
+        else:
+            effects.record(
+                f"verb {verb_id} (restore)",
+                partial(self._store.upsert_verb, previous),
+            )
+
+    def _record_binding_inverse(
+        self,
+        effects: EffectLog,
+        tenant_id: str,
+        verb_id: str,
+        previous: VerbBinding | None,
+    ) -> None:
+        """Put back the binding that was there, INCLUDING when there was none.
+
+        The distinction is the reason the inverse is built here rather than
+        written out somewhere else later: only this call site knows whether it
+        created a binding or replaced one, and "delete it" is wrong in the
+        second case.
+        """
+        if previous is None:
+            effects.record(
+                f"binding {verb_id}",
+                lambda: self._store.delete_binding(tenant_id, verb_id),
+            )
+        else:
+            effects.record(
+                f"binding {verb_id} (restore)",
+                partial(self._store.upsert_binding, previous),
+            )
 
     async def bind_verb_to_agent(self, tenant_id: str, verb_id: str, agent_capability: str) -> None:
         """Re-point a verb at a reasoning agent instead of an adapter (US-KER-02).
@@ -110,7 +291,9 @@ class KernelRegistry:
             )
         return sorted(views, key=lambda workflow: workflow["id"])
 
-    async def _agent_profile_views(self, tenant_id: str) -> list[dict[str, Any]]:
+    async def _agent_profile_views(
+        self, tenant_id: str, workspace_id: str | None
+    ) -> list[dict[str, Any]]:
         views = [
             {
                 "name": capability.name,
@@ -126,7 +309,9 @@ class KernelRegistry:
                     capability.name
                 ).as_view(),
             }
-            for capability in await self._store.list_capabilities(tenant_id)
+            for capability in await self._store.list_capabilities(
+                tenant_id, workspace_id=workspace_id, enforce_workspace=True
+            )
         ]
         return sorted(views, key=lambda profile: profile["name"])
 
@@ -140,9 +325,10 @@ class KernelRegistry:
         """Return the caller-visible discovery catalogue.
 
         Verb and noun visibility is the intersection of the tenant ceiling and
-        the caller's grants.  Workflows additionally honour the caller's active
-        workspace, while agent capability profiles are tenant-scoped library
-        records.  The verb payload is deliberately kept backward-compatible.
+        the caller's grants.  Workflows AND agent capability profiles honour the
+        caller's active workspace: a profile is visible when it is org-wide or
+        belongs to that workspace (0083).  The verb payload is deliberately kept
+        backward-compatible.
         """
         verbs = await self._store.list_verbs(tenant_id, noun_id)
         # A verb is visible iff the tenant ceiling permits it AND the caller's own
@@ -178,5 +364,7 @@ class KernelRegistry:
             "nouns": await self._noun_views(tenant_id, visible),
             "verbs": out,
             "workflows": await self._workflow_views(tenant_id, workspace_id),
-            "agent_capabilities": await self._agent_profile_views(tenant_id),
+            "agent_capabilities": await self._agent_profile_views(
+                tenant_id, workspace_id
+            ),
         }

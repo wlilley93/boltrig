@@ -53,23 +53,23 @@ say "digests for $VERSION, read from the registry"
 # default multi-line block, which a naive capture swallows whole and then writes
 # into a live overlay as a malformed pin.
 digest_of() { docker buildx imagetools inspect "$1" 2>/dev/null | awk '/^Digest:/{print $2; exit}'; }
-KD=""; FD=""; WUD=""
+KD=""; FD=""; UD=""
 for i in $(seq 1 40); do
   KD=$(digest_of "ghcr.io/wlilley93/boltrig-kernel:$VERSION")
   FD=$(digest_of "ghcr.io/wlilley93/boltrig-fleet:$VERSION")
-  WUD=$(digest_of "ghcr.io/wlilley93/boltrig-worker-ui:$VERSION")
-  [[ "$KD" == sha256:* && "$FD" == sha256:* && "$WUD" == sha256:* ]] && break
+  UD=$(digest_of "ghcr.io/wlilley93/boltrig-ui:$VERSION")
+  [[ "$KD" == sha256:* && "$FD" == sha256:* && "$UD" == sha256:* ]] && break
   [ "$i" = 1 ] && echo "  waiting for $VERSION to publish (the release workflow is probably still running)"
   sleep 15
 done
 echo "  kernel $KD"
 echo "  fleet  $FD"
-echo "  worker $WUD"
+echo "  worker $UD"
 [[ "$KD" == sha256:* ]] || die "kernel digest for $VERSION never became resolvable - did the release succeed?"
 [[ "$FD" == sha256:* ]] || die "fleet digest for $VERSION never became resolvable - did the release succeed?"
 # Worker is rolled with the kernel and fleet so the browser surface cannot drift
 # behind the signed release.
-[[ "$WUD" == sha256:* ]] || die "Worker digest for $VERSION never became resolvable - did the release succeed?"
+[[ "$UD" == sha256:* ]] || die "Worker digest for $VERSION never became resolvable - did the release succeed?"
 
 # SOURCE-FIRST. The overlay is TRACKED in wlilley93/Opbox
 # (boltrig-tenants/), and the box's copy is DERIVED. This used to sed the file on
@@ -90,25 +90,30 @@ repin() { # $1=overlay path ON THE BOX (its basename-relative path under SRC_ROO
   [ -f "$src" ] || die "no tracked source for $rel at $src - the box copy is not authoritative, so refusing to edit it"
 
   cp -a "$src" "$src.bak-roll-$STAMP"
-  python3 - "$src" "$VERSION" "$KD" "$FD" "$WUD" <<'PY'
+  python3 - "$src" "$VERSION" "$KD" "$FD" "$UD" <<'PY'
 import re, sys
-p, version, kd, fd, wud = sys.argv[1:6]
+p, version, kd, fd, ud = sys.argv[1:6]
 s = open(p).read()
 s = re.sub(r'ghcr\.io/wlilley93/boltrig-kernel:[^\s"]+', f'ghcr.io/wlilley93/boltrig-kernel:{version}@{kd}', s)
 s = re.sub(r'ghcr\.io/wlilley93/boltrig-fleet:[^\s"]+',  f'ghcr.io/wlilley93/boltrig-fleet:{version}@{fd}',  s)
-s = re.sub(r'ghcr\.io/wlilley93/boltrig-worker-ui:[^\s"]+', f'ghcr.io/wlilley93/boltrig-worker-ui:{version}@{wud}', s)
+s = re.sub(r'ghcr\.io/wlilley93/boltrig-ui:[^\s"]+', f'ghcr.io/wlilley93/boltrig-ui:{version}@{ud}', s)
 open(p, 'w').write(s)
 PY
 
-  local n
+  local n expected image_lines
   n=$(diff "$src.bak-roll-$STAMP" "$src" | grep -c '^[<>]' || true)
   diff "$src.bak-roll-$STAMP" "$src" || true
-  # 6: three image lines (kernel, fleet, Worker), each contributing a `<` and a
-  # `>`. A count that only sees what it expects cannot report an omitted service.
+  # The overlays repeat images (fleet serves fleet-worker AND hatchet-worker),
+  # so the expected diff is 2 lines per MATCHING IMAGE LINE IN THIS FILE - a
+  # hardcoded 6 aborted every roll of a 4-image-line overlay and forced the
+  # hand-pin-first workaround. Counting what the regex actually rewrites keeps
+  # the property the 6 was for: an omitted service line still fails loudly.
+  image_lines=$(grep -cE 'ghcr\.io/wlilley93/boltrig-(kernel|fleet|ui):' "$src" || true)
+  expected=$((2 * image_lines))
   case "${n:-0}" in
-    6) echo "  [ok] repinned kernel, fleet and Worker image lines IN THE SOURCE ($rel)" ;;
+    "$expected") echo "  [ok] repinned $image_lines image lines IN THE SOURCE ($rel)" ;;
     0) echo "  [ok] source already pinned at $VERSION (safe no-op re-run)" ;;
-    *) die "source diff for $rel is $n changed lines; expected 6 (repin kernel+fleet+Worker) or 0 (already pinned)" ;;
+    *) die "source diff for $rel is $n changed lines; expected $expected (2 per image line) or 0 (already pinned)" ;;
   esac
   rm -f "$src.bak-roll-$STAMP"
 
@@ -137,9 +142,11 @@ PY
 }
 
 bring_up() { # $1=overlay $2=project
+  # hatchet-worker rides the fleet image and was bounced BY HAND after every
+  # roll since v0.4.32 split it out - a manual step is a forgotten step.
   ssh "$H" "cd $PROJECT_DIR && \
-    docker compose -f $COMPOSE -f $1 -p $2 pull kernel fleet-worker worker-ui && \
-    docker compose -f $COMPOSE -f $1 -p $2 up -d --no-deps kernel fleet-worker worker-ui" \
+    docker compose -f $COMPOSE -f $1 -p $2 pull kernel fleet-worker hatchet-worker ui && \
+    docker compose -f $COMPOSE -f $1 -p $2 up -d --no-deps kernel fleet-worker hatchet-worker ui" \
     || die "compose up failed for $2"
 }
 
@@ -240,7 +247,7 @@ gate() { # $1=project $2=expected `addons active:` substring
   # back at all, has to fail the roll rather than be discovered twelve releases
   # later. Asserting the IMAGE and not merely `healthy` is the point - a container
   # that never restarted reports healthy while serving the old bundle.
-  local u="$P-worker-ui-1"
+  local u="$P-ui-1"
   local us=""
   for i in $(seq 1 24); do
     us=$(ssh "$H" "docker ps --filter name=^/$u\$ --format '{{.Status}}'" 2>/dev/null)

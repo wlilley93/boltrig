@@ -189,13 +189,18 @@ def test_skill_requirements_and_profile_catalogues_reject_duplicates() -> None:
         )
 
 
-@pytest.mark.parametrize(
-    "model_id",
-    ["latest", "gpt-latest", "auto", "gpt/default", "gpt-5.4\nadmin"],
-)
-def test_exact_model_policy_rejects_aliases_paths_and_controls(model_id: str) -> None:
+@pytest.mark.parametrize("model_id", ["gpt-5.4\nadmin", "a/../b", ""])
+def test_exact_model_policy_rejects_paths_and_controls(model_id: str) -> None:
     with pytest.raises(ValueError):
         ExactModelPolicy(model_id, ReasoningEffort.HIGH)
+
+
+@pytest.mark.parametrize("model_id", ["qwen3vl-abliterated:latest", "gpt-latest"])
+def test_exact_model_policy_accepts_provider_alias_tags(model_id: str) -> None:
+    """The pin is the byte-exact ADMITTED string, not an alias blocklist: the
+    admitted model may be a user binding whose provider lists it under an alias
+    tag (owner decision 2026-08-20; see user_model_id)."""
+    assert ExactModelPolicy(model_id, ReasoningEffort.HIGH).model_id == model_id
 
 
 def test_exact_model_policy_accepts_nested_bifrost_ids_through_160_chars() -> None:

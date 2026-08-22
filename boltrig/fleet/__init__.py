@@ -1,9 +1,9 @@
 """The Boltrig agent fleet (Epic FLT).
 
-The fleet is the agent layer above the kernel: the permanent tier-1 Chief of
-Staff (US-FLT-01) and tier-2 Department Heads (US-FLT-02), the spawn logic that
-turns a task + skills into a bounded ephemeral agent (US-FLT-03/04), the
-pluggable agent runtimes (P4), and the durable-execution seam over Hatchet (P6).
+The live fleet is a flat roster of durable, addressable tier-1 peers plus the
+spawn logic that turns a bounded task and skills into a one-task ephemeral
+agent. Named-peer sessions persist as mailbox logs and summaries; model
+processes and ephemeral children may come and go.
 
 It depends on the kernel's frozen contracts and never modifies them; the kernel
 stays unaware of the fleet and receives the reasoning-verb invoker via
@@ -25,6 +25,9 @@ from .retention import (
 )
 from .chief_of_staff import ChiefOfStaff, Department
 from .department_head import DepartmentHead
+from .named_agent import NamedAgent
+from .agent_mailbox import AgentMailboxService
+from .agent_turns import AgentTurnCoordinator, AgentTurnLeaseLost
 from .pump import WorkPump, build_org
 from .result import AgentResult
 from .runtime import (
@@ -55,6 +58,10 @@ __all__ = [
     "ChiefOfStaff",
     "Department",
     "DepartmentHead",
+    "NamedAgent",
+    "AgentMailboxService",
+    "AgentTurnCoordinator",
+    "AgentTurnLeaseLost",
     "WorkPump",
     "build_org",
     # runtimes

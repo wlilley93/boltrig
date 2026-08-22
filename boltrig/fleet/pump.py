@@ -1,9 +1,9 @@
-"""The delegation pump: the org goes live (Beat 4; US-FLT-06, US-EXE-06).
+"""The work and peer-message pump (Beat 4; US-FLT-06, US-EXE-06).
 
-The pump is the serving loop that makes the permanent tier real: it claims a PENDING
-work item from the store (the Beat 3 lease, US-FLT-05), asks the Chief of Staff to route
-it, hands it to the routed Department Head to decompose and fan out, joins the children
-onto the parent, and walks the item's status. It retries transient failures up to a cap
+The pump is the serving loop for the flat named-agent roster. It alternates
+durable peer-mailbox turns with PENDING work items, sends addressed or defaulted
+work directly to one tier-1 peer, joins its ephemeral children onto the parent,
+and walks the item's status. It retries transient failures up to a cap
 (US-EXE-06) and parks BLOCKED / cap-breach / convergent-degraded work for a human (D6)
 instead of pretending it is done.
 
@@ -41,16 +41,16 @@ from boltrig.models import (
 from boltrig.workflows.generator import learn_from_success
 from boltrig.workflows.library import WorkflowLibrary
 
-from . import lease_token, permanent_runtime as permanent
+from . import lease_token
 from .authority import context_for, route_to_head
-from .chief_of_staff import ChiefOfStaff, Department
+from .chief_of_staff import ChiefOfStaff
 from .department_head import DepartmentHead, tree_root_id
+from .named_work_routing import NamedWorkRouting
+from .pump_policy import DEFAULT_LEASE_SECONDS, DEFAULT_MAX_ATTEMPTS
 from .work_follow_ons import persist_new_work_items
 
 if TYPE_CHECKING:  # type-only seams (fleet imports stay kernel-free)
     from boltrig.api.codex_execution import CodexExecutionStack
-    from boltrig.config.manifest import FleetManifest
-
     from .spawn import Spawner
 
 log = logging.getLogger("boltrig.fleet.pump")
@@ -60,10 +60,6 @@ WORK_ITEM_TASK = "boltrig-work-item"
 
 # Sane policy defaults (the manifest carries no pump policy section yet; these
 # are the documented defaults until one exists).
-DEFAULT_MAX_ATTEMPTS = 3
-DEFAULT_LEASE_SECONDS = 300
-DEFAULT_SPAWN_BUDGET = 32
-
 # The end states an attempt can durably reach. Once the row holds one of these the
 # attempt is OVER: boltrig/work/store.py gives DONE and CANCELLED no outgoing
 # transition at all, and FAILED / AWAITING_HUMAN move again only on a human
@@ -138,17 +134,20 @@ def outcome_score(terminal_status: str, degraded: bool) -> dict[str, Any]:
     }
 
 
-class WorkPump:
+class WorkPump(NamedWorkRouting):
     """Claim -> route -> decompose -> join -> transition, forever (US-FLT-06)."""
 
     def __init__(
         self,
         kernel_or_store: Any,
         spawner: Spawner | Any,
-        chief_of_staff: ChiefOfStaff,
-        heads: dict[str, DepartmentHead | Any],
+        chief_of_staff: ChiefOfStaff | Any | None,
+        heads: dict[str, DepartmentHead | Any] | None,
         executor: Any = None,
         *,
+        named_agents: dict[str, Any] | None = None,
+        default_agent: str | None = None,
+        mailbox: Any = None,
         max_attempts: int = DEFAULT_MAX_ATTEMPTS,
         lease_seconds: int = DEFAULT_LEASE_SECONDS,
         worker_id: str | None = None,
@@ -186,7 +185,15 @@ class WorkPump:
         self._audit = audit
         self._spawner = spawner
         self._cos = chief_of_staff
-        self.heads = dict(heads)
+        self.heads = dict(heads or {})
+        # ``named_agents is not None`` selects the flat serving topology.  The
+        # legacy CoS/head constructor remains as an input compatibility seam for
+        # old callers and tests, but build_org no longer composes that hierarchy.
+        self.named_agents = dict(named_agents or {})
+        self._flat_agents = named_agents is not None
+        self._default_agent = default_agent
+        self._mailbox = mailbox
+        self._prefer_mailbox = True
         self._executor = executor
         self.max_attempts = max_attempts
         self.lease_seconds = lease_seconds
@@ -202,8 +209,18 @@ class WorkPump:
     # --- the serving loop -------------------------------------------------------
     async def run_once(self, tenant_id: str) -> bool:
         """Claim and process at most one work item. Returns whether one was claimed."""
+        # Alternate the two durable lanes when both stay busy, so an active peer
+        # conversation cannot starve filed work (or vice versa).
+        if self._mailbox is not None and self._prefer_mailbox:
+            if await self._mailbox.run_once(tenant_id):
+                self._prefer_mailbox = False
+                return True
         item = await self._store.claim_work_item(tenant_id, self.worker_id, self.lease_seconds)
         if item is None:
+            if self._mailbox is not None:
+                claimed = await self._mailbox.run_once(tenant_id)
+                self._prefer_mailbox = not claimed
+                return claimed
             return False
         # D2: the fence value is whatever the CLAIM handed out, carried to the
         # body. Not re-read there - that shape was tried and defeated.
@@ -213,6 +230,7 @@ class WorkPump:
             await self._executor.enqueue(WORK_ITEM_TASK, payload)
         else:
             await self._run_item_payload(payload)
+        self._prefer_mailbox = True
         return True
 
     async def run_forever(self, tenant_id: str, interval: float = 2.0) -> None:
@@ -252,6 +270,8 @@ class WorkPump:
                 return item
 
             ctx = await self._context_for(item, run_id)
+            if self._flat_agents and self._default_agent is not None:
+                ctx = self._named_context(ctx, self._default_agent)
             wf_id = workflow_target_id(item)
             if wf_id is not None:
                 # SEC-178: honor the address before routing and recheck cancel before trigger.
@@ -259,14 +279,8 @@ class WorkPump:
                 if cancelled:
                     return item
                 return await self._run_addressed_workflow(item, run_id, ctx, wf_id)
-            head = await route_to_head(self._cos, self.heads, store, item, run_id, ctx)
-            if head is None:  # SEC-165: unroutable parks; it never mis-routes
-                await self._park(
-                    item,
-                    run_id,
-                    reason="unroutable_department",
-                    detail="the routed department has no head; a human must route it",
-                )
+            head = await self._resolve_handler(item, run_id, ctx)
+            if head is None:
                 return item
 
             # boundary 1: the chokepoint before dispatching the execute verb. If a
@@ -275,6 +289,8 @@ class WorkPump:
             if cancelled:
                 return item
             ctx = await self._context_for(item, run_id)
+            if self._flat_agents:
+                ctx = self._named_context(ctx, item.owner_member or self._default_agent or "")
             await store.upsert_checkpoint(tenant, run_id, "execute", "started")
             tree_id = await tree_root_id(store, item)
             # In-flight adapter call: a cancel requested DURING this never interrupts
@@ -287,7 +303,9 @@ class WorkPump:
             # step's own record is kept even under a cancel - it really ran (SEC-166).
             children = list(outcome.get("children") or [])
             item.result = outcome
-            item.degraded = any(bool(c.get("degraded")) for c in children)
+            item.degraded = bool(outcome.get("degraded")) or any(
+                bool(c.get("degraded")) for c in children
+            )
 
             # boundary 2 (SEC-166): the next cooperative point AFTER the step. The step was
             # never interrupted; re-reading here is what stops a cancel going unseen for the
@@ -304,6 +322,31 @@ class WorkPump:
         finally:
             if cancelled:
                 await self._cancel(item, run_id)
+
+    async def _resolve_handler(
+        self, item: WorkItem, run_id: str, context: InvocationContext
+    ) -> Any | None:
+        """Resolve one explicit peer/legacy head, parking any unroutable item."""
+        head = (
+            await self._route_to_named_agent(item, run_id)
+            if self._flat_agents
+            else await route_to_head(
+                self._cos, self.heads, self._store, item, run_id, context
+            )
+        )
+        if head is not None:
+            return head
+        await self._park(
+            item,
+            run_id,
+            reason=("unroutable_agent" if self._flat_agents else "unroutable_department"),
+            detail=(
+                "the addressed named agent is unavailable; a human must route it"
+                if self._flat_agents
+                else "the routed department has no head; a human must route it"
+            ),
+        )
+        return None
 
     async def _run_addressed_workflow(
         self, item: WorkItem, run_id: str, ctx: InvocationContext, wf_id: str
@@ -534,7 +577,7 @@ class WorkPump:
             context=detail,
             urgency=Urgency.ASYNC,
             work_item_id=item.id,
-            requested_by="chief-of-staff",
+            requested_by=item.owner_member or self._default_agent or "fleet-pump",
             requested_on_behalf_of=item.on_behalf_of,
             workspace_id=item.workspace_id,
             department_scope=[item.owner_member] if item.owner_member else None,
@@ -652,62 +695,5 @@ class WorkPump:
 
         await reflect_terminal_item(self, item, run_id, terminal_status)
 
-
-# --- the org factory ----------------------------------------------------------
-def build_org(
-    kernel: Any,
-    spawner: Spawner | Any,
-    manifest: FleetManifest | None = None,
-    *,
-    executor: Any = None,
-    max_attempts: int = DEFAULT_MAX_ATTEMPTS,
-    lease_seconds: int = DEFAULT_LEASE_SECONDS,
-    codex_execution: CodexExecutionStack | None = None,
-) -> WorkPump:
-    """Build the live org (CoS + heads + pump) from the manifest hierarchy (P7).
-
-    Each ``hierarchy.tier2`` entry becomes a routable Department and a DepartmentHead
-    sharing the kernel's store (the fan-out CAS seam, US-EXE-07). Wildcard
-    ``supported_skills`` patterns describe capabilities, not loadable skill ids, so only
-    concrete entries become the head's ``domain_skills``. No hierarchy (or no manifest)
-    degrades to a minimal default org - one CoS over one general head - never a crash (P9).
-    ``codex_execution`` is the Codex shadow root admission stack (SEC-172), built by
-    the api composition root; None (the default) means off, no admit.
-    """
-    departments: list[Department] = []
-    heads: dict[str, Any] = {}
-    tiers = manifest.hierarchy.tier2 if manifest is not None else ()
-    for tier in tiers:
-        name = tier.department or tier.name
-        skills = [s for s in tier.supported_skills if "*" not in s]
-        departments.append(Department(name=name, domain_skills=skills, intent_keywords=[name]))
-        heads[name] = DepartmentHead(
-            name,
-            skills,
-            [],
-            DEFAULT_SPAWN_BUDGET,
-            spawner=spawner,
-            runtime=permanent.head(spawner, manifest, tier, name),
-            store=kernel.store,
-        )
-    if not heads:  # P9: no hierarchy -> the minimal default org, never a crash
-        departments = [Department(name="general")]
-        heads["general"] = DepartmentHead(
-            "general",
-            [],
-            [],
-            DEFAULT_SPAWN_BUDGET,
-            spawner=spawner,
-            store=kernel.store,
-        )
-    chief = ChiefOfStaff(kernel, departments, runtime=permanent.chief(spawner, manifest))
-    return WorkPump(
-        kernel,
-        spawner,
-        chief,
-        heads,
-        executor,
-        max_attempts=max_attempts,
-        lease_seconds=lease_seconds,
-        codex_execution=codex_execution,
-    )
+# Historical import/monkeypatch seam; composition itself lives in org_builder.
+from .org_builder import build_org  # noqa: E402,F401

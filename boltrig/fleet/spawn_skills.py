@@ -134,10 +134,23 @@ def supports(cap: AgentCapability, skills: list[str]) -> bool:
 
 
 async def select_capability(
-    store: Any, tenant_id: str, skills: list[str], prefer: dict[str, Any]
+    store: Any,
+    tenant_id: str,
+    skills: list[str],
+    prefer: dict[str, Any],
+    *,
+    workspace_id: str | None = None,
 ) -> AgentCapability:
-    """Select the cheapest capable runtime, honouring explicit pins."""
-    caps = await store.list_capabilities(tenant_id)
+    """Select the cheapest capable runtime, honouring explicit pins.
+
+    The candidate set is the caller's workspace roster UNION the org-wide
+    profiles (0083). A spawn inside one workspace can therefore never route to
+    an agent another workspace authored, which is the point of a per-workspace
+    roster: two businesses on one account get different agents.
+    """
+    caps = await store.list_capabilities(
+        tenant_id, workspace_id=workspace_id, enforce_workspace=True
+    )
     capable = [cap for cap in caps if supports(cap, skills)]
     if not capable:
         raise NoCapableRuntime(
@@ -181,18 +194,32 @@ async def select_capability(
 
 
 async def bound_capability_status(
-    store: Any, tenant_id: str, name: str
+    store: Any, tenant_id: str, name: str, *, workspace_id: str | None = None
 ) -> tuple[AgentCapability | None, bool]:
-    """Resolve an agent binding without confusing retirement with absence."""
+    """Resolve an agent binding without confusing retirement with absence.
+
+    Both reads are scoped identically (workspace UNION org-wide). If only the
+    first were scoped, a name visible in another workspace would answer
+    "retired" here rather than "absent", and the caller reports a different
+    error for each.
+    """
     active = next(
-        (item for item in await store.list_capabilities(tenant_id) if item.name == name),
+        (
+            item
+            for item in await store.list_capabilities(
+                tenant_id, workspace_id=workspace_id, enforce_workspace=True
+            )
+            if item.name == name
+        ),
         None,
     )
     if active is not None:
         return active, False
     retired = any(
         item.name == name and not item.is_active
-        for item in await store.list_all_capabilities(tenant_id)
+        for item in await store.list_all_capabilities(
+            tenant_id, workspace_id=workspace_id, enforce_workspace=True
+        )
     )
     return None, retired
 

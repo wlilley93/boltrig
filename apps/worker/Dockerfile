@@ -1,6 +1,6 @@
 # Boltrig Worker web client. This is the only first-party browser surface.
 
-FROM node:22.23.1-alpine3.24@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS worker-build
+FROM node:22.23.2-alpine3.24@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS worker-build
 WORKDIR /workspace
 RUN corepack enable
 
@@ -19,6 +19,13 @@ RUN cd apps/worker \
     && pnpm install --frozen-lockfile --ignore-scripts \
     && pnpm rebuild esbuild
 COPY apps/worker/src ./apps/worker/src
+# The static public set: favicons, the PWA manifest and the bundled companion
+# preview audio. Vite copies public/ into dist at build; without this COPY the
+# image built and scanned green while shipping a dist with NO favicon and NO
+# onboarding voice previews - which is exactly what every image before
+# 2026-08-20 did (the SPA fallback answered those paths 200 text/html, so no
+# probe on status alone could see it).
+COPY apps/worker/public ./apps/worker/public
 # The Worker imports the shared VDS token source during the frontend build.
 # Keep the image context narrow by packaging only the token files it consumes;
 # the design reference and other documentation are not runtime dependencies.
@@ -28,9 +35,12 @@ COPY docs/design/imported/tokens/colors.css docs/design/imported/tokens/spacing.
 # operator-owned companion package, so an environment variable cannot widen the
 # release after review.
 RUN cd apps/worker && pnpm run build
+# The artifact gate for the line above: an image whose dist lost the public
+# set must fail to BUILD, not ship and 200 its way past every status probe.
+RUN test -f apps/worker/dist/favicon.ico && test -d apps/worker/dist/companion
 
 FROM nginx:1.30.4-alpine@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46 AS runtime
-RUN apk add --no-cache c-ares=1.34.8-r0 expat=2.8.2-r0 libexpat=2.8.2-r0
+RUN apk add --no-cache c-ares=1.34.8-r0 expat=2.8.3-r0 libexpat=2.8.3-r0
 COPY apps/worker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=worker-build /workspace/apps/worker/dist /usr/share/nginx/html
 

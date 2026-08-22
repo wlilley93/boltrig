@@ -20,11 +20,14 @@ from .manifest import (
     HitlConfig,
     IdentityConfig,
     ModelsConfig,
+    NamedAgentConfig,
+    NamedAgentsConfig,
     NetworkConfig,
     PrivacyConfig,
     apply_manifest,
     export_runtime_environment,
     load_manifest,
+    resolved_named_agents,
 )
 from .settings import Settings, load_settings
 from .spawn_rules import SpawnRule
@@ -39,6 +42,9 @@ __all__ = [
     "FleetManifest",
     "IdentityConfig",
     "ModelsConfig",
+    "NamedAgentConfig",
+    "NamedAgentsConfig",
+    "resolved_named_agents",
     "HierarchyConfig",
     "HierarchyTier",
     "EphemeralRuntime",

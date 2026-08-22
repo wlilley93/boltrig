@@ -33,12 +33,9 @@ def _mcp_spec_approval_view(record: Any) -> dict[str, Any]:
     raw = str(spec.get("url") or "")
     try:
         parsed = urlsplit(raw)
-        hostname = parsed.hostname
-        port = parsed.port
+        hostname, port = parsed.hostname, parsed.port
     except ValueError:
-        parsed = urlsplit("")
-        hostname = None
-        port = None
+        parsed, hostname, port = urlsplit(""), None, None
     origin = None
     if parsed.scheme.lower() in {"http", "https"} and hostname:
         shown_host = f"[{hostname}]" if ":" in hostname else hostname
@@ -74,6 +71,9 @@ async def integration_context(
             "health": connection.health,
             "credential_ref": connection.credential_ref,
             "credential_owned": connection.credential_owned,
+            # Whose connection it is: the approver otherwise sees only an id.
+            "level": connection.level,
+            "scope_id": connection.scope_id,
         }
     }
 

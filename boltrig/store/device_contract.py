@@ -20,6 +20,15 @@ class DeviceStoreContract(Protocol):
     async def list_devices(
         self, tenant_id: str, owner_id: str
     ) -> list[EnrolledDevice]: ...
+    # The ADMIN inventory read. ``list_devices`` hard-filters to the caller's own
+    # owner_id in both implementations, so before this an administrator could not
+    # answer "who has the desktop installed" at all - the ledger existed and had
+    # no reader. Deliberately a separate method rather than a nullable owner_id:
+    # an owner-scoped read that widens when a caller passes None is one missing
+    # argument away from a disclosure.
+    async def list_devices_for_tenant(
+        self, tenant_id: str
+    ) -> list[EnrolledDevice]: ...
     async def authenticate_device_session(
         self, tenant_id: str, device_id: str, token_hash: str
     ) -> EnrolledDevice | None: ...

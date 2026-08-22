@@ -135,6 +135,65 @@ afterEach(() => {
 });
 
 describe("Worker bounded history pagination", () => {
+  const channelProvenance = {
+    schema: "channel_message_v1" as const,
+    kind: "channel_message" as const,
+    direction: "inbound" as const,
+    provider: "slack",
+    provider_label: "Slack",
+    channel_id: "channel-1",
+    channel_label: "Acme growth",
+    display_label: "Slack · Acme growth",
+    from: { kind: "authenticated_subject" as const, subject: "alice", label: "Alice" },
+    to: { kind: "routing_target" as const, address: "fable", label: "Fable" },
+    threaded: true,
+  };
+
+  it("renders kernel-authored channel origin, from, and routed-to labels", async () => {
+    const item = {
+      id: "work-channel",
+      intent: "Reply to the customer",
+      status: "pending" as const,
+      source: "slack",
+      provenance: channelProvenance,
+    };
+    api.work.mockResolvedValue({ items: [item], next_cursor: null });
+    api.workDetail.mockResolvedValue({ item, children: [], audit: [] });
+
+    render(<WorkView />);
+    const row = await screen.findByRole("button", { name: /Reply to the customer/ });
+    expect(within(row).getByText(/Slack · Acme growth/)).toBeTruthy();
+    fireEvent.click(row);
+
+    const detail = await screen.findByRole("complementary", { name: "Work item details" });
+    expect(within(detail).getByText("Alice")).toBeTruthy();
+    expect(within(detail).getByText("Fable")).toBeTruthy();
+  });
+
+  it("keeps the same channel provenance label on execution history", async () => {
+    api.runs.mockResolvedValue({
+      runs: [{
+        run_id: "run-channel",
+        work_item: "work-channel",
+        intent: "Reply to the customer",
+        status: "done",
+        source: "slack",
+        provenance: channelProvenance,
+      }],
+      next_cursor: null,
+    });
+    api.auditTree.mockResolvedValue({ root: null });
+    api.runTopology.mockResolvedValue({ root: null });
+
+    render(<RunsView />);
+    const row = await screen.findByRole("button", { name: /Reply to the customer/ });
+    expect(within(row).getByText(/Slack · Acme growth/)).toBeTruthy();
+    fireEvent.click(row);
+    const detail = await screen.findByRole("complementary", { name: "Run details" });
+    expect(within(detail).getByText("Alice")).toBeTruthy();
+    expect(within(detail).getByText("Fable")).toBeTruthy();
+  });
+
   it("loads the next scoped run page with the opaque server cursor", async () => {
     api.runs
       .mockResolvedValueOnce({
@@ -2584,7 +2643,12 @@ describe("Worker integration honesty", () => {
     await waitFor(() => expect(api.submitIntegrationSecret).toHaveBeenCalledWith(
       "tickets",
       {
+        // The scope rides with the submission and defaults to the org's shared
+        // connection, which is what every caller predating per-user credentials
+        // meant. There is no scope_id: the kernel derives the owner from the
+        // authenticated caller rather than believing the request.
         label: "Tickets",
+        level: "org",
         fields: { token: "write-only-token", account_id: "support" },
       },
     ));
@@ -2721,7 +2785,10 @@ describe("Worker integration honesty", () => {
     expect(screen.getByText(/vendor-portal's last probe failed \(egress denied\)/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Open Tickets details" }));
-    expect(screen.getByText("reference present · custody not exposed")).toBeTruthy();
+    // The custody claim now also says WHOSE credential it is, because a member
+    // needs to know whether a call runs as them or as the organisation. The
+    // custody half is unchanged: the reference is never exposed either way.
+    expect(screen.getByText("the organisation's · custody not exposed")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open vendor-portal server details" }));
     expect(screen.getByText("egress_denied")).toBeTruthy();
     expect(screen.getByText("configured · contents unavailable")).toBeTruthy();

@@ -78,7 +78,8 @@ class SlackSocketAdapter(PlatformAdapter):
     Inbound normalisation (the contract): a Socket Mode ``events_api`` envelope
     carrying a plain ``message`` event becomes
     ``{"id": <payload event_id>, "sender": <user>, "text": <text>}`` plus
-    ``"thread": <thread_ts>`` when the event is in a thread. The Slack
+    a complete reply target in ``thread``: ``channel`` for a root message or
+    ``channel:thread_ts`` for a threaded message. The Slack
     ``event_id`` is the platform's stable delivery id - it feeds the kernel's
     durable replay dedup. Bot/self events (``bot_id`` present) and every
     message subtype (``message_changed`` and friends) are ignored and logged at
@@ -147,7 +148,9 @@ class SlackSocketAdapter(PlatformAdapter):
             raise RuntimeError(f"apps.connections.open failed: {type(exc).__name__}") from exc
         if resp.status_code != 200 or not data.get("ok") or not data.get("url"):
             # Slack's error string is safe to surface; the token is not in it.
-            raise RuntimeError(f"apps.connections.open refused: {data.get('error') or resp.status_code}")
+            raise RuntimeError(
+                f"apps.connections.open refused: {data.get('error') or resp.status_code}"
+            )
         wss_url = str(data["url"])
         refusal = egress_refusal(wss_url, self._egress_allow)
         if refusal:
@@ -224,13 +227,26 @@ class SlackSocketAdapter(PlatformAdapter):
             # better to drop loud than ingest twice.
             log.warning("slack events_api envelope had no event_id; dropping")
             return
+        channel = str(event.get("channel") or "")
+        if not channel:
+            # A Slack message without its channel cannot be replied to safely.
+            log.warning("slack message event had no channel; dropping")
+            return
+        thread_ts = str(event.get("thread_ts") or "")
+        reply_target = f"{channel}:{thread_ts}" if thread_ts else channel
         message: dict[str, Any] = {
             "id": event_id,
             "sender": str(event["user"]),
             "text": str(event.get("text") or ""),
+            # ``thread`` is always the COMPLETE outbound target.  Keeping only
+            # thread_ts here made the notification seam parse it as a channel.
+            "thread": reply_target,
+            "provider_message_id": str(event.get("ts") or event_id),
+            "provider_sender_id": str(event["user"]),
+            "provider_conversation_id": reply_target,
+            "provider_timestamp": str(event.get("ts") or ""),
+            "threaded": bool(thread_ts),
         }
-        if event.get("thread_ts"):
-            message["thread"] = str(event["thread_ts"])
         if self._on_message is not None:
             await self._on_message(message)
 
@@ -254,14 +270,17 @@ class SlackSocketAdapter(PlatformAdapter):
             body["thread_ts"] = thread_ts
         try:
             resp = await self._http.post(
-                post_url, json=body,
+                post_url,
+                json=body,
                 headers={"Authorization": f"Bearer {self._bot_token}"},
             )
             data = resp.json()
         except Exception as exc:
             raise AdapterDeliveryError(f"chat.postMessage failed: {type(exc).__name__}") from exc
         if resp.status_code != 200 or not data.get("ok"):
-            raise AdapterDeliveryError(f"chat.postMessage refused: {data.get('error') or resp.status_code}")
+            raise AdapterDeliveryError(
+                f"chat.postMessage refused: {data.get('error') or resp.status_code}"
+            )
 
     # --- helpers -------------------------------------------------------------
     async def _close_ws(self) -> None:

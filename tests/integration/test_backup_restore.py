@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
@@ -105,8 +107,21 @@ def _run_pg_tool(
     )
 
 
+@pytest.fixture
+def docker_shared_workdir() -> Iterator[Path]:
+    # Docker Desktop/Colima may not share the platform's default pytest temp
+    # root with its VM. The checkout's parent is already a required bind source,
+    # and a test-local directory keeps that transport detail out of other tests.
+    with tempfile.TemporaryDirectory(
+        prefix="boltrig-backup-restore-", dir=_REPO.parent
+    ) as directory:
+        yield Path(directory)
+
+
 @pytest.mark.invariant("FR-OPS-04")
-async def test_backup_restores_into_a_fresh_database(tmp_path: Path) -> None:
+async def test_backup_restores_into_a_fresh_database(
+    docker_shared_workdir: Path,
+) -> None:
     dsn = os.environ.get("BOLTRIG_TEST_DATABASE_URL")
     if not dsn:
         pytest.skip("set BOLTRIG_TEST_DATABASE_URL for the backup/restore drill")
@@ -131,14 +146,14 @@ async def test_backup_restores_into_a_fresh_database(tmp_path: Path) -> None:
             "createdb",
             [*connection_args, "--maintenance-db", "postgres", target_db],
             source_env,
-            tmp_path,
+            docker_shared_workdir,
         )
-        dump = tmp_path / "boltrig.dump"
+        dump = docker_shared_workdir / "boltrig.dump"
         _run_pg_tool(
             "pg_dump",
             [*source_args, "--format=custom", "--file", "/backup/boltrig.dump"],
             source_env,
-            tmp_path,
+            docker_shared_workdir,
         )
         assert dump.is_file() and dump.stat().st_size > 0
         target_args, target_env = _pg_command(dsn, target_db)
@@ -146,7 +161,7 @@ async def test_backup_restores_into_a_fresh_database(tmp_path: Path) -> None:
             "pg_restore",
             [*target_args, "--no-owner", "--no-privileges", "/backup/boltrig.dump"],
             target_env,
-            tmp_path,
+            docker_shared_workdir,
         )
         restored = await asyncpg.connect(target_dsn)
         try:
@@ -169,5 +184,5 @@ async def test_backup_restores_into_a_fresh_database(tmp_path: Path) -> None:
                 target_db,
             ],
             source_env,
-            tmp_path,
+            docker_shared_workdir,
         )

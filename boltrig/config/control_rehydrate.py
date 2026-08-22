@@ -174,7 +174,7 @@ async def rehydrate_adapter_instance(
     # convert one unusable adapter into an unbootable kernel. Measured on the beelink
     # 2026-07-30: `opbox` publishes 633 verbs, MCP_MAX_TOOL_SNAPSHOT was 500, and the
     # kernel died at startup with "MCP tool snapshot is out of bounds" on every boot.
-    # The bound belongs at INGEST (snapshot_from_response), where refusing is
+    # The bound belongs at INGEST (page_from_response, against the ACCUMULATED
     # meaningful because the data can still be rejected. Here we degrade: this one
     # adapter does not load, and everything else serves.
     try:

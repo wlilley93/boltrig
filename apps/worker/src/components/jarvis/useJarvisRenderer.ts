@@ -36,6 +36,29 @@ export interface JarvisRendererInputs {
   neural: boolean;
 }
 
+function buildRenderer(
+  neural: boolean,
+  opts: Pick<JarvisRendererInputs, "accent" | "scale" | "labels" | "highResolution">,
+): JarvisWebGLRenderer | JarvisNeuralRenderer {
+  if (!neural) {
+    return new JarvisWebGLRenderer({
+      accent: opts.accent,
+      scale: opts.scale,
+      labels: opts.labels === "svg" ? "none" : "shader",
+      maxDevicePixelRatio: opts.highResolution ? 2 : 1.25,
+    });
+  }
+  const renderer = new JarvisNeuralRenderer({
+    maxDevicePixelRatio: opts.highResolution ? 2 : 1.5,
+  });
+  // The neural body's look is built ON its baked lattice film ("Jarvis Final
+  // 1740" idles the film's gain around 1.5) — a body without the loop mounted
+  // is deliberately near-empty. One loop serves every state; the per-mode
+  // latticeSpeed tuning is what makes standby drift and thinking race.
+  renderer.setLatticeVideo("/companion/jarvis-lattice.mp4");
+  return renderer;
+}
+
 export function useJarvisRenderer(inputs: JarvisRendererInputs) {
   const {
     state, phenotype, turn, telemetry, suspended,
@@ -52,14 +75,7 @@ export function useJarvisRenderer(inputs: JarvisRendererInputs) {
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const renderer = neural
-      ? new JarvisNeuralRenderer({ maxDevicePixelRatio: highResolution ? 2 : 1.5 })
-      : new JarvisWebGLRenderer({
-        accent,
-        scale,
-        labels: labels === "svg" ? "none" : "shader",
-        maxDevicePixelRatio: highResolution ? 2 : 1.25,
-      });
+    const renderer = buildRenderer(neural, { accent, scale, labels, highResolution });
     rendererRef.current = renderer;
     renderer.mount(host);
     setFallback(renderer.status().state === "failed");

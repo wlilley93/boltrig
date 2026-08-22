@@ -24,8 +24,18 @@ import {
   setUniforms,
   type FloatUniforms,
 } from "../canvas/glResources";
+import { ULTRON_TUNING, pulsedCore, ramp, type UltronTuning } from "../canvas/bodyTuning";
+import { IRIS_FRAG, IRIS_VERT, IRIS_VERTS } from "../canvas/shadersIris";
 import { BLOOM_FRAG, COMPOSITE_FRAG } from "../canvas/shadersPost";
 import { QUAD_VERT, SIM_FRAG } from "../canvas/shadersSim";
+import { LatticeDeck } from "../canvas/latticeLayer";
+import {
+  DENDRITE_DEPTH,
+  DENDRITE_FRAG,
+  DENDRITE_SEGMENTS,
+  DENDRITE_TRUNKS,
+  DENDRITE_VERT,
+} from "./shadersDendrite";
 import {
   CRACK_FRAG,
   CRACK_SEGMENTS,
@@ -33,17 +43,23 @@ import {
   FACET_FRAG,
   FACET_STRIDE,
   FACET_VERT,
+  MEMBRANE_FRAG,
+  MEMBRANE_VERT,
   VEIN_FRAG,
   VEIN_VERT,
 } from "./shadersUltron";
 
-const GRID = 128;
-const PARTICLES = GRID * GRID;
-const FACETS = Math.floor(PARTICLES / FACET_STRIDE);
+export const GRID = 128;
+export const PARTICLES = GRID * GRID;
+export const FACETS = Math.floor(PARTICLES / FACET_STRIDE);
 const BLOOM_DIV = 2;
 
 /** Everything a frame is driven by, derived once by the renderer and shared. */
 export interface UltronDrive {
+  /** Eight 0..1 voice bands. The membrane reads them as pressure per region. */
+  bands: Float32Array;
+  /** Overall speech level, so a silent body still holds its shape. */
+  voice: number;
   /** Animation seconds. NOT wall clock -- see UltronRenderer.animClock. */
   time: number;
   dt: number;
@@ -53,7 +69,18 @@ export interface UltronDrive {
   waveT: number;
   waveAmp: number;
   radius: number;
+  /** A low continuous breath while speaking, so a held note still moves. */
+  swell: number;
 }
+
+import {
+  drawDendrite,
+  drawIris,
+  drawMembrane,
+  drawVein,
+  drawCrack,
+  drawFacet,
+} from "./ultronScenePasses";
 
 export class UltronPasses {
   private progs: Record<string, WebGLProgram> = {};
@@ -66,6 +93,7 @@ export class UltronPasses {
   private blurTex: WebGLTexture[] = [];
   private blurFbo: WebGLFramebuffer[] = [];
   private ping = 0;
+  private lattice: LatticeDeck | null = null;
   private size: [number, number] = [0, 0];
 
   constructor(private readonly gl: WebGL2RenderingContext) {}
@@ -74,12 +102,18 @@ export class UltronPasses {
     const gl = this.gl;
     this.progs = {
       sim: createProgram(gl, QUAD_VERT, SIM_FRAG),
+      membrane: createProgram(gl, MEMBRANE_VERT, MEMBRANE_FRAG),
+      dendrite: createProgram(gl, DENDRITE_VERT, DENDRITE_FRAG),
       vein: createProgram(gl, VEIN_VERT, VEIN_FRAG),
       crack: createProgram(gl, CRACK_VERT, CRACK_FRAG),
       facet: createProgram(gl, FACET_VERT, FACET_FRAG),
       bloom: createProgram(gl, QUAD_VERT, BLOOM_FRAG),
       comp: createProgram(gl, QUAD_VERT, COMPOSITE_FRAG),
+      iris: createProgram(gl, IRIS_VERT, IRIS_FRAG),
     };
+
+    this.lattice = new LatticeDeck(gl);
+    this.lattice.init();
 
     const seed = seedParticles(PARTICLES);
     for (let i = 0; i < 2; i++) {
@@ -115,14 +149,25 @@ export class UltronPasses {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
-  render(d: UltronDrive, palette: FloatUniforms, core: number, starburst: number): void {
-    this.simulate(d);
-    this.drawScene(d, palette);
+  /** One frame. `tuning` defaults to what ships; only the bench overrides it. */
+  /** The deck behind the body: per-state loops, crossfaded. */
+  latticeDeck(): LatticeDeck | null {
+    return this.lattice;
+  }
+
+  render(d: UltronDrive, palette: FloatUniforms, tuning: UltronTuning = ULTRON_TUNING): void {
+    this.simulate(d, tuning);
+    this.drawScene(d, palette, tuning);
     this.bloom();
-    this.composite(palette, core, starburst);
+    this.composite({
+      palette, core: pulsedCore(tuning.core, d.energy, d.bands), starburst: 0.0,
+      eye: tuning.eye, knee: tuning.knee,
+      bounce: [tuning.bounce[0], tuning.bounce[1], tuning.bounceTrail], time: d.time,
+    });
   }
 
   destroy(): void {
+    this.lattice?.destroy();
     const gl = this.gl;
     [...this.simFbo, ...this.blurFbo, this.sceneFbo].forEach((f) => f && gl.deleteFramebuffer(f));
     [...this.simTex, ...this.blurTex, this.sceneTex].forEach((t) => t && gl.deleteTexture(t));
@@ -141,7 +186,7 @@ export class UltronPasses {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
-  private simulate(d: UltronDrive): void {
+  private simulate(d: UltronDrive, tuning: UltronTuning): void {
     const gl = this.gl;
     const prog = this.progs.sim;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.simFbo[1 - this.ping]);
@@ -153,18 +198,38 @@ export class UltronPasses {
     setUniforms(gl, prog, {
       uTime: d.time, uDt: d.dt, uEnergy: d.energy, uRadius: d.radius,
       uWaveT: d.waveT, uWaveAmp: d.waveAmp,
+      // Three concentric clouds reaching out in arms; Jarvis leaves this at 0
+      // and keeps the plain shell. The value and its reasoning now live in
+      // canvas/bodyTuning, so the bench can move it while you watch.
+      uPetal: tuning.petal,
+      uCloud: tuning.cloud,
+      uSwirl: tuning.swirl,
+      // Ultron has ONE particle layer. Zero is the no-change offset, set
+      // explicitly rather than left to default so the intent is on the page: he
+      // shares canvas/shadersSim.ts, so the uniform exists in his program too.
+      uLayerPace: [0, 0],
+      uOuter: tuning.outerShell,
+      // The anchoring pull that dissolves the vein-density combs; see the
+      // uniform's own comment in shadersSim.
+      uHomePull: tuning.homePull,
     }, { uState: 0 });
     this.fullscreen(prog);
     this.ping = 1 - this.ping;
   }
 
-  private drawScene(d: UltronDrive, palette: FloatUniforms): void {
+  private drawScene(d: UltronDrive, palette: FloatUniforms, tuning: UltronTuning): void {
     const gl = this.gl;
     const [w, h] = this.size;
     const aspect = w / Math.max(1, h);
     const shared: FloatUniforms = {
       ...palette, uTime: d.time, uAspect: aspect, uEnergy: d.energy,
-      uAggression: d.aggression,
+      uAggression: d.aggression, uBands: d.bands, uVoice: d.voice,
+      // The wavefront reaches the DRAW passes, not only SIM: there it is a
+      // force, here it is light, and only the second one is visible.
+      uWaveT: d.waveT, uWaveAmp: d.waveAmp, uSwell: d.swell,
+      uReverb: tuning.reverb,
+      uSwirl: tuning.swirl,
+      uOuter: tuning.outerShell,
     };
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFbo);
@@ -177,32 +242,20 @@ export class UltronPasses {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.simTex[this.ping]);
 
-    const vein = this.progs.vein;
-    gl.useProgram(vein);
-    setUniforms(gl, vein, {
-      ...shared,
-      // Longer than Jarvis's streak: growth, not data in motion.
-      uStreak: 0.052 + 0.040 * d.energy,
-      uGain: 0.06 + 0.08 * d.energy,
-    }, { uState: 0, uGrid: GRID });
-    gl.drawArrays(gl.LINES, 0, PARTICLES * 2);
-
-    const crack = this.progs.crack;
-    gl.useProgram(crack);
-    setUniforms(gl, crack, {
-      ...shared,
-      // Wider than LINK's range: a membrane wants a connected web, where a
-      // neural interior wants sparse, flickering connections.
-      uLinkRange: 0.26,
-      uGain: 0.52 + 0.38 * d.energy,
-    }, { uState: 0, uGrid: GRID, uSegments: CRACK_SEGMENTS });
-    gl.drawArrays(gl.LINES, 0, PARTICLES * CRACK_SEGMENTS * 2);
-
-    const facet = this.progs.facet;
-    gl.useProgram(facet);
-    setUniforms(gl, facet, { ...shared, uSize: 0.024, uGain: 0.55 + 0.40 * d.energy },
-      { uState: 0, uGrid: GRID, uStride: FACET_STRIDE });
-    gl.drawArrays(gl.LINES, 0, FACETS * 6);
+    // The baked membrane, under everything: the heavy slow structure is
+    // footage, the electricity and the instability stay live on top.
+    this.lattice?.draw({
+      size: this.size, warm: shared.uWarm as number[],
+      gain: ramp(tuning.lattice, d.energy) * (1 + 0.35 * d.swell),
+      fullscreen: (p) => this.fullscreen(p), scale: tuning.presence,
+      fx: [tuning.latticeBlur, tuning.latticeSat, tuning.latticeGlow],
+    });
+    drawMembrane(gl, this.progs, d, tuning, shared);
+    drawDendrite(gl, this.progs, d, tuning, shared);
+    drawIris(gl, this.progs, d, tuning, shared);
+    drawVein(gl, this.progs, d, tuning, shared);
+    drawCrack(gl, this.progs, d, tuning, shared);
+    drawFacet(gl, this.progs, d, tuning, shared);
   }
 
   private bloom(): void {
@@ -226,7 +279,13 @@ export class UltronPasses {
     this.fullscreen(prog);
   }
 
-  private composite(palette: FloatUniforms, core: number, starburst: number): void {
+  // Spec object rather than a parameter list: this method has no tuning of
+  // its own, and reaching for one is what made it fail to compile.
+  private composite(spec: {
+    palette: FloatUniforms; core: number; starburst: number;
+    eye: readonly number[]; bounce: readonly number[]; time: number; knee: number;
+  }): void {
+    const { palette, core, starburst, eye, bounce, time, knee } = spec;
     const gl = this.gl;
     const [w, h] = this.size;
     const prog = this.progs.comp;
@@ -239,7 +298,10 @@ export class UltronPasses {
     gl.bindTexture(gl.TEXTURE_2D, this.blurTex[1]);
     setUniforms(gl, prog, {
       ...palette, uAspect: w / Math.max(1, h), uBloomGain: 1.05,
-      uCore: core, uStarburst: starburst,
+      uCore: core, uStarburst: starburst, uEye: eye,
+      uBounce: bounce, uTime: time,
+      // Pre-knee compression for the additive pile-ups; 0 is the identity.
+      uKnee: knee,
     }, { uScene: 0, uBloom: 1 });
     this.fullscreen(prog);
     gl.activeTexture(gl.TEXTURE0);

@@ -12,6 +12,10 @@ import pytest
 
 from boltrig.adapters.base import Credential, ErrorClass
 from boltrig.adapters.mcp_consumer import McpConsumerAdapter
+import json
+
+import httpx
+
 from boltrig.config.control_mcp import bind_mcp_credential
 from boltrig.kernel import Kernel
 from boltrig.models import GrantSet, InvocationContext
@@ -20,32 +24,52 @@ from boltrig.store import InMemoryStore
 T = "acme"
 
 
-class _Recorder:
-    """Stands in for the external MCP server: records the bearer each POST sent."""
+class _MockDoor:
+    """The client seam the transport uses, backed by a real httpx transport.
+
+    These stand-ins used to implement ``post(url, json, headers)`` by hand. The
+    transport now reads its body through ``bounded_http_response``, which streams
+    via ``build_request``/``send`` - a bound a fake with only ``post`` cannot
+    express, and therefore cannot be tested against. Answering a real
+    ``httpx.MockTransport`` puts the httpx seam back under the test.
+    """
 
     def __init__(self) -> None:
-        self.bearers: list[str | None] = []
+        self._client = httpx.AsyncClient(transport=httpx.MockTransport(self._handle))
 
-    async def post(self, url, json, headers):  # noqa: ANN001 - httpx-shaped stub
-        self.bearers.append(headers.get("x-boltrig-mcp-token"))
-        return _Resp()
+    async def _handle(self, request: httpx.Request) -> httpx.Response:
+        raise NotImplementedError
 
-    async def __aenter__(self) -> "_Recorder":
+    def build_request(self, *args, **kwargs):
+        return self._client.build_request(*args, **kwargs)
+
+    async def send(self, *args, **kwargs):
+        return await self._client.send(*args, **kwargs)
+
+    async def post(self, *args, **kwargs):
+        return await self._client.post(*args, **kwargs)
+
+    async def __aenter__(self):
         return self
 
     async def __aexit__(self, *exc) -> bool:
+        # Deliberately not closed: the pinned_client seam hands back this same
+        # door for every call, and a MockTransport holds no socket.
         return False
 
 
-class _Resp:
-    """The httpx response shape the consumer now reads: a status (typed error
-    mapping), headers (session id / content type), and the JSON payload."""
+class _Recorder(_MockDoor):
+    """Stands in for the external MCP server: records the bearer each POST sent."""
 
-    status_code = 200
-    headers: dict = {}
+    def __init__(self) -> None:
+        super().__init__()
+        self.bearers: list[str | None] = []
 
-    def json(self) -> dict:
-        return {"result": {"_boltrig": {"output": {"ok": True}}}}
+    async def _handle(self, request: httpx.Request) -> httpx.Response:
+        self.bearers.append(request.headers.get("x-boltrig-mcp-token"))
+        return httpx.Response(
+            200, json={"result": {"_boltrig": {"output": {"ok": True}}}}
+        )
 
 
 def _consumer(monkeypatch, recorder: _Recorder) -> McpConsumerAdapter:
@@ -258,26 +282,14 @@ async def test_a_refusal_never_echoes_the_bearer_back(monkeypatch, caplog):
     """
     token = "CANARY-BEARER"
 
-    class _R:
-        def __init__(self, status: int, payload: dict | None = None) -> None:
-            self.status_code = status
-            self.headers: dict = {}
-            self._payload = payload
-
-        def json(self) -> dict:
-            return self._payload or {}
-
-    class _Refusing:
-        async def post(self, url, json, headers):  # noqa: ANN001 - httpx-shaped stub
-            if json.get("method") == "initialize":  # the handshake itself fails
-                return _R(401, {"error": f"bad token {token}"})  # the canary echo
-            return _R(400)  # "no live session" - forces the handshake path
-
-        async def __aenter__(self) -> "_Refusing":
-            return self
-
-        async def __aexit__(self, *exc) -> bool:
-            return False
+    class _Refusing(_MockDoor):
+        async def _handle(self, request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            if body.get("method") == "initialize":  # the handshake itself fails
+                # The canary echo: a careless refusal page putting the presented
+                # bearer in its body.
+                return httpx.Response(401, json={"error": f"bad token {token}"})
+            return httpx.Response(400)  # "no live session" - forces the handshake
 
     monkeypatch.setattr(
         "boltrig.adapters.egress.pinned_async_client", lambda url, timeout: _Refusing()

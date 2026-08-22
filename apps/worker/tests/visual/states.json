@@ -30,6 +30,7 @@
         "/v1/me/approval-posture",
         "/v1/orgs/current",
         "/v1/workspaces",
+        "/v1/named-agents",
         "/v1/console/overview",
         "/v1/conversations?limit=25&offset=0",
         "/v1/chat/config",
@@ -422,6 +423,8 @@
         "#shell-projects.shell-task-group-label",
         ".plugins-page",
         ".plugins-pane",
+        ".plugins-tabs[aria-label=\"Integrations views\"]",
+        ".plugins-tab.active",
         ".plugins-heading h1",
         ".plugins-alert[aria-label=\"Connection health issues\"]",
         ".plugins-alert-copy strong",
@@ -445,6 +448,7 @@
       "required_visible_selectors": [
         ".companion-switcher-trigger",
         "#shell-projects.shell-task-group-label",
+        ".plugins-tabs[aria-label=\"Integrations views\"]",
         ".plugins-heading h1",
         ".plugins-alert[aria-label=\"Connection health issues\"]",
         ".plugins-alert > button",
@@ -456,8 +460,9 @@
       ],
       "required_geometry": [
         { "selector": ".plugins-pane", "x": 403, "width": 900 },
-        { "selector": ".plugins-alert", "x": 435, "y": 140.875, "width": 836, "height": 64.125 },
-        { "selector": ".plugins-search", "y": 256, "height": 38 },
+        { "selector": ".plugins-tabs", "x": 435, "y": 140.875, "height": 31 },
+        { "selector": ".plugins-alert", "x": 435, "y": 203.875, "width": 836, "height": 64.125 },
+        { "selector": ".plugins-search", "y": 319, "height": 38 },
         { "selector": ".plugins-group:first-child .plugins-row:first-child", "height": 57 },
         { "selector": ".plugins-group:first-child .plugins-row:first-child .plugins-row-toggle", "height": 56 }
       ],
@@ -781,6 +786,7 @@
         "/v1/me/approval-posture",
         "/v1/orgs/current",
         "/v1/workspaces",
+        "/v1/named-agents",
         "/v1/console/overview",
         "/v1/conversations?limit=25&offset=0",
         "/v1/conversations/direction-thread",
@@ -812,6 +818,8 @@
         ".right-rail .rail-agent-stack [data-familiar-body=\"voyager\"]",
         ".transcript-tool-summary",
         ".transcript-subagent-chip",
+        ".display-object-card.display-object-communication[data-phase=\"draft\"]",
+        ".display-object-communication button",
         ".transcript-navigation[aria-label=\"Transcript navigation\"]",
         ".transcript-navigation button[aria-label=\"Previous user message\"]",
         ".transcript-navigation button[aria-label=\"Next user message\"]",
@@ -862,10 +870,12 @@
         ".right-rail [aria-label=\"Sources\"] .rail-view-sources-mark, .right-rail [aria-label=\"Sources\"] .task-inspector__row:last-child .task-inspector__icon",
         ".transcript-tool-summary",
         ".transcript-subagent-chip",
+        ".display-object-card.display-object-communication[data-phase=\"draft\"]",
         ".transcript-navigation[aria-label=\"Transcript navigation\"]",
         ".transcript-navigation button[aria-label=\"Previous user message\"]",
         ".transcript-navigation button[aria-label=\"Next user message\"]",
-        ".composer button[aria-label=\"Model\"]"
+        ".composer button[aria-label=\"Model\"]",
+        ".composer select[aria-label=\"Agent for the next turn\"]"
       ],
       "required_visible_counts": [
         { "selector": ".shell-task-group-label", "count": 3 },
@@ -879,8 +889,8 @@
         { "selector": ".right-rail .rail-group[aria-label=\"Background processes\"]", "count": 1 },
         { "selector": ".right-rail .rail-group[aria-label=\"Computer Use\"]", "count": 1 },
         { "selector": ".right-rail .rail-group[aria-label=\"Sources\"]", "count": 1 },
-        { "selector": ".message.user", "count": 2 },
-        { "selector": ".message.assistant", "count": 2 },
+        { "selector": ".display-object-card.display-object-communication", "count": 1 },
+        { "selector": ".display-object-communication .display-object-actions button", "count": 4 },
         { "selector": ".sidebar-footer > button", "count": 2 },
         { "selector": ".composer .voice-primary", "count": 1 }
       ],
@@ -926,7 +936,11 @@
         "View all",
         "codex-chat-reference.png",
         "Automatic · openai/gpt-5.4",
-        "Approve for me"
+        "To Chief of Staff",
+        "Approve for me",
+        "Draft update for #launch",
+        "The review evidence is ready. I will hold this draft until you send it.",
+        "Change recipient"
       ],
       "required_absent_text": [
         "Governed by Boltrig",

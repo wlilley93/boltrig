@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import threading
 
-from boltrig.models.model_id_policy import exact_model_id
+from boltrig.models.model_id_policy import user_model_id
 
 from .model_proxy_ceiling_errors import ToolCeilingViolation
 
@@ -36,7 +36,7 @@ class NativeCollaborationWireGate:
         if type(max_total) is not int or not 1 <= max_total <= 64:
             raise ValueError("native collaboration max_total must be between 1 and 64")
         try:
-            exact_model_id(allowed_model)
+            user_model_id(allowed_model)
         except ValueError:
             raise ValueError("native collaboration model must be bounded and non-empty")
         if (

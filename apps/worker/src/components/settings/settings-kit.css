@@ -129,7 +129,7 @@
 .settings-info:hover,
 .settings-info:focus-visible {
   border-color: var(--text-2);
-  color: var(--text-1);
+  color: var(--text);
   outline: none;
 }
 

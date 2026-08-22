@@ -10,6 +10,7 @@ from .capability_model_routes import (
     CapabilityRouteValidationError,
     validated_capability_routes,
 )
+from .capability_scope import find_capability, resolve_capability_scope, scope_view
 from .control_approval_model_endpoints import model_endpoint_view
 
 AUTHORED_DEFINITION_ACTIONS = frozenset(
@@ -258,13 +259,15 @@ async def binding_upsert_context(
 async def capability_upsert_context(
     store: Any, params: dict[str, Any], context: InvocationContext
 ) -> dict[str, Any]:
-    current = next(
-        (
-            item
-            for item in await store.list_all_capabilities(context.tenant_id)
-            if item.name == params["name"]
-        ),
-        None,
+    # The fingerprint has to bind the SAME row the write will land on. Since
+    # 0083 a bare name matches at most one row per scope, so an unscoped
+    # ``next()`` here would let an approval minted against one workspace's
+    # profile be spent editing another's.
+    workspace_id = resolve_capability_scope(params, context)
+    current = find_capability(
+        await store.list_all_capabilities(context.tenant_id),
+        params["name"],
+        workspace_id,
     )
     try:
         _, _, _, selected_endpoints = await validated_capability_routes(
@@ -278,6 +281,7 @@ async def capability_upsert_context(
         ) from None
     endpoint = selected_endpoints.get("text")
     return {
+        **scope_view(workspace_id),
         "capability": (
             None
             if current is None
@@ -293,6 +297,7 @@ async def capability_upsert_context(
                 "model_routes": current.model_routes,
                 "source": current.source,
                 "is_active": current.is_active,
+                "workspace_id": current.workspace_id,
             }
         ),
         "model_endpoint": model_endpoint_view(endpoint),

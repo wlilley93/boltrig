@@ -40,6 +40,18 @@ export interface BargeInHost {
   bargeInGate?: BargeInGate;
   bargeInTimer?: number | null;
   onBargeIn?: () => void;
+  /**
+   * 0..1 how loudly the person is talking, for whatever body is on the Stage.
+   *
+   * THROTTLED, NOT PER FRAME. The gate polls at 100Hz because that is what
+   * catching a speech onset in 30ms costs; a React state update at 100Hz is a
+   * different question entirely, and pushing one would spend the whole saving
+   * the analyser was polled quickly to make. See MIC_LEVEL_PUBLISH_MS.
+   */
+  onMicLevel?: (level: number) => void;
+  /** Epoch milliseconds of the last level published, and what it said. */
+  micLevelAt?: number;
+  micLevelLast?: number;
   /** Epoch milliseconds until which inbound assistant PCM is dropped, not
    * queued - the interrupted turn keeps arriving after the local flush. */
   suppressPlaybackUntil: number;
@@ -49,6 +61,33 @@ export interface BargeInHost {
 
 /** 512 samples spans 10.67ms at 48kHz - one poll's worth, no more. */
 const BARGE_IN_FFT_SIZE = 512;
+
+/**
+ * How often the level reaches the body, in milliseconds.
+ *
+ * ~30Hz, the same rate the outgoing voice's spectral features are sampled at,
+ * so the two directions arrive on the same clock and a body cannot appear to
+ * answer one of them more eagerly than the other. It is also comfortably below
+ * a frame at 60fps: publishing faster than the renderer can draw only spends
+ * CPU crossing from JS into React to be overwritten.
+ */
+const MIC_LEVEL_PUBLISH_MS = 33;
+
+/** Below this, two levels are the same number as far as a body is concerned. */
+const MIC_LEVEL_EPSILON = 0.01;
+
+/** Publish if enough time has passed AND the value actually moved -- or if it
+ *  has just reached silence, which is a change a body must never miss. */
+function publishMicLevel(host: BargeInHost, level: number, now: number): void {
+  if (!host.onMicLevel) return;
+  const last = host.micLevelLast ?? 0;
+  const silenced = level === 0 && last !== 0;
+  if (!silenced && now - (host.micLevelAt ?? 0) < MIC_LEVEL_PUBLISH_MS) return;
+  if (!silenced && Math.abs(level - last) < MIC_LEVEL_EPSILON) return;
+  host.micLevelAt = now;
+  host.micLevelLast = level;
+  host.onMicLevel(level);
+}
 
 /**
  * Give the gate its own capture-side analyser.
@@ -70,11 +109,18 @@ export function attachBargeInCapture(
   return analyser;
 }
 
-/** The gate's share of a call's media resources, ready to spread into them. */
+/** The gate's share of a call's media resources, ready to spread into them.
+ *
+ * `onMicLevel` comes AFTER `tuning` rather than beside `onBargeIn`, where it
+ * belongs by meaning, purely so the existing self-trigger test's three-argument
+ * call keeps working. A caller wanting the meter and the shipped tuning passes
+ * `undefined` for the middle one, which is the honest way to say "the default".
+ */
 export function bargeInHostFields(
   micAnalyser: AnalyserNode | null,
   onBargeIn: () => void,
   tuning: SelfTriggerTuning = resolveSelfTriggerTuning(),
+  onMicLevel?: (level: number) => void,
 ): Omit<BargeInHost, "playbackSources" | "analyser"> {
   return {
     micAnalyser: micAnalyser ?? undefined,
@@ -83,6 +129,7 @@ export function bargeInHostFields(
     bargeInGate: createBargeInGate({ selfTrigger: createSelfTriggerGuard(tuning) }),
     bargeInTimer: null,
     onBargeIn,
+    onMicLevel,
     suppressPlaybackUntil: 0,
     bargeInAt: 0,
   };
@@ -156,7 +203,14 @@ export function startBargeInGate(host: BargeInHost, isMuted: () => boolean): voi
     const gate = host.bargeInGate;
     // A muted microphone carries no speech to detect, and observing its silence
     // would only drag the tracked floor down before the user unmutes.
-    if (!analyser || !gate || isMuted()) return;
+    if (!analyser || !gate) return;
+    if (isMuted()) {
+      // A muted microphone is silence to look at as well as to listen to. Left
+      // unpublished, the body would hold whatever it last heard and go on
+      // attending to a person who has switched their microphone off.
+      publishMicLevel(host, 0, Date.now());
+      return;
+    }
     if (typeof analyser.getFloatTimeDomainData !== "function") {
       // No time-domain read, no energy gate. Stop rather than poll forever;
       // the provider-side `interrupted` event still stops playback there.
@@ -170,8 +224,12 @@ export function startBargeInGate(host: BargeInHost, isMuted: () => boolean): voi
     const rms = frameRms(frame);
     const reference = referenceRms(host);
     const playing = host.playbackSources.size > 0;
-    const { trigger, active } = gate.observe({ rms, playing, now, reference });
+    const { trigger, active, level } = gate.observe({ rms, playing, now, reference });
     publishBargeInFrame(diagnostics, { rms, reference, playing, active, trigger, now });
+    // While SHE is talking the microphone is carrying AEC residual, not a
+    // person, and a level read off that would make her react to her own voice
+    // through the listening channel as well as the speaking one.
+    publishMicLevel(host, playing ? 0 : level, now);
     if (trigger) {
       host.bargeInAt = now;
       host.suppressPlaybackUntil = now + BARGE_IN_SUPPRESS_MS;

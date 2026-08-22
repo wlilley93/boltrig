@@ -19,6 +19,7 @@ import {
 import {
   clampStageState,
   RESTING_STAGE_STATE,
+  type FamiliarStageState,
 } from "../src/components/familiar/FamiliarState";
 
 afterEach(() => {
@@ -47,12 +48,23 @@ describe("FamiliarStage fallback ladder", () => {
       TRIANGLES: 4,
       VERTEX_SHADER: 0x8b31,
       attachShader: vi.fn(),
+      // The renderer links through canvas/glResources.createProgram rather than
+      // a private copy, and that binds attribute location 0 before linking. A
+      // fake missing it throws inside link() and the Stage falls back to the
+      // badge -- which presents as "pending never resolves", not as a mock gap.
+      bindAttribLocation: vi.fn(),
       clear: vi.fn(),
       clearColor: vi.fn(),
       compileShader: vi.fn(),
       createProgram: vi.fn(() => ({})),
       createShader: vi.fn(() => ({})),
+      // The lattice deck owns programs and textures of its own and releases
+      // them on destroy; a fake without the delete half throws in teardown and
+      // poisons every later test in the file.
+      createTexture: vi.fn(() => ({})),
+      deleteProgram: vi.fn(),
       deleteShader: vi.fn(),
+      deleteTexture: vi.fn(),
       drawArrays: vi.fn(),
       getExtension: vi.fn(() => null),
       getProgramInfoLog: vi.fn(() => null),
@@ -74,7 +86,7 @@ describe("FamiliarStage fallback ladder", () => {
     );
 
     render(<FamiliarStage mode="voice" state={RESTING_STAGE_STATE} />);
-    const stage = screen.getByRole("img", { name: "Boltrig Familiar · ready" });
+    const stage = screen.getByRole("img", { name: "Boltrig Familiar" });
     expect(stage.dataset.renderer).toBe("pending");
     expect(stage.getAttribute("aria-busy")).toBe("true");
 
@@ -91,14 +103,58 @@ describe("FamiliarStage fallback ladder", () => {
     render(
       <FamiliarStage
         mode="hero"
-        state={{ ...RESTING_STAGE_STATE, working: true }}
+        state={{ ...RESTING_STAGE_STATE, mode: "working" }}
       />,
     );
     await waitFor(() => {
-      expect(screen.getByRole("img", { name: "Boltrig Familiar · working" })
+      expect(screen.getByRole("img", { name: "Boltrig Familiar" })
         .getAttribute("data-renderer")).toBe("badge");
     });
     expect(document.querySelector(".familiar-stage .familiar-orb")).toBeTruthy();
+  });
+
+  // The name is the IDENTITY and the live region is the STATE. They were one
+  // string, which meant the only channel carrying "she is working" was an
+  // aria-label on a role="img" -- a NAME, read once when focus reaches it and
+  // not re-announced when it changes. A body that is the surface's only
+  // indicator has to say what it is doing somewhere a screen reader will
+  // repeat, or it is not an indicator for everyone.
+  it("says the mode in a live region beside the body, not in its name", async () => {
+    const { rerender } = render(
+      <FamiliarStage mode="hero" state={RESTING_STAGE_STATE} />,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("img", { name: "Boltrig Familiar" })).toBeTruthy();
+    });
+    const status = document.querySelector(".familiar-stage-status");
+    expect(status?.getAttribute("aria-live")).toBe("polite");
+    expect(status?.textContent).toBe("Boltrig Familiar ready");
+
+    for (const [mode, said] of [
+      ["listening", "listening"],
+      ["thinking", "thinking"],
+      ["speaking", "speaking"],
+      ["error", "disconnected"],
+    ] as const) {
+      rerender(
+        <FamiliarStage mode="hero" state={{ ...RESTING_STAGE_STATE, mode }} />,
+      );
+      expect(document.querySelector(".familiar-stage-status")?.textContent)
+        .toBe(`Boltrig Familiar ${said}`);
+    }
+  });
+
+  // The live region cannot live INSIDE the body: role="img" replaces its own
+  // subtree in the accessibility tree, so a nested one is never announced --
+  // the version of this fix that looks right in the markup and does nothing.
+  it("keeps the live region outside the role=img subtree", async () => {
+    render(<FamiliarStage mode="hero" state={RESTING_STAGE_STATE} />);
+    await waitFor(() => {
+      expect(screen.getByRole("img", { name: "Boltrig Familiar" })).toBeTruthy();
+    });
+    const stage = screen.getByRole("img", { name: "Boltrig Familiar" });
+    expect(stage.querySelector(".familiar-stage-status")).toBeNull();
+    expect(document.querySelector(".familiar-stage-status")).toBeTruthy();
   });
 
   it("keeps accepting state updates after falling back", async () => {
@@ -106,16 +162,17 @@ describe("FamiliarStage fallback ladder", () => {
       <FamiliarStage mode="hero" state={RESTING_STAGE_STATE} />,
     );
     await waitFor(() => {
-      expect(screen.getByRole("img", { name: "Boltrig Familiar · ready" })
+      expect(screen.getByRole("img", { name: "Boltrig Familiar" })
         .getAttribute("data-renderer")).toBe("badge");
     });
     rerender(
       <FamiliarStage
         mode="voice"
-        state={{ working: false, speaking: true, level: 0.8 }}
+        state={{ mode: "speaking", level: 0.8 }}
       />,
     );
-    expect(screen.getByRole("img", { name: "Boltrig Familiar · working" })).toBeTruthy();
+    expect(document.querySelector(".familiar-stage-status")?.textContent)
+      .toBe("Boltrig Familiar speaking");
   });
 
   it("keeps the authoritative body when the premium renderer falls back", async () => {
@@ -135,7 +192,7 @@ describe("FamiliarStage fallback ladder", () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getByRole("img", { name: "Noether Familiar · ready" })
+      expect(screen.getByRole("img", { name: "Noether Familiar" })
         .getAttribute("data-familiar-body")).toBe("kepler");
     });
   });
@@ -295,6 +352,97 @@ describe("FamiliarWebGLRenderer lifecycle", () => {
     dateNow.mockRestore();
   });
 
+  /**
+   * THE MODES, MEASURED AT THE UNIFORMS.
+   *
+   * The offscreen render harness reads brightness and saturation over the
+   * middle of the frame, and it separates speaking and error from the rest
+   * easily -- but listening differs from standby almost entirely in GAZE, which
+   * moves a pupil rather than a histogram. Judging that change by whole-frame
+   * statistics would report "no difference" about a difference that is the
+   * whole point of the state, so it is checked where it actually happens.
+   */
+  it("gives each mode a different uniform recipe, gaze included", () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const dateNow = vi.spyOn(Date, "now")
+      .mockReturnValue(new Date(2026, 7, 11, 15, 0, 0).getTime());
+    // PIN THE WANDER. uAttention is max(wander, drive), and the unseeded wander
+    // has a 25% branch that rolls attention up to 1.0 — above listening's
+    // deterministic drive (~0.84), so the listening-beats-standby comparison
+    // below failed whenever standby drew that mood (first seen on CI
+    // 2026-08-20). 0.7 selects the calm branch for every read(), so all four
+    // modes share one wander and the assertions compare only the drive.
+    const dice = vi.spyOn(Math, "random").mockReturnValue(0.7);
+
+    const read = (mode: FamiliarStageState["mode"], micLevel = 0.8) => {
+      const values = new Map<string, number>();
+      const canvas = document.createElement("canvas");
+      Object.defineProperty(canvas, "clientWidth", { configurable: true, value: 150 });
+      const gl = {
+        COLOR_BUFFER_BIT: 0x4000,
+        TRIANGLES: 4,
+        clear: vi.fn(),
+        clearColor: vi.fn(),
+        drawArrays: vi.fn(),
+        getExtension: vi.fn(() => null),
+        uniform1f: vi.fn((location: string, value: number) => values.set(location, value)),
+        uniform2f: vi.fn(),
+        uniform4f: vi.fn((location: string, x: number, y: number, z: number, w: number) => {
+          values.set(`${location}.x`, x);
+          values.set(`${location}.y`, y);
+          values.set(`${location}.z`, z);
+          values.set(`${location}.w`, w);
+        }),
+        viewport: vi.fn(),
+      };
+      const renderer = new FamiliarWebGLRenderer({ reducedMotion: false });
+      const internals = renderer as unknown as {
+        canvas: HTMLCanvasElement;
+        frame(now: number): void;
+        gl: typeof gl;
+        statusValue: { kind: "webgl2"; state: "running" };
+        uniforms: Record<string, string>;
+      };
+      internals.canvas = canvas;
+      internals.gl = gl;
+      internals.statusValue = { kind: "webgl2", state: "running" };
+      internals.uniforms = new Proxy({}, { get: (_t, property) => String(property) });
+      renderer.update({ mode, micLevel, level: 0.8, bands: [0.8, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2] });
+      // Enough frames for the tuning ease to arrive: a mode change is a target
+      // the body travels to, so reading one frame in reads the journey.
+      for (let i = 1; i <= 400; i += 1) internals.frame(i * 16);
+      renderer.destroy();
+      return values;
+    };
+
+    const standby = read("standby");
+    const listening = read("listening");
+    const speaking = read("speaking");
+    const failed = read("error");
+
+    // LISTENING IS GAZE, not amplitude. She turns toward you and her attention
+    // rises; what she does NOT do is move as though she were the one talking.
+    expect(listening.get("uGaze")!).toBeGreaterThan(0.9);
+    expect(standby.get("uGaze")!).toBeLessThan(0.2);
+    expect(listening.get("uAttention")!).toBeGreaterThan(standby.get("uAttention")!);
+    expect(listening.get("uAudio.x")!).toBeLessThan(speaking.get("uAudio.x")!);
+
+    // SPEAKING drives all four channels from the spectrum.
+    expect(speaking.get("uAudio.x")!).toBeGreaterThan(0.5);
+    expect(speaking.get("uAudio.w")!).toBeGreaterThan(0);
+
+    // ERROR is held tension and lost light, and it is NOT irritation: the one
+    // colour term in the shader means she is annoyed WITH YOU, which a dropped
+    // websocket is not. Getting that wrong makes an outage look like a mood.
+    expect(failed.get("uTension")!).toBeGreaterThan(0.5);
+    expect(failed.get("uLuminosity")!).toBeLessThan(standby.get("uLuminosity")!);
+    expect(failed.get("uIrritation")).toBe(0);
+    expect(failed.get("uGaze")!).toBeLessThan(0.3);
+
+    dice.mockRestore();
+    dateNow.mockRestore();
+  });
+
   it("reports failed (not blank) without WebGL2 and removes its canvas", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
@@ -321,25 +469,61 @@ describe("FamiliarWebGLRenderer lifecycle", () => {
 describe("clampStageState", () => {
   it("bounds and defaults every field", () => {
     expect(clampStageState({})).toEqual({
-      working: false, speaking: false, level: 0, bands: null, onset: 0,
+      mode: "standby", level: 0, bands: null, onset: 0, micLevel: 0,
     });
-    expect(clampStageState({ level: 7, speaking: true }).level).toBe(1);
+    expect(clampStageState({ level: 7, mode: "speaking" }).level).toBe(1);
     expect(clampStageState({ level: -3 }).level).toBe(0);
     expect(clampStageState({ level: Number.NaN }).level).toBe(0);
     expect(clampStageState({ level: Infinity }).level).toBe(0);
+    expect(clampStageState({ micLevel: 3 }).micLevel).toBe(1);
+  });
+
+  // An unknown mode is a HOST that is ahead of this build, not a reason to
+  // throw or to draw nothing: the calm default is the only safe way to be wrong.
+  it("falls back to standby for a mode it does not know", () => {
+    expect(clampStageState({ mode: "transcending" as never }).mode).toBe("standby");
   });
 });
 
 describe("familiarStateFromTurn", () => {
-  it("derives working from loading or an unfinished live turn", async () => {
+  const base = {
+    loading: false, hasLiveEvents: false, liveEnded: false,
+    voiceSpeaking: false, voiceLevel: 0,
+  };
+
+  it("tells thinking from working, and standby from both", async () => {
     const { familiarStateFromTurn } = await import("../src/components/familiar/FamiliarState");
-    const base = { loading: false, hasLiveEvents: false, liveEnded: false, voiceSpeaking: false, voiceLevel: 0 };
-    expect(familiarStateFromTurn(base).working).toBe(false);
-    expect(familiarStateFromTurn({ ...base, loading: true }).working).toBe(true);
-    expect(familiarStateFromTurn({ ...base, hasLiveEvents: true }).working).toBe(true);
-    expect(familiarStateFromTurn({ ...base, hasLiveEvents: true, liveEnded: true }).working).toBe(false);
-    const speaking = familiarStateFromTurn({ ...base, voiceSpeaking: true, voiceLevel: 2 });
-    expect(speaking.speaking).toBe(true);
+    expect(familiarStateFromTurn(base).mode).toBe("standby");
+    // Loading with nothing streaming yet is "I heard you"; live events are
+    // "I am doing it". They were one state, and the difference is the one a
+    // person waiting on a reply actually reads.
+    expect(familiarStateFromTurn({ ...base, loading: true }).mode).toBe("thinking");
+    expect(familiarStateFromTurn({ ...base, hasLiveEvents: true }).mode).toBe("working");
+    expect(familiarStateFromTurn({ ...base, hasLiveEvents: true, liveEnded: true }).mode)
+      .toBe("standby");
+  });
+
+  it("reads a live microphone as listening, and carries its level", async () => {
+    const { familiarStateFromTurn } = await import("../src/components/familiar/FamiliarState");
+    const heard = familiarStateFromTurn({ ...base, micActive: true, micLevel: 0.6 });
+    expect(heard.mode).toBe("listening");
+    expect(heard.micLevel).toBe(0.6);
+    // The level channel follows whichever voice is live, so a body with no mic
+    // wiring of its own still animates to the person talking to it.
+    expect(heard.level).toBe(0.6);
+  });
+
+  it("orders speaking over listening, and failure over everything", async () => {
+    const { familiarStateFromTurn } = await import("../src/components/familiar/FamiliarState");
+    const speaking = familiarStateFromTurn({
+      ...base, voiceSpeaking: true, voiceLevel: 2, micActive: true,
+    });
+    expect(speaking.mode).toBe("speaking");
     expect(speaking.level).toBe(1);
+    // A dropped call is not less important than the turn that was streaming
+    // when it dropped, which is the whole reason failure sits at the top.
+    expect(familiarStateFromTurn({
+      ...base, failed: true, voiceSpeaking: true, hasLiveEvents: true, micActive: true,
+    }).mode).toBe("error");
   });
 });

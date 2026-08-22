@@ -8,7 +8,7 @@ import tomllib
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from boltrig.models.model_id_policy import exact_model_id
+from boltrig.models.model_id_policy import user_model_id
 
 from .skill_config import MAX_SKILL_CONFIG_BYTES, REVIEWED_SYSTEM_SKILLS_0_144_3
 
@@ -34,8 +34,11 @@ def validate_cell_id(value: object) -> str:
 
 
 def validate_model_id(value: object) -> str:
+    # The runtime pins whatever exact string was admitted; a user binding may
+    # lawfully carry a provider alias (see ``user_model_id``), so this lexical
+    # gate checks shape, not alias policy.
     try:
-        return exact_model_id(value)
+        return user_model_id(value)
     except ValueError as error:
         raise CodexRuntimeConfigError("model id is invalid") from error
 

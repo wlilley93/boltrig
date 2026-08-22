@@ -2,6 +2,7 @@
 
 import { animated, useSpring } from "@react-spring/web";
 
+import { BrandMark } from "./brand-mark";
 import { BrandWordmark } from "./brand-wordmark";
 
 /**
@@ -31,6 +32,7 @@ export const SiteHeader = () => {
         aria-label="Boltrig home"
         className="pointer-events-auto inline-flex min-h-11 items-center text-white transition-colors hover:text-brain-sky"
       >
+        <BrandMark className="mr-2.5" />
         <BrandWordmark className="text-[1.05rem]" />
       </a>
 

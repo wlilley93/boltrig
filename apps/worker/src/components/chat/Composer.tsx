@@ -10,6 +10,7 @@ import type {
   ChatAttachment,
   ChatAttachmentLimits,
   ChatModelChoice,
+  NamedAgentView,
 } from "@wlilley93/boltrig-web-sdk";
 
 import { modelUnavailableCopy } from "./modelAvailabilityCopy";
@@ -20,6 +21,7 @@ import {
   type ApprovalRuntime,
 } from "../ApprovalPostureControl";
 import { ModelChip } from "./ModelChip";
+import { AgentChip } from "./AgentChip";
 import { ComposerAddMenu } from "./ComposerAddMenu";
 import {
   AttachmentStatus,
@@ -41,6 +43,10 @@ export interface ComposerProps {
   defaultModelUnavailableReason?: string | null;
   modelChoicesLoaded: boolean;
   modelSelectionLocked: boolean;
+  agents: NamedAgentView[];
+  agentAddress: string;
+  agentReady: boolean;
+  agentSelectionLocked: boolean;
   attachmentLimits: ChatAttachmentLimits;
   /** Local App Server turns currently accept text only. Keep the control
       visibly unavailable instead of staging bytes the native bridge cannot
@@ -52,11 +58,12 @@ export interface ComposerProps {
   /** The draft lives with the caller so starter cards can fill it. */
   value: string;
   onChange: Dispatch<SetStateAction<string>>;
-  inputRef?: RefObject<HTMLTextAreaElement>;
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
   /** When live voice is verified reachable, an empty draft turns the primary
       button into "Start a voice call". */
   voicePrimary?: { onStart(): void };
   onModelChoice(value: string): void;
+  onAgentAddress(value: string): void;
   onSend(message: string, files: ChatAttachment[]): Promise<boolean>;
   onStop(): Promise<void>;
   /** The voice control, so it sits with the other composer tools rather than
@@ -93,7 +100,7 @@ export function Composer(props: ComposerProps) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     const message = props.value.trim();
-    if (!message || !modelReady) return;
+    if (!message || !modelReady || !props.agentReady) return;
     props.onChange("");
     const sentFiles = staged.files;
     const owner = props.conversationKey;
@@ -190,7 +197,7 @@ function ComposerDropTarget() {
 
 type ComposerToolsProps = ComposerProps & {
   addFiles(list: FileList | readonly File[] | null): Promise<boolean>;
-  fileInputRef: RefObject<HTMLInputElement>;
+  fileInputRef: RefObject<HTMLInputElement | null>;
   modelReady: boolean;
   voicePrimaryVisible: boolean;
 };
@@ -200,6 +207,15 @@ function ComposerTools(props: ComposerToolsProps) {
     <div className="composer-tools">
       <AttachmentAndPolicyTools {...props} />
       <div>
+        <AgentChip
+          agents={props.agents}
+          value={props.agentAddress}
+          disabled={props.disabled || props.agentSelectionLocked}
+          disabledReason={props.agentSelectionLocked
+            ? "The next responder can be changed after the current turn finishes."
+            : undefined}
+          onChange={props.onAgentAddress}
+        />
         {(props.modelChoicesLoaded || props.modelChoices.length > 0 || props.defaultModelName) && (
           <ModelChip
             choices={props.modelChoices}
@@ -301,8 +317,10 @@ function ComposerPrimaryAction(props: ComposerToolsProps) {
     <button
       aria-label={props.busy ? "Queue next ↑" : "Send ↑"}
       className="send-button"
-      disabled={props.disabled || !props.value.trim() || !props.modelReady}
-      title={!props.modelReady
+      disabled={props.disabled || !props.value.trim() || !props.modelReady || !props.agentReady}
+      title={!props.agentReady
+        ? "Choose an agent for the next turn"
+        : !props.modelReady
         ? modelUnavailableCopy(props.defaultModelUnavailableReason)
         : props.busy ? "Queue next" : "Send"}
       type="submit"

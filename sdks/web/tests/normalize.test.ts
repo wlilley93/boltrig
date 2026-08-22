@@ -15,7 +15,12 @@ test("normalizeEvents: empty input yields an empty, un-ended turn", () => {
 
 test("normalizeEvents: message_start + text_deltas accumulate; message_end ends the turn", () => {
   const events: ChatEvent[] = [
-    { type: "message_start", run_id: "r1", conversation_id: "c1" },
+    {
+      type: "message_start",
+      run_id: "r1",
+      conversation_id: "c1",
+      agent_address: "researcher",
+    },
     { type: "text_delta", delta: "Hello, " },
     { type: "text_delta", delta: "world" },
     { type: "message_end", run_id: "r1" } as ChatEvent,
@@ -24,6 +29,7 @@ test("normalizeEvents: message_start + text_deltas accumulate; message_end ends 
   assert.equal(t.text, "Hello, world");
   assert.equal(t.runId, "r1");
   assert.equal(t.conversationId, "c1");
+  assert.equal(t.agentAddress, "researcher");
   assert.equal(t.ended, true);
 });
 

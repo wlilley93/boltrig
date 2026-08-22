@@ -70,3 +70,69 @@ def _event_safe(value: Any) -> Any:
     if isinstance(value, tuple):
         return [_event_safe(item) for item in value]
     return value
+
+
+def result_frames(
+    *, verb: str, status: str, output: Any, run_id: Any, call_id: Any
+) -> list[dict[str, Any]]:
+    """The run-event frames one completed verb produces. Usually one, sometimes two.
+
+    A LIST rather than a single frame, because ``voice.listen`` is the first verb
+    whose outcome carries something the emotion relay needs to see separately from
+    the tool result. The relay matches rules on an event's TOP-LEVEL fields -- the
+    table is ``where: {verb: ...}`` and nothing walks into a nested payload -- so a
+    tone buried inside a ``tool_result`` output is unreachable to it. It needs to be
+    its own event type or it may as well not be measured.
+
+    Kept here rather than in the dispatcher for the reason this module exists: these
+    are pure shaping functions holding no dispatch state, and the chokepoint is the
+    wrong home for them. The dispatcher decides WHEN a verb has finished; what that
+    finish looks like on the wire is this module's business.
+
+    The tone frame deliberately carries NO transcript. The point of measuring
+    delivery rather than words is that the words do not have to travel, and putting
+    them on a second stream to save a lookup would give that away for nothing.
+    """
+    frames: list[dict[str, Any]] = [
+        {
+            "type": "tool_result", "verb": verb, "status": status,
+            "output": _event_safe(output) if status == "ok" else None,
+            "run_id": run_id, "call_id": call_id,
+            "result_summary": (
+                _summarise_output(output) if status == "ok" else {"status": status}
+            ),
+        }
+    ]
+    tone = _tone_frame(status, output, run_id)
+    if tone is not None:
+        frames.append(tone)
+    return frames
+
+
+def _tone_frame(status: str, output: Any, run_id: Any) -> dict[str, Any] | None:
+    """A ``voice_tone`` event, when the verb reported one and only then.
+
+    Every gate here is a refusal: a failed verb, an output that is not a mapping, a
+    missing or malformed tone block. The tone is a garnish on a transcript and must
+    never be the reason an event is malformed -- so anything unexpected produces no
+    event rather than a partial one.
+    """
+    if status != "ok" or not isinstance(output, dict):
+        return None
+    block = output.get("tone")
+    if not isinstance(block, dict):
+        return None
+    label = block.get("tone")
+    if not isinstance(label, str) or not label:
+        return None
+    intensity = block.get("intensity")
+    return {
+        "type": "voice_tone",
+        "tone": label,
+        "intensity": float(intensity) if isinstance(intensity, (int, float)) else 0.5,
+        # How many utterances the baseline behind this had heard. On the event so
+        # that a tone can be discounted after the fact if the calibration turns out
+        # to have been thin -- a bare label cannot be second-guessed.
+        "calibrated_on": block.get("calibrated_on"),
+        "run_id": run_id,
+    }

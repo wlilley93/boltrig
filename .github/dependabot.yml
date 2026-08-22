@@ -41,7 +41,9 @@ updates:
     #   gunicorn>=24            cognee>=1.2.0 depends on gunicorn>=20.1.0,<24
     #   limits>=5               cognee>=1.2.0 depends on limits>=4.4.1,<5
     #   packaging>=25           limits<5 depends on packaging>=21,<25 (via cognee)
-    #   importlib-metadata>=9   litellm 1.83.x depends on importlib-metadata==8.5.0
+    #   importlib-metadata>=9   litellm 1.96.x depends on importlib-metadata>=8.0.0,<9.0
+    #                           (was ==8.5.0 under litellm 1.83.x; the bound >=9 now
+    #                           EQUALS upstream's ceiling by measurement, not by luck)
     #
     # Three of the four are one constraint wearing different hats: `cognee` bounds
     # this graph. Dependabot cannot see any of it, because it reasons per-package
@@ -155,6 +157,44 @@ updates:
     # itself the moment cognee raises its own cryptography ceiling.
       - dependency-name: cognee
         versions: [">=1.4.1"]
+    #
+    # A FOURTH round, 2026-08-18, and this one is worth recording for HOW it
+    # failed rather than that it failed. #295 was a group of 22 whose lock could
+    # not install at all, and pip names only the FIRST conflict, so the second
+    # appeared only after the first was reverted:
+    #
+    #   pwdlib>=0.3.1   fastapi-users 15.0.5 depends on pwdlib[argon2,bcrypt]==0.3.0
+    #   mpmath>=1.4     sympy 1.14.0 depends on mpmath>=1.1.0,<1.4
+    #
+    # Two more the same week, closed as #277 and #278, both transitive and both
+    # a major past what their parents allow. Neither is imported anywhere in this
+    # repository; each exists only as a `# via` line in a compiled lock:
+    #
+    #   pylance>=0.37   # via cognee; EVERY cognee release through 1.5.0 pins
+    #                   # pylance<=0.36.0,>=0.22.0. The bound was >=1, a round
+    #                   # number that only blocked the major line - which the
+    #                   # minor-patch group already excluded - so 0.39.0 was
+    #                   # offered and failed CI on the resolver conflict (#299).
+    #                   # Bounds are upstream's, not round numbers.
+    #   openai>=3       # via cognee, instructor, litellm
+    #
+    # THE TRIAGE RULE, since this is now four rounds of one shape: read the
+    # `# via` comment under the pinned line. No `# via` means direct, and the
+    # bump is a real decision. A `# via` means the bump is a claim about a
+    # package the PR does not touch, and the fix is to raise the PARENT and
+    # recompile, never the child alone.
+    #
+    # Bounds are upstream's, not round numbers. pwdlib is pinned with `==`, so
+    # anything above 0.3.0 is refused; mpmath's ceiling is <1.4, so 1.3.x
+    # patches still arrive.
+      - dependency-name: pwdlib
+        versions: [">=0.3.1"]
+      - dependency-name: mpmath
+        versions: [">=1.4"]
+      - dependency-name: pylance
+        versions: [">=0.37"]
+      - dependency-name: openai
+        versions: [">=3"]
     labels:
       - dependencies
       - python

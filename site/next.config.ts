@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Static export: the marketing site is served as static files by the host
-  // Caddy at boltrig.io (no Node runtime on prod). The contact API route is
+  // Caddy at boltrig.ai (no Node runtime on prod). The contact API route is
   // removed in favour of a mailto CTA so nothing needs a server.
   output: "export",
 

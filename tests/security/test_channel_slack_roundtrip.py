@@ -10,7 +10,8 @@ Slack adapter against a FAKE Slack (no network):
   envelope by id, and normalises events_api envelopes;
 
   inbound  - one threaded message event becomes a governed work item via the
-             ONE signed intake route, its thread_ts landing on the reply route;
+             ONE signed intake route, its complete channel:thread_ts target
+             landing on the reply route with kernel-authored provenance;
              a bot-self event and a message_changed subtype are acked but
              ignored;
   outbound - one outbox row is claimed over the run-scoped token, delivered
@@ -37,6 +38,7 @@ from boltrig.models import (
     TenantPermissions,
 )
 from boltrig.store import InMemoryStore
+from boltrig.work.channel_provenance import public_channel_provenance
 
 T = "acme"
 SECRET = "slackroundtrip_123"
@@ -55,14 +57,27 @@ async def _kernel() -> tuple[Kernel, InMemoryStore]:
     store = InMemoryStore()
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     await store.upsert_channel(
-        Channel(id="ch-s1", tenant_id=T, platform="slack", name="Slack",
-                transport="socket", credential_ref="cred-1",
-                config={"sender_field": "sender"})
+        Channel(
+            id="ch-s1",
+            tenant_id=T,
+            platform="slack",
+            name="Slack",
+            transport="socket",
+            credential_ref="cred-1",
+            config={"sender_field": "sender"},
+        )
     )
     await store.set_credential_ref(T, "cred-1", {"secret": SECRET})
     await store.upsert_channel_binding(
-        ChannelBinding(id="b-1", tenant_id=T, channel_id="ch-s1", platform="slack",
-                       external_user_id="U-9", subject="alice", role="member")
+        ChannelBinding(
+            id="b-1",
+            tenant_id=T,
+            channel_id="ch-s1",
+            platform="slack",
+            external_user_id="U-9",
+            subject="alice",
+            role="member",
+        )
     )
     return Kernel(store), store
 
@@ -78,25 +93,27 @@ async def _until(predicate, timeout: float = 5.0):
 
 
 def _envelope(envelope_id: str, event_id: str, event: dict) -> str:
-    return json.dumps({
-        "envelope_id": envelope_id, "type": "events_api",
-        "payload": {"event_id": event_id, "event": event},
-    })
+    return json.dumps(
+        {
+            "envelope_id": envelope_id,
+            "type": "events_api",
+            "payload": {"event_id": event_id, "event": event},
+        }
+    )
 
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-177")
+@pytest.mark.invariant("CHAN-PROV-01")
 async def test_slack_adapter_round_trip_against_a_test_kernel():
     kernel, store = await _kernel()
     kernel_app = create_app(kernel)
-    asgi = httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=kernel_app), base_url="http://test"
-    )
+    asgi = httpx.AsyncClient(transport=httpx.ASGITransport(app=kernel_app), base_url="http://test")
 
     # --- the fake Slack -----------------------------------------------------
-    sockets: asyncio.Queue = asyncio.Queue()   # accepted Socket Mode conns
-    acks: asyncio.Queue = asyncio.Queue()      # envelope ids the adapter acked
-    posted: list[dict] = []                    # chat.postMessage bodies + auth
+    sockets: asyncio.Queue = asyncio.Queue()  # accepted Socket Mode conns
+    acks: asyncio.Queue = asyncio.Queue()  # envelope ids the adapter acked
+    posted: list[dict] = []  # chat.postMessage bodies + auth
 
     async def _socket_handler(ws):
         await sockets.put(ws)
@@ -113,35 +130,41 @@ async def test_slack_adapter_round_trip_against_a_test_kernel():
 
     def _slack_api(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/apps.connections.open"):
-            return httpx.Response(
-                200, json={"ok": True, "url": f"ws://127.0.0.1:{socket_port}/"}
-            )
+            return httpx.Response(200, json={"ok": True, "url": f"ws://127.0.0.1:{socket_port}/"})
         if request.url.path.endswith("/chat.postMessage"):
-            posted.append({
-                "auth": request.headers.get("authorization"),
-                **json.loads(request.content),
-            })
+            posted.append(
+                {
+                    "auth": request.headers.get("authorization"),
+                    **json.loads(request.content),
+                }
+            )
             return httpx.Response(200, json={"ok": True, "ts": "1720000001.000001"})
         return httpx.Response(404, json={"ok": False, "error": "unknown_method"})
 
     fake_api = httpx.AsyncClient(transport=httpx.MockTransport(_slack_api))
 
     token = kernel.mcp.issue_run_token(
-        T, GrantSet(), actor="channel-gateway",
+        T,
+        GrantSet(),
+        actor="channel-gateway",
         extra={"channel_gateway": True, "channels": ["ch-s1"]},
     )
     daemon = sidecar_app.ChannelSidecarDaemon(
         sidecar_app.KernelClient("http://test", token, client=asgi),
-        [sidecar_app.ChannelSpec(
-            channel_id="ch-s1", platform="slack", secret=SECRET,
-            config={
-                "app_token": "xapp-test-token",
-                "bot_token": "xoxb-test-token",
-                "api_base": "http://127.0.0.1/api",
-                "egress_allow": ["127.0.0.1"],
-                "http_client": fake_api,
-            },
-        )],
+        [
+            sidecar_app.ChannelSpec(
+                channel_id="ch-s1",
+                platform="slack",
+                secret=SECRET,
+                config={
+                    "app_token": "xapp-test-token",
+                    "bot_token": "xoxb-test-token",
+                    "api_base": "http://127.0.0.1/api",
+                    "egress_allow": ["127.0.0.1"],
+                    "http_client": fake_api,
+                },
+            )
+        ],
         poll_seconds=0.05,
     )
     await daemon.start()
@@ -150,36 +173,118 @@ async def test_slack_adapter_round_trip_against_a_test_kernel():
         ws = await asyncio.wait_for(sockets.get(), timeout=5)
 
         # --- link (a): one threaded event in -> a governed work item --------
-        await ws.send(_envelope("env-1", "Ev0001", {
-            "type": "message", "user": "U-9", "text": "hello nabu",
-            "channel": "C123", "ts": "1720000000.000200", "thread_ts": THREAD_TS,
-        }))
+        await ws.send(
+            _envelope(
+                "env-1",
+                "Ev0001",
+                {
+                    "type": "message",
+                    "user": "U-9",
+                    "text": "hello nabu",
+                    "channel": "C123",
+                    "ts": "1720000000.000200",
+                    "thread_ts": THREAD_TS,
+                },
+            )
+        )
         assert await asyncio.wait_for(acks.get(), timeout=5) == "env-1"
         items = await _until(lambda: _work_items(store))
         (item,) = [w for w in items if w.on_behalf_of == "alice"]
         assert item.raw.get("text") == "hello nabu"
         assert item.target == "cos"  # default addressing, tier-1
-        assert item.reply_route["thread"] == THREAD_TS  # the way back
+        assert item.reply_route["thread"] == f"C123:{THREAD_TS}"  # complete way back
+        provenance = public_channel_provenance(item)
+        assert provenance == {
+            "schema": "channel_message_v1",
+            "kind": "channel_message",
+            "direction": "inbound",
+            "provider": "slack",
+            "provider_label": "Slack",
+            "channel_id": "ch-s1",
+            "channel_label": "Slack",
+            "display_label": "Slack · Slack",
+            "from": {
+                "kind": "authenticated_subject",
+                "subject": "alice",
+                "label": "alice",
+            },
+            "to": {
+                "kind": "routing_target",
+                "address": "cos",
+                "label": "cos",
+            },
+            "threaded": True,
+        }
+        # Exact Slack identities stay in the private correlation stamp, not the
+        # public projection consumed by the UI.
+        assert "U-9" not in json.dumps(provenance)
+        assert "1720000000.000200" not in json.dumps(provenance)
+
+        # A top-level event must retain its channel too. Before this repair the
+        # adapter omitted thread entirely, so completion could not return to it.
+        await ws.send(
+            _envelope(
+                "env-root",
+                "Ev-root",
+                {
+                    "type": "message",
+                    "user": "U-9",
+                    "text": "root message",
+                    "channel": "C999",
+                    "ts": "1720000000.000300",
+                },
+            )
+        )
+        assert await asyncio.wait_for(acks.get(), timeout=5) == "env-root"
+
+        async def _two_work_items():
+            rows = await store.list_work_items(T)
+            return rows if len(rows) == 2 else []
+
+        items = await _until(_two_work_items)
+        root = next(w for w in items if w.source_id == "Ev-root")
+        assert root.reply_route["thread"] == "C999"
+        assert public_channel_provenance(root)["threaded"] is False
 
         # bot-self echoes and message subtypes are acked but never ingested
-        await ws.send(_envelope("env-2", "Ev0002", {
-            "type": "message", "subtype": "bot_message", "bot_id": "B1",
-            "text": "my own echo", "channel": "C123",
-        }))
-        await ws.send(_envelope("env-3", "Ev0003", {
-            "type": "message", "subtype": "message_changed",
-            "message": {"user": "U-9", "text": "edited"}, "channel": "C123",
-        }))
+        await ws.send(
+            _envelope(
+                "env-2",
+                "Ev0002",
+                {
+                    "type": "message",
+                    "subtype": "bot_message",
+                    "bot_id": "B1",
+                    "text": "my own echo",
+                    "channel": "C123",
+                },
+            )
+        )
+        await ws.send(
+            _envelope(
+                "env-3",
+                "Ev0003",
+                {
+                    "type": "message",
+                    "subtype": "message_changed",
+                    "message": {"user": "U-9", "text": "edited"},
+                    "channel": "C123",
+                },
+            )
+        )
         assert await asyncio.wait_for(acks.get(), timeout=5) == "env-2"
         assert await asyncio.wait_for(acks.get(), timeout=5) == "env-3"
         await asyncio.sleep(0.3)
-        assert len(await store.list_work_items(T)) == 1
+        assert len(await store.list_work_items(T)) == 2
 
         # --- link (b): one outbox row out -> chat.postMessage + acked --------
         await store.enqueue_channel_outbox(
-            ChannelOutboxMessage(id="out-s1", tenant_id=T, channel_id="ch-s1",
-                                 payload={"text": "hi back",
-                                          "target": f"C123:{THREAD_TS}"})
+            ChannelOutboxMessage(
+                id="out-s1",
+                tenant_id=T,
+                channel_id="ch-s1",
+                payload={"text": "hi back", "target": f"C123:{THREAD_TS}"},
+            )
         )
         (delivery,) = await _until(lambda: _delivered(posted))
         assert delivery["channel"] == "C123"

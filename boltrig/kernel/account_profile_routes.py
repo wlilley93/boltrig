@@ -9,6 +9,7 @@ from fastapi import Query, Request
 from fastapi.responses import JSONResponse
 
 from boltrig.models import UserSetting
+from boltrig.models.workspace_settings import resolve_user_settings, storage_key
 from boltrig.store import audit_read_contract as audit_pages
 
 from .approval_posture import APPROVAL_POSTURE_SETTING
@@ -61,13 +62,17 @@ def _register_settings_routes(app, P, K, audit, user_view) -> None:
 
         defaults = dict(platform_state(request).get("user_defaults", {}))
         stored = {row.key: row.value for row in rows}
+        # Workspace override, then user override, then tenant default. The
+        # namespaced storage keys never surface under their raw names, so a
+        # caller sees exactly the values the scope they are in will use.
+        values, sources = resolve_user_settings(
+            defaults, stored, p.active_workspace_id
+        )
         return {
             "profile": profile,
-            "settings": {**defaults, **stored},
-            "setting_sources": {
-                key: "user_override" if key in stored else "tenant_default"
-                for key in set(defaults) | set(stored)
-            },
+            "active_workspace_id": p.active_workspace_id,
+            "settings": values,
+            "setting_sources": sources,
         }
 
     @app.put("/v1/me/settings")
@@ -97,11 +102,15 @@ def _register_settings_routes(app, P, K, audit, user_view) -> None:
                 status_code=400,
             )
         for key, value in updates.items():
+            # A workspace-scoped key written from inside a workspace lands on
+            # that workspace's key, so choosing a companion in one business does
+            # not change the other. Every other key, and every write at org
+            # scope, lands on the bare key exactly as before.
             await k.store.upsert_user_setting(
                 UserSetting(
                     tenant_id=p.tenant_id,
                     user_id=p.subject,
-                    key=str(key),
+                    key=storage_key(str(key), p.active_workspace_id),
                     value=value,
                 )
             )

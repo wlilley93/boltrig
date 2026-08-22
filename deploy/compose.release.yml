@@ -44,9 +44,9 @@ services:
     environment:
       BOLTRIG_RELEASE_MODE: ${BOLTRIG_RELEASE_MODE:?set BOLTRIG_RELEASE_MODE to exactly core or full}
 
-  worker-ui:
+  ui:
     build: !reset null
-    image: ${BOLTRIG_WORKER_UI_IMAGE:?set BOLTRIG_WORKER_UI_IMAGE to an image@sha256 digest}
+    image: ${BOLTRIG_UI_IMAGE:?set BOLTRIG_UI_IMAGE to an image@sha256 digest}
     pull_policy: always
 
   backup:

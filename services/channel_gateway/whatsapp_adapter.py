@@ -193,6 +193,12 @@ class WhatsAppBridgeAdapter(PlatformAdapter):
             "text": str(event.get("body") or ""),
             # the chat JID is the way back (DM phone JID or group JID alike)
             "thread": chat_id,
+            # Preserve the exact JID privately for collision-free provenance;
+            # the stripped sender remains the authored binding key.
+            "provider_message_id": message_id,
+            "provider_sender_id": sender_jid,
+            "provider_conversation_id": chat_id,
+            "provider_timestamp": event.get("timestamp"),
         }
         if self._on_message is not None:
             await self._on_message(message)
@@ -213,11 +219,11 @@ class WhatsAppBridgeAdapter(PlatformAdapter):
         if refusal:
             raise AdapterDeliveryError(f"whatsapp bridge egress-refused: {refusal}")
         try:
-            resp = await self._http.post(
-                send_url, json={"chatId": target, "message": text}
-            )
+            resp = await self._http.post(send_url, json={"chatId": target, "message": text})
             data = resp.json()
         except Exception as exc:
             raise AdapterDeliveryError(f"bridge send failed: {type(exc).__name__}") from exc
         if resp.status_code != 200 or not data.get("success"):
-            raise AdapterDeliveryError(f"bridge send refused: {data.get('error') or resp.status_code}")
+            raise AdapterDeliveryError(
+                f"bridge send refused: {data.get('error') or resp.status_code}"
+            )

@@ -966,3 +966,124 @@
   .plugins-system-details > summary { align-items: flex-start; flex-direction: column; gap: 3px; }
   .plugins-system-details > summary::before { display: none; }
 }
+
+/* ---------------------------------------------------------------------------
+ * The capability-layer tabs (Connections / Capabilities / Rules / Review).
+ *
+ * Every value below is an existing token or an existing rung of this
+ * stylesheet. No new colour is introduced: `--text-2/3/4`, `--border`,
+ * `--card`, `--accent` are the same ones the connections list already uses, so
+ * the tabs cannot drift from the page they sit on and the control boundary
+ * keeps whatever contrast the token gate already measured for it.
+ * ------------------------------------------------------------------------ */
+
+.plugins-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.plugins-tab {
+  padding: 7px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.plugins-tab:hover { color: var(--text-2); }
+
+.plugins-tab.active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+.plugins-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.capability-filter {
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.capability-filter.active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.capability-filter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.capability-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.capability-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--card);
+}
+
+.capability-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.capability-row-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.capability-row-name .plugins-health { min-width: 0; text-align: left; }
+
+.capability-row-sub {
+  color: var(--text-3);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.capability-row-sub.muted { color: var(--text-4); }
+
+/* Provider-authored text. It is rendered as data and never as instruction, so
+ * it is clamped rather than allowed to set the height of the queue. */
+.capability-row-evidence {
+  max-width: 72ch;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.capability-row-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}

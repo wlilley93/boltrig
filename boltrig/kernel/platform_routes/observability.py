@@ -174,6 +174,8 @@ def _register_audit_integrity_routes(app, P, K) -> None:
 
 def _run_row(w) -> dict:
     """One /v1/runs row. `external_ref` is the GENERIC opaque source_id."""
+    from boltrig.work.channel_provenance import public_channel_provenance
+
     return {
         "run_id": work_item_run_id(w),
         "work_item": w.id,
@@ -183,6 +185,7 @@ def _run_row(w) -> dict:
         "on_behalf_of": w.on_behalf_of,
         "source": w.source,
         "external_ref": w.source_id,
+        "provenance": public_channel_provenance(w),
     }
 
 

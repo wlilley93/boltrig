@@ -40,6 +40,10 @@
       "types": "./dist/src/chatTurnNormalizer.d.ts",
       "import": "./dist/src/chatTurnNormalizer.js"
     },
+    "./displayObjects": {
+      "types": "./dist/src/displayObjects.d.ts",
+      "import": "./dist/src/displayObjects.js"
+    },
     "./client": {
       "types": "./dist/src/client.d.ts",
       "import": "./dist/src/client.js"

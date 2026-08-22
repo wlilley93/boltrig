@@ -24,21 +24,11 @@ from urllib.parse import quote
 import httpx
 
 from boltrig.adapters.base import Result, VerbSpec
+from boltrig.adapters.builtin.ms_graph_specs import ms_graph_specs
 from boltrig.adapters.http_base import Handler, HttpAdapter, RateLimitConfig
 from boltrig.models import InvocationContext
 
 _GRAPH_BASE = "https://graph.microsoft.com/v1.0"
-
-_DRIVE_ITEM_OUT = {
-    "type": "object",
-    "properties": {
-        "id": {"type": "string"},
-        "name": {"type": "string"},
-        "webUrl": {"type": "string"},
-        "size": {"type": "integer"},
-    },
-    "required": ["id"],
-}
 
 
 def _as_list(value: Any) -> list[Any]:
@@ -60,188 +50,7 @@ class MsGraphAdapter(HttpAdapter):
 
     # --- verbs ---------------------------------------------------------------
     def describe(self) -> list[VerbSpec]:
-        read_rl = {"per": "minute", "max": 1000, "scope": "tenant"}
-        write_rl = {"per": "minute", "max": 200, "scope": "tenant"}
-        send_rl = {"per": "minute", "max": 30, "scope": "tenant"}
-        return [
-            VerbSpec(
-                verb_id="document.search",
-                noun_id="document",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string"},
-                        "size": {"type": "integer"},
-                        "offset": {"type": "integer"},
-                    },
-                    "required": ["query"],
-                },
-                output_schema={
-                    "type": "object",
-                    "properties": {
-                        "results": {"type": "array"},
-                        "count": {"type": "integer"},
-                    },
-                },
-                description="Search documents across SharePoint / OneDrive (Graph search API)",
-                rate_limit=read_rl,
-                degraded_mode={"strategy": "empty", "output": {"results": [], "count": 0}},
-            ),
-            VerbSpec(
-                verb_id="document.read",
-                noun_id="document",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "drive_id": {"type": "string"},
-                        "item_id": {"type": "string"},
-                    },
-                    "required": ["drive_id", "item_id"],
-                },
-                output_schema=_DRIVE_ITEM_OUT,
-                description="Read a drive item's metadata",
-                rate_limit=read_rl,
-            ),
-            VerbSpec(
-                verb_id="document.create",
-                noun_id="document",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "drive_id": {"type": "string"},
-                        "path": {"type": "string"},
-                        "content": {"type": "string"},
-                        "content_type": {"type": "string"},
-                    },
-                    "required": ["drive_id", "path", "content"],
-                },
-                output_schema=_DRIVE_ITEM_OUT,
-                description="Upload a small file to a drive path",
-                rate_limit=write_rl,
-                # Writes into the customer's drive (see the guard in
-                # tests/security/test_builtin_write_verbs_are_gated.py).
-                consequence="high",
-            ),
-            VerbSpec(
-                verb_id="document.update",
-                noun_id="document",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "drive_id": {"type": "string"},
-                        "item_id": {"type": "string"},
-                        "name": {"type": "string"},
-                        "fields": {"type": "object"},
-                    },
-                    "required": ["drive_id", "item_id"],
-                },
-                output_schema=_DRIVE_ITEM_OUT,
-                description="Update a drive item's metadata",
-                rate_limit=write_rl,
-                consequence="high",
-            ),
-            VerbSpec(
-                verb_id="email.send",
-                noun_id="email",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "to": {"type": ["array", "string"]},
-                        "cc": {"type": ["array", "string"]},
-                        "subject": {"type": "string"},
-                        "body": {"type": "string"},
-                        "body_type": {"type": "string", "enum": ["Text", "HTML"]},
-                        "from_user": {"type": "string"},
-                        "save_to_sent": {"type": "boolean"},
-                    },
-                    "required": ["to", "subject", "body"],
-                },
-                output_schema={
-                    "type": "object",
-                    "properties": {"status": {"type": "string"}},
-                },
-                consequence="high",
-                description="Send an email via Exchange Online (sendMail)",
-                rate_limit=send_rl,
-            ),
-            VerbSpec(
-                verb_id="calendar.create_event",
-                noun_id="calendar",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "subject": {"type": "string"},
-                        "start": {"type": "string"},
-                        "end": {"type": "string"},
-                        "timezone": {"type": "string"},
-                        "attendees": {"type": ["array", "string"]},
-                        "location": {"type": "string"},
-                        "body": {"type": "string"},
-                        "owner": {"type": "string"},
-                    },
-                    "required": ["subject", "start", "end"],
-                },
-                output_schema={
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "string"},
-                        "webLink": {"type": "string"},
-                    },
-                    "required": ["id"],
-                },
-                consequence="high",
-                description="Create a calendar event (Exchange / Outlook)",
-                rate_limit=write_rl,
-            ),
-            VerbSpec(
-                verb_id="chat.post_message",
-                noun_id="chat",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "chat_id": {"type": "string"},
-                        "content": {"type": "string"},
-                        "content_type": {"type": "string", "enum": ["text", "html"]},
-                    },
-                    "required": ["chat_id", "content"],
-                },
-                output_schema={
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "string"},
-                        "createdDateTime": {"type": "string"},
-                    },
-                    "required": ["id"],
-                },
-                consequence="high",
-                description="Post a message to a Teams chat",
-                rate_limit=write_rl,
-            ),
-            VerbSpec(
-                verb_id="directory.get_user",
-                noun_id="directory",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "user_id": {"type": "string"},
-                        "select": {"type": ["array", "string"]},
-                    },
-                    "required": ["user_id"],
-                },
-                output_schema={
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "string"},
-                        "displayName": {"type": "string"},
-                        "mail": {"type": "string"},
-                        "userPrincipalName": {"type": "string"},
-                    },
-                    "required": ["id"],
-                },
-                description="Read a directory user from Entra ID",
-                rate_limit=read_rl,
-            ),
-        ]
+        return ms_graph_specs()
 
     def _handlers(self) -> dict[str, Handler]:
         return {
@@ -251,6 +60,7 @@ class MsGraphAdapter(HttpAdapter):
             "document.update": self._document_update,
             "email.send": self._email_send,
             "calendar.create_event": self._calendar_create_event,
+            "calendar.delete_event": self._calendar_delete_event,
             "chat.post_message": self._chat_post_message,
             "directory.get_user": self._directory_get_user,
         }
@@ -364,6 +174,15 @@ class MsGraphAdapter(HttpAdapter):
         data = await self.request(client, "POST", url, json=event, expected=(201,))
         return Result.success({"id": data.get("id"), "webLink": data.get("webLink")})
 
+    async def _calendar_delete_event(
+        self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
+    ) -> Result:
+        owner = params.get("owner")
+        event = quote(str(params["event_id"]), safe="")
+        url = f"/users/{quote(str(owner), safe='')}/events/{event}" if owner else f"/me/events/{event}"
+        await self.request(client, "DELETE", url, expected=(204,))
+        return Result.success({"status": "deleted"})
+
     async def _chat_post_message(
         self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
     ) -> Result:
@@ -379,6 +198,11 @@ class MsGraphAdapter(HttpAdapter):
             {"id": data.get("id"), "createdDateTime": data.get("createdDateTime")}
         )
 
+    def inverses(self):
+        """Declared (do, undo) pairs; the kernel registers them at adapter
+        registration, so an unregistered adapter annotates nothing."""
+        return {"calendar.create_event": _create_event_inverse}
+
     async def _directory_get_user(
         self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
     ) -> Result:
@@ -389,6 +213,22 @@ class MsGraphAdapter(HttpAdapter):
             query["$select"] = ",".join(_as_list(select))
         data = await self.request(client, "GET", url, params=query or None, expected=(200,))
         return Result.success(data)
+
+
+def _create_event_inverse(params: dict[str, Any], output: dict[str, Any]):
+    """calendar.create_event reverses through calendar.delete_event.
+
+    Built at record time from the SUCCESS OUTPUT (only it carries the event
+    id); the owner rides along from the create's own params so the delete
+    lands on the same mailbox. No id in the output -> that call is honestly
+    not undoable.
+    """
+    if not output.get("id"):
+        return None
+    inverse_params: dict[str, Any] = {"event_id": output["id"]}
+    if params.get("owner"):
+        inverse_params["owner"] = params["owner"]
+    return ("calendar.delete_event", inverse_params)
 
 
 def build() -> MsGraphAdapter:

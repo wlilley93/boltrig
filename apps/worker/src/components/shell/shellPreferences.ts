@@ -15,6 +15,8 @@
 
 export const SHELL_PREFERENCES_V1_KEY = "boltrig.shell-preferences.v1";
 export const LEGACY_PINNED_CONVERSATIONS_KEY = "boltrig-worker-pinned-conversations";
+export const SHELL_ORGANIZE_MODE_KEY = "boltrig.sidebar-organize.v1";
+export type ShellOrganizeMode = "project" | "agent" | "list";
 
 interface StoredShellPreferencesV1 {
   schema_version: 1;
@@ -57,6 +59,24 @@ export function persistShellPreferences(value: ShellPreferences): ShellPreferenc
   }
   mirrorLegacyPins(normalised.pinnedConversationIds);
   return normalised;
+}
+
+export function loadShellOrganizeMode(): ShellOrganizeMode {
+  try {
+    const value = localStorage.getItem(SHELL_ORGANIZE_MODE_KEY);
+    return value === "agent" || value === "list" ? value : "project";
+  } catch {
+    return "project";
+  }
+}
+
+export function persistShellOrganizeMode(mode: ShellOrganizeMode): ShellOrganizeMode {
+  try {
+    localStorage.setItem(SHELL_ORGANIZE_MODE_KEY, mode);
+  } catch {
+    // The in-memory React state remains useful when storage is unavailable.
+  }
+  return mode;
 }
 
 function readStoredPreferences(): StoredShellPreferencesV1 | null {

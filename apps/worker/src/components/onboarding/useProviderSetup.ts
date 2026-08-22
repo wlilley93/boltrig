@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
-import type {
-  AiKeyLevel,
-  AiKeyProposalView,
-  AiKeyView,
-  ChatModelChoicesResponse,
-  UserProfile,
+import {
+  BoltrigApiError,
+  type AiKeyLevel,
+  type AiKeyProposalView,
+  type AiKeyView,
+  type ChatModelChoicesResponse,
+  type UserProfile,
 } from "@wlilley93/boltrig-web-sdk";
 
 import { submitWriteOnlyAiKey } from "../../aiKeyIntake";
 import { client } from "../../client";
-import { providerKeyOptional, providerNeedsBaseUrl } from "./providerCatalogue";
+import { providerApiBaseUrl, providerKeyOptional, providerNeedsBaseUrl } from "./providerCatalogue";
 
 interface ProviderReadiness {
   models: ChatModelChoicesResponse | null;
@@ -30,6 +31,7 @@ interface ProviderCompletionContext {
   proposal: AiKeyProposalView | null;
   provider: string;
   readiness: ProviderReadiness | null;
+  userId: string;
   setBusy: Dispatch<SetStateAction<boolean>>;
   setKeyPresent: Dispatch<SetStateAction<boolean>>;
   setMessage: Dispatch<SetStateAction<string>>;
@@ -64,6 +66,7 @@ export function useProviderSetup(
 
   const completionContext: ProviderCompletionContext = {
     apiKeyInput, baseUrl, keyPresent, level, modality, model, proposal, provider, readiness,
+    userId: profile.id,
     setBusy, setKeyPresent, setMessage, setProposal, setReadiness,
   };
 
@@ -97,16 +100,37 @@ async function completeProvider(context: ProviderCompletionContext): Promise<boo
       provider: context.provider.trim(),
       model: context.model.trim(),
       modality: context.modality,
-      base_url: context.baseUrl.trim() || undefined,
+      // A typed base URL always wins. Failing that, a non-native provider
+      // submits the catalogue's published URL: the kernel binds it as an
+      // OpenAI-compatible custom provider and cannot do so without an address.
+      base_url: context.baseUrl.trim()
+        || providerApiBaseUrl(context.provider.trim())
+        || undefined,
     });
     context.setKeyPresent(false);
-    return applyIntakeResult(context, await submission);
-  } catch {
-    context.setMessage("We couldn't connect that provider. Check the details and try again.");
+    return await applyIntakeResult(context, await submission);
+  } catch (error) {
+    context.setMessage(failureMessage(
+      error,
+      "We couldn't connect that provider. Check the details and try again.",
+    ));
     return false;
   } finally {
     context.setBusy(false);
   }
+}
+
+/**
+ * The sentence the server sent, or the fallback. Every refusal the kernel
+ * writes is one plain instruction for the person reading it; swallowing it
+ * behind a generic line is how three days of "still needs approval" happened.
+ */
+function failureMessage(error: unknown, fallback: string): string {
+  if (error instanceof BoltrigApiError && typeof error.body === "object" && error.body) {
+    const reason = (error.body as { reason?: unknown }).reason;
+    if (typeof reason === "string" && reason) return reason;
+  }
+  return fallback;
 }
 
 function providerInputIsComplete(context: ProviderCompletionContext): boolean {
@@ -119,20 +143,68 @@ function providerInputIsComplete(context: ProviderCompletionContext): boolean {
     );
 }
 
-function applyIntakeResult(context: ProviderCompletionContext, result: {
+/**
+ * Confirm the key the kernel just accepted can actually reach its provider.
+ *
+ * A WRITE THAT SUCCEEDED IS NOT A PROVIDER THAT WORKS, and this step exists
+ * because we shipped the version that assumed otherwise. Intake returning `ok`
+ * means the secret was sealed, approved and stored - it says nothing about the
+ * endpoint answering. A key saved on 2026-08-18 with base_url
+ * `https://mac-mini-m1:11434` reported "Provider connected." and was dead:
+ * Ollama serves plain HTTP on that port, so every request died in the TLS
+ * handshake. The onboarding said connected, the model list stayed empty, and
+ * nothing anywhere named the scheme.
+ *
+ * `gateway_ready` on /v1/ai-keys is the kernel asking Bifrost whether the
+ * binding is usable, which is the question the user is actually asking. Read it
+ * back and say which of the two things happened.
+ *
+ * A failed re-read is NOT reported as a dead provider: not knowing and knowing
+ * it is broken are different answers, and only one of them should send someone
+ * to check their endpoint. So an unreachable re-read lets the step pass, and
+ * only a kernel that positively says `gateway_ready: false` holds it.
+ *
+ * Holding the step is the point. Returning true here would advance the wizard,
+ * and OnboardingGate only renders this message while the step is on screen, so
+ * a warning on the success path is a warning nobody reads. The instruction is
+ * spelled out because the recovery needs the key typed again: the address is
+ * part of the sealed intake, so changing it is a resubmit, not a retry.
+ */
+async function confirmGatewayReady(context: ProviderCompletionContext): Promise<boolean> {
+  const refreshed = await loadProviderReadiness(context.userId, context.modality)
+    .catch(() => null);
+  if (!refreshed) {
+    context.setMessage("Provider saved. We couldn't confirm it is reachable.");
+    return true;
+  }
+  context.setReadiness(refreshed);
+  if (refreshed.existingKey && !refreshed.existingKey.gateway_ready) {
+    context.setMessage(
+      "Provider saved, but it did not answer. Check the API address - a "
+      + "self-hosted endpoint is usually http, not https - then re-enter your "
+      + "key and select Continue.",
+    );
+    return false;
+  }
+  context.setMessage("Provider connected.");
+  return true;
+}
+
+/**
+ * One press covers the whole journey. The kernel completes a member's own
+ * provider inside the submit call itself, so `pending_human` here means either
+ * the decision belongs to somebody else or the kernel predates the fold; both
+ * are answered by trying the approval NOW, in the same press, never by asking
+ * for a second one.
+ */
+async function applyIntakeResult(context: ProviderCompletionContext, result: {
   status: string;
   reason?: string;
   proposal?: AiKeyProposalView;
-}): boolean {
-  if (result.status === "ok") {
-    context.setReadiness((current) => current && { ...current, keyCount: current.keyCount + 1 });
-    context.setMessage("Provider connected.");
-    return true;
-  }
+}): Promise<boolean> {
+  if (result.status === "ok") return confirmGatewayReady(context);
   if (result.status === "pending_human" && result.proposal) {
-    context.setProposal(result.proposal);
-    context.setMessage("Select Continue again to approve this provider and model.");
-    return false;
+    return approveAndConnect(context, result.proposal);
   }
   context.setMessage(result.reason ?? "We couldn't connect that provider.");
   return false;
@@ -148,15 +220,31 @@ async function approveAndConnect(
     const result = await client.approveAiKeyProposal(current.id);
     if (result.status === "ok") {
       context.setProposal(null);
-      context.setReadiness((value) => value && { ...value, keyCount: value.keyCount + 1 });
-      context.setMessage("Provider connected.");
-      return true;
+      return await confirmGatewayReady(context);
     }
-    if (result.proposal) context.setProposal(result.proposal);
-    context.setMessage(result.reason ?? "This provider connection still needs approval.");
+    if (result.status === "pending") {
+      // The decision genuinely sits with an administrator. Keep the request so
+      // the next press re-checks it instead of resubmitting the key.
+      context.setProposal(result.proposal ?? current);
+      context.setMessage(
+        result.reason ?? "This connection is waiting for an administrator's approval.",
+      );
+      return false;
+    }
+    // Any other state is dead. A dead request held in memory wedged this
+    // wizard for a whole morning (every press re-answered it, nothing ever
+    // resubmitted), so it is dropped here and the next press starts fresh.
+    context.setProposal(null);
+    context.setMessage(
+      result.reason ?? "That request can no longer be used. Submit the provider again.",
+    );
     return false;
-  } catch {
-    context.setMessage("We couldn't finish connecting that provider. Try again.");
+  } catch (error) {
+    context.setProposal(null);
+    context.setMessage(failureMessage(
+      error,
+      "We couldn't finish connecting that provider. Try again.",
+    ));
     return false;
   } finally {
     context.setBusy(false);
@@ -179,14 +267,14 @@ async function activateExisting(
       context.setMessage(result.reason ?? "We couldn't connect the saved provider.");
       return false;
     }
-    context.setReadiness((value) => value && {
-      ...value,
-      existingKey: value.existingKey && { ...value.existingKey, gateway_ready: true },
-    });
-    context.setMessage("Provider connected.");
-    return true;
-  } catch {
-    context.setMessage("We couldn't connect the saved provider. Try again.");
+    // Was `setReadiness(... gateway_ready: true)`: the client asserting the very
+    // fact it is supposed to be reading. Ask the kernel instead.
+    return await confirmGatewayReady(context);
+  } catch (error) {
+    context.setMessage(failureMessage(
+      error,
+      "We couldn't connect the saved provider. Try again.",
+    ));
     return false;
   } finally {
     context.setBusy(false);

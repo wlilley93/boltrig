@@ -412,7 +412,15 @@ def test_set_key_route_is_role_scoped():
 @pytest.mark.security
 @pytest.mark.invariant("SEC-113")
 @pytest.mark.invariant("FR-AIKEY-03")
-def test_onboarding_approval_is_explicit_and_activates_the_exact_saved_model():
+def test_onboarding_connects_your_own_provider_in_one_press():
+    """A member's OWN key completes inside the submit call itself.
+
+    The requester is the person any approval would ask, so the kernel answers
+    the approval in the same request (owner decision 2026-08-20: onboarding is
+    click-through). Every SEC-113 property is unchanged underneath: the secret
+    is sealed before any approval exists, the proposal is consumed exactly
+    once, the set is audited, and no approval id ever crosses HTTP.
+    """
     k, app, store = _app()
     _run(store.upsert_user(User(
         id="admin",
@@ -434,22 +442,64 @@ def test_onboarding_approval_is_explicit_and_activates_the_exact_saved_model():
             "api_key": "provider-secret",
         },
     )
-    assert staged.status_code == 202
+    assert staged.status_code == 200, staged.text
+    assert staged.json()["status"] == "ok"
     assert "hitl_request_id" not in staged.text
-    proposal_id = staged.json()["proposal"]["id"]
+    config = _run(store.get_ai_config(T, "user", "admin", "text"))
+    assert config is not None and config.model == "openai/gpt-5.4"
+    listed = client.get("/v1/ai-keys", headers=_hdr(role="superadmin")).json()
+    assert listed["ai_keys"][0]["gateway_ready"] is True
+    proposals = _run(store.list_ai_key_secret_proposals(T, "admin", None))
+    assert proposals and proposals[0].status == "consumed"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-113")
+@pytest.mark.invariant("FR-AIKEY-03")
+def test_org_level_key_still_pends_and_the_approve_route_finalizes_it():
+    """Keys set for a SHARED scope keep the full approval stop.
+
+    Folding the requester's own answer into the submit press must not widen:
+    an org-level key changes everyone's model, so it still parks as
+    pending_human with a plain reason, and the explicit approve route is what
+    finalizes it. Approval ids stay server-side on both legs.
+    """
+    k, app, store = _app()
+    _run(store.upsert_user(User(
+        id="admin",
+        tenant_id=T,
+        email="admin@example.test",
+        role="superadmin",
+        status="active",
+    )))
+    client = TestClient(app)
+
+    staged = client.put(
+        "/v1/ai-keys",
+        headers=_hdr(role="superadmin"),
+        json={
+            "level": "org",
+            "provider": "openai",
+            "model": "openai/gpt-5.4",
+            "api_key": "provider-secret",
+        },
+    )
+    assert staged.status_code == 202, staged.text
+    body = staged.json()
+    assert body["status"] == "pending_human"
+    assert body["reason"]
+    assert "hitl_request_id" not in staged.text
+    proposal_id = body["proposal"]["id"]
 
     applied = client.post(
         f"/v1/ai-keys/proposals/{proposal_id}/approve",
         headers=_hdr(role="superadmin"),
     )
-
     assert applied.status_code == 200, applied.text
     assert applied.json()["status"] == "ok"
     assert "hitl_request_id" not in applied.text
-    config = _run(store.get_ai_config(T, "user", "admin", "text"))
+    config = _run(store.get_ai_config(T, "org", T, "text"))
     assert config is not None and config.model == "openai/gpt-5.4"
-    listed = client.get("/v1/ai-keys", headers=_hdr(role="superadmin")).json()
-    assert listed["ai_keys"][0]["gateway_ready"] is True
 
 
 @pytest.mark.security
@@ -527,7 +577,9 @@ def test_keyless_self_hosted_provider_connects_without_an_api_key():
     assert applied.status_code == 200, applied.text
     body = applied.json()
     assert body["status"] == "ok" and body["provider"] == "ollama"
-    assert body["model"] == "ollama/qwen3vl-abliterated"
+    # The bare name is stored under the provider's own default tag: that IS the
+    # id the server lists, so gateway verification can match it byte-exactly.
+    assert body["model"] == "ollama/qwen3vl-abliterated:latest"
     assert body["base_url"] == "http://mac-mini-m1:11434/v1"
     assert "keyless" not in applied.text
 

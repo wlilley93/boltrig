@@ -85,7 +85,7 @@ export const FeaturesSection = () => {
             <span>[ Request_Access ]</span>
           </a>
           <a
-            href="https://app.boltrig.io"
+            href="https://app.boltrig.ai"
             className="inline-flex items-center gap-2.5 border border-brain-sky/25 px-7 py-3.5 text-xs font-semibold uppercase tracking-[0.28em] text-brain-sky/80 backdrop-blur-md hover:border-brain-sky/60 hover:text-white"
           >
             <span>Open the console</span>

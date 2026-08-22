@@ -20,6 +20,7 @@ from boltrig.models import (
     utcnow,
 )
 from boltrig.work.normalise import normalise
+from boltrig.work.channel_provenance import stamp_channel_message_provenance
 
 from .work_authority import stamp_creator_ceiling
 
@@ -86,9 +87,7 @@ async def _verified_candidate(kernel, channel, body, request):
         # (SEC-01). Starlette caches the body FastAPI already parsed, so this
         # is a buffer access, not a second stream read.
         raw_body = await request.body()
-        return verify_and_normalise(
-            body, dict(request.headers), secret, raw_body=raw_body
-        )
+        return verify_and_normalise(body, dict(request.headers), secret, raw_body=raw_body)
     except WebhookAuthError:
         return JSONResponse({"status": "denied", "reason": "signature"}, status_code=401)
     except WebhookValidationError as exc:
@@ -151,9 +150,10 @@ def _throttled(reason: str, exc: RateLimited) -> JSONResponse:
 async def _terminal_or_work(
     kernel, channel, principal, sender, body, request, delivery: str
 ) -> JSONResponse:
-    from .channel_routes import _hitl_reply_response, _resolve_addressing
+    from .channel_addressing_runtime import resolve_channel_addressing
+    from .channel_routes import _hitl_reply_response
 
-    target, reply_route = _resolve_addressing(channel, body)
+    target, reply_route = await resolve_channel_addressing(kernel, channel, body)
     ceiling = thread_ceiling(channel, reply_route.get("thread"))
     if ceiling is not None:
         # The ceiling applies to every channel action, including an inline HITL
@@ -176,6 +176,16 @@ async def _terminal_or_work(
     item.on_behalf_of = principal.subject
     item.target, item.reply_route = target, reply_route
     item.reply_route["sender"] = sender
+    stamp_channel_message_provenance(
+        item,
+        channel=channel,
+        authenticated_subject=principal.subject,
+        delivery_id=delivery,
+        sender=sender,
+        target=target,
+        reply_route=item.reply_route,
+        body=body,
+    )
     stamp_creator_ceiling(item, principal.grants)
     stamp_thread_ceiling(item, reply_route.get("thread"), ceiling)
     await kernel.store.create_work_item(item)

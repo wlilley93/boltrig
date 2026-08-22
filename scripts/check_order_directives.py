@@ -154,9 +154,15 @@ def test_sources() -> dict[Path, str]:
             continue
         for pattern in patterns:
             for path in sorted(base.rglob(pattern)):
+                # Filter on the path RELATIVE to the scan base, never the
+                # absolute path: a checkout under a dot-named parent (a git
+                # worktree in ~/.worktrees, a CI cache dir) made every part
+                # test true, the scan found zero sources, and only the
+                # scan-guard's found-0 refusal stopped a vacuous green
+                # (measured 2026-08-21).
                 if any(
                     part.startswith(".") or part in {"__pycache__", "node_modules", "dist"}
-                    for part in path.parts
+                    for part in path.relative_to(base).parts
                 ):
                     continue
                 try:

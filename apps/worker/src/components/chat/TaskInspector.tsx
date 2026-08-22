@@ -261,7 +261,7 @@ export function TaskInspector(props: TaskInspectorProps) {
 
   const aside = (
     <aside
-      {...(mode !== "rail" && !open ? { inert: "" } : {})}
+      inert={mode !== "rail" && !open}
       aria-hidden={mode !== "rail" && !open ? true : undefined}
       aria-label={mode === "sheet" ? undefined : "Task details"}
       aria-labelledby={mode === "sheet" ? titleId : undefined}

@@ -1,5 +1,12 @@
 # Proposal: pinned Boltrig as a host-app agent runtime
 
+> **Superseded 2026-08-18** by `docs/SPEC-capability-doctrine.md` (the
+> canonical capability doctrine) and
+> `docs/PLAN-opbox-boltrig-merge-2026-08-17.md` (the unification plan). This
+> proposal's kernel-authority framing is adopted; its "swap the agent runtime"
+> mechanism is replaced by the first-party plugin + Connection shape
+> (decision 0031). Retained for history.
+
 Status: DESIGN / not implemented.
 
 This records the transition plan for swapping the Opbox caged agent runtime for

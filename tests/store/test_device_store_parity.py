@@ -377,3 +377,82 @@ async def test_device_lifecycle_and_lease_cas_match_on_both_stores(device_store)
     assert await device_store.authenticate_device_session(
         T, completed.id, token_digest("session-secret")
     ) is None
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-07")
+async def test_tenant_wide_device_read_matches_on_both_stores(device_store):
+    """The admin census read (A4), including the two-orgs-one-laptop case.
+
+    ``list_devices`` is owner-scoped in both implementations, which is why this
+    is a second method rather than a nullable argument. The parity that matters
+    is the ORDER and the tenant fence: the route derives every count from this
+    one list, so a backend that returned another tenant's rows would produce a
+    census that is wrong rather than a query that fails.
+    """
+    now = utcnow()
+    seeded = []
+    for index, (device_id, owner, fingerprint, tenant) in enumerate(
+        (
+            ("census-a1", "alice", "fp-alice-laptop", T),
+            ("census-a2", "alice", "fp-alice-desktop", T),
+            # One machine, two seats: the same fingerprint enrolled twice.
+            ("census-b1", "bob", "fp-bob-laptop", T),
+            ("census-b2", "bob", "fp-bob-laptop", T),
+            ("census-x1", "mallory", "fp-other", "rival-tenant"),
+        )
+    ):
+        enrollment_id = f"census-enrol-{index}"
+        secret = f"census-secret-{index}"
+        assert await device_store.create_device_enrollment(
+            DeviceEnrollment(
+                id=enrollment_id,
+                tenant_id=tenant,
+                owner_id=owner,
+                label="Boltrig Desktop",
+                authorization_code_hash=token_digest(secret),
+                expires_at=now + timedelta(minutes=5),
+                created_at=now,
+            )
+        )
+        device = replace(
+            _device(now),
+            id=device_id,
+            tenant_id=tenant,
+            owner_id=owner,
+            public_key=f"pk-{device_id}",
+            public_key_fingerprint=fingerprint,
+            session_token_hash=None,
+            session_expires_at=None,
+        )
+        assert await device_store.complete_device_enrollment(
+            tenant, enrollment_id, token_digest(secret), device
+        ) is not None
+        seeded.append(device_id)
+
+    rows = await device_store.list_devices_for_tenant(T)
+    assert [row.id for row in rows] == [
+        "census-a1", "census-a2", "census-b1", "census-b2",
+    ]
+    assert {row.public_key_fingerprint for row in rows} == {
+        "fp-alice-laptop", "fp-alice-desktop", "fp-bob-laptop",
+    }
+    # The rival tenant's device exists and is invisible here: the seed is only a
+    # fence test if the excluded row was really written.
+    assert [row.id for row in await device_store.list_devices_for_tenant(
+        "rival-tenant"
+    )] == ["census-x1"]
+
+    # A revoked device stays in the list carrying revoked_at, because the census
+    # counts it separately rather than pretending it was never installed.
+    assert await device_store.revoke_device(T, "census-a1", "alice")
+    revoked = {
+        row.id: row.revoked_at is not None
+        for row in await device_store.list_devices_for_tenant(T)
+    }
+    assert revoked == {
+        "census-a1": True,
+        "census-a2": False,
+        "census-b1": False,
+        "census-b2": False,
+    }

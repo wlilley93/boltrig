@@ -25,9 +25,10 @@ class InvocationContext:
     # ORGANISATION is the tenant boundary (tenant_id); a workspace is a scope INSIDE
     # it. Set from the session's active workspace only after the resolver has RE-
     # AUTHORIZED the caller's membership every request (fail-closed to None), so it
-    # is never trusted from the client. Additive with a None default: this phase
-    # PLUMBS it through the context; the next phase (D11) reads it to scope grants /
-    # credentials / AI keys / workflows. None == no active workspace.
+    # is never trusted from the client. Additive with a None default. AI-key
+    # resolution ALREADY reads it (fleet/runtime_resolver.py -> identity/ai_keys.py);
+    # grants, credentials and workflows do not yet. The older wording here claimed
+    # nothing read it, which had already stopped being true.
     workspace_id: WorkspaceId | None = None
     # Request provenance for the enriched audit row ([2026] VJS-COUNTY 9, D1/D2).
     # Stamped at the door from the request (the client peer / CF client header and

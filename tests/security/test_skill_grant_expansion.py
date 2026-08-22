@@ -98,9 +98,17 @@ def _load_skills() -> list[tuple[str, list[str]]]:
     # Every caller of this loops over the result and asserts something about each
     # skill. An empty list makes all of those bodies unreachable and every one of
     # them green, so the sweep proves it read the shipped set rather than nothing.
-    assert len(out) >= 5, (
-        f"scanned nothing: {_SKILLS} yielded {len(out)} skill(s) with tool_grants, "
-        "and every grant assertion below iterates over this list"
+    #
+    # It counts the skills that GRANT something, which is what every caller
+    # actually iterates. Counting files instead - which is what this did - meant
+    # the 17 shipped skills with an empty tool_grants list held the guard up on
+    # their own: the assertion would have stayed green with every grant in the
+    # repo deleted, while its own message said "skill(s) with tool_grants".
+    granting = [row for row in out if row[1]]
+    assert len(granting) >= 5, (
+        f"scanned nothing: {_SKILLS} yielded {len(granting)} skill(s) with "
+        f"tool_grants out of {len(out)} file(s), and every grant assertion below "
+        "iterates over this list"
     )
     return out
 
@@ -169,19 +177,33 @@ def test_no_skill_expands_beyond_the_kernel_tool_bound():
 def test_every_granted_namespace_resolves_to_at_least_one_registered_verb():
     """A grant naming verbs that do not exist is inert, and says nothing when it is.
 
-    Asserted per NAMESPACE rather than per token on purpose. A single token may
-    legitimately name a verb absent from one tenant's surface. A whole namespace
-    resolving to nothing means the skill is addressing a door that is not there -
-    which is the live ``ops/opbox`` defect, and is never intentional.
+    Asserted per NAMESPACE rather than per token on purpose: a single token may
+    legitimately name a verb absent from one tenant's surface, while a whole
+    namespace resolving to nothing means the skill is addressing a door that is
+    not there.
+
+    IT USED TO SKIP THE STRONGEST CASE. The check `continue`d when the namespace
+    was absent from the surface ENTIRELY, so a skill granting a namespace that
+    has never existed was the one thing it could not see - and two shipped skills
+    were doing exactly that, granting `jira.read`/`jira.write` while the Jira
+    adapter registers `ticket.*`. Both were inert from the day they were written
+    and nothing said so. An absent namespace is now the louder offence, because
+    it is the less ambiguous one.
     """
     surface = _load_surface()
     offences: list[str] = []
     for skill, grants in _load_skills():
         namespaces = {_namespace(g) for g in grants if g != "*"}
         for ns in sorted(namespaces):
-            if not any(v.split(".", 1)[0] == ns for v in surface):
-                continue  # the namespace is absent from this surface entirely
             tokens = [g for g in grants if _namespace(g) == ns]
+            if not any(v.split(".", 1)[0] == ns for v in surface):
+                offences.append(
+                    f"{skill}: the namespace '{ns}' is not registered at all "
+                    f"({', '.join(tokens)}) - the skill is addressing a door that "
+                    f"does not exist. Grant the registered VERB ids, or add the "
+                    f"adapter to {_SURFACE.name} if it is genuinely shipped"
+                )
+                continue
             if not _expand(tokens, surface):
                 offences.append(
                     f"{skill}: every grant on '{ns}' resolves to nothing "

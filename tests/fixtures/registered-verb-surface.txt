@@ -64,6 +64,9 @@ chat.ask_user	native:questions	native
 chat.post_message	ms-graph	http
 contact.read	crm-sql	sql
 contact.search	crm-sql	sql
+# Source-authored additions after the Classical Visas capture above. These rows
+# are registered unconditionally by the current kernel boot and are kept here so
+# packaged skills can be checked before the next tenant evidence refresh.
 control.adapter.activate	control	script
 control.adapter.deactivate	control	script
 control.adapter.delete	control	script
@@ -76,6 +79,8 @@ control.budget.upsert	control	script
 control.capability.restore	control	script
 control.capability.retire	control	script
 control.capability.upsert	control	script
+control.capability_binding.approve	control	script
+control.capability_binding.reject	control	script
 control.channel.bind	control	script
 control.channel.configure	control	script
 control.channel.connect	control	script
@@ -88,10 +93,11 @@ control.config.upsert	control	script
 control.eval_case.archive	control	script
 control.eval_case.restore	control	script
 control.eval_case.upsert	control	script
-control.invitation.create	control	script
-control.invitation.revoke	control	script
 control.integration.connect	control	script
 control.integration.revoke	control	script
+control.integration.revoke_member	control	script
+control.invitation.create	control	script
+control.invitation.revoke	control	script
 control.mcp_server.activate	control	script
 control.mcp_server.deactivate	control	script
 control.mcp_server.delete	control	script
@@ -110,6 +116,8 @@ control.noun.define	control	script
 control.noun.restore	control	script
 control.org.update	control	script
 control.permanent_fleet.apply	control	script
+control.routing_policy.delete	control	script
+control.routing_policy.upsert	control	script
 control.skill.archive	control	script
 control.skill.restore	control	script
 control.skill.upsert	control	script
@@ -169,8 +177,8 @@ knowledge.upload.begin	knowledge	script
 knowledge.upload.commit	knowledge	script
 knowledge.upload.stage	knowledge	script
 memory.forget	memory	script
-memory.ingest	memory	script
 memory.improve	memory	script
+memory.ingest	memory	script
 memory.recall	memory	script
 memory.remember	memory	script
 opbox.add_comment	opbox	mcp
@@ -219,8 +227,8 @@ opbox.get_stakeholder_file_timeline	opbox	mcp
 opbox.get_step_form_data	opbox	mcp
 opbox.knowledge_search	opbox	mcp
 opbox.link_entity_to_matter	opbox	mcp
-opbox.link_files	opbox	mcp
 opbox.link_file_to_entity	opbox	mcp
+opbox.link_files	opbox	mcp
 opbox.link_individual_to_matter	opbox	mcp
 opbox.list_access_grants	opbox	mcp
 opbox.list_api_endpoints	opbox	mcp
@@ -286,8 +294,5 @@ ticket.read	memory-tickets	script
 ticket.search	jira	http
 ticket.update	jira	http
 web.fetch	web	http
-# Source-authored additions after the Classical Visas capture above. These rows
-# are registered unconditionally by the current kernel boot and are kept here so
-# packaged skills can be checked before the next tenant evidence refresh.
 work.get	work-board	script
 work.list	work-board	script

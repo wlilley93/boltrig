@@ -1,5 +1,11 @@
 """Reference SQL adapter: a CRM over a relational database (US-ADP-03, SEC-09).
 
+It is also the capability doctrine's first canonical domain: both verbs declare
+``implements`` (``crm.contact.read`` / ``crm.contact.search``), so registering
+this adapter creates a provider connection, its source operations and approved
+capability bindings. A second CRM declaring the same capability is then a second
+binding, not a replacement - which is the whole point of the shard.
+
 Exposes the ``contact`` noun (read / search) against a ``contacts`` table. It is
 READ-SCOPED by default (``write_allowed=False``): the base refuses any write for
 this binding before a statement reaches the driver, which is how read/write scope
@@ -55,6 +61,7 @@ class CrmSqlAdapter(SqlAdapter):
                 output_schema=_CONTACT_OUT,
                 description="Read a CRM contact by id",
                 rate_limit=read_rl,
+                implements="crm.contact.read",
             ),
             VerbSpec(
                 verb_id="contact.search",
@@ -77,6 +84,7 @@ class CrmSqlAdapter(SqlAdapter):
                 },
                 description="Search CRM contacts by name or email",
                 rate_limit=read_rl,
+                implements="crm.contact.search",
             ),
         ]
 

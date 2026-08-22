@@ -228,6 +228,8 @@ async def test_cancellation_reaps_a_factory_process_registered_before_return(
     starting = asyncio.create_task(supervisor.start(layout, arguments=pinned_arguments(layout)))
     while factory.allocations == 0:
         await asyncio.sleep(0)
+    descriptor = inherited_descriptor(factory)
+    pinned_identity = os.fstat(descriptor)
 
     starting.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -235,8 +237,19 @@ async def test_cancellation_reaps_a_factory_process_registered_before_return(
 
     assert process.kill_calls == 1
     assert process.returncode == -9
-    with pytest.raises(OSError):
-        os.fstat(inherited_descriptor(factory))
+    # The pinned-binary descriptor was RELEASED. A bare fstat-raises check
+    # flaked under the coverage run: any file the process opens between the
+    # close and this assertion (coverage data, logging) can be allocated the
+    # SAME number, and fstat then answers for the stranger. Closed-or-reused
+    # is provable either way: the number no longer names the pinned binary.
+    try:
+        now_identity = os.fstat(descriptor)
+    except OSError:
+        pass  # closed and not yet reused: the strong form
+    else:
+        assert (now_identity.st_dev, now_identity.st_ino) != (
+            pinned_identity.st_dev, pinned_identity.st_ino,
+        ), "the inherited descriptor still names the pinned binary"
 
 
 async def test_one_active_owner_and_crash_cleanup_allow_replacement_process(

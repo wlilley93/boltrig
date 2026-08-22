@@ -113,6 +113,16 @@ class _FakeStore:
 
         return tuple(_Verb(v) for v in ("ticket.read", "ticket.write", "jira.create"))
 
+    # Part of the store contract the offer derivation reads. A double that
+    # omits it cannot stand in for a store, and stubbing the product to
+    # tolerate its absence would make a capability silently vanish from the
+    # offer on any store that failed to implement it.
+    async def list_capability_bindings(self, tenant_id: str, capability_id=None, **_):
+        return []
+
+    async def list_source_operations(self, tenant_id: str, connection_id=None):
+        return []
+
 
 async def test_compile_codex_tool_ceiling_is_tenant_ceiling_intersect_run_grants() -> None:
     kernel = _FakeKernel()

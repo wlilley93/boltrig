@@ -13,6 +13,8 @@ from typing import Any
 
 from boltrig.models import Consequence, InvocationContext, TargetType, UserSetting, Verb, VerbBinding
 
+from .routing import blocking_names, governed_capabilities, unpinned
+
 APPROVAL_POSTURE_SETTING = "agentic.approval_posture"
 
 
@@ -59,6 +61,51 @@ async def persist_approval_posture(
 
 def is_delegated_agent_call(context: InvocationContext) -> bool:
     return bool(context.on_behalf_of) and context.actor_tier != "human"
+
+
+async def requires_approval(
+    store: Any,
+    blocking_verbs: Any,
+    verb: str,
+    verb_def: Verb,
+    binding: VerbBinding,
+    plan: Any,
+    context: InvocationContext,
+) -> bool:
+    """Every reason one invocation must pause for a human, in one place.
+
+    Three, in order of bluntness. The operator's always-ask list is matched
+    against every name the call answers to - what the caller typed, the
+    canonical capability, and the source operation actually executed - because
+    an operator who blocked an action meant that action however it is addressed.
+    That takes TWO lookups, not one: ``blocking_names`` covers what a name can
+    know, and ``governed_capabilities`` covers what only the stored bindings can
+    - which capabilities a bare source-operation id implements. Matching names
+    alone left the capability spelling governing nothing a model could reach,
+    since the MCP face offers source-operation ids and never capability names.
+
+    A binding may then RAISE the consequence of the operation it routes to (SPEC
+    §8 step 5), only upwards, since a mapping able to lower it would let a route
+    quietly downgrade a governed action. That override is read for the direct
+    spelling too, for the same reason: it is a property of the route.
+
+    The operator's own entries are normalised first: a list written with a
+    version pin is read as the capability it names, so the gate cannot quietly
+    expire when a binding's version moves (``routing.unpinned``).
+
+    Everything else remains the established posture gate.
+    """
+    blocked = unpinned(blocking_verbs)
+    if not blocked.isdisjoint(blocking_names(verb, verb_def, plan)):
+        return True
+    capabilities, override = await governed_capabilities(
+        store, context.tenant_id, verb_def, plan
+    )
+    if not blocked.isdisjoint(capabilities):
+        return True
+    if override == "high":
+        return True
+    return await posture_requires_approval(store, verb, verb_def, binding, context)
 
 
 async def posture_requires_approval(
@@ -116,4 +163,5 @@ __all__ = [
     "parse_approval_posture",
     "persist_approval_posture",
     "posture_requires_approval",
+    "requires_approval",
 ]

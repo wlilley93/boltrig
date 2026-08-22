@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import Request
 
 from boltrig.model_choice_policy import opaque_model_choice_id
-from boltrig.models.model_id_policy import exact_model_id
+from boltrig.models.model_id_policy import exact_model_id, user_model_id
 
 from ._shared import platform_state
 
@@ -64,7 +64,9 @@ async def _scoped_ai_default(kernel, principal, platform: dict):
     if resolution.is_default:
         return None
     try:
-        model = exact_model_id(resolution.model)
+        # The caller's own binding: aliases are the provider's naming and are
+        # allowed (user_model_id); kernel choices below stay byte-exact.
+        model = user_model_id(resolution.model)
     except ValueError:
         raw_model = resolution.model
         return (
@@ -88,10 +90,44 @@ async def _scoped_ai_default(kernel, principal, platform: dict):
     return model, True, None
 
 
+def _declared_for(endpoints, model: str | None) -> tuple[str, ...] | None:
+    """The declaration of the store endpoint naming exactly this model, if any."""
+
+    return next(
+        (endpoint.modalities for endpoint in endpoints if endpoint.model == model),
+        None,
+    )
+
+
+def _advertised_modalities(
+    advertised: dict, declared_modalities: tuple[str, ...] | None
+) -> list[str] | None:
+    """Resolve a row's modalities, letting a store declaration stand in.
+
+    Plain OpenAI-compatible gateways list provider-derived models as bare
+    {id, name} rows: absence of the key means "not described", never
+    "describes nothing". Only that absence may be answered by the store
+    endpoint's own declaration - the same declaration the kernel already
+    trusts to route to the model at all. A row carrying the key malformed
+    stays refused.
+    """
+
+    modalities = advertised.get("input_modalities")
+    if isinstance(modalities, list):
+        return modalities
+    if "input_modalities" not in advertised and declared_modalities:
+        return [
+            "image" if modality == "vision" else modality
+            for modality in declared_modalities
+        ]
+    return None
+
+
 def _choice_availability(
     model: str,
     platform: dict,
     catalogue_by_id: dict[str, dict],
+    declared_modalities: tuple[str, ...] | None = None,
 ) -> tuple[bool, str | None]:
     try:
         exact_model_id(model)
@@ -104,8 +140,8 @@ def _choice_availability(
     advertised = catalogue_by_id.get(model)
     if advertised is None:
         return False, "model_not_advertised"
-    modalities = advertised.get("input_modalities")
-    if not isinstance(modalities, list):
+    modalities = _advertised_modalities(advertised, declared_modalities)
+    if modalities is None:
         return False, "text_capability_not_advertised"
     if "text" not in modalities:
         return False, "text_not_supported"
@@ -116,10 +152,11 @@ def _model_availability(
     model: str | None,
     platform: dict,
     catalogue_by_id: dict[str, dict],
+    declared_modalities: tuple[str, ...] | None = None,
 ) -> tuple[bool, str | None]:
     if model is None:
         return False, "default_model_unconfigured"
-    return _choice_availability(model, platform, catalogue_by_id)
+    return _choice_availability(model, platform, catalogue_by_id, declared_modalities)
 
 
 async def _catalogue(platform: dict) -> dict:
@@ -188,7 +225,9 @@ def _project_choices(endpoints, platform, catalogue_available, catalogue_by_id):
         except ValueError:
             continue
         available, reason = (
-            _choice_availability(endpoint.model, platform, catalogue_by_id)
+            _choice_availability(
+                endpoint.model, platform, catalogue_by_id, endpoint.modalities
+            )
             if catalogue_available
             else (False, "catalogue_unavailable")
         )
@@ -245,6 +284,7 @@ def register(app, P, K) -> None:
                 default_model,
                 platform,
                 catalogue_by_id,
+                _declared_for(endpoints, default_model),
             )
         else:
             default_available = False

@@ -8,18 +8,37 @@ import {
 } from "react";
 import type { IntegrationCatalogueEntry } from "@wlilley93/boltrig-web-sdk";
 
-export function PluginPageHeading({ onAdd }: { onAdd(): void }) {
+import { IntegrationsTabs } from "./IntegrationsTabs";
+
+/**
+ * The page title, and the tab strip beneath it.
+ *
+ * The tabs render HERE, inside the pane, rather than around the whole route:
+ * the visual contract pins the pane's column, and a strip above `.plugins-page`
+ * lands at x=266 against a pane at x=435, which is not a styling detail but a
+ * different page. Every tab shows the same heading and the same strip, so this
+ * is also the only place they have to be written.
+ *
+ * `onAdd` is optional. Adding a plugin is a Connections action, and a page-level
+ * button that does nothing on three of four tabs is worse than its absence.
+ */
+export function PluginPageHeading({ onAdd }: { onAdd?: () => void }) {
   return (
-    <header className="plugins-heading">
-      <div className="plugins-heading-copy">
-        <h1>Plugins</h1>
-        <p>Connect the apps and services you want Boltrig to use.</p>
-      </div>
-      <button className="plugins-add-button" onClick={onAdd} type="button">
-        <PlusIcon />
-        <span>Add plugin</span>
-      </button>
-    </header>
+    <>
+      <header className="plugins-heading">
+        <div className="plugins-heading-copy">
+          <h1>Plugins</h1>
+          <p>Connect the apps and services you want Boltrig to use.</p>
+        </div>
+        {onAdd && (
+          <button className="plugins-add-button" onClick={onAdd} type="button">
+            <PlusIcon />
+            <span>Add plugin</span>
+          </button>
+        )}
+      </header>
+      <IntegrationsTabs />
+    </>
   );
 }
 

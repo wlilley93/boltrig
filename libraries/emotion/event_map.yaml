@@ -26,4 +26,14 @@ rules:
   - {type: ultracode, where: {status: phase_started}, appraise: spawn_worker, intensity: 0.6}
   - {type: ultracode, where: {status: agent_finished}, appraise: step_ok, intensity: 0.4}
   - {type: cancelled, appraise: interrupted, intensity: 0.8}
+  - {type: voice_tone, where: {tone: excited}, has: [tone], appraise: user_excited, intensity: 0.8, throttle_s: 20}
+  - {type: voice_tone, where: {tone: cross}, has: [tone], appraise: user_cross, intensity: 0.9, throttle_s: 20}
+  - {type: voice_tone, where: {tone: subdued}, has: [tone], appraise: user_subdued, intensity: 0.7, throttle_s: 20}
+  - {type: voice_tone, where: {tone: sarcastic}, has: [tone], appraise: user_sarcastic, intensity: 0.6, throttle_s: 30}
   - {type: final, appraise: task_success, intensity: 1.0}
+  # The Worker announces an adoption through POST /v1/familiar/emotion/adopted;
+  # the throttle keeps a settings browser from pumping mood by flicking skins.
+
+  # The Worker announces an adoption through POST /v1/familiar/emotion/adopted;
+  # the throttle keeps a settings browser from pumping mood by flicking skins.
+  - {type: character_adopted, appraise: character_adopted, intensity: 1.0, throttle_s: 60}

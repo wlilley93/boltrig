@@ -102,10 +102,10 @@ async def test_invalid_per_call_model_fails_before_creating_cell_tree(
         model_id="provider/model-base-20260812",
     )
 
-    with pytest.raises(ValueError, match="mutable"):
+    with pytest.raises(ValueError, match="path"):
         await source.admit(
             assignment("invalid-selected-model"),
-            model_id="provider/latest",
+            model_id="provider//latest",
         )
 
     assert list(stack.iterdir()) == []

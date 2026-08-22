@@ -188,10 +188,18 @@ async def test_schema_failure_names_the_offending_field_for_a_granted_caller():
 async def test_schema_failure_tells_an_ungranted_caller_nothing_about_the_schema():
     """The gate, not the absence of values: disclosure requires authorisation.
 
-    ``dispatch.py`` validates params (:520) BEFORE it checks grants (:524), so a
-    caller with no grant on a verb still reaches the schema rejection. Without a
-    gate, the richer message above would hand that caller the input-schema shape
-    of every verb in the tenant - exactly what ``_list_tools`` exists to withhold.
+    ``dispatch.py`` USED TO validate params before checking grants, so a caller
+    with no grant on a verb still reached the schema rejection and the envelope's
+    disclosure predicate was the only thing between them and the input-schema
+    shape of every verb in the tenant. The capability layer made that acute - a
+    routed call is validated against the SOURCE OPERATION's schema - so the order
+    is now grants first and such a caller never reaches validation at all.
+
+    This asserts the PROPERTY, not either mechanism: an ungranted caller learns
+    nothing about the schema. The envelope predicate stays (see mcp_errors,
+    limit 2), because an ordering in one call path and a gate on the envelope
+    protect different things, and a pair like that disagreeing is how the hole
+    opened the first time.
     """
     k = await _kernel()
     # Granted ticket.read only; ticket.create is outside this run's grants.
@@ -202,7 +210,7 @@ async def test_schema_failure_tells_an_ungranted_caller_nothing_about_the_schema
     text = res["result"]["content"][0]["text"]
     assert res["result"]["isError"] is True
     assert "title" not in text, f"leaked a schema property to an ungranted caller: {text!r}"
-    assert text == "schema_invalid", f"expected the bare reason, got {text!r}"
+    assert text == "grant_missing", f"expected the authorisation refusal, got {text!r}"
 
 
 @pytest.mark.security

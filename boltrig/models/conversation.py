@@ -44,6 +44,13 @@ class Conversation:
     id: str
     tenant_id: TenantId
     user_id: UserId  # owner (RBAC: only owner + scoped roles, SEC-25)
+    # The named tier-1 peer selected for the NEXT admitted turn. This is a
+    # mutable projection, not historical authorship: every persisted message
+    # below freezes the agent that received/authored that exact turn.
+    agent_address: str | None = None
+    # A project is the existing Workspace aggregate. It belongs to the human
+    # owner/team, never to an agent. NULL retains legacy/unfiled conversations.
+    workspace_id: str | None = None
     title: str | None = None
     status: ConversationStatus = ConversationStatus.ACTIVE
     origin: ConversationOrigin = ConversationOrigin.USER
@@ -62,6 +69,11 @@ class ConversationMessage:
     role: MessageRole
     content: str | None = None
     run_id: RunId | None = None  # the fleet run this turn produced/used
+    # Immutable per-turn routing/authorship. USER rows carry a recipient;
+    # ASSISTANT/TOOL/SYSTEM rows carry an author. Nullable for legacy rows and
+    # tenants that have not adopted the named-agent registry.
+    recipient_agent_address: str | None = None
+    author_agent_address: str | None = None
     hitl_request_id: str | None = None  # set when this message is an inline HITL prompt
     events: list[dict[str, Any]] = field(default_factory=list)  # render data (tool/subagent)
     # Inline, size-capped attachments carried on the message row itself

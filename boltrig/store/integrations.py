@@ -16,6 +16,8 @@ from boltrig.models.base import utcnow
 from .integration_atomic import (
     active_mem,
     active_pg,
+    applicable_mem,
+    applicable_pg,
     create_mem,
     create_pg,
     revoke_mem,
@@ -77,6 +79,8 @@ def _connection(row):
         revoked_at=row["revoked_at"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        level=row["level"],
+        scope_id=row["scope_id"],
     )
 
 
@@ -139,8 +143,8 @@ class IntegrationStorePG:
             """INSERT INTO integration_connections
                  (id, tenant_id, integration_id, adapter_id, label, health,
                   credential_ref, credential_owned, accounts, last_checked_at,
-                  revoked_at, created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+                  revoked_at, created_at, updated_at, level, scope_id)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  integration_id=EXCLUDED.integration_id,
                  adapter_id=EXCLUDED.adapter_id, label=EXCLUDED.label,
@@ -163,6 +167,8 @@ class IntegrationStorePG:
             connection.revoked_at,
             connection.created_at,
             connection.updated_at,
+            connection.level,
+            connection.scope_id,
         )
 
     async def update_integration_connection_health_if_active(
@@ -185,8 +191,8 @@ class IntegrationStorePG:
             """INSERT INTO integration_connections
                  (id, tenant_id, integration_id, adapter_id, label, health,
                   credential_ref, credential_owned, accounts, last_checked_at,
-                  revoked_at, created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+                  revoked_at, created_at, updated_at, level, scope_id)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
                ON CONFLICT DO NOTHING
                RETURNING id""",
             connection.id,
@@ -202,6 +208,8 @@ class IntegrationStorePG:
             connection.revoked_at,
             connection.created_at,
             connection.updated_at,
+            connection.level,
+            connection.scope_id,
         )
         return row is not None
 
@@ -219,6 +227,11 @@ class IntegrationStorePG:
 
     async def get_active_integration_connection_for_adapter(self, tenant_id, adapter_id):
         return await active_pg(self._pool, tenant_id, adapter_id)
+
+    async def list_applicable_integration_connections_for_adapter(
+        self, tenant_id, adapter_id, owner
+    ):
+        return await applicable_pg(self._pool, tenant_id, adapter_id, owner)
 
     async def list_integration_connections(self, tenant_id):
         rows = await self._pool.fetch(
@@ -285,6 +298,8 @@ class IntegrationStoreMem:
         if any(
             row.tenant_id == connection.tenant_id
             and row.adapter_id == connection.adapter_id
+            and row.level == connection.level
+            and row.scope_id == connection.scope_id
             and row.health != "revoked"
             for row in connections.values()
         ):
@@ -307,6 +322,12 @@ class IntegrationStoreMem:
     async def get_active_integration_connection_for_adapter(self, tenant_id, adapter_id):
         _, connections = _memory_tables(self)
         return active_mem(connections, tenant_id, adapter_id)
+
+    async def list_applicable_integration_connections_for_adapter(
+        self, tenant_id, adapter_id, owner
+    ):
+        _, connections = _memory_tables(self)
+        return applicable_mem(connections, tenant_id, adapter_id, owner)
 
     async def list_integration_connections(self, tenant_id):
         _, connections = _memory_tables(self)

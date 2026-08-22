@@ -32,6 +32,9 @@ from .control_notifications import (
 )
 from .control_profiles import execute_profile_operation
 from .permanent_fleet import execute_permanent_fleet_operation
+from .control_capability_bindings import execute_capability_binding_operation
+from .control_routing_policies import execute_routing_policy_operation
+
 from .control_registry_operations import execute_registry_operation
 from .control_mcp import register_mcp_consumer
 from .control_mcp_lifecycle import execute_mcp_lifecycle_operation
@@ -43,26 +46,20 @@ from .control_compat import execute_compat_operation
 from .control_budget import execute_budget_operation
 from .control_work import execute_work_operation
 from .control_workflow_dispatch import execute_workflow_control
+from boltrig.identity.user_view import user_view
+# Handlers sharing the (store, loader, verb, params, context) seam, tried in
+# order. A tuple rather than an inline literal so adding one is a data edit.
+_REGISTRY_RECORD_HANDLERS = (
+    execute_registry_operation,
+    execute_capability_binding_operation,
+    execute_routing_policy_operation,
+)
 
 __all__ = ["ControlPlaneAdapter", "build_control_plane_adapter", "register_mcp_consumer",
            "safe_consequence", "set_binding_record", "upsert_noun_record",
            "upsert_skill_record", "upsert_verb_record"]
 
 ControlHandler = Callable[[str, dict[str, Any], InvocationContext], Awaitable[Result | None]]
-
-
-def _user_view(user: Any) -> dict[str, Any]:
-    return {
-        "id": user.id,
-        "email": user.email,
-        "display_name": user.display_name,
-        "role": user.role,
-        "scope": user.scope,
-        "status": user.status,
-        "source": user.source,
-        "source_group": user.source_group,
-        "last_seen_at": user.last_seen_at.isoformat() if user.last_seen_at else None,
-    }
 
 
 class ControlPlaneAdapter:
@@ -163,9 +160,14 @@ class ControlPlaneAdapter:
     async def _registry_records(
         self, verb: str, params: dict[str, Any], context: InvocationContext
     ) -> Result | None:
-        return await execute_registry_operation(
-            self._store, self._loader, verb, params, context
-        )
+        # Capability-binding review shares this seam rather than taking its own:
+        # identical (store, loader) shape, and a binding IS a registry record, so
+        # a second handler would be a second name for the same thing.
+        for run in _REGISTRY_RECORD_HANDLERS:
+            result = await run(self._store, self._loader, verb, params, context)
+            if result is not None:
+                return result
+        return None
 
     async def _adapters(
         self, verb: str, params: dict[str, Any], context: InvocationContext
@@ -273,12 +275,12 @@ class ControlPlaneAdapter:
             return Result.success({"section": params["section"], "value": value})
         if verb == "control.user.update":
             user = await update_user_record(self._store, tenant, params, context=context)
-            return Result.success({"user": _user_view(user)})
+            return Result.success({"user": user_view(user)})
         if verb == "control.user.deactivate":
             user = await deactivate_user_record(
                 self._store, tenant, params["user_id"], context=context
             )
-            return Result.success({"user": _user_view(user)})
+            return Result.success({"user": user_view(user)})
         if verb == "control.invitation.create":
             invitation, secret = await create_invitation_record(
                 self._store, tenant, params, context=context

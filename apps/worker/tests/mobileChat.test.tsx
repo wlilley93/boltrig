@@ -24,7 +24,7 @@ afterEach(() => {
 
 const EMPTY_TURN: NormalizedTurn = {
   text: "", reasoning: "", tools: [], subagents: [], hitls: [],
-  questions: [], steps: [], timeline: [], ended: false,
+  questions: [], displayObjects: [], steps: [], timeline: [], ended: false,
   cancelled: false, degraded: false,
 };
 

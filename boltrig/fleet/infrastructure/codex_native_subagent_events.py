@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from typing import Callable, Protocol
 
 from boltrig.fleet.domain import JSONValue
-from boltrig.models.model_id_policy import exact_model_id
+from boltrig.models.model_id_policy import user_model_id
 
 from .codex_runtime_event_state import CodexRuntimeProtocolError
 
@@ -38,7 +38,7 @@ class NativeThreadKnowledge(Protocol):
 
 def validate_native_event_policy(model_id: str, reasoning_effort: str) -> None:
     try:
-        exact_model_id(model_id)
+        user_model_id(model_id)
     except ValueError:
         raise ValueError("event translator model policy is invalid")
     if reasoning_effort not in _REASONING_EFFORTS:

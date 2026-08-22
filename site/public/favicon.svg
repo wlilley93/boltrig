@@ -1,8 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Boltrig">
-  <rect width="100" height="100" fill="#04060D" />
-  <g fill="none" stroke="#F2F7FC" stroke-linecap="round" stroke-width="6">
-    <circle cx="50" cy="50" r="44" stroke-dasharray="230 46" />
-    <circle cx="50" cy="50" r="9" fill="#3DD3F0" stroke="none" />
+  <!-- White ground, dark mark, and a wide margin: the mark occupies 70 of the
+       100 unit box, leaving 15 units of clear space each side. It used to run to
+       r=47 of 50, so it filled the square corner to corner and read as a solid
+       tile rather than a logo at tab size.
+
+       THE RINGS HAD TO INVERT WITH THE GROUND. They were #F2F7FC, near-white on
+       near-black; leaving them while the ground went white would have made the
+       whole mark disappear and left a lone cyan dot floating in an empty square.
+       They carry the shape, so they take the dark.
+
+       Geometry stays proportional to apps/worker/src/components/BrandMark.tsx:
+       the radius scales by 32/44 and the dash array scales with it, so the gap
+       keeps its share of the circumference instead of drifting round the ring. -->
+  <rect width="100" height="100" fill="#FFFFFF" />
+  <g fill="none" stroke="#04060D" stroke-linecap="round" stroke-width="6">
+    <circle cx="50" cy="50" r="32" stroke-dasharray="167.3 33.5" />
+    <circle cx="50" cy="50" r="7" fill="#3DD3F0" stroke="none" />
   </g>
 </svg>
-

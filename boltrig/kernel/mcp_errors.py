@@ -1,4 +1,4 @@
-"""Turning a kernel exception into the MCP result envelope a model actually reads.
+"""The MCP wire envelopes: the JSON-RPC frames, and the result a model reads.
 
 Extracted from ``mcp.py``'s ``_call_tool``, which had grown a branch per failure
 mode. The envelopes here are byte-identical to the ones it returned, with one
@@ -21,13 +21,17 @@ TWO LIMITS, both deliberate.
    schema-validation ledger order draws for the append-only store, applied to a
    second channel. See ``kernel/schema_diagnosis.py`` for the rule.
 
-2. DISCLOSURE FOLLOWS AUTHORISATION. ``dispatch.py`` validates params (:520)
-   BEFORE it checks grants (:524), so a caller holding no grant on a verb still
-   reaches the schema rejection. Naming that verb's properties to them would hand
-   out the input-schema shape of every verb in the tenant, which is exactly what
-   ``_list_tools`` exists to withhold (SEC-23, FR-MCP-02). The richer text is
-   therefore gated on the same predicate ``_list_tools`` uses, and an ungranted
-   caller keeps the bare reason.
+2. DISCLOSURE FOLLOWS AUTHORISATION. This gate is now belt AND braces, and
+   both halves are worth keeping. ``dispatch.py`` used to validate params BEFORE
+   checking grants, so a caller holding no grant still reached the schema
+   rejection and this predicate was the only thing between them and the input
+   shape of every verb in the tenant. As of the capability-routing follow-up the
+   grant check runs first (the routed case made it acute: a routed call is
+   validated against the SOURCE OPERATION's schema, and the digest in that
+   rejection is the binding's own ``source_schema_digest``). The predicate stays
+   because the ordering is a property of one call path and this is a property of
+   the envelope - the kind of pair whose disagreement is how the hole opened in
+   the first place. An ungranted caller keeps the bare reason.
 
 ``_boltrig`` is untouched in every branch: the machine-readable status and reason
 are a contract, and only the human/model-facing text grows.
@@ -44,6 +48,17 @@ from boltrig.models import (
     PendingHuman,
     SchemaValidationError,
 )
+
+def ok(rid: Any, result: dict) -> dict:
+    """A JSON-RPC success frame. It lives here rather than in ``mcp.py`` so a
+    handler extracted out of that file can answer without importing it back."""
+    return {"jsonrpc": "2.0", "id": rid, "result": result}
+
+
+def err(rid: Any, code: int, message: str) -> dict:
+    """A JSON-RPC error frame."""
+    return {"jsonrpc": "2.0", "id": rid, "error": {"code": code, "message": message}}
+
 
 # A rejection is meant to be read and acted on in one turn, so it stays short
 # enough to survive a context window that is already carrying the failed call.

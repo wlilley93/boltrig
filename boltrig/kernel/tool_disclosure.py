@@ -40,7 +40,9 @@ deny-dominance and the terminal-wildcard rule stay in one place.
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Iterable
+from typing import Any
 
 from boltrig.models import Consequence, GrantSet, Verb
 from boltrig.models.grants import normalize_identifier
@@ -204,6 +206,80 @@ def offer_payload(
         }
         for verb in ranked
     ]
+
+
+# One page of the offer. Above every measured tenant surface on purpose: the
+# committed registered-verb surface is 293 rows and the widest known consumed
+# server is 633, so no client alive sees its answer change today.
+MCP_TOOLS_PAGE_SIZE = 1000
+
+
+def _encode_cursor(name: str) -> str:
+    """Opaque to the client, and deliberately NOT an index.
+
+    An index cursor silently skips a tool when the offer shrinks between pages,
+    which is the failure a client cannot detect. Anchored to the last name
+    emitted, a changed offer costs at worst a repeat or a clean stop.
+    """
+    return base64.urlsafe_b64encode(name.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _resume_index(rows: list[dict], cursor: Any) -> int:
+    """Where the next page starts. Raises on a cursor that cannot be resolved.
+
+    An empty or absent cursor is the FIRST page, not a broken one: a client that
+    initialises the field rather than omitting it is asking for the beginning,
+    and answering that with zero tools is a silent capability outage - the agent
+    sees a server with nothing to offer and no error to report.
+
+    Anything else unusable - a non-string, undecodable base64, or an anchor no
+    longer in the offer - raises, and the face turns that into JSON-RPC -32602.
+    The alternatives are both silent: an empty success is indistinguishable from
+    "this server has no tools", and restarting at zero turns a stale cursor into
+    a client that pages forever.
+    """
+    if cursor is None or cursor == "":
+        return 0
+    if not isinstance(cursor, str):
+        raise ToolDisclosureError("cursor is not a string")
+    try:
+        anchor = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)).decode("utf-8")
+    except Exception as exc:
+        raise ToolDisclosureError("cursor is not decodable") from exc
+    for index, row in enumerate(rows):
+        if row["name"] == anchor:
+            return index + 1
+    raise ToolDisclosureError("cursor names a tool that is no longer offered")
+
+
+def offer_page(
+    candidates: Iterable[Verb],
+    grants: GrantSet,
+    skills: Iterable[str],
+    cursor: Any = None,
+) -> dict[str, Any]:
+    """One PAGE of ``offer_payload``, plus the MCP continuation token (SPEC 11.6).
+
+    PAGING IS NOT THE TRUNCATION D4 RESERVES. No page-size choice here drops a
+    row from the offer: a budget that DROPS rows remains unadopted, and when one
+    is adopted it is still passed to ``compute_tool_offer`` and nowhere else.
+
+    THE GUARANTEE IS EXACT ONLY FOR A STABLE OFFER, and that limit is stated
+    rather than glossed. The offer is recomputed from live store state on every
+    page, and the rank depends on each verb's consequence and grant specificity,
+    so a row that re-ranks AHEAD of the cursor's anchor between two of a
+    client's requests is not delivered on either page. Registering an adapter or
+    re-probing a consumed server mid-pagination is enough to do it. What the
+    name-anchored cursor buys is that the failure is bounded to rows that MOVED:
+    an index cursor loses a row whenever the offer merely shrinks.
+    """
+    rows = offer_payload(candidates, grants, skills)
+    start = _resume_index(rows, cursor)
+    page = rows[start : start + MCP_TOOLS_PAGE_SIZE]
+    payload: dict[str, Any] = {"tools": page}
+    if page and start + len(page) < len(rows):
+        payload["nextCursor"] = _encode_cursor(page[-1]["name"])
+    return payload
 
 
 def _model_description(verb: Verb) -> str:

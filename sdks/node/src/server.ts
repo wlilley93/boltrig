@@ -91,11 +91,19 @@ export interface VerbDef {
    * inputSchema and used by the KERNEL's param validation at dispatch. */
   schema: Record<string, unknown>;
   handler: VerbHandler;
-  /** Declared consequence. NOTE: today's consumer maps every consumed verb to
-   * consequence "low" (mcp_consumer.py:85-93 does not propagate it); this flag
-   * is surfaced as MCP tool annotations and documented so an operator can
-   * re-assert "high" kernel-side after activation (see README). */
+  /** Declared consequence, PROPAGATED. The consumer reads it into the verb row
+   * (mcp_tool_policy.consequence_hint), and since 2026-08-16 it fails CLOSED:
+   * a tool carrying no consequence, no addon risk class and no readOnly
+   * annotation reads HIGH, because absence is not evidence of safety. Leave it
+   * undefined and the kernel will treat the verb as high-consequence and gate
+   * it; declare "low" only where that is a claim you mean to make. */
   consequence?: "low" | "high";
+  /** The canonical capability this verb implements, e.g. "crm.contact.search"
+   * (SPEC capability doctrine §5, level 1). Unpinned - a version is an
+   * addressing detail of one call, and a pinned claim is refused rather than
+   * reinterpreted. It is a CLAIM: Boltrig records it as a proposed binding that
+   * routes nothing and governs nothing until a human approves it. */
+  implements?: string;
 }
 
 export interface BoltrigMcpServerOptions {
@@ -199,6 +207,17 @@ export function validateVerbTable(verbs: VerbDef[]): void {
     if (verb.consequence !== undefined && verb.consequence !== "low" && verb.consequence !== "high") {
       throw new Error(`verb ${verb.name}: consequence must be "low" or "high"`);
     }
+    if (verb.implements !== undefined) {
+      // The pin check comes FIRST so a versioned claim gets the message that
+      // explains it, rather than the generic charset refusal it would otherwise
+      // trip on.
+      if (typeof verb.implements === "string" && verb.implements.includes("@")) {
+        throw new Error(`verb ${verb.name}: implements must not pin a version`);
+      }
+      if (typeof verb.implements !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(verb.implements)) {
+        throw new Error(`verb ${verb.name}: implements must be a dotted capability id`);
+      }
+    }
   }
 }
 
@@ -269,9 +288,14 @@ export async function createBoltrigMcpServer(
           name: v.name,
           description: v.description,
           inputSchema: v.schema,
-          // Per-tool consequence hint the consumer propagates to the verb row
-          // (mcp_consumer.py:_consequence_hint; absent/bogus -> "low").
-          consequence: v.consequence ?? "low",
+          // ABSENCE TRAVELS AS ABSENCE. This used to send `v.consequence ?? "low"`,
+          // which turned "the app declared nothing" into a positive low signal on
+          // the wire - and the consumer takes an explicit consequence at its word
+          // (mcp_tool_policy.consequence_hint checks `is not None` first). That
+          // silently defeated the 2026-08-16 fail-closed rule, under which a tool
+          // publishing no evidence of safety reads HIGH and gets the human gate.
+          ...(v.consequence === undefined ? {} : { consequence: v.consequence }),
+          ...(v.implements === undefined ? {} : { implements: v.implements }),
           annotations: {
             readOnlyHint: false,
             destructiveHint: v.consequence === "high",

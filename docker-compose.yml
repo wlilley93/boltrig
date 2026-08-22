@@ -16,7 +16,7 @@
 #   fleet-worker      the fleet runtime + durable workers (Epics F/G)
 #   hatchet-engine    optional durable execution engine (US-FLT-06, seam)
 #   hatchet-dashboard optional Hatchet web console (seam)
-#   worker-ui         the first-party React console (the only browser surface)
+#   ui                the first-party React console (the only browser surface)
 #   bifrost           optional model cost/cache gateway (profile: gateway)
 #   local-model       optional on-box inference for sensitive data (profile: local)
 
@@ -476,14 +476,14 @@ services:
     depends_on:
       - hatchet-engine
 
-  worker-ui:
+  ui:
     # The Worker is the only first-party browser surface.
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
       args:
         VITE_DESKTOP_DOWNLOAD_URL: ${BOLTRIG_DESKTOP_DOWNLOAD_URL:-}
-    image: boltrig/worker-ui:0.1.0
+    image: boltrig/ui:0.1.0
     restart: unless-stopped
     networks:
       - default

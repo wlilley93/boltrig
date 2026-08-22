@@ -30,7 +30,7 @@ services:
       - caddy_config:/config
     depends_on:
       - kernel
-      - worker-ui
+      - ui
 
   kernel:
     # reachable only through Caddy now (no direct host port). Internal
@@ -48,7 +48,7 @@ services:
       - ./libraries:/app/libraries:ro
       - ${CA_BUNDLE_FILE:-./deploy/ca-bundle.crt}:/certs/ca.pem:ro
 
-  worker-ui:
+  ui:
     ports: !override []
 
   # M8 (SEC-69): drop the Hatchet host ports entirely in the secure posture. The

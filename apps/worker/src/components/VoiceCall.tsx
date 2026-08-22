@@ -26,6 +26,7 @@ import {
 } from "./voiceBargeInGraph";
 import { audioTracks, createVoicePlaybackAnalyser, resamplePcm16, safeDisconnect } from "./voiceMedia";
 import { UtteranceGain, pcm16ToFloat } from "./voiceLoudness";
+import { voiceStageInput } from "./voiceStageInput";
 import "./VoiceCall.css";
 
 interface VoiceCallProps {
@@ -217,6 +218,11 @@ export function VoiceCall({
     ...QUIET_VOICE_FEATURES,
     bands: [...QUIET_VOICE_FEATURES.bands],
   });
+  /** How loudly the PERSON is talking, from the barge-in gate's own meter. Its
+   *  own state rather than a field on the features above, because it moves on a
+   *  different clock and for a different reason: those describe her voice, this
+   *  describes yours. */
+  const [micLevel, setMicLevel] = useState(0);
   const mediaRef = useRef<MediaResources | null>(null);
   const callRef = useRef<RealtimeCall | null>(null);
   const textDraftOwnerRef = useRef<{
@@ -415,6 +421,7 @@ export function VoiceCall({
     characterMutedRef.current = false;
     setCharacterMuted(false);
     setFamiliarActivity({ ...QUIET_VOICE_FEATURES, bands: [...QUIET_VOICE_FEATURES.bands] });
+    setMicLevel(0);
     setLines([]);
     setUsage(null);
     setEventNotice("");
@@ -456,6 +463,7 @@ export function VoiceCall({
     textDraftOwnerRef.current = null;
     setTextDraft("");
     setFamiliarActivity({ ...QUIET_VOICE_FEATURES, bands: [...QUIET_VOICE_FEATURES.bands] });
+    setMicLevel(0);
     setLines([]);
     setUsage(null);
     setEventNotice("");
@@ -639,7 +647,7 @@ export function VoiceCall({
         },
         ...bargeInHostFields(micAnalyser, () => interruptForBargeIn(
           mediaRef.current, playAtRef, setEventNotice,
-        )),
+        ), undefined, setMicLevel),
         readyTimeout: null,
         rejectReady: null,
       };
@@ -1089,25 +1097,7 @@ export function VoiceCall({
     (profile) => profile.name === call?.agent_profile_id,
   )?.familiar_genotype;
   const stageGenotype = primaryAgent?.familiar_genotype ?? profileGenotype ?? null;
-  const stageState = {
-    working: !familiarActivity.speaking && (
-      status === "creating" || status === "joining" || status === "reconnecting"
-    ),
-    speaking: familiarActivity.speaking,
-    level: familiarActivity.level,
-    bands: familiarActivity.bands,
-    onset: familiarActivity.onset,
-  };
-  const stageInput: StageTurnInput = {
-    loading: false,
-    hasLiveEvents: stageState.working,
-    liveEnded: false,
-    voiceSpeaking: stageState.speaking,
-    voiceLevel: stageState.level,
-    voiceBands: stageState.bands,
-    voiceOnset: stageState.onset,
-    micActive: !muted,
-  };
+  const stageInput = voiceStageInput({ features: familiarActivity, micLevel, muted, status });
   const noticeVisible = Boolean(
     approvalCount > 0 && eventNotice && eventNotice !== dismissedNotice,
   );

@@ -104,55 +104,6 @@ async def _channel_secret(kernel, ref: dict | None) -> str | None:
     return ref.get("secret")
 
 
-# Addressing (decision 0003, Phase 2): which agent a channel message is routed
-# TO. This is routing DATA, never authority - identity stays kernel-authoritative
-# via the binding rows; the target only steers which agent picks the item up.
-# Resolution order (first hit wins):
-#   1. an explicit ``target`` the VERIFIED sender put on the message (custom
-#      surfaces - the desktop familiar, hey-nabu, sites - address directly);
-#   2. the channel's config mapping ``addressing.routes`` (chat/thread id ->
-#      target), so a platform chat can be pinned to a subagent;
-#   3. ``addressing.default_target`` on the channel, else "cos" (the tier-1
-#      chief of staff - today's behaviour, so unconfigured channels are unchanged).
-# A target is a short slug; anything longer/else is ignored (fail to default,
-# never to an error - a malformed address must not drop a verified message).
-DEFAULT_TARGET = "cos"
-_TARGET_FIELDS = ("chat", "thread", "channel", "chat_id", "thread_id")
-
-
-def _clean_target(value) -> str | None:
-    """A target slug or None: short, safe-charset routing data."""
-    import re
-
-    slug = str(value or "").strip()
-    return slug if re.fullmatch(r"[A-Za-z0-9._:-]{1,64}", slug) else None
-
-
-def _resolve_addressing(ch, body: dict) -> tuple[str, dict]:
-    """Resolve (target, reply_route) for an inbound message.
-
-    The reply_route is the way BACK for round-trip integrity (SEC-179): the
-    channel, thread and sender the triggering message came from, so a reply or
-    a run-completion notification returns to the same surface/thread."""
-    addressing = (ch.config or {}).get("addressing") or {}
-    thread_field = addressing.get("thread_field")
-    thread_id = ""
-    for field_name in ([thread_field] if thread_field else []) + [
-        f for f in _TARGET_FIELDS if f != thread_field
-    ]:
-        value = body.get(field_name)
-        if value is not None and str(value).strip():
-            thread_id = str(value).strip()
-            break
-    target = _clean_target(body.get("target"))
-    if target is None and thread_id:
-        target = _clean_target((addressing.get("routes") or {}).get(thread_id))
-    if target is None:
-        target = _clean_target(addressing.get("default_target")) or DEFAULT_TARGET
-    reply_route = {"channel_id": ch.id, "thread": thread_id or None, "sender": None}
-    return target, reply_route
-
-
 # --------------------------------------------------------------------------- #
 # Channel-native HITL replies (SEC-14 the approval/question separation, SEC-179
 # the round-trip): a BOUND sender answers a pending approval/question from the

@@ -93,6 +93,15 @@ def test_chat_model_choices_are_tenant_scoped_exact_and_catalogue_verified() -> 
                     "name": "Vision only",
                     "input_modalities": ["image"],
                 },
+                {
+                    "id": "ollama/bare-row",
+                    "name": "Provider-derived, no architecture block",
+                },
+                {
+                    "id": "provider/mis-described",
+                    "name": "Carries the key malformed",
+                    "input_modalities": "nope",
+                },
             ],
         }
     )
@@ -116,6 +125,8 @@ def test_chat_model_choices_are_tenant_scoped_exact_and_catalogue_verified() -> 
                 "provider/model-a",
                 tenant_id="another-tenant",
             ),
+            _endpoint("bare-declared", "ollama/bare-row"),
+            _endpoint("mis-described", "provider/mis-described"),
         ],
         catalogue,
     )
@@ -132,9 +143,11 @@ def test_chat_model_choices_are_tenant_scoped_exact_and_catalogue_verified() -> 
     assert body["default_available"] is True
     assert body["default_unavailable_reason"] is None
     assert [(row["id"], row["available"], row["unavailable_reason"]) for row in body["choices"]] == [
+        ("bare-declared", True, None),
         ("choice-a", True, None),
         ("default-choice", True, None),
         ("invalid-alias", False, "model_id_unsupported"),
+        ("mis-described", False, "text_capability_not_advertised"),
         ("not-advertised", False, "model_not_advertised"),
         ("vision-upstream", False, "text_not_supported"),
     ]

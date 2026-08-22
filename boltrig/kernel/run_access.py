@@ -177,9 +177,7 @@ async def visible_audit_tree_events(
     before any node or aggregate is built.
     """
     departments = departments_for(principal.role, principal.scope)
-    root_item = await store.get_work_item_by_run_id(
-        principal.tenant_id, root_run_id
-    )
+    root_item = await store.get_work_item_by_run_id(principal.tenant_id, root_run_id)
     if root_item is not None:
         root_item = await visible_work_item_by_run(store, principal, root_run_id)
         if root_item is None:
@@ -199,9 +197,7 @@ async def visible_audit_tree_events(
     visible_item_ids = {item.id for item in visible_items}
     visible_work_ids = {work_item_run_id(item) for item in visible_items}
     hidden_work_ids = {
-        work_item_run_id(item)
-        for item in all_items
-        if item.id not in visible_item_ids
+        work_item_run_id(item) for item in all_items if item.id not in visible_item_ids
     }
 
     def _run_visible(run_id: str) -> bool:
@@ -239,6 +235,8 @@ def build_run_topology(items: list[WorkItem], root_item: WorkItem) -> dict[str, 
     absent and a hidden parent link is reported as ``parent_run_id: null``.
     Cycle-guarded like the audit-tree assembler.
     """
+    from boltrig.work.channel_provenance import public_channel_provenance
+
     by_id: dict[str, WorkItem] = {item.id: item for item in items}
     # Guarantee the root is present even if a clamp dropped it from the slice.
     by_id.setdefault(root_item.id, root_item)
@@ -268,13 +266,12 @@ def build_run_topology(items: list[WorkItem], root_item: WorkItem) -> dict[str, 
             "on_behalf_of": item.on_behalf_of,
             "attempts": item.attempts,
             "degraded": item.degraded,
+            "provenance": public_channel_provenance(item),
         }
         if item_id in seen:
             return {**base, "children": [], "cycle": True}
         seen = seen | {item_id}
-        base["children"] = [
-            node(child_id, seen) for child_id in children_of.get(item_id, [])
-        ]
+        base["children"] = [node(child_id, seen) for child_id in children_of.get(item_id, [])]
         return base
 
     return {"root": node(root_item.id, frozenset())}

@@ -68,6 +68,14 @@ class DeviceStorePG:
         )
         return [device_row(row) for row in rows]
 
+    async def list_devices_for_tenant(self, tenant_id):
+        rows = await self._pool.fetch(
+            """SELECT * FROM devices WHERE tenant_id=$1
+               ORDER BY owner_id,created_at,id""",
+            tenant_id,
+        )
+        return [device_row(row) for row in rows]
+
     async def authenticate_device_session(
         self, tenant_id, device_id, token_hash
     ):

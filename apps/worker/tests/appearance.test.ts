@@ -4,8 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   APPEARANCE_KEYS,
+  DEFAULT_APPEARANCE,
   appearanceFromSettings,
   appearanceToSettings,
+  bootstrapAppearance,
   loadAppearance,
   saveAppearanceLocal,
   toggleTheme,
@@ -53,6 +55,23 @@ describe("worker appearance runtime", () => {
       [APPEARANCE_KEYS.reducedMotion]: true,
       [APPEARANCE_KEYS.highContrast]: true,
     });
+  });
+
+  it("gives a first-run visitor dark, without a stored preference or a system hint", () => {
+    // The defect this pins: the default was "system", so a first-run visitor on
+    // a light Mac met a dark product in its light palette. Nothing is stored
+    // here and no theme is passed - this is exactly what a new browser gets.
+    localStorage.clear();
+    expect(loadAppearance().theme).toBe("dark");
+    bootstrapAppearance();
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(document.documentElement.dataset.themePreference).toBe("dark");
+  });
+
+  it("still lets a person choose System, which is a preference and not the default", () => {
+    saveAppearanceLocal({ ...DEFAULT_APPEARANCE, theme: "system" });
+    expect(document.documentElement.dataset.themePreference).toBe("system");
+    expect(loadAppearance().theme).toBe("system");
   });
 
   it("mirrors and applies all axes, resolving System without losing the preference", () => {

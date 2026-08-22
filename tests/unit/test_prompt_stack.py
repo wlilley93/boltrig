@@ -22,8 +22,8 @@ def test_floor_is_present_and_first_for_every_agent_tier():
 
 
 def test_each_tier_has_its_own_character():
-    assert "Chief of Staff" in compose_system_prompt("tier1")
-    assert "Department Head" in compose_system_prompt("tier2")
+    assert "flat peer network" in compose_system_prompt("tier1")
+    assert "legacy Department Head" in compose_system_prompt("tier2")
     assert "worker" in compose_system_prompt("ephemeral").lower()
 
 
@@ -47,7 +47,7 @@ def test_department_slant_only_applies_to_heads():
 
 def test_head_without_department_still_has_floor_and_character():
     sp = compose_system_prompt("tier2")
-    assert sp.startswith(GOVERNANCE_FLOOR) and "Department Head" in sp
+    assert sp.startswith(GOVERNANCE_FLOOR) and "legacy Department Head" in sp
 
 
 def test_human_or_unknown_tier_has_no_agent_character():

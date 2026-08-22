@@ -100,8 +100,17 @@ const workspace = {
   settings: {},
 };
 
+// happy-dom's location.reload navigates the document, which unmounts the tree
+// mid-assertion. Stubbed so the test can observe the call rather than survive it.
+const reload = vi.fn();
+
 beforeEach(() => {
   stubDesktopViewport();
+  reload.mockClear();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: { ...window.location, reload },
+  });
   api.updateMeProfile.mockResolvedValue({ status: "ok", profile });
   api.chatModelChoices.mockResolvedValue({
     status: "ok",
@@ -370,6 +379,32 @@ describe("Worker account surface", () => {
     fireEvent.click(screen.getByRole("button", { name: "Switch workspace" }));
     expect(await screen.findByText("The workspace context could not be changed."))
       .toBeTruthy();
+    // A failed switch must NOT reload: the session is still bound to the old
+    // workspace, and reloading would present the old context as if it were the
+    // switch taking effect.
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("reloads into the new context on a successful switch", async () => {
+    api.workspaces.mockResolvedValue({
+      workspaces: [
+        workspace,
+        { ...workspace, id: "workspace-b", name: "Research", slug: "research" },
+      ],
+    });
+    api.consoleOverview.mockResolvedValue({ workspace_id: "workspace-b" });
+    api.switchActiveContext.mockResolvedValue({ status: "ok" });
+
+    render(<AccountView />);
+    await screen.findByText("Alice");
+    fireEvent.click(screen.getByRole("button", { name: "Access" }));
+    await screen.findByLabelText("Active workspace");
+    fireEvent.click(screen.getByRole("button", { name: "Switch workspace" }));
+
+    // Agent rosters and companions are per-workspace now, and nothing in the
+    // shell re-reads either. Without this the page keeps drawing the previous
+    // workspace's roster and character until something else happens to reload.
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
   });
 
   it("reports clipboard success and failure for both one-time 2FA values", async () => {

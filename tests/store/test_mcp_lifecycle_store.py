@@ -921,3 +921,34 @@ async def test_recreated_server_generation_refuses_stale_generation_cas(store):
     ) is None
     assert await store.get_mcp_server_lifecycle(T, "generation-cas") == recreated
     assert (await store.get_adapter(T, "generation-cas")).spec_ref == spec_ref
+
+
+@pytest.mark.store
+async def test_a_probe_the_size_of_opbox_persists_on_both_stores(store):
+    """A 633-tool probe passed every Python bound and died at the INSERT.
+
+    ``MCP_MAX_TOOL_SNAPSHOT`` was raised 500 -> 5000 precisely because Opbox
+    publishes 633 verbs, and every Python bound moved with it - the snapshot
+    validator, the receipt's own ``__post_init__``. The column's CHECK did not,
+    so the refusal arrived from the database, after the network round trip, on
+    the exact server the Opbox integration depends on. The memory store was
+    green throughout, which is why a parity test is the one that catches it.
+    """
+    now = utcnow()
+    await _create_lifecycle(store, T, "ext-mcp", now)
+    tools = tuple(_tool(f"opbox.verb_{index:04d}") for index in range(633))
+    await store.record_mcp_probe_receipt(
+        McpProbeReceipt(
+            tenant_id=T,
+            server_id="ext-mcp",
+            probe_id="mcp_probe_opbox_sized",
+            outcome="succeeded",
+            failure_code=None,
+            observed_at=now + timedelta(seconds=2),
+            tool_count=len(tools),
+        ),
+        expected_config_revision=1,
+        last_known_tools=tools,
+    )
+    latest = await store.get_latest_mcp_probe_receipt(T, "ext-mcp")
+    assert latest is not None and latest.tool_count == 633

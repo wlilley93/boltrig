@@ -109,6 +109,10 @@ async def test_author_inventory_retains_inactive_profiles_but_discovery_does_not
         "status": "ok",
         "id": "active",
         "capability_status": "retired",
+        # The scope the mutation landed on (0083). Reported so an author can see
+        # they edited the org-wide profile rather than shadowing it per workspace.
+        "workspace_id": None,
+        "scope": "organisation",
     }
     viewer = {**author, "x-boltrig-role": "member"}
     assert client.get("/v1/agent-capabilities", headers=viewer).status_code == 403
@@ -122,7 +126,12 @@ async def test_retire_blocks_every_capability_route_and_only_restore_reactivates
     retired = await _approved(
         kernel, "control.capability.retire", {"name": "archivist"}
     )
-    assert retired == {"id": "archivist", "capability_status": "retired"}
+    assert retired == {
+        "id": "archivist",
+        "capability_status": "retired",
+        "workspace_id": None,
+        "scope": "organisation",
+    }
     assert await kernel.store.list_capabilities(T) == []
     assert (await kernel.store.list_all_capabilities(T))[0].is_active is False
     with pytest.raises(NoCapableRuntime):
@@ -145,7 +154,12 @@ async def test_retire_blocks_every_capability_route_and_only_restore_reactivates
     restored = await _approved(
         kernel, "control.capability.restore", {"name": "archivist"}
     )
-    assert restored == {"id": "archivist", "capability_status": "active"}
+    assert restored == {
+        "id": "archivist",
+        "capability_status": "active",
+        "workspace_id": None,
+        "scope": "organisation",
+    }
     assert (await select_capability(
         kernel.store, T, ["records/read"], {"capability": "archivist"}
     )).name == "archivist"

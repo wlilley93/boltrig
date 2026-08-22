@@ -1,7 +1,10 @@
+import { useState } from "react";
+
 import type { CharacterId } from "../../character";
 import { saveSkinLocal } from "../../character";
+import { client } from "../../client";
 import { skinFor, useCharacter, useCharacterOptions, useSkin } from "../characters";
-import { SettingsRow, SettingsSegmented } from "./rowKit";
+import { SettingsButton, SettingsRow, SettingsSegmented } from "./rowKit";
 
 /**
  * Which body is on the Stage, and what it wears.
@@ -45,7 +48,53 @@ export function CompanionRows({
         title="Companion"
       />
       <SkinRow busy={busy} character={character} />
+      <MoodResetRow busy={busy} />
     </>
+  );
+}
+
+type ResetApi = Pick<typeof client, "resetEmotion">;
+
+// The literal client callsite (tests inject a stub through the `api` prop;
+// the worker-surface ledger requires the real method to be reachable here).
+const liveResetApi: ResetApi = { resetEmotion: () => client.resetEmotion() };
+
+/**
+ * The explicit reset (2026-08-21): clears the companion's ACCUMULATED MOOD -
+ * never memory, knowledge or any data - and says exactly that. Two presses,
+ * inline: an armed button beats a browser confirm and cannot be hit by one
+ * stray click.
+ */
+export function MoodResetRow({ busy, api = liveResetApi }: { busy: boolean; api?: ResetApi }) {
+  const [phase, setPhase] = useState<"idle" | "armed" | "done" | "failed">("idle");
+  const reset = async () => {
+    try {
+      const out = await api.resetEmotion();
+      setPhase(out.status === "ok" ? "done" : "failed");
+    } catch {
+      setPhase("failed");
+    }
+  };
+  const label = phase === "armed" ? "Really reset?" : phase === "done" ? "Mood reset" : "Reset mood";
+  return (
+    <SettingsRow
+      control={(
+        <SettingsButton
+          disabled={busy || phase === "done"}
+          label={label}
+          onClick={() => {
+            if (phase === "armed") void reset();
+            else setPhase("armed");
+          }}
+          tone={phase === "armed" ? "danger" : undefined}
+        />
+      )}
+      desc={phase === "failed"
+        ? "The reset didn't go through. Try again."
+        : "Return the companion's accumulated mood to its resting state. Memory, knowledge and your data are untouched."}
+      tech="familiar.emotion.reset"
+      title="Companion mood"
+    />
   );
 }
 

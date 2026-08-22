@@ -347,6 +347,23 @@
             "type": "string"
           },
           "description": "Provider -> voice id. What makes a bundle portable to an install with no local TTS. Ids only; never keys."
+        },
+        "tone": {
+          "type": "array",
+          "maxItems": 6,
+          "description": "OPTIONAL spectral shaping this character asks for, applied AFTER the automatic loudness and tilt stages. Absence means none -- never a default and never another character's. For shaping that is about who the character IS; a dull or harsh clone is a reference problem and must be fixed there, not masked here.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "frequency", "gainDb", "reason"],
+            "properties": {
+              "type": { "enum": ["peaking", "highshelf", "lowshelf"] },
+              "frequency": { "type": "number", "minimum": 20, "maximum": 20000 },
+              "gainDb": { "type": "number", "minimum": -12, "maximum": 12, "description": "Bounded so a bundle cannot ship something that damages hearing or clips the output." },
+              "q": { "type": "number", "minimum": 0.1, "maximum": 10 },
+              "reason": { "type": "string", "minLength": 1, "description": "REQUIRED. An unexplained filter is how a measured correction rots into an undocumented fudge." }
+            }
+          }
         }
       }
     },

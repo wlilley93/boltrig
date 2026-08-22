@@ -821,7 +821,7 @@ Also registered at boot but living elsewhere: the control-plane adapter (1.16), 
 | fleet-worker | deploy/fleet.Dockerfile | none | `python -m boltrig.api.worker` |
 | hatchet-engine | hatchet-lite (optional) | 7077 grpc, 8888 api | durable execution backbone |
 | hatchet-dashboard | hatchet-dashboard | 8889 | Hatchet UI |
-| worker-ui | apps/worker/Dockerfile (nginx) | 8080 | the React/Tauri Worker console, proxying `/v1/` to the kernel |
+| ui | apps/worker/Dockerfile (nginx) | 8080 | the React/Tauri Worker console, proxying `/v1/` to the kernel |
 | bifrost | maximhq/bifrost (profile `gateway`) | 8080 | the model gateway seam's target |
 | local-model | vllm/vllm-openai (profile `local`) | 8001 | on-box inference for sensitive data |
 | pi_sidecar | services/pi_sidecar/Dockerfile | expose 8090, `sandbox` network only | the sandboxed agent loop |

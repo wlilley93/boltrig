@@ -15,6 +15,7 @@ from pathlib import Path
 
 import asyncpg
 
+from .effect_ledger_postgres import EffectLedgerStorePG
 from .channels import ChannelStorePG
 from .channel_dedup import ChannelDedupStorePG
 from .channel_outbox import ChannelOutboxStorePG
@@ -35,12 +36,15 @@ from .work_items import WorkItemReadsPG, work_item_from_row
 from .workflow_triggers import WorkflowTriggerStorePG
 from .workflow_schedules import WorkflowScheduleStorePG
 from .authored_definitions_postgres import AuthoredDefinitionStorePG
+from .capability_routing import CapabilityRoutingStorePG
 from .eval_cases import EvalCaseStorePG
 from .credential_references import CredentialReferencePresencePG
 from .ai_key_proposals import AiKeyProposalStorePG
 from .mcp_lifecycle import McpLifecycleStorePG
 from .model_endpoints_postgres import ModelEndpointStorePG
 from .conversation_queue import ConversationQueueStorePG
+from .conversation_binding_postgres import ConversationBindingStorePG
+from .agent_mailbox_postgres import AgentMailboxStorePG
 from .rows import (
     _adapter, _ai_config, _anchor, _audit, _checkpoint,
     _conversation, _hitl_req, _hitl_resp,
@@ -53,7 +57,7 @@ from .rows import (
 from boltrig.models import (
     AdapterRecord,
     AuditEvent, AuditRollupAnchor,
-    ConfigRevision, Conversation,
+    ConfigRevision,
     ConversationMessage, ConversationStatus,
     ConversationSummary, MemoryItem,
     MemoryErasure,
@@ -126,9 +130,9 @@ async def _init_conn(conn: asyncpg.Connection) -> None:
     await conn.set_type_codec(
         "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
     )
-
 @bind_tenant_on_store_methods
 class PostgresStore(
+    EffectLedgerStorePG,
     ControlPlaneReadsPG,
     DistillationReadsPG,
     BudgetPolicyPG, BudgetUsagePG, WorkItemReadsPG, IdempotencyStorePG, GuardedWritesPG,
@@ -138,12 +142,13 @@ class PostgresStore(
     ChannelStorePG, CapabilityStorePG, ObservabilityReadsPG,
     ChannelDedupStorePG, ChannelOutboxStorePG, PasswordResetStorePG,
     WorkflowTriggerStorePG, WorkflowScheduleStorePG,
-    AuthoredDefinitionStorePG,
+    AuthoredDefinitionStorePG, CapabilityRoutingStorePG,
     EvalCaseStorePG,
     CredentialReferencePresencePG,
     AiKeyProposalStorePG,
     McpLifecycleStorePG,
-    ModelEndpointStorePG, ConversationQueueStorePG,
+    ModelEndpointStorePG, ConversationQueueStorePG, ConversationBindingStorePG,
+    AgentMailboxStorePG,
 ):
     """asyncpg-backed Store. Domain methods live in partial mixins
     (e.g. ``ChannelStorePG``) to keep this file under the structural floor;
@@ -820,20 +825,6 @@ class PostgresStore(
         return int(result.rsplit(" ", 1)[-1])
 
     # --- conversations ---
-    async def create_conversation(self, c: Conversation):
-        await self._pool.execute(
-            """INSERT INTO conversations (id, tenant_id, user_id, title, status, origin, source_ref, source_run_id, companion_id, created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-               ON CONFLICT (tenant_id, id) DO NOTHING""",
-            c.id, c.tenant_id, c.user_id, c.title, c.status.value, c.origin.value, c.source_ref, c.source_run_id, c.companion_id, c.created_at, c.updated_at,
-        )
-
-    async def get_conversation(self, tenant_id, conv_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM conversations WHERE tenant_id=$1 AND id=$2", tenant_id, conv_id
-        )
-        return _conversation(row)
-
     async def list_conversations(self, tenant_id, user_id):
         rows = await self._pool.fetch(
             """SELECT * FROM conversations WHERE tenant_id=$1 AND user_id=$2
@@ -898,13 +889,6 @@ class PostgresStore(
         out = [(_conversation(r), r["matched_snippet"]) for r in rows[:limit]]
         return out, (off + limit if has_more else None)
 
-    async def update_conversation(self, c: Conversation):
-        await self._pool.execute(
-            """UPDATE conversations SET title=$3, status=$4, origin=$5, source_ref=$6, source_run_id=$7, companion_id=$8, updated_at=$9
-               WHERE tenant_id=$1 AND id=$2""",
-            c.tenant_id, c.id, c.title, c.status.value, c.origin.value, c.source_ref, c.source_run_id, c.companion_id, c.updated_at,
-        )
-
     async def restore_closed_conversation(
         self, tenant_id, conv_id, user_id, restored_at
     ):
@@ -941,12 +925,12 @@ class PostgresStore(
     async def add_message(self, m: ConversationMessage):
         await self._pool.execute(
             """INSERT INTO conversation_messages
-               (id, conversation_id, tenant_id, role, content, run_id, hitl_request_id,
-                events, attachments, superseded_by, created_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+               (id, conversation_id, tenant_id, role, content, run_id, recipient_agent_address, author_agent_address, hitl_request_id, events, attachments, superseded_by, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
                ON CONFLICT (tenant_id, id) DO NOTHING""",
             m.id, m.conversation_id, m.tenant_id, m.role.value, m.content, m.run_id,
-            m.hitl_request_id, m.events, m.attachments, m.superseded_by, m.created_at,
+            m.recipient_agent_address, m.author_agent_address, m.hitl_request_id,
+            m.events, m.attachments, m.superseded_by, m.created_at,
         )
 
     async def list_messages(self, tenant_id, conv_id):
@@ -1658,11 +1642,12 @@ class PostgresStore(
         await self._pool.execute(
             """INSERT INTO organisations
                (id, name, slug, settings, allow_own_ai_keys, require_two_factor,
-                created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                created_at, updated_at, allow_own_integration_credentials)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
                ON CONFLICT (id) DO NOTHING""",
             org.id, org.name, org.slug, org.settings,
             org.allow_own_ai_keys, org.require_two_factor, org.created_at, org.updated_at,
+            org.allow_own_integration_credentials,
         )
 
     async def get_org(self, tenant_id):
@@ -1677,10 +1662,12 @@ class PostgresStore(
     async def update_org(self, org: Organisation):
         await self._pool.execute(
             """UPDATE organisations SET name=$2, slug=$3, settings=$4,
-                   allow_own_ai_keys=$5, require_two_factor=$6, updated_at=now()
+                   allow_own_ai_keys=$5, require_two_factor=$6, updated_at=now(),
+                   allow_own_integration_credentials=$7
                WHERE id=$1""",
             org.id, org.name, org.slug, org.settings,
             org.allow_own_ai_keys, org.require_two_factor,
+            org.allow_own_integration_credentials,
         )
 
     async def create_workspace(self, workspace: Workspace):

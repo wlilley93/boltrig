@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Mapping
 from typing import cast
 
@@ -29,6 +30,8 @@ from .codex_runtime_surface_evidence import (
 
 SURFACE_PREFLIGHT_TIMEOUT_SECONDS = 10.0
 APP_PAGE_LIMIT = 128
+
+_log = logging.getLogger(__name__)
 
 
 class BoundCodexSurfacePreflightProbe:
@@ -93,6 +96,14 @@ class BoundCodexSurfacePreflightProbe:
         except asyncio.CancelledError:
             raise
         except Exception:
+            # The raised type stays cause-free (the admission verdict is the
+            # API-visible fact), but the cause itself goes to the operator log:
+            # this exact swallow spent a day as "cell exits -1, empty stderr"
+            # (2026-08-20) because nothing anywhere recorded WHICH attestation
+            # or call failed.
+            _log.warning(
+                "codex quarantined surface preflight failed", exc_info=True
+            )
             raise CodexRuntimeAdmissionError("Codex quarantined surface preflight failed") from None
         evidence = QuarantinedCodexSurfaceEvidence(
             effective_config_digest=canonical_surface_digest(config),
@@ -234,6 +245,18 @@ def _attest_policy_tables(config: dict[str, object], receipt: CodexRuntimeConfig
         "boltrig": {
             "url": receipt.mcp_server_url,
             "bearer_token_env_var": receipt.mcp_bearer_env_var,
+            # The pinned binary NORMALIZES the entry in its effective view,
+            # adding exactly these three defaults (measured against codex-cli
+            # 0.144.3 on the first live kernel-tools admission, 2026-08-20).
+            # The written config carries two keys; comparing the effective
+            # view against the written shape can therefore NEVER pass, and
+            # every earlier green ran the read-only lane whose receipt has no
+            # URL at all. The defaults are pinned by VALUE, not ignored: a
+            # binary that changes any of them - or adds a fourth - refuses
+            # again, which is the attestation doing its job.
+            "enabled": True,
+            "environment_id": "local",
+            "tool_timeout_sec": None,
         }
     }:
         raise CodexRuntimeAdmissionError("Codex MCP config differs from its receipt")

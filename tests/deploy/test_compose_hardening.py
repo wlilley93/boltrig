@@ -405,7 +405,12 @@ def test_release_publishes_only_scanned_signed_digest_images_with_sboms():
     assert 'cosign sign --yes "$IMAGE_REF"' in workflow
     assert 'cosign attest --yes --type cyclonedx --predicate "$SBOM_FILE"' in workflow
     assert "cosign verify-attestation" in workflow
-    assert "actions/attest@a1948c3f048ba23858d222213b7c278aabede763" in workflow
+    # Pinned by DIGEST, and the digest is the assertion: this action writes the
+    # provenance attestation, so a tag pointed at different code is exactly the
+    # substitution this test exists to refuse. Moved to v4.2.2 with the pin in
+    # release.yml, having checked upstream that the tag really resolves here:
+    # gh api repos/actions/attest/git/ref/tags/v4.2.2 -> this commit.
+    assert "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6" in workflow
     assert "push-to-registry: true" in workflow
     assert "provenance-${{ matrix.image }}.intoto.json" in workflow
     assert "gh attestation verify" in workflow
@@ -417,7 +422,7 @@ def test_release_publishes_only_scanned_signed_digest_images_with_sboms():
     for variable in (
         "BOLTRIG_KERNEL_IMAGE",
         "BOLTRIG_FLEET_IMAGE",
-        "BOLTRIG_WORKER_UI_IMAGE",
+        "BOLTRIG_UI_IMAGE",
         "BOLTRIG_BACKUP_IMAGE",
     ):
         assert variable in workflow
@@ -472,7 +477,7 @@ def test_release_compose_uses_only_required_digest_images_without_builds():
         "fleet-worker": "BOLTRIG_FLEET_IMAGE",
         "browser-executor": "BOLTRIG_FLEET_IMAGE",
         "hatchet-worker": "BOLTRIG_FLEET_IMAGE",
-        "worker-ui": "BOLTRIG_WORKER_UI_IMAGE",
+        "ui": "BOLTRIG_UI_IMAGE",
         "backup": "BOLTRIG_BACKUP_IMAGE",
     }
     for service, variable in variables.items():

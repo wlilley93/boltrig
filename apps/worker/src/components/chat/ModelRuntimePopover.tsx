@@ -6,7 +6,7 @@ import type { ChipOption } from "./modelChipOptions";
 interface ModelRuntimePopoverProps {
   active: number;
   canReset: boolean;
-  listboxRef: RefObject<HTMLDivElement>;
+  listboxRef: RefObject<HTMLDivElement | null>;
   onBack(): void;
   onChoose(option: ChipOption): void;
   onManage?(): void;

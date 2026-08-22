@@ -7,6 +7,8 @@ from typing import Any
 from boltrig.models import AdapterFailure, InvocationContext
 from boltrig.workflows.snapshot import workflow_snapshot_digest
 
+from .capability_scope import find_capability, resolve_capability_scope, scope_view
+
 WORKFLOW_ACTIONS = frozenset(
     {
         "control.workflow.schedule",
@@ -236,13 +238,13 @@ async def workflow_trigger_binding_context(
 async def capability_context(
     store: Any, params: dict[str, Any], context: InvocationContext
 ) -> dict[str, Any]:
-    capability = next(
-        (
-            item
-            for item in await store.list_all_capabilities(context.tenant_id)
-            if item.name == params["name"]
-        ),
-        None,
+    # Scoped for the same reason as the upsert context: one name can now name
+    # one row per scope, and the fingerprint must bind the row that will change.
+    workspace_id = resolve_capability_scope(params, context)
+    capability = find_capability(
+        await store.list_all_capabilities(context.tenant_id),
+        params["name"],
+        workspace_id,
     )
     if capability is None:
         raise AdapterFailure(
@@ -251,8 +253,10 @@ async def capability_context(
             reason="control_resource_not_found",
         )
     return {
+        **scope_view(workspace_id),
         "capability": {
             "name": capability.name,
+            "workspace_id": capability.workspace_id,
             "runtime": capability.runtime,
             "supported_skills": capability.supported_skills,
             "max_depth": capability.max_depth,

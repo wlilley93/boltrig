@@ -66,6 +66,8 @@ def _row(connection: IntegrationConnection) -> dict:
         "revoked_at": connection.revoked_at,
         "created_at": connection.created_at,
         "updated_at": connection.updated_at,
+        "level": connection.level,
+        "scope_id": connection.scope_id,
     }
 
 

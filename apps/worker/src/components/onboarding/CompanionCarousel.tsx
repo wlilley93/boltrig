@@ -24,6 +24,7 @@ export function CompanionCarousel({
   onIndex,
   art,
   footer,
+  skin,
 }: {
   items: readonly CompanionChoice[];
   index: number;
@@ -32,6 +33,18 @@ export function CompanionCarousel({
   art: ReactNode;
   /** Optional controls under the art -- the skin pills, when there are skins. */
   footer?: ReactNode;
+  /**
+   * Which body the active companion is wearing, published to the DOM so the
+   * step can dress itself around it.
+   *
+   * NOT decoration, and not something the carousel reads. Two of the four
+   * bodies paint an opaque rectangle and two composite with alpha, and Jarvis
+   * has one of each -- so the character alone does not say which. onboarding.css
+   * matches on the pair and gives the whole panel the opaque body’s own colour,
+   * because a solid rectangle on a surface of any other colour IS an inner card
+   * and no amount of removing frames deletes one.
+   */
+  skin: string;
 }) {
   const active = items[index];
   if (!active) return null;
@@ -59,7 +72,7 @@ export function CompanionCarousel({
           </button>
         )}
 
-        <article className="companion-card" data-companion={active.id}>
+        <article className="companion-card" data-companion={active.id} data-skin={skin}>
           <span className="companion-art" aria-hidden="true">{art}</span>
           <div className="companion-copy">
             <strong>{active.name}</strong>

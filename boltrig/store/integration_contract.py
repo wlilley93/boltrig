@@ -53,7 +53,18 @@ class IntegrationStoreContract(Protocol):
     async def get_active_integration_connection_for_adapter(
         self, tenant_id: str, adapter_id: str
     ) -> IntegrationConnection | None:
-        """Return exactly one active adapter connection; ambiguity fails closed."""
+        """Return the ORG-scoped active adapter connection; ambiguity fails closed."""
+        ...
+
+    async def list_applicable_integration_connections_for_adapter(
+        self, tenant_id: str, adapter_id: str, owner: str | None
+    ) -> list[IntegrationConnection]:
+        """Every active connection that could serve ``owner``: theirs and the org's.
+
+        Returns both rather than choosing, because choosing needs the org's
+        ``allow_own_integration_credentials`` policy and that is the kernel's to
+        read, not the store's. Ambiguity within one scope still fails closed.
+        """
         ...
 
     async def list_integration_connections(self, tenant_id: str) -> list[IntegrationConnection]: ...

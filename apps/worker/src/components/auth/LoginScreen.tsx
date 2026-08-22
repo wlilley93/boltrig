@@ -54,8 +54,8 @@ export function LoginScreen({ onChallenge, onState, onForgot }: LoginScreenProps
         {error && <p className="auth-error" role="alert">{error}</p>}
         <button className="primary-button" disabled={busy || !email.trim() || !password}>{busy ? "Signing in…" : "Sign in"}</button>
       </form>
-      <div className="auth-actions">
-        <button type="button" className="secondary-button" onClick={() => onForgot(email)}>
+      <div className="auth-forgot">
+        <button type="button" onClick={() => onForgot(email)}>
           Forgot password?
         </button>
       </div>

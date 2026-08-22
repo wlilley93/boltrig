@@ -196,6 +196,7 @@ async def append_continuation(
                 id=uuid.uuid4().hex, conversation_id=str(conversation_id),
                 tenant_id=tenant_id, role=MessageRole.ASSISTANT, content=text,
                 run_id=run_id, events=frames,
+                author_agent_address=held.context.actor,
             )
         )
         conversation = await store.get_conversation(tenant_id, str(conversation_id))

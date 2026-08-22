@@ -103,7 +103,11 @@ async def prepare_spawn_intake(
 
     try:
         capability = await select_capability(
-            store, tenant_id, effective_skills, effective_prefer
+            store,
+            tenant_id,
+            effective_skills,
+            effective_prefer,
+            workspace_id=context.workspace_id,
         )
     except NoCapableRuntime as exc:
         if spawn_rule is None:

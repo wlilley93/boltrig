@@ -21,6 +21,8 @@ from boltrig.config.manifest import (
     HitlConfig,
     IdentityConfig,
     ModelsConfig,
+    NamedAgentConfig,
+    NamedAgentsConfig,
     NetworkConfig,
     PrivacyConfig,
 )
@@ -45,6 +47,8 @@ NESTED_MANIFEST_TYPES = (
     CredentialRef,
     IdentityConfig,
     ModelsConfig,
+    NamedAgentConfig,
+    NamedAgentsConfig,
     BudgetConfig,
     HierarchyTier,
     HierarchyConfig,

@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   meSettings: vi.fn(),
   meNotifications: vi.fn(),
   putMeSettings: vi.fn(),
+  characterAdopted: vi.fn().mockResolvedValue({ status: "ok" }),
   putApprovalPosture: vi.fn(),
   knowledgeProviders: vi.fn(),
   setKnowledgeProvider: vi.fn(),
@@ -304,6 +305,9 @@ describe("settings surface", () => {
     }));
     expect(document.documentElement.dataset.character).toBe("jarvis");
     expect(localStorage.getItem("boltrig.character")).toBe("jarvis");
+    // The adoption announcement rode the successful save (the explicit
+    // novelty affordance) - and only for a REAL change of companion.
+    expect(api.characterAdopted).toHaveBeenCalledExactlyOnceWith("jarvis");
   });
 
   it("updates Companion choices when a validated plugin registers after Settings mounts", async () => {

@@ -55,6 +55,50 @@ body {
   width: 100%;
 }
 
+/* The mark that sits beside the wordmark. Geometry mirrors the Worker's
+   BrandMark; the core takes this site's --brain-azure rather than the app's
+   Opbox blue, which is the colour app/icon.svg and public/favicon.svg already
+   carry. See site/src/components/common/brand-mark.tsx. */
+.boltrig-mark {
+  block-size: 1.35em;
+  color: color-mix(in srgb, var(--brain-azure) 55%, transparent);
+  display: inline-block;
+  inline-size: 1.35em;
+  vertical-align: -.28em;
+}
+.boltrig-mark__core,
+.boltrig-mark__ping {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.boltrig-mark__core { fill: var(--brain-azure); }
+.boltrig-mark__ping {
+  fill: none;
+  stroke: var(--brain-azure);
+  stroke-width: 1.6;
+}
+.boltrig-mark[data-pulse="true"] .boltrig-mark__core {
+  animation: boltrig-mark-pulse 2.6s ease-in-out infinite;
+}
+.boltrig-mark[data-pulse="true"] .boltrig-mark__ping {
+  animation: boltrig-mark-ping 2.6s cubic-bezier(0, 0, .2, 1) infinite;
+}
+@keyframes boltrig-mark-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(.92); }
+}
+@keyframes boltrig-mark-ping {
+  0% { opacity: .62; transform: scale(1); }
+  80%, 100% { opacity: 0; transform: scale(3.4); }
+}
+/* Reduced motion stops the breathe AND hides the ping outright. Pausing alone
+   would freeze the ring mid-flight, leaving a permanent halo round the core
+   that no static design asked for. */
+@media (prefers-reduced-motion: reduce) {
+  .boltrig-mark[data-pulse="true"] .boltrig-mark__core { animation: none; }
+  .boltrig-mark__ping { display: none; }
+}
+
 .boltrig-wordmark {
   display: inline-block;
   font-family: "Boltrig Archivo", Archivo, Arial, sans-serif;

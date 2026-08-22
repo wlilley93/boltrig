@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .execution import SandboxPolicy
-from boltrig.models.model_id_policy import exact_model_id
+from boltrig.models.model_id_policy import user_model_id
 
 MAX_CONTENT_REFERENCE_LENGTH = 512
 MAX_RUNTIME_TOOLS = 32
@@ -159,13 +159,19 @@ class DigestPinnedContent:
 
 @dataclass(frozen=True)
 class ExactModelPolicy:
-    """One exact Codex model choice, with no fallback or prompt-controlled alias."""
+    """One exact Codex model choice, with no fallback or prompt-controlled alias.
+
+    "Exact" means the admitted STRING is pinned byte-for-byte - no fallback and
+    nothing prompt-controlled - not that provider alias tags are refused: the
+    admitted model may be a user's own binding (see ``user_model_id``), whose
+    aliases are the provider's naming and were accepted at intake.
+    """
 
     model_id: str
     reasoning_effort: ReasoningEffort
 
     def __post_init__(self) -> None:
-        model_id = exact_model_id(self.model_id)
+        model_id = user_model_id(self.model_id)
         if type(self.reasoning_effort) is not ReasoningEffort:
             raise TypeError("reasoning_effort must be an exact ReasoningEffort")
         object.__setattr__(self, "model_id", model_id)

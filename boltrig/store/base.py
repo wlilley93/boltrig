@@ -57,12 +57,14 @@ from .audit_read_contract import AuditReadContract
 from .workflow_trigger_contract import WorkflowTriggerStoreContract
 from .workflow_schedule_contract import WorkflowScheduleStoreContract
 from .authored_definitions_contract import AuthoredDefinitionStoreContract
+from .capability_routing_contract import CapabilityRoutingStoreContract
 from .eval_cases import EvalCaseStoreContract
 from .execution_search_contract import ExecutionSearchContract
 from .credential_references import CredentialReferenceContract
 from .ai_key_proposals import AiKeyProposalStoreContract
 from .channel_gateway_contract import ChannelGatewayStateContract
 from .conversation_contract import ConversationStoreContract
+from .agent_mailbox_contract import AgentMailboxStoreContract
 from .mcp_lifecycle import McpLifecycleStoreContract
 from .model_endpoint_contract import ModelEndpointStoreContract
 # List pages clamp to MAX_WORK_PAGE/DEFAULT_WORK_PAGE so growing tenants stay bounded.
@@ -95,16 +97,15 @@ def clamp_observability_page(limit: int) -> int:
 def clamp_memory_list(limit: int) -> int:
     """Clamp a caller-supplied memory-list page size into [1, MAX_MEMORY_LIST]."""
     return max(1, min(int(limit), MAX_MEMORY_LIST))
-
 @runtime_checkable
 class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStoreContract,
             BackgroundJobStoreContract, AuditReadContract, IdempotencyStoreContract, GuardedWritesContract,
             CapabilityStoreContract, RealtimeCallStoreContract, PasswordResetStoreContract,
             WorkflowTriggerStoreContract, WorkflowScheduleStoreContract,
-            AuthoredDefinitionStoreContract,
+            AuthoredDefinitionStoreContract, CapabilityRoutingStoreContract,
             EvalCaseStoreContract, ExecutionSearchContract,
             CredentialReferenceContract, AiKeyProposalStoreContract,
-            ChannelGatewayStateContract, ConversationStoreContract,
+            ChannelGatewayStateContract, ConversationStoreContract, AgentMailboxStoreContract,
             McpLifecycleStoreContract, ModelEndpointStoreContract, Protocol):
     # --- permissions ---
     async def get_tenant_permissions(self, tenant_id: str) -> TenantPermissions: ...

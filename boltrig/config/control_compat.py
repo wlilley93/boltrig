@@ -106,6 +106,7 @@ def _org_view(org: Any) -> dict[str, Any]:
         "slug": org.slug,
         "settings": org.settings,
         "allow_own_ai_keys": bool(org.allow_own_ai_keys),
+        "allow_own_integration_credentials": bool(org.allow_own_integration_credentials),
         "require_two_factor": bool(org.require_two_factor),
         "created_at": org.created_at.isoformat() if org.created_at else None,
         "updated_at": org.updated_at.isoformat() if org.updated_at else None,
@@ -221,6 +222,10 @@ async def _update_org(store: Any, tenant_id: str, params: dict[str, Any], contex
         org.settings = params["settings"]
     if "allow_own_ai_keys" in params:
         org.allow_own_ai_keys = bool(params["allow_own_ai_keys"])
+    if "allow_own_integration_credentials" in params:
+        org.allow_own_integration_credentials = bool(
+            params["allow_own_integration_credentials"]
+        )
     if "require_two_factor" in params:
         org.require_two_factor = bool(params["require_two_factor"])
     await store.update_org(org)

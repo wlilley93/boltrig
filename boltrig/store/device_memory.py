@@ -53,6 +53,14 @@ class DeviceStoreMem:
         ]
         return sorted(rows, key=lambda row: (row.created_at, row.id))
 
+    async def list_devices_for_tenant(self, tenant_id):
+        _, devices, _, _ = _tables(self)
+        rows = [
+            replace(row) for (tenant, _), row in devices.items()
+            if tenant == tenant_id
+        ]
+        return sorted(rows, key=lambda row: (row.owner_id, row.created_at, row.id))
+
     async def authenticate_device_session(
         self, tenant_id, device_id, token_hash
     ):

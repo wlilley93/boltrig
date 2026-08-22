@@ -39,6 +39,12 @@ export const COMPANIONS: readonly CompanionChoice[] = [
     blurb: "An intelligence that has finished evaluating the situation.",
     note: "Cold, certain, and unimpressed by effort.",
   },
+  {
+    id: "colossus",
+    name: "Colossus",
+    blurb: "A defence system that has finished reasoning, and now reports.",
+    note: "A panel of lamps, not a face. Formal, literal and immovable.",
+  },
 ];
 
 /** Rail position of a companion, or 0 for one that is not offered here. */

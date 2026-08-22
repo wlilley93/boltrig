@@ -14,7 +14,9 @@ async def resolve_call_profiles(kernel, principal, body: dict):
         capability = next(
             (
                 item for item in await kernel.store.list_capabilities(
-                    principal.tenant_id
+                    principal.tenant_id,
+                    workspace_id=principal.active_workspace_id,
+                    enforce_workspace=True,
                 )
                 if item.name == agent_id
             ),

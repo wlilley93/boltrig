@@ -31,7 +31,7 @@ services:
       - caddy_dev_config:/config
     depends_on:
       - kernel
-      - worker-ui
+      - ui
 
   kernel:
     # Bind the kernel API to LOOPBACK only in dev. The base stack publishes
@@ -60,7 +60,7 @@ services:
       BOLTRIG_CODEX_TRUSTED: "0"
       BOLTRIG_DEV_AUTH: "1"
 
-  worker-ui:
+  ui:
     # The Worker is reachable only through the dev Caddy now (no direct host port).
     # !override replaces the base list entirely (a plain [] would merge-append and
     # leave the base 8080:80, colliding with Caddy).

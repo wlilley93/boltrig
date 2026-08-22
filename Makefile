@@ -368,6 +368,7 @@ iac-scan: ## Run pinned, offline high/critical IaC misconfiguration checks
 		--skip-dirs .claude --severity HIGH,CRITICAL --exit-code 1 /repo
 
 secret-scan: ## Scan complete Git history with narrow test-fixture exceptions
+	$(PY) scripts/check_secret_scan_history.py
 	docker run --rm --volume "$(CURDIR):/repo:ro" $(GITLEAKS_IMAGE) \
 		git /repo --config /repo/.gitleaks.toml --redact=100 --no-banner
 

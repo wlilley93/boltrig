@@ -8,7 +8,7 @@
 # replace the tag with a sha256 reference after pulling the desired image.
 
 # IAC-002: pinned to a stable tag + digest.
-FROM postgres:16.14-bookworm@sha256:64154d0babcb1741988719e703419af0382b19953706149f9872fbd0f438efa8 AS base
+FROM postgres:16.15-bookworm@sha256:60f4761b9035e0b8d5218f701a8c3382f641bf12b1604822574cf5be3baeb537 AS base
 
 # IAC-002: rclone is BUILT HERE from its pinned upstream source rather than
 # copied from the official rclone image, because the official image is compiled

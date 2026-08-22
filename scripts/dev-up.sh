@@ -14,7 +14,7 @@ cd "$(dirname "$0")/.."
 COMPOSE=(docker compose --profile gateway -f docker-compose.yml -f deploy/compose.dev.yml)
 
 echo "== bringing up the core stack (kernel/fleet/worker/bifrost/caddy + pg/redis) =="
-"${COMPOSE[@]}" up -d --build kernel fleet-worker worker-ui bifrost caddy
+"${COMPOSE[@]}" up -d --build kernel fleet-worker ui bifrost caddy
 
 echo "== waiting for the kernel to be healthy =="
 for i in $(seq 1 30); do

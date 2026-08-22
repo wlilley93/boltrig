@@ -23,10 +23,38 @@ const RINGS: Array<{ r: number; dash: string; rotate: number }> = [
   { r: 13, dash: "68 14", rotate: 144 },
 ];
 
-export function BrandMark({ className = "" }: { className?: string }) {
+/**
+ * The core, and the one fixed colour in the mark.
+ *
+ * Opbox blue, copied from `public/opbox-mark.svg` in the Opbox tree so the two
+ * products' marks read as one house rather than two. Opbox's in-app dot renders
+ * `var(--accent)`, which is `#006BFF` in its default theme -- five units of
+ * green from the logo asset and indistinguishable at dot size. The LOGO file is
+ * the one copied here, because the logo is what this element is.
+ *
+ * `public/favicon.svg` carries this value too, and must keep carrying it: the
+ * desktop icons are rasterised from the favicon (4b392a21), so changing the
+ * core in one place only would put a third shade of the mark back in the tree.
+ */
+const CORE = "#0066FF";
+
+export function BrandMark({
+  className = "",
+  pulse = true,
+}: {
+  className?: string;
+  /**
+   * Whether the core breathes. Opbox's policy, which this follows: pulse on
+   * auth cards, modal headers and gates -- surfaces a person is waiting on --
+   * and off in dense app chrome, table rows and status cells, where a moving
+   * dot is noise. Every current call site is the first kind, so it defaults on.
+   */
+  pulse?: boolean;
+}) {
   return (
     <svg
       className={`boltrig-mark ${className}`.trim()}
+      data-pulse={pulse ? "true" : undefined}
       viewBox="0 0 100 100"
       aria-hidden
       focusable="false"
@@ -48,7 +76,15 @@ export function BrandMark({ className = "" }: { className?: string }) {
           />
         ))}
       </g>
-      <circle cx="50" cy="50" fill="#3DD3F0" r="5" />
+      {/* The radar ping, drawn BEFORE the core so an expanding ring never
+          crosses in front of it. Rendered only when pulsing: an element
+          animated to opacity 0 is still an element, and leaving it in the
+          static mark would put a stray hairline ring at r=5 under any renderer
+          that ignores the animation. */}
+      {pulse ? (
+        <circle className="boltrig-mark__ping" cx="50" cy="50" r="5" stroke={CORE} />
+      ) : null}
+      <circle className="boltrig-mark__core" cx="50" cy="50" fill={CORE} r="5" />
     </svg>
   );
 }

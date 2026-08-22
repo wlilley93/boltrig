@@ -15,9 +15,15 @@ def _heads(desired: dict[str, Any]) -> list[dict[str, Any]]:
 async def _desired_projection_state(
     store: Any, tenant_id: str, desired: dict[str, Any]
 ) -> tuple[bool, str]:
+    # ORG-WIDE ONLY: the permanent fleet is authored by the manifest, which has
+    # no workspace. Unscoped, a workspace row sharing a head's name would shadow
+    # the org-wide one in this dict and the projection would report drift (or
+    # parity) about the wrong row.
     capabilities = {
         item.name: item
-        for item in await store.list_all_capabilities(tenant_id)
+        for item in await store.list_all_capabilities(
+            tenant_id, workspace_id=None, enforce_workspace=True
+        )
     }
     profiles_match = all(
         (

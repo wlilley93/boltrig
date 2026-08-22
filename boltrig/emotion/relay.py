@@ -219,6 +219,16 @@ class EmotionRelay(EventRelay):
 
     # --- emotion side (loop thread; pure math + dict ops, no I/O) ---
     def _react(self, tenant_id: str, event: Mapping[str, Any]) -> None:
+        if event.get("type") == "emotion_reset":
+            # The explicit Settings affordance (2026-08-21): a FRESH engine at
+            # model baselines, and the stale restore snapshot dropped so a
+            # restart cannot resurrect the old mood. No filesystem write here -
+            # the publisher thread persists the fresh state on its next tick,
+            # keeping it the only writer.
+            with self._engines_lock:
+                self._engines[tenant_id] = EmotionEngine(self._model, time.time())
+                self._saved.pop(tenant_id, None)
+            return
         rule = self._match(event)
         if rule is None:
             return

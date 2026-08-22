@@ -33,7 +33,8 @@ import json
 
 import pytest
 
-from boltrig.kernel.access_routes import _ai_config_view, _org_view, _pat_view, _user_view
+from boltrig.identity.user_view import user_view
+from boltrig.kernel.access_routes import _ai_config_view, _org_view, _pat_view
 from boltrig.models import AiConfig, Organisation, PersonalAccessToken, utcnow
 
 T = "acme"
@@ -174,11 +175,13 @@ def test_each_view_publishes_exactly_these_keys_and_no_others(view: dict, keys: 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-192")
 def test_the_user_directory_view_carries_no_credential_material() -> None:
-    """`_user_view` makes no promise in prose, which is exactly why it gets one.
+    """`user_view` makes no promise in prose, which is exactly why it gets one.
 
-    It sits beside the views above on the same surface and renders the user
-    directory. Nothing said it was safe, so nothing could have caught it becoming
-    unsafe.
+    It renders the user directory on the same surface as the views above. It
+    moved to identity/user_view.py when the byte-identical copy in
+    config/control_plane.py was folded into it, so this one assertion now covers
+    BOTH the HTTP directory and the control.user.* verbs. Nothing said it was
+    safe, so nothing could have caught it becoming unsafe.
     """
     class _U:
         id, email, display_name, role = "u-1", "a@b.test", "A B", "member"
@@ -187,7 +190,7 @@ def test_the_user_directory_view_carries_no_credential_material() -> None:
         password_hash = "SENTINEL-password-hash-4d1a90"
         totp_secret = "SENTINEL-totp-seed-9e2b7f"
 
-    rendered = _rendered(_user_view(_U()))
+    rendered = _rendered(user_view(_U()))
     assert "SENTINEL-password-hash-4d1a90" not in rendered
     assert "SENTINEL-totp-seed-9e2b7f" not in rendered
     assert "a@b.test" in rendered  # the directory is still useful

@@ -18,7 +18,7 @@ PROVENANCE_TYPE = "https://slsa.dev/provenance/v1"
 _IMAGE_SUFFIXES = {
     "BOLTRIG_KERNEL_IMAGE": "kernel",
     "BOLTRIG_FLEET_IMAGE": "fleet",
-    "BOLTRIG_WORKER_UI_IMAGE": "worker-ui",
+    "BOLTRIG_UI_IMAGE": "ui",
     "BOLTRIG_BACKUP_IMAGE": "backup",
 }
 _RELEASE_TAG = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$")
