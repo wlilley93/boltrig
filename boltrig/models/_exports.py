@@ -7,6 +7,16 @@ makes both auditable without turning ``models.__init__`` into another monolith.
 from __future__ import annotations
 
 PUBLIC_MODEL_EXPORTS = [
+    "AgentDelivery",
+    "AgentDeliveryStatus",
+    "AgentMessage",
+    "AgentMessageKind",
+    "AgentSession",
+    "AgentSessionSummary",
+    "AgentTurnLane",
+    "AgentTurnLease",
+    "ClaimedAgentMessage",
+    "NamedAgent",
     "ActionType",
     "AuditEvent",
     "AuditRollupAnchor",
@@ -18,6 +28,8 @@ PUBLIC_MODEL_EXPORTS = [
     "NounId",
     "OrgId",
     "RunId",
+    "RunEffect",
+    "RUN_EFFECT_STATUSES",
     "SkillId",
     "TenantId",
     "UserId",
@@ -155,6 +167,7 @@ PUBLIC_MODEL_EXPORTS = [
     "HITLStateConflict",
     "TenantIsolation",
     "RateLimited",
+    "RouteRequired",
     "BudgetExceeded",
     "BudgetWindowUnavailable",
     "DepthExceeded",

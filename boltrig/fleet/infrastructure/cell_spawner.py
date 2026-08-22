@@ -428,6 +428,10 @@ def _exec_cell(request: SpawnRequest, stdio: tuple[int, int, int]) -> None:
     # The drop must happen BEFORE exec so the cell never runs privileged for an
     # instant, and drop_privileges re-reads /proc to prove it rather than assuming.
     drop_privileges(request.uid, request.gid)
+    # chdir AFTER the drop (only the cell uid can enter its 0700 workspace).
+    # Missing until 2026-08-20: cwd was validated, never applied, and every
+    # cell inherited the kernel's cwd, failing the auth.cwd attestation.
+    os.chdir(request.cwd)
     os.execve(request.argv[0], list(request.argv), request.env)
 
 

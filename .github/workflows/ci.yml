@@ -86,7 +86,12 @@ jobs:
   worker-desktop-package:
     name: Worker desktop package (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    # 120, not 60: measured 2026-08-19 - four cold-cache runs were KILLED at the
+    # 60-minute ceiling (linux-x86_64 x2, macos-arm64 x2) while warm-cache runs
+    # of the same legs finish in 6-12 minutes (linux 9m13s measured). The
+    # ceiling exists to catch hangs, not to race a cold Rust cache; 120 still
+    # bounds a hang while letting a cold build complete and finally be timed.
+    timeout-minutes: 120
     defaults:
       run:
         shell: bash

@@ -21,8 +21,7 @@ purpose - a reference from another run or purpose fails closed
 
 from __future__ import annotations
 
-import os
-from typing import Any, Protocol
+from typing import Any
 
 from boltrig.adapters.base import Credential
 from boltrig.models import CredentialResolution
@@ -31,6 +30,7 @@ from .integration_credentials import (
     resolve_integration_credential,
 )
 from .integration_scope import pick_connection, scope_of
+from .secret_stores import EnvSecretStore, SecretStore
 from .run_scoped_credentials import (
     ADAPTER_BEARER_KIND as _ADAPTER_BEARER_KIND,
     HELD_CALL_KIND as HELD_CALL_KIND,
@@ -43,33 +43,6 @@ from .run_scoped_credentials import (
     parse_run_scoped_ref,
     run_scoped_cred_id,
 )
-
-
-class SecretStore(Protocol):
-    """Fetches secret material by reference. Implementations: Vault, cloud KMS,
-    Docker secrets, env. None ever persist material in the app DB."""
-
-    async def fetch(self, store: str, ref: str) -> dict: ...
-
-
-class EnvSecretStore:
-    """Reads secret material from environment variables.
-
-    The credential reference is an env var name; its value is JSON (a dict of
-    material) or, failing that, the raw string under key ``value``.
-    """
-
-    async def fetch(self, store: str, ref: str) -> dict:
-        raw = os.environ.get(ref)
-        if raw is None:
-            raise CredentialResolution(f"env secret '{ref}' not set")
-        try:
-            import json
-
-            parsed = json.loads(raw)
-            return parsed if isinstance(parsed, dict) else {"value": parsed}
-        except ValueError:
-            return {"value": raw}
 
 
 class CredentialResolver:

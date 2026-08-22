@@ -221,6 +221,20 @@ def _hermetic_environment(monkeypatch: pytest.MonkeyPatch) -> None:
             monkeypatch.delenv(name, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_egress_posture() -> None:
+    """No test inherits another test's manifest egress posture: the
+    process-wide default network config is process state, and a manifest
+    applied in one test must not silently air-gap (or allow-list) every
+    adapter constructed by a later one. Tests that exercise the default
+    install it through the ordinary apply path; this bracket withdraws it."""
+    from boltrig.adapters.egress import set_default_network_config
+
+    set_default_network_config(None)
+    yield
+    set_default_network_config(None)
+
+
 def make_ctx(grants: list[str], *, run_id: str = "run-1", depth: int = 0, **kw) -> InvocationContext:
     return InvocationContext(
         tenant_id=TENANT,

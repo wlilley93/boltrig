@@ -21,7 +21,7 @@ export const FAMILIAR_ARRIVAL: FamiliarTuning = {
   composition: [0.30, 0.5],
   gaze: [0, 1],
   arousalLift: [0, 0],
-  idlePulse: [0, 0.49],
+  idlePulse: [0, 0.2],
   daylight: [0.10, 0.60],
   // Long tau, long dwell: the wander has not started yet, so the first mood
   // arrives as a drift rather than as a jump on the first frame.
@@ -66,7 +66,7 @@ export const FAMILIAR_MODES: Record<FamiliarMode, Partial<FamiliarTuning>> = {
   standby: {
     gaze: [0, 1],
     arousalLift: [0, 0],
-    idlePulse: [0, 0.49],
+    idlePulse: [0, 0.2],
   },
 
   /**
@@ -87,7 +87,7 @@ export const FAMILIAR_MODES: Record<FamiliarMode, Partial<FamiliarTuning>> = {
     gaze: [1, 1],
     listen: [0.22, 0.92],
     arousalLift: [0.10, 0],
-    idlePulse: [0, 0.49],
+    idlePulse: [0, 0.2],
     wander: [4, 20],
     gesture: [6, 16],
   },
@@ -104,7 +104,7 @@ export const FAMILIAR_MODES: Record<FamiliarMode, Partial<FamiliarTuning>> = {
   thinking: {
     gaze: [0.15, 1],
     arousalLift: [0.12, 0],
-    idlePulse: [0.22, 0.22],
+    idlePulse: [0.2, 0.14],
     daylight: [0.12, 0.62],
     wander: [7, 40],
     gesture: [45, 120],
@@ -121,7 +121,7 @@ export const FAMILIAR_MODES: Record<FamiliarMode, Partial<FamiliarTuning>> = {
   working: {
     gaze: [0.4, 1],
     arousalLift: [0.25, 0],
-    idlePulse: [0.15, 0.49],
+    idlePulse: [0.16, 0.2],
     gesture: [20, 60],
   },
 
@@ -149,7 +149,7 @@ export const FAMILIAR_MODES: Record<FamiliarMode, Partial<FamiliarTuning>> = {
     beat: [1.15, 0.16],
     gaze: [1, 1],
     arousalLift: [0, 0.22],
-    idlePulse: [0, 0.49],
+    idlePulse: [0, 0.2],
     gesture: [25, 70],
   },
 

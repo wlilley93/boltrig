@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
-from boltrig.models.model_id_policy import exact_model_id
+from boltrig.models.model_id_policy import user_model_id
 
 from .bifrost_user_admin import BIFROST_PROVIDERS, BifrostUserAdmin
 from .bifrost_user_transport import (
@@ -26,11 +27,23 @@ from .bifrost_user_transport import (
     safe_identifier,
 )
 
+#: models.dev, which the onboarding picker is generated from, spells six
+#: providers differently from Bifrost. The picker submits its own catalogue id
+#: as the model prefix, so the kernel normalises here rather than asking the
+#: browser to know Bifrost's naming.
 _PROVIDER_ALIASES = {
     "google": "gemini",
     "google-generative-ai": "gemini",
     "x-ai": "xai",
+    "amazon-bedrock": "bedrock",
+    "fireworks-ai": "fireworks",
+    "google-vertex": "vertex",
 }
+
+#: A catalogue provider id: lowercase, dot/dash/underscore, bounded. The same
+#: shape models.dev uses, and the only names the custom path will create in
+#: Bifrost - an id is an identifier, never an address or an instruction.
+_CUSTOM_PROVIDER_ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -67,7 +80,26 @@ def _binding_ids(tenant_id: str, resolution: Any) -> tuple[str, str, str]:
 
 
 def _provider_and_model(resolution: Any) -> tuple[str, str, str]:
-    model_id = exact_model_id(getattr(resolution, "model", None))
+    """Resolve (provider, raw_model, model_id) - native or custom.
+
+    A provider in ``BIFROST_PROVIDERS`` rides Bifrost's native driver. ANY
+    other well-formed catalogue provider is bound as an OpenAI-compatible
+    CUSTOM provider instead - Bifrost stores its ``base_url`` in
+    ``custom_provider_config`` - so the full models.dev picker connects
+    rather than 93% of it failing here at submit. A custom provider without
+    a base URL is refused with the actionable half of the sentence, because
+    an address is the one thing the custom path cannot invent.
+    """
+    try:
+        # A user-connected model, not a kernel-pinned artifact: aliases like
+        # ``:latest`` are the provider's own naming and are accepted (see
+        # ``user_model_id``); shape and path rules still refuse the malformed.
+        model_id = user_model_id(getattr(resolution, "model", None))
+    except ValueError:
+        raise BifrostUserBindingUnavailable(
+            "that model name is not valid; use the exact name your provider "
+            "lists, e.g. qwen3vl-abliterated:latest"
+        ) from None
     configured = str(getattr(resolution, "provider", "") or "").strip().lower()
     configured = _PROVIDER_ALIASES.get(configured, configured)
     prefix, separator, provider_model = model_id.partition("/")
@@ -76,10 +108,17 @@ def _provider_and_model(resolution: Any) -> tuple[str, str, str]:
         if separator
         else configured
     )
-    if not provider or provider not in BIFROST_PROVIDERS:
+    if not provider or not _CUSTOM_PROVIDER_ID.fullmatch(provider):
         raise BifrostUserBindingUnavailable(
-            "the selected provider is not supported by Bifrost"
+            "that provider is not recognised"
         )
+    if provider not in BIFROST_PROVIDERS:
+        base_url = str(getattr(resolution, "base_url", "") or "").strip()
+        if not base_url:
+            raise BifrostUserBindingUnavailable(
+                f"{provider} needs the URL of its OpenAI-compatible endpoint; "
+                "set the provider's base URL and try again"
+            )
     if configured and configured not in {provider, "custom"}:
         raise BifrostUserBindingUnavailable(
             "the selected provider and model do not match"
@@ -114,7 +153,7 @@ class BifrostUserGateway:
             return None
         provider, _raw_model, model_id = _provider_and_model(resolution)
         try:
-            virtual_key = ascii_secret(sealed.get("secret"), "Bifrost virtual key")
+            virtual_key = ascii_secret(sealed.get("secret"), "the saved access key")
             provider_key_id = safe_identifier(
                 sealed.get("provider_key_id"), "provider key id"
             )
@@ -187,7 +226,9 @@ class BifrostUserGateway:
             and previous.get("provider") != provider
         ):
             await self._admin.revoke_metadata(previous)
-        await self._admin.ensure_provider(provider)
+        await self._admin.ensure_provider(
+            provider, base_url=getattr(resolution, "base_url", None)
+        )
         await self._admin.ensure_provider_key(
             provider,
             provider_key_id,
@@ -209,8 +250,21 @@ class BifrostUserGateway:
             credential_ref=ref,
         )
         if not await self.is_usable(binding):
+            # Two different user mistakes end here and need different fixes, so
+            # ask the gateway which one happened rather than guessing: a key
+            # whose provider fetch failed is a wrong ADDRESS; a healthy key
+            # whose listing lacks the id is a wrong NAME.
+            status = await self._admin.provider_key_status(provider, provider_key_id)
+            if status == "list_models_failed":
+                raise BifrostUserBindingUnavailable(
+                    "your provider did not answer at that address; check the "
+                    "URL (self-hosted servers are usually http://, not "
+                    "https://), then enter the key and address again"
+                )
             raise BifrostUserBindingUnavailable(
-                "Bifrost could not verify that the selected key can use this model"
+                f"your provider answered but does not list the model "
+                f"'{raw_model}'; use the exact name it serves (self-hosted "
+                "models usually include a tag, e.g. :latest)"
             )
         await store.set_credential_ref(
             tenant_id,

@@ -1,7 +1,7 @@
 """Channel addressing (decision 0003, Phase 2; SEC-178): an inbound message
-carries a TARGET - routing data, never authority. The default is the tier-1
-chief of staff ("cos", today's behaviour); a verified sender or the channel's
-config mapping can address a named tier-2 subagent/run instead. Identity stays
+carries a TARGET - routing data, never authority. Tenants without a named-agent
+roster retain the legacy "cos" target; otherwise an authored default, explicit
+address, or channel mapping selects an enabled tier-1 peer. Identity stays
 kernel-authoritative via the binding rows; the work item also carries the
 reply route (channel + thread + sender) for round-trip delivery.
 """
@@ -31,6 +31,7 @@ from boltrig.models import (
     GrantSet,
     TenantPermissions,
     User,
+    NamedAgent,
     WorkflowDefinition,
     WorkflowSource,
     WorkStatus,
@@ -45,14 +46,27 @@ async def _kernel(channel_config: dict | None = None) -> tuple[Kernel, InMemoryS
     store = InMemoryStore()
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     await store.upsert_channel(
-        Channel(id="ch-a1", tenant_id=T, platform="slack", name="Ops", transport="socket",
-                credential_ref="cred-1",
-                config={"sender_field": "sender", **(channel_config or {})})
+        Channel(
+            id="ch-a1",
+            tenant_id=T,
+            platform="slack",
+            name="Ops",
+            transport="socket",
+            credential_ref="cred-1",
+            config={"sender_field": "sender", **(channel_config or {})},
+        )
     )
     await store.set_credential_ref(T, "cred-1", {"secret": SECRET})
     await store.upsert_channel_binding(
-        ChannelBinding(id="b-1", tenant_id=T, channel_id="ch-a1", platform="slack",
-                       external_user_id="U-9", subject="alice", role="member")
+        ChannelBinding(
+            id="b-1",
+            tenant_id=T,
+            channel_id="ch-a1",
+            platform="slack",
+            external_user_id="U-9",
+            subject="alice",
+            role="member",
+        )
     )
     return Kernel(store), store
 
@@ -87,8 +101,49 @@ def test_intake_defaults_to_the_tier1_chief_of_staff():
 
 
 @pytest.mark.security
+@pytest.mark.invariant("FLT-PEER-01")
 @pytest.mark.invariant("SEC-178")
-def test_an_explicit_target_addresses_a_tier2_subagent():
+def test_named_roster_uses_only_authored_default_and_otherwise_parks_unassigned():
+    kernel, store = asyncio.run(_kernel())
+    asyncio.run(
+        store.upsert_named_agent(
+            NamedAgent(
+                tenant_id=T,
+                address="researcher",
+                name="Researcher",
+                runtime="script",
+                default_for_intake=True,
+            )
+        )
+    )
+    c = _client(kernel)
+    _intake(c, 20)
+    first = next(
+        item for item in asyncio.run(store.list_work_items(T)) if item.raw.get("id") == "evt-20"
+    )
+    assert first.target == "researcher"
+
+    asyncio.run(
+        store.upsert_named_agent(
+            NamedAgent(
+                tenant_id=T,
+                address="researcher",
+                name="Researcher",
+                runtime="script",
+                default_for_intake=False,
+            )
+        )
+    )
+    _intake(c, 21)
+    second = next(
+        item for item in asyncio.run(store.list_work_items(T)) if item.raw.get("id") == "evt-21"
+    )
+    assert second.target == "system:unassigned"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-178")
+def test_an_explicit_target_addresses_a_named_agent():
     kernel, store = asyncio.run(_kernel())
     c = _client(kernel)
     _intake(c, 2, target="researcher")
@@ -102,7 +157,7 @@ def test_the_channel_config_maps_a_chat_to_a_target():
     config = {"addressing": {"routes": {"C-ops": "oncall"}, "default_target": "triage"}}
     kernel, store = asyncio.run(_kernel(config))
     c = _client(kernel)
-    # a mapped chat addresses its pinned tier-2 target, and the thread is
+    # a mapped chat addresses its pinned named-agent target, and the thread is
     # captured on the reply route for the round trip
     _intake(c, 3, chat="C-ops")
     # an unmapped chat falls to the channel's default target
@@ -135,8 +190,14 @@ class _SpyAdapter:
 
     def describe(self) -> list[VerbSpec]:
         return [
-            VerbSpec(verb_id=v, noun_id="job", input_schema=_OBJ,
-                     output_schema=_OBJ, consequence="low", description=v)
+            VerbSpec(
+                verb_id=v,
+                noun_id="job",
+                input_schema=_OBJ,
+                output_schema=_OBJ,
+                consequence="low",
+                description=v,
+            )
             for v in ("job.one", "job.two")
         ]
 
@@ -156,17 +217,30 @@ async def _workflow_kernel(channel_config: dict) -> tuple[Kernel, InMemoryStore,
     await kernel.register_adapter(T, spy)
     # The bound sender ("alice") holds ONLY job.one: the workflow's job.two step
     # must be denied - the address steers which workflow runs, never its authority.
-    await store.upsert_user(User(
-        id="alice", tenant_id=T, email="alice@example.com", role="member",
-        scope={"verbs": ["job.one"]}, status="active",
-    ))
-    await store.upsert_workflow(WorkflowDefinition(
-        id="wf-report", tenant_id=T, version="1", source=WorkflowSource.PRECREATED,
-        definition={"steps": [
-            {"id": "s1", "action": "job.one", "params": {}},
-            {"id": "s2", "action": "job.two", "params": {}, "parents": ["s1"]},
-        ]},
-    ))
+    await store.upsert_user(
+        User(
+            id="alice",
+            tenant_id=T,
+            email="alice@example.com",
+            role="member",
+            scope={"verbs": ["job.one"]},
+            status="active",
+        )
+    )
+    await store.upsert_workflow(
+        WorkflowDefinition(
+            id="wf-report",
+            tenant_id=T,
+            version="1",
+            source=WorkflowSource.PRECREATED,
+            definition={
+                "steps": [
+                    {"id": "s1", "action": "job.one", "params": {}},
+                    {"id": "s2", "action": "job.two", "params": {}, "parents": ["s1"]},
+                ]
+            },
+        )
+    )
     return kernel, store, spy
 
 
@@ -236,6 +310,7 @@ async def test_an_unknown_workflow_target_parks_for_a_human():
 def test_a_bare_workflow_prefix_is_not_a_workflow_target():
     """``workflow:`` with no id is not an addressing escape hatch: it resolves to
     no workflow target and falls through to ordinary routing like any other slug."""
+
     class _Item:
         target = "workflow:"
 

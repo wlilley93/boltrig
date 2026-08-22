@@ -8,6 +8,9 @@ never comes from the payload.
 """
 
 import asyncio
+import hashlib
+import hmac
+import json
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -146,6 +149,103 @@ def test_duplicate_delivery_not_double_ingested():
     # exactly one work item exists, not two
     items = asyncio.run(store.list_work_items(T))
     assert sum(1 for w in items if w.on_behalf_of == "alice") == 1
+
+
+# --------------------------------------------------------------------------- #
+# SEC-01  platform signature headers verify over the RAW request bytes
+# --------------------------------------------------------------------------- #
+def _raw_and_platform_headers(payload: dict) -> tuple[bytes, dict]:
+    # A NON-canonical wire form (insertion order, spaced separators): a
+    # signature over it that verifies proves the check ran over the RAW bytes,
+    # because the canonical form (sorted keys, tight separators) hashes
+    # differently. GitHub-style x-hub-signature-256 = HMAC over exactly this.
+    raw = json.dumps(payload).encode("utf-8")
+    sig = hmac.new(SECRET.encode("utf-8"), raw, hashlib.sha256).hexdigest()
+    return raw, {"x-hub-signature-256": f"sha256={sig}"}
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-01")
+def test_platform_signature_over_raw_bytes_verifies():
+    kernel, _ = asyncio.run(_kernel_with_channel())
+    payload = {"sender": "U-42", "type": "message", "text": "hello", "id": "evt-raw-1"}
+    raw, headers = _raw_and_platform_headers(payload)
+    r = _client(kernel).post(
+        "/v1/channels/ch-1/inbound",
+        content=raw,
+        headers={**headers, "content-type": "application/json"},
+    )
+    assert r.status_code == 202  # the raw-bytes HMAC now verifies end to end
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-01")
+def test_boltrig_canonical_scheme_still_verifies_over_noncanonical_wire():
+    kernel, _ = asyncio.run(_kernel_with_channel())
+    payload = {"sender": "U-42", "type": "message", "text": "hi", "id": "evt-canon-1"}
+    # Post NON-canonical bytes while signing the canonical form: the native
+    # scheme is defined over the decoded object, so the wire formatting must
+    # not matter to it (M3/SEC-66 scheme unchanged by the platform branch).
+    r = _client(kernel).post(
+        "/v1/channels/ch-1/inbound",
+        content=json.dumps(payload).encode("utf-8"),
+        headers={**_signed(payload), "content-type": "application/json"},
+    )
+    assert r.status_code == 202
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-01")
+def test_bad_platform_signature_rejected():
+    kernel, _ = asyncio.run(_kernel_with_channel())
+    payload = {"sender": "U-42", "type": "message", "text": "hello", "id": "evt-raw-2"}
+    raw, _headers = _raw_and_platform_headers(payload)
+    r = _client(kernel).post(
+        "/v1/channels/ch-1/inbound",
+        content=raw,
+        headers={
+            "x-hub-signature-256": "sha256=" + "0" * 64,
+            "content-type": "application/json",
+        },
+    )
+    assert r.status_code == 401  # fail closed on mismatch (unchanged behaviour)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-01")
+def test_platform_signature_without_raw_body_fails_closed():
+    # The unit seam: a caller that cannot supply the wire bytes must not get a
+    # verification against bytes the platform never signed (SEC-01).
+    payload = {"sender": "U-42", "type": "message", "id": "evt-raw-3"}
+    raw = json.dumps(payload).encode("utf-8")
+    sig = hmac.new(SECRET.encode("utf-8"), raw, hashlib.sha256).hexdigest()
+    with pytest.raises(WebhookAuthError):
+        verify_and_normalise(payload, {"x-hub-signature-256": f"sha256={sig}"}, SECRET)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-66")
+def test_stripe_style_platform_signature_binds_timestamp_to_raw_body():
+    # Stripe signs t + "." + raw_body; the platform branch must bind the RAW
+    # bytes (not the canonical form) into the timestamp-bound content, and the
+    # replay window applies over that bound timestamp exactly as it does for
+    # the native scheme.
+    payload = {"sender": "U-42", "type": "message", "id": "evt-stripe-1"}
+    raw = json.dumps(payload).encode("utf-8")
+    ts = int(time.time())
+    sig = expected_signature(SECRET, signed_content(ts, raw))
+    ok = verify_and_normalise(
+        payload, {"stripe-signature": f"t={ts},v1={sig}"}, SECRET,
+        raw_body=raw, now=float(ts),
+    )
+    assert ok["authenticated"] is True
+    # attack: keep the captured signature, rewrite only the timestamp - the
+    # bound raw body makes the reconstruction mismatch (M3/SEC-66)
+    with pytest.raises(WebhookAuthError):
+        verify_and_normalise(
+            payload, {"stripe-signature": f"t={ts + 60},v1={sig}"}, SECRET,
+            raw_body=raw, now=float(ts),
+        )
 
 
 # --------------------------------------------------------------------------- #

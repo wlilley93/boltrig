@@ -160,3 +160,13 @@ def test_readyz_stays_bounded_and_fail_closed_with_a_hung_adapter() -> None:
     assert response.json()["status"] == "not_ready"
     assert elapsed < 5.0  # readiness never fans out to loader adapters
     assert adapter.health_calls == 0
+
+
+def test_a_failed_module_load_records_down_not_unknown() -> None:
+    # US-ADP-06 says a failed load is recorded ``down``; the except branch used
+    # to only log, so health_of fell back to ``unknown`` and the docstring lied.
+    # The row is keyed by the module_ref (what a module-sourced binding carries
+    # as its target_ref), which is the lookup that previously read unknown.
+    loader = AdapterLoader()
+    assert loader.load_module("t", "boltrig.no.such_module:build") is None
+    assert loader.health_of("t", "boltrig.no.such_module:build") == "down"

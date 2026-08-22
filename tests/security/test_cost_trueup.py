@@ -90,7 +90,7 @@ async def test_budget_trued_up_to_actual_after_run(monkeypatch):
     spawner = build_spawner(kernel)
 
     # --- actual came in HIGHER than the estimate --------------------------------
-    async def high_runtime_for(tenant_id, capability, context=None):
+    async def high_runtime_for(tenant_id, capability, context=None, *, outbound_text=None):
         return _FakeRuntime(tokens=9000, cost_micros=123)  # cost ignored; priced by table
 
     monkeypatch.setattr(spawner, "_runtime_for", high_runtime_for)
@@ -103,7 +103,7 @@ async def test_budget_trued_up_to_actual_after_run(monkeypatch):
 
     # --- a second run whose actual is LOWER than the estimate -------------------
     # inflate the estimate with a long task, then report a tiny actual usage.
-    async def low_runtime_for(tenant_id, capability, context=None):
+    async def low_runtime_for(tenant_id, capability, context=None, *, outbound_text=None):
         return _FakeRuntime(tokens=5, cost_micros=999)
 
     monkeypatch.setattr(spawner, "_runtime_for", low_runtime_for)
@@ -137,7 +137,7 @@ async def test_degraded_run_refunds_the_estimate(monkeypatch):
             # the P9 degrade shape: ok=True, degraded=True, tokens_used == 0
             return AgentResult.degrade(runtime="hermes", reason="no_api_key")
 
-    async def degraded_runtime_for(tenant_id, capability, context=None):
+    async def degraded_runtime_for(tenant_id, capability, context=None, *, outbound_text=None):
         return _DegradedRuntime()
 
     monkeypatch.setattr(spawner, "_runtime_for", degraded_runtime_for)
@@ -243,7 +243,7 @@ async def test_the_manifest_seeded_tenant_budget_is_actually_debited(monkeypatch
     )
     spawner = build_spawner(kernel)
 
-    async def runtime_for(tenant_id, capability, context=None):
+    async def runtime_for(tenant_id, capability, context=None, *, outbound_text=None):
         return _FakeRuntime(tokens=4321, cost_micros=0)
 
     monkeypatch.setattr(spawner, "_runtime_for", runtime_for)

@@ -49,10 +49,175 @@ CREATE TABLE IF NOT EXISTS verb_bindings (
     target_type TEXT NOT NULL,                          -- 'adapter' | 'agent'
     target_ref  TEXT NOT NULL,                          -- adapter id or agent type
     rate_limit  JSONB,                                  -- {per, max, scope}
+    -- capability doctrine step 1 (docs/SPEC-capability-doctrine.md §10):
+    -- presentation/mapping fields; nullable, unread by enforcement until the
+    -- multi-binding shard. Authoritative connection label stays on
+    -- integration_connections.label.
+    internal_source_operation_id TEXT,
+    canonical_capability_id       TEXT,
+    model_display_name            TEXT,
+    connection_label              TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (verb_id, tenant_id)
 );
+CREATE INDEX IF NOT EXISTS verb_bindings_canonical_capability_idx
+  ON verb_bindings (tenant_id, canonical_capability_id)
+  WHERE canonical_capability_id IS NOT NULL;
+
+-- Capability doctrine step 2 (docs/SPEC-capability-doctrine.md §8): the
+-- multi-binding layer. A canonical capability may have MANY bindings; identity
+-- is binding_id, so a second binding never replaces a first. verb_bindings keeps
+-- its (verb_id, tenant_id) key and its meaning narrows to what it is actually
+-- correct for: which adapter executes one SOURCE OPERATION.
+CREATE TABLE IF NOT EXISTS provider_connections (
+    id                 TEXT NOT NULL,
+    tenant_id          TEXT NOT NULL,
+    label              TEXT NOT NULL,          -- the destination a human recognises
+    provider           TEXT NOT NULL,
+    source_type        TEXT NOT NULL DEFAULT 'native' CHECK (source_type IN (
+                         'nango','mcp','openapi','sdk_plugin','native')),
+    adapter_id         TEXT,                   -- executing adapter, when there is one
+    integration_connection_id TEXT,            -- catalogue row; label authority
+    workspace_id       TEXT,                   -- NULL = tenant-wide
+    account_ref        TEXT,
+    credential_ref     TEXT,                   -- reference only, never material
+    health             TEXT NOT NULL DEFAULT 'unknown' CHECK (health IN (
+                         'unknown','pending','ok','degraded','down','revoked')),
+    status             TEXT NOT NULL DEFAULT 'active' CHECK (status IN (
+                         'active','disabled','revoked')),
+    trust_level        TEXT NOT NULL DEFAULT 'untrusted' CHECK (trust_level IN (
+                         'untrusted','reviewed','trusted','first_party')),
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+-- DELIBERATELY NOT UNIQUE on (tenant_id, adapter_id): three live HubSpot
+-- connections is the doctrine's worked example. The one-active-adapter index on
+-- integration_connections constrains the CATALOGUE setup flow only (SPEC §11.2).
+CREATE INDEX IF NOT EXISTS provider_connections_provider_idx
+  ON provider_connections (tenant_id, provider, status);
+
+CREATE TABLE IF NOT EXISTS source_operations (
+    id                 TEXT NOT NULL,          -- provider-prefixed, never model-facing
+    tenant_id          TEXT NOT NULL,
+    provider           TEXT NOT NULL,
+    source_type        TEXT NOT NULL DEFAULT 'native' CHECK (source_type IN (
+                         'nango','mcp','openapi','sdk_plugin','native')),
+    connection_id      TEXT,
+    title              TEXT,
+    description        TEXT NOT NULL DEFAULT '',
+    input_schema       JSONB NOT NULL DEFAULT '{}'::jsonb,
+    output_schema      JSONB,
+    annotations        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    schema_digest      TEXT NOT NULL DEFAULT '',
+    catalogue_revision TEXT,
+    consequence_hint   TEXT,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS source_operations_connection_idx
+  ON source_operations (tenant_id, connection_id);
+
+CREATE TABLE IF NOT EXISTS capability_bindings (
+    binding_id           TEXT NOT NULL,
+    tenant_id            TEXT NOT NULL,
+    capability_id        TEXT NOT NULL,
+    capability_version   INT NOT NULL DEFAULT 1,
+    source_operation_id  TEXT NOT NULL,
+    connection_id        TEXT NOT NULL,
+    status               TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN (
+                           'proposed','approved','disabled','retired')),
+    trust_level          TEXT NOT NULL DEFAULT 'untrusted' CHECK (trust_level IN (
+                           'untrusted','reviewed','trusted','first_party')),
+    priority             INT NOT NULL DEFAULT 100,
+    workspace_predicate  TEXT,
+    input_transform_ref  TEXT,
+    output_transform_ref TEXT,
+    source_schema_digest TEXT,
+    consequence_override TEXT CHECK (consequence_override IN ('low','high')),
+    health               TEXT NOT NULL DEFAULT 'unknown',
+    fallback_policy      TEXT NOT NULL DEFAULT 'none',
+    created_from         TEXT NOT NULL DEFAULT 'manual' CHECK (created_from IN (
+                           'declared','mapping_pack','structural','ai_assisted','manual')),
+    reviewed_by          TEXT,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, binding_id),
+    FOREIGN KEY (tenant_id, connection_id)
+      REFERENCES provider_connections(tenant_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, source_operation_id)
+      REFERENCES source_operations(tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS capability_bindings_capability_idx
+  ON capability_bindings (tenant_id, capability_id, capability_version, priority);
+-- One claim per (capability version, connection, source operation): a re-import
+-- updates the binding it already made instead of growing a duplicate route.
+CREATE UNIQUE INDEX IF NOT EXISTS capability_bindings_claim_idx
+  ON capability_bindings (
+    tenant_id, capability_id, capability_version, connection_id, source_operation_id
+  ) WHERE status <> 'retired';
+
+CREATE TABLE IF NOT EXISTS routing_policies (
+    id                 TEXT NOT NULL,
+    tenant_id          TEXT NOT NULL,
+    capability_id      TEXT NOT NULL,
+    binding_id         TEXT NOT NULL,
+    operation_class    TEXT NOT NULL DEFAULT 'create' CHECK (operation_class IN (
+                         'read','create','update','delete')),
+    capability_version INT,                     -- NULL = any version
+    scope              TEXT NOT NULL DEFAULT 'tenant' CHECK (scope IN (
+                         'tenant','workspace')),
+    workspace_id       TEXT,
+    precedence         INT NOT NULL DEFAULT 100,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id),
+    CHECK ((scope = 'workspace') = (workspace_id IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS routing_policies_capability_idx
+  ON routing_policies (tenant_id, capability_id, operation_class, precedence);
+
+-- Doctrine step 3: an opaque, kernel-issued reference to ONE remote record, so
+-- a merged fan-out can be acted on without the model ever holding a provider
+-- id. The ref is minted random and stored rather than derived from the record's
+-- identity; boltrig/models/provenance.py records why (a derived ref is a
+-- confirmation oracle, and a keyed one buys a key to manage).
+CREATE TABLE IF NOT EXISTS entity_provenance (
+    ref                 TEXT NOT NULL,
+    tenant_id           TEXT NOT NULL,
+    entity_type         TEXT NOT NULL,
+    connection_id       TEXT NOT NULL,
+    provider            TEXT NOT NULL,
+    remote_object_type  TEXT NOT NULL,
+    remote_record_id    TEXT NOT NULL,
+    capability_id       TEXT NOT NULL,
+    capability_version  INT NOT NULL DEFAULT 1,
+    binding_id          TEXT,
+    workspace_id        TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, ref),
+    FOREIGN KEY (tenant_id, connection_id)
+      REFERENCES provider_connections(tenant_id, id) ON DELETE CASCADE
+);
+-- THIS INDEX IS THE IDEMPOTENCY. A second sighting of the same remote record
+-- updates last_seen_at and returns the ref already minted, instead of naming
+-- one object twice - two refs for one record makes a follow-up write ambiguous
+-- in exactly the way the ref exists to prevent.
+--
+-- workspace_id is part of the identity, and coalesced because Postgres treats
+-- NULLs as distinct in a unique index: without the coalesce, every tenant-wide
+-- sighting (workspace_id NULL) would mint a fresh ref and the idempotency would
+-- silently apply only to workspace-scoped rows. Scoping the ref this way also
+-- means a ref minted in one workspace does not resolve in another, so the
+-- tenant fence holds inside the resolution path and not only downstream of it.
+CREATE UNIQUE INDEX IF NOT EXISTS entity_provenance_record_idx
+  ON entity_provenance (
+    tenant_id, coalesce(workspace_id, ''), connection_id,
+    remote_object_type, remote_record_id
+  );
 
 -- ---------------------------------------------------------------------------
 -- 6.2 Adapters, skills, capabilities, workflows, endpoints
@@ -165,10 +330,22 @@ CREATE TABLE IF NOT EXISTS agent_capabilities (
     is_active        BOOLEAN NOT NULL DEFAULT true,
     source           TEXT NOT NULL DEFAULT 'control-plane'
                          CHECK (source IN ('manifest', 'control-plane')),
+    -- The workspace this profile belongs to, or NULL for an ORG-WIDE profile every
+    -- workspace sees (0083). A workspace read is the UNION of its own rows and the
+    -- org-wide ones, so a shared agent is declared once, not copied per workspace.
+    workspace_id     TEXT,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (tenant_id, name)
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- There is deliberately NO primary key: PRIMARY KEY (tenant_id, name) forbade two
+-- workspaces from each having a "researcher", which is what 0083 exists to allow.
+-- Uniqueness still holds WITHIN a scope, because the profile editor disables the
+-- name on edit and select_capability matches on the bare name. coalesce() because
+-- Postgres treats NULLs as DISTINCT in a unique index, so the bare column would
+-- constrain every workspace scope and leave the org-wide one unconstrained.
+CREATE UNIQUE INDEX IF NOT EXISTS agent_capabilities_scope_idx
+  ON agent_capabilities (tenant_id, coalesce(workspace_id, ''), name);
 
 CREATE TABLE IF NOT EXISTS workflow_definitions (
     id          TEXT NOT NULL,
@@ -403,6 +580,24 @@ CREATE INDEX IF NOT EXISTS audit_actor_idx ON audit_log (tenant_id, actor);
 CREATE INDEX IF NOT EXISTS audit_actor_page_idx ON audit_log (tenant_id, actor, seq DESC);
 CREATE INDEX IF NOT EXISTS audit_behalf_page_idx ON audit_log (tenant_id, on_behalf_of, seq DESC);
 
+-- The audit OUTBOX (SEC-16 audit-always, durable half): an AuditWriter whose
+-- append faulted (transient DB error, lock starvation) persists the canonical
+-- event PAYLOAD here instead, and the outbox janitor drains it into the chain
+-- once the fault clears. Chain fields (seq/prev_hash/hash) are deliberately NOT
+-- stored - they are re-derived at drain time against the then-current head, so
+-- the chain stays contiguous and verifiable; the event's own `ts` preserves the
+-- action time. Keys-only (K-20): the payload is the already-scrubbed event.
+CREATE TABLE IF NOT EXISTS audit_outbox (
+    id             BIGSERIAL PRIMARY KEY,
+    tenant_id      TEXT NOT NULL,
+    payload        JSONB NOT NULL,
+    append_error   TEXT,
+    attempts       INT NOT NULL DEFAULT 0,
+    next_retry_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS audit_outbox_due_idx ON audit_outbox (next_retry_at);
+
 -- The distinct SecurityEvent stream ([2026] VJS-COUNTY 9, D3): its OWN
 -- append-only, hash-chained table for security SIGNALS (login failures,
 -- rate-limit trips, permission denials, MCP auth failures). Same chaining as
@@ -544,6 +739,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     id          TEXT NOT NULL,
     tenant_id   TEXT NOT NULL,
     user_id     TEXT NOT NULL,                          -- owner
+    agent_address TEXT,                                 -- next admitted turn; history is message-attributed
+    workspace_id TEXT,                                  -- project/workspace; NULL = unfiled/legacy
     title       TEXT,
     status      TEXT NOT NULL DEFAULT 'active',         -- active | closed
     origin      TEXT NOT NULL DEFAULT 'user'
@@ -661,7 +858,8 @@ CREATE TABLE IF NOT EXISTS background_job_receipts (
     tenant_id                 TEXT NOT NULL,
     job_name                  TEXT NOT NULL
                               CHECK (job_name IN ('hitl_expiry','retention','distillation',
-                                                  'anchor','workflow_scheduler','pump', 'reflection')),
+                                                  'anchor','workflow_scheduler','pump', 'reflection',
+                                                  'audit_outbox')),
     process_instance_identity TEXT NOT NULL
                               CHECK (
                                 process_instance_identity
@@ -1209,7 +1407,9 @@ CREATE TABLE IF NOT EXISTS mcp_probe_receipts (
       )
     ),
     observed_at TIMESTAMPTZ NOT NULL,
-    tool_count  INTEGER NOT NULL CHECK (tool_count BETWEEN 0 AND 500),
+    tool_count  INTEGER NOT NULL
+                CONSTRAINT mcp_probe_receipts_tool_count_check
+                CHECK (tool_count BETWEEN 0 AND 5000),
     receipt_kind TEXT NOT NULL DEFAULT 'content_free_probe_attempt'
                  CHECK (receipt_kind = 'content_free_probe_attempt'),
     CHECK (
@@ -1230,6 +1430,8 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
     role            TEXT NOT NULL,                      -- user | assistant | tool | system
     content         TEXT,
     run_id          TEXT,                               -- the fleet run this turn used
+    recipient_agent_address TEXT,                       -- immutable USER turn recipient
+    author_agent_address TEXT,                          -- immutable ASSISTANT/TOOL/SYSTEM author
     hitl_request_id TEXT,                               -- set for an inline HITL prompt
     events          JSONB,                              -- structured render data
     attachments     JSONB,                              -- inline size-capped attachment records ([2026] VJS-COUNTY 3)
@@ -1282,6 +1484,148 @@ CREATE TABLE IF NOT EXISTS conversation_summaries (
 );
 CREATE INDEX IF NOT EXISTS conv_summaries_idx
     ON conversation_summaries (tenant_id, conversation_id, covered_count);
+
+-- Flat named-agent federation (0084). Named agents are durable tier-1 peers;
+-- ephemeral children have no identity row and therefore no mailbox address.
+-- Message envelopes are immutable. Claim/retry state lives separately so a
+-- lease transition never rewrites authored content.
+CREATE TABLE IF NOT EXISTS named_agents (
+    tenant_id TEXT NOT NULL, address TEXT NOT NULL, name TEXT NOT NULL,
+    runtime TEXT NOT NULL, model_endpoint TEXT,
+    supported_skills TEXT[] NOT NULL DEFAULT ARRAY['*']::TEXT[],
+    max_depth INTEGER NOT NULL DEFAULT 3,
+    cost_tier TEXT NOT NULL DEFAULT 'standard', purpose TEXT NOT NULL DEFAULT '',
+    brief TEXT NOT NULL DEFAULT '', scope_id TEXT,
+    default_for_intake BOOLEAN NOT NULL DEFAULT FALSE,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,address), UNIQUE (tenant_id,name),
+    CHECK (address ~ '^[a-z0-9][a-z0-9_-]{0,62}$'),
+    CHECK (scope_id IS NULL OR scope_id ~ '^[a-z0-9][a-z0-9_-]{0,62}$'),
+    CHECK (runtime IN ('codex','script','python-script')),
+    CHECK (max_depth BETWEEN 1 AND 5),
+    CHECK (cardinality(supported_skills) BETWEEN 1 AND 64),
+    CHECK (octet_length(purpose) <= 2000),
+    CHECK (octet_length(brief) <= 32000)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS named_agents_one_default_idx
+  ON named_agents(tenant_id) WHERE default_for_intake AND enabled;
+CREATE INDEX IF NOT EXISTS conversations_agent_idx
+  ON conversations(tenant_id,agent_address,updated_at DESC);
+CREATE INDEX IF NOT EXISTS conversations_workspace_idx
+  ON conversations(tenant_id,workspace_id,updated_at DESC);
+DO $$
+BEGIN
+  ALTER TABLE conversations
+    ADD CONSTRAINT conversations_named_agent_fkey
+    FOREIGN KEY (tenant_id,agent_address)
+    REFERENCES named_agents(tenant_id,address) ON DELETE RESTRICT;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$
+BEGIN
+  ALTER TABLE conversation_messages
+    ADD CONSTRAINT conversation_messages_recipient_agent_fkey
+    FOREIGN KEY (tenant_id,recipient_agent_address)
+    REFERENCES named_agents(tenant_id,address) ON DELETE RESTRICT;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$
+BEGIN
+  ALTER TABLE conversation_messages
+    ADD CONSTRAINT conversation_messages_author_agent_fkey
+    FOREIGN KEY (tenant_id,author_agent_address)
+    REFERENCES named_agents(tenant_id,address) ON DELETE RESTRICT;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+CREATE TABLE IF NOT EXISTS agent_turn_leases (
+    tenant_id TEXT NOT NULL, agent_address TEXT NOT NULL, lease_owner TEXT,
+    lease_token TEXT, lane TEXT, lease_expires_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,agent_address),
+    FOREIGN KEY (tenant_id,agent_address)
+      REFERENCES named_agents(tenant_id,address) ON DELETE CASCADE,
+    CHECK (lane IS NULL OR lane IN ('interactive','peer','background')),
+    CHECK (
+      (lease_owner IS NULL AND lease_token IS NULL AND lane IS NULL
+       AND lease_expires_at IS NULL)
+      OR
+      (lease_owner IS NOT NULL AND lease_token IS NOT NULL AND lane IS NOT NULL
+       AND lease_expires_at IS NOT NULL)
+    )
+);
+CREATE TABLE IF NOT EXISTS agent_turn_waiters (
+    tenant_id TEXT NOT NULL, agent_address TEXT NOT NULL, waiter_id TEXT NOT NULL,
+    lane TEXT NOT NULL, requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (tenant_id,agent_address,waiter_id),
+    FOREIGN KEY (tenant_id,agent_address)
+      REFERENCES named_agents(tenant_id,address) ON DELETE CASCADE,
+    CHECK (lane IN ('interactive','peer','background'))
+);
+CREATE INDEX IF NOT EXISTS agent_turn_waiters_schedule_idx
+  ON agent_turn_waiters(tenant_id,agent_address,lane,requested_at,waiter_id);
+CREATE TABLE IF NOT EXISTS agent_sessions (
+    id TEXT NOT NULL, tenant_id TEXT NOT NULL, agent_address TEXT NOT NULL,
+    conversation_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,id), UNIQUE (tenant_id,agent_address,conversation_id),
+    FOREIGN KEY (tenant_id,agent_address)
+      REFERENCES named_agents(tenant_id,address) ON DELETE RESTRICT
+);
+CREATE TABLE IF NOT EXISTS agent_messages (
+    id TEXT NOT NULL, tenant_id TEXT NOT NULL, conversation_id TEXT NOT NULL,
+    sender TEXT NOT NULL, recipient TEXT NOT NULL, kind TEXT NOT NULL,
+    content TEXT NOT NULL, reply_to TEXT, correlation_id TEXT, run_id TEXT,
+    authority JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,id),
+    FOREIGN KEY (tenant_id,sender)
+      REFERENCES named_agents(tenant_id,address) ON DELETE RESTRICT,
+    FOREIGN KEY (tenant_id,recipient)
+      REFERENCES named_agents(tenant_id,address) ON DELETE RESTRICT,
+    FOREIGN KEY (tenant_id,reply_to)
+      REFERENCES agent_messages(tenant_id,id) ON DELETE RESTRICT,
+    CHECK (sender <> recipient), CHECK (kind IN ('ask','tell','reply')),
+    CHECK (octet_length(content) BETWEEN 1 AND 32768),
+    CHECK (jsonb_typeof(authority)='object')
+);
+CREATE INDEX IF NOT EXISTS agent_messages_conversation_idx
+  ON agent_messages(tenant_id,conversation_id,created_at,id);
+CREATE INDEX IF NOT EXISTS agent_messages_recipient_idx
+  ON agent_messages(tenant_id,recipient,created_at,id);
+CREATE TABLE IF NOT EXISTS agent_message_deliveries (
+    tenant_id TEXT NOT NULL, message_id TEXT NOT NULL, recipient TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+    lease_owner TEXT, lease_expires_at TIMESTAMPTZ, available_at TIMESTAMPTZ,
+    last_error TEXT, delivered_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,message_id),
+    FOREIGN KEY (tenant_id,message_id)
+      REFERENCES agent_messages(tenant_id,id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id,recipient)
+      REFERENCES named_agents(tenant_id,address) ON DELETE RESTRICT,
+    CHECK (status IN ('pending','in_flight','delivered','failed')),
+    CHECK (attempts >= 0),
+    CHECK ((lease_owner IS NULL) = (lease_expires_at IS NULL))
+);
+CREATE INDEX IF NOT EXISTS agent_deliveries_claim_idx
+  ON agent_message_deliveries(tenant_id,recipient,status,available_at,updated_at);
+CREATE TABLE IF NOT EXISTS agent_session_summaries (
+    id TEXT NOT NULL, tenant_id TEXT NOT NULL, session_id TEXT NOT NULL,
+    up_to_message_id TEXT NOT NULL, covered_count INTEGER NOT NULL,
+    summary TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,id),
+    FOREIGN KEY (tenant_id,session_id)
+      REFERENCES agent_sessions(tenant_id,id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id,up_to_message_id)
+      REFERENCES agent_messages(tenant_id,id) ON DELETE RESTRICT,
+    CHECK (covered_count > 0), CHECK (octet_length(summary) <= 16384)
+);
+CREATE INDEX IF NOT EXISTS agent_session_summaries_latest_idx
+  ON agent_session_summaries(tenant_id,session_id,covered_count DESC,created_at DESC);
 
 -- ===========================================================================
 -- Round Four: users + provisioning (USR), personal access tokens (PAT),
@@ -1507,6 +1851,14 @@ CREATE TABLE IF NOT EXISTS workspaces (
     PRIMARY KEY (tenant_id, id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS workspaces_slug_idx ON workspaces (slug);
+DO $$
+BEGIN
+  ALTER TABLE conversations
+    ADD CONSTRAINT conversations_workspace_fkey
+    FOREIGN KEY (tenant_id,workspace_id)
+    REFERENCES workspaces(tenant_id,id) ON DELETE RESTRICT;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- D3: organisation membership. One row per user per org; role is drawn from the
 -- existing platform role vocabulary. Tenant-scoped (RLS).
@@ -2515,3 +2867,26 @@ CREATE INDEX IF NOT EXISTS trajectory_events_recent
 CREATE INDEX IF NOT EXISTS trajectory_events_expiry
     ON trajectory_events (expires_at)
     WHERE expires_at IS NOT NULL;
+
+-- 0085: the durable run-effect ledger. One row per consequential verb a run
+-- completed; inverse NULL = not_undoable (recorded honestly, never omitted);
+-- revert walks seq DESC through dispatch.
+CREATE TABLE IF NOT EXISTS run_effects (
+    tenant_id       TEXT NOT NULL,
+    run_id          TEXT NOT NULL,
+    seq             INTEGER NOT NULL,
+    verb_id         TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'recorded',
+    inverse_verb    TEXT,
+    inverse_params  JSONB NOT NULL DEFAULT '{}'::jsonb,
+    summary         TEXT NOT NULL DEFAULT '',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, run_id, seq),
+    CHECK (status IN ('recorded','not_undoable','reverted','revert_failed')),
+    CHECK ((inverse_verb IS NULL) = (status = 'not_undoable')
+           OR status IN ('reverted','revert_failed')),
+    CHECK (octet_length(summary) <= 512),
+    CHECK (pg_column_size(inverse_params) <= 16384)
+);
+CREATE INDEX IF NOT EXISTS run_effects_revert_idx
+  ON run_effects(tenant_id, run_id, status, seq DESC);

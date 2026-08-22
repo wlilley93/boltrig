@@ -56,9 +56,7 @@ def test_the_corpus_guard_refuses_an_absent_or_truncated_source_tree(tmp_path):
 
 @pytest.mark.invariant("SEC-WRK-01")
 def test_worker_ships_no_openworker_agent_server_or_provider_secret_path():
-    source = _corpus(
-        (WORKER / "src").rglob("*"), what="the Worker web source", at_least=20
-    )
+    source = _corpus((WORKER / "src").rglob("*"), what="the Worker web source", at_least=20)
     rust = _corpus(
         (WORKER / "src-tauri" / "src").glob("*.rs"),
         what="the Tauri native source",
@@ -93,9 +91,7 @@ def test_desktop_native_process_seams_are_explicit_and_bounded():
     config_payload = json.loads(config)
     package_payload = json.loads((WORKER / "package.json").read_text(encoding="utf-8"))
     build_script = (WORKER / "src-tauri" / "build.rs").read_text(encoding="utf-8")
-    origin_gate = (
-        WORKER / "scripts" / "require-desktop-origin.mjs"
-    ).read_text(encoding="utf-8")
+    origin_gate = (WORKER / "scripts" / "require-desktop-origin.mjs").read_text(encoding="utf-8")
     assert "materialize_artifact" in rust
     assert ".save_file(" in rust
     assert "destination:" not in rust
@@ -108,9 +104,9 @@ def test_desktop_native_process_seams_are_explicit_and_bounded():
     assert "reveal_item_in_dir(path)" in rust
     assert "reveal_item_in_dir(handle)" not in rust
     client = (WORKER / "src" / "client.ts").read_text(encoding="utf-8")
-    capabilities = (
-        WORKER / "src-tauri" / "capabilities" / "default.json"
-    ).read_text(encoding="utf-8")
+    capabilities = (WORKER / "src-tauri" / "capabilities" / "default.json").read_text(
+        encoding="utf-8"
+    )
     assert "accessToken" not in client
     assert "device_session_token" not in rust_files["lib.rs"]
     assert "dialog:allow-save" not in capabilities
@@ -161,7 +157,7 @@ def test_desktop_native_process_seams_are_explicit_and_bounded():
     assert agent.index("verify_lease(&lease") < agent.index(".claim(")
     assert "validate_verifier(verifier)?" in protocol
     assert ".verify(&canonical_lease_bytes(lease)?" in protocol
-    assert roots.index('if !root.command_enabled') < roots.index("Command::new(executable)")
+    assert roots.index("if !root.command_enabled") < roots.index("Command::new(executable)")
     assert roots.index(".blocking_show()") < roots.index("Command::new(executable)")
     assert "tokio::process::Command" in roots
     assert "command_shell_refused" in roots
@@ -187,31 +183,25 @@ def test_desktop_native_process_seams_are_explicit_and_bounded():
 
 @pytest.mark.invariant("SEC-198")
 def test_browser_cloud_and_desktop_local_agent_routes_cannot_silently_cross():
-    route = (
-        WORKER / "src" / "components" / "shell" / "AppRouteSurface.tsx"
-    ).read_text(encoding="utf-8")
-    directory = (
-        WORKER / "src" / "components" / "shell" / "useConversationDirectory.ts"
-    ).read_text(encoding="utf-8")
-    local_view = (
-        WORKER / "src" / "components" / "LocalChatView.tsx"
-    ).read_text(encoding="utf-8")
+    route = (WORKER / "src" / "components" / "shell" / "AppRouteSurface.tsx").read_text(
+        encoding="utf-8"
+    )
+    directory = (WORKER / "src" / "components" / "shell" / "useConversationDirectory.ts").read_text(
+        encoding="utf-8"
+    )
+    local_view = (WORKER / "src" / "components" / "LocalChatView.tsx").read_text(encoding="utf-8")
     local_client = (WORKER / "src" / "localAgentClient.ts").read_text(encoding="utf-8")
     local_controller = (
         WORKER / "src" / "components" / "chat" / "useLocalChatController.ts"
     ).read_text(encoding="utf-8")
-    approval_surface = (
-        WORKER / "src" / "components" / "ApprovalPostureControl.tsx"
-    ).read_text(encoding="utf-8")
-    native = (WORKER / "src-tauri" / "src" / "local_agent.rs").read_text(
+    approval_surface = (WORKER / "src" / "components" / "ApprovalPostureControl.tsx").read_text(
         encoding="utf-8"
     )
-    native_protocol = (
-        WORKER / "src-tauri" / "src" / "local_agent_protocol.rs"
-    ).read_text(encoding="utf-8")
-    remote = (WORKER / "src-tauri" / "src" / "device_roots.rs").read_text(
+    native = (WORKER / "src-tauri" / "src" / "local_agent.rs").read_text(encoding="utf-8")
+    native_protocol = (WORKER / "src-tauri" / "src" / "local_agent_protocol.rs").read_text(
         encoding="utf-8"
     )
+    remote = (WORKER / "src-tauri" / "src" / "device_roots.rs").read_text(encoding="utf-8")
 
     assert "hasDesktopRuntime() ? <LocalChatView" in route
     assert ": <ChatView" in route
@@ -222,9 +212,9 @@ def test_browser_cloud_and_desktop_local_agent_routes_cannot_silently_cross():
     assert "/v1/chat" not in local_view
     assert "client.streamChat" not in local_view
     assert 'source: "bundled" | "development" | null' in local_client
-    request_shape = native_protocol.split(
-        "pub(crate) struct LocalTurnRequest", 1
-    )[1].split("}", 1)[0]
+    request_shape = native_protocol.split("pub(crate) struct LocalTurnRequest", 1)[1].split("}", 1)[
+        0
+    ]
     assert "approval_posture" not in request_shape
     assert "client.approvalPosture" not in local_controller
     assert 'invoke<LocalAgentPosture>("local_agent_posture")' in local_client
@@ -244,26 +234,14 @@ def test_browser_cloud_and_desktop_local_agent_routes_cannot_silently_cross():
 
 @pytest.mark.invariant("SEC-WRK-01")
 def test_desktop_updater_accepts_no_webview_release_trust_or_unsigned_path():
-    native = (
-        WORKER / "src-tauri" / "src" / "desktop_updater.rs"
-    ).read_text(encoding="utf-8")
-    lib = (
-        WORKER / "src-tauri" / "src" / "lib.rs"
-    ).read_text(encoding="utf-8")
+    native = (WORKER / "src-tauri" / "src" / "desktop_updater.rs").read_text(encoding="utf-8")
+    lib = (WORKER / "src-tauri" / "src" / "lib.rs").read_text(encoding="utf-8")
     wrapper = (WORKER / "src" / "desktop.ts").read_text(encoding="utf-8")
-    surface = (
-        WORKER / "src" / "components" / "DesktopUpdater.tsx"
-    ).read_text(encoding="utf-8")
-    config = (
-        WORKER / "src-tauri" / "tauri.conf.json"
-    ).read_text(encoding="utf-8")
-    ci_config = (
-        WORKER / "src-tauri" / "tauri.ci.conf.json"
-    ).read_text(encoding="utf-8")
+    surface = (WORKER / "src" / "components" / "DesktopUpdater.tsx").read_text(encoding="utf-8")
+    config = (WORKER / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
+    ci_config = (WORKER / "src-tauri" / "tauri.ci.conf.json").read_text(encoding="utf-8")
     ci_config_payload = json.loads(ci_config)
-    ci_workflow = (
-        ROOT / ".github" / "workflows" / "ci.yml"
-    ).read_text(encoding="utf-8")
+    ci_workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
     assert 'option_env!("BOLTRIG_UPDATER_ENDPOINT")' in native
     assert 'option_env!("BOLTRIG_UPDATER_PUBLIC_KEY")' in native
@@ -310,27 +288,21 @@ def test_desktop_updater_accepts_no_webview_release_trust_or_unsigned_path():
 
 @pytest.mark.invariant("SEC-WRK-01")
 def test_desktop_oauth_return_accepts_only_kernel_brokered_opaque_results():
-    native = (
-        WORKER / "src-tauri" / "src" / "desktop_oauth.rs"
-    ).read_text(encoding="utf-8")
+    native = (WORKER / "src-tauri" / "src" / "desktop_oauth.rs").read_text(encoding="utf-8")
     lib = (WORKER / "src-tauri" / "src" / "lib.rs").read_text(encoding="utf-8")
     wrapper = (WORKER / "src" / "desktop.ts").read_text(encoding="utf-8")
-    surface = (
-        WORKER / "src" / "components" / "IntegrationsView.tsx"
-    ).read_text(encoding="utf-8")
-    config = (
-        WORKER / "src-tauri" / "tauri.conf.json"
-    ).read_text(encoding="utf-8")
-    capabilities = (
-        WORKER / "src-tauri" / "capabilities" / "default.json"
-    ).read_text(encoding="utf-8")
+    surface = (WORKER / "src" / "components" / "IntegrationsView.tsx").read_text(encoding="utf-8")
+    config = (WORKER / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
+    capabilities = (WORKER / "src-tauri" / "capabilities" / "default.json").read_text(
+        encoding="utf-8"
+    )
 
     assert '"schemes": ["boltrig-worker"]' in config
     assert "tauri_plugin_deep_link::init()" in lib
     assert "tauri_plugin_single_instance::init" in lib
     assert "register_all()" in native
-    assert 'url.scheme() != CALLBACK_SCHEME' in native
-    assert 'url.host_str() != Some(CALLBACK_HOST)' in native
+    assert "url.scheme() != CALLBACK_SCHEME" in native
+    assert "url.host_str() != Some(CALLBACK_HOST)" in native
     assert "url.path() != CALLBACK_PATH" in native
     assert '"code" | "access_token" | "refresh_token" | "id_token"' in native
     assert "provider_secret_in_native_return" in native
@@ -347,8 +319,9 @@ def test_desktop_oauth_return_accepts_only_kernel_brokered_opaque_results():
         assert command in lib
         assert command in wrapper
     oauth_wrapper = wrapper[
-        wrapper.index("export interface DesktopOAuthReturnReadiness"):
-        wrapper.index("export async function clearDesktopSession")
+        wrapper.index("export interface DesktopOAuthReturnReadiness") : wrapper.index(
+            "export async function clearDesktopSession"
+        )
     ]
     for forbidden in (
         "authorization_url",
@@ -379,7 +352,7 @@ def test_worker_image_is_the_only_first_party_browser_surface():
     nginx = (WORKER / "nginx.conf").read_text(encoding="utf-8")
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert 'profiles: ["worker"]' not in compose
-    assert "worker-ui:" in compose
+    assert "ui:" in compose
     assert "COPY --from=worker-build" in dockerfile
     assert "operator-build" not in dockerfile
     assert "BOLTRIG_UI_BASE" not in dockerfile
@@ -391,7 +364,7 @@ def test_worker_image_is_the_only_first_party_browser_surface():
 @pytest.mark.invariant("WRK-02")
 def test_worker_is_the_default_edge_presentation():
     caddy = (ROOT / "deploy" / "Caddyfile.example").read_text(encoding="utf-8")
-    assert "{$BOLTRIG_FRONTEND_UPSTREAM:worker-ui:8080}" in caddy
+    assert "{$BOLTRIG_FRONTEND_UPSTREAM:ui:8080}" in caddy
     assert "{$BOLTRIG_FRONTEND_UPSTREAM:ui:80}" not in caddy
     assert not (ROOT / "deploy" / "compose.worker-primary.yml").exists()
 
@@ -399,25 +372,19 @@ def test_worker_is_the_default_edge_presentation():
 @pytest.mark.invariant("WRK-02")
 def test_worker_is_a_signed_digest_pinned_first_party_release_image():
     release = (ROOT / "deploy" / "compose.release.yml").read_text(encoding="utf-8")
-    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
-        encoding="utf-8"
-    )
-    validator = (ROOT / "scripts" / "validate_release_images.py").read_text(
-        encoding="utf-8"
-    )
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    validator = (ROOT / "scripts" / "validate_release_images.py").read_text(encoding="utf-8")
 
-    assert "BOLTRIG_WORKER_UI_IMAGE" in release
-    assert "BOLTRIG_WORKER_UI_IMAGE" in validator
-    assert "image: worker-ui" in workflow
+    assert "BOLTRIG_UI_IMAGE" in release
+    assert "BOLTRIG_UI_IMAGE" in validator
+    assert "image: ui" in workflow
     assert "apps/worker/Dockerfile" in workflow
 
 
 @pytest.mark.invariant("WRK-03")
 def test_worker_built_artifact_has_a_gating_build_acceptance():
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     package = (WORKER / "package.json").read_text(encoding="utf-8")
 
     assert "worker-quality" in makefile
@@ -431,12 +398,8 @@ def test_worker_built_artifact_has_a_gating_build_acceptance():
 
 @pytest.mark.invariant("WRK-04")
 def test_worker_preserves_audit_anchor_evidence_and_labels_its_strength():
-    sdk_types = (ROOT / "sdks" / "web" / "src" / "types.ts").read_text(
-        encoding="utf-8"
-    )
-    operate = (
-        WORKER / "src" / "components" / "OperationsView.tsx"
-    ).read_text(encoding="utf-8")
+    sdk_types = (ROOT / "sdks" / "web" / "src" / "types.ts").read_text(encoding="utf-8")
+    operate = (WORKER / "src" / "components" / "OperationsView.tsx").read_text(encoding="utf-8")
 
     assert "anchor?: AuditAnchorEvidence | null;" in sdk_types
     for field in (
@@ -489,9 +452,8 @@ def test_worker_parity_includes_every_non_http_lifecycle_dimension():
     )
     for dimension in ("discover", "configure", "operate", "observe", "recover"):
         assert f"**{dimension}**" in section
-    assert (
-        "A flat agent profile, saved cron string, parsed policy field"
-        in " ".join(section.split())
+    assert "A flat agent profile, saved cron string, parsed policy field" in " ".join(
+        section.split()
     )
 
 
@@ -504,7 +466,13 @@ def test_worker_edge_allows_same_origin_voice_without_opening_browser_capabiliti
 
     for source in (caddy, nginx):
         assert "X-Content-Type-Options" in source and "nosniff" in source
-        assert "X-Frame-Options" in source and "DENY" in source
+        # SAMEORIGIN, not DENY (ADR-0030 amendment, Principal 2026-08-21): the
+        # console is mounted at <host>/boltrig and framed SAME-ORIGIN by the
+        # host app (the Opbox Agents panel). Cross-origin framing stays barred
+        # - the negative assertions pin that the relaxation stopped at 'self'
+        # and never became an allowlist or a wildcard.
+        assert "X-Frame-Options" in source and "SAMEORIGIN" in source
+        assert "DENY" not in source
         assert "Referrer-Policy" in source and "no-referrer" in source
         assert "camera=()" in source
         assert "geolocation=()" in source
@@ -512,28 +480,33 @@ def test_worker_edge_allows_same_origin_voice_without_opening_browser_capabiliti
         assert "connect-src 'self'" in source
         assert "connect-src 'self' https: wss:" not in source
         assert "object-src 'none'" in source
-        assert "frame-ancestors 'none'" in source
+        assert "frame-ancestors 'self'" in source
+        assert "frame-ancestors 'none'" not in source
+        assert "frame-ancestors 'self' http" not in source
     assert macos_bundle["NSMicrophoneUsageDescription"] == (
-        "Boltrig Worker uses the microphone only while you are participating "
-        "in a voice call."
+        "Boltrig Worker uses the microphone only while you are participating in a voice call."
     )
 
 
 @pytest.mark.invariant("SEC-WRK-13")
 def test_worker_renders_closed_conversations_in_archived_as_restore_only():
-    task_list = (
-        WORKER / "src" / "components" / "shell" / "TaskList.tsx"
-    ).read_text(encoding="utf-8")
-    archived = (
-        WORKER / "src" / "components" / "settings" / "ArchivedSection.tsx"
-    ).read_text(encoding="utf-8")
+    task_list = (WORKER / "src" / "components" / "shell" / "TaskList.tsx").read_text(
+        encoding="utf-8"
+    )
+    task_model = (WORKER / "src" / "components" / "shell" / "useTaskListModel.ts").read_text(
+        encoding="utf-8"
+    )
+    archived = (WORKER / "src" / "components" / "settings" / "ArchivedSection.tsx").read_text(
+        encoding="utf-8"
+    )
     chat = (WORKER / "src" / "components" / "ChatView.tsx").read_text(encoding="utf-8")
-    controls = (
-        WORKER / "src" / "components" / "ConversationControls.tsx"
-    ).read_text(encoding="utf-8")
+    controls = (WORKER / "src" / "components" / "ConversationControls.tsx").read_text(
+        encoding="utf-8"
+    )
     sdk = (ROOT / "sdks" / "web" / "src" / "client.ts").read_text(encoding="utf-8")
 
-    assert 'conversation.status !== "closed"' in task_list
+    assert "ConversationListState" in task_list
+    assert 'item.status !== "closed"' in task_model
     assert 'row.status === "closed"' in archived
     assert "restoreMyConversation" in archived
     assert "Bring back" in archived

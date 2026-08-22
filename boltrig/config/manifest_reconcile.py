@@ -13,6 +13,13 @@ store write, so a tripped mass-deactivation guard aborts the whole apply with
 nothing committed (fail-closed). The actual soft-deactivation
 (:func:`reconcile_capabilities`) runs AFTER the upsert loop through a single
 atomic store statement, so no partial wipe can be observed.
+
+A manifest carries a tenant and no workspace, so both the plan and the
+reconciliation are pinned to the ORG-WIDE scope (``workspace_id=None``,
+matched exactly). Since 0083 gave capabilities a workspace, an unscoped
+reconcile would soft-deactivate every workspace's manifest agents on the first
+apply after a workspace authored one - invisibly, because a deactivated row
+still exists and merely stops being routable.
 """
 
 from __future__ import annotations
@@ -23,7 +30,7 @@ from typing import TYPE_CHECKING, Any
 from boltrig.models import ActionType, AgentCapability, AuditEvent, utcnow
 
 if TYPE_CHECKING:  # imported for typing only; avoids a manifest <-> reconcile cycle
-    from .manifest import EphemeralRuntime, FleetManifest, HierarchyTier
+    from .manifest import EphemeralRuntime, FleetManifest, NamedAgentConfig
 
 MANIFEST_SOURCE = "manifest"
 # The mass-deactivation floor: an apply may drop at most this many manifest-sourced
@@ -41,12 +48,14 @@ class BulkCapabilityDeactivationError(RuntimeError):
     """
 
 
-def _capability_from_tier(tier: HierarchyTier, tenant_id: str) -> AgentCapability:
+def _capability_from_named_agent(
+    agent: NamedAgentConfig, tenant_id: str
+) -> AgentCapability:
     return AgentCapability(
-        name=tier.name, tenant_id=tenant_id, runtime=tier.runtime,
-        supported_skills=list(tier.supported_skills), max_depth=tier.max_depth,
-        is_ephemeral=False, cost_tier=tier.cost_tier,
-        model_endpoint=tier.model_endpoint, source=MANIFEST_SOURCE,
+        name=agent.name, tenant_id=tenant_id, runtime=agent.runtime,
+        supported_skills=list(agent.supported_skills), max_depth=agent.max_depth,
+        is_ephemeral=False, cost_tier=agent.cost_tier,
+        model_endpoint=agent.model_endpoint, source=MANIFEST_SOURCE,
     )
 
 
@@ -60,13 +69,15 @@ def _capability_from_ephemeral(rt: EphemeralRuntime, tenant_id: str) -> AgentCap
 
 
 def declared_capabilities(manifest: FleetManifest) -> list[AgentCapability]:
-    """Every capability the manifest authors (ephemeral runtimes + hierarchy
-    tiers), each stamped ``source='manifest'``."""
+    """Every ephemeral runtime and durable named peer authored by the manifest."""
+    from .manifest import resolved_named_agents
+
     tenant = manifest.tenant_id
     caps = [_capability_from_ephemeral(rt, tenant) for rt in manifest.ephemeral_runtimes]
-    if manifest.hierarchy.tier1 is not None:
-        caps.append(_capability_from_tier(manifest.hierarchy.tier1, tenant))
-    caps.extend(_capability_from_tier(t, tenant) for t in manifest.hierarchy.tier2)
+    caps.extend(
+        _capability_from_named_agent(agent, tenant)
+        for agent in resolved_named_agents(manifest).members
+    )
     return caps
 
 
@@ -99,7 +110,15 @@ async def plan_capability_reconciliation(
     unconditional (it does not depend on the counts).
     """
     declared_names = frozenset(c.name for c in declared_capabilities(manifest))
-    active = await store.list_capabilities(manifest.tenant_id)
+    # ORG-WIDE ONLY. A fleet manifest carries a tenant and no workspace, so it
+    # authors org-wide rows and reconciles org-wide rows. Reading the unfiltered
+    # set instead would count every workspace's manifest agents into A and list
+    # their names in `absent`, so the mass-deactivation guard would fire on
+    # arithmetic about rows this apply cannot touch, and the plan would promise
+    # drops that never happen.
+    active = await store.list_capabilities(
+        manifest.tenant_id, workspace_id=None, enforce_workspace=True
+    )
     active_manifest = [c for c in active if c.source == MANIFEST_SOURCE]
     absent = tuple(sorted(c.name for c in active_manifest if c.name not in declared_names))
     a_before, dropped = len(active_manifest), len(absent)
@@ -127,7 +146,7 @@ async def reconcile_capabilities(
     if not plan.absent_names:
         return []
     deactivated = await kernel.store.deactivate_absent_manifest_capabilities(
-        manifest.tenant_id, list(plan.declared_names)
+        manifest.tenant_id, list(plan.declared_names), workspace_id=None
     )
     audit = getattr(kernel, "audit", None)
     for name in deactivated:

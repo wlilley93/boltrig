@@ -3,6 +3,7 @@
 // card components render.
 
 import type { FamiliarGenotype, HITLKind, SpawnRuleReceipt } from "./types.js";
+import type { DisplayObjectEnvelope } from "./displayObjects.js";
 
 export interface ToolEntry {
   key: string;
@@ -70,6 +71,11 @@ export interface StepEntry {
   status: "running" | "ok" | "failed" | "skipped" | "paused" | "error";
 }
 
+export interface DisplayObjectEntry {
+  key: string;
+  object: DisplayObjectEnvelope;
+}
+
 // Typed transcript entries preserve the arrival order of executable work. A
 // tool result mutates its earlier tool entry in place, while workflow updates
 // share one ordered card whose step rows settle in place.
@@ -78,17 +84,20 @@ export type TimelineEntry =
   | { kind: "subagent"; key: string; entry: SubagentEntry }
   | { kind: "hitl"; key: string; entry: HitlEntry }
   | { kind: "question"; key: string; entry: QuestionEntry }
+  | { kind: "display_object"; key: string; entry: DisplayObjectEntry }
   | { kind: "steps"; key: string; entries: StepEntry[] };
 
 export interface NormalizedTurn {
   runId?: string;
   conversationId?: string;
+  agentAddress?: string;
   text: string;
   reasoning: string;
   tools: ToolEntry[];
   subagents: SubagentEntry[];
   hitls: HitlEntry[];
   questions: QuestionEntry[];
+  displayObjects: DisplayObjectEntry[];
   steps: StepEntry[];
   timeline: TimelineEntry[];
   ended: boolean;

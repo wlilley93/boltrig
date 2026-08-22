@@ -296,6 +296,7 @@ export const ULTRON_UNIFORMS: readonly string[] = [
   "uWarm", "uHot", "uFringe", "uInner", "uFringeScale", "uFringeGain", "uGain",
   "uSrc", "uDir", "uThreshold",
   "uScene", "uBloom", "uBloomGain", "uCore", "uStarburst", "uBounce",
+  "uHomePull", "uKnee", "uMembrane",
 ];
 
 const ULTRON_SOURCE: CharacterCanvasSource = {

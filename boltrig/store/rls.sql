@@ -82,6 +82,10 @@ DECLARE
     -- anchors. Both carry a real tenant_id, so the generic tenant_id policy fences
     -- them (a null GUC -> zero rows, fail-closed) exactly like audit_log.
     'security_log','audit_rollup_anchors',
+    -- The audit outbox (SEC-16 durable deferral): tenant-scoped like audit_log
+    -- itself; its rows are DELETED by the drain, so unlike the append-only
+    -- chains it keeps the app role's full grant set.
+    'audit_outbox',
     'budgets','budget_usage','credential_refs','tenant_permissions','conversations',
     'config_revisions','permanent_fleet_observations','birth_profile_receipts',
     'background_job_receipts',
@@ -89,6 +93,10 @@ DECLARE
     'personal_agents','memory_items','mcp_servers','mcp_probe_receipts',
     'conversation_messages','conversation_steer_queue',
     'conversation_summaries',
+    -- Flat named-agent federation (0084): identities, immutable envelopes,
+    -- mutable delivery/turn leases, priority waiters, logical sessions, and summaries.
+    'named_agents','agent_turn_leases','agent_turn_waiters','agent_sessions','agent_messages',
+    'agent_message_deliveries','agent_session_summaries',
     'user_invitations','user_credentials','password_reset_tokens',
     'user_settings','user_sessions','memory_facts',
     -- TOTP two-factor ([2026] VJS-COUNTY 10): all three carry a tenant_id column, so
@@ -101,6 +109,11 @@ DECLARE
     'channel_gateway_leases',
     'run_checkpoints','fanout_counters',
     'run_cancel_requests',
+    -- The run-effect ledger (0085): what a run changed and how to undo it.
+    -- inverse_params carry real identifiers (message ts, ticket ids), so an
+    -- unfenced row would hand one tenant the handles to revert another's
+    -- actions. Same generic tenant_id policy, fail-closed on a null GUC.
+    'run_effects',
     -- Decision 0003 Phase 2: durable intake dedup markers + the socket-class
     -- outbound hand-off. Both carry a real tenant_id resolved from the VERIFIED
     -- channel before the write, so the generic tenant_id policy fences them.
@@ -115,6 +128,17 @@ DECLARE
     -- tenant_id-scoped like the rest; the migration created the table without a
     -- policy and this is where that is corrected.
     'trajectory_events',
+    -- Capability doctrine step 2 (migration 0079): the canonical routing
+    -- layer. Every row carries a real tenant_id - a connection label, a
+    -- provider operation, an implementation claim and a routing rule are all
+    -- tenant data, and a route read outside the fence would pick a
+    -- destination belonging to someone else. Same generic tenant_id policy,
+    -- fail-closed on a null GUC.
+    'provider_connections','source_operations','capability_bindings',
+    'routing_policies',
+    -- Doctrine step 3: a ref resolves to a remote record, so an unfenced row
+    -- here would let one tenant's brref name another tenant's record.
+    'entity_provenance',
     -- Org -> workspace tenancy ([2026] VJS-COUNTY 8). These three carry a real
     -- tenant_id column, so the generic tenant_id policy binds them. organisations
     -- is handled separately below (its isolation column is id, which IS tenant_id).

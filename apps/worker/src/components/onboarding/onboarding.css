@@ -308,7 +308,7 @@
 .onboarding-visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important; white-space: nowrap !important; border: 0 !important; }
 .onboarding-capability { display: grid; grid-template-columns: 30px auto; gap: 9px; align-items: center; margin: 0; padding: 9px 11px; border: 1px solid var(--border); border-radius: 11px; color: var(--text-2); background: color-mix(in srgb, var(--card-2) 58%, transparent); }
 .onboarding-desktop-banner { margin: 0; padding: 9px 11px; border: 1px solid color-mix(in srgb, #8f70ff 38%, var(--border)); border-radius: 11px; color: var(--text-2); background: color-mix(in srgb, var(--card-2) 58%, transparent); }
-.onboarding-desktop-banner a { color: var(--text-1); text-decoration: underline; }
+.onboarding-desktop-banner a { color: var(--text); text-decoration: underline; }
 .onboarding-capability > span { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 8px; color: var(--text-2); font-size: 11px; background: var(--inset); }
 .onboarding-capability.vision { border-color: color-mix(in srgb, #8f70ff 38%, var(--border)); }
 .onboarding-capability.vision > span { color: #b9a8ff; }

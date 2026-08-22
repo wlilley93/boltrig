@@ -406,3 +406,27 @@ def test_every_first_party_auth_invariant_is_declared_in_the_catalogue():
         if f"\n  {inv}:" not in catalogue
     ]
     assert not missing, f"first-party auth invariants absent from the catalogue: {missing}"
+
+
+# --- accept-invite: unauthenticated argon2 must be throttled before the hash ---
+@pytest.mark.security
+@pytest.mark.invariant("SEC-100")
+def test_accept_invite_is_rate_limited_before_the_argon2_spend(monkeypatch):
+    # accept-invite was the ONLY public auth endpoint with no rate limit, and it
+    # pays a ~64 MiB argon2 hash on every unauthenticated POST BEFORE the invite
+    # is claimed - a cheap memory-exhaustion lever. The 429 must arrive ahead of
+    # the hash (the throttle is enforced first, so the trip costs no argon2).
+    _set_cookies_insecure(monkeypatch)
+    monkeypatch.setattr("boltrig.kernel.ratelimit.time.time", lambda: 1_700_000_000.0)
+    _, app, store = _app()
+    _run(_seat_owner(store))
+    client = TestClient(app)
+    codes = [
+        client.post(
+            "/v1/auth/accept-invite",
+            json={"token": "boltrig_invite_bogus", "password": "n" * 12},
+        ).status_code
+        for _ in range(11)
+    ]
+    assert codes[:10] == [400] * 10  # invalid invite, uniform
+    assert codes[10] == 429  # the per-IP bound (10/min) trips

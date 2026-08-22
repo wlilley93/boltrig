@@ -19,31 +19,24 @@ async def regeneration_inputs(
 ):
     conversation = await store.get_conversation(tenant_id, conversation_id)
     if conversation is not None and conversation.status == ConversationStatus.CLOSED:
-        raise ConversationClosed(
-            "restore the closed conversation before regenerating a reply"
-        )
+        raise ConversationClosed("restore the closed conversation before regenerating a reply")
     messages = await store.list_messages(tenant_id, conversation_id)
     live = [message for message in messages if message.superseded_by is None]
     assistant = next(
-        (
-            message
-            for message in reversed(live)
-            if message.role == MessageRole.ASSISTANT
-        ),
+        (message for message in reversed(live) if message.role == MessageRole.ASSISTANT),
         None,
     )
     if assistant is None or assistant.id != target_message_id:
-        raise RegenerateNotEligible(
-            "only the last assistant message may be regenerated"
-        )
+        raise RegenerateNotEligible("only the last assistant message may be regenerated")
     user = next(
-        (
-            message
-            for message in reversed(live)
-            if message.role == MessageRole.USER
-        ),
+        (message for message in reversed(live) if message.role == MessageRole.USER),
         None,
     )
     if user is None:
         raise RegenerateNotEligible("no user message to regenerate")
-    return assistant, user
+    agent_address = (
+        assistant.author_agent_address
+        or user.recipient_agent_address
+        or (conversation.agent_address if conversation is not None else None)
+    )
+    return assistant, user, agent_address

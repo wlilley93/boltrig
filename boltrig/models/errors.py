@@ -99,6 +99,41 @@ class BindingNotFound(BoltrigError):
     reason = "binding_not_found"
 
 
+class RouteRequired(BoltrigError):
+    """Several destinations could serve this capability and no rule picks one.
+
+    The doctrine's structured ambiguity (SPEC §7.C): rather than guessing, or
+    silently answering from whichever connection sorted first, the kernel hands
+    back the candidate destinations BY THEIR HUMAN-READABLE LABELS so the caller
+    (or the person behind it) can name one. A model that has to guess which CRM
+    it just wrote to is the failure this replaces.
+    """
+
+    status_code = 409
+    reason = "route_required"
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        capability: str,
+        operation_class: str,
+        destinations: list[dict[str, Any]],
+    ) -> None:
+        super().__init__(message)
+        self.capability = capability
+        self.operation_class = operation_class
+        self.destinations = destinations
+
+    def caller_detail(self) -> dict[str, Any]:
+        """Named destinations, so the retry can be a decision rather than a guess."""
+        return {
+            "capability": self.capability,
+            "operation_class": self.operation_class,
+            "destinations": self.destinations,
+        }
+
+
 class AdapterFailure(BoltrigError):
     """An adapter rejected a call using the shared adapter error taxonomy."""
 

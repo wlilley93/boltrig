@@ -103,3 +103,13 @@ user_sarcastic:
   emotions: {amusement: 0.18, curiosity: 0.12, confidence: -0.06, defiance: 0.05}
   needs: {stimulation: 1.2, social: 0.6}
   tension: 0.25
+
+# A companion adoption is an explicit novelty affordance (2026-08-21): the
+# user chose a new face, and the being meets the moment - novelty refilled,
+# curiosity up, a little play, a small bond. Mild by design: adopting is a
+# greeting, not a personality transplant, and the shared tenant mood (the
+# honest event history) persists underneath the new register.
+character_adopted:
+  emotions: {curiosity: 0.2, anticipation: 0.15, playfulness: 0.1, connection: 0.05}
+  needs: {novelty: 4.0, stimulation: 1.5}
+  attachment: 0.003

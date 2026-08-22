@@ -50,6 +50,7 @@ async def _default_deliver(
     text: str,
     target: str | None,
     diversion: Diversion | None = None,
+    network_config: dict | None = None,
 ) -> dict:
     """Kernel-side outbound delivery. A channel with a configured outbound_url
     gets an egress-guarded POST; a socket channel is enqueued for the sidecar
@@ -71,8 +72,14 @@ async def _default_deliver(
         # identical transport, and recorded that as a limitation to disclose
         # rather than cure - nobody may cite a dev-mode success as evidence the
         # real transport works.
-        async with pinned_async_client(diversion.loopback_url, timeout=10) as client:
-            resp = await client.post(
+        if network_config:
+            client = pinned_async_client(
+                diversion.loopback_url, network_config, timeout=10
+            )
+        else:  # plain signature: an injected seam sees exactly what it sees today
+            client = pinned_async_client(diversion.loopback_url, timeout=10)
+        async with client as resp_client:
+            resp = await resp_client.post(
                 diversion.loopback_url,
                 json={"text": text, "target": target, "channel": channel.id},
             )
@@ -87,8 +94,16 @@ async def _default_deliver(
 
         # SSRF (H2/SEC-61): pin the connection to the vetted IP so httpx cannot
         # re-resolve the outbound host to internal space (raises EgressBlocked).
-        async with pinned_async_client(outbound_url, timeout=10) as client:
-            resp = await client.post(outbound_url, json={"text": text, "target": target})
+        # The manifest NetworkConfig rides the same call (SEC-52): an air-gap /
+        # allow-list posture is enforced on the webhook leg, not just web.fetch.
+        if network_config:
+            client = pinned_async_client(outbound_url, network_config, timeout=10)
+        else:  # plain signature: an injected seam sees exactly what it sees today
+            client = pinned_async_client(outbound_url, timeout=10)
+        async with client as resp_client:
+            resp = await resp_client.post(
+                outbound_url, json={"text": text, "target": target}
+            )
         return {"status": "sent", "code": resp.status_code}
     if channel.transport == "socket":
         # The durable hand-off: the sidecar claims this row over its run-scoped
@@ -115,10 +130,14 @@ class ChannelSendAdapter:
         store,
         deliver: DeliverFn | None = None,
         diversion: DiversionFn | None = None,
+        network_config: dict | None = None,
     ) -> None:
         self._store = store
         self._deliver = deliver or self._deliver_default
         self._diversion = diversion
+        # The manifest NetworkConfig (SEC-52): an air-gap / allow-list posture
+        # must bind the outbound webhook leg, which is ordinary egress.
+        self._network_config = dict(network_config) if network_config else None
 
     def _diversion_for(self, params: dict) -> Diversion | None:
         if self._diversion is None:
@@ -127,7 +146,8 @@ class ChannelSendAdapter:
 
     async def _deliver_default(self, channel: Channel, text: str, target: str | None) -> dict:
         return await _default_deliver(
-            self._store, channel, text, target, self._diversion_for({"target": target})
+            self._store, channel, text, target, self._diversion_for({"target": target}),
+            self._network_config,
         )
 
     def approval_context(self, verb: str, params: dict, context: InvocationContext) -> dict | None:
@@ -199,5 +219,6 @@ def build_channel_send(
     store,
     deliver: DeliverFn | None = None,
     diversion: DiversionFn | None = None,
+    network_config: dict | None = None,
 ) -> ChannelSendAdapter:
-    return ChannelSendAdapter(store, deliver, diversion)
+    return ChannelSendAdapter(store, deliver, diversion, network_config)

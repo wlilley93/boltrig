@@ -117,9 +117,13 @@ async def test_permanent_profile_is_pinned_metered_and_redacted_in_audit():
     )
     assert tenant == T
     assert capability == _capability()
+    # SEC-13: the routing seam also receives the egress prompt it is about to
+    # run (the PII classification input) - the same string the runtime gets.
     assert spawner._runtime_resolver.runtime_for.await_args.kwargs == {
         "pinned_policy": True,
         "allow_kernel_tools": False,
+        "force_kernel_tools": False,
+        "outbound_text": resolved.calls[0][0],
     }
     assert phase_context.actor == "head-of-research"
     assert phase_context.actor_tier == "tier2"

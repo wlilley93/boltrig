@@ -10,8 +10,8 @@ from boltrig.models.work import work_item_run_id
 from .base import clamp_work_page
 from .work_item_rows import detached_work_item, work_item_from_row
 from .workspace_scope import (
-    append_work_workspace_clause,
-    work_item_workspace_visible,
+    append_workspace_scope_clause,
+    workspace_scope_visible,
 )
 
 
@@ -48,7 +48,7 @@ class ExecutionSearchMem:
 
         def _visible(w) -> bool:
             return (allowed is None or w.owner_member in allowed) and (
-                work_item_workspace_visible(w, workspace_id, True)
+                workspace_scope_visible(w, workspace_id, True)
             )
 
         hidden = {work_item_run_id(w) for w in items if not _visible(w)}
@@ -78,7 +78,7 @@ class ExecutionSearchPG:
         if departments is not None:
             args.append(list(departments))
             visible_clauses.append(f"owner_member = ANY(${len(args)}::text[])")
-        append_work_workspace_clause(visible_clauses, args, workspace_id, True)
+        append_workspace_scope_clause(visible_clauses, args, workspace_id, True)
         visible_sql = " AND ".join(visible_clauses)
         clauses = ["w.tenant_id=$1", visible_sql]
         clauses.append(

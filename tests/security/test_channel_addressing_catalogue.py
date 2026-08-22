@@ -133,7 +133,9 @@ def test_channel_inventory_projects_scoped_targets_and_stale_routes_honestly():
     assert response.status_code == 200
     body = json.loads(response.body)
     catalogue = body["addressing_catalogue"]
-    assert catalogue["supports_arbitrary_agent_pinning"] is False
+    # Flat serving can pin any declared named address; "arbitrary" does not
+    # mean an undeclared slug, which remains stale below.
+    assert catalogue["supports_arbitrary_agent_pinning"] is True
     assert [target["id"] for target in catalogue["targets"]] == [
         "cos",
         "research",

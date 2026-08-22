@@ -8,6 +8,18 @@ bodies are Pydantic and live with the FastAPI app.
 from __future__ import annotations
 
 from ._exports import PUBLIC_MODEL_EXPORTS as _PUBLIC_MODEL_EXPORTS
+from .agent_comms import (
+    AgentDelivery as AgentDelivery,
+    AgentDeliveryStatus as AgentDeliveryStatus,
+    AgentMessage as AgentMessage,
+    AgentMessageKind as AgentMessageKind,
+    AgentSession as AgentSession,
+    AgentSessionSummary as AgentSessionSummary,
+    AgentTurnLane as AgentTurnLane,
+    AgentTurnLease as AgentTurnLease,
+    ClaimedAgentMessage as ClaimedAgentMessage,
+    NamedAgent as NamedAgent,
+)
 from .audit import (
     ActionType as ActionType,
     AuditEvent as AuditEvent,
@@ -44,6 +56,10 @@ from .channels import (
     ChannelOutboxMessage as ChannelOutboxMessage,
     ChannelPairing as ChannelPairing,
     transport_for as transport_for,
+)
+from .effects import (
+    RUN_EFFECT_STATUSES as RUN_EFFECT_STATUSES,
+    RunEffect as RunEffect,
 )
 from .context import (
     InvocationContext as InvocationContext,
@@ -179,6 +195,7 @@ from .errors import (
     NetworkPolicyViolation as NetworkPolicyViolation,
     PendingHuman as PendingHuman,
     RateLimited as RateLimited,
+    RouteRequired as RouteRequired,
     SchemaValidationError as SchemaValidationError,
     SensingCapabilityUnavailable as SensingCapabilityUnavailable,
     SensitiveDataMisrouted as SensitiveDataMisrouted,

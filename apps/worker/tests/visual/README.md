@@ -108,3 +108,30 @@ The comparator verifies the capture receipt, every target/current PNG digest,
 the 1440×900 dimensions, and the still-current source digest. It atomically
 writes only `current/diff/` and `current/metrics.json`; the resulting status is
 `measured_unreviewed` and its visual verdict remains `not_assessed`.
+
+## The capture rig (measured 2026-08-16)
+
+The governed states include WebGL surfaces (`call` renders the Familiar through
+`FamiliarWebGLRenderer`), so the rig's playwright-core must actually drive GPU
+WebGL in the pinned chromium-for-testing 151:
+
+- a CURRENT playwright-core drives ANGLE Metal on macOS and renders the canvas
+  states natively;
+- playwright-core older than ~1.5x cannot enable chromium 151's gated
+  SwiftShader, so `getContext("webgl2")` returns null headless, the Stage falls
+  back to its non-canvas mode, and the capture fails with
+  `computed-style-missing:.voice-call-primary-familiar .familiar-stage-canvas`
+  - an environment failure that PRESENTS as a contract miss on `call`.
+
+If the `call` state fails every capture with that miss while the DOM contract
+otherwise settles, check `BOLTRIG_PLAYWRIGHT_MODULE`'s playwright-core version
+before touching any contract: `node -e 'import(process.env.BOLTRIG_PLAYWRIGHT_MODULE).then(p=>console.log(p.chromium.name()))'`
+and probe WebGL the way the rig does (headless launch, `--force-color-profile=srgb`,
+`getContext("webgl2")`).
+
+Line-height doctrine: every text box that feeds a `required_geometry` value must
+pin `line-height` to the measured macOS `normal` (16px at 13.5px, 15px at
+12.5px, 16px at 13px) - see the pins in `styles.css`, `settings-kit.css` and
+`IntegrationsView.css`, and the 3bfd2ca4 correction (17px was NOT the macOS
+value; bisect the parent commit before pinning, never scale one font's ratio
+onto another).

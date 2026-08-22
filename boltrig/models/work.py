@@ -60,12 +60,10 @@ class WorkItem:
     lease_expires_at: datetime | None = None
     workspace_id: WorkspaceId | None = None  # originating active workspace
     # Channel addressing (decision 0003, Phase 2). ``target`` is ROUTING DATA,
-    # never authority: None / "cos" addresses the tier-1 chief of staff (the
-    # default - the CoS routes the item); any other value names a tier-2
-    # subagent/run the item is addressed to. It is resolved at intake from the
-    # channel's config mapping (chat/thread id -> target) or an explicit target
-    # the verified sender supplied; identity stays kernel-authoritative (the
-    # binding rows), this only steers routing.
+    # never authority: it names the enabled tier-1 agent that owns the intake,
+    # or a reserved system target. It is resolved at intake from the channel's
+    # config mapping, an explicit address from the verified sender, or the
+    # tenant's authored intake default; identity stays kernel-authoritative.
     target: str | None = None
     # The way back for round-trip integrity: {"channel_id", "thread", "sender"}
     # captured at intake so a reply / run-completion notification returns to the

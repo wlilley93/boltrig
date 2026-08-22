@@ -39,6 +39,14 @@ export const ULTRON_ARRIVAL: UltronTuning = {
   veinLimb: [0, 0],
   crackLimb: [0, 0],
   facetLimb: [0.08, 0.08],
+  // Main's live-membrane mechanics, carried for the type but OFF: the canon
+  // ("Ultron final 1800") was authored on the film deck — lattice IS his
+  // membrane — and every one of these zeros is that mechanism's documented
+  // identity value.
+  homePull: 0.0,
+  knee: 0,
+  membraneGain: [0.0, 0.0],
+  membrane: [0.98, 0.10, 0.12],
   lattice: [2.2, 0],
   latticeBlur: 0,
   latticeSat: 0.5,

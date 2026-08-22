@@ -82,6 +82,29 @@ class PasswordResetStoreMem:
                 del self._tfa_challenges[challenge_key]
         return PasswordResetResult(user_id=token.user_id, revoked_sessions=revoked)
 
+    async def revoke_user_sessions(
+        self, tenant_id: str, user_id: str, *, keep_token_hash: str | None = None
+    ) -> int:
+        """Revoke the identity's OTHER sessions (self-service password rotation).
+
+        The reset path revokes everything inside its CTE because its caller is
+        unauthenticated; the rotate path is authenticated, so the CALLER's
+        session survives via ``keep_token_hash`` while every other session -
+        including an attacker's from a phished password - dies with the old
+        credential."""
+        revoked = 0
+        for session in self._sessions.values():
+            if (
+                session.tenant_id == tenant_id
+                and session.user_id == user_id
+                and not session.revoked
+                and (keep_token_hash is None
+                     or not hmac.compare_digest(session.token_hash, keep_token_hash))
+            ):
+                session.revoked = True
+                revoked += 1
+        return revoked
+
 
 class PasswordResetStorePG:
     async def replace_password_reset_token(self, token: PasswordResetToken) -> bool:
@@ -118,6 +141,21 @@ class PasswordResetStorePG:
             token_hash,
         )
         return row is not None
+
+    async def revoke_user_sessions(
+        self, tenant_id: str, user_id: str, *, keep_token_hash: str | None = None
+    ) -> int:
+        rows = await self._pool.fetch(
+            """UPDATE user_sessions s
+                  SET revoked=true
+                 WHERE s.tenant_id=$1 AND s.user_id=$2 AND NOT s.revoked
+                   AND ($3::text IS NULL OR s.token_hash IS DISTINCT FROM $3)
+               RETURNING s.id""",
+            tenant_id,
+            user_id,
+            keep_token_hash,
+        )
+        return len(rows)
 
     async def reset_password_with_token(
         self,

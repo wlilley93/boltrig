@@ -106,6 +106,15 @@ uniform vec4 uEye;
  *  uniform) is byte-identical to the pre-bounce composite. */
 uniform vec3 uBounce;
 uniform float uTime;
+// PRE-KNEE HIGHLIGHT COMPRESSION, for additive pile-ups. The filmic knee below
+// maps everything far above 1.5 to the same white, so wherever thousands of
+// additive streaks stack (a density knot, a hot syllable) the hue is gone
+// before the knee ever shapes it. This Reinhard term compresses the SCENE
+// while it is still linear: dense regions keep their colour and their
+// gradient instead of clipping to a white slab, thin filaments (far below
+// 1/uKnee) pass through nearly untouched. Zero -- the unset default -- is the
+// identity, so every body that predates the dial is byte-identical.
+uniform float uKnee;
 ${FINITE_CEILING}
 void main() {
   // Clamped on read, for the reason FINITE_CEILING gives: an Inf reaching the
@@ -130,6 +139,7 @@ void main() {
     c = min(texture(uScene, vUV).rgb, CEIL)
       + min(texture(uBloom, vUV).rgb, CEIL) * uBloomGain;
   }
+  c = c / (1.0 + uKnee * c);
 
   // The heart, starburst and eye are drawn HERE, not sampled from the scene,
   // so they ride the current bounce explicitly — trails are texture-only.

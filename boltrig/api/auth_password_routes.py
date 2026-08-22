@@ -87,6 +87,18 @@ async def _rotate(k, request, body, realm, user, cred) -> JSONResponse:
             status_code=400,
         )
     await k.store.set_password_credential(realm, user.id, hash_password(new))
+    # The old credential is dead, so sessions minted against it must die with
+    # it: an attacker's session from a phished password otherwise survived the
+    # victim's own rotation for up to the 12h sliding / 7d absolute session
+    # lifetime. The reset path already revokes everything inside its CTE; this
+    # mirrors it for self-service rotation, keeping only the caller's current
+    # session (they just proved knowledge of the old password).
+    session = getattr(request.state, "boltrig_session", None)
+    await k.store.revoke_user_sessions(
+        realm,
+        user.id,
+        keep_token_hash=getattr(session, "token_hash", None),
+    )
     if user.must_change_password:
         await k.store.upsert_user(_replace(user, must_change_password=False))
     # Keys-only ([2026] VJS-COUNTY 7, D8): the fact of the rotation, never a password.

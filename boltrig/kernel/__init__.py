@@ -132,6 +132,15 @@ class Kernel:
         from boltrig.models import AdapterHealth, AdapterRecord
 
         self.loader.register(tenant_id, adapter)
+        declared_inverses = getattr(adapter, "inverses", None)
+        if callable(declared_inverses):
+            # The verb's AUTHOR states what reverses it; registration is the
+            # composition point, so only adapters actually loaded annotate the
+            # run-effect ledger (last-wins, like verb re-registration).
+            from .effect_inverses import register_inverse
+
+            for verb_id, builder in declared_inverses().items():
+                register_inverse(verb_id, builder)
         resource_specs = getattr(adapter, "mcp_resources", None)
         self.mcp.register_resources(
             tenant_id,

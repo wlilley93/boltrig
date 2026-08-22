@@ -66,6 +66,9 @@ sdks/web/node_modules
 
 # Local per-box compose override (desktop orb phenotype handoff etc.) - never committed.
 docker-compose.override.yml
+# Retag/rollback copies are named <file>.bak-retag-<stamp>, which docker-compose.override.*.yml*
+# below does NOT match (it wants .<name>.yml). One of those sat untracked in the tree for two days.
+docker-compose.override.yml.*
 backups/
 .secrets/
 deploy/wheelhouse/
@@ -80,3 +83,5 @@ _migration/
 # porting them into bodyPresets.ts, not a source of truth. Committing it would put
 # two copies of every look in the tree and make the stale one look authoritative.
 apps/worker/tests/visual/presets.json
+# a pnpm install tree for linux docker builds; materialised by the Dockerfile install, never source
+apps/worker/node_modules.linux/

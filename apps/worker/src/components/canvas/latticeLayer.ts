@@ -69,6 +69,18 @@ void main() {
 
 /** blur / saturation / glow, in slider terms. Neutral is [0, 1, 0]. */
 export type LatticeFx = readonly [number, number, number];
+
+/** Everything one draw needs. One spec keeps the layer and the deck on the
+ *  same signature, and a state change costs a spread, not a re-plumb. */
+export interface LatticeDrawSpec {
+  size: readonly [number, number];
+  warm: ArrayLike<number>;
+  gain: number;
+  fullscreen: (prog: WebGLProgram) => void;
+  recolour?: boolean;
+  scale?: number;
+  fx?: LatticeFx;
+}
 const NEUTRAL_FX: LatticeFx = [0, 1, 0];
 
 export class LatticeLayer {
@@ -166,15 +178,8 @@ export class LatticeLayer {
    * so the loop is never cropped. `fullscreen` is the owning passes' triangle
    * -- the layer borrows the geometry rather than owning a copy.
    */
-  draw(
-    size: readonly [number, number],
-    warm: ArrayLike<number>,
-    gain: number,
-    fullscreen: (prog: WebGLProgram) => void,
-    recolour = false,
-    scale = 1,
-    fx: LatticeFx = NEUTRAL_FX,
-  ): void {
+  draw(spec: LatticeDrawSpec): void {
+    const { size, warm, gain, fullscreen, recolour = false, scale = 1, fx = NEUTRAL_FX } = spec;
     const gl = this.gl;
     if (!this.ready || !this.tex || !this.prog || gain <= 0) return;
     const [w, h] = size;
@@ -244,31 +249,38 @@ export class LatticeDeck {
     this.fade = 1;
   }
 
-  /** Advance the fade and pull in video frames. Once per frame, before draw.
-   *  `rate` is the footage's playback speed — half-time membrane, double-time
-   *  lattice — applied to both slots so a crossfade never runs two clocks. */
-  tick(mode: string, dt: number, rate = 1): void {
-    if (!this.map || this.slots.length < 2) return;
+  /** The footage clock, clamped, on both slots — a crossfade never runs two
+   *  speeds. `rate` is the footage's playback speed — half-time membrane,
+   *  double-time lattice. */
+  private setRate(rate: number): void {
     const speed = Math.min(4, Math.max(0.25, rate));
     for (const slot of this.slots) {
       if (slot.el && slot.el.playbackRate !== speed) slot.el.playbackRate = speed;
     }
-    const desired = this.map[mode] ?? this.map.standby ?? null;
-    const active = this.slots[this.active];
-    if (desired !== active.url) {
-      this.active = 1 - this.active;
-      const next = this.slots[this.active];
-      if (next.url !== desired) {
-        next.el?.remove();
-        next.el = desired ? latticeVideo(desired) : null;
-        next.url = desired;
-        next.layer.reset();
-      } else {
-        // Returning to a recently-left state: its loop is still loaded.
-        void next.el?.play().catch(() => undefined);
-      }
-      this.fade = 0;
+  }
+
+  /** Point the inactive slot at `desired` and begin the cross toward it. */
+  private swapTo(desired: string | null): void {
+    this.active = 1 - this.active;
+    const next = this.slots[this.active];
+    if (next.url !== desired) {
+      next.el?.remove();
+      next.el = desired ? latticeVideo(desired) : null;
+      next.url = desired;
+      next.layer.reset();
+    } else {
+      // Returning to a recently-left state: its loop is still loaded.
+      void next.el?.play().catch(() => undefined);
     }
+    this.fade = 0;
+  }
+
+  /** Advance the fade and pull in video frames. Once per frame, before draw. */
+  tick(mode: string, dt: number, rate = 1): void {
+    if (!this.map || this.slots.length < 2) return;
+    this.setRate(rate);
+    const desired = this.map[mode] ?? this.map.standby ?? null;
+    if (desired !== this.slots[this.active].url) this.swapTo(desired);
     const front = this.slots[this.active];
     const back = this.slots[1 - this.active];
     front.layer.upload(front.el);
@@ -284,24 +296,16 @@ export class LatticeDeck {
   }
 
   /** Both slots, additively, fade-weighted. Gain includes tuning and voice. */
-  draw(
-    size: readonly [number, number],
-    warm: ArrayLike<number>,
-    gain: number,
-    fullscreen: (prog: WebGLProgram) => void,
-    recolour = false,
-    scale = 1,
-    fx: LatticeFx = NEUTRAL_FX,
-  ): void {
-    if (!this.map || this.slots.length < 2 || gain <= 0) return;
+  draw(spec: LatticeDrawSpec): void {
+    if (!this.map || this.slots.length < 2 || spec.gain <= 0) return;
     const front = this.slots[this.active];
     const back = this.slots[1 - this.active];
     // A raised cosine, so the cross leaves and arrives gently rather than
     // snapping at both ends of a linear ramp.
     const eased = 0.5 - 0.5 * Math.cos(Math.PI * this.fade);
-    front.layer.draw(size, warm, gain * eased, fullscreen, recolour, scale, fx);
+    front.layer.draw({ ...spec, gain: spec.gain * eased });
     if (this.fade < 1 && back.el) {
-      back.layer.draw(size, warm, gain * (1 - eased), fullscreen, recolour, scale, fx);
+      back.layer.draw({ ...spec, gain: spec.gain * (1 - eased) });
     }
   }
 

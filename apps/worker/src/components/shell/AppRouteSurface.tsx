@@ -18,7 +18,7 @@ const BrowserWorkspace = lazyNamed(
 const ChannelsView = lazyNamed(() => import("../ChannelsView"), "ChannelsView");
 const EvaluationsView = lazyNamed(() => import("../EvaluationsView"), "EvaluationsView");
 const HomeView = lazyNamed(() => import("../OperationsView"), "HomeView");
-const IntegrationsView = lazyNamed(() => import("../IntegrationsView"), "IntegrationsView");
+const IntegrationsSurface = lazyNamed(() => import("../integrations/IntegrationsSurface"), "IntegrationsSurface");
 const KnowledgeView = lazyNamed(() => import("../ParityViews"), "KnowledgeView");
 const MemoryView = lazyNamed(() => import("../ParityViews"), "MemoryView");
 const MobileSettings = lazyNamed(() => import("../MobileSettings"), "MobileSettings");
@@ -86,7 +86,7 @@ function CoreRoute(props: AppRouteSurfaceProps) {
     case "build": return <BuildView />;
     case "browser": return <BrowserWorkspace />;
     case "evaluations": return <EvaluationsView />;
-    case "integrations": return <IntegrationsView />;
+    case "integrations": return <IntegrationsSurface />;
     default: return null;
   }
 }

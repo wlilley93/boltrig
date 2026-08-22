@@ -118,12 +118,8 @@ class ChatService(ChatQueueService):
     ) -> bool:
         return self._relay.clear_active_run(tenant_id, conversation_id, expected=expected)
 
-    def _refresh_active_run(
-        self, tenant_id: str, conversation_id: str, *, expected: str
-    ) -> bool:
-        return self._relay.refresh_active_run(
-            tenant_id, conversation_id, expected=expected
-        )
+    def _refresh_active_run(self, tenant_id: str, conversation_id: str, *, expected: str) -> bool:
+        return self._relay.refresh_active_run(tenant_id, conversation_id, expected=expected)
 
     def live_projection(self):
         from boltrig.fleet.chat_live_projection import ChatLiveProjection
@@ -203,6 +199,7 @@ class ChatService(ChatQueueService):
         role: str,
         message: str,
         conversation_id: str | None = None,
+        agent_address: str | None = None,
         grants: GrantSet | None = None,
         attachments: list[dict[str, Any]] | None = None,
         workspace_id: str | None = None,
@@ -210,7 +207,9 @@ class ChatService(ChatQueueService):
         on_behalf_bearer: str | None = None,
         idempotency_key: str | None = None,
         origin: str | None = None,
-        model_profile_id: str | None = None, model_choice_id: str | None = None,
+        model_profile_id: str | None = None,
+        model_choice_id: str | None = None,
+        caller_context: Any = None,
         input_role: MessageRole = MessageRole.USER,
     ) -> AsyncIterator[dict[str, Any]]:
         request = TurnRequest(
@@ -219,6 +218,7 @@ class ChatService(ChatQueueService):
             role=role,
             message=message,
             conversation_id=conversation_id,
+            agent_address=agent_address,
             grants=grants,
             attachments=attachments,
             workspace_id=workspace_id,
@@ -228,6 +228,7 @@ class ChatService(ChatQueueService):
             origin=origin,
             model_profile_id=model_profile_id,
             model_choice_id=model_choice_id,
+            caller_context=caller_context,
             input_role=input_role,
         )
         async for event in stream_turn(self, request):
@@ -235,6 +236,7 @@ class ChatService(ChatQueueService):
 
     async def _maybe_compact(self, tenant_id: str, conversation_id: str) -> None:
         await maybe_compact(self, tenant_id, conversation_id)
+
     async def _drive(
         self,
         tenant_id,
@@ -246,12 +248,15 @@ class ChatService(ChatQueueService):
         grants,
         attachments=None,
         *,
+        agent_address=None,
         heartbeat=True,
+        caller_context=None,
         workspace_id=None,
         scope=None,
         on_behalf_bearer=None,
         origin=None,
-        model_profile_id=None, model_choice_id=None,
+        model_profile_id=None,
+        model_choice_id=None,
     ):
         async for event in drive_turn_events(
             self,
@@ -263,6 +268,7 @@ class ChatService(ChatQueueService):
             role=role,
             grants=grants,
             attachments=attachments,
+            agent_address=agent_address,
             heartbeat=heartbeat,
             workspace_id=workspace_id,
             scope=scope,
@@ -270,6 +276,7 @@ class ChatService(ChatQueueService):
             origin=origin,
             model_profile_id=model_profile_id,
             model_choice_id=model_choice_id,
+            caller_context=caller_context,
         ):
             yield event
 
@@ -296,7 +303,7 @@ class ChatService(ChatQueueService):
         must be the last non-superseded assistant reply, else ``RegenerateNotEligible``
         is raised BEFORE anything is re-run or persisted (fail-closed). Owner-only
         RBAC is enforced by the route, mirroring delete (D5)."""
-        last_assistant, last_user = await regeneration_inputs(
+        last_assistant, last_user, agent_address = await regeneration_inputs(
             self._store,
             tenant_id,
             conversation_id,
@@ -322,6 +329,7 @@ class ChatService(ChatQueueService):
             grants,
             last_user.attachments,
             heartbeat=False,
+            agent_address=agent_address,
             workspace_id=workspace_id,
             scope=scope,
         ):
@@ -338,6 +346,7 @@ class ChatService(ChatQueueService):
             run_id=run_id,
             hitl_request_id=hitl_id,
             events=collected,
+            author_agent_address=agent_address,
         )
         await self._store.add_message(new_message)
         conv = await self._store.get_conversation(tenant_id, conversation_id)

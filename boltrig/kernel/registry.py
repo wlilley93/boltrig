@@ -27,9 +27,31 @@ from boltrig.models import (
 )
 from boltrig.store import Store
 
+from .capability_records import (
+    apply_mapping_pack,
+    capability_connection,
+    declare_capability,
+    reconcile_binding_schemas,
+    record_source_operation,
+)
+from boltrig.capabilities.mapping_packs import load_packs
+
 from .revertible import EffectLog
 
 log = logging.getLogger("boltrig.kernel.registry")
+
+
+def _is_external_provider(adapter: Any) -> bool:
+    """Whether this adapter's operations are somebody else's API catalogue.
+
+    ``source`` is ``builtin`` for the adapters that ship inside the image and
+    ``generated`` or ``manual`` for everything consumed or hand-authored, which
+    is the same attribute :func:`capability_connection` already reads to decide
+    trust. Reading it here too keeps one definition of "external" rather than
+    two that can disagree, and defaults to builtin so an adapter that declares
+    nothing about itself is treated as ours and ingests nothing.
+    """
+    return getattr(adapter, "source", "builtin") != "builtin"
 
 
 class KernelRegistry:
@@ -56,11 +78,60 @@ class KernelRegistry:
         built while what was displaced is still known. Absent, the behaviour is
         exactly as before minus the clobbering, so existing callers need no
         change.
+
+        A spec declaring ``implements`` records the doctrine's three routing
+        records - a provider connection, the source operation, and the binding
+        that claims a canonical capability (SPEC-capability-doctrine.md §5 level
+        1).
+
+        An EXTERNAL provider's operations are recorded as source operations even
+        when they claim nothing (SPEC §10 step 4). Until they were, an operation
+        was invisible to the capability layer until somebody had already mapped
+        it, which left the compiler, the review queue and every mapping pack
+        with nothing to work on: the Opbox door publishes 633 verbs and declares
+        ``implements`` on none of them.
+
+        BUILTINS ARE DELIBERATELY EXCLUDED. They are Boltrig's own verbs rather
+        than a provider's catalogue, they are already first-class, and ingesting
+        all thirty adapters' operations on every tenant at every startup is a
+        cost with no reader today. Their declared specs still record, exactly as
+        before, so this only ever adds rows for adapters that represent someone
+        else's API.
         """
         registered: list[str] = []
-        for spec in adapter.describe():
+        specs = list(adapter.describe())
+        declared = [spec for spec in specs if spec.implements]
+        catalogue = specs if _is_external_provider(adapter) else declared
+        connection = (
+            await capability_connection(self._store, tenant_id, adapter)
+            if (declared or catalogue)
+            else None
+        )
+        for spec in specs:
             await self._register_spec(tenant_id, adapter, spec, effects)
             registered.append(spec.verb_id)
+        digests: dict[str, str] = {}
+        for spec in catalogue:
+            assert connection is not None
+            digests[spec.verb_id] = await record_source_operation(
+                self._store, tenant_id, connection, spec
+            )
+        if digests:
+            # One pass over the tenant's bindings rather than a read per
+            # operation: an Opbox door is 443 of them.
+            demoted = await reconcile_binding_schemas(self._store, tenant_id, digests)
+            if demoted:
+                log.warning(
+                    "capability bindings returned to review after a schema change: %d",
+                    len(demoted),
+                )
+        if connection is not None:
+            pack = load_packs().get(connection.provider)
+            if pack is not None:
+                await apply_mapping_pack(self._store, tenant_id, connection, specs, pack)
+        for spec in declared:
+            assert connection is not None
+            await declare_capability(self._store, tenant_id, connection, spec)
         return registered
 
     async def _register_spec(
@@ -220,7 +291,9 @@ class KernelRegistry:
             )
         return sorted(views, key=lambda workflow: workflow["id"])
 
-    async def _agent_profile_views(self, tenant_id: str) -> list[dict[str, Any]]:
+    async def _agent_profile_views(
+        self, tenant_id: str, workspace_id: str | None
+    ) -> list[dict[str, Any]]:
         views = [
             {
                 "name": capability.name,
@@ -236,7 +309,9 @@ class KernelRegistry:
                     capability.name
                 ).as_view(),
             }
-            for capability in await self._store.list_capabilities(tenant_id)
+            for capability in await self._store.list_capabilities(
+                tenant_id, workspace_id=workspace_id, enforce_workspace=True
+            )
         ]
         return sorted(views, key=lambda profile: profile["name"])
 
@@ -250,9 +325,10 @@ class KernelRegistry:
         """Return the caller-visible discovery catalogue.
 
         Verb and noun visibility is the intersection of the tenant ceiling and
-        the caller's grants.  Workflows additionally honour the caller's active
-        workspace, while agent capability profiles are tenant-scoped library
-        records.  The verb payload is deliberately kept backward-compatible.
+        the caller's grants.  Workflows AND agent capability profiles honour the
+        caller's active workspace: a profile is visible when it is org-wide or
+        belongs to that workspace (0083).  The verb payload is deliberately kept
+        backward-compatible.
         """
         verbs = await self._store.list_verbs(tenant_id, noun_id)
         # A verb is visible iff the tenant ceiling permits it AND the caller's own
@@ -288,5 +364,7 @@ class KernelRegistry:
             "nouns": await self._noun_views(tenant_id, visible),
             "verbs": out,
             "workflows": await self._workflow_views(tenant_id, workspace_id),
-            "agent_capabilities": await self._agent_profile_views(tenant_id),
+            "agent_capabilities": await self._agent_profile_views(
+                tenant_id, workspace_id
+            ),
         }

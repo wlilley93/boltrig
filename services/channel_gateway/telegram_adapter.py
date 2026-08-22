@@ -135,7 +135,9 @@ class TelegramLongPollAdapter(PlatformAdapter):
             raise RuntimeError(f"telegram {method} failed: {type(exc).__name__}") from exc
         if resp.status_code != 200 or not data.get("ok"):
             # Telegram's description is safe to surface; the token is not in it.
-            raise RuntimeError(f"telegram {method} refused: {data.get('description') or resp.status_code}")
+            raise RuntimeError(
+                f"telegram {method} refused: {data.get('description') or resp.status_code}"
+            )
         return data.get("result") or {}
 
     # --- lifecycle ---------------------------------------------------------
@@ -223,12 +225,19 @@ class TelegramLongPollAdapter(PlatformAdapter):
         topic_id = message.get("message_thread_id")
         thread = f"{chat_id}:{topic_id}" if topic_id is not None else str(chat_id)
         if self._on_message is not None:
-            await self._on_message({
-                "id": str(update_id),
-                "sender": str(sender["id"]),
-                "text": str(text),
-                "thread": thread,
-            })
+            await self._on_message(
+                {
+                    "id": str(update_id),
+                    "sender": str(sender["id"]),
+                    "text": str(text),
+                    "thread": thread,
+                    "provider_message_id": str(message.get("message_id") or update_id),
+                    "provider_sender_id": str(sender["id"]),
+                    "provider_conversation_id": thread,
+                    "provider_timestamp": message.get("date"),
+                    "threaded": topic_id is not None,
+                }
+            )
 
     # --- link (b): outbound ------------------------------------------------
     async def deliver(self, payload: dict[str, Any]) -> None:

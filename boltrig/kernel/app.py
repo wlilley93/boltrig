@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from boltrig.models import (
@@ -32,6 +32,8 @@ from .conversation_list_views import conversation_search_views, conversation_vie
 from .hitl_http import list_visible_hitl, respond_to_hitl
 from .web_security import client_ip
 from .work_http import get_visible_work_item, list_visible_work_items, work_item_audit_trail
+from .work_views import work_item_view
+from .bearer_principal import resolve_principal
 
 
 @dataclass
@@ -311,22 +313,12 @@ def create_app(
         app.state.platform = _platform_for(kernel)
 
     async def principal(request: Request) -> Principal:
-        from boltrig.identity.tokens import looks_like_pat, resolve_pat_principal
         from boltrig.store.postgres import set_current_tenant
 
-        # Headless parity (US-HEAD-02, SEC-37): a personal access token bearer is
-        # resolved to its owner's effective grants (PAT scope ∩ owner's current
-        # grants) and flows through the same chokepoint as the site. Anything else
-        # falls through to the configured resolver (OIDC in prod, headers in dev).
-        auth = request.headers.get("authorization", "")
-        scheme, _, value = auth.partition(" ")
-        token = value.strip() if scheme.lower() == "bearer" else None
-        if token and looks_like_pat(token):
-            p = await resolve_pat_principal(_get_kernel(request).store, token)
-            if p is None:
-                raise HTTPException(status_code=401, detail="invalid or expired access token")
-        else:
-            p = await resolver(request)
+        # A PAT bearer, else the configured resolver. Lives in bearer_principal
+        # because deciding WHICH WORKSPACE a headless caller acts in is a security
+        # question, and this file is at its structural ratchet.
+        p = await resolve_principal(request, resolver, _get_kernel)
         # Stamp request provenance for the enriched audit row ([2026] VJS-COUNTY 9,
         # D1). Taken from the request at the door, never from a body field. Behind
         # the CF tunnel the TCP peer is the tunnel, so CF's authoritative client
@@ -430,11 +422,14 @@ def create_app(
             scope=p.scope,
             message=body.message,
             conversation_id=body.conversation_id,
+            agent_address=body.agent_address,
             attachments=body.attachments,
             on_behalf_bearer=body.on_behalf_bearer,
             idempotency_key=body.idempotency_key,
             origin=body.origin,
-            model_profile_id=body.model_profile_id, model_choice_id=body.model_choice_id,
+            caller_context=body.caller_context,
+            model_profile_id=body.model_profile_id,
+            model_choice_id=body.model_choice_id,
         )
         # RBAC / access errors happen before the first event and propagate to the
         # central exception handler (canonical envelope) - the stream hasn't begun.
@@ -443,9 +438,7 @@ def create_app(
         except StopAsyncIteration:
             first = None
 
-        # Mid-run steer (US-CHAT-15): the conversation's turn was already in flight,
-        # so the message was durably queued instead of starting a parallel turn -
-        # acknowledge with a 202, no SSE stream on this POST.
+        # Mid-run steers are durably queued and acknowledged with 202, not SSE.
         if first is not None and first.get("type") == "queued":
             return JSONResponse(
                 {
@@ -453,6 +446,8 @@ def create_app(
                     "conversation_id": first.get("conversation_id"),
                     "message_id": first.get("message_id"),
                     "run_id": first.get("run_id"),
+                    "queued_run_id": first.get("queued_run_id"),
+                    "agent_address": first.get("agent_address"),
                 },
                 status_code=202,
             )
@@ -590,20 +585,7 @@ def create_app(
         )
         next_cursor = items[-1].id if len(items) == page else None
         return {
-            "items": [
-                {
-                    "id": w.id,
-                    "intent": w.intent,
-                    "status": w.status.value,
-                    "confidence": w.confidence,
-                    "convergent": w.convergent,
-                    "owner_member": w.owner_member,
-                    "source": w.source,
-                    "parent_id": w.parent_id,
-                    "hatchet_run_id": w.hatchet_run_id,
-                }
-                for w in items
-            ],
+            "items": [work_item_view(w) for w in items],
             "limit": page,
             "next_cursor": next_cursor,
         }
@@ -635,18 +617,7 @@ def create_app(
             return JSONResponse({"error": "not_found"}, status_code=404)
 
         def _wd(w) -> dict:
-            return {
-                "id": w.id,
-                "intent": w.intent,
-                "status": w.status.value,
-                "confidence": w.confidence,
-                "convergent": w.convergent,
-                "owner_member": w.owner_member,
-                "source": w.source,
-                "parent_id": w.parent_id,
-                "hatchet_run_id": w.hatchet_run_id,
-                "on_behalf_of": w.on_behalf_of,
-            }
+            return work_item_view(w, detail=True)
 
         # children queried directly by parent_id, still department-scoped and
         # bounded to a page (US-IAM-02 preserved; M7 / SEC-69 bounding).

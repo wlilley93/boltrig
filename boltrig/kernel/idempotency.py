@@ -57,8 +57,28 @@ class IdempotencyReplay:
     result: dict[str, Any]
 
 
+def _normalize_sensitive_key(key: str) -> str:
+    # Camel-case to snake_case with ACRONYM handling: the previous
+    # split-before-every-capital turned "APIKey" into "a_p_i_key", which
+    # matched neither the exact set nor any _token/_api_key suffix, so an
+    # adapter output like {"APIKey": ...} skipped the uncacheable/redaction
+    # check entirely. "APIKey" -> "api_key", "apiKey" -> "api_key".
+    #
+    # BOTH PATTERNS ARE ZERO-WIDTH ON PURPOSE. The acronym rule was first written
+    # as `([A-Z]+)([A-Z][a-z])`, which is correct and is polynomial: on a run of
+    # N capitals with no lowercase after it, greedy `[A-Z]+` backtracks through
+    # every split point, from every start position. CodeQL flagged it high
+    # (py/polynomial-redos) and the input is a KEY OF AN ADAPTER'S OUTPUT, so an
+    # external service picks it. A lookbehind plus a lookahead states the same
+    # rule - split between the last capital of an acronym and a following
+    # CapitalisedWord - and consumes nothing, so there is nothing to backtrack.
+    s = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", "_", key)
+    s = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", s)
+    return s.lower().replace("-", "_")
+
+
 def sensitive_key(key: Any) -> bool:
-    normalized = re.sub(r"(?<!^)(?=[A-Z])", "_", str(key)).lower().replace("-", "_")
+    normalized = _normalize_sensitive_key(str(key))
     return (
         normalized in _SENSITIVE_KEYS
         or normalized.endswith("_password")

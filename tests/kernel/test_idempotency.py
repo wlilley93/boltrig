@@ -160,6 +160,25 @@ class SecretResultAdapter(CountingAdapter):
         return Result.success({"nested": {"accessToken": "sk-super-secret"}})
 
 
+class CamelAcronymSecretAdapter(CountingAdapter):
+    """'APIKey' normalises to 'api_key' only when acronym runs are split as a
+    unit; the old per-capital split produced 'a_p_i_key' and matched nothing."""
+
+    async def execute(self, verb, params, credential, context):
+        self.calls += 1
+        return Result.success({"APIKey": "opaque-machine-token-123456"})
+
+
+class FailFirstAdapter(CountingAdapter):
+    """Fails the first execution, succeeds afterwards (a transient failure)."""
+
+    async def execute(self, verb, params, credential, context):
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("transient adapter failure")
+        return Result.success({"n": self.calls})
+
+
 @pytest.mark.kernel
 @pytest.mark.invariant("SEC-15")
 async def test_secret_shaped_success_is_completed_uncacheable_not_persisted():
@@ -177,6 +196,43 @@ async def test_secret_shaped_success_is_completed_uncacheable_not_persisted():
     with pytest.raises(IdempotencyConflict):
         await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="secret-result")
     assert adapter.calls == 1
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-15")
+async def test_camel_acronym_secret_key_is_uncacheable():
+    store = InMemoryStore()
+    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
+    k = Kernel(store)
+    adapter = CamelAcronymSecretAdapter()
+    await k.register_adapter(T, adapter)
+
+    await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="acronym-secret")
+    record = store._idem[(T, "acronym-secret")]
+    assert record["status"] == "uncacheable" and record["result"] is None
+    assert "opaque-machine-token-123456" not in repr(record)
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-15")
+async def test_execution_failure_after_start_releases_the_key_for_retry():
+    # start() flips the claim to 'executing' BEFORE the adapter runs, and the
+    # post-start except block releases on any raise. That release used to match
+    # only 'claimed' rows, so it silently no-opped: the key parked IN_PROGRESS
+    # for the 300s lease and then turned UNCERTAIN - a permanent conflict for a
+    # transient adapter failure. A retry must execute again, not conflict.
+    store = InMemoryStore()
+    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
+    k = Kernel(store)
+    adapter = FailFirstAdapter()
+    await k.register_adapter(T, adapter)
+
+    with pytest.raises(Exception, match="transient adapter failure"):
+        await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="k-flaky")
+
+    out = await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="k-flaky")
+    assert out == {"n": 2}  # retried and executed, not IdempotencyConflict
+    assert adapter.calls == 2
 
 
 @pytest.mark.kernel

@@ -65,6 +65,8 @@ def _message_view(message: Any) -> dict[str, Any]:
         "role": message.role.value,
         "content": message.content,
         "run_id": message.run_id,
+        "recipient_agent_address": message.recipient_agent_address,
+        "author_agent_address": message.author_agent_address,
         "hitl_request_id": message.hitl_request_id,
         "events": message.events,
         "attachments": message.attachments,
@@ -98,6 +100,8 @@ async def _conversation_view(
     return {
         "conversation": {
             "id": conversation.id,
+            "agent_address": conversation.agent_address,
+            "workspace_id": conversation.workspace_id,
             "title": conversation.title,
             "status": conversation.status.value,
             "origin": conversation.origin.value,
@@ -118,6 +122,7 @@ async def _event_stream(
     tenant_id: str,
     conversation_id: str,
     run_id: str,
+    agent_address: str | None,
     cursor: int,
     replay_truncated: bool,
 ) -> AsyncIterator[str]:
@@ -129,6 +134,8 @@ async def _event_stream(
             "conversation_id": conversation_id,
         },
     }
+    if agent_address is not None:
+        first["event"]["agent_address"] = agent_address
     if replay_truncated:
         first["replay_truncated"] = True
     yield f"data: {json.dumps(first)}\n\n"
@@ -184,6 +191,11 @@ def register_conversation_live_routes(app: Any, *, principal_dep: Any) -> None:
                 {"status": "error", "reason": "invalid cursor"}, status_code=400
             )
         projection = chat.live_projection()
+        bound_conversation = await chat.get_conversation(
+            p.tenant_id, p.subject, p.role, conversation_id
+        )
+        if bound_conversation is None:
+            return JSONResponse({"error": "not_found"}, status_code=404)
         run_id = await projection.active_run_for(
             p.tenant_id, p.subject, p.role, conversation_id
         )
@@ -199,6 +211,7 @@ def register_conversation_live_routes(app: Any, *, principal_dep: Any) -> None:
                 tenant_id=p.tenant_id,
                 conversation_id=conversation_id,
                 run_id=run_id,
+                agent_address=bound_conversation.agent_address,
                 cursor=cursor,
                 replay_truncated=truncated,
             ),
@@ -218,5 +231,7 @@ def register_worker_query_routes(
     from .familiar_phenotype_routes import register_familiar_phenotype_routes
     from .federated_search_routes import register_federated_search_routes
 
-    register_familiar_phenotype_routes(app, principal_dep=principal_dep)
+    register_familiar_phenotype_routes(
+        app, principal_dep=principal_dep, get_kernel=get_kernel
+    )
     register_federated_search_routes(app, principal_dep, get_kernel)

@@ -15,9 +15,14 @@ from typing import Any
 # inside every legacy-signature executor, which _safe_exec degrades rather than
 # raises, so the turn answered "(turn error: TypeError)" and nothing said why.
 # Anything threaded into the executor call belongs in this set the same day.
+# ``caller_context`` (2026-08-19, fleet/chat_caller_context) is the host's page
+# and @-references. It was added to the CALL first and not here, and the file's
+# own warning above described what happened next exactly: every legacy-signature
+# executor raised TypeError, _safe_exec degraded instead of raising, and the
+# integration chat tests failed with no statement of why.
 _OPTIONAL_KWARGS = frozenset({
     "scope", "workspace_id", "on_behalf_bearer", "origin", "model_profile_id",
-    "model_choice_id",
+    "model_choice_id", "caller_context", "agent_address",
 })
 _KEYWORD_KINDS = frozenset(
     {

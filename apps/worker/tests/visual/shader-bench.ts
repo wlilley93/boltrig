@@ -1907,12 +1907,23 @@ function buildLfoFields(
  * panel lying about what is being rendered, which is the one thing a bench must
  * never do -- Copy settings would print a number nothing was drawing.
  */
+/** The one gate for writing a tuning field by parsed name: the name must be a
+ *  field the record already owns, and never a prototype climber. Saved looks
+ *  and URL state are user-provided, so a bare record[field] write would let a
+ *  crafted id reach __proto__. */
+function ownField(record: object, field: string): boolean {
+  if (field === "__proto__" || field === "constructor" || field === "prototype") return false;
+  return Object.prototype.hasOwnProperty.call(record, field);
+}
+
 function tickLfos(nowMs: number): void {
   let changed = false;
   for (const [id, lfo] of Object.entries(lfos)) {
     if (!lfo.on) continue;
     const [field, indexText] = id.split(":");
     const index = Number(indexText);
+    if (field === "__proto__" || field === "constructor" || field === "prototype") continue;
+    if (!ownField(tuning, field)) continue;
     const current = (tuning as unknown as Record<string, number | number[]>)[field];
     if (current === undefined) continue;
     const turns = (nowMs / 1000) * lfo.rate + lfo.phase;
@@ -2205,7 +2216,7 @@ declare global {
 }
 window.__benchFrame = () => {
   drive();
-  renderer?.frame(performance.now());
+  (renderer as { frame?(now: number): void } | null)?.frame?.(performance.now());
 };
 
 function loop(): void {
@@ -2253,7 +2264,7 @@ function loop(): void {
     }
   }
   drive();
-  renderer?.frame(performance.now());
+  (renderer as { frame?(now: number): void } | null)?.frame?.(performance.now());
   // Every twelfth frame: often enough to feel live while dragging, rare enough
   // that the readback is not the reason the bench is slow.
   if (frames % 12 === 0) measure();
@@ -2587,6 +2598,8 @@ function effectiveTuning(of: Tuning = tuning): Tuning {
     for (const [id, end] of Object.entries(speech)) {
       const [field, indexText] = id.split(":");
       if (scoped !== null && !scoped.has(field)) continue;
+      if (field === "__proto__" || field === "constructor" || field === "prototype") continue;
+      if (!ownField(record, field)) continue;
       const value = record[field];
       if (value === undefined) continue;
       // A value with an ADSR rides its own gated envelope — snapping out on
@@ -3092,7 +3105,7 @@ $("fromBaseline").addEventListener("click", () => {
   buildControls();
   remember(slotKey(body, slot), tuning);
   rememberLfos();
-  renderer?.transitionTo(clone(effectiveTuning()) as never);
+  (renderer as { transitionTo?(next: never): void } | null)?.transitionTo?.(clone(effectiveTuning()) as never);
   paintMixerLevels();
   paintDrift();
   $("saved").textContent = `${slot} reset to baseline`;
@@ -3178,7 +3191,7 @@ async function refreshHistory(): Promise<void> {
     speech = savedSpeech(key);
     adsr = savedAdsr(key);
     buildControls();
-    renderer?.transitionTo(clone(effectiveTuning()) as never);
+    (renderer as { transitionTo?(next: never): void } | null)?.transitionTo?.(clone(effectiveTuning()) as never);
     paintMixerLevels();
   }
   paintDrift();
@@ -3444,6 +3457,8 @@ function lerpTuning(from: Tuning, to: Tuning, at: number): Tuning {
   const target = out as unknown as Record<string, number | number[]>;
   const source = from as unknown as Record<string, number | number[]>;
   for (const [key, value] of Object.entries(target)) {
+    if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
+    if (!ownField(target, key) || !ownField(source, key)) continue;
     const was = source[key];
     if (was === undefined) continue;
     if (typeof value === "number" && typeof was === "number") {
@@ -3576,7 +3591,7 @@ $("history").addEventListener("change", (event) => {
   remember(slotKey(body, slot), tuning);
   rememberLfos();
   rememberSpeech();
-  renderer?.transitionTo(clone(effectiveTuning()) as never);
+  (renderer as { transitionTo?(next: never): void } | null)?.transitionTo?.(clone(effectiveTuning()) as never);
   paintMixerLevels();
   paintMixer();
   paintDrift();
@@ -3731,7 +3746,7 @@ $("clipFile").addEventListener("change", (event) => {
 $("play").addEventListener("click", () => {
   // Releases the bench's pin, so the body eases from its arrival state to this
   // mode under its own logic. Touching any slider takes control back.
-  renderer?.replay();
+  (renderer as { replay?(): void } | null)?.replay?.();
   $("saved").textContent = "drawing in…";
   $("saved").className = "ok";
 });
@@ -4002,6 +4017,8 @@ $("allMin").addEventListener("click", () => {
   const record = tuning as unknown as Record<string, number | number[]>;
   for (const field of Object.keys(record)) {
     if (HIDDEN_FIELDS.has(field) || GEOMETRY_FIELDS.has(field)) continue;
+    if (field === "__proto__" || field === "constructor" || field === "prototype") continue;
+    if (!ownField(record, field)) continue;
     const fallback = RANGE[field] ?? [0, 1, 0.005];
     const value = record[field];
     if (typeof value === "number") {

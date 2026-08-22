@@ -25,6 +25,9 @@ from boltrig.models import (
     ActionType,
     AdapterRecord,
     AgentCapability,
+    AgentMessage,
+    AgentMessageKind,
+    AgentTurnLane,
     AuditEvent,
     Channel,
     Conversation,
@@ -41,6 +44,7 @@ from boltrig.models import (
     MessageRole,
     MemoryProjectionStatus,
     ModelEndpoint,
+    NamedAgent,
     Noun,
     RealtimeCallEvent,
     RealtimeCallSession,
@@ -53,6 +57,7 @@ from boltrig.models import (
     VerbBinding,
     WorkItem,
     WorkStatus,
+    Workspace,
     utcnow,
 )
 from boltrig.store.idempotency_contract import IdempotencyClaimStatus
@@ -73,7 +78,10 @@ _TABLES = (
     "integration_connections,integration_catalogue,"
     "security_log,audit_rollup_anchors,conversation_steer_queue,conversation_messages,"
     "conversations,channels,realtime_calls,"
-    "realtime_call_events"
+    "realtime_call_events,audit_outbox,"
+    "routing_policies,capability_bindings,source_operations,provider_connections"
+    ",agent_session_summaries,agent_message_deliveries,agent_messages,agent_sessions"
+    ",agent_turn_waiters,agent_turn_leases,named_agents"
 )
 
 
@@ -144,6 +152,136 @@ async def store(request):
     close = getattr(s, "close", None)
     if close is not None:
         await close()
+
+
+@pytest.mark.store
+@pytest.mark.invariant("REL-AGENT-01")
+@pytest.mark.invariant("REL-AGENT-02")
+async def test_named_agent_turn_scheduling_and_delivery_match_on_both_stores(store):
+    for address in ("alice", "bob"):
+        await store.upsert_named_agent(
+            NamedAgent(
+                tenant_id=T,
+                address=address,
+                name=address,
+                runtime="script",
+                default_for_intake=address == "alice",
+            )
+        )
+    held = await store.acquire_agent_turn(
+        T, "bob", "holder", AgentTurnLane.INTERACTIVE, 60
+    )
+    assert held is not None
+    assert await store.acquire_agent_turn(
+        T, "bob", "background", AgentTurnLane.BACKGROUND, 60
+    ) is None
+    message = AgentMessage(
+        id="parity-peer-message",
+        tenant_id=T,
+        conversation_id="parity-dialogue",
+        sender="alice",
+        recipient="bob",
+        kind=AgentMessageKind.TELL,
+        content="Persist before waking Bob.",
+    )
+    assert await store.enqueue_agent_message(message)
+    assert await store.acquire_agent_turn(
+        T, "bob", "interactive", AgentTurnLane.INTERACTIVE, 60
+    ) is None
+    assert await store.release_agent_turn(held)
+
+    assert await store.claim_next_agent_message(T, "peer-worker", 60) is None
+    interactive = await store.acquire_agent_turn(
+        T, "bob", "interactive", AgentTurnLane.INTERACTIVE, 60
+    )
+    assert interactive is not None
+    assert await store.release_agent_turn(interactive)
+    claimed = await store.claim_next_agent_message(T, "peer-worker", 60)
+    assert claimed is not None
+    assert claimed.turn_lease.lane is AgentTurnLane.PEER
+    renewed = await store.renew_agent_message_claim(
+        T, message.id, claimed.turn_lease, 60
+    )
+    assert renewed is not None and renewed.token == claimed.turn_lease.token
+    assert await store.complete_agent_message(T, message.id, renewed)
+    inbox = await store.list_agent_inbox(T, "bob")
+    assert [(row.id, status) for row, status in inbox] == [
+        (message.id, "delivered")
+    ]
+
+    background = await store.acquire_agent_turn(
+        T, "bob", "background", AgentTurnLane.BACKGROUND, 60
+    )
+    assert background is not None
+    assert await store.release_agent_turn(background)
+
+
+@pytest.mark.store
+@pytest.mark.invariant("CONV-AGENT-02")
+async def test_conversation_agent_selection_is_compare_and_set_on_both_stores(store):
+    for address in ("alice", "bob"):
+        await store.upsert_named_agent(
+            NamedAgent(
+                tenant_id=T,
+                address=address,
+                name=address.title(),
+                runtime="script",
+                default_for_intake=address == "alice",
+            )
+        )
+    conversation = Conversation(
+        id="legacy-null-agent", tenant_id=T, user_id="owner"
+    )
+    await store.create_conversation(conversation)
+
+    assert await store.switch_conversation_agent(T, conversation.id, None, "bob") == "bob"
+    assert await store.switch_conversation_agent(T, conversation.id, None, "alice") == "bob"
+    assert await store.switch_conversation_agent(T, conversation.id, "bob", "alice") == "alice"
+    stored = await store.get_conversation(T, conversation.id)
+    assert stored is not None and stored.agent_address == "alice"
+
+    # The generic metadata update path cannot rewrite the routing identity.
+    stored.agent_address = "bob"
+    stored.title = "ordinary metadata update"
+    await store.update_conversation(stored)
+    reloaded = await store.get_conversation(T, conversation.id)
+    assert reloaded is not None
+    assert reloaded.agent_address == "alice"
+    assert reloaded.title == "ordinary metadata update"
+
+
+@pytest.mark.store
+@pytest.mark.invariant("CONV-PROJECT-01")
+async def test_conversation_project_membership_is_compare_and_set_on_both_stores(store):
+    for workspace_id in ("project-a", "project-b"):
+        await store.create_workspace(Workspace(
+            id=workspace_id,
+            tenant_id=T,
+            name=workspace_id,
+            slug=workspace_id,
+        ))
+    conversation = Conversation(id="project-cas", tenant_id=T, user_id="owner")
+    await store.create_conversation(conversation)
+
+    assert await store.move_conversation_workspace(
+        T, conversation.id, None, "project-a"
+    ) == (True, "project-a")
+    assert await store.move_conversation_workspace(
+        T, conversation.id, None, "project-b"
+    ) == (True, "project-a")
+    assert await store.move_conversation_workspace(
+        T, conversation.id, "project-a", "project-b"
+    ) == (True, "project-b")
+
+    stored = await store.get_conversation(T, conversation.id)
+    assert stored is not None
+    stored.workspace_id = "project-a"
+    stored.title = "metadata only"
+    await store.update_conversation(stored)
+    reloaded = await store.get_conversation(T, conversation.id)
+    assert reloaded is not None
+    assert reloaded.workspace_id == "project-b"
+    assert reloaded.title == "metadata only"
 
 
 @pytest.mark.store
@@ -2242,3 +2380,257 @@ async def test_authored_definition_lifecycle_matches_on_both_stores(store):
     assert (await store.get_verb(T, verb.id)).description == "Updated reader"
     assert (await store.get_skill(T, skill.id)).version == "1.1.0"
     assert await store.get_binding(T, verb.id) == binding
+
+
+# --- audit outbox (SEC-16 durable deferral) -----------------------------------
+@pytest.mark.store
+@pytest.mark.invariant("SEC-16")
+async def test_audit_outbox_enqueue_due_delete_and_mark_failed_parity(store):
+    """The outbox seams agree on both backends: enqueue lands a due row keyed to
+    its tenant, mark_failed bumps attempts and pushes next_retry_at out, delete
+    removes it, and due() respects both the tenant fence and the retry time."""
+    from datetime import timedelta
+
+    from boltrig.models import utcnow
+
+    now = utcnow()
+    await store.audit_outbox_enqueue(T, {"verb": "ticket.create"}, "RuntimeError")
+    # A different tenant's row must not leak through the fence.
+    await store.audit_outbox_enqueue("other", {"verb": "other.verb"}, "RuntimeError")
+
+    due = await store.audit_outbox_due(T, now + timedelta(seconds=1))
+    rows = [r for r in due if r["payload"].get("verb") == "ticket.create"]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["append_error"] == "RuntimeError" and row["attempts"] == 0
+
+    await store.audit_outbox_mark_failed(
+        row["id"], "OperationalError", now + timedelta(minutes=10)
+    )
+    # Before the retry time: not due. After: due again with attempts bumped.
+    assert await store.audit_outbox_due(T, now + timedelta(minutes=5), limit=100) == [] or all(
+        r["id"] != row["id"] for r in await store.audit_outbox_due(T, now + timedelta(minutes=5), limit=100)
+    )
+    again = [r for r in await store.audit_outbox_due(T, now + timedelta(minutes=11), limit=100)
+             if r["id"] == row["id"]]
+    assert len(again) == 1 and again[0]["attempts"] == 1
+    assert again[0]["append_error"] == "OperationalError"
+
+    await store.audit_outbox_delete(row["id"])
+    assert all(
+        r["id"] != row["id"]
+        for r in await store.audit_outbox_due(T, now + timedelta(hours=1), limit=100)
+    )
+
+
+@pytest.mark.store
+async def test_capability_bindings_are_plural_and_ordered_on_both_stores(store):
+    """The shard's whole point, asserted on the store that ships.
+
+    Under the old single-binding contract the SECOND write replaced the first.
+    Here both survive, and they come back in the order the resolver depends on -
+    priority, then binding id - because an unstable order would make a route
+    non-deterministic in the one place the doctrine will not tolerate it.
+    """
+    from boltrig.models.capability_routing import (
+        CapabilityBinding,
+        ProviderConnection,
+        RoutingPolicy,
+        SourceOperation,
+    )
+
+    for connection_id, label, provider in (
+        ("pconn-a", "HubSpot — UK Sales", "hubspot"),
+        ("pconn-b", "Pipedrive — EU", "pipedrive"),
+    ):
+        await store.upsert_provider_connection(
+            ProviderConnection(
+                id=connection_id, tenant_id=T, label=label, provider=provider
+            )
+        )
+    for connection_id, provider, priority in (
+        ("pconn-a", "hubspot", 100),
+        ("pconn-b", "pipedrive", 50),
+    ):
+        operation_id = f"{provider}.contact.search"
+        await store.upsert_source_operation(
+            SourceOperation(
+                id=operation_id,
+                tenant_id=T,
+                provider=provider,
+                connection_id=connection_id,
+                input_schema={"type": "object"},
+                schema_digest="digest-1",
+            )
+        )
+        await store.upsert_capability_binding(
+            CapabilityBinding(
+                binding_id=f"cb-{connection_id}",
+                tenant_id=T,
+                capability_id="crm.contact.search",
+                source_operation_id=operation_id,
+                connection_id=connection_id,
+                status="approved",
+                priority=priority,
+            )
+        )
+
+    bindings = await store.list_capability_bindings(T, "crm.contact.search")
+    assert [b.binding_id for b in bindings] == ["cb-pconn-b", "cb-pconn-a"]
+    assert [b.ref for b in bindings] == ["crm.contact.search@1"] * 2
+
+    # Re-declaring one binding UPDATES that row and leaves its sibling alone.
+    await store.upsert_capability_binding(
+        CapabilityBinding(
+            binding_id="cb-pconn-a",
+            tenant_id=T,
+            capability_id="crm.contact.search",
+            source_operation_id="hubspot.contact.search",
+            connection_id="pconn-a",
+            status="disabled",
+            priority=100,
+        )
+    )
+    bindings = await store.list_capability_bindings(T, "crm.contact.search")
+    assert [(b.binding_id, b.status) for b in bindings] == [
+        ("cb-pconn-b", "approved"),
+        ("cb-pconn-a", "disabled"),
+    ]
+
+    # The routing rule round-trips with its workspace scope intact: a rule that
+    # silently lost its scope would route every workspace to one destination.
+    await store.upsert_routing_policy(
+        RoutingPolicy(
+            id="rp-1",
+            tenant_id=T,
+            capability_id="crm.contact.search",
+            binding_id="cb-pconn-b",
+            operation_class="read",
+            scope="workspace",
+            workspace_id="ws-1",
+        )
+    )
+    policies = await store.list_routing_policies(T, "crm.contact.search")
+    assert [(p.scope, p.workspace_id, p.binding_id) for p in policies] == [
+        ("workspace", "ws-1", "cb-pconn-b")
+    ]
+
+    connection = await store.get_provider_connection(T, "pconn-a")
+    assert connection.label == "HubSpot — UK Sales" and connection.eligible
+    operation = await store.get_source_operation(T, "hubspot.contact.search")
+    assert operation.schema_digest == "digest-1"
+    assert operation.input_schema == {"type": "object"}
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-06")
+async def test_routing_policy_delete_reports_absence_on_both_stores(store):
+    """A5: the delete half, which had no store method until step 6's verbs.
+
+    "Already gone" and "never existed" have to be distinguishable, because the
+    thing being removed is which implementation a live canonical verb reaches.
+    """
+    from boltrig.models.capability_routing import RoutingPolicy
+
+    policy = RoutingPolicy(
+        id="rp:parity",
+        tenant_id=T,
+        capability_id="matter.open",
+        binding_id="cb:parity",
+        operation_class="read",
+    )
+    await store.upsert_routing_policy(policy)
+    assert [row.id for row in await store.list_routing_policies(T)] == ["rp:parity"]
+    assert [
+        row.id for row in await store.list_routing_policies(T, "matter.open")
+    ] == ["rp:parity"]
+    assert await store.list_routing_policies(T, "other.capability") == []
+
+    assert await store.delete_routing_policy(T, "rp:parity") is True
+    # The second call is the whole point: False, not another True.
+    assert await store.delete_routing_policy(T, "rp:parity") is False
+    assert await store.delete_routing_policy(T, "rp:never-was") is False
+    # And the tenant fence holds on delete as well as on read.
+    await store.upsert_routing_policy(policy)
+    assert await store.delete_routing_policy("other-tenant", "rp:parity") is False
+    assert [row.id for row in await store.list_routing_policies(T)] == ["rp:parity"]
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-12")
+async def test_agent_capability_workspace_scope_matches_on_both_stores(store):
+    """0083: the union read, the exact-scope write, and the exact-scope reconcile.
+
+    ``coalesce(workspace_id,'')`` in the unique index and ``workspace_id or ""``
+    in the memory key are one rule spelled twice, and the shadowing case below is
+    the only thing that can catch them disagreeing.
+    """
+    workspace_a, workspace_b = "ws-parity-a", "ws-parity-b"
+
+    def profile(name, workspace_id, *, runtime="codex", source="control-plane"):
+        return AgentCapability(
+            name=name,
+            tenant_id=T,
+            runtime=runtime,
+            supported_skills=["*"],
+            max_depth=1,
+            is_ephemeral=True,
+            cost_tier="standard",
+            workspace_id=workspace_id,
+            source=source,
+        )
+
+    await store.upsert_capability(profile("shared", None))
+    await store.upsert_capability(profile("researcher", None))
+    await store.upsert_capability(profile("researcher", workspace_a, runtime="script"))
+    await store.upsert_capability(profile("acme-only", workspace_b))
+
+    async def scoped(workspace_id):
+        rows = await store.list_capabilities(
+            T, workspace_id=workspace_id, enforce_workspace=True
+        )
+        return sorted(
+            (row.name, row.workspace_id or "", row.runtime) for row in rows
+        )
+
+    # The same name in two scopes is TWO rows, not one overwritten one.
+    assert await scoped(workspace_a) == [
+        ("researcher", "", "codex"),
+        ("researcher", workspace_a, "script"),
+        ("shared", "", "codex"),
+    ]
+    assert await scoped(workspace_b) == [
+        ("acme-only", workspace_b, "codex"),
+        ("researcher", "", "codex"),
+        ("shared", "", "codex"),
+    ]
+    assert await scoped(None) == [
+        ("researcher", "", "codex"),
+        ("shared", "", "codex"),
+    ]
+
+    # An upsert at one scope replaces only that row.
+    await store.upsert_capability(profile("researcher", workspace_a, runtime="codex"))
+    assert len(await store.list_all_capabilities(T)) == 4
+
+    # Retirement is exact: the shared profile stays routable in both workspaces.
+    assert await store.set_capability_active(
+        T, "researcher", False, workspace_id=workspace_a
+    ) is not None
+    assert ("researcher", "", "codex") in await scoped(workspace_a)
+    assert ("researcher", workspace_a, "codex") not in await scoped(workspace_a)
+
+    # A name that exists only in another workspace is ABSENT here, not retired.
+    assert await store.set_capability_active(
+        T, "acme-only", False, workspace_id=workspace_a
+    ) is None
+
+    # An org-scoped manifest reconcile leaves every workspace roster alone.
+    await store.upsert_capability(profile("org-manifest", None, source="manifest"))
+    await store.upsert_capability(
+        profile("ws-manifest", workspace_b, source="manifest")
+    )
+    assert await store.deactivate_absent_manifest_capabilities(
+        T, [], workspace_id=None
+    ) == ["org-manifest"]
+    assert ("ws-manifest", workspace_b, "codex") in await scoped(workspace_b)

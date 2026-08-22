@@ -147,6 +147,40 @@ export interface UltronTuning {
   veinLimb: LimbMix;
   crackLimb: LimbMix;
   facetLimb: LimbMix;
+  /**
+   * The azimuthal anchoring pull, dissolving the vein-density combs.
+   *
+   * The radial spring fixes only |p|; nothing restored a particle's BEARING, so
+   * the on-shell tangential flow (compressible on the sphere) random-walked the
+   * density into bright vertically-striated knots that survived facets=0 and
+   * petal=0 -- they were particle mass, not a pass. Each particle now feels a
+   * gentle tangential pull toward its own hashed bearing; the curl still swirls
+   * everything locally, but coverage is uniform at equilibrium. Zero is the
+   * pre-dial body, byte for byte.
+   */
+  homePull: number;
+  /**
+   * Pre-knee highlight compression at the composite, 0 = identity.
+   *
+   * Wherever thousands of additive streaks stack, the filmic knee saturates and
+   * the hue is gone -- a knot reads as a white slab. Reinhard on the linear
+   * scene keeps dense regions blue and graded while thin filaments pass nearly
+   * untouched.
+   */
+  knee: number;
+  /** The membrane's brightness: base, and what a voice adds. */
+  membraneGain: readonly [base: number, perVoice: number];
+  /**
+   * The analytic shell itself: radius as a scale on the body radius, the
+   * silhouette feather, and the interior veil.
+   *
+   * The volumetric surface the reference has and line passes cannot make: bright
+   * at the limb by chord length, faint through the middle, silhouette displaced
+   * by the same cloudy() lobes that shape the particle mass. The veil is the
+   * through-the-body glow -- too high and he is fog again, which is the failure
+   * this whole program exists to end, so it starts low.
+   */
+  membrane: readonly [radius: number, feather: number, veil: number];
 }
 
 /**
@@ -187,6 +221,14 @@ export const ULTRON_TUNING: UltronTuning = {
   veinLimb: [0, 0],
   crackLimb: [0, 0],
   facetLimb: [0.08, 0.08],
+  // Main's live-membrane mechanics, carried for the type but OFF: the canon
+  // ("Ultron final 1800") was authored on the film deck — lattice IS his
+  // membrane — and every one of these zeros is that mechanism's documented
+  // identity value.
+  homePull: 0.0,
+  knee: 0,
+  membraneGain: [0.0, 0.0],
+  membrane: [0.98, 0.10, 0.12],
   lattice: [2.2, 0],
   latticeBlur: 0,
   latticeSat: 0.5,

@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-22T05:48:44.850Z",
+  "capturedAt": "2026-08-21T22:55:45.093Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "a503c2c7474922e27e969595e74d5cbfcd9f5a3d8623bc16546461058013cac5",
-    "digestAfterCapture": "a503c2c7474922e27e969595e74d5cbfcd9f5a3d8623bc16546461058013cac5",
+    "digestBeforeCapture": "dd8eee5c0790086b78473c9e5f939f3d91ae753d77ea3a49b380ae74f13c56b4",
+    "digestAfterCapture": "dd8eee5c0790086b78473c9e5f939f3d91ae753d77ea3a49b380ae74f13c56b4",
     "sourceUnchangedDuringCapture": true,
-    "branch": "bench-unified",
-    "head": "9263442039e6f638dae1daf2dd4a481efec76323",
+    "branch": "feat/real-brand-mark",
+    "head": "cdb3c4fb880aa3ef4f4c8ba9c22f6e8c211a29b0",
     "dirty": true
   },
   "runner": {
@@ -40,7 +40,7 @@
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "015ca5a23e11535f558c5014b656121778a3c430eee6b3f6c51dbc8ab9fe9e61",
+      "sha256": "c66d6f153e87a58f0763d9147260f75905e74a0b923752bc8dec73dc88318f2d",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -62,6 +62,8 @@
         "fixtureMisses": [],
         "contractMisses": [],
         "requestedPaths": [
+          "/v1/workspaces",
+          "/v1/named-agents",
           "/v1/conversations?limit=25&offset=0",
           "/v1/me/settings",
           "/v1/orgs/current",
@@ -75,6 +77,7 @@
           "/v1/chat/config",
           "/v1/me/settings",
           "/v1/familiar/phenotype",
+          "/v1/named-agents",
           "/v1/me/settings",
           "/v1/capabilities",
           "/v1/capabilities",

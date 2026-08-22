@@ -19,7 +19,11 @@ import type { FamiliarPresentationMode, FamiliarStageState } from "./FamiliarSta
 export type FamiliarRendererKind = "pending" | "webgl2" | "badge";
 
 export function useFamiliarRenderer(input: {
-  host: React.RefObject<HTMLDivElement>;
+  // `| null` is React 19's shape: useRef<T>(null) returns RefObject<T | null>
+  // there, where React 18 returned RefObject<T>. This file was written on the
+  // 18 side of the branch and is the only host ref in the tree still declared
+  // the old way; the other sixteen already carry it.
+  host: React.RefObject<HTMLDivElement | null>;
   mode: FamiliarPresentationMode;
   state: FamiliarStageState;
   phenotype?: FamiliarPhenotypeResponse | null;

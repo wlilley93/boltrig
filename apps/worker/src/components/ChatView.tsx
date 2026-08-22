@@ -50,6 +50,7 @@ import { Welcome } from "./chat/Welcome";
 import { downloadAttachment } from "./chat/attachmentPresentation";
 import { reasonText } from "./chat/chatErrors";
 import { useChatModelOptions } from "./chat/useChatModelOptions";
+import { chatSelectionError, useChatAgentSelection } from "./chat/useChatAgentSelection";
 import { useChatProjection } from "./chat/useChatProjection";
 import { useConversationQueue } from "./chat/useConversationQueue";
 import { useLiveReplySpeech } from "./chat/useReplySpeech";
@@ -80,7 +81,6 @@ interface ChatViewProps {
 type ConversationLoadState = { conversationId: string | null;
   phase: "idle" | "loading" | "ready" | "error"; error: string;
 };
-
 export function ChatView({
   conversationId,
   onConversation,
@@ -179,6 +179,7 @@ export function ChatView({
   const conversationGenerationRef = useRef(0);
   const selectedConversationRef = useRef<string | null>(conversationId);
   selectedConversationRef.current = conversationId;
+  const agentSelection = useChatAgentSelection(selectedConversationRef);
   const liveConversationRef = useRef<string | null>(null);
   const activeRunRef = useRef<string | null>(null);
   const followCursorRef = useRef(0);
@@ -227,7 +228,6 @@ export function ChatView({
     conversationLoad.conversationId === conversationId
     && conversationLoad.phase === "ready"
   );
-
   const primeReplySpeech = useLiveReplySpeech({ callActive, conversationKey: conversationId, live, onActivity: setVoiceActivity, onError: setError });
   // Reset route-owned projections before paint while retaining an adopted live stream.
   useLayoutEffect(() => {
@@ -236,7 +236,6 @@ export function ChatView({
       && liveConversationRef.current === conversationId
       && controllersRef.current.size > 0
     );
-
     // Adopt a stream-created conversation; every other selection is a hard boundary.
     if (!ownsLiveStream) conversationGenerationRef.current += 1;
     // Model selection is a per-conversation next-turn choice. Never carry an
@@ -244,7 +243,7 @@ export function ChatView({
     // adoption above deliberately preserves the choice that started its live
     // turn, so the locked label remains truthful until that turn settles.
     if (!ownsLiveStream) setModelChoice("");
-
+    agentSelection.reset(conversationId, ownsLiveStream);
     setError("");
     setContinuity("");
     setRetryFollow(false);
@@ -283,7 +282,6 @@ export function ChatView({
     setConversationLoad({ conversationId, phase: "loading", error: "" });
     void hydrateConversation(conversationId, ownsLiveStream);
   }, [conversationId]);
-
   useEffect(() => () => abortStreams(), []);
 
   useEffect(() => {
@@ -341,16 +339,16 @@ export function ChatView({
     // instead of leaving focus on <body>.
     railToggleRef.current?.focus();
   }, [compactTaskDetails, taskDetailsOpen]);
-
   async function send(
     message: string,
     attachments: ChatAttachment[],
   ): Promise<boolean> {
-    const selectedModelAvailable = modelChoice
-      ? modelChoices.some((choice) => choice.id === modelChoice && choice.available)
-      : defaultModelAvailable;
-    if (!modelChoicesLoaded || !selectedModelAvailable) {
-      setError("Choose an available model in the composer before sending.");
+    const invalidSelection = chatSelectionError(agentSelection, {
+      defaultModelAvailable,
+      modelChoice, modelChoices, modelChoicesLoaded,
+    });
+    if (invalidSelection) {
+      setError(invalidSelection);
       return true;
     }
     if (conversationId && conversationStatus !== "active") {
@@ -379,6 +377,7 @@ export function ChatView({
     try {
       const queued = await client.streamChat({
         conversation_id: conversationId ?? undefined,
+        agent_address: agentSelection.requestAddress,
         message,
         attachments: attachments.length ? attachments : undefined,
         // A queued steer joins the already-admitted turn and therefore
@@ -393,7 +392,7 @@ export function ChatView({
         if (!controllerOwnsGeneration(controller, generation)) return;
         sawStreamEvent = true;
         if (event.type === "message_start") streamedRunId = event.run_id;
-        acceptLiveEvent(event, generation);
+        acceptLiveEvent(agentSelection.observeEvent(event), generation);
       }, controller.signal);
       // Abort is a successful `undefined` return in the SDK. Check ownership
       // before interpreting that value as a naturally completed live turn.
@@ -404,13 +403,9 @@ export function ChatView({
         activeRunRef.current = queued.run_id;
         liveConversationRef.current = queuedConversationId;
         if (queuedConversationId) onWorkingChange?.(queuedConversationId, true);
-        queue.echo({
-          id: queuedMessageId,
-          role: "user",
-          content: message,
-          attachments,
-          created_at: new Date().toISOString(),
-        });
+        queue.echo(agentSelection.queuedUserMessage(
+          queuedMessageId, message, attachments, queued.agent_address,
+        ));
         // A 202 queue receipt carries no stream. When no other stream is
         // open (the active turn was started elsewhere or the local follow
         // already dropped), attach a follow after this send's controller is
@@ -547,6 +542,7 @@ export function ChatView({
     const loadedMessageIds = new Set(thread.messages.map((message) => message.id));
     queue.hydrate(thread.queued_message_ids ?? [], loadedMessageIds);
     setMessages(thread.messages);
+    agentSelection.adopt(thread.conversation?.agent_address ?? "");
     setModelContext(thread.model_context ?? null);
     setArtifacts(artifactResult.artifacts);
     setArtifactCursor(artifactResult.next_cursor ?? null);
@@ -684,7 +680,7 @@ export function ChatView({
             + "The durable transcript will refresh when the turn settles.",
           );
         }
-        acceptLiveEvent(frame.event, generation);
+        acceptLiveEvent(agentSelection.observeEvent(frame.event), generation);
       }, { since, signal: controller.signal });
       if (
         !controllerOwnsGeneration(controller, generation)
@@ -911,6 +907,7 @@ export function ChatView({
     }, 0);
   }
 
+  const selectionLocked = loading || (Boolean(live.runId) && !live.ended);
   const composer = (
     <Composer
       busy={loading}
@@ -924,7 +921,8 @@ export function ChatView({
       defaultModelAvailable={defaultModelAvailable}
       defaultModelUnavailableReason={defaultModelUnavailableReason}
       modelChoicesLoaded={modelChoicesLoaded}
-      modelSelectionLocked={loading || (Boolean(live.runId) && !live.ended)}
+      modelSelectionLocked={selectionLocked}
+      {...agentSelection.composerProps(selectionLocked)}
       attachmentLimits={attachmentLimits}
       onModelChoice={setModelChoice}
       onSend={send}
@@ -1028,7 +1026,7 @@ export function ChatView({
             );
           }}
           onRetryConversation={retryConversationLoad}
-          onDecisionResolved={retryConversationLoad}
+          onDecisionResolved={retryConversationLoad} onDisplayReply={(text) => send(text, [])}
           onReorderQueued={queue.reorder}
           onRespondHitl={async (id, decision) => {
             try {
@@ -1235,8 +1233,9 @@ export function ChatView({
             renderMessage={(message) => (
               <Message
                 message={message}
+                agentLabel={agentSelection.messageLabel(message)}
                 tech={tech}
-                onDecisionResolved={retryConversationLoad}
+                onDecisionResolved={retryConversationLoad} onDisplayReply={(text) => send(text, [])}
                 durationSeconds={message.run_id ? turnDurations[message.run_id] : undefined}
               />
             )}
@@ -1248,6 +1247,7 @@ export function ChatView({
               tech={tech}
               startedAt={live.runId ? liveStartsRef.current.get(live.runId) ?? null : null}
               onOpenSubagent={canOpenPanes && railTurnIsLive ? openSubagentTab : undefined}
+              agentLabel={agentSelection.label(agentSelection.address)} onDisplayReply={(text) => send(text, [])}
             />
           )}
           {continuity && (

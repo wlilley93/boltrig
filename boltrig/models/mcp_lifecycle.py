@@ -26,6 +26,14 @@ MCP_MAX_RETURNED_PROBE_RECEIPTS = 100
 # 2MB already bounds the payload whatever the count. Kept as a sanity ceiling, set
 # above any plausible real registry rather than below the one we ship.
 MCP_MAX_TOOL_SNAPSHOT = 5000
+# Pagination bounds (SPEC §11.6). MCP_MAX_TOOL_PAGES is deliberately the
+# snapshot cap divided by a conventional page size rather than a round number:
+# a server that needs more pages than that to deliver 5000 tools is paginating
+# so finely that the round trips, not the tools, are the problem. The cursor is
+# untrusted text this process echoes straight back to the server, so it carries
+# its own length bound.
+MCP_MAX_TOOL_PAGES = 50
+MCP_MAX_CURSOR_BYTES = 2 * 1024
 MCP_MAX_TOOL_DESCRIPTION_BYTES = 8 * 1024
 MCP_MAX_TOOL_SCHEMA_BYTES = 256 * 1024
 MCP_MAX_TOOL_SNAPSHOT_BYTES = 2 * 1024 * 1024
@@ -92,10 +100,18 @@ class McpToolSnapshot:
     consequence: str
     input_schema: dict[str, Any]
     output_schema: dict[str, Any]
+    # The canonical capability this tool CLAIMS to implement (SPEC §5 level 1).
+    # Optional and defaulted so a snapshot persisted before this existed still
+    # loads: the strict key check in the store codec accepts both shapes.
+    implements: str | None = None
 
     def __post_init__(self) -> None:
         if not self.name:
             raise ValueError("MCP tool snapshot name is required")
+        if self.implements is not None and (
+            not self.implements or "@" in self.implements
+        ):
+            raise ValueError("MCP tool capability claim must be an unpinned id")
         if self.consequence not in {"low", "high"}:
             raise ValueError("MCP tool consequence must be low or high")
         if len(self.description.encode("utf-8")) > MCP_MAX_TOOL_DESCRIPTION_BYTES:

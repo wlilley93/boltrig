@@ -100,6 +100,13 @@ class VerbBinding:
     target_type: TargetType
     target_ref: AdapterId | str  # adapter id or agent-capability name
     rate_limit: RateLimit | None = None
+    # capability doctrine step 1 (docs/SPEC-capability-doctrine.md §10):
+    # presentation/mapping fields; None = not yet compiled. Unread by
+    # enforcement sites until the multi-binding shard.
+    internal_source_operation_id: str | None = None
+    canonical_capability_id: str | None = None
+    model_display_name: str | None = None
+    connection_label: str | None = None
 
     def owned_by(self, adapter_id: str) -> bool:
         """Is this binding the named adapter's to change or remove?

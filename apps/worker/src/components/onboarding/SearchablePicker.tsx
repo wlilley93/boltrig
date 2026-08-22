@@ -126,7 +126,7 @@ interface PickerMenuProps {
   onQuery: (value: string) => void;
   query: string;
   searchLabel: string;
-  searchRef: React.RefObject<HTMLInputElement>;
+  searchRef: React.RefObject<HTMLInputElement | null>;
   selectedValue: string;
 }
 
@@ -217,7 +217,7 @@ function InfoIcon({ text }: { text: string }) {
 
 function pickerDismissal(
   open: boolean,
-  root: React.RefObject<HTMLDivElement>,
+  root: React.RefObject<HTMLDivElement | null>,
   dismiss: () => void,
 ) {
   if (!open) return;
