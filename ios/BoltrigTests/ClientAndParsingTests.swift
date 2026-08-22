@@ -84,9 +84,13 @@ final class ClientAndParsingTests: XCTestCase {
 
     func testChatEventMapping() {
         XCTAssertEqual(ChatEvent.from(json: ["type": "text_delta", "delta": "a", "degraded": true]), .textDelta("a", degraded: true))
-        XCTAssertEqual(ChatEvent.from(json: ["type": "hitl", "hitl_request_id": "h1", "question": "ok?"]), .needsYou(requestID: "h1", question: "ok?"))
+        XCTAssertEqual(ChatEvent.from(json: ["type": "hitl", "hitl_request_id": "h1", "question": "ok?", "kind": "approval", "options": ["approve", "decline"]]), .needsYou(requestID: "h1", kind: "approval", question: "ok?", options: ["approve", "decline"]))
+        XCTAssertEqual(ChatEvent.from(json: ["type": "question", "question_id": "q1", "prompt": "Which?", "choices": ["a", "b"]]), .question(id: "q1", prompt: "Which?", choices: ["a", "b"]))
+        XCTAssertEqual(ChatEvent.from(json: ["type": "artifact", "name": "report.pdf", "media_type": "application/pdf", "size": 1234]), .artifact(name: "report.pdf", mediaType: "application/pdf", size: 1234))
+        XCTAssertEqual(ChatEvent.from(json: ["type": "subagent", "child_run_id": "c1", "task": "Check prices", "name": "Scout"]), .subagent(childRunID: "c1", task: "Check prices", name: "Scout"))
         XCTAssertEqual(ChatEvent.from(json: ["type": "message_end", "run_id": "r1"]), .messageEnd(runID: "r1"))
-        XCTAssertEqual(ChatEvent.from(json: ["type": "display_object"]), .other(type: "display_object"))
+        XCTAssertEqual(ChatEvent.from(json: ["type": "display_object"]), .displayObject)
+        XCTAssertEqual(ChatEvent.from(json: ["type": "something_new"]), .other(type: "something_new"))
         XCTAssertEqual(ChatEvent.from(json: [:]), .other(type: "unknown"))
     }
 

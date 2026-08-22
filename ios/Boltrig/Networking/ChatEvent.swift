@@ -11,11 +11,22 @@ enum ChatEvent: Equatable {
     case reasoningDelta(String)
     case toolCall(verb: String?, status: String?)
     case toolResult(verb: String?, status: String?)
-    case needsYou(requestID: String, question: String?)
-    case question(id: String, prompt: String)
+    case subagent(childRunID: String, task: String, name: String?)
+    case subagentEnd(childRunID: String, status: String)
+    case steerQueued
+    case steerConsumed
+    case needsYou(requestID: String, kind: String?, question: String?, options: [String])
+    case question(id: String, prompt: String, choices: [String])
     case heartbeat
     case messageEnd(runID: String)
     case cancelled(runID: String)
+    case artifact(name: String, mediaType: String?, size: Int)
+    case artifactRejected(count: Int)
+    case modelRouting(selected: String?)
+    case workflowStep(stepID: String, action: String?, status: String?)
+    case workflowRun(status: String?)
+    case displayObject
+    case eventUnavailable(reason: String?)
     case other(type: String)
 
     /// Builds an event from one decoded `data:` frame. Unknown or malformed frames become
@@ -35,17 +46,45 @@ enum ChatEvent: Equatable {
                              status: object["status"] as? String)
         case "tool_result":
             return .toolResult(verb: object["verb"] as? String, status: object["status"] as? String)
+        case "subagent":
+            return .subagent(childRunID: object["child_run_id"] as? String ?? "",
+                             task: object["task"] as? String ?? "", name: object["name"] as? String)
+        case "subagent_end":
+            return .subagentEnd(childRunID: object["child_run_id"] as? String ?? "", status: object["status"] as? String ?? "")
+        case "steer_queued":
+            return .steerQueued
+        case "steer_consumed":
+            return .steerConsumed
         case "hitl":
             return .needsYou(requestID: object["hitl_request_id"] as? String ?? "",
-                             question: object["question"] as? String)
+                             kind: object["kind"] as? String,
+                             question: object["question"] as? String,
+                             options: object["options"] as? [String] ?? [])
         case "question":
-            return .question(id: object["question_id"] as? String ?? "", prompt: object["prompt"] as? String ?? "")
+            return .question(id: object["question_id"] as? String ?? "", prompt: object["prompt"] as? String ?? "",
+                             choices: object["choices"] as? [String] ?? [])
         case "heartbeat":
             return .heartbeat
         case "message_end":
             return .messageEnd(runID: object["run_id"] as? String ?? "")
         case "cancelled":
             return .cancelled(runID: object["run_id"] as? String ?? "")
+        case "artifact":
+            return .artifact(name: object["name"] as? String ?? "file", mediaType: object["media_type"] as? String,
+                             size: object["size"] as? Int ?? 0)
+        case "artifact_rejected":
+            return .artifactRejected(count: object["count"] as? Int ?? 0)
+        case "model_routing":
+            return .modelRouting(selected: object["selected_profile_id"] as? String)
+        case "workflow_step":
+            return .workflowStep(stepID: object["step_id"] as? String ?? "", action: object["action"] as? String,
+                                 status: object["status"] as? String)
+        case "workflow_run":
+            return .workflowRun(status: object["status"] as? String)
+        case "display_object":
+            return .displayObject
+        case "event_unavailable":
+            return .eventUnavailable(reason: object["reason"] as? String)
         default:
             return .other(type: type)
         }

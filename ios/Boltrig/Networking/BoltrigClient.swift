@@ -122,7 +122,8 @@ struct BoltrigClient {
     }
 
     /// Sends one message and streams the turn back. A 202 yields a single `.queued` event.
-    func streamChat(message: String, conversationID: String?, idempotencyKey: String) -> AsyncThrowingStream<ChatEvent, Error> {
+    func streamChat(message: String, conversationID: String?, idempotencyKey: String,
+                    attachments: [ChatAttachment] = []) -> AsyncThrowingStream<ChatEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -130,7 +131,7 @@ struct BoltrigClient {
                         "message": message,
                         "origin": "ios",
                         "idempotency_key": idempotencyKey,
-                        "attachments": [],
+                        "attachments": attachments.map(\.wireForm),
                     ]
                     if let conversationID { payload["conversation_id"] = conversationID }
                     let body = try JSONSerialization.data(withJSONObject: payload)
@@ -141,42 +142,16 @@ struct BoltrigClient {
                         throw BoltrigError(kind: .invalidResponse, status: 0)
                     }
                     if http.statusCode == 202 {
-                        var collected = Data()
-                        for try await byte in bytes { collected.append(byte) }
+                        let collected = try await SSEByteReader.collect(bytes)
                         let object = (try? JSONSerialization.jsonObject(with: collected) as? [String: Any]) ?? [:]
                         continuation.yield(.queued(conversationID: object["conversation_id"] as? String))
                         continuation.finish()
                         return
                     }
                     guard (200..<300).contains(http.statusCode) else {
-                        var collected = Data()
-                        for try await byte in bytes { collected.append(byte) }
-                        throw Self.mapError(status: http.statusCode, data: collected)
+                        throw Self.mapError(status: http.statusCode, data: try await SSEByteReader.collect(bytes))
                     }
-                    // Split lines by hand: the frame boundary is a blank line, and
-                    // AsyncBytes.lines does not deliver empty lines.
-                    var parser = SSEFrameParser()
-                    var lineBuffer = Data()
-                    for try await byte in bytes {
-                        try Task.checkCancellation()
-                        if byte == UInt8(ascii: "\n") {
-                            if lineBuffer.last == UInt8(ascii: "\r") { lineBuffer.removeLast() }
-                            let line = String(decoding: lineBuffer, as: UTF8.self)
-                            lineBuffer.removeAll(keepingCapacity: true)
-                            if let frame = parser.consume(line: line) {
-                                continuation.yield(ChatEvent.from(json: frame))
-                            }
-                        } else {
-                            lineBuffer.append(byte)
-                        }
-                    }
-                    if !lineBuffer.isEmpty {
-                        if lineBuffer.last == UInt8(ascii: "\r") { lineBuffer.removeLast() }
-                        if let frame = parser.consume(line: String(decoding: lineBuffer, as: UTF8.self)) {
-                            continuation.yield(ChatEvent.from(json: frame))
-                        }
-                    }
-                    if let frame = parser.flush() {
+                    for try await frame in SSEByteReader.frames(from: bytes) {
                         continuation.yield(ChatEvent.from(json: frame))
                     }
                     continuation.finish()
