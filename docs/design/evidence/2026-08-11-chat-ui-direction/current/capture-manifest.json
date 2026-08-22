@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-22T15:02:19.996Z",
+  "capturedAt": "2026-08-22T15:31:03.918Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,12 +17,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "6fb160ab00879702e20ed0219182f4213d0bb02695ac4390bd7b4b16b9509036",
-    "digestAfterCapture": "6fb160ab00879702e20ed0219182f4213d0bb02695ac4390bd7b4b16b9509036",
+    "digestBeforeCapture": "249f9bb6ab487b401051f04e920d5d3000ff07183471004c205aa5ffafba5aed",
+    "digestAfterCapture": "249f9bb6ab487b401051f04e920d5d3000ff07183471004c205aa5ffafba5aed",
     "sourceUnchangedDuringCapture": true,
-    "branch": "harden/desktop-origin-land",
-    "head": "d6e3f20705dd13583c1ed4bcf1a043e9bd7f75a2",
-    "dirty": false
+    "branch": "worker/today-and-companion-names",
+    "head": "1d6c16cffd0302388e049e5504f30869d0d1a598",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",

@@ -1133,27 +1133,6 @@
       "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"
     },
-    "apps/worker/src/components/MobileToday.tsx": {
-      "file_lines": 174,
-      "max_function_lines": 151,
-      "max_parameters": 2,
-      "max_complexity": 8,
-      "max_nesting_depth": 1,
-      "over_limit_functions": [
-        {
-          "name": "MobileToday",
-          "line": 24,
-          "column": 1,
-          "lines": 151,
-          "parameters": 1,
-          "complexity": 8,
-          "nesting_depth": 0
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
     "apps/worker/src/components/OperationsView.tsx": {
       "file_lines": 1282,
       "max_function_lines": 443,
