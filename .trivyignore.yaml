@@ -40,62 +40,21 @@ misconfigurations:
       turns red on both.
 
 vulnerabilities:
-  - id: CVE-2026-16804
-    purls: &chromium_purls
-      - "pkg:deb/debian/chromium"
-      - "pkg:deb/debian/chromium-common"
-    expired_at: 2026-09-11
-    statement: &chromium_statement >-
-      SCOPED BY EXACT PURL - NO WILDCARDS, and both packages listed. Measured with the
-      pinned scanner (aquasec/trivy:0.72.0) against the built image: a trailing `*`
-      (`pkg:deb/debian/chromium*`) matches NOTHING, and `chromium-common` is a separate
-      package that needs its own purl - with only `chromium` listed, 8 findings became 7,
-      not 6. Verify any change to this block by running the scanner locally rather than
-      pushing and reading CI; two of my attempts here looked correct and suppressed nothing.
-      SCOPED BY PURL, NOT BY PATH, and that distinction is load-bearing. These are dpkg
-      findings: trivy attributes them to the PACKAGE, not a file, so a `paths` entry can
-      never match and the ignore is silently INERT - the first attempt used
-      `usr/bin/chromium`, the gate stayed red, and that is how this was found. `purls`
-      scopes to pkg:deb/debian/chromium* only, which honours the scoping the ratio of
-      [2026] VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001 requires while actually
-      matching. This is NOT a global ignore.
-      chromium 150.0.7871.181-1~deb12u1 in the fleet image, which ships it for the
-      browser-cli adapter (browser-use). Trivy reports "fixed 151.0.7922.47-1", but
-      that is the UPSTREAM CHROME version, not a Debian package: measured 2026-07-31,
-      the newest chromium available to bookworm INCLUDING bookworm-security is exactly
-      the installed 150.0.7871.181-1~deb12u1, and trixie carries the same code as
-      150.0.7871.181-1~deb13u1. No Debian release carries the fix, so there is nothing
-      to upgrade to and no rebuild or base change takes it. Follows the ratio of
-      [2026] VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001, which names this
-      exact shape: the gate blocks because a PACKAGE-level fix exists even though no
-      released ARTIFACT carries one.
-      REACHABILITY, STATED HONESTLY AS THAT RATIO REQUIRES: this is NOT unreachable.
-      chromium is present and running in both production fleet workers, and the
-      browser-cli adapter is ACTIVATED on the Classical Visas tenant. Browser
-      automation renders remote content by definition, so a sandbox escape is live
-      wherever the adapter is invoked. What bounds it TODAY is usage, not
-      architecture: all six browser verbs (web.fetch, browser.doctor, browser.tab.open,
-      browser.remote.start, browser.remote.stop, browser.page.info) have ZERO rows in
-      that tenant's audit_log - the adapter has never once been invoked. The second
-      tenant registers no browser adapter at all.
-      THE EXPIRY IS SIX WEEKS, NOT THE USUAL YEAR, because usage is a weak bound: the
-      day someone invokes a browser verb the exposure becomes real with no further
-      change. Before renewal, prefer DEACTIVATING browser-cli on any tenant not using
-      it, or dropping chromium from the image, over extending this. Recorded because
-      an unscanned image was deployed to both prod stacks on 2026-07-31 while branch
-      protection was being bypassed - silence is what this file exists to prevent.
-  - id: CVE-2026-16805
-    purls: *chromium_purls
-    expired_at: 2026-09-11
-    statement: *chromium_statement
-  - id: CVE-2026-16806
-    purls: *chromium_purls
-    expired_at: 2026-09-11
-    statement: *chromium_statement
-  - id: CVE-2026-16807
-    purls: *chromium_purls
-    expired_at: 2026-09-11
-    statement: *chromium_statement
+  # July 2026 chromium wave (CVE-2026-16804, -16805, -16806, -16807) RETIRED
+  # 2026-08-22. Those four rested on a 2026-07-31 measurement that the installed
+  # 150.0.7871.181-1~deb12u1 was the newest chromium anywhere in bookworm and
+  # that "no rebuild or base change takes it". The archive has since moved: the
+  # image now installs 151.0.7922.137-1~deb12u1 from bookworm-security, which is
+  # past the 151.0.7922.47-1 those findings named as fixed. Measured, not
+  # assumed: aquasec/trivy:0.72.0 against the built fleet image reports ZERO
+  # findings for all four ids, and the gate stays green with these entries gone.
+  # An acceptance kept after its fix has landed is not harmless - trivy matches
+  # on CVE id plus purl, never on the version recorded here, so an inert entry
+  # would equally hide a genuine re-report of the same ids. Retiring it is the
+  # holding of [2026] VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001, which
+  # makes an acceptance self-cancelling by condition; only RENEWAL needs a fresh
+  # ruling. The purl-scoping measurement those entries carried is preserved in
+  # the wave-2 statement below.
   # August 2026 chromium wave (11 CVEs, all HIGH, all fixed upstream in
   # 151.0.7922.169-1~deb12u1). DIFFERENT SHAPE from the block above: here the
   # fixed version IS a real Debian package version, announced but NOT YET
@@ -109,11 +68,23 @@ vulnerabilities:
   # them ride to expiry. Expiry deliberately SHARES 2026-09-11 with the block
   # above - the wave has earned no extra time.
   - id: CVE-2026-76033
-    purls: *chromium_purls
+    purls: &chromium_purls
+      - "pkg:deb/debian/chromium"
+      - "pkg:deb/debian/chromium-common"
     expired_at: 2026-09-11
     statement: &chromium_wave2_statement >-
-      SCOPED BY EXACT PURL - NO WILDCARDS - both chromium and chromium-common,
-      per the measurement recorded in the statement above this block. Fixed
+      SCOPED BY EXACT PURL - NO WILDCARDS, and both packages listed. Measured with
+      the pinned scanner (aquasec/trivy:0.72.0) against the built image: a trailing
+      `*` (`pkg:deb/debian/chromium*`) matches NOTHING, and `chromium-common` is a
+      separate package that needs its own purl - with only `chromium` listed, 8
+      findings became 7, not 6. SCOPED BY PURL, NOT BY PATH, and that distinction is
+      load-bearing: these are dpkg findings, so trivy attributes them to the PACKAGE,
+      not a file, and a `paths` entry can never match - the ignore would be silently
+      INERT. Verify any change to this block by running the scanner locally rather
+      than pushing and reading CI; two earlier attempts looked correct in review and
+      suppressed nothing. This is NOT a global ignore. (That measurement was first
+      recorded on the July 2026 block, retired 2026-08-22 once its findings were
+      genuinely fixed; it is carried here so it is not lost with it.) Fixed
       version 151.0.7922.169-1~deb12u1 is announced in the advisory data but
       not yet published: measured 2026-08-21, bookworm-security's
       binary-amd64 Packages index offers exactly the installed
@@ -122,11 +93,24 @@ vulnerabilities:
       base change can take a package the archive does not serve. Follows the
       ratio of [2026] VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001:
       accept only where the fix cannot be taken, and only as a record.
-      Reachability and compensating controls are unchanged from the entries
-      above (browser-cli activated on one tenant, zero invocations of any
-      browser verb in its audit_log, HITL-gated at the chokepoint, read-only
-      root filesystem) and are recorded per-CVE in
-      docs/security/accepted-advisories.json. The image installs chromium
+      REACHABILITY, STATED HONESTLY AS THAT RATIO REQUIRES: this is NOT
+      unreachable. chromium is present and running in both production fleet
+      workers, and the browser-cli adapter is ACTIVATED on the Classical Visas
+      tenant. Browser automation renders remote content by definition, so a
+      sandbox escape is live wherever the adapter is invoked. What bounds it
+      TODAY is usage, not architecture: all six browser verbs (web.fetch,
+      browser.doctor, browser.tab.open, browser.remote.start,
+      browser.remote.stop, browser.page.info) had ZERO rows in that tenant's
+      audit_log when last measured - the adapter has never once been invoked.
+      The second tenant registers no browser adapter at all. The same
+      compensating controls stand: HITL-gated at the chokepoint, read-only root
+      filesystem. All of it is recorded per-CVE in
+      docs/security/accepted-advisories.json.
+      THE EXPIRY IS SIX WEEKS, NOT THE USUAL YEAR, because usage is a weak
+      bound: the day someone invokes a browser verb the exposure becomes real
+      with no further change. Before renewal, prefer DEACTIVATING browser-cli on
+      any tenant not using it, or dropping chromium from the image, over
+      extending this. The image installs chromium
       unpinned, so the first build after the archive publishes .169 carries
       the fix with no change here - delete this block then.
   - id: CVE-2026-76036
