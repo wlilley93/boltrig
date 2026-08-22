@@ -138,11 +138,11 @@ only Will can do (an account, a payment, a legal signature, a decision).
 
 ### 3.3 Content and rights decisions [WILL]
 
-- **Character names**: JARVIS and ULTRON are Marvel (Disney) marks; COLOSSUS is both a Marvel
-  character and the Forbin Project AI, and the bundles cite the films as inspiration. Apple's
-  5.2.1 reviewers act on this when they notice. Options in order of cost: ship Familiar only in
-  the store build, rename the three for the store, obtain a licence. Record the decision in
-  `THIRD_PARTY_NOTICES.md` either way.
+- **Character names: decided 2026-08-22, the iPhone ships Familiar only.** JARVIS and ULTRON
+  are Marvel (Disney) marks; COLOSSUS is both a Marvel character and the Forbin Project AI. The
+  phone bundle carries none of them and switches the account to Familiar on first sign-in
+  (`docs/HANDOVER-2026-08-22-ios-app.md`, Part 3). The web keeps all four; record the store-build
+  position in `THIRD_PARTY_NOTICES.md` when the store listing is written.
 - **Voices**: `THIRD_PARTY_NOTICES.md` already bars the CC-BY-NC voices from a commercial build and
   a test guards it. The cloned real-person voice noted in `docs/BACKUP-2026-08-14.md` needs a
   written release from that person or it cannot ship in a product anyone pays for; Kyutai's
@@ -242,8 +242,8 @@ must be declared and both must honour the consent the cookie banner promises.
 4. Build account deletion and a real export (server route plus Settings entry).
 5. Add Sentry to the kernel and the app; add an uptime monitor; write the breach and incident
    one-pager; register with the ICO; write the DPIA.
-6. Decide the character names and the real-voice clone for the store build; update
-   `THIRD_PARTY_NOTICES.md`.
+6. Done 2026-08-22 for the names (Familiar only on iPhone); the real-voice clone still needs a
+   written release before any paid use; update `THIRD_PARTY_NOTICES.md` with the store position.
 7. Create the App Store Connect record (`ai.boltrig.app`), internal TestFlight with your own
    phones, then external TestFlight with invitees, collecting crashes and feedback.
 8. Provision the review account, write the review notes, answer App Privacy from the privacy
