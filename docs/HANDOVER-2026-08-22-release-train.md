@@ -202,11 +202,31 @@ fails two tests; edit the document, copy to the bundle, regenerate.
 
 ## 6. Open, and whose call it is
 
-- **Chromium advisory acceptance (Will or whoever is on the train):** 11 HIGH
-  CVEs in `.trivyignore.yaml` + `docs/security/accepted-advisories.json`, expiry
-  **2026-09-11**. Debian bookworm-security still serves `151.0.7922.137-1~deb12u1`
-  (checked 2026-08-22); delete the entries the day `151.0.7922.169-1~deb12u1`
-  appears, rebuild fleet, scan.
+- **Chromium advisory acceptance - TWO blocks, and one of them is now stale.**
+  `.trivyignore.yaml` + `docs/security/accepted-advisories.json`, both expiring
+  **2026-09-11**.
+  - The AUGUST block (11 HIGH CVEs, entries recorded against
+    `151.0.7922.137-1~deb12u1`) is still sound: it waits for
+    `151.0.7922.169-1~deb12u1`, and bookworm-security still served `.137` when
+    measured on 2026-08-22. Measure the Packages index, never the tracker page -
+    the tracker shows the ANNOUNCEMENT and reads as fixed while the archive has
+    nothing to install.
+  - The JULY block (4 entries, CVE-2026-16804 through -16807) rests on a premise
+    that has since died. Its statement says, measured 2026-07-31, that the newest
+    chromium anywhere in bookworm was the installed `150.0.7871.181-1~deb12u1`
+    and "no rebuild or base change takes it". The image has since moved: the
+    running fleet worker carries `151.0.7922.137-1~deb12u1` (measured
+    2026-08-22 by `dpkg-query` inside `boltrig-fleet-worker-1`), which is past
+    the `151.0.7922.47-1` those findings named as fixed. Those four suppressions
+    are therefore probably inert - and an inert suppression is not harmless,
+    because it would also hide a genuine re-report of the same ids.
+  - The cheap decisive measurement needs no rebuild: scan the CURRENT fleet image
+    with the pinned scanner (`aquasec/trivy:0.72.0`) with the four July entries
+    removed, and see whether those CVEs come back. Delete whichever the scanner
+    stops reporting; keep the rest with the premise rewritten to what is true.
+    Verify any edit to that file by running the scanner locally - a `paths` entry
+    can never match a dpkg finding, a trailing `*` in a purl matches nothing, and
+    both mistakes look correct in review.
 - **Codex production gate (Will):** `readyz` reports `codex_runtime: test_only,
   production_gate_closed, blocker_count 7`. The seven are the quarantined
   preflight receipt fields in
