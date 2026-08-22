@@ -873,13 +873,21 @@ App Server over stdio and executes approved file/Bash work on the user's own
 computer. There is no silent fallback between them.
 
 “Local” describes execution and data ownership, not necessarily model
-inference. The bundled Codex process uses that user's own Codex authentication
-and may contact the Codex service for reasoning; Bash, approved filesystem
-access, thread persistence and process ownership remain on the computer. The
-desktop child receives an allowlisted environment and never inherits Boltrig
-provider credentials, gateway keys, GitHub tokens or SSH agent sockets. Do not
-describe this posture as an offline model, and do not make a personal Ollama or
-operator model host a release default.
+inference. The bundled Codex process runs under an app-private home
+(`<app data>/local-agent/codex-home`, owner-only, seeded once with a minimal
+`config.toml`); `CODEX_HOME` is set explicitly and never inherited, so a
+personal `~/.codex` (its `config.toml`, `auth.json`, memories and history) is
+neither read nor changed (decision 0027, amended 2026-08-22). That home starts
+unsigned: the user signs the local runtime in from Settings → Advanced, which
+runs the bundled binary's device-code login under the private home, opens only
+the runtime's HTTPS sign-in page and shows the one-time code; no local listener
+is opened for this, and sign-out removes the credential from the private home.
+The runtime may then contact the Codex service for reasoning; Bash, approved
+filesystem access, thread persistence and process ownership remain on the
+computer. The desktop child receives an allowlisted environment and never
+inherits Boltrig provider credentials, gateway keys, GitHub tokens or SSH agent
+sockets. Do not describe this posture as an offline model, and do not make a
+personal Ollama or operator model host a release default.
 
 Development builds may resolve `BOLTRIG_LOCAL_CODEX_BIN` (an absolute file) or
 `codex` from `PATH`; the UI labels that source `development`. Release builds do

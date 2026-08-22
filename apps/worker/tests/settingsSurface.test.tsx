@@ -26,11 +26,20 @@ const api = vi.hoisted(() => ({
   invokeApprovalState: vi.fn(),
 }));
 const desktop = vi.hoisted(() => ({ runtime: false }));
+const local = vi.hoisted(() => ({
+  localAgentStatus: vi.fn(),
+  signInLocalAgent: vi.fn(),
+  signOutLocalAgent: vi.fn(),
+}));
 
 vi.mock("../src/client", () => ({ client: api }));
 vi.mock("../src/desktop", async (importOriginal) => ({
   ...await importOriginal<typeof import("../src/desktop")>(),
   hasDesktopRuntime: () => desktop.runtime,
+}));
+vi.mock("../src/localAgentClient", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../src/localAgentClient")>(),
+  ...local,
 }));
 
 import { Sidebar } from "../src/components/Shell";
@@ -40,8 +49,23 @@ import { loadLocalConversation, saveLocalConversation } from "../src/localAgentC
 import { SETTINGS_SECTIONS } from "../src/settingsSections";
 import { SHORTCUTS } from "../src/shortcuts";
 
+function localRuntime(signedIn: boolean) {
+  return {
+    runtime: "local" as const,
+    state: "ready" as const,
+    source: "bundled" as const,
+    version: "0.144.3",
+    active: false,
+    signed_in: signedIn,
+    reason: null,
+  };
+}
+
 beforeEach(() => {
   desktop.runtime = false;
+  local.localAgentStatus.mockReset().mockResolvedValue(localRuntime(false));
+  local.signInLocalAgent.mockReset();
+  local.signOutLocalAgent.mockReset().mockResolvedValue({ signed_in: false });
   api.approvalPosture.mockResolvedValue({
     posture: "risk_based",
     source: "safe_default",
@@ -666,5 +690,65 @@ describe("settings surface", () => {
     cleanup();
     render(<SettingsSearchResults onOpenSection={vi.fn()} query="qqqqqq" />);
     expect(screen.getByText(/Nothing matches that/)).toBeTruthy();
+  });
+});
+
+describe("local runtime sign-in (Settings → Advanced)", () => {
+  afterEach(() => cleanup());
+
+  async function localRuntimeRow(): Promise<HTMLElement> {
+    const title = await screen.findByText("Local runtime sign-in");
+    const row = title.closest(".settings-row");
+    if (!(row instanceof HTMLElement)) throw new Error("local runtime row missing");
+    return row;
+  }
+
+  it("keeps the local runtime row off the web build", async () => {
+    render(<SettingsSectionPane section="advanced" />);
+    await screen.findByText("Running in");
+    expect(screen.queryByText("Local runtime sign-in")).toBeNull();
+    expect(local.localAgentStatus).not.toHaveBeenCalled();
+  });
+
+  it("signs the local runtime in from the desktop, showing the one-time code", async () => {
+    desktop.runtime = true;
+    let finish!: () => void;
+    local.signInLocalAgent.mockImplementation(async (onEvent) => {
+      onEvent({ type: "started" });
+      onEvent({
+        type: "code",
+        url: "https://auth.openai.com/codex/device",
+        code: "6B30-9JOVE",
+        opened: true,
+      });
+      await new Promise<void>((resolve) => { finish = resolve; });
+      return { signed_in: true };
+    });
+    render(<SettingsSectionPane section="advanced" />);
+
+    // The pane also carries the account "Sign out"; scope to the local row.
+    const row = await localRuntimeRow();
+    fireEvent.click(await within(row).findByRole("button", { name: "Sign in" }));
+    await within(row).findByText("6B30-9JOVE");
+    expect(within(row).getByText(/Enter the code 6B30-9JOVE on the sign-in page that just opened/)).toBeTruthy();
+    local.localAgentStatus.mockResolvedValue(localRuntime(true));
+    await act(async () => { finish(); });
+
+    await within(row).findByRole("button", { name: "Sign out" });
+    expect(within(row).getByText("signed in")).toBeTruthy();
+    expect(local.signInLocalAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it("signs the local runtime out and reports the runtime as not signed in", async () => {
+    desktop.runtime = true;
+    local.localAgentStatus.mockResolvedValue(localRuntime(true));
+    render(<SettingsSectionPane section="advanced" />);
+
+    const row = await localRuntimeRow();
+    fireEvent.click(await within(row).findByRole("button", { name: "Sign out" }));
+    local.localAgentStatus.mockResolvedValue(localRuntime(false));
+    await within(row).findByRole("button", { name: "Sign in" });
+    expect(local.signOutLocalAgent).toHaveBeenCalledTimes(1);
+    expect(within(row).getByText("not signed in")).toBeTruthy();
   });
 });

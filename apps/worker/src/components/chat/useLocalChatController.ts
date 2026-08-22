@@ -43,7 +43,9 @@ export function useLocalChatController(props: LocalChatControllerProps) {
   return {
     ...projection,
     ...runtime,
-    ready: runtime.status?.state === "ready" && Boolean(runtime.rootId),
+    ready: runtime.status?.state === "ready"
+      && runtime.status.signed_in
+      && Boolean(runtime.rootId),
     send,
     stop: async () => { await stopLocalAgentTurn().catch(() => undefined); },
   };
@@ -194,7 +196,8 @@ function canStart(context: TurnContext, attachments: ChatAttachment[]): boolean 
   return !context.projection.busy
     && attachments.length === 0
     && Boolean(context.runtime.rootId)
-    && context.runtime.status?.state === "ready";
+    && context.runtime.status?.state === "ready"
+    && context.runtime.status.signed_in;
 }
 
 function beginTurn(context: TurnContext, message: string): TurnSession {
@@ -355,6 +358,9 @@ function localError(reason: unknown): string {
   const code = String(reason);
   if (code.includes("local_agent_cancelled")) return "Local task stopped.";
   if (code.includes("local_agent_binary")) return "The local Codex runtime is unavailable.";
+  if (code.includes("local_agent_not_signed_in")) {
+    return "Sign in to the local runtime in Settings → Advanced.";
+  }
   if (code.includes("local_agent_root")) {
     return "The selected local workspace is no longer available.";
   }
@@ -376,6 +382,7 @@ function unavailableStatus(reason: string): LocalAgentStatus {
     source: null,
     version: null,
     active: false,
+    signed_in: false,
     reason,
   };
 }

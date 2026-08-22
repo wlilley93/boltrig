@@ -214,6 +214,7 @@ function localUnavailableReason(
 ): string {
   if (!status) return "Checking the local agent";
   if (status.state !== "ready") return localStatusReason(status.reason);
+  if (!status.signed_in) return "Sign in to the local runtime in Settings → Advanced";
   if (roots.length === 0) return "Bind a local workspace in Settings → Advanced";
   return "";
 }

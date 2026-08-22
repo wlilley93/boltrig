@@ -667,6 +667,16 @@ NATIVE_COMMANDS: dict[str, FeatureCoverage] = {
         ("worker", "worker", "worker", "worker", "worker"),
         "Stops the owned desktop-local child and is also used for conversation switches and unmount recovery.",
     ),
+    "local_agent_sign_in": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("worker", "worker", "worker", "worker", "worker"),
+        "Signs the bundled desktop-local runtime in to its app-private home with the runtime's own device-code flow; the app opens only the runtime's HTTPS sign-in page and streams the one-time code, never a credential.",
+    ),
+    "local_agent_sign_out": _coverage(
+        "apps/worker/src-tauri/src/lib.rs",
+        ("worker", "worker", "worker", "worker", "worker"),
+        "Cancels a pending local sign-in and removes the runtime credential from the app-private home; nothing outside that home is touched.",
+    ),
     "device_agent_status": _coverage(
         "apps/worker/src-tauri/src/lib.rs",
         ("worker", "worker", "worker", "worker", "worker"),
