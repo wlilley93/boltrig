@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-22T14:09:44.422Z",
+  "capturedAt": "2026-08-22T13:22:25.487Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "b43cdc1f4b6e5df173147eeaf24960d278c953998c162db254eec6599c1c3ac4",
-    "digestAfterCapture": "b43cdc1f4b6e5df173147eeaf24960d278c953998c162db254eec6599c1c3ac4",
+    "digestBeforeCapture": "53133a032c597835df8e679c2542ddb24aca4997d0f0d72e9b59678390ced6f0",
+    "digestAfterCapture": "53133a032c597835df8e679c2542ddb24aca4997d0f0d72e9b59678390ced6f0",
     "sourceUnchangedDuringCapture": true,
-    "branch": "harden/desktop-origin-land",
-    "head": "779a64ed01226e4c29ad194a882622071e293076",
+    "branch": "feat/ios-app-land",
+    "head": "d0f6283357ef7b53d987c9b988ca1c9fa32dd7bb",
     "dirty": false
   },
   "runner": {
@@ -56,7 +56,7 @@
         "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

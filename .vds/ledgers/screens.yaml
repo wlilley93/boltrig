@@ -1,5 +1,5 @@
 schema_version: 1
-generated_at: 2026-08-22T14:09:52Z
+generated_at: 2026-08-22T13:22:32Z
 generated_by: vds ledger screens
 source_globs:
 - apps/worker/src/components/*View.tsx
@@ -7,8 +7,8 @@ source_globs:
 - apps/worker/src/components/PermanentFleetTopology.tsx
 - apps/worker/src/components/SettingsSurface.tsx
 - apps/worker/src/components/VoiceCall.tsx
-source_digest: sha256:1dc4ac3f68510cf5154ba29251bc0ad4051af5e80552411cccbdb07f817f0862
-content_digest: sha256:3cc8ad9a73d73d9d4f44e0b0db64e8c66e0fa6368be71b628beaf4ca91595b8a
+source_digest: sha256:b397fb2f7d3852b529d189a8133cb1e45b903e583b942a97f7938e2b803bcdb0
+content_digest: sha256:cd649ff99d6f98a759e775b93cd086fdd95dc2980dcfd4ade605383c6c7410e2
 screens:
 - route: apps/worker/src/components/AccountView.tsx
   digest: sha256:a0c87b3a1ca42e62c595f9a1a951bab8fc27367180e0c1d89862cefc74da90ab
@@ -6561,7 +6561,7 @@ screens:
     import_path: null
     line: 1523
 - route: apps/worker/src/components/LocalChatView.tsx
-  digest: sha256:bfdfbdba1b63342a8d4ca92674391536506dc647b513ab4c1e09790517af251c
+  digest: sha256:389ffcdbcc33f6d47a11e6c3a2856d4c36d37be1bd1ee778f82da7faf86a736c
   references:
   - name: div
     root: div
@@ -11168,7 +11168,7 @@ screens:
     import_path: null
     line: 58
 - route: apps/worker/src/components/SettingsSurface.tsx
-  digest: sha256:eefa945e813a571433afebe24ab548fdb33c74724293397744b6370203939046
+  digest: sha256:03daf1538cfd87d436e94320979fe8a9000243daf51730402d4747e1704951d6
   references:
   - name: SectionHead
     root: SectionHead
@@ -11177,7 +11177,7 @@ screens:
     kind: component
     import_path: ./settings/SectionHead
     resolved_path: apps/worker/src/components/settings/SectionHead
-    line: 52
+    line: 51
   - name: SettingsGroup
     root: SettingsGroup
     export_name: SettingsGroup
@@ -11185,7 +11185,7 @@ screens:
     kind: component
     import_path: ./settings/rowKit
     resolved_path: apps/worker/src/components/settings/rowKit
-    line: 53
+    line: 52
   - name: SettingsRow
     root: SettingsRow
     export_name: SettingsRow
@@ -11193,7 +11193,7 @@ screens:
     kind: component
     import_path: ./settings/rowKit
     resolved_path: apps/worker/src/components/settings/rowKit
-    line: 54
+    line: 53
   - name: ApprovalPostureSettings
     root: ApprovalPostureSettings
     export_name: ApprovalPostureSettings
@@ -11201,7 +11201,7 @@ screens:
     kind: component
     import_path: ./ApprovalPostureControl
     resolved_path: apps/worker/src/components/ApprovalPostureControl
-    line: 59
+    line: 58
   - name: SettingsRow
     root: SettingsRow
     export_name: SettingsRow
@@ -11209,14 +11209,14 @@ screens:
     kind: component
     import_path: ./settings/rowKit
     resolved_path: apps/worker/src/components/settings/rowKit
-    line: 62
+    line: 61
   - name: span
     root: span
     export_name: null
     namespace_member: false
     kind: element
     import_path: null
-    line: 66
+    line: 65
   - name: SettingsRow
     root: SettingsRow
     export_name: SettingsRow
@@ -11224,14 +11224,14 @@ screens:
     kind: component
     import_path: ./settings/rowKit
     resolved_path: apps/worker/src/components/settings/rowKit
-    line: 71
+    line: 70
   - name: Pane
     root: Pane
     export_name: null
     namespace_member: false
     kind: component
     import_path: null
-    line: 88
+    line: 87
     unresolved_because: '"Pane" is not imported in this file, so it is defined locally or comes from a global'
   - name: div
     root: div
@@ -11239,7 +11239,7 @@ screens:
     namespace_member: false
     kind: element
     import_path: null
-    line: 113
+    line: 112
   - name: SectionHead
     root: SectionHead
     export_name: SectionHead
@@ -11247,7 +11247,7 @@ screens:
     kind: component
     import_path: ./settings/SectionHead
     resolved_path: apps/worker/src/components/settings/SectionHead
-    line: 114
+    line: 113
   - name: CompactYouSection
     root: CompactYouSection
     export_name: CompactYouSection
@@ -11255,7 +11255,7 @@ screens:
     kind: component
     import_path: ./settings/CompactSections
     resolved_path: apps/worker/src/components/settings/CompactSections
-    line: 115
+    line: 114
   - name: SectionHead
     root: SectionHead
     export_name: SectionHead
@@ -11263,7 +11263,7 @@ screens:
     kind: component
     import_path: ./settings/SectionHead
     resolved_path: apps/worker/src/components/settings/SectionHead
-    line: 126
+    line: 125
   - name: CompactOrganisationSection
     root: CompactOrganisationSection
     export_name: CompactOrganisationSection
@@ -11271,7 +11271,7 @@ screens:
     kind: component
     import_path: ./settings/CompactSections
     resolved_path: apps/worker/src/components/settings/CompactSections
-    line: 127
+    line: 126
   - name: MemberIntegrationConnections
     root: MemberIntegrationConnections
     export_name: MemberIntegrationConnections
@@ -11279,7 +11279,7 @@ screens:
     kind: component
     import_path: ./integrations/MemberConnections
     resolved_path: apps/worker/src/components/integrations/MemberConnections
-    line: 128
+    line: 127
   - name: BehaviourSection
     root: BehaviourSection
     export_name: BehaviourSection
@@ -11287,7 +11287,7 @@ screens:
     kind: component
     import_path: ./settings/BehaviourSection
     resolved_path: apps/worker/src/components/settings/BehaviourSection
-    line: 134
+    line: 133
   - name: BehaviourSection
     root: BehaviourSection
     export_name: BehaviourSection
@@ -11295,7 +11295,7 @@ screens:
     kind: component
     import_path: ./settings/BehaviourSection
     resolved_path: apps/worker/src/components/settings/BehaviourSection
-    line: 138
+    line: 137
   - name: BehaviourSection
     root: BehaviourSection
     export_name: BehaviourSection
@@ -11303,7 +11303,7 @@ screens:
     kind: component
     import_path: ./settings/BehaviourSection
     resolved_path: apps/worker/src/components/settings/BehaviourSection
-    line: 142
+    line: 141
   - name: BehaviourSection
     root: BehaviourSection
     export_name: BehaviourSection
@@ -11311,7 +11311,7 @@ screens:
     kind: component
     import_path: ./settings/BehaviourSection
     resolved_path: apps/worker/src/components/settings/BehaviourSection
-    line: 146
+    line: 145
   - name: BehaviourSection
     root: BehaviourSection
     export_name: BehaviourSection
@@ -11319,15 +11319,7 @@ screens:
     kind: component
     import_path: ./settings/BehaviourSection
     resolved_path: apps/worker/src/components/settings/BehaviourSection
-    line: 150
-  - name: SectionHead
-    root: SectionHead
-    export_name: SectionHead
-    namespace_member: false
-    kind: component
-    import_path: ./settings/SectionHead
-    resolved_path: apps/worker/src/components/settings/SectionHead
-    line: 156
+    line: 149
   - name: CompactAdvancedSection
     root: CompactAdvancedSection
     export_name: CompactAdvancedSection
@@ -11335,15 +11327,15 @@ screens:
     kind: component
     import_path: ./settings/CompactSections
     resolved_path: apps/worker/src/components/settings/CompactSections
-    line: 157
-  - name: LocalRuntimeSection
-    root: LocalRuntimeSection
-    export_name: LocalRuntimeSection
+    line: 153
+  - name: SectionHead
+    root: SectionHead
+    export_name: SectionHead
     namespace_member: false
     kind: component
-    import_path: ./settings/LocalRuntimeSection
-    resolved_path: apps/worker/src/components/settings/LocalRuntimeSection
-    line: 158
+    import_path: ./settings/SectionHead
+    resolved_path: apps/worker/src/components/settings/SectionHead
+    line: 153
 - route: apps/worker/src/components/VoiceCall.tsx
   digest: sha256:1506ff574a19d2e6997474b6bf2e2622f9ba9077c33135d7495054aa1dd38174
   references:
