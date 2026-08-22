@@ -229,6 +229,23 @@ _PROSPECTIVE_RE = re.compile(
 
 ALLOW: dict[tuple[str, str], str] = {
     (
+        "docs/PROPOSAL-native-tables-surface.md",
+        "migrations/0026_data_plane.sql",
+    ): (
+        "A PROPOSED artefact of a deferred proposal (status deferred; revisit "
+        "trigger = a paying Boltrig-only customer). The document names the file "
+        "the work would create; it does not exist until the proposal is taken up, "
+        "and the proposal says so in its status line."
+    ),
+    (
+        "docs/PROPOSAL-native-tables-surface.md",
+        "boltrig/adapters/builtin/tables.py",
+    ): (
+        "Same deferred proposal, same reason: the adapter module it would add. "
+        "Naming the future path is the proposal's job; the ALLOW is what keeps "
+        "the gate honest about the fact that nothing ships it yet."
+    ),
+    (
         "docs/characters/README.md",
         "tests/test_montgomery_persona.py",
     ): (
