@@ -21,7 +21,19 @@ export interface LocalAgentStatus {
   source: "bundled" | "development" | null;
   version: string | null;
   active: boolean;
+  /** Whether the app-private runtime home holds a sign-in. A `ready` runtime
+   * without one cannot start a local task. */
+  signed_in: boolean;
   reason: string | null;
+}
+
+export type LocalAgentSignInEvent =
+  | { type: "started" }
+  | { type: "code"; url: string; code: string; opened: boolean }
+  | { type: "completed" };
+
+export interface LocalAgentSignInView {
+  signed_in: boolean;
 }
 
 export type LocalAgentEvent =
@@ -110,6 +122,20 @@ export async function runLocalAgentTurn(
 export async function stopLocalAgentTurn(): Promise<void> {
   if (!isDesktop) throw new Error("local_agent_requires_desktop");
   await invoke("stop_local_agent_turn");
+}
+
+export async function signInLocalAgent(
+  onEvent: (event: LocalAgentSignInEvent) => void,
+): Promise<LocalAgentSignInView> {
+  if (!isDesktop) throw new Error("local_agent_requires_desktop");
+  const channel = new Channel<LocalAgentSignInEvent>();
+  channel.onmessage = onEvent;
+  return invoke<LocalAgentSignInView>("local_agent_sign_in", { onEvent: channel });
+}
+
+export async function signOutLocalAgent(): Promise<LocalAgentSignInView> {
+  if (!isDesktop) throw new Error("local_agent_requires_desktop");
+  return invoke<LocalAgentSignInView>("local_agent_sign_out");
 }
 
 export function localConversationId(threadId: string): string {
@@ -348,6 +374,7 @@ function unavailable(reason: string): LocalAgentStatus {
     source: null,
     version: null,
     active: false,
+    signed_in: false,
     reason,
   };
 }

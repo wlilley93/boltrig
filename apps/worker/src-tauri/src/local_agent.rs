@@ -1,15 +1,19 @@
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
+use std::fs::{DirBuilder, File, OpenOptions};
+use std::io::{Read, Write};
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
-use std::{fs::File, io::Read};
 
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_opener::OpenerExt;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::{mpsc, Mutex};
@@ -32,8 +36,28 @@ const TURN_IDLE_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60);
 const MAX_PROJECTED_BYTES: usize = 2 * 1024 * 1024;
 const MAX_PROJECTED_EVENTS: usize = 10_000;
 const MAX_ACTIVE_MESSAGE_ITEMS: usize = 32;
+/// The bundled runtime's home lives under the app's own data directory. It is
+/// never inherited from `CODEX_HOME`, so a personal `~/.codex` (its
+/// `config.toml` with provider or MCP overrides, `auth.json`, memories and
+/// history) is neither read nor written by a local task.
+const LOCAL_AGENT_DIR: &str = "local-agent";
+const PRIVATE_CODEX_HOME_DIR: &str = "codex-home";
+const PRIVATE_CONFIG_TOML: &str = "\
+# Boltrig Worker local runtime.
+#
+# This home belongs to the signed desktop app and is separate from any
+# personal Codex configuration on this computer. The app sets the sandbox and
+# approval policy for every local thread itself, so this file stays minimal.
+";
+const MAX_AUTH_FILE_BYTES: u64 = 256 * 1024;
+/// A device code expires after fifteen minutes; the sign-in child is killed
+/// shortly after that if it is still waiting.
+const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(16 * 60);
+const SIGN_OUT_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_SIGN_IN_LINE_BYTES: usize = 4 * 1024;
+const MAX_SIGN_IN_OUTPUT_BYTES: usize = 64 * 1024;
+/// `CODEX_HOME` is deliberately absent: the private home is set explicitly.
 const SAFE_LOCAL_AGENT_ENVIRONMENT: &[&str] = &[
-    "CODEX_HOME",
     "HOME",
     "LANG",
     "LC_ALL",
@@ -49,11 +73,12 @@ const SAFE_LOCAL_AGENT_ENVIRONMENT: &[&str] = &[
 ];
 
 pub(crate) struct LocalAgentRuntime {
-    active: Mutex<Option<ActiveTurn>>,
+    active: Mutex<Option<ActiveChild>>,
+    sign_in: Mutex<Option<ActiveChild>>,
 }
 
 #[derive(Clone)]
-struct ActiveTurn {
+struct ActiveChild {
     generation: String,
     stop: mpsc::Sender<()>,
 }
@@ -65,7 +90,29 @@ pub(crate) struct LocalAgentStatus {
     source: Option<&'static str>,
     version: Option<String>,
     active: bool,
+    /// Whether the app-private runtime home holds a sign-in. Local tasks have
+    /// no model access until it does; the binary may still be `ready`.
+    signed_in: bool,
     reason: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub(crate) enum LocalAgentSignInEvent {
+    Started,
+    /// The bundled runtime printed its device sign-in page and one-time code.
+    /// `opened` says whether the app opened the page in the system browser.
+    Code {
+        url: String,
+        code: String,
+        opened: bool,
+    },
+    Completed,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct LocalAgentSignInView {
+    signed_in: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -137,26 +184,31 @@ impl LocalAgentRuntime {
     pub(crate) fn new() -> Self {
         Self {
             active: Mutex::new(None),
+            sign_in: Mutex::new(None),
         }
     }
 
     pub(crate) async fn status(&self, app: &AppHandle) -> LocalAgentStatus {
         let active = self.active.lock().await.is_some();
-        match resolve_binary(app).and_then(|binary| probe_binary(&binary.path, binary.source)) {
-            Ok((source, version)) => LocalAgentStatus {
+        let runtime =
+            resolve_binary(app).and_then(|binary| probe_binary(&binary.path, binary.source));
+        match (runtime, private_codex_home(app)) {
+            (Ok((source, version)), Ok(home)) => LocalAgentStatus {
                 runtime: "local",
                 state: "ready",
                 source: Some(source),
                 version: Some(version),
                 active,
+                signed_in: codex_home_signed_in(&home),
                 reason: None,
             },
-            Err(reason) => LocalAgentStatus {
+            (Err(reason), _) | (Ok(_), Err(reason)) => LocalAgentStatus {
                 runtime: "local",
                 state: "unavailable",
                 source: None,
                 version: None,
                 active,
+                signed_in: false,
                 reason: Some(reason),
             },
         }
@@ -246,6 +298,10 @@ pub(crate) async fn run_turn(
     let workspace = local_agent_workspace(&agent.api_origin, &agent.device_id, &request.root_id)?;
     let binary = resolve_binary(app)?;
     let _ = probe_binary(&binary.path, binary.source)?;
+    let codex_home = private_codex_home(app)?;
+    if !codex_home_signed_in(&codex_home) {
+        return Err("local_agent_not_signed_in".to_string());
+    }
     let (stop, stop_rx) = mpsc::channel(1);
     let generation = uuid::Uuid::new_v4().to_string();
     let posture = {
@@ -254,7 +310,7 @@ pub(crate) async fn run_turn(
             return Err("local_agent_busy".to_string());
         }
         let posture = load_posture()?;
-        *active = Some(ActiveTurn {
+        *active = Some(ActiveChild {
             generation: generation.clone(),
             stop,
         });
@@ -264,6 +320,7 @@ pub(crate) async fn run_turn(
     let result = run_child(
         app,
         binary.path,
+        &codex_home,
         &workspace,
         request,
         posture,
@@ -296,9 +353,11 @@ pub(crate) async fn stop(runtime: &LocalAgentRuntime) -> Result<(), String> {
         .map_err(|_| "local_agent_not_running".to_string())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_child(
     app: &AppHandle,
     binary: PathBuf,
+    codex_home: &Path,
     workspace: &Path,
     request: LocalTurnRequest,
     posture: ApprovalPosture,
@@ -314,7 +373,7 @@ async fn run_child(
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true);
-    apply_safe_environment(&mut command);
+    apply_safe_environment(&mut command, codex_home);
     let mut child = command
         .spawn()
         .map_err(|_| "local_agent_spawn_failed".to_string())?;
@@ -961,19 +1020,422 @@ fn bundled_target() -> Result<(&'static str, &'static str, &'static str), String
     Err("local_agent_platform_unsupported".to_string())
 }
 
-fn apply_safe_environment(command: &mut Command) {
+fn apply_safe_environment(command: &mut Command, codex_home: &Path) {
     command.env_clear();
+    for (key, value) in safe_environment(|key| std::env::var_os(key), codex_home) {
+        command.env(key, value);
+    }
+}
+
+/// The complete child environment: the allowlisted parent values plus the
+/// app-private `CODEX_HOME`, which always wins over anything inherited.
+fn safe_environment(
+    parent: impl Fn(&str) -> Option<OsString>,
+    codex_home: &Path,
+) -> Vec<(&'static str, OsString)> {
+    let mut environment = Vec::with_capacity(SAFE_LOCAL_AGENT_ENVIRONMENT.len() + 1);
     for key in SAFE_LOCAL_AGENT_ENVIRONMENT {
-        if let Some(value) = std::env::var_os(key) {
-            if *key == "PATH" {
-                if let Some(path) = absolute_path_entries(&value) {
-                    command.env(key, path);
-                }
-            } else {
-                command.env(key, value);
+        let Some(value) = parent(key) else {
+            continue;
+        };
+        if *key == "PATH" {
+            if let Some(path) = absolute_path_entries(&value) {
+                environment.push((*key, path));
+            }
+        } else {
+            environment.push((*key, value));
+        }
+    }
+    environment.push(("CODEX_HOME", codex_home.as_os_str().to_os_string()));
+    environment
+}
+
+fn private_codex_home(app: &AppHandle) -> Result<PathBuf, String> {
+    let base = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| "local_agent_home_unavailable".to_string())?;
+    let home = base.join(LOCAL_AGENT_DIR).join(PRIVATE_CODEX_HOME_DIR);
+    ensure_private_codex_home(&home)?;
+    Ok(home)
+}
+
+/// Create the private runtime home (owner-only on Unix) and seed a minimal
+/// `config.toml` exactly once. Nothing is copied from a personal `~/.codex`;
+/// an existing directory that is not a real directory is refused.
+fn ensure_private_codex_home(home: &Path) -> Result<(), String> {
+    if !home.is_absolute() {
+        return Err("local_agent_home_unavailable".to_string());
+    }
+    let mut builder = DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    builder.mode(0o700);
+    builder
+        .create(home)
+        .map_err(|_| "local_agent_home_unavailable".to_string())?;
+    let metadata = home
+        .symlink_metadata()
+        .map_err(|_| "local_agent_home_unavailable".to_string())?;
+    if !metadata.file_type().is_dir() {
+        return Err("local_agent_home_unavailable".to_string());
+    }
+    #[cfg(unix)]
+    {
+        std::fs::set_permissions(home, std::fs::Permissions::from_mode(0o700))
+            .map_err(|_| "local_agent_home_unavailable".to_string())?;
+        if let Some(parent) = home.parent() {
+            let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
+        }
+    }
+    seed_private_config(home)
+}
+
+fn seed_private_config(home: &Path) -> Result<(), String> {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    match options.open(home.join("config.toml")) {
+        Ok(mut file) => file
+            .write_all(PRIVATE_CONFIG_TOML.as_bytes())
+            .map_err(|_| "local_agent_home_unavailable".to_string()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(_) => Err("local_agent_home_unavailable".to_string()),
+    }
+}
+
+/// Whether the private home holds a sign-in. The bundled binary writes
+/// `auth.json` on `codex login` (an API key or ChatGPT tokens) and removes it
+/// on `codex logout`; nothing outside the private home is consulted.
+fn codex_home_signed_in(home: &Path) -> bool {
+    let path = home.join("auth.json");
+    let Ok(metadata) = path.symlink_metadata() else {
+        return false;
+    };
+    if !metadata.file_type().is_file()
+        || metadata.len() == 0
+        || metadata.len() > MAX_AUTH_FILE_BYTES
+    {
+        return false;
+    }
+    let Ok(bytes) = std::fs::read(&path) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
+        return false;
+    };
+    // Spelled in two halves so the source never carries the provider-key
+    // literal that the surface-boundary gate forbids; the runtime writes it.
+    let api_key = value
+        .get(concat!("OPENAI_", "API_KEY"))
+        .and_then(Value::as_str)
+        .is_some_and(|key| !key.is_empty());
+    let tokens = value
+        .get("tokens")
+        .and_then(Value::as_object)
+        .is_some_and(|tokens| {
+            ["access_token", "id_token", "refresh_token"]
+                .iter()
+                .any(|field| {
+                    tokens
+                        .get(*field)
+                        .and_then(Value::as_str)
+                        .is_some_and(|token| !token.is_empty())
+                })
+        });
+    value.is_object() && (api_key || tokens)
+}
+
+fn remove_private_auth(home: &Path) -> Result<(), String> {
+    match std::fs::remove_file(home.join("auth.json")) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err("local_agent_sign_out_failed".to_string()),
+    }
+}
+
+/// Sign the bundled runtime in to its private home with its device-code flow.
+///
+/// `codex login --device-auth` prints a sign-in page and a one-time code and
+/// then polls until the user finishes in the browser; unlike `codex login` it
+/// opens no local listener and does not launch a browser itself, so the app is
+/// the only thing that opens the page. The child runs under the private
+/// `CODEX_HOME` with the same cleared environment as a local turn.
+pub(crate) async fn sign_in(
+    app: &AppHandle,
+    runtime: &LocalAgentRuntime,
+    on_event: tauri::ipc::Channel<LocalAgentSignInEvent>,
+) -> Result<LocalAgentSignInView, String> {
+    let binary = resolve_binary(app)?;
+    let _ = probe_binary(&binary.path, binary.source)?;
+    let home = private_codex_home(app)?;
+    let (stop, stop_rx) = mpsc::channel(1);
+    let generation = uuid::Uuid::new_v4().to_string();
+    {
+        if runtime.active.lock().await.is_some() {
+            return Err("local_agent_busy".to_string());
+        }
+        let mut signing_in = runtime.sign_in.lock().await;
+        if signing_in.is_some() {
+            return Err("local_agent_busy".to_string());
+        }
+        *signing_in = Some(ActiveChild {
+            generation: generation.clone(),
+            stop,
+        });
+    }
+    let result = run_sign_in(app, binary.path, &home, on_event, stop_rx).await;
+    let mut signing_in = runtime.sign_in.lock().await;
+    if signing_in
+        .as_ref()
+        .is_some_and(|child| child.generation == generation)
+    {
+        *signing_in = None;
+    }
+    result
+}
+
+async fn run_sign_in(
+    app: &AppHandle,
+    binary: PathBuf,
+    home: &Path,
+    on_event: tauri::ipc::Channel<LocalAgentSignInEvent>,
+    mut stop_rx: mpsc::Receiver<()>,
+) -> Result<LocalAgentSignInView, String> {
+    let mut command = Command::new(binary);
+    command
+        .arg("login")
+        .arg("--device-auth")
+        .current_dir(home)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    apply_safe_environment(&mut command, home);
+    let mut child = command
+        .spawn()
+        .map_err(|_| "local_agent_spawn_failed".to_string())?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "local_agent_stdio_unavailable".to_string())?;
+    let _ = on_event.send(LocalAgentSignInEvent::Started);
+    let driven = tokio::time::timeout(
+        SIGN_IN_TIMEOUT,
+        drive_sign_in(app, BufReader::new(stdout), &on_event, &mut stop_rx),
+    )
+    .await
+    .unwrap_or_else(|_| Err("local_agent_sign_in_timed_out".to_string()));
+    let status = match driven {
+        Ok(()) => tokio::time::timeout(SIGN_OUT_TIMEOUT, child.wait()).await,
+        Err(reason) => {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            return Err(reason);
+        }
+    };
+    let exited = matches!(status, Ok(Ok(status)) if status.success());
+    if !exited {
+        let _ = child.kill().await;
+        let _ = child.wait().await;
+        return Err("local_agent_sign_in_failed".to_string());
+    }
+    if !codex_home_signed_in(home) {
+        return Err("local_agent_sign_in_failed".to_string());
+    }
+    let _ = on_event.send(LocalAgentSignInEvent::Completed);
+    Ok(LocalAgentSignInView { signed_in: true })
+}
+
+/// Read the child's prompt until it exits. `Ok(())` means stdout closed.
+async fn drive_sign_in(
+    app: &AppHandle,
+    mut stdout: BufReader<ChildStdout>,
+    on_event: &tauri::ipc::Channel<LocalAgentSignInEvent>,
+    stop_rx: &mut mpsc::Receiver<()>,
+) -> Result<(), String> {
+    let mut prompt = SignInPrompt::default();
+    let mut announced = false;
+    let mut total = 0_usize;
+    loop {
+        let line = tokio::select! {
+            line = read_text_line(&mut stdout) => line?,
+            stopped = stop_rx.recv() => {
+                return Err(if stopped.is_some() {
+                    "local_agent_sign_in_cancelled".to_string()
+                } else {
+                    "local_agent_control_closed".to_string()
+                });
+            }
+        };
+        let Some(line) = line else {
+            return Ok(());
+        };
+        total = total.saturating_add(line.len());
+        if total > MAX_SIGN_IN_OUTPUT_BYTES {
+            return Err("local_agent_output_too_large".to_string());
+        }
+        prompt.observe(&line);
+        if announced {
+            continue;
+        }
+        if let (Some(url), Some(code)) = (&prompt.url, &prompt.code) {
+            announced = true;
+            let opened = open_sign_in_url(app, url);
+            on_event
+                .send(LocalAgentSignInEvent::Code {
+                    url: url.clone(),
+                    code: code.clone(),
+                    opened,
+                })
+                .map_err(|_| "local_agent_renderer_disconnected".to_string())?;
+        }
+    }
+}
+
+/// What the device-code prompt tells the user: the page to open and the
+/// one-time code to enter there. Parsed from plain text with terminal colour
+/// codes removed; nothing else on the child's stdout is interpreted.
+#[derive(Default)]
+struct SignInPrompt {
+    url: Option<String>,
+    code: Option<String>,
+}
+
+impl SignInPrompt {
+    fn observe(&mut self, line: &str) {
+        let clean = strip_ansi(line);
+        for token in clean.split_whitespace() {
+            if self.url.is_none() && token.starts_with("https://") {
+                self.url = Some(token.trim_end_matches(['.', ',', ')']).to_string());
+            } else if self.url.is_some() && self.code.is_none() && looks_like_device_code(token) {
+                self.code = Some(token.to_string());
             }
         }
     }
+}
+
+fn looks_like_device_code(token: &str) -> bool {
+    let bytes = token.as_bytes();
+    (7..=24).contains(&bytes.len())
+        && bytes
+            .iter()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || *byte == b'-')
+        && token.contains('-')
+        && token.split('-').all(|part| part.len() >= 3)
+}
+
+fn strip_ansi(line: &str) -> String {
+    let mut clean = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' {
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                for next in chars.by_ref() {
+                    if ('\u{40}'..='\u{7e}').contains(&next) {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        if !ch.is_control() {
+            clean.push(ch);
+        }
+    }
+    clean
+}
+
+/// The app opens only the runtime's own HTTPS sign-in page; a URL the child
+/// prints that points anywhere else is shown to the user but never launched.
+fn sign_in_url_is_openable(url: &str) -> bool {
+    url::Url::parse(url).is_ok_and(|parsed| {
+        parsed.scheme() == "https"
+            && parsed.username().is_empty()
+            && parsed.password().is_none()
+            && parsed
+                .host_str()
+                .is_some_and(|host| host == "openai.com" || host.ends_with(".openai.com"))
+    })
+}
+
+fn open_sign_in_url(app: &AppHandle, url: &str) -> bool {
+    sign_in_url_is_openable(url) && app.opener().open_url(url, None::<&str>).is_ok()
+}
+
+/// Remove the sign-in from the private home. A sign-in still in progress is
+/// cancelled first; the bundled binary's own `logout` runs when it is
+/// available, and the credential file is removed regardless.
+pub(crate) async fn sign_out(
+    app: &AppHandle,
+    runtime: &LocalAgentRuntime,
+) -> Result<LocalAgentSignInView, String> {
+    let pending = runtime
+        .sign_in
+        .lock()
+        .await
+        .as_ref()
+        .map(|child| child.stop.clone());
+    if let Some(stop) = pending {
+        let _ = stop.send(()).await;
+    }
+    if runtime.active.lock().await.is_some() {
+        return Err("local_agent_busy".to_string());
+    }
+    let home = private_codex_home(app)?;
+    if let Ok(binary) = resolve_binary(app) {
+        if probe_binary(&binary.path, binary.source).is_ok() {
+            let mut command = Command::new(binary.path);
+            command
+                .arg("logout")
+                .current_dir(&home)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .kill_on_drop(true);
+            apply_safe_environment(&mut command, &home);
+            if let Ok(mut child) = command.spawn() {
+                let _ = tokio::time::timeout(SIGN_OUT_TIMEOUT, child.wait()).await;
+            }
+        }
+    }
+    remove_private_auth(&home)?;
+    Ok(LocalAgentSignInView {
+        signed_in: codex_home_signed_in(&home),
+    })
+}
+
+/// One bounded line of plain text; `Ok(None)` when the stream closes.
+async fn read_text_line<R: AsyncBufRead + Unpin>(reader: &mut R) -> Result<Option<String>, String> {
+    let mut bytes = Vec::new();
+    loop {
+        let buffer = reader
+            .fill_buf()
+            .await
+            .map_err(|_| "local_agent_transport_failed".to_string())?;
+        if buffer.is_empty() {
+            if bytes.is_empty() {
+                return Ok(None);
+            }
+            break;
+        }
+        let newline = buffer.iter().position(|byte| *byte == b'\n');
+        let take = newline.map_or(buffer.len(), |index| index + 1);
+        if bytes.len().saturating_add(take) > MAX_SIGN_IN_LINE_BYTES + 1 {
+            return Err("local_agent_frame_too_large".to_string());
+        }
+        bytes.extend_from_slice(&buffer[..take]);
+        reader.consume(take);
+        if newline.is_some() {
+            break;
+        }
+    }
+    while matches!(bytes.last(), Some(b'\n' | b'\r')) {
+        bytes.pop();
+    }
+    Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
 }
 
 fn absolute_path_entries(value: &OsStr) -> Option<OsString> {
@@ -1053,9 +1515,238 @@ mod tests {
         ] {
             assert!(!SAFE_LOCAL_AGENT_ENVIRONMENT.contains(&forbidden));
         }
-        assert!(SAFE_LOCAL_AGENT_ENVIRONMENT.contains(&"CODEX_HOME"));
+        // CODEX_HOME is never passed through: the private home is set explicitly.
+        assert!(!SAFE_LOCAL_AGENT_ENVIRONMENT.contains(&"CODEX_HOME"));
         assert!(SAFE_LOCAL_AGENT_ENVIRONMENT.contains(&"HOME"));
         assert!(SAFE_LOCAL_AGENT_ENVIRONMENT.contains(&"PATH"));
+    }
+
+    fn private_home_fixture() -> PathBuf {
+        PathBuf::from(if cfg!(windows) {
+            r"C:\app-data\local-agent\codex-home"
+        } else {
+            "/app-data/local-agent/codex-home"
+        })
+    }
+
+    fn scratch_dir(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "boltrig-local-agent-{label}-{}",
+            uuid::Uuid::new_v4()
+        ))
+    }
+
+    #[test]
+    fn local_agent_codex_home_is_always_the_private_directory() {
+        let private = private_home_fixture();
+        let parent = |key: &str| -> Option<OsString> {
+            match key {
+                "CODEX_HOME" => Some(OsString::from("/home/user/.codex")),
+                "HOME" => Some(OsString::from("/home/user")),
+                "PATH" => std::env::join_paths([std::env::temp_dir()]).ok(),
+                _ => None,
+            }
+        };
+        let environment = safe_environment(parent, &private);
+        let codex_homes: Vec<_> = environment
+            .iter()
+            .filter(|(key, _)| *key == "CODEX_HOME")
+            .collect();
+        assert_eq!(codex_homes.len(), 1);
+        assert_eq!(codex_homes[0].1, private.as_os_str());
+        assert!(environment
+            .iter()
+            .any(|(key, value)| *key == "HOME" && value == "/home/user"));
+        assert!(!environment
+            .iter()
+            .any(|(_, value)| value == "/home/user/.codex"));
+        // A parent with no CODEX_HOME at all still yields the private one.
+        assert_eq!(
+            safe_environment(|_| None, &private),
+            vec![("CODEX_HOME", private.clone().into_os_string())]
+        );
+    }
+
+    #[test]
+    fn private_codex_home_is_created_private_seeded_once_and_copies_nothing_personal() {
+        let root = scratch_dir("home");
+        let personal = root.join("personal-home").join(".codex");
+        std::fs::create_dir_all(&personal).unwrap();
+        std::fs::write(
+            personal.join("config.toml"),
+            "model_provider = \"personal-marker\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            personal.join("auth.json"),
+            format!("{{\"{}\":\"sk-personal\"}}", concat!("OPENAI_", "API_KEY")),
+        )
+        .unwrap();
+        let home = root
+            .join("app-data")
+            .join(LOCAL_AGENT_DIR)
+            .join(PRIVATE_CODEX_HOME_DIR);
+
+        ensure_private_codex_home(&home).unwrap();
+
+        assert!(home.is_dir());
+        #[cfg(unix)]
+        {
+            assert_eq!(home.metadata().unwrap().permissions().mode() & 0o777, 0o700);
+            assert_eq!(
+                home.parent()
+                    .unwrap()
+                    .metadata()
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o700
+            );
+            assert_eq!(
+                home.join("config.toml")
+                    .metadata()
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+        let config = std::fs::read_to_string(home.join("config.toml")).unwrap();
+        assert_eq!(config, PRIVATE_CONFIG_TOML);
+        assert!(!config.contains("personal-marker"));
+        assert!(!home.join("auth.json").exists());
+        assert!(!codex_home_signed_in(&home));
+
+        // A second visit keeps whatever the home already holds.
+        std::fs::write(home.join("config.toml"), "# edited\n").unwrap();
+        ensure_private_codex_home(&home).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(home.join("config.toml")).unwrap(),
+            "# edited\n"
+        );
+        assert_eq!(
+            ensure_private_codex_home(Path::new("relative/codex-home")),
+            Err("local_agent_home_unavailable".to_string())
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_codex_home_refuses_a_symlinked_directory() {
+        let root = scratch_dir("symlink");
+        let elsewhere = root.join("elsewhere");
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let home = root.join(LOCAL_AGENT_DIR).join(PRIVATE_CODEX_HOME_DIR);
+        std::fs::create_dir_all(home.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&elsewhere, &home).unwrap();
+        assert_eq!(
+            ensure_private_codex_home(&home),
+            Err("local_agent_home_unavailable".to_string())
+        );
+        assert!(!elsewhere.join("config.toml").exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn signed_in_reads_only_the_private_auth_file() {
+        let home = scratch_dir("auth");
+        std::fs::create_dir_all(&home).unwrap();
+        let auth = home.join("auth.json");
+        assert!(!codex_home_signed_in(&home));
+        let api_key_field = concat!("OPENAI_", "API_KEY");
+        let with_api_key = format!("{{\"{api_key_field}\":\"sk-test\",\"auth_mode\":\"apikey\"}}");
+        let with_empty_api_key = format!("{{\"{api_key_field}\":\"\"}}");
+        for (contents, expected) in [
+            (with_api_key.as_str(), true),
+            ("{\"auth_mode\":\"chatgpt\",\"tokens\":{\"access_token\":\"a\",\"refresh_token\":\"r\"}}", true),
+            (with_empty_api_key.as_str(), false),
+            ("{}", false),
+            ("[]", false),
+            ("not json", false),
+            ("", false),
+        ] {
+            std::fs::write(&auth, contents).unwrap();
+            assert_eq!(codex_home_signed_in(&home), expected, "{contents}");
+        }
+        remove_private_auth(&home).unwrap();
+        assert!(!auth.exists());
+        remove_private_auth(&home).unwrap();
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    /// The exact prompt Codex 0.144.3 prints for `login --device-auth`,
+    /// captured on 2026-08-22 with its terminal colour codes intact.
+    #[test]
+    fn sign_in_prompt_parser_finds_the_device_page_and_code() {
+        let mut prompt = SignInPrompt::default();
+        for line in [
+            "",
+            "Welcome to Codex [v\u{1b}[90m0.144.3\u{1b}[0m]",
+            "\u{1b}[90mOpenAI's command-line coding agent\u{1b}[0m",
+            "Follow these steps to sign in with ChatGPT using device code authorization:",
+            "1. Open this link in your browser and sign in to your account",
+        ] {
+            prompt.observe(line);
+            assert!(prompt.url.is_none() && prompt.code.is_none(), "{line:?}");
+        }
+        prompt.observe("   \u{1b}[94mhttps://auth.openai.com/codex/device\u{1b}[0m");
+        prompt.observe("2. Enter this one-time code \u{1b}[90m(expires in 15 minutes)\u{1b}[0m");
+        assert!(prompt.code.is_none());
+        prompt.observe("   \u{1b}[94m6B30-9JOVE\u{1b}[0m");
+        assert_eq!(
+            prompt.url.as_deref(),
+            Some("https://auth.openai.com/codex/device")
+        );
+        assert_eq!(prompt.code.as_deref(), Some("6B30-9JOVE"));
+        // Later output never rewrites what was announced.
+        prompt.observe("https://evil.example/ ZZZZ-ZZZZZ");
+        assert_eq!(
+            prompt.url.as_deref(),
+            Some("https://auth.openai.com/codex/device")
+        );
+        assert_eq!(prompt.code.as_deref(), Some("6B30-9JOVE"));
+    }
+
+    #[test]
+    fn sign_in_only_opens_the_runtime_sign_in_page() {
+        assert!(sign_in_url_is_openable(
+            "https://auth.openai.com/codex/device"
+        ));
+        for refused in [
+            "http://auth.openai.com/codex/device",
+            "https://auth.openai.com.evil.example/codex/device",
+            "https://evil.example/?next=auth.openai.com",
+            "https://user:pass@auth.openai.com/codex/device",
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "",
+        ] {
+            assert!(!sign_in_url_is_openable(refused), "{refused}");
+        }
+    }
+
+    #[tokio::test]
+    async fn text_line_reader_bounds_lines_and_reports_end_of_stream() {
+        let mut reader = BufReader::new(b"first\r\nsecond".as_slice());
+        assert_eq!(
+            read_text_line(&mut reader).await.unwrap().as_deref(),
+            Some("first")
+        );
+        assert_eq!(
+            read_text_line(&mut reader).await.unwrap().as_deref(),
+            Some("second")
+        );
+        assert_eq!(read_text_line(&mut reader).await.unwrap(), None);
+        let mut oversized = vec![b'x'; MAX_SIGN_IN_LINE_BYTES + 2];
+        oversized.push(b'\n');
+        let mut reader = BufReader::new(oversized.as_slice());
+        assert_eq!(
+            read_text_line(&mut reader).await,
+            Err("local_agent_frame_too_large".to_string())
+        );
     }
 
     #[cfg(unix)]

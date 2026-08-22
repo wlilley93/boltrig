@@ -336,6 +336,11 @@ def test_desktop_candidates_embed_the_protected_api_origin() -> None:
     assert "BOLTRIG_DESKTOP_API_ORIGIN" in requirement
     assert 'origin.protocol !== "https:"' in requirement
     assert 'raw !== canonical' in requirement
+    # The product domain moved to boltrig.ai on 2026-08-18; boltrig.io stays
+    # admitted only for the dev.boltrig.io API grace path. A guard that admits
+    # one family but not the other cannot produce the desktop build that the
+    # hosted stack on app.boltrig.ai expects.
+    assert 'hostname.endsWith(".boltrig.ai")' in requirement
     assert 'hostname.endsWith(".boltrig.io")' in requirement
 
     build = _step("desktop-candidates", "Build signed installers")

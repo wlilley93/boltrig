@@ -122,6 +122,15 @@ returns nothing. Until then the kernel names both hostnames in
 `BOLTRIG_ALLOWED_HOSTS`, so the leg is allow-listed rather than smuggled through
 on a `Host` header rewritten to a value the kernel already trusts.
 
+The signed desktop carries the same two families. Its webview CSP
+(`connect-src` in `apps/worker/src-tauri/tauri.conf.json`) and the release
+guard on `BOLTRIG_DESKTOP_API_ORIGIN` admit `boltrig.ai`, `*.boltrig.ai`,
+`boltrig.io` and `*.boltrig.io` over `https`/`wss` only; the `.io` entries exist
+for the `dev.boltrig.io` grace path above and leave with it. A production
+desktop build is compiled against `https://app.boltrig.ai`; any other host,
+scheme, port, path or credential fails the release guard before a package is
+built.
+
 **`docker restart` does not reload an `--env-file`.** It replays the container's
 baked environment; the file is read once, at create time. Editing
 `/home/jellytot/boltrig-dev/backend.env` and restarting leaves the old values in
@@ -831,7 +840,9 @@ the two expected cookies and installs them directly into the webview cookie
 store; it never returns the httpOnly session secret to JavaScript.
 
 Every desktop build must set `VITE_API_BASE` and
-`BOLTRIG_DESKTOP_API_ORIGIN` to the same canonical origin. Setting only the
+`BOLTRIG_DESKTOP_API_ORIGIN` to the same canonical origin, and a protected
+release accepts only a canonical HTTPS origin under `boltrig.ai` or, for the
+grace path, `boltrig.io` (the list in "Public hostnames"). Setting only the
 Vite value produces a UI that renders the account forms but whose native HTTP
 transport cannot contact the server. The checked-in Tauri pre-build command
 refuses that split configuration, and the Rust build script tracks the native
@@ -862,13 +873,21 @@ App Server over stdio and executes approved file/Bash work on the user's own
 computer. There is no silent fallback between them.
 
 “Local” describes execution and data ownership, not necessarily model
-inference. The bundled Codex process uses that user's own Codex authentication
-and may contact the Codex service for reasoning; Bash, approved filesystem
-access, thread persistence and process ownership remain on the computer. The
-desktop child receives an allowlisted environment and never inherits Boltrig
-provider credentials, gateway keys, GitHub tokens or SSH agent sockets. Do not
-describe this posture as an offline model, and do not make a personal Ollama or
-operator model host a release default.
+inference. The bundled Codex process runs under an app-private home
+(`<app data>/local-agent/codex-home`, owner-only, seeded once with a minimal
+`config.toml`); `CODEX_HOME` is set explicitly and never inherited, so a
+personal `~/.codex` (its `config.toml`, `auth.json`, memories and history) is
+neither read nor changed (decision 0027, amended 2026-08-22). That home starts
+unsigned: the user signs the local runtime in from Settings → Advanced, which
+runs the bundled binary's device-code login under the private home, opens only
+the runtime's HTTPS sign-in page and shows the one-time code; no local listener
+is opened for this, and sign-out removes the credential from the private home.
+The runtime may then contact the Codex service for reasoning; Bash, approved
+filesystem access, thread persistence and process ownership remain on the
+computer. The desktop child receives an allowlisted environment and never
+inherits Boltrig provider credentials, gateway keys, GitHub tokens or SSH agent
+sockets. Do not describe this posture as an offline model, and do not make a
+personal Ollama or operator model host a release default.
 
 Development builds may resolve `BOLTRIG_LOCAL_CODEX_BIN` (an absolute file) or
 `codex` from `PATH`; the UI labels that source `development`. Release builds do

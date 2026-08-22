@@ -120,3 +120,30 @@ Conflicting or unreadable local identity is never overwritten silently.
   to the signed app and avoids a new localhost authentication surface.
 - **Ship the operator's M1/Ollama settings.** Local and BYO routes are user data,
   never release defaults.
+
+## Amended 2026-08-22: app-private runtime home
+
+- The bundled local runtime always runs with `CODEX_HOME` set to a directory
+  the signed app owns: `<app data>/local-agent/codex-home`, created owner-only
+  (`0700` on Unix) with a minimal `config.toml` seeded once and never
+  overwritten. `CODEX_HOME` is never inherited from the environment and nothing
+  is read from or copied out of a personal `~/.codex` (its `config.toml` with
+  any provider or MCP overrides, `auth.json`, memories, history). A Finder- or
+  Dock-launched app and a terminal-launched one therefore run the same runtime.
+- Consequence for sign-in: the private home starts without a credential, so
+  local tasks have no model access until the user signs the local runtime in
+  from Settings → Advanced. The app runs the bundled binary's device-code login
+  (`codex login --device-auth`) under the private home: the child prints the
+  sign-in page and a one-time code, the app opens that HTTPS page (and only an
+  `openai.com` page) in the system browser and shows the code, and the child
+  polls until the user finishes or the code expires. Neither the app nor the
+  child opens a local listener for this flow; the plain `codex login`, which
+  binds `127.0.0.1:1455` for its browser callback and launches a browser on its
+  own, is deliberately not used. Sign-out runs the binary's `logout` under the
+  private home and removes `auth.json` there; it also cancels a sign-in still
+  in progress. `LocalAgentStatus` carries `signed_in`, and a local turn refuses
+  with `local_agent_not_signed_in` rather than letting the runtime fail later.
+- What does not change: the local agent still acts on the user's own computer,
+  in the bound folder, under the device-side posture of this decision. The
+  sign-in is the user's own runtime account, kept on that computer; it is not a
+  Boltrig or provider credential and is never sent to the kernel.

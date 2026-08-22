@@ -46,6 +46,7 @@ beforeEach(() => {
     source: "development",
     version: "0.145.0",
     active: false,
+    signed_in: true,
     reason: null,
   });
   local.localAgentRoots.mockResolvedValue([{ root_id: "root-1" }]);
@@ -111,6 +112,7 @@ describe("desktop local chat", () => {
       source: null,
       version: null,
       active: false,
+      signed_in: false,
       reason: "local_agent_binary_not_bundled",
     });
     render(<LocalChatView
@@ -124,6 +126,29 @@ describe("desktop local chat", () => {
       .toBe("Local Codex is not included in this development build"));
     expect((input as HTMLTextAreaElement).disabled).toBe(true);
     expect(screen.queryByPlaceholderText("Loading conversation state…")).toBeNull();
+  });
+
+  it("asks for the local runtime sign-in before a ready runtime can take a task", async () => {
+    local.localAgentStatus.mockResolvedValue({
+      runtime: "local",
+      state: "ready",
+      source: "bundled",
+      version: "0.144.3",
+      active: false,
+      signed_in: false,
+      reason: null,
+    });
+    render(<LocalChatView
+      conversationId={null}
+      onChanged={vi.fn()}
+      onConversation={vi.fn()}
+    />);
+
+    const input = await screen.findByLabelText("Task instructions");
+    await waitFor(() => expect(input.getAttribute("placeholder"))
+      .toBe("Sign in to the local runtime in Settings → Advanced"));
+    expect((input as HTMLTextAreaElement).disabled).toBe(true);
+    expect(local.runLocalAgentTurn).not.toHaveBeenCalled();
   });
 
   it("adopts a new local route only after its entire first answer settles", async () => {
