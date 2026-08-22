@@ -28,8 +28,9 @@ final class SessionStoreTests: XCTestCase {
             return XCTFail("expected signedIn, got \(store.state), error \(store.errorMessage ?? "nil")")
         }
         XCTAssertEqual(account.displayName, "Ada Lovelace")
-        XCTAssertEqual(account.companionName, "Ultron")
+        XCTAssertEqual(account.companionPresence, .familiar)
         XCTAssertTrue(account.onboardingComplete)
+        XCTAssertTrue(StubURLProtocol.recorded("PUT", "/v1/me/settings").isEmpty, "a Familiar account is left alone")
         XCTAssertEqual(vault.stored?.secret, "boltrig_pat_secret")
         XCTAssertEqual(vault.stored?.tokenID, "tok1")
 
@@ -43,6 +44,54 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(me.value(forHTTPHeaderField: "Authorization"), "Bearer boltrig_pat_secret")
         XCTAssertNil(me.value(forHTTPHeaderField: BoltrigClient.csrfHeader))
         XCTAssertEqual(StubURLProtocol.recorded("POST", "/v1/auth/logout").count, 1, "the cookie session is closed once the token exists")
+    }
+
+    func testAnotherCompanionIsSwitchedToFamiliarOnFirstLoad() async throws {
+        vault.stored = StoredSession(instanceURL: BoltrigEnvironment.hostedInstanceURL, tokenID: "tok1", secret: "boltrig_pat_old", createdAt: Date())
+        var served = 0
+        StubURLProtocol.on("GET", "/v1/me/settings") { _ in
+            served += 1
+            return StubURLProtocol.json(200, served == 1 ? Fixtures.settingsOtherCharacter : Fixtures.settings)
+        }
+        Fixtures.stubAdoption()
+        let store = makeStore()
+        await store.restore()
+
+        guard case let .signedIn(account) = store.state else { return XCTFail("expected signedIn, got \(store.state)") }
+        XCTAssertEqual(account.companionPresence, .familiar, "the account is re-read after the switch")
+        let put = try XCTUnwrap(StubURLProtocol.recorded("PUT", "/v1/me/settings").first)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: StubURLProtocol.body(of: put)) as? [String: Any])
+        XCTAssertEqual((body["settings"] as? [String: Any])?["agent.character"] as? String, "familiar")
+        let adopted = try XCTUnwrap(StubURLProtocol.recorded("POST", "/v1/familiar/emotion/adopted").first)
+        let adoptedBody = try XCTUnwrap(JSONSerialization.jsonObject(with: StubURLProtocol.body(of: adopted)) as? [String: Any])
+        XCTAssertEqual(adoptedBody["character"] as? String, "familiar")
+        let order = StubURLProtocol.requests.compactMap { $0.url?.path }.filter { $0 == "/v1/me/settings" || $0 == "/v1/familiar/emotion/adopted" }
+        XCTAssertTrue(order.firstIndex(of: "/v1/familiar/emotion/adopted")! > order.firstIndex(of: "/v1/me/settings")!, "the setting is written before the announcement")
+        XCTAssertEqual(store.familiarAdoptedNotice, "Boltrig for iPhone uses Familiar. Familiar is now your companion everywhere.")
+    }
+
+    func testUnsetCompanionIsSetToFamiliarAndAdoptionFailureIsSilent() async {
+        vault.stored = StoredSession(instanceURL: BoltrigEnvironment.hostedInstanceURL, tokenID: "tok1", secret: "boltrig_pat_old", createdAt: Date())
+        StubURLProtocol.on("GET", "/v1/me/settings") { _ in StubURLProtocol.json(200, Fixtures.settingsNoCharacter) }
+        StubURLProtocol.on("PUT", "/v1/me/settings") { _ in StubURLProtocol.json(200, ["status": "ok", "keys": ["agent.character"]]) }
+        StubURLProtocol.on("POST", "/v1/familiar/emotion/adopted") { _ in StubURLProtocol.json(500, ["status": "error", "reason": "relay down"]) }
+        let store = makeStore()
+        await store.restore()
+        guard case .signedIn = store.state else { return XCTFail("expected signedIn, got \(store.state)") }
+        XCTAssertEqual(StubURLProtocol.recorded("PUT", "/v1/me/settings").count, 1)
+        XCTAssertEqual(store.familiarAdoptedNotice, "Boltrig for iPhone uses Familiar. Familiar is now your companion everywhere.")
+    }
+
+    func testFailedAdoptionWriteSaysSoAndStillSignsIn() async {
+        vault.stored = StoredSession(instanceURL: BoltrigEnvironment.hostedInstanceURL, tokenID: "tok1", secret: "boltrig_pat_old", createdAt: Date())
+        StubURLProtocol.on("GET", "/v1/me/settings") { _ in StubURLProtocol.json(200, Fixtures.settingsOtherCharacter) }
+        StubURLProtocol.on("PUT", "/v1/me/settings") { _ in StubURLProtocol.json(503, ["status": "error", "reason": "unavailable"]) }
+        let store = makeStore()
+        await store.restore()
+        guard case let .signedIn(account) = store.state else { return XCTFail("expected signedIn, got \(store.state)") }
+        XCTAssertEqual(account.companionPresence, .other)
+        XCTAssertEqual(store.familiarAdoptedNotice, "Boltrig could not set Familiar as your companion. It will try again next time.")
+        XCTAssertTrue(StubURLProtocol.recorded("POST", "/v1/familiar/emotion/adopted").isEmpty)
     }
 
     func testWrongPasswordStaysSignedOutWithPlainCopy() async {

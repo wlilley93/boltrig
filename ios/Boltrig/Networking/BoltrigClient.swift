@@ -85,6 +85,19 @@ struct BoltrigClient {
         return try Account.decode(data)
     }
 
+    /// Writes user settings by key. The server refuses the approval posture and sensing keys
+    /// here; those have their own routes.
+    func putSettings(_ values: [String: Any]) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["settings": values])
+        _ = try await perform(path: "/v1/me/settings", method: "PUT", body: body)
+    }
+
+    /// Tells the companion's inner life that it has been chosen; purely cosmetic on the server.
+    func announceAdopted(character: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["character": character])
+        _ = try await perform(path: "/v1/familiar/emotion/adopted", method: "POST", body: body)
+    }
+
     // MARK: Work
 
     func conversations() async throws -> [ConversationSummary] {
@@ -206,7 +219,7 @@ struct BoltrigClient {
         return request
     }
 
-    private func perform(path: String, method: String, body: Data?) async throws -> (Data, HTTPURLResponse) {
+    func perform(path: String, method: String, body: Data?) async throws -> (Data, HTTPURLResponse) {
         let request = try makeRequest(path: path, method: method, body: body)
         let data: Data
         let response: URLResponse

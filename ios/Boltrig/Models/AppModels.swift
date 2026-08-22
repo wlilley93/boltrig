@@ -154,6 +154,6 @@ extension ChatMessage {
 
 extension Account {
     static let preview = Account(id: "preview", email: "preview@example.com", displayName: "Preview Person", role: "member",
-                                 activeWorkspaceID: nil, onboardingComplete: true, characterID: "familiar")
+                                 activeWorkspaceID: nil, onboardingComplete: true, characterID: CompanionPresence.familiarID)
 }
 #endif

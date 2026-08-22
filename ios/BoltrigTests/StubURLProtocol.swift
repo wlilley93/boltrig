@@ -93,9 +93,29 @@ enum Fixtures {
         "profile": ["id": "u1", "email": "ada@example.com", "display_name": "Ada Lovelace", "role": "member",
                     "scope": "workspace", "status": "active", "source": "invite", "source_group": NSNull(), "last_seen_at": NSNull()],
         "active_workspace_id": "ws1",
-        "settings": ["setup.onboarding_version": 1, "agent.character": "ultron", "theme": "dark"],
+        "settings": ["setup.onboarding_version": 1, "agent.character": "familiar", "theme": "dark"],
         "setting_sources": ["theme": "user_override"],
     ]
+
+    /// An account whose companion was chosen on the web and is not Familiar. The id is a
+    /// neutral placeholder: the phone never displays it and the bundle names no other companion.
+    static var settingsOtherCharacter: [String: Any] {
+        var copy = settings
+        copy["settings"] = ["setup.onboarding_version": 1, "agent.character": "another-character"]
+        return copy
+    }
+
+    static var settingsNoCharacter: [String: Any] {
+        var copy = settings
+        copy["settings"] = ["setup.onboarding_version": 1]
+        return copy
+    }
+
+    /// The familiar-only adoption routes answer ok.
+    static func stubAdoption() {
+        StubURLProtocol.on("PUT", "/v1/me/settings") { _ in StubURLProtocol.json(200, ["status": "ok", "keys": ["agent.character"]]) }
+        StubURLProtocol.on("POST", "/v1/familiar/emotion/adopted") { _ in StubURLProtocol.json(200, ["status": "ok"]) }
+    }
 
     static func stubHappyTokenPath() {
         StubURLProtocol.on("POST", "/v1/me/tokens") { _ in

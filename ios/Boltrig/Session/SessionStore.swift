@@ -27,6 +27,8 @@ final class SessionStore: ObservableObject {
     @Published var errorMessage: String?
     @Published private(set) var instanceURL: URL
     @Published var isBusy = false
+    /// Shown once after the phone has switched the account's companion to Familiar.
+    @Published var familiarAdoptedNotice: String?
 
     private let vault: SessionVault
     private let configuration: URLSessionConfiguration
@@ -73,7 +75,7 @@ final class SessionStore: ObservableObject {
         state = .restoring
         do {
             let account = try await tokenClient(stored.secret).account()
-            state = .signedIn(account)
+            state = .signedIn(await adoptFamiliarIfNeeded(account, client: tokenClient(stored.secret)))
         } catch let error as BoltrigError {
             switch error.kind {
             case .unauthenticated, .forbidden:
@@ -226,6 +228,29 @@ final class SessionStore: ObservableObject {
         await restore()
     }
 
+    // MARK: Familiar only
+
+    /// Boltrig for iPhone ships Familiar. An account whose companion is unset or is another
+    /// character is switched to Familiar here, once, so the same companion speaks on every
+    /// surface. The setting is the person's own (workspace-scoped); the phone writes it, then
+    /// tells the companion's inner life, then re-reads the account. A failed write is reported
+    /// plainly and retried on the next launch; it never blocks signing in.
+    func adoptFamiliarIfNeeded(_ account: Account, client: BoltrigClient) async -> Account {
+        guard account.companionPresence.needsAdoption else { return account }
+        do {
+            try await client.putSettings(["agent.character": CompanionPresence.familiarID])
+            try? await client.announceAdopted(character: CompanionPresence.familiarID)
+            familiarAdoptedNotice = "Boltrig for iPhone uses Familiar. Familiar is now your companion everywhere."
+            if let refreshed = try? await client.account() {
+                return refreshed
+            }
+            return account
+        } catch {
+            familiarAdoptedNotice = "Boltrig could not set Familiar as your companion. It will try again next time."
+            return account
+        }
+    }
+
     // MARK: Internals
 
     private func route(_ outcome: SignInOutcome) async {
@@ -256,7 +281,7 @@ final class SessionStore: ObservableObject {
             try? await sessionClient.logout()
             signInSession = nil
             let account = try await tokenClient(minted.secret).account()
-            state = .signedIn(account)
+            state = .signedIn(await adoptFamiliarIfNeeded(account, client: tokenClient(minted.secret)))
         } catch let error as BoltrigError {
             switch error.kind {
             case .passwordChangeRequired:

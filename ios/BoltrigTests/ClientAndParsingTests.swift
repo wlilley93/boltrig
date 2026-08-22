@@ -52,14 +52,19 @@ final class ClientAndParsingTests: XCTestCase {
         XCTAssertEqual(account.initials, "AL")
         XCTAssertEqual(account.activeWorkspaceID, "ws1")
         XCTAssertTrue(account.onboardingComplete)
-        XCTAssertEqual(account.characterID, "ultron")
+        XCTAssertEqual(account.characterID, "familiar")
+        XCTAssertEqual(account.companionPresence, .familiar)
 
         var fresh = Fixtures.settings
         fresh["settings"] = [:]
         fresh["profile"] = ["id": "u2", "email": "grace.hopper@example.com", "display_name": ""]
         let bare = try Account.decode(try JSONSerialization.data(withJSONObject: fresh))
         XCTAssertFalse(bare.onboardingComplete)
-        XCTAssertEqual(bare.companionName, "Familiar")
+        XCTAssertNil(bare.characterID)
+        XCTAssertEqual(bare.companionPresence, .unset)
+        XCTAssertTrue(bare.companionPresence.needsAdoption)
+        XCTAssertEqual(CompanionPresence(characterID: "another-character"), .other)
+        XCTAssertEqual(CompanionPresence(characterID: "familiar"), .familiar)
         XCTAssertEqual(bare.nameForDisplay, "grace.hopper@example.com")
         XCTAssertEqual(bare.initials, "GH")
     }

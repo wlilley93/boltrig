@@ -46,8 +46,9 @@ struct Account: Equatable {
     let activeWorkspaceID: String?
     /// The web app's first-run flow has been completed for this account.
     let onboardingComplete: Bool
-    /// The companion chosen during onboarding: familiar, jarvis, ultron or colossus.
-    let characterID: String
+    /// The companion id stored on the account, or nil when none is set yet. The phone
+    /// never displays an id: see `CompanionPresence`.
+    let characterID: String?
 
     var nameForDisplay: String {
         displayName.isEmpty ? email : displayName
@@ -61,13 +62,8 @@ struct Account: Equatable {
         return String(letters).uppercased()
     }
 
-    var companionName: String {
-        switch characterID {
-        case "jarvis": return "Jarvis"
-        case "ultron": return "Ultron"
-        case "colossus": return "Colossus"
-        default: return "Familiar"
-        }
+    var companionPresence: CompanionPresence {
+        CompanionPresence(characterID: characterID)
     }
 
     /// Decodes the `/v1/me/settings` body: profile, active workspace and a settings bag
@@ -93,7 +89,10 @@ struct Account: Equatable {
             role: profile["role"] as? String ?? "",
             activeWorkspaceID: root["active_workspace_id"] as? String,
             onboardingComplete: onboardingVersion >= 1,
-            characterID: settings["agent.character"] as? String ?? "familiar"
+            characterID: (settings["agent.character"] as? String).flatMap { value in
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                return trimmed.isEmpty ? nil : trimmed
+            }
         )
     }
 }

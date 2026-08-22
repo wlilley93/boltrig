@@ -38,8 +38,13 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 4)
 
-                    LabelValueRow(label: "Companion", value: store.account.companionName)
+                    LabelValueRow(label: "Companion", value: "Familiar")
                     LabelValueRow(label: "Connected to", value: store.isPreview ? "Preview" : session.instanceLabel)
+                    if let notice = session.familiarAdoptedNotice {
+                        Text(notice)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                     if !store.account.onboardingComplete && !store.isPreview {
                         Text("Finish setting up on the web to choose your companion and connect a provider.")
                             .font(.footnote)
