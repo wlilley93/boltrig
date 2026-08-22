@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 
 struct ChatView: View {
@@ -45,6 +46,11 @@ private struct ChatThread: View {
     @Binding var draft: String
     var isComposerFocused: FocusState<Bool>.Binding
     let onOpenToday: () -> Void
+    @State private var showAddSheet = false
+    @State private var showPhotos = false
+    @State private var showFiles = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var photoCount = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -147,7 +153,47 @@ private struct ChatThread: View {
                     .padding(.horizontal, 14)
                 }
             }
+            if let notice = chat.attachmentNotice {
+                Text(notice).font(.footnote).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14)
+            } else if !chat.attachments.isEmpty {
+                Text(ChatSession.attachmentsFootnote).font(.footnote).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14)
+            }
             HStack(alignment: .bottom, spacing: 9) {
+                Button { showAddSheet = true } label: {
+                    Image(systemName: "plus").font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 42, height: 42)
+                        .background(BoltrigTheme.card, in: Circle())
+                }
+                .disabled(chat.isSending || chat.isReconnecting)
+                .accessibilityLabel("Add a photo or file")
+                .confirmationDialog("Add to this message", isPresented: $showAddSheet, titleVisibility: .visible) {
+                    Button("Choose a photo") { showPhotos = true }
+                    Button("Choose a file") { showFiles = true }
+                }
+                .photosPicker(isPresented: $showPhotos, selection: $photoItem, matching: .images)
+                .fileImporter(isPresented: $showFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+                    guard case let .success(urls) = result else { return }
+                    for url in urls { chat.attach(AttachmentImporter.file(at: url, limits: chat.limits)) }
+                }
+                .onChange(of: photoItem) { _, item in
+                    guard let item else { return }
+                    photoItem = nil
+                    photoCount += 1
+                    let name = "Photo \(photoCount).jpg"
+                    Task {
+                        guard let raw = try? await item.loadTransferable(type: Data.self) else {
+                            chat.attach(.refused("That photo could not be read."))
+                            return
+                        }
+                        let outcome = await Task.detached(priority: .userInitiated) {
+                            AttachmentImporter.photo(raw, name: name, limits: await chat.limits)
+                        }.value
+                        chat.attach(outcome)
+                    }
+                }
                 TextField("Ask Boltrig", text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...5)
