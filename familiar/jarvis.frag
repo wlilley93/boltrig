@@ -252,9 +252,9 @@ const float R_HAIRCIRC  = 0.250;  // the one complete, unbroken circle
 const float R_GAUGE     = 0.288;  // fine tick gauge + the working sweep
 const float R_ARC1      = 0.322;
 const float R_ARC2      = 0.368;
-const float R_COIL_IN   = 0.296;  // arc-reactor coil pack, inner edge
-const float R_COIL_OUT  = 0.318;  // arc-reactor coil pack, outer edge
-const float R_CONTAIN   = 0.386;  // containment ring, between ARC2 and OUTER
+const float R_COIL_IN   = 0.296;  // arc-reactor coil packs, inner edge
+const float R_COIL_OUT  = 0.318;  // ... outer edge; sits in the gauge->arc1 gap
+const float R_CONTAIN   = 0.386;  // containment band, in the arc2->outer gap
 const float R_OUTER     = 0.403;  // outermost ring; the labels sit on it
 const float R_SWEEP_OUT = 0.462;  // the listening sweep runs PAST the outer ring
 const float R_SPOKE_IN  = 0.258;  // resting long-spoke layer, inner end
@@ -381,12 +381,10 @@ float tickRing(float turn, float r, float t, float r0, float len, float n,
     return lineAA(u * TAU * r, halfW) * bandAA(r, r0, r0 + len);
 }
 
-// Arc-reactor coil packs: n winding blocks standing in a radial band.
-//
-// The striation across the band is the whole point. A block of solid colour at
-// this radius is just a fat dash; ribbed across its width it reads as wound
-// wire, which is the one detail that makes the dial an arc reactor rather than
-// another ring of arcs.
+// Arc-reactor coil packs: n blocks standing across a radial band, each carrying
+// fine windings. The windings are a cosine across the band rather than a texture
+// so they stay crisp at any scale, and they never reach zero - a coil reads as a
+// wound block, not as a set of separate wires.
 float coilPack(float turn, float r, float t, float rIn, float rOut, float n,
                float speed, float duty) {
     float rot  = turn - t * speed;
@@ -394,8 +392,8 @@ float coilPack(float turn, float r, float t, float rIn, float rOut, float n,
     float edge = duty * 0.5 / n;
     float body = lineAA(u * TAU * r, edge * TAU * r) * bandAA(r, rIn, rOut);
     float span = max(rOut - rIn, 1e-4);
-    float wind = 0.5 + 0.5 * cos((r - rIn) / span * TAU * 6.0);
-    return body * mix(0.42, 1.0, wind);
+    float wind = 0.5 + 0.5 * cos((r - rIn) / span * TAU * 7.0);
+    return body * mix(0.58, 1.0, wind);
 }
 
 // =============================================================================
@@ -803,21 +801,14 @@ void main() {
                               gene(G_ARC2_FILL) > 0.01 ? gene(G_ARC2_FILL) : 0.50) * 0.65;
 
     // -- arc-reactor coil packs ----------------------------------------------
-    // Ten blocks in the gap the gauge and the first arc ring leave. They turn
-    // at half the first arc ring's rate, so the dial gains a layer that is
-    // clearly geared to the others rather than drifting on its own.
-    SMEAR = smearAt(W_ARC1 * 0.5, R_COIL_IN);
+    // Ten winding blocks in the gap between the gauge and the first arc ring.
+    // Ten is the reactor's own count. They lift with `level`, so the coils are
+    // brightest when the voice is, and they take accent-to-white rather than the
+    // copper of the reference: a second hue would read as a state change.
+    SMEAR = smearAt(W_ARC1 * 0.5, R_COIL_OUT);
     float coil = coilPack(turn, rrJ, spin, R_COIL_IN, R_COIL_OUT, 10.0,
-                          W_ARC1 * 0.5, 0.54);
-    col += mix(accent, accHi, 0.30) * coil * 0.42 * (0.72 + 0.50 * level);
-
-    // -- core halo -------------------------------------------------------------
-    // The reference's centre is its brightest point; this dial's was not. Three
-    // hairlines rather than a glow, because a bloom here would wash the iris.
-    float halo = lineAA(rrJ - 0.038, 0.0012)
-               + lineAA(rrJ - 0.058, 0.0011) * 0.72
-               + lineAA(rrJ - 0.078, 0.0010) * 0.48;
-    col += mix(accent, vec3(1.0), 0.55) * halo * 0.30 * (0.60 + 0.60 * level);
+                          W_ARC1 * 0.5, 0.52);
+    col += mix(accent, accHi, 0.40) * coil * 0.42 * (0.70 + 0.55 * level);
 
     // The outermost ring is the "signal" ring: with no live relay behind the
     // phenotype it falls away to almost nothing, so an unfed instrument looks
@@ -828,14 +819,25 @@ void main() {
     col += accent * bandAA(rrJ, R_OUTER - 0.004, R_OUTER + 0.004)
                   * chunkRing(turn, spin, R_OUTER, 22.0, W_OUTER, 3.0 + chunkSeed, 0.42) * 0.55 * sig;
 
-    // -- containment ring ------------------------------------------------------
-    // Fine and dense, sitting between the second arc ring and the outer one. It
-    // carries `sig` deliberately: an instrument with no live phenotype behind it
-    // should lose its containment too, not keep a full reactor shell.
+    // -- containment band ------------------------------------------------------
+    // A dense, near-continuous band outside the coils - the reactor's electron
+    // sink. Multiplied by `sig` like the outer ring, so an unfed instrument
+    // shows a faint containment ring rather than a confident one.
     SMEAR = smearAt(W_OUTER * 0.4, R_CONTAIN);
     col += accent * bandAA(rrJ, R_CONTAIN - 0.005, R_CONTAIN + 0.005)
-                  * dashRing(turn, spin, R_CONTAIN, 44.0, 0.70, W_OUTER * 0.4)
+                  * dashRing(turn, spin, R_CONTAIN, 44.0, 0.74, W_OUTER * 0.4)
                   * 0.26 * sig;
+
+    // -- core halo -------------------------------------------------------------
+    // Three concentric hairlines inside the iris, brightest at the middle, so the
+    // centre reads as a lit well rather than a dot. Unrolled deliberately: a
+    // constant-bounds loop is the sort of thing that compiles here and not on a
+    // phone.
+    SMEAR = 0.0;
+    float halo = lineAA(rrJ - 0.038, 0.0013) * 1.00
+               + lineAA(rrJ - 0.058, 0.0011) * 0.72
+               + lineAA(rrJ - 0.078, 0.0009) * 0.48;
+    col += mix(accent, vec3(1.0), 0.55) * halo * 0.30 * (0.60 + 0.60 * level);
 
     // -- sparse long markers on the outer ring --------------------------------
     col += accent * tickRing(turn, rrJ, spin, R_ARC2 + 0.012, 0.022, 24.0, W_ARC2, 0.0008)
