@@ -1,6 +1,21 @@
 /* Familiar Stage (ADR 0025). The stage is a square viewport for the WebGL body;
  * presentation modes size it, the canvas always fills it. The body draws on
- * transparency, so the surrounding view keeps its own background. */
+ * transparency — and the surfaces AROUND it go true black below. */
+
+/* FULL BLACK BEHIND HER — bench parity, by request. Her canon body is a film
+ * composited over darkness: any grey behind the orb reads as a frame around
+ * her rather than as space. Whenever her stage is on a surface, that surface's
+ * whole canvas paints #000 in BOTH themes — the film's darkness is her ground,
+ * not a theme preference. !important because the theme parity rules
+ * (ChatViewParity.css and friends) select these same containers with higher
+ * specificity, and this must win regardless of import order. */
+.worker-shell:has(.familiar-stage),
+.surface:has(.familiar-stage),
+.chat-layout:has(.familiar-stage),
+.chat-main:has(.familiar-stage),
+.voice-call-screen:has(.familiar-stage) {
+  background: #000 !important;
+}
 
 .familiar-stage {
   position: relative;

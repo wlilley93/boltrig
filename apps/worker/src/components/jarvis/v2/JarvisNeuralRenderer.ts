@@ -57,7 +57,6 @@
 //   BLOOM            bright-pass then a separable Gaussian at half resolution.
 //                    Additive lines alone are thin and mean.
 
-
 import {
   RESTING_PHENOTYPE,
   jarvisEmotion,
@@ -77,8 +76,11 @@ import {
 import {
   JARVIS_ARRIVAL,
   JARVIS_PULSES,
+  JARVIS_SPEECH,
   jarvisModeTuning,
 } from "../../canvas/bodyPresets";
+import { SpeechReach } from "../../canvas/speechReach";
+import { fitCanvasToHost } from "../../canvas/fitCanvas";
 import type { JarvisStageState } from "../JarvisState";
 import type { FloatUniforms } from "../../canvas/glResources";
 import { NeuralPasses } from "./neuralPasses";
@@ -133,6 +135,8 @@ export class JarvisNeuralRenderer {
    */
   private introLeft = 0;
   private live: JarvisTuning = JARVIS_ARRIVAL;
+  /** The syllable meter and reach ride — see canvas/speechReach.ts. */
+  private speech = new SpeechReach();
   /** A bench override. Null means follow the mode, which is the shipped path. */
   private tuning: JarvisTuning | null = null;
   /** The baked loops' source, held until the passes exist to receive it. */
@@ -214,7 +218,6 @@ export class JarvisNeuralRenderer {
     this.tuning = next;
     this.introLeft = Math.max(this.introLeft, seconds);
   }
-
 
   mount(host: HTMLElement): void {
     this.host = host;
@@ -322,6 +325,10 @@ export class JarvisNeuralRenderer {
     // An explicit bench override replaces the target outright, which is why
     // dragging a slider is instant.
     const mode = this.state?.mode ?? "standby";
+    // The syllable meter runs on whatever voice is live (the app folds the mic
+    // into `level` outside speaking, and the body answering what it hears is
+    // this look's design).
+    this.speech.advance(this.state?.level ?? 0);
     let shown = this.live;
     if (this.introLeft > 0 && !this.reducedMotion) {
       // THE DRAW-IN, and it outranks a pinned tuning for as long as it lasts. The
@@ -347,7 +354,10 @@ export class JarvisNeuralRenderer {
         : easeTuning(this.live, target, easeFactor(this.clock.easeDt));
       shown = this.reducedMotion
         ? this.live
-        : applyPulses(this.live, JARVIS_PULSES[mode], this.clock.animClock);
+        : this.speech.apply(
+          applyPulses(this.live, JARVIS_PULSES[mode], this.clock.animClock),
+          JARVIS_SPEECH,
+        );
     }
     // PRESENCE scales the whole composite: the simulation's home radius and
     // the baked layer read the same number, so body and footage stay one piece.
@@ -366,21 +376,13 @@ export class JarvisNeuralRenderer {
   }
 
   private resize(): void {
-    const canvas = this.canvas;
-    const host = this.host;
-    if (!canvas || !host || !this.passes) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, this.opts.maxDevicePixelRatio ?? 1.5);
-    const w = Math.max(1, Math.round(host.clientWidth * dpr));
-    const h = Math.max(1, Math.round(host.clientHeight * dpr));
-    if (w === this.size[0] && h === this.size[1]) return;
-    this.size = [w, h];
-    canvas.width = w;
-    canvas.height = h;
-    this.passes.resize(w, h);
+    if (!this.canvas || !this.host || !this.passes) return;
+    const next = fitCanvasToHost(
+      this.canvas, this.host, this.opts.maxDevicePixelRatio ?? 1.5, this.size);
+    if (!next) return;
+    this.size = next;
+    this.passes.resize(next[0], next[1]);
   }
-
-  /** What the frame is driven by, derived once and shared by every pass. */
-
 
   private loop = (): void => {
     this.raf = requestAnimationFrame(this.loop);

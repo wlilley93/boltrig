@@ -45,6 +45,7 @@ import {
   ULTRON_ARRIVAL,
   familiarModeTuning,
   jarvisModeTuning,
+  jarvis1ModeTuning,
   ultronModeTuning,
 } from "../../src/components/canvas/bodyPresets";
 import { FamiliarWebGLRenderer } from "../../src/components/familiar/FamiliarWebGLRenderer";
@@ -52,9 +53,12 @@ import { FAMILIAR_MODES } from "../../src/components/familiar/FamiliarState";
 import { JarvisNeuralRenderer } from "../../src/components/jarvis/v2/JarvisNeuralRenderer";
 import { UltronRenderer } from "../../src/components/ultron/UltronRenderer";
 import { ColossusRenderer } from "../../src/components/colossus/ColossusRenderer";
+import {
+  colossusModeTuning, type ColossusTuning,
+} from "../../src/components/colossus/colossusTuning";
 import { JarvisWebGLRenderer } from "../../src/components/jarvis/JarvisRenderer";
 
-type Tuning = FamiliarTuning | JarvisTuning | UltronTuning;
+type Tuning = FamiliarTuning | JarvisTuning | UltronTuning | ColossusTuning;
 type Mode = "standby" | "listening" | "thinking" | "working" | "speaking" | "error";
 
 /**
@@ -94,6 +98,8 @@ const LEGEND: Record<string, readonly string[]> = {
   latticeSat: ["level"],
   latticeGlow: ["amount"],
   latticeSpeed: ["×realtime"],
+  bounce: ["amount", "speed"],
+  bounceTrail: ["persistence"],
   // ---- Jarvis: the wheels -------------------------------------------------
   ringGain: ["brightness", "×voice"],
   ringSpin: ["spin SPEED", "precess SPEED"],
@@ -186,6 +192,17 @@ const LEGEND: Record<string, readonly string[]> = {
   wander: ["ease SECONDS", "dwell SECONDS"],
   gesture: ["min gap SECONDS", "max gap SECONDS"],
   errorTone: ["tension", "light left"],
+  // ---- Colossus: the sign -------------------------------------------------
+  energy: ["base drive", "×voice"],
+  voice: ["floor while speaking", "idle bleed"],
+  ticker: ["pace CELLS/S", "×voice"],
+  tickerScale: ["glyph scale"],
+  pitch: ["lamps across"],
+  curve: ["glass curve"],
+  decay: ["persistence"],
+  bloom: ["base", "×voice"],
+  vignette: ["corner falloff"],
+  counter: ["step threshold", "glow fade"],
   ...Object.fromEntries(PHENOTYPE_SCALARS
     .map((k) => [`pheno.${k}`, ["0 = none, 1 = full"]])),
 };
@@ -200,8 +217,20 @@ const LEGEND: Record<string, readonly string[]> = {
  * exact look the arc gating exists to break, and unreachable from the panel.
  */
 const RANGE_AT: Record<string, [number, number, number]> = {
+  // Colossus: pace and its ×voice are cells/second; the counter's halves are
+  // a 0..1 onset threshold and a per-second fade — different kinds of number.
+  "ticker:1": [0, 40, 0.5],
+  "counter:0": [0.05, 1, 0.01],
+  "counter:1": [0.5, 10, 0.1],
   "clump:1": [0.4, 8, 0.05],
   "focus:0": [0, 2, 0.01],
+  // Slight is the brief: 0.06 of the frame is already a hop, not a bob.
+  // The gain slider capped at the [0,1] fallback while the canon look sits at
+  // 1.18 — "brighter" was unreachable by dial. Real headroom for both halves.
+  "shardGain:0": [0, 4, 0.02],
+  "shardGain:1": [0, 2, 0.02],
+  "bounce:0": [0, 0.06, 0.001],
+  "bounce:1": [0, 3, 0.01],
   // Fractional on purpose: an integer dial jumped, and easing between modes
   // stepped through the counts in between instead of gliding.
   "ringArc:0": [0.25, 9, 0.05],
@@ -210,6 +239,17 @@ const RANGE_AT: Record<string, [number, number, number]> = {
   // gain that makes them lead was not reachable from the panel at all.
   "dendriteGain:0": [0, 3, 0.05],
   "dendriteGain:1": [0, 2, 0.05],
+  // The pupil and iris terms measured 2.2 and 1.8 in canon — both past the
+  // old fallback cap.
+  // FINE POINTS, NOT BLURS: the marks' height and width need a floor and a
+  // step fine enough to sharpen back down — the fallback scale could only
+  // make smudges bigger.
+  "glyphSize:0": [0.002, 0.12, 0.0005],
+  "glyphSize:1": [0.0003, 0.02, 0.0001],
+  "glyphBSize:0": [0.002, 0.12, 0.0005],
+  "glyphBSize:1": [0.0003, 0.02, 0.0001],
+  "eye:0": [0, 4, 0.02],
+  "eye:1": [0, 4, 0.02],
   "eye:2": [0, 1.2, 0.01],
   // An EXPONENT, not a gain: 60 is tight and 8 is broad, so it needs a range of
   // its own or the slider tops out an order of magnitude below anything useful.
@@ -222,13 +262,38 @@ const RANGE_AT: Record<string, [number, number, number]> = {
 
 /** Slider ranges. A number with no entry gets 0..1, which is right for a gain. */
 const RANGE: Record<string, [number, number, number]> = {
+  // THE GAIN SWEEP. Every gain used to ride the [0,1] fallback, and the canon
+  // wears the proof: peaks pinned at exactly 1.0 on ringGain, drawGain, core,
+  // glyphGain and starburst (a value stuck at a wall is a capped dial), with
+  // irisGain 1.1, outerGain 1.2, lattice 1.44 and the shards 1.18 already
+  // PAST it. One uniform scale — 0..3, 0.02 — so brighter is always on the
+  // slider and equal travel means equal meaning across strips.
+  ringGain: [0, 3, 0.02],
+  glyphGain: [0, 3, 0.02],
+  glyphBGain: [0, 3, 0.02],
+  irisGain: [0, 3, 0.02],
+  linkGain: [0, 3, 0.02],
+  veinGain: [0, 3, 0.02],
+  crackGain: [0, 3, 0.02],
+  facetGain: [0, 3, 0.02],
+  drawGain: [0, 3, 0.02],
+  outerGain: [0, 3, 0.02],
+  core: [0, 3, 0.02],
+  voiceLevel: [0, 2, 0.01],
+  voiceLow: [0, 2, 0.01],
+  voiceMid: [0, 2, 0.01],
+  voiceHigh: [0, 2, 0.01],
   linkRange: [0.02, 0.60, 0.005],
   crackRange: [0.02, 0.60, 0.005],
-  shardSize: [0.002, 0.06, 0.001],
+  // The floor and step were the whole problem: canon shards live at
+  // 0.003–0.006, which the old [0.002 min, 0.001 step] scale covered in
+  // three clicks and could barely go below. Finer, lower, and no dead top.
+  shardSize: [0.0005, 0.03, 0.0002],
   facetSize: [0.002, 0.06, 0.001],
   shardStride: [1, 64, 1],
   clump: [0, 1, 0.005],
-  lattice: [0, 2, 0.01],
+  lattice: [0, 3, 0.01],
+  bounceTrail: [0, 0.95, 0.01],
   latticeBlur: [0, 1, 0.01],
   latticeSat: [0, 2, 0.01],
   latticeGlow: [0, 1, 0.01],
@@ -277,7 +342,7 @@ const RANGE: Record<string, [number, number, number]> = {
   bead: [1, 24, 0.5],
   signal: [0, 3, 0.02],
   arc: [0, 3.2, 0.02],
-  starburst: [0, 1, 0.01],
+  starburst: [0, 2, 0.01],
   streak: [0, 0.4, 0.002],
   veinStreak: [0, 0.4, 0.002],
   // The limb pair wants headroom: the fix for "it reads as fur" was taking the
@@ -318,6 +383,17 @@ const RANGE: Record<string, [number, number, number]> = {
   errorTone: [0, 1, 0.01],
   arousalLift: [0, 1, 0.01],
   gaze: [0, 1, 0.01],
+  // ---- Colossus: the sign ------------------------------------------------
+  energy: [0, 1, 0.01],
+  voice: [0, 1, 0.01],
+  ticker: [0, 60, 0.5],
+  tickerScale: [0.8, 4, 0.02],
+  pitch: [40, 400, 2],
+  curve: [0, 0.25, 0.001],
+  decay: [0, 0.98, 0.01],
+  bloom: [0, 1.5, 0.01],
+  vignette: [0, 1, 0.01],
+  counter: [0, 10, 0.1],
 };
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -350,7 +426,23 @@ type LfoMap = Record<string, Lfo>;
 let lfos: LfoMap = {};
 const lfoKey = (field: string, index: number): string => `${field}:${index}`;
 /** The DOM the LFO has to move, so a swept value is visible and not just felt. */
-const sliderDom: Record<string, { input: HTMLInputElement; out: HTMLElement }> = {};
+/** Every card slider registers here with `set`, the ONE way to write it
+ *  from outside: sliders live in curved position space (travel spent where
+ *  the response is), and `set` encodes value → position so sweeps, journeys
+ *  and mirrors never need to know the curve exists. */
+const sliderDom: Record<string, {
+  input: HTMLInputElement; out: HTMLElement; set?: (value: number) => void;
+}> = {};
+
+function writeSlider(dom: { input: HTMLInputElement; out: HTMLElement; set?: (value: number) => void },
+  value: number): void {
+  if (dom.set) {
+    dom.set(value);
+  } else {
+    dom.input.value = String(value);
+    dom.out.textContent = value.toFixed(3);
+  }
+}
 
 /**
  * A tuning survives a reload, and can be handed to someone else as a link.
@@ -380,21 +472,38 @@ function storeNewest(key: string): SavedVersion | null {
  * shipped table. The store steps make "Save preset" the publishing act: what
  * was last locked in is what a fresh browser opens on, without a force-URL.
  */
+/**
+ * Only the fields the SHIPPED struct declares survive a load. A stored blob
+ * can carry another body's fields — an autosave that fired across a body
+ * switch once wrote jarvis's dials into familiar.standby, and the plain
+ * spread then resurrected the union on every load, so her desk grew seven of
+ * his strips. The shipped struct is the authority on what this body IS.
+ */
+function ownFields(shipped: Tuning, stored: unknown): Partial<Tuning> {
+  if (typeof stored !== "object" || stored === null) return {};
+  const keep: Record<string, unknown> = {};
+  for (const key of Object.keys(shipped)) {
+    const value = (stored as Record<string, unknown>)[key];
+    if (value !== undefined) keep[key] = value;
+  }
+  return keep as Partial<Tuning>;
+}
+
 function saved(name: string, shipped: Tuning): Tuning {
   const fromUrl = new URLSearchParams(location.search).get(name);
   const raw = fromUrl ?? localStorage.getItem(storageKey(name));
   if (raw) {
     try {
-      return { ...clone(shipped), ...JSON.parse(raw) } as Tuning;
+      return { ...clone(shipped), ...ownFields(shipped, JSON.parse(raw)) } as Tuning;
     } catch {
       return clone(shipped);
     }
   }
   const version = storeNewest(name);
-  if (version?.tuning) return { ...clone(shipped), ...version.tuning } as Tuning;
+  if (version?.tuning) return { ...clone(shipped), ...ownFields(shipped, version.tuning) } as Tuning;
   const which = name.slice(0, name.indexOf("."));
   const base = storeNewest(`${which}.baseline`);
-  if (base?.tuning) return { ...clone(shipped), ...base.tuning } as Tuning;
+  if (base?.tuning) return { ...clone(shipped), ...ownFields(shipped, base.tuning) } as Tuning;
   return clone(shipped);
 }
 
@@ -433,6 +542,18 @@ function savedLfos(name: string): LfoMap {
  * and settles back to exactly what was tuned.
  */
 let speech: Record<string, number> = {};
+/**
+ * PER-VALUE ADSR, shaping the ×voice journey. [attack, decay, sustain,
+ * release] — seconds, seconds, level 0..1, seconds. A value with an envelope
+ * no longer rides the syllable meter directly: each syllable GATES it, so a
+ * blown-out shell radius can snap out and pump back like a speaker cone.
+ * Keyed like the reach; saved with the look.
+ */
+let adsr: Record<string, [number, number, number, number]> = {};
+/** Live envelope integrators, monitor-side only. */
+const envState: Record<string, { level: number; stage: "idle" | "attack" | "decay" | "sustain" | "release" }> = {};
+let envGate = false;
+let envClock = 0;
 /** Smoothed syllable envelope, 0..1 — fast up, slow down, like a VU needle. */
 let speechEnv = 0;
 let speechShown = 0;
@@ -445,6 +566,78 @@ function rememberSpeech(): void {
     // A full or blocked store is not a reason to stop rendering.
   }
   scheduleAutosave();
+}
+
+/**
+ * Advance every gated envelope one frame. The syllable meter is the GATE —
+ * with hysteresis, so a held vowel is one gate and the gap between words is a
+ * release — and each value's [attack, decay, sustain, release] shapes what
+ * its journey does inside that gate. Returns whether anything moved enough
+ * to be worth a push.
+ */
+function tickAdsr(nowMs: number): boolean {
+  const dt = Math.min(0.1, Math.max(0.001, (nowMs - envClock) / 1000));
+  envClock = nowMs;
+  envGate = speechEnv > (envGate ? 0.16 : 0.3);
+  let moved = false;
+  for (const [id, shape] of Object.entries(adsr)) {
+    if (speech[id] === undefined) continue;
+    const [a, d, s, r] = shape;
+    const st = envState[id] ?? (envState[id] = { level: 0, stage: "idle" });
+    const was = st.level;
+    if (envGate) {
+      if (st.stage === "idle" || st.stage === "release") st.stage = "attack";
+      if (st.stage === "attack") {
+        st.level += dt / Math.max(a, 0.005);
+        if (st.level >= 1) {
+          st.level = 1;
+          st.stage = "decay";
+        }
+      } else if (st.stage === "decay") {
+        st.level -= dt * (1 - s) / Math.max(d, 0.005);
+        if (st.level <= s) {
+          st.level = s;
+          st.stage = "sustain";
+        }
+      } else if (st.stage === "sustain") {
+        st.level = s;
+      }
+    } else if (st.level > 0) {
+      st.stage = "release";
+      st.level = Math.max(0, st.level - dt / Math.max(r, 0.005));
+      if (st.level === 0) st.stage = "idle";
+    }
+    if (Math.abs(st.level - was) > 0.002) moved = true;
+  }
+  return moved;
+}
+
+function rememberAdsr(): void {
+  try {
+    localStorage.setItem(storageKey(`${slotKey(body, slot)}.adsr`), JSON.stringify(adsr));
+  } catch {
+    // A full or blocked store is not a reason to stop rendering.
+  }
+  scheduleAutosave();
+}
+
+function savedAdsr(name: string): Record<string, [number, number, number, number]> {
+  const raw = localStorage.getItem(storageKey(`${name}.adsr`));
+  if (raw) {
+    try {
+      return JSON.parse(raw) as Record<string, [number, number, number, number]>;
+    } catch {
+      return {};
+    }
+  }
+  // The envelopes travel with the look: same chain as savedSpeech().
+  const version = storeNewest(name) as
+    { adsr?: Record<string, [number, number, number, number]> } | undefined;
+  if (version) return { ...(version.adsr ?? {}) };
+  const which = name.slice(0, name.indexOf("."));
+  const base = storeNewest(`${which}.baseline`) as
+    { adsr?: Record<string, [number, number, number, number]> } | undefined;
+  return { ...(base?.adsr ?? {}) };
 }
 
 function savedSpeech(name: string): Record<string, number> {
@@ -464,12 +657,91 @@ function savedSpeech(name: string): Record<string, number> {
   return { ...(base?.speech ?? {}) };
 }
 
+/**
+ * UNDO, per gesture. Autosave replaces itself, so the store's history only
+ * holds deliberate checkpoints — it cannot answer "put back what I had three
+ * touches ago". This stack can: a snapshot is taken at the START of each edit
+ * burst (600ms of quiet ends one), Ctrl+Z or ↩ walks back through them. It
+ * lives for the current tab of the current body and clears on switch —
+ * predictable beats deep.
+ */
+type UndoSnap = {
+  tuning: Tuning;
+  lfos: LfoMap;
+  speech: Record<string, number>;
+  adsr: Record<string, [number, number, number, number]>;
+};
+const undoStack: UndoSnap[] = [];
+let undoSettled: UndoSnap | null = null;
+let undoEditAt = 0;
+let undoSettleTimer = 0;
+/** True while a restore (or a state/body load) writes through remember():
+ *  those writes are not gestures and must not feed the stack. */
+let undoSuppress = false;
+
+function undoSnap(): UndoSnap {
+  return {
+    tuning: clone(tuning),
+    lfos: JSON.parse(JSON.stringify(lfos)) as LfoMap,
+    speech: { ...speech },
+    adsr: JSON.parse(JSON.stringify(adsr)) as UndoSnap["adsr"],
+  };
+}
+
+function undoResetBaseline(): void {
+  undoStack.length = 0;
+  undoSettled = undoSnap();
+}
+
+function undoMark(): void {
+  if (undoSuppress) return;
+  const now = performance.now();
+  if (now - undoEditAt > 600 && undoSettled) {
+    undoStack.push(undoSettled);
+    if (undoStack.length > 50) undoStack.shift();
+  }
+  undoEditAt = now;
+  window.clearTimeout(undoSettleTimer);
+  undoSettleTimer = window.setTimeout(() => { undoSettled = undoSnap(); }, 700);
+}
+
+function undoPop(): void {
+  const snap = undoStack.pop();
+  if (!snap) {
+    $("saved").textContent = "nothing to undo";
+    $("saved").className = "";
+    return;
+  }
+  tuning = clone(snap.tuning);
+  lfos = { ...snap.lfos };
+  speech = { ...snap.speech };
+  adsr = { ...snap.adsr };
+  undoSettled = undoSnap();
+  undoSuppress = true;
+  try {
+    buildControls();
+    remember(slotKey(body, slot), tuning);
+    rememberLfos();
+    rememberSpeech();
+    rememberAdsr();
+    push();
+  } finally {
+    undoSuppress = false;
+  }
+  paintMixerLevels();
+  paintMixer();
+  paintDrift();
+  $("saved").textContent = `undone — ${undoStack.length} step${undoStack.length === 1 ? "" : "s"} left`;
+  $("saved").className = "ok";
+}
+
 function remember(name: string, value: Tuning): void {
   try {
     localStorage.setItem(storageKey(name), JSON.stringify(value));
   } catch {
     // A full or blocked store is not a reason to stop rendering.
   }
+  undoMark();
   scheduleAutosave();
 }
 
@@ -493,7 +765,7 @@ async function autosaveNow(): Promise<void> {
       body: JSON.stringify({
         body, slot, tuning,
         lfos: Object.fromEntries(Object.entries(lfos).filter(([, l]) => l.on)),
-        speech,
+        speech, adsr,
         autosave: true,
       }),
     });
@@ -554,10 +826,17 @@ function transportSlots(): readonly Slot[] {
 
 /** The shipped numbers for a body and slot, before any local edit. */
 function shippedFor(which: Body, at: Slot): Tuning {
-  // A stability report does not come in an irritated variant: he has one
-  // register and therefore no numbers. Empty is the honest struct, and the
-  // dial builder generates nothing from it -- which is the correct panel.
-  if (which === "colossus" || which === "jarvis1") return {} as Tuning;
+  // His register in a sign's vocabulary: drive, voice, ticker, glass. The
+  // per-mode tables carry what the renderer used to hardcode, so the desk
+  // starts from exactly the panel that always shipped.
+  if (which === "colossus") {
+    return colossusModeTuning(
+      at === "arrival" || at === "error" ? "standby" : at,
+    );
+  }
+  // V1's surface in the V2 format: genes, accent, scale, bloom. One register,
+  // so every mode ships the base and the per-state saves diverge from there.
+  if (which === "jarvis1") return jarvis1ModeTuning("standby") as unknown as Tuning;
   if (at === "arrival") {
     if (which === "familiar") return FAMILIAR_ARRIVAL;
     return which === "jarvis" ? JARVIS_ARRIVAL : ULTRON_ARRIVAL;
@@ -606,8 +885,9 @@ function clone<T extends Tuning>(value: T): T {
  */
 function newRenderer(): FamiliarWebGLRenderer | JarvisNeuralRenderer | UltronRenderer | ColossusRenderer | JarvisWebGLRenderer {
   if (body === "familiar") return new FamiliarWebGLRenderer({ reducedMotion: false });
-  // The panel of lamps. One register, no tuning struct, no arrival -- but the
-  // same mount/update/frame contract, and drive()'s payload IS his state type.
+  // The panel of lamps. One register and no arrival -- but the same
+  // mount/update/frame contract, and since colossusTuning.ts a real tuning
+  // struct: drive, voice, sign and glass, mixable like any other body.
   if (body === "colossus") return new ColossusRenderer();
   // The original dial. Its rAF callback is a public-enough property named
   // `frame` that self-reschedules through the stubbed rAF, so the bench
@@ -694,6 +974,11 @@ window.requestAnimationFrame = (() => 0) as typeof window.requestAnimationFrame;
 
 function mount(): void {
   cancelLoop();
+  // A pending autosave belongs to the body that scheduled it. Left running
+  // across a switch it fires 1.5s later with the NEW slot key and the OLD
+  // body's numbers — which is exactly how jarvis's dials got written into
+  // familiar.standby.
+  window.clearTimeout(autosaveTimer);
   renderer?.destroy();
   const host = $("stage");
   host.innerHTML = "";
@@ -704,18 +989,25 @@ function mount(): void {
   // buffer across a wide window and every judgement made about her shape is
   // made about a distortion the app never renders.
   $("stage").classList.toggle("square", body === "familiar");
+  // Colossus is TUNABLE now — colossusTuning.ts gave him a struct — so the
+  // no-tuning veil comes off for every body. The class stays in the CSS for
+  // any future body that genuinely has no numbers.
+  document.body.classList.remove("no-tuning");
+  // Draw-in is the arrival journey; a body without an arrival has nothing to
+  // play, and a live-looking button that does nothing is a wiring bug.
+  ($("play") as HTMLButtonElement).disabled = !slotsFor(body).includes("arrival");
   renderer.mount(host);
   // The baked layer's loop, mounted whenever a body that has one is on stage.
   // Free until the lattice dial gives it gain; silently absent if the file is
   // not there.
   if (body === "jarvis") {
-    (renderer as JarvisNeuralRenderer).setLatticeVideo({
-      standby: "/tests/visual/assets/jarvis-lattice.mp4",
-      listening: "/tests/visual/assets/jarvis-lattice-listening.mp4",
-      thinking: "/tests/visual/assets/jarvis-lattice-thinking.mp4",
-      working: "/tests/visual/assets/jarvis-lattice-working.mp4",
-      speaking: "/tests/visual/assets/jarvis-lattice-speaking.mp4",
-    });
+    // ONE LOOP FOR EVERY STATE, deliberately: per-state footage crossfaded on
+    // a state change, and a fade between two spins of the same lattice reads
+    // as a glitch. The state's character rides latticeSpeed instead — the
+    // transition lerps it, so working→standby is the SAME video easing back
+    // down to its resting spin, never a dissolve.
+    (renderer as JarvisNeuralRenderer).setLatticeVideo(
+      "/tests/visual/assets/jarvis-lattice.mp4");
   } else if (body === "ultron") {
     (renderer as UltronRenderer).setLatticeVideo({
       standby: "/tests/visual/assets/ultron-membrane.mp4",
@@ -738,6 +1030,23 @@ function mount(): void {
   const status = renderer.status();
   if (status.state !== "running") {
     $("readout").textContent = `FAILED — ${status.reason ?? status.state}`;
+    // THE DESK STILL CHANGES BODY. Returning bare here left the PREVIOUS
+    // body's strips standing over the failed stage — and every dial touched
+    // then wrote the wrong body's fields into the new body's slot. The data
+    // half of the swap runs regardless; only the renderer-facing half waits.
+    shipped = shippedFor(body, slot);
+    tuning = saved(slotKey(body, slot), shipped);
+    for (const id of Object.keys(sliderDom)) delete sliderDom[id];
+    lfos = savedLfos(slotKey(body, slot));
+    speech = savedSpeech(slotKey(body, slot));
+    adsr = savedAdsr(slotKey(body, slot));
+    loadBaseline();
+    loadVolumes();
+    loadRack();
+    buildControls();
+    buildMixer();
+    paintHistory();
+    paintDrift();
     return;
   }
   paintModes();
@@ -764,14 +1073,17 @@ function mount(): void {
   for (const id of Object.keys(sliderDom)) delete sliderDom[id];
   lfos = savedLfos(slotKey(body, slot));
   speech = savedSpeech(slotKey(body, slot));
+  adsr = savedAdsr(slotKey(body, slot));
   reachArming = null;
   loadBaseline();
   loadVolumes();
+  loadRack();
   buildControls();
   buildMixer();
   paintHistory();
   paintDrift();
   push();
+  undoResetBaseline();
   // THE INTRO, on every mount. `push()` first so the renderer knows what it is
   // easing TOWARD -- the saved look if there is one, not the shipped preset -- and
   // then the draw-in runs from the arrival state to that. Skipping the push would
@@ -918,10 +1230,10 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
     "rings", "ringArc", "ringWidth", "ringGain", "ringRadius", "ringBeam",
     "ringSpin", "ringLife",
   ] },
-  { title: "2 · Glyphs — the inner inscriptions", fields: [
+  // One channel for BOTH inscription bands: inner (glyph*) and outer
+  // (glyphB*) belong to one instrument and were two strips to hunt across.
+  { title: "2 · Glyphs — both inscription bands", fields: [
     "glyphGain", "glyphRadius", "glyphSize", "glyphSpin", "glyphDensity",
-  ] },
-  { title: "2 · Sigils — the outer inscriptions", fields: [
     "glyphBGain", "glyphBRadius", "glyphBSize", "glyphBSpin", "glyphBDensity",
   ] },
   { title: "3 · The iris — radial filaments", fields: [
@@ -939,11 +1251,13 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "4 · Inner particle layer — the core cloud", fields: [
     "drawGain", "streak", "swirl", "drawLimb",
   ] },
-  { title: "4 · Outer particle layer — the distant shell", fields: [
+  // ONE CHANNEL for everything on the outskirts: the distant shell, the
+  // circuit shards riding it, and the debris clumping — they are one visual
+  // system and were three strips to hunt across.
+  { title: "4 · Shell — shards and debris", fields: [
     "outerShell", "outerGain", "outerStreak", "outerLimb", "outerPace",
+    "shardGain", "shardSize", "shardStride", "clump", "focus",
   ] },
-  { title: "5 · Circuit shards", fields: ["shardGain", "shardSize", "shardStride"] },
-  { title: "5 · Debris — clumping and depth", fields: ["clump", "focus"] },
   { title: "0 · Lattice loop — the baked layer", fields: [
     "lattice", "latticeBlur", "latticeSat", "latticeGlow", "latticeSpeed",
   ] },
@@ -953,6 +1267,7 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "6 · The eye — core and composite", fields: [
     "core", "eye", "starburst", "petal", "cloud",
   ] },
+  { title: "0 · Motion — the bounce", fields: ["bounce"] },
   { title: "6 · Voice reverberation — how speech crosses the body", fields: [
     "reverb",
   ] },
@@ -973,6 +1288,20 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
   { title: "5 · Her presence — size, light and failure", fields: [
     "composition", "daylight", "errorTone",
   ] },
+  // ---- Colossus. A sign's vocabulary: how hard the board is driven, how the
+  // voice reaches it, how fast the sentence crosses, and the tube in front.
+  { title: "1 · His board — lamps and drive", fields: [
+    "energy", "voice", "bloom",
+  ] },
+  { title: "2 · His sign — the ticker", fields: [
+    "ticker", "tickerScale",
+  ] },
+  { title: "3 · His glass — the tube", fields: [
+    "curve", "pitch", "decay", "vignette",
+  ] },
+  { title: "4 · His counter — the stepping readout", fields: [
+    "counter",
+  ] },
 ];
 
 /**
@@ -982,6 +1311,115 @@ const GROUPS: readonly { title: string; fields: readonly string[] }[] = [
  * source calls it -- but `crackRange` is not a description of anything, and a panel
  * you have to read the shader to use is a panel that gets used wrong.
  */
+/**
+ * The name a card WEARS. `latticeSat` means nothing at the desk; "Saturation"
+ * does. Short enough for a card, plain enough to need no manual — the full
+ * prose stays on hover, and the code name rides the tooltip for anyone
+ * matching against source.
+ */
+const READABLE: Record<string, string> = {
+  lattice: "Film level",
+  latticeBlur: "Motion blur",
+  latticeSat: "Saturation",
+  latticeGlow: "Glow",
+  latticeSpeed: "Film speed",
+  presence: "Presence",
+  bounce: "Bounce",
+  bounceTrail: "Bounce trail",
+  rings: "Wheel count",
+  ringArc: "Beams per wheel",
+  ringWidth: "Beam width",
+  ringGain: "Wheel brightness",
+  ringRadius: "Wheel placement",
+  ringBeam: "Beam spread",
+  ringSpin: "Wheel spin",
+  ringLife: "Beam fade cycle",
+  glyphGain: "Inner brightness",
+  glyphRadius: "Inner placement",
+  glyphSize: "Inner mark size",
+  glyphSpin: "Inner spin",
+  glyphDensity: "Inner density",
+  glyphBGain: "Outer brightness",
+  glyphBRadius: "Outer placement",
+  glyphBSize: "Outer mark size",
+  glyphBSpin: "Outer spin",
+  glyphBDensity: "Outer density",
+  irisGain: "Iris brightness",
+  irisRadius: "Iris placement",
+  irisFil: "Filaments",
+  irisFlow: "Flow speed",
+  linkGain: "Pathway brightness",
+  linkBow: "Pathway wander",
+  linkRange: "Pathway reach",
+  linkLimb: "Pathway rim bias",
+  dendriteGain: "Neuron brightness",
+  dendrite: "Neuron shape",
+  dendriteTip: "Tip clusters",
+  bead: "Signal marks",
+  signal: "Signal travel",
+  arc: "Terminal arcs",
+  veinGain: "Vein brightness",
+  veinStreak: "Vein length",
+  veinLimb: "Vein rim bias",
+  crackGain: "Fracture brightness",
+  crackRange: "Fracture reach",
+  crackLimb: "Fracture rim bias",
+  drawGain: "Cloud brightness",
+  streak: "Cloud trails",
+  swirl: "Flow rate",
+  drawLimb: "Cloud roundness",
+  outerShell: "Shell placement",
+  outerGain: "Shell brightness",
+  outerStreak: "Shell trails",
+  outerLimb: "Shell roundness",
+  outerPace: "Shell drift",
+  shardGain: "Shard brightness",
+  shardSize: "Shard size",
+  shardStride: "Shard count",
+  clump: "Clumping",
+  focus: "Far-side blur",
+  facetGain: "Facet brightness",
+  facetSize: "Facet size",
+  facetSpin: "Facet spin",
+  facetLimb: "Facet rim bias",
+  core: "Heart brightness",
+  eye: "The eye",
+  starburst: "Starburst",
+  petal: "Petal arms",
+  cloud: "Cloud form",
+  reverb: "Reverb",
+  voiceLevel: "Voice drive",
+  voiceLow: "Voice lows",
+  voiceMid: "Voice mids",
+  voiceHigh: "Voice highs",
+  voiceEnv: "Voice envelope",
+  voiceGate: "Silence gate",
+  beat: "Syllable weight",
+  listen: "Attentiveness",
+  gaze: "Gaze",
+  arousalLift: "Rousing",
+  idlePulse: "Idle pulse",
+  composition: "Size in frame",
+  daylight: "Daylight warmth",
+  wander: "Mood drift",
+  gesture: "Gestures",
+  errorTone: "Failure tone",
+  energy: "Drive",
+  voice: "Voice reach",
+  ticker: "Sign pace",
+  tickerScale: "Sign size",
+  pitch: "Lamp pitch",
+  curve: "Glass curve",
+  decay: "Phosphor",
+  bloom: "Bloom",
+  vignette: "Vignette",
+  counter: "Counter",
+};
+
+/** Dials whose small numbers mean MORE effect: shown with the fill inverted,
+ *  so down still reads as less. shardStride is "1 in N particles". */
+const INVERTED_DIALS = new Set(["shardStride"]);
+
 const TITLES: Record<string, string> = {
   rings: "How many wheels",
   ringArc: "Beams per wheel, and how long each is",
@@ -1048,6 +1486,8 @@ const TITLES: Record<string, string> = {
   core: "How bright the heart is",
   eye: "The eye — pupil, iris and lens ring",
   reverb: "How the voice rings through the body",
+  bounce: "A slight bounce of the whole composite",
+  bounceTrail: "How much ghost trail the bounce leaves behind",
   starburst: "Horizontal flare across the middle",
   petal: "How many bloom lobes",
   cloud: "How cloud-formed the mass is",
@@ -1067,6 +1507,16 @@ const TITLES: Record<string, string> = {
   wander: "How her mood drifts when nothing is happening",
   gesture: "How often she looks, nods or preens",
   errorTone: "What a dropped call does to her",
+  energy: "How hard the board is driven, and what the voice adds",
+  voice: "How the voice reaches the board: its speaking floor, its idle bleed",
+  ticker: "How fast the sentence crosses the sign",
+  tickerScale: "How big the sign's letters are",
+  pitch: "How many lamps across the panel — coarse is the reference",
+  curve: "How curved the glass in front is",
+  decay: "How long a driven lamp holds its light",
+  bloom: "How much the bright lamps flare",
+  vignette: "How hard the picture falls off toward the corners",
+  counter: "What steps the counter, and how fast its glow fades",
   ...Object.fromEntries(Object.entries(PHENO_TITLES)
     .map(([k, v]) => [`pheno.${k}`, v])),
 };
@@ -1113,16 +1563,45 @@ function row(
     // reads it — it just no longer takes a fader.
     if (HIDDEN_VALUES.has(lfoKey(key, index))) return;
     const [min, max, step] = RANGE_AT[lfoKey(key, index)] ?? fallback;
+    // THE CURVE. A linear slider over a wide range spends nine-tenths of its
+    // travel where nothing happens: on a 0..3 gain the whole character of the
+    // look lives below 0.5, so a nudge was a leap. Position space runs 0..1000
+    // through a γ curve — half the travel covers the sensitive low end, the
+    // top still reaches the ceiling — and every write goes through toPos /
+    // fromPos so the VALUES (readouts, saves, sweeps, reach) never change
+    // meaning. Signed ranges stay linear: a curve around zero would lie.
+    const GAMMA = 2.2;
+    const curved = min >= 0 && max > min;
+    const snap = (raw: number): number => {
+      const stepped = Math.round((raw - min) / step) * step + min;
+      return Number(Math.min(max, Math.max(min, stepped)).toFixed(6));
+    };
+    const toPos = (v: number): number => curved
+      ? Math.round(1000 * Math.pow((Math.min(max, Math.max(min, v)) - min) / (max - min), 1 / GAMMA))
+      : v;
+    const fromPos = (p: number): number => curved
+      ? snap(min + (max - min) * Math.pow(p / 1000, GAMMA))
+      : snap(p);
     const input = document.createElement("input");
     input.type = "range";
-    input.min = String(min);
-    input.max = String(max);
-    input.step = String(step);
-    input.value = String(value);
+    input.min = curved ? "0" : String(min);
+    input.max = curved ? "1000" : String(max);
+    input.step = curved ? "1" : String(step);
+    input.value = String(toPos(value));
+    // An inverted dial (small number = more effect) flips its FILL direction
+    // natively, so down still reads as less — the number is untouched, and
+    // sweeps, typed values and the reach all stay consistent.
+    if (INVERTED_DIALS.has(key)) input.classList.add("invert");
     const out = document.createElement("b");
     out.textContent = value.toFixed(3);
     readouts[index] = out;
-    sliderDom[lfoKey(key, index)] = { input, out };
+    sliderDom[lfoKey(key, index)] = {
+      input, out,
+      set: (v: number) => {
+        input.value = String(toPos(v));
+        out.textContent = v.toFixed(3);
+      },
+    };
     // TYPE THE NUMBER. Click the readout and it becomes a field: Enter or blur
     // commits (clamped to the slider's range), Escape walks away. A dial you
     // can only drag cannot be set to exactly 0.5.
@@ -1153,7 +1632,7 @@ function row(
           ? Math.min(max, Math.max(min, typed))
           : was;
         live[index] = next;
-        input.value = String(next);
+        input.value = String(toPos(next));
         out.textContent = next.toFixed(3);
         if (next !== was) {
           onChange(live.slice());
@@ -1168,7 +1647,7 @@ function row(
       field.addEventListener("blur", () => done(true));
     });
     input.addEventListener("input", () => {
-      live[index] = Number(input.value);
+      live[index] = fromPos(Number(input.value));
       readouts[index].textContent = live[index].toFixed(3);
       onChange(live.slice());
       push();
@@ -1200,37 +1679,54 @@ function row(
     const xv = document.createElement("input");
     xv.type = "range";
     xv.className = "xv";
-    xv.min = String(min);
-    xv.max = String(max);
-    xv.step = String(step);
-    xv.title = "×voice — the value this dial reaches at full voice. Double-click to clear.";
+    xv.min = curved ? "0" : String(min);
+    xv.max = curved ? "1000" : String(max);
+    xv.step = curved ? "1" : String(step);
+    xv.title = "reach — the value this dial travels to at full syllable. Double-click to clear.";
     const paintXv = () => {
       const end = speech[lfoKey(key, index)];
       xv.classList.toggle("set", end !== undefined);
-      xv.value = String(end !== undefined ? end : live[index]);
+      xv.value = String(toPos(end !== undefined ? end : live[index]));
     };
     xv.addEventListener("input", () => {
       // LEFTMOST IS THE ANCHOR, not a destination: parked at the rail's
       // bottom the modifier is cleared and the value stays pinned to its
       // dial — "travel all the way down during speech" is not a thing this
       // slider says.
-      if (Number(xv.value) <= min) {
+      if (fromPos(Number(xv.value)) <= min) {
         delete speech[lfoKey(key, index)];
         rememberSpeech();
         paintXv();
         return;
       }
-      speech[lfoKey(key, index)] = Number(xv.value);
+      speech[lfoKey(key, index)] = fromPos(Number(xv.value));
       // Locked colour holds the voice modifiers at parity too: setting one
       // colour field's ×voice sets them all.
       if (colourLock && COLOUR_FIELDS.has(key)) {
-        for (const field of COLOUR_FIELDS) speech[lfoKey(field, 0)] = Number(xv.value);
+        for (const field of COLOUR_FIELDS) speech[lfoKey(field, 0)] = fromPos(Number(xv.value));
       }
       rememberSpeech();
       xv.classList.add("set");
     });
     xv.addEventListener("dblclick", () => {
       delete speech[lfoKey(key, index)];
+      rememberSpeech();
+      paintXv();
+    });
+    // CLICK AGAIN TO LET GO: tapping the thumb of an amber slider clears the
+    // reach back to grey/anchored. The discriminator is whether any `input`
+    // fired between pointerdown and click — the thumb jump runs BEFORE the
+    // pointerdown listener (measured), so comparing values cannot tell a tap
+    // from a drag, but a true thumb-tap fires no input at all while drags and
+    // jump-taps always do.
+    let xvTouched = false;
+    xv.addEventListener("input", () => { xvTouched = true; });
+    xv.addEventListener("pointerdown", () => { xvTouched = false; });
+    xv.addEventListener("click", () => {
+      const id = lfoKey(key, index);
+      if (speech[id] === undefined || xvTouched) return;
+      delete speech[id];
+      delete envState[id];
       rememberSpeech();
       paintXv();
     });
@@ -1241,11 +1737,68 @@ function row(
     const fxbtns = document.createElement("div");
     fxbtns.className = "fxbtns";
     fxbtns.appendChild(bind);
+    // THE ENVELOPE. ⌁ gates this value's reach journey per syllable —
+    // attack, decay, sustain, release — so a blown-out shell radius can snap
+    // out and pump back like a speaker cone instead of riding the meter.
+    const env = document.createElement("button");
+    env.type = "button";
+    env.className = "lfo-bind envb";
+    env.title = "ADSR — gate the reach journey per syllable (speaker-cone pump). Click again to clear.";
+    env.textContent = "⌁";
+    fxbtns.appendChild(env);
     val.appendChild(fxbtns);
     vals.appendChild(val);
 
     const panel = lfoPanel(key, index, live, min, max, onChange);
     wrap.appendChild(panel);
+    const envPanel = document.createElement("div");
+    envPanel.className = "lfo adsrp";
+    wrap.appendChild(envPanel);
+    const paintEnv = () => {
+      const on = adsr[lfoKey(key, index)] !== undefined;
+      env.classList.toggle("on", on);
+      envPanel.classList.toggle("open", on);
+    };
+    const buildEnvFields = () => {
+      envPanel.innerHTML = "";
+      const shape = adsr[lfoKey(key, index)];
+      if (!shape) return;
+      const names = ["attack ms", "decay ms", "sustain", "release ms"];
+      shape.forEach((at, slotIndex) => {
+        const holder = document.createElement("label");
+        holder.textContent = names[slotIndex];
+        const field = document.createElement("input");
+        field.type = "number";
+        field.step = slotIndex === 2 ? "0.05" : "5";
+        field.value = slotIndex === 2 ? String(at) : String(Math.round(at * 1000));
+        field.addEventListener("change", () => {
+          const typed = Number(field.value);
+          const current = adsr[lfoKey(key, index)];
+          if (!Number.isFinite(typed) || !current) return;
+          current[slotIndex] = slotIndex === 2
+            ? Math.min(1, Math.max(0, typed))
+            : Math.max(0.005, typed / 1000);
+          rememberAdsr();
+        });
+        holder.appendChild(field);
+        envPanel.appendChild(holder);
+      });
+    };
+    env.addEventListener("click", () => {
+      const id = lfoKey(key, index);
+      if (adsr[id]) {
+        delete adsr[id];
+        delete envState[id];
+      } else {
+        // Speaker-cone defaults: fast out, quick settle, modest hold.
+        adsr[id] = [0.03, 0.08, 0.45, 0.12];
+      }
+      rememberAdsr();
+      buildEnvFields();
+      paintEnv();
+    });
+    buildEnvFields();
+    paintEnv();
     paintXv();
     const paint = () => {
       const on = lfos[lfoKey(key, index)]?.on === true;
@@ -1279,7 +1832,7 @@ function row(
   });
   const code = document.createElement("span");
   code.className = "code";
-  code.textContent = label;
+  code.textContent = READABLE[key] ?? label;
   name.appendChild(code);
   wrap.appendChild(name);
   return wrap;
@@ -1386,10 +1939,7 @@ function tickLfos(nowMs: number): void {
       (tuning as unknown as Record<string, number[]>)[field] = next;
     }
     const dom = sliderDom[id];
-    if (dom) {
-      dom.input.value = String(value);
-      dom.out.textContent = value.toFixed(3);
-    }
+    if (dom) writeSlider(dom, value);
     changed = true;
   }
   // Pushed but NOT remembered: a swept value is a question, not a decision, and
@@ -1571,10 +2121,7 @@ function assign(key: string, value: number | number[]): void {
       const id = lfoKey(field, 0);
       if (speech[id] !== undefined) speech[id] = flat;
       const dom = sliderDom[id];
-      if (dom && field !== key) {
-        dom.input.value = String(flat);
-        dom.out.textContent = flat.toFixed(3);
-      }
+      if (dom && field !== key) writeSlider(dom, flat);
     }
     rememberSpeech();
   }
@@ -1693,9 +2240,11 @@ function loop(): void {
     // saved reach travels start→end on the syllable envelope, monitor-side.
     // Pushed only when the envelope actually moved, and never over a journey
     // or a take — those branches call effectiveTuning() themselves.
+    const envMoved = tickAdsr(performance.now());
+    const envAlive = Object.values(envState).some((e) => e.level > 0.002);
     const speechActive = Object.keys(speech).length > 0
       || talkTest.size > 0 || talkRelease.size > 0 || voiceHold;
-    if (renderer && speechActive && speechEnv < 0.002 && speechShown !== 0) {
+    if (renderer && speechActive && speechEnv < 0.002 && !envAlive && speechShown !== 0) {
       // THE LANDING. The release has settled: one exact push back to base, so
       // the body ends on precisely what the dials read rather than holding a
       // frozen sliver of swell.
@@ -1704,8 +2253,13 @@ function loop(): void {
       voiceHold = false;
       talkRelease.clear();
       (renderer as { setTuning?(next: never): void }).setTuning?.(clone(effectiveTuning()) as never);
-    } else if (renderer && speechActive && Math.abs(speechEnv - speechShown) > 0.003) {
+    } else if (renderer && speechActive
+      && (envMoved || Math.abs(speechEnv - speechShown) > 0.003)) {
       speechShown = speechEnv;
+      (renderer as { setTuning?(next: never): void }).setTuning?.(clone(effectiveTuning()) as never);
+    } else if (renderer && rackActive() && speechEnv > 0.002) {
+      // The rack rides the speech: while the body talks and any unit is
+      // pinned, the monitor follows the wobble frame by frame.
       (renderer as { setTuning?(next: never): void }).setTuning?.(clone(effectiveTuning()) as never);
     }
   }
@@ -1791,7 +2345,7 @@ async function savePreset(): Promise<void> {
     slot,
     tuning,
     lfos: Object.fromEntries(Object.entries(lfos).filter(([, l]) => l.on)),
-    speech,
+    speech, adsr,
     ...(label.trim() === "" ? {} : { label: label.trim() }),
   };
   try {
@@ -1831,7 +2385,7 @@ async function savePreset(): Promise<void> {
  *  the composite once shrank to a dot. The link* pathways are BACK on the
  *  desk (max flexibility beats the old "superseded by the iris" ruling);
  *  their shipped gain is zero, so nothing changes until raised. */
-const HIDDEN_FIELDS = new Set(["presence"]);
+const HIDDEN_FIELDS = new Set(["presence", "bounceTrail"]);
 /** Single VALUES hidden from the cards while their data stays live: the
  *  lattice pair's ×voice element is covered by the generic ×voice slider. */
 const HIDDEN_VALUES = new Set(["lattice:1"]);
@@ -1860,20 +2414,18 @@ const mixerDom: Record<string, { input: HTMLInputElement; out: HTMLElement }> = 
  */
 const SPATIAL_RANK: Record<string, number> = {
   "0 · Lattice loop — the baked layer": 0,
-  "4 · Outer particle layer — the distant shell": 1,
+  "4 · Shell — shards and debris": 1,
   "1 · Wheels — the orbiting beams": 2,
-  "2 · Sigils — the outer inscriptions": 3,
-  "2 · Glyphs — the inner inscriptions": 4,
+  "2 · Glyphs — both inscription bands": 3,
   "5 · Crystal facets": 4,
   "4 · Veins and cracks": 5,
-  "5 · Circuit shards": 6,
-  "5 · Debris — clumping and depth": 7,
   "3 · Pathways — the neural links": 8,
   "3 · Dendrites — the neurons and their signals": 8,
   "4 · Inner particle layer — the core cloud": 9,
   "3 · The iris — radial filaments": 10,
   "6 · The eye — core and composite": 11,
   "6 · Voice reverberation — how speech crosses the body": 90,
+  "0 · Motion — the bounce": 89,
 };
 
 /**
@@ -1882,25 +2434,27 @@ const SPATIAL_RANK: Record<string, number> = {
  */
 const STRIP_NAME: Record<string, string> = {
   "0 · Lattice loop — the baked layer": "Film",
-  "4 · Outer particle layer — the distant shell": "Shell",
+  "4 · Shell — shards and debris": "Shell",
   "1 · Wheels — the orbiting beams": "Wheels",
-  "2 · Glyphs — the inner inscriptions": "Glyphs",
-  "2 · Sigils — the outer inscriptions": "Sigils",
+  "2 · Glyphs — both inscription bands": "Glyphs",
   "5 · Crystal facets": "Facets",
   "4 · Veins and cracks": "Veins",
-  "5 · Circuit shards": "Shards",
-  "5 · Debris — clumping and depth": "Debris",
   "3 · Pathways — the neural links": "Pathways",
   "3 · Dendrites — the neurons and their signals": "Neurons",
   "4 · Inner particle layer — the core cloud": "Cloud",
   "3 · The iris — radial filaments": "Iris",
   "6 · The eye — core and composite": "Eye",
   "6 · Voice reverberation — how speech crosses the body": "Reverb",
+  "0 · Motion — the bounce": "Motion",
   "1 · Her voice — what speech does to the body": "Voice",
   "2 · Her envelope — the shape of a syllable": "Envelope",
   "3 · Her attention — being spoken to": "Attention",
   "4 · Her inner life — alive between events": "Life",
   "5 · Her presence — size, light and failure": "Aura",
+  "1 · His board — lamps and drive": "Board",
+  "2 · His sign — the ticker": "Sign",
+  "3 · His glass — the tube": "Glass",
+  "4 · His counter — the stepping readout": "Counter",
 };
 
 function channelsFor(): { title: string; fields: string[] }[] {
@@ -1922,7 +2476,7 @@ function channelsFor(): { title: string; fields: string[] }[] {
 /** What a channel's fader drives: the pass's first master level. */
 function levelFields(fields: readonly string[]): string[] {
   const levels = fields.filter((f) => f.endsWith("Gain"));
-  for (const special of ["core", "reverb", "voiceLevel"] as const) {
+  for (const special of ["core", "reverb", "voiceLevel", "energy"] as const) {
     if (fields.includes(special)) levels.push(special);
   }
   return levels;
@@ -1931,7 +2485,7 @@ function levelFields(fields: readonly string[]): string[] {
 /** What mute silences: every field that puts light on screen for this pass.
  *  Wider than the fader, because a pass like the eye draws through `eye` and
  *  `starburst` as well as `core` — muting only the gains left it half lit. */
-const MUTE_EXTRA = new Set(["core", "eye", "starburst", "reverb", "voiceLevel", "lattice"]);
+const MUTE_EXTRA = new Set(["core", "eye", "starburst", "reverb", "voiceLevel", "lattice", "energy", "bloom"]);
 function muteFields(fields: readonly string[]): string[] {
   return fields.filter((f) => f.endsWith("Gain") || MUTE_EXTRA.has(f));
 }
@@ -1978,13 +2532,56 @@ function rememberVolumes(): void {
   } catch { /* fine */ }
 }
 
+/**
+ * THE LFO RACK, and it RIDES THE SPEECH. As many units as wanted, each with a
+ * rate, a depth and a set of PINNED CHANNELS — but the wobble is scaled by
+ * the syllable meter, so pinned strips tremolo WITH the voice and stand
+ * still in silence. The channels come to the LFO rather than each channel
+ * owning one — the per-dial ∿ stays for free-running precision work.
+ * Monitor-side, per body, this browser only, like the faders.
+ */
+type RackUnit = { rate: number; depth: number; channels: string[] };
+let lfoRack: RackUnit[] = [];
+
+function loadRack(): void {
+  try {
+    lfoRack = JSON.parse(localStorage.getItem(storageKey(`rack.${body}`)) ?? "[]") as RackUnit[];
+  } catch {
+    lfoRack = [];
+  }
+}
+
+function rememberRack(): void {
+  try {
+    localStorage.setItem(storageKey(`rack.${body}`), JSON.stringify(lfoRack));
+  } catch { /* fine */ }
+}
+
+function rackActive(): boolean {
+  return lfoRack.some((u) => u.depth > 0.001 && u.channels.length > 0);
+}
+
+/** The rack's combined wobble on one strip, this instant — scaled by the
+ *  syllable meter, so it speaks when the body speaks. Never below zero. */
+function rackFactor(title: string, seconds: number): number {
+  let factor = 1;
+  lfoRack.forEach((unit, index) => {
+    if (unit.depth <= 0.001 || !unit.channels.includes(title)) return;
+    factor *= 1 + unit.depth * speechEnv
+      * Math.sin(2 * Math.PI * unit.rate * seconds + index * 1.7);
+  });
+  return Math.max(0, factor);
+}
+
 /** The tuning the renderer hears: muted channels' levels at zero, the real
  *  numbers untouched. With nothing muted this is `tuning` itself. */
 function effectiveTuning(of: Tuning = tuning): Tuning {
   const faded = Object.keys(channelVolume).some((t) => volumeOf(t) < 1);
-  const talking = speechEnv > 0.002
+  const envHeld = Object.values(envState).some((e) => e.level > 0.002);
+  const talking = (speechEnv > 0.002 || envHeld)
     && (Object.keys(speech).length > 0 || talkTest.size > 0);
-  if (soloed.size === 0 && !faded && !talking) return of;
+  const racked = rackActive() && speechEnv > 0.002;
+  if (soloed.size === 0 && !faded && !talking && !racked) return of;
   const out = clone(of);
   const record = out as unknown as Record<string, number | number[]>;
   // Speech reach FIRST, volumes after: the fader is the channel's master, so
@@ -2005,12 +2602,15 @@ function effectiveTuning(of: Tuning = tuning): Tuning {
       if (!ownField(record, field)) continue;
       const value = record[field];
       if (value === undefined) continue;
+      // A value with an ADSR rides its own gated envelope — snapping out on
+      // each syllable and pumping back like a cone — instead of the meter.
+      const k = adsr[id] ? (envState[id]?.level ?? 0) : speechEnv;
       if (typeof value === "number") {
-        record[field] = value + (end - value) * speechEnv;
+        record[field] = value + (end - value) * k;
       } else {
         const next = value.slice();
         const index = Number(indexText);
-        next[index] = next[index] + (end - next[index]) * speechEnv;
+        next[index] = next[index] + (end - next[index]) * k;
         record[field] = next;
       }
     }
@@ -2035,8 +2635,11 @@ function effectiveTuning(of: Tuning = tuning): Tuning {
   }
   for (const g of channelsFor()) {
     if (!fadeable(g.fields)) continue;
-    const vol = audible(g.title) ? volumeOf(g.title) : 0;
-    if (vol >= 1) continue;
+    const wobble = racked ? rackFactor(g.title, performance.now() / 1000) : 1;
+    const vol = (audible(g.title) ? volumeOf(g.title) : 0) * wobble;
+    // The rack's up-swing pushes PAST unity — a tremolo has a top half — so
+    // only an exactly-neutral channel is skipped.
+    if (Math.abs(vol - 1) < 1e-6) continue;
     // A channel with no light of its own (Debris, the envelopes) scales its
     // EFFECT instead: every field fades, so zero still means "not there" —
     // except geometry, which no volume is allowed to touch.
@@ -2121,9 +2724,51 @@ function buildMixer(): void {
         channelVolume[g.title] = Number(fader.value);
         out.textContent = `${Math.round(Number(fader.value) * 100)}%`;
         rememberVolumes();
+        // Touching a fader SELECTS its channel: the hand is already on this
+        // strip, so the bus should be showing its effects before the drag ends.
+        if (channel !== g.title) selectChannel(g.title);
         push();
       });
-      fader.addEventListener("click", (event) => event.stopPropagation());
+      // A CLICK IS A SELECTION, NOT A VOLUME CHANGE. The browser jumps the
+      // thumb to the click point before any listener runs, so a click meant
+      // as "show me this channel" was silently rewriting the level. A tap
+      // (pointer moved < 5px) puts the jump back and only selects; a drag
+      // commits its value as before.
+      fader.dataset.committed = fader.value;
+      let downX = 0;
+      let downY = 0;
+      fader.addEventListener("pointerdown", (event) => {
+        downX = event.clientX;
+        downY = event.clientY;
+        // Fires BEFORE the thumb jump (measured), so this is the true
+        // pre-gesture value — and the flag keeps paintMixerLevels (which
+        // push() calls inside this very input dispatch, before focus has
+        // even landed) from syncing the jumped value over it.
+        fader.dataset.committed = fader.value;
+        fader.dataset.gesture = "1";
+      });
+      fader.addEventListener("change", () => {
+        // Keyboard commits only: a range fires `change` on pointer release
+        // too — BEFORE click — and committing there handed the tap the very
+        // jumped value it exists to undo.
+        if (fader.dataset.gesture !== "1") fader.dataset.committed = fader.value;
+      });
+      fader.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (Math.hypot(event.clientX - downX, event.clientY - downY) < 5) {
+          const committed = Number(fader.dataset.committed ?? "1");
+          channelVolume[g.title] = committed;
+          fader.value = String(committed);
+          out.textContent = `${Math.round(committed * 100)}%`;
+          rememberVolumes();
+          push();
+        } else {
+          fader.dataset.committed = fader.value;
+        }
+        delete fader.dataset.gesture;
+        if (channel !== g.title) selectChannel(g.title);
+      });
+      fader.addEventListener("pointercancel", () => { delete fader.dataset.gesture; });
       mixerDom[g.title] = { input: fader, out };
       strip.appendChild(fader);
       strip.appendChild(out);
@@ -2133,8 +2778,7 @@ function buildMixer(): void {
       solo.type = "button";
       solo.textContent = "S";
       solo.title = "Solo — silence every other channel";
-      solo.addEventListener("click", (event) => {
-        event.stopPropagation();
+      solo.addEventListener("click", () => {
         if (soloed.has(g.title)) soloed.delete(g.title);
         else soloed.add(g.title);
         paintMixer();
@@ -2147,8 +2791,9 @@ function buildMixer(): void {
       osc.type = "button";
       osc.textContent = "osc";
       osc.title = "Talk test — play this channel's speech reach as if a line were being spoken";
-      osc.addEventListener("click", (event) => {
-        event.stopPropagation();
+      // No stopPropagation on any strip button: ANY click on the channel
+      // opens its effects, and the bubble reaching the strip is how.
+      osc.addEventListener("click", () => {
         if (talkTest.has(g.title)) {
           talkTest.delete(g.title);
           talkRelease.add(g.title);
@@ -2162,8 +2807,7 @@ function buildMixer(): void {
       halt.type = "button";
       halt.textContent = "■";
       halt.title = "Stop this channel's talk test";
-      halt.addEventListener("click", (event) => {
-        event.stopPropagation();
+      halt.addEventListener("click", () => {
         if (talkTest.has(g.title)) {
           talkTest.delete(g.title);
           talkRelease.add(g.title);
@@ -2178,7 +2822,81 @@ function buildMixer(): void {
     strip.addEventListener("click", () => selectChannel(g.title));
     desk.appendChild(strip);
   }
+  buildRack(desk);
   paintMixer();
+}
+
+/** The rack, at the desk's right: one card per LFO, channels pinned by chip. */
+function buildRack(desk: HTMLElement): void {
+  const titles = channelsFor().map((g) => g.title);
+  lfoRack.forEach((unit, index) => {
+    const card = document.createElement("div");
+    card.className = "rackcard";
+    const head = document.createElement("div");
+    head.className = "chname";
+    head.textContent = `LFO ${index + 1}`;
+    const kill = document.createElement("button");
+    kill.type = "button";
+    kill.className = "rackkill";
+    kill.textContent = "×";
+    kill.title = "Remove this LFO";
+    kill.addEventListener("click", () => {
+      lfoRack.splice(index, 1);
+      rememberRack();
+      buildMixer();
+    });
+    card.appendChild(head);
+    card.appendChild(kill);
+    const dial = (label: string, min: number, max: number, step: number,
+      value: number, apply: (v: number) => void) => {
+      const holder = document.createElement("label");
+      holder.className = "rackdial";
+      holder.textContent = label;
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = String(min);
+      input.max = String(max);
+      input.step = String(step);
+      input.value = String(value);
+      input.addEventListener("input", () => {
+        apply(Number(input.value));
+        rememberRack();
+      });
+      holder.appendChild(input);
+      card.appendChild(holder);
+    };
+    dial("rate", 0.05, 3, 0.01, unit.rate, (v) => { unit.rate = v; });
+    dial("depth", 0, 1, 0.01, unit.depth, (v) => { unit.depth = v; });
+    const chips = document.createElement("div");
+    chips.className = "rackchips";
+    for (const title of titles) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.textContent = STRIP_NAME[title] ?? channelShortName(title).split(" ")[0];
+      chip.classList.toggle("on", unit.channels.includes(title));
+      chip.addEventListener("click", () => {
+        const at = unit.channels.indexOf(title);
+        if (at >= 0) unit.channels.splice(at, 1);
+        else unit.channels.push(title);
+        chip.classList.toggle("on", at < 0);
+        rememberRack();
+      });
+      chips.appendChild(chip);
+    }
+    card.appendChild(chips);
+    desk.appendChild(card);
+  });
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "rackadd";
+  add.textContent = "+ LFO";
+  add.title = "Add an LFO to the rack, then pin channels — it wobbles them WITH the voice";
+  add.addEventListener("click", () => {
+    lfoRack.push({ rate: 0.4, depth: 0.25, channels: [] });
+    rememberRack();
+    buildMixer();
+  });
+  desk.appendChild(add);
 }
 
 function paintMixer(): void {
@@ -2214,6 +2932,14 @@ function paintMixerLevels(): void {
   for (const [title, dom] of Object.entries(mixerDom)) {
     const vol = volumeOf(title);
     dom.input.value = String(vol);
+    // The tap-restores-this value must follow EXTERNAL writes (a state
+    // switch), or a later click would put back a stale volume — but never
+    // mid-gesture: push() runs inside the fader's own input event, and
+    // syncing here then overwrote the pre-jump value the tap needs to
+    // restore.
+    if (dom.input.dataset.gesture !== "1") {
+      dom.input.dataset.committed = String(vol);
+    }
     dom.out.textContent = `${Math.round(vol * 100)}%`;
   }
 }
@@ -2329,6 +3055,7 @@ $("applyAll").addEventListener("click", () => {
       localStorage.setItem(storageKey(slotKey(body, at)), JSON.stringify(ground.tuning));
       localStorage.setItem(storageKey(`${slotKey(body, at)}.lfo`), JSON.stringify(ground.lfos));
       localStorage.setItem(storageKey(`${slotKey(body, at)}.speech`), JSON.stringify(speech));
+      localStorage.setItem(storageKey(`${slotKey(body, at)}.adsr`), JSON.stringify(adsr));
     }
   } catch { /* a blocked store is not a reason to stop rendering */ }
   // And to the FILE — one OVERWRITE version per state plus the baseline — so
@@ -2344,7 +3071,7 @@ $("applyAll").addEventListener("click", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        body, slot: at, tuning: ground.tuning, lfos: ground.lfos, speech,
+        body, slot: at, tuning: ground.tuning, lfos: ground.lfos, speech, adsr,
         overwrite: true, label,
       }),
     }).then((response) => {
@@ -2394,6 +3121,7 @@ $("fromBaseline").addEventListener("click", () => {
 type SavedVersion = {
   tuning: Partial<Tuning>; lfos?: LfoMap; speech?: Record<string, number>;
   savedAt?: string; label?: string; overwrite?: boolean; autosave?: boolean;
+  adsr?: Record<string, [number, number, number, number]>;
 };
 let history: Record<string, { versions: SavedVersion[] }> = {};
 
@@ -2425,6 +3153,7 @@ function adoptOverwrites(): boolean {
         localStorage.setItem(storageKey(key), JSON.stringify(newest.tuning));
         localStorage.setItem(storageKey(`${key}.lfo`), JSON.stringify(newest.lfos ?? {}));
         localStorage.setItem(storageKey(`${key}.speech`), JSON.stringify(newest.speech ?? {}));
+        localStorage.setItem(storageKey(`${key}.adsr`), JSON.stringify(newest.adsr ?? {}));
       }
       localStorage.setItem(seenKey, String(at));
       adopted = true;
@@ -2460,6 +3189,7 @@ async function refreshHistory(): Promise<void> {
     tuning = saved(key, shipped);
     lfos = savedLfos(key);
     speech = savedSpeech(key);
+    adsr = savedAdsr(key);
     buildControls();
     (renderer as { transitionTo?(next: never): void } | null)?.transitionTo?.(clone(effectiveTuning()) as never);
     paintMixerLevels();
@@ -2521,23 +3251,108 @@ function trim(value: number): string {
 
 /**
  * THE FRAME-VIDEO CHARACTERS. Montgomery and Maya are not shaders: each is a
- * whole player (clip graph, live lips, its own controls) already served on
- * this box. The bench stages them whole, in an iframe over the tailnet
- * serve, and steps aside: the dials belong to the sphere bodies, so they are
- * hidden rather than left mislabelling a body they cannot drive.
+ * whole player (clip graph, live lips, its own speech) already served on this
+ * box, staged whole in an iframe over the tailnet serve. The chrome is the
+ * SAME chrome: the transport shows his positions, the emotion row shows his
+ * bearing, and both drive the player over the clip: postMessage wire --
+ * repainted from every clip:state the player posts back, so the bench shows
+ * where he actually is, not where it last asked him to be. Only the tuning
+ * tools stand down: dials belong to the shader bodies.
  */
-const VIDEO_BODIES: Record<string, { url: string; title: string }> = {
-  montgomery: { url: "https://beelink.tailb4b671.ts.net:8902/", title: "General Montgomery" },
-  maya: { url: "https://beelink.tailb4b671.ts.net:8901/", title: "Maya" },
+const VIDEO_BODIES: Record<string, { url: string; title: string; wire: boolean }> = {
+  montgomery: { url: "https://beelink.tailb4b671.ts.net:8902/", title: "General Montgomery", wire: true },
+  maya: { url: "https://beelink.tailb4b671.ts.net:8903/", title: "Maya — framegraph", wire: true },
+  "maya-library": { url: "https://beelink.tailb4b671.ts.net:8901/", title: "Maya — clip library", wire: false },
+};
+const VIDEO_ORIGINS = new Set(
+  Object.values(VIDEO_BODIES).map((body) => new URL(body.url).origin),
+);
+let videoOrigin: string | null = null;
+/** Friendly labels where the wire's ids are terse; unknown ids show as-is. */
+const VIDEO_LABELS: Record<string, string> = {
+  H1: "Desk", H2: "Table — far", H3: "Fireplace", H4: "Window", H5: "Seated",
 };
 let videoChar: string | null = null;
-let asideHidden: HTMLElement[] = [];
+let videoFrame: HTMLIFrameElement | null = null;
+let videoWant: string | null = null;
+function clipPost(msg: object): void {
+  try { if (videoOrigin) videoFrame?.contentWindow?.postMessage(msg, videoOrigin); } catch { /* fine */ }
+}
+type ClipState = { node?: string; targetHub?: string | null; mood?: string;
+                   wantEmotion?: string | null; positions?: string[];
+                   emotions?: { tags?: string[] } };
+let videoChips = "";
+/** The chips come FROM the character: whatever positions and emotion tags its
+ *  clip:state names, that is what the transport and the emotion row offer --
+ *  Montgomery's four rooms and six bearings, the framegraph Maya's pools,
+ *  never a list hardcoded here. Rebuilt only when the shape changes. */
+function ensureVideoChips(state: ClipState): void {
+  const positions = state.positions ?? [];
+  const tags = state.emotions?.tags ?? [];
+  const sig = positions.join(",") + "|" + tags.join(",");
+  if (sig === videoChips) return;
+  videoChips = sig;
+  const states = $("states");
+  states.innerHTML = "";
+  for (const hub of positions) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.state = hub;
+    button.textContent = VIDEO_LABELS[hub] ?? hub;
+    button.addEventListener("click", () => {
+      clipPost({ type: "clip:position", hub });
+      paintVideoPanel({ targetHub: hub });
+    });
+    states.appendChild(button);
+  }
+  const chips = $("emotions");
+  chips.innerHTML = "";
+  for (const tag of tags) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.dataset.emotion = tag;
+    chip.textContent = tag;
+    chip.addEventListener("click", () => {
+      const clearing = videoWant === tag;
+      videoWant = clearing ? null : tag;
+      clipPost({ type: "clip:emotion", tag: clearing ? null : tag });
+      paintVideoPanel({});
+    });
+    chips.appendChild(chip);
+  }
+}
+function paintVideoPanel(state: ClipState = {}): void {
+  if (!videoChar) return;
+  if (state.wantEmotion !== undefined) videoWant = state.wantEmotion;
+  const at = state.targetHub ?? state.node;
+  for (const b of Array.from($("states").querySelectorAll("button")) as HTMLElement[]) {
+    if (at) b.classList.toggle("on", b.dataset.state === at);
+  }
+  for (const b of Array.from($("emotions").querySelectorAll("button")) as HTMLElement[]) {
+    b.classList.toggle("on", b.dataset.emotion === videoWant);
+    // the green edge is where the mood actually IS; the .on ring is the
+    // directed choice -- the same two-truths split the player draws
+    b.style.boxShadow = b.dataset.emotion === state.mood ? "inset 0 0 0 1px #5cb87f" : "";
+  }
+}
+window.addEventListener("message", (ev) => {
+  // The players are DECLARED cross-origin bodies (VIDEO_BODIES). Only their
+  // origins speak clip state; anyone else's messages are not ours to parse.
+  if (!VIDEO_ORIGINS.has(ev.origin)) return;
+  const d = ev.data as ({ type?: string } & ClipState) | null;
+  if (!videoChar || !d || d.type !== "clip:state") return;
+  ensureVideoChips(d);
+  paintVideoPanel(d);
+});
 function mountVideo(name: string): void {
   const info = VIDEO_BODIES[name];
+  videoOrigin = new URL(info.url).origin;
   cancelLoop();
   renderer?.destroy();
   renderer = null;
   videoChar = name;
+  videoWant = null;
+  document.body.classList.add("video-char");
   const host = $("stage");
   host.classList.remove("square");
   host.innerHTML = "";
@@ -2546,31 +3361,33 @@ function mountVideo(name: string): void {
   frame.allow = "autoplay; fullscreen";
   frame.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0;background:#000";
   host.appendChild(frame);
+  videoFrame = frame;
+  frame.addEventListener("load", () => clipPost({ type: "clip:state?" }));
   $("readout").textContent = "";
-  const aside = document.querySelector("aside");
-  if (aside){
-    for (const el of Array.from(aside.children) as HTMLElement[]){
-      if (el.querySelector("#body") || el.id === "videoNote") continue;
-      if (!el.hidden){ el.hidden = true; asideHidden.push(el); }
-    }
-    let note = document.getElementById("videoNote");
-    if (!note){
-      note = document.createElement("p");
-      note.id = "videoNote";
-      note.style.cssText = "color:#74747e;font-size:12px;line-height:1.5";
-      aside.appendChild(note);
-    }
-    note.textContent = info.title + " is a frame-video character: positions, bearing and "
-      + "speech live on the stage itself (tap it to wake his controls). The dials here "
-      + "belong to the shader bodies and are stood down.";
-  }
+  videoChips = "";
+  $("states").innerHTML = "";
+  $("emotions").innerHTML = "";
+  const mixer = $("mixer");
+  mixer.innerHTML = "";
+  const note = document.createElement("p");
+  note.style.cssText = "color:#74747e;font-size:12px;line-height:1.5;margin:8px 2px";
+  note.textContent = info.wire
+    ? info.title + " is a frame-video character: the transport and emotion row are built "
+      + "from its own clip:state (green edge = the mood it is actually in), and speech "
+      + "lives on the stage. The dials and mixer belong to the shader bodies."
+    : info.title + " is a frame-video character: the controls live on the stage itself. "
+      + "The dials and mixer belong to the shader bodies.";
+  mixer.appendChild(note);
+  ($("save") as HTMLButtonElement).disabled = true;
 }
 function unmountVideo(): void {
   if (!videoChar) return;
   videoChar = null;
-  for (const el of asideHidden) el.hidden = false;
-  asideHidden = [];
-  document.getElementById("videoNote")?.remove();
+  videoFrame = null;
+  videoOrigin = null;
+  document.body.classList.remove("video-char");
+  ($("save") as HTMLButtonElement).disabled = false;
+  $("mixer").innerHTML = "";
 }
 $("body").addEventListener("change", (event) => {
   const value = (event.target as HTMLSelectElement).value;
@@ -2684,6 +3501,7 @@ function setState(next: Slot): void {
   for (const id of Object.keys(sliderDom)) delete sliderDom[id];
   lfos = savedLfos(slotKey(body, slot));
   speech = savedSpeech(slotKey(body, slot));
+  adsr = savedAdsr(slotKey(body, slot));
   reachArming = null;
   buildControls();
   remember(slotKey(body, slot), tuning);
@@ -2692,6 +3510,7 @@ function setState(next: Slot): void {
   paintMixer();
   paintHistory();
   paintDrift();
+  undoResetBaseline();
   const paceName = ($("pace") as HTMLSelectElement).value;
   // A RECORDED transition is the legal path between this pair: it plays at its
   // own length scaled by the pace, and the lerp carries any untracked field.
@@ -2725,7 +3544,7 @@ async function saveEverything(): Promise<void> {
     status.className = "";
     return;
   }
-  const jobs: { at: string; tuning: unknown; lfos: unknown; speech: unknown }[] =
+  const jobs: { at: string; tuning: unknown; lfos: unknown; speech: unknown; adsr?: unknown }[] =
     slotsFor(body).map((at) => ({
       at: at as string,
       tuning: at === slot ? tuning : saved(slotKey(body, at), shippedFor(body, at)),
@@ -2733,6 +3552,7 @@ async function saveEverything(): Promise<void> {
         ? Object.fromEntries(Object.entries(lfos).filter(([, l]) => l.on))
         : savedLfos(slotKey(body, at)),
       speech: at === slot ? speech : savedSpeech(slotKey(body, at)),
+      adsr: at === slot ? adsr : savedAdsr(slotKey(body, at)),
     }));
   if (baseline) {
     jobs.push({ at: "baseline", tuning: baseline.tuning, lfos: baseline.lfos, speech: {} });
@@ -2743,7 +3563,7 @@ async function saveEverything(): Promise<void> {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          body, slot: job.at, tuning: job.tuning, lfos: job.lfos, speech: job.speech,
+          body, slot: job.at, tuning: job.tuning, lfos: job.lfos, speech: job.speech, adsr: job.adsr,
           ...(label.trim() === "" ? {} : { label: label.trim() }),
         }),
       });
@@ -2775,6 +3595,7 @@ $("history").addEventListener("change", (event) => {
   tuning = { ...clone(shipped), ...version.tuning } as Tuning;
   lfos = { ...(version.lfos ?? {}) };
   speech = { ...(version.speech ?? {}) };
+  adsr = { ...(version.adsr ?? {}) };
   buildControls();
   remember(slotKey(body, slot), tuning);
   rememberLfos();
@@ -3094,10 +3915,7 @@ function applyTracks(base: Tuning, tracks: Tracks, p: number, skip?: Set<string>
     const parts = typeof value === "number" ? [value] : value;
     parts.forEach((part, index) => {
       const dom = sliderDom[lfoKey(field, index)];
-      if (dom) {
-        dom.input.value = String(part);
-        dom.out.textContent = part.toFixed(3);
-      }
+      if (dom) writeSlider(dom, part);
     });
   }
   return out;
@@ -3144,11 +3962,17 @@ document.addEventListener("keydown", (event) => {
     abBaseline(true);
     return;
   }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+    event.preventDefault();
+    undoPop();
+    return;
+  }
   const index = Number(event.key) - 1;
   if (!Number.isInteger(index) || index < 0) return;
   const available = transportSlots();
   if (index < available.length) setState(available[index]);
 });
+$("undo").addEventListener("click", undoPop);
 
 /** Framing mode: fold the desk away, keep presence at hand. */
 let deskHidden = ((): boolean => {
@@ -3161,7 +3985,6 @@ let deskHidden = ((): boolean => {
 
 function paintDesk(): void {
   document.body.classList.toggle("desk-hidden", deskHidden);
-  $("deskToggle").classList.toggle("on", deskHidden);
   $("deskMin").textContent = deskHidden ? "▴" : "▾";
   $("deskMin").title = deskHidden ? "Restore the desk" : "Minimise the desk";
 }
@@ -3173,7 +3996,7 @@ function toggleDesk(): void {
   } catch { /* fine */ }
   paintDesk();
 }
-$("deskToggle").addEventListener("click", toggleDesk);
+$("deskExpand").addEventListener("click", toggleDesk);
 $("deskMin").addEventListener("click", toggleDesk);
 paintDesk();
 

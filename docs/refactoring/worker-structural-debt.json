@@ -714,17 +714,17 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/ChatView.tsx": {
-      "file_lines": 1325,
-      "max_function_lines": 1243,
+      "file_lines": 1324,
+      "max_function_lines": 1240,
       "max_parameters": 3,
       "max_complexity": 100,
       "max_nesting_depth": 4,
       "over_limit_functions": [
         {
           "name": "ChatView",
-          "line": 83,
+          "line": 85,
           "column": 1,
-          "lines": 1243,
+          "lines": 1240,
           "parameters": 1,
           "complexity": 100,
           "nesting_depth": 4
@@ -990,19 +990,19 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/jarvis/JarvisRenderer.ts": {
-      "file_lines": 745,
-      "max_function_lines": 144,
+      "file_lines": 728,
+      "max_function_lines": 130,
       "max_parameters": 5,
-      "max_complexity": 37,
+      "max_complexity": 34,
       "max_nesting_depth": 2,
       "over_limit_functions": [
         {
           "name": "JarvisWebGLRenderer.frame",
-          "line": 601,
+          "line": 598,
           "column": 19,
-          "lines": 144,
+          "lines": 130,
           "parameters": 1,
-          "complexity": 37,
+          "complexity": 34,
           "nesting_depth": 2
         }
       ],
@@ -1373,7 +1373,7 @@
         }
       ],
       "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-20: extracted typed channel-origin facts, lowering the file 1588\u21921577 lines, RunsView 212\u2192209 lines and complexity 25\u219223, and WorkDetail 226\u2192218 lines and complexity 23\u219216.",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-20: extracted typed channel-origin facts, lowering the file 1588→1577 lines, RunsView 212→209 lines and complexity 25→23, and WorkDetail 226→218 lines and complexity 23→16.",
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/PermanentFleetTopology.tsx": {
