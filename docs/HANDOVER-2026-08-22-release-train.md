@@ -70,6 +70,12 @@ file you have not `git add`ed is invisible: the capture passes every local gate
 and fails only in CI, which checks out everything. `git add` new files BEFORE the
 recapture cascade, and commit `.vds/ledgers/*.yaml` together with the evidence.
 
+The prose gate has the SAME blindness pointing the other way: it resolves a cited
+path against the worktree, so an untracked or gitignored file makes the citation
+pass locally and fail in CI. This document tripped it on its own first run, by
+naming the canon store. Whenever a gate disagrees between here and CI, ask what
+the two trees disagree about before you ask what the code does.
+
 **A dirty PR runs no CI at all.** `mergeStateStatus: DIRTY` shows zero checks,
 not red ones. Merge main in, push, and only then read the checks.
 
