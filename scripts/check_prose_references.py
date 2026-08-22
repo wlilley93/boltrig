@@ -229,6 +229,17 @@ _PROSPECTIVE_RE = re.compile(
 
 ALLOW: dict[tuple[str, str], str] = {
     (
+        "docs/HANDOVER-2026-08-22-release-train.md",
+        "apps/worker/tests/visual/presets.json",
+    ): (
+        "The canon store is gitignored BY DESIGN (.gitignore:85) and lives in one "
+        "working tree on the beelink; the handover's whole point at that line is to "
+        "say so and to name the backups. The path cannot resolve in a clone, which "
+        "is exactly the fact being recorded - and this gate passing locally while "
+        "failing in CI, because an untracked copy sat in the author's worktree, is "
+        "the same index-versus-worktree trap the document describes two lines later."
+    ),
+    (
         "docs/PROPOSAL-native-tables-surface.md",
         "migrations/0026_data_plane.sql",
     ): (
