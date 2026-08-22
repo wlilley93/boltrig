@@ -459,11 +459,21 @@ app and an iPhone app. What the repository says today:
 - "Connect to a Boltrig instance by URL" needs only the existing `/v1` API and works for the
   hosted service, for a self-hosted single box, and for a dev preview. That is what was built.
 
+Will's reply when shown this (2026-08-22): he had understood the Tauri app to be the entire
+Boltrig stack downloaded onto the user's computer, the user's computer becoming the server. It is
+not that today. If that is the intended product, the desktop needs, in addition to the phone
+pairing layer above: the kernel and fleet worker packaged as sidecars or a bundled runtime,
+embedded stand-ins for Postgres, Redis and Hatchet or those services bundled, all state on the
+user's disk, the optional local model, a first-run flow replacing `genesis.sh`, and auto-update
+that is allowed wherever the desktop is distributed. That is a separate program and a product
+decision; it is recorded here as Will's intent signal, not as a decision taken.
+
 The decision taken on the branch, swappable: the phone targets an instance URL (hosted by
 default, changeable on the sign-in screen, https only, token scoped to the instance). This keeps
 Will's "not the site, my own box" direction open without inventing a desktop server. If the
 product later ships a desktop that IS the server, the phone needs only a pairing flow that hands
-it the URL and a first token; the rest of the client is unchanged. Shipping "only Tauri plus
+it the URL and a first token; the rest of the client is unchanged. Until then, a self-hosted
+single box (`genesis.sh` on any machine that runs Docker) is already a valid target of this app. Shipping "only Tauri plus
 iPhone" is a business decision about dropping the hosted web app and is recorded as open; the
 code does not prevent it but also does not make the desktop a server.
 

@@ -14,18 +14,18 @@ only Will can do (an account, a payment, a legal signature, a decision).
 | Error tracking | root logging config (`boltrig/api/logging_config.py`), liveness and readiness routes (`boltrig/kernel/health_routes.py`), doctor checks, a UI error boundary | any crash or error sink: no Sentry, no OpenTelemetry, no log shipping, no alerting, no structured logs |
 | Statistics | tamper-evident audit ledger, `GET /v1/cost`, model telemetry reconstructed from audit rows (`boltrig/observability/model_telemetry.py`), budgets and spend (`boltrig/kernel/platform_routes/budgets.py`), console counts | product analytics of any kind, user or conversation counts over time, a metrics endpoint, uptime monitoring |
 | Legal and privacy | encrypted secrets at rest (`boltrig/store/sealing.py`), 30-day conversation retention janitor (`boltrig/fleet/retention.py`), memory erasure route, a privacy-coverage API that is honest about what is unenforced (`boltrig/kernel/platform_routes/privacy_policy.py`), cookie banner on the marketing site | a privacy policy, terms, a subprocessor list, a DPA, account deletion, user data export, any GDPR text, a security contact, `security.txt`; the cookie banner links to `/privacy-policy`, which does not exist |
-| App Store | brand icon source (`assets/brand/boltrig-app-icon.svg`), macOS signing and notarisation in the desktop release workflow, the native app on this branch (`ios/`) | a paid Apple Developer Program team (unknown), an App Store Connect record, demo credentials for review, push notifications, universal links (`/.well-known/apple-app-site-association` soft-404s the marketing home page), App Privacy answers, screenshots and metadata |
+| App Store | a paid individual Apple Developer Program membership (Will, confirmed 2026-08-22), brand icon source (`assets/brand/boltrig-app-icon.svg`), macOS signing and notarisation in the desktop release workflow, the native app on this branch (`ios/`) | an App Store Connect record, demo credentials for review, push notifications, universal links (`/.well-known/apple-app-site-association` soft-404s the marketing home page), App Privacy answers, screenshots and metadata |
 | Content rights | character constitutions and safety text in the prompts (`docs/characters/README.md`), voice licences tracked with a guard test (`THIRD_PARTY_NOTICES.md`) | clearance for the names Jarvis, Ultron and Colossus (Marvel and Forbin marks), consent for the cloned real voice (`docs/BACKUP-2026-08-14.md` records it as a real person's voice), a decision on the CC-BY-NC voices (`cosette`, `jean`) that cannot ship commercially |
 
 ## 1. Apple: accounts, records, distribution
 
-1. **[WILL][TESTFLIGHT] Apple Developer Program membership** (USD 99 a year). A free Personal Team
-   builds to a cabled phone and nothing else: no TestFlight, no App Store. Decide individual versus
-   organisation now: the seller name shown in the store follows the enrolment, an organisation
-   needs a D-U-N-S number and a legal entity, and switching later means a new account. If the
-   entity is the Jellytot company, enrol it; if you want "Boltrig" as the seller, that is a
-   trade name question for the lawyer below. The Xcode template project on the M4 was created
-   under team `5B68P8YVT8`; whether that team is paid is not visible from the repository.
+1. **Apple Developer Program membership: in place.** Will confirmed on 2026-08-22 that he holds a
+   paid individual membership (USD 99 a year), so TestFlight and App Store submission are open as
+   soon as the App Store Connect record exists. Consequences of "individual": the seller name
+   shown in the store is William Lilley, not Boltrig or a company; moving to an organisation later
+   (D-U-N-S number, legal entity) is a separate account and an app transfer. The project carries
+   team `5B68P8YVT8`, the team the M4's Xcode created the template project under; confirm it is the
+   paid team in Xcode's Accounts settings before the first archive.
 2. **[WILL] Bundle identifier is permanent.** The branch uses `ai.boltrig.app` (the Tauri desktop is
    `io.boltrig.worker`). Create the App Store Connect record with the same identifier; changing it
    after release is a new app.
@@ -233,8 +233,8 @@ must be declared and both must honour the consent the cookie banner promises.
 
 ## 7. The order to do it in
 
-1. **[WILL]** Confirm or start the paid Developer Program enrolment and decide individual versus
-   organisation. Nothing else on the Apple side can start without it.
+1. **Done 2026-08-22:** paid individual Developer Program membership confirmed. Open only if the
+   seller should later become an organisation (new account plus app transfer).
 2. **[WILL]** Set up a mailbox for support and privacy contact. Pick the seller and legal entity.
 3. Write the privacy policy and terms (drafts can be produced from the inventory above; the
    lawyer reviews), publish them on `boltrig.ai` at the URLs the app already links, fix the
@@ -249,5 +249,5 @@ must be declared and both must honour the consent the cookie banner promises.
 8. Provision the review account, write the review notes, answer App Privacy from the privacy
    manifest (`ios/Boltrig/PrivacyInfo.xcprivacy`) and the policy, submit as unlisted.
 
-Items 3 to 6 are parallel with the native work in `docs/HANDOVER-2026-08-22-ios-app.md`; items 1,
-2 and 6 are the ones only Will can move.
+Items 3 to 6 are parallel with the native work in `docs/HANDOVER-2026-08-22-ios-app.md`; items 2
+and 6 are the ones only Will can move.
