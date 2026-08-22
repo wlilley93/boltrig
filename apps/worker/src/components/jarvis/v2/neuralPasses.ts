@@ -172,8 +172,11 @@ export class NeuralPasses {
     const eye: readonly [number, number, number, number] = [
       tuning.eye[0], tuning.eye[1], tuning.eye[2] * tuning.presence, tuning.eye[3],
     ];
-    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), tuning.starburst, eye,
-      [tuning.bounce[0], tuning.bounce[1], tuning.bounceTrail], d.time);
+    this.composite({
+      palette, core: pulsedCore(tuning.core, d.energy, d.bands),
+      starburst: tuning.starburst, eye,
+      bounce: [tuning.bounce[0], tuning.bounce[1], tuning.bounceTrail], time: d.time,
+    });
   }
 
   destroy(): void {
@@ -287,13 +290,13 @@ export class NeuralPasses {
     this.fullscreen(prog);
   }
 
-  private composite(
-    palette: FloatUniforms, core: number, starburst: number,
-    // Passed in rather than read off a field: this method has no tuning of its
-    // own, and reaching for one is what made it fail to compile.
-    eye: readonly number[],
-    bounce: readonly number[], time: number,
-  ): void {
+  // Spec object rather than a parameter list: this method has no tuning of
+  // its own, and reaching for one is what made it fail to compile.
+  private composite(spec: {
+    palette: FloatUniforms; core: number; starburst: number;
+    eye: readonly number[]; bounce: readonly number[]; time: number;
+  }): void {
+    const { palette, core, starburst, eye, bounce, time } = spec;
     const gl = this.gl;
     const [w, h] = this.size;
     const prog = this.progs.comp;

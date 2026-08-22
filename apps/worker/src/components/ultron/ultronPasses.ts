@@ -159,8 +159,11 @@ export class UltronPasses {
     this.simulate(d, tuning);
     this.drawScene(d, palette, tuning);
     this.bloom();
-    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), 0.0, tuning.eye,
-      [tuning.bounce[0], tuning.bounce[1], tuning.bounceTrail], d.time, tuning.knee);
+    this.composite({
+      palette, core: pulsedCore(tuning.core, d.energy, d.bands), starburst: 0.0,
+      eye: tuning.eye, knee: tuning.knee,
+      bounce: [tuning.bounce[0], tuning.bounce[1], tuning.bounceTrail], time: d.time,
+    });
   }
 
   destroy(): void {
@@ -276,13 +279,13 @@ export class UltronPasses {
     this.fullscreen(prog);
   }
 
-  private composite(
-    palette: FloatUniforms, core: number, starburst: number,
-    // Passed in rather than read off a field: this method has no tuning of its
-    // own, and reaching for one is what made it fail to compile.
-    eye: readonly number[],
-    bounce: readonly number[], time: number, knee: number,
-  ): void {
+  // Spec object rather than a parameter list: this method has no tuning of
+  // its own, and reaching for one is what made it fail to compile.
+  private composite(spec: {
+    palette: FloatUniforms; core: number; starburst: number;
+    eye: readonly number[]; bounce: readonly number[]; time: number; knee: number;
+  }): void {
+    const { palette, core, starburst, eye, bounce, time, knee } = spec;
     const gl = this.gl;
     const [w, h] = this.size;
     const prog = this.progs.comp;

@@ -26,6 +26,7 @@ import {
 import { FamiliarBadge } from "./familiar/FamiliarBadge";
 import { StageBody, useFamiliarBody } from "./StageBody";
 import { stageTurnInput, type StageVoiceActivity } from "./chat/stageTurnInput";
+import { traceFromEvents } from "./chat/thinkingTrace";
 import { useCharacter } from "./characters";
 import { familiarBusy, familiarStateFromTurn } from "./familiar/FamiliarState";
 import { MobileChat } from "./MobileChat";
@@ -219,11 +220,9 @@ export function ChatView({
       || conversationLoad.phase === "loading"
     ),
   );
-  const conversationLoadError = (
-    conversationId
+  const conversationLoadError = (conversationId
     && conversationLoad.conversationId === conversationId
-    && conversationLoad.phase === "error"
-  ) ? conversationLoad.error : "";
+    && conversationLoad.phase === "error") ? conversationLoad.error : "";
   const conversationReady = !conversationId || (
     conversationLoad.conversationId === conversationId
     && conversationLoad.phase === "ready"
@@ -834,25 +833,12 @@ export function ChatView({
   // one full-resolution Stage. Chat must not leave a second WebGL renderer
   // running invisibly behind that modal.
   const stageIsHero = messages.length === 0 && events.length === 0;
-  // The tail of the live reasoning, bounded HERE — the stage contract carries
-  // one short phrase, never the stream (see CharacterTurnInput.thinkingTrace).
-  // Only Colossus reads it: his sign shows what the machine is doing while it
-  // thinks. Word-clipped at the front so the phrase starts on a word.
-  const thinkingTrace = useMemo(() => {
-    let reasoning = "";
-    for (const ev of events) {
-      if (ev.type === "reasoning_delta") reasoning += ev.delta;
-    }
-    const flat = reasoning.replace(/\s+/g, " ").trim();
-    if (!flat) return null;
-    return flat.length <= 80 ? flat : flat.slice(-80).replace(/^\S*\s/, "");
-  }, [events]);
   const stageInput = stageTurnInput({
     loading,
     liveEventCount: events.length,
     liveEnded: live.ended,
     voice: voiceActivity,
-    thinkingTrace,
+    thinkingTrace: useMemo(() => traceFromEvents(events), [events]),
   });
   const stageState = familiarStateFromTurn(stageInput);
 
@@ -864,10 +850,8 @@ export function ChatView({
 
   // Live voice is feature-guarded the same way VoiceCall guards itself: the
   // affordances render only where the call control is actually mounted.
-  const voiceAvailable = (
-    typeof client.createCall === "function"
-    && (!conversationId || conversationStatus === "active")
-  );
+  const voiceAvailable = typeof client.createCall === "function"
+    && (!conversationId || conversationStatus === "active");
   const headerTitle = conversationStatus === "closed"
     ? "Closed conversation"
     : loadingConversation

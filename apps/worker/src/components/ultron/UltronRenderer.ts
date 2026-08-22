@@ -22,6 +22,8 @@
 import { type FloatUniforms } from "../canvas/glResources";
 import { UltronPasses } from "./ultronPasses";
 import { BodyClock } from "../canvas/bodyClock";
+import { SpeechReach } from "../canvas/speechReach";
+import { fitCanvasToHost } from "../canvas/fitCanvas";
 import { ULTRON_ONSET, ultronDrive, ultronPalette } from "./ultronDrive";
 import {
   RESTING_PHENOTYPE,
@@ -95,13 +97,8 @@ export class UltronRenderer {
    */
   private introLeft = 0;
   private live: UltronTuning = ULTRON_ARRIVAL;
-  /**
-   * The syllable envelope: a VU needle over the voice level — fast toward a
-   * louder syllable, easing back through the gaps between words. Same
-   * constants as Jarvis's, per-frame at rAF rate, matching the bench where
-   * the ULTRON_SPEECH reaches were tuned against real clips.
-   */
-  private speechEnv = 0;
+  /** The syllable meter and reach ride — see canvas/speechReach.ts. */
+  private speech = new SpeechReach();
   /** A bench override. Null means follow the mode, which is the shipped path. */
   private tuning: UltronTuning | null = null;
 
@@ -257,11 +254,7 @@ export class UltronRenderer {
     // An explicit bench override replaces the target outright, which is why
     // dragging a slider is instant.
     const mode = this.state?.mode ?? "standby";
-    // Same meter as Jarvis's: 1.13 restores the bench's headroom (it metered
-    // the reach at peak*1.3 while reporting level at peak*1.15).
-    const reachTarget = Math.min(1, (this.state?.level ?? 0) * 1.13);
-    this.speechEnv += (reachTarget - this.speechEnv)
-      * (reachTarget > this.speechEnv ? 0.45 : 0.1);
+    this.speech.advance(this.state?.level ?? 0);
     let shown = this.live;
     if (this.introLeft > 0 && !this.reducedMotion) {
       // THE DRAW-IN, and it outranks a pinned tuning for as long as it lasts. The
@@ -287,8 +280,9 @@ export class UltronRenderer {
         : easeTuning(this.live, target, easeFactor(this.clock.easeDt));
       shown = this.reducedMotion
         ? this.live
-        : this.applySpeech(
+        : this.speech.apply(
           applyPulses(this.live, ULTRON_PULSES[mode], this.clock.animClock),
+          ULTRON_SPEECH,
         );
     }
     d.radius *= shown.presence;
@@ -298,32 +292,6 @@ export class UltronRenderer {
 
   // ------------------------------------------------------------------ internals
 
-  /**
-   * Ride every ULTRON_SPEECH reach on the syllable envelope: each mapped dial
-   * travels from the mode's value toward its spoken one and settles back as
-   * the envelope releases. Applied on the SHIPPED path only — the bench pins
-   * its tuning and folds the same reaches in itself, so applying them here too
-   * would speak twice.
-   */
-  private applySpeech(tuning: UltronTuning): UltronTuning {
-    const k = this.speechEnv;
-    if (k < 0.002) return tuning;
-    const out = { ...tuning } as unknown as Record<string, number | number[]>;
-    for (const [id, reach] of Object.entries(ULTRON_SPEECH)) {
-      const [field, indexText] = id.split(":");
-      const value = out[field];
-      if (value === undefined) continue;
-      if (typeof value === "number") {
-        out[field] = value + (reach - value) * k;
-      } else {
-        const next = value.slice();
-        const index = Number(indexText);
-        next[index] = next[index] + (reach - next[index]) * k;
-        out[field] = next;
-      }
-    }
-    return out as unknown as UltronTuning;
-  }
 
   private fail(reason: string): void {
     this._status = { state: "failed", reason };
@@ -333,17 +301,12 @@ export class UltronRenderer {
   }
 
   private resize(): void {
-    const canvas = this.canvas;
-    const host = this.host;
-    if (!canvas || !host || !this.passes) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, this.opts.maxDevicePixelRatio ?? 1.5);
-    const w = Math.max(1, Math.round(host.clientWidth * dpr));
-    const h = Math.max(1, Math.round(host.clientHeight * dpr));
-    if (w === this.size[0] && h === this.size[1]) return;
-    this.size = [w, h];
-    canvas.width = w;
-    canvas.height = h;
-    this.passes.resize(w, h);
+    if (!this.canvas || !this.host || !this.passes) return;
+    const next = fitCanvasToHost(
+      this.canvas, this.host, this.opts.maxDevicePixelRatio ?? 1.5, this.size);
+    if (!next) return;
+    this.size = next;
+    this.passes.resize(next[0], next[1]);
   }
 
 

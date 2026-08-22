@@ -14,7 +14,13 @@ import {
   sweepPeriod,
   WAVE_SAMPLES,
 } from "./JarvisMotion";
-import { GENE, genotypeFrom } from "./JarvisGenotype";
+import { genotypeFrom } from "./JarvisGenotype";
+import { parseLiveKnobs, type JarvisLiveKnobsInput } from "./jarvisLiveKnobs";
+import { pushInstrumentState } from "./jarvisInstrumentUniforms";
+import {
+  PHENO_KEYS, PHENO_STALE_MS, PHENO_TAU, RESTING_PHENOTYPE,
+  type PhenoKey, type Phenotype,
+} from "./jarvisPhenotype";
 import { NO_TELEMETRY, type JarvisTelemetry } from "./JarvisTelemetry";
 import { NO_WORK, type JarvisWork } from "./JarvisWork";
 import {
@@ -44,35 +50,6 @@ export const UNIFORMS = [
   "uWorkLoad", "uWorkFail", "uHDR", "uSpinDelta", "uParallax",
 ] as const;
 type UniformName = (typeof UNIFORMS)[number];
-
-/** The ten server phenotype scalars (decision 0013 + 0024's attachment). */
-const PHENO_KEYS = [
-  "valence", "arousal", "irritation", "fatigue", "attention",
-  "social", "buoyancy", "luminosity", "tension", "attachment",
-] as const;
-type PhenoKey = (typeof PHENO_KEYS)[number];
-type Phenotype = Record<PhenoKey, number>;
-
-/**
- * Rest values. Read them as "nothing is known", not "the agent is calm": the
- * instrument sits at neutral and drops its signal ring rather than performing a
- * mood it has not been told about.
- *
- * This is the one place the instrument deliberately diverges from the Familiar,
- * whose renderer WANDERS its mood when the relay is absent so the creature
- * still looks alive. A creature may idle plausibly; an instrument that invents
- * a reading is broken.
- */
-const RESTING_PHENOTYPE: Phenotype = {
-  valence: 0.5, arousal: 0.28, irritation: 0, fatigue: 0, attention: 0.5,
-  social: 0.5, buoyancy: 0.5, luminosity: 0.5, tension: 0, attachment: 0.5,
-};
-
-/** Phenotype crossfade time constant — mood morphs, it never snaps. */
-const PHENO_TAU = 2.0;
-
-/** How long a phenotype sample stays usable before the dial drops to rest. */
-const PHENO_STALE_MS = 10_000;
 
 /** Mode crossfade time constant. Slow enough to read as a morph, not a cut. */
 const MODE_TAU = 0.18;
@@ -342,34 +319,17 @@ export class JarvisWebGLRenderer {
    * null to clear: the tracks fall back to ghosts, which is the honest
    * rendering of "no reading" and is NOT the same as a gauge at zero.
    */
-  /**
-   * THE BENCH'S LIVE KNOBS: identity genes, accent, scale, bloom -- the
-   * honest set this renderer can change without a remount. Genes re-upload
-   * on the next frame, where the scene program is bound; unknown fields are
-   * ignored so the tuning object can grow without breaking this renderer.
-   */
-  setTuning(next: Partial<{
-    presence: number;
-    accent: readonly [number, number, number];
-    scale: number;
-    bloom: readonly [number, number, number];
-  }> & Partial<Record<keyof typeof GENE, number>>): void {
-    if (typeof next.presence === "number" && Number.isFinite(next.presence)) {
-      this.presence = Math.min(2.5, Math.max(0.2, next.presence));
-    }
-    if (Array.isArray(next.accent) && next.accent.length === 3) {
-      this.accent = [next.accent[0], next.accent[1], next.accent[2]];
-    }
-    if (typeof next.scale === "number" && Number.isFinite(next.scale)) this.scale = next.scale;
-    if (Array.isArray(next.bloom) && next.bloom.length === 3) {
-      this.bloomTuning = [next.bloom[0], next.bloom[1], next.bloom[2]];
-    }
-    for (const [field, index] of Object.entries(GENE)) {
-      const value = (next as Record<string, unknown>)[field];
-      if (typeof value === "number" && Number.isFinite(value)) {
-        this.genes[index] = value;
-        this.genesDirty = true;
-      }
+  /** The bench's live knobs, parsed in jarvisLiveKnobs.ts. Genes re-upload
+   *  on the next frame, where the scene program is bound. */
+  setTuning(next: JarvisLiveKnobsInput): void {
+    const knobs = parseLiveKnobs(next);
+    if (knobs.presence !== undefined) this.presence = knobs.presence;
+    if (knobs.accent) this.accent = knobs.accent;
+    if (knobs.scale !== undefined) this.scale = knobs.scale;
+    if (knobs.bloom) this.bloomTuning = knobs.bloom;
+    for (const [index, value] of knobs.genes) {
+      this.genes[index] = value;
+      this.genesDirty = true;
     }
   }
 
@@ -737,34 +697,15 @@ export class JarvisWebGLRenderer {
       this.genesDirty = false;
     }
 
-    f("uSpin", this.spin);
-    f("uSpinDelta", this.spinDelta);
-    gl.uniform2f(u.uParallax ?? null, this.parallax.x, this.parallax.y);
-    f("uPhenoFresh", this.phenoFresh);
-    f("uValence", this.pheno.valence);
-    f("uArousal", this.pheno.arousal);
-    f("uIrritation", this.pheno.irritation);
-    f("uFatigue", this.pheno.fatigue);
-    f("uAttention", this.pheno.attention);
-    f("uLuminosity", this.pheno.luminosity);
-    f("uTension", this.pheno.tension);
-
-    const { budget, tokens } = this.telemetry;
-    f("uBudgetFill", budget.fill);
-    f("uBudgetKnown", budget.known ? 1 : 0);
-    f("uBudgetHard", budget.hard ? 1 : 0);
-    f("uTokenFill", tokens.fill);
-    f("uTokenKnown", tokens.known ? 1 : 0);
-
-    f("uWorkLoad", this.workLoad);
-    f("uWorkFail", this.workFail);
-
-    const labels = labelsForMode(mode);
-    const labelGain = this.labels === "shader" ? 1 : 0;
-    i1("uLabelTop", labels.top);
-    i1("uLabelBottom", labels.bottom);
-    f("uLabelTopAmt", labels.topAmt * labelGain);
-    f("uLabelBottomAmt", labels.bottomAmt * labelGain);
+    pushInstrumentState(
+      { f, i1, set2: (n, x, y) => gl.uniform2f(u[n as keyof typeof u] ?? null, x, y) },
+      {
+        spin: this.spin, spinDelta: this.spinDelta, parallax: this.parallax,
+        phenoFresh: this.phenoFresh, pheno: this.pheno, telemetry: this.telemetry,
+        workLoad: this.workLoad, workFail: this.workFail,
+        mode, shaderLabels: this.labels === "shader",
+      },
+    );
 
     f("uHDR", offscreen ? 1 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
