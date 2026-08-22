@@ -178,7 +178,10 @@ def test_desktop_native_process_seams_are_explicit_and_bounded():
     ):
         assert f"#[tauri::command]\nfn {forbidden_export}" not in lib
     assert "connect-src 'self' https: wss:" not in config
-    assert "https://*.boltrig.io" in config
+    # The desktop webview may reach the product domain and, for the
+    # dev.boltrig.io API grace path, the retired one; nothing wider.
+    for origin in ("https://*.boltrig.ai", "wss://*.boltrig.ai", "https://*.boltrig.io"):
+        assert origin in config
 
 
 @pytest.mark.invariant("SEC-198")

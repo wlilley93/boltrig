@@ -714,7 +714,11 @@ jobs:
           }
           const hostname = origin.hostname.toLowerCase();
           const canonical = origin.origin;
-          const allowedHost = hostname === "boltrig.io" || hostname.endsWith(".boltrig.io");
+          // boltrig.ai is the product domain (2026-08-18). boltrig.io stays admitted
+          // only for the dev.boltrig.io API grace path; both lists must match the
+          // connect-src allowlist in apps/worker/src-tauri/tauri.conf.json.
+          const allowedHost = hostname === "boltrig.ai" || hostname.endsWith(".boltrig.ai")
+            || hostname === "boltrig.io" || hostname.endsWith(".boltrig.io");
           if (
             origin.protocol !== "https:" ||
             !allowedHost ||
