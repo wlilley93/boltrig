@@ -56,6 +56,11 @@ final class SessionStore: ObservableObject {
         return nil
     }
 
+    /// The id of the key this phone signs in with, so the keys list can mark it "This phone".
+    var phoneTokenID: String? {
+        (try? vault.load())?.tokenID
+    }
+
     var instanceLabel: String { InstanceAddress.label(for: instanceURL) }
     var isHostedInstance: Bool { instanceURL == BoltrigEnvironment.hostedInstanceURL }
 

@@ -8,13 +8,8 @@ struct SettingsView: View {
     @State private var disconnecting: LinkedDevice?
     let onLeavePreview: (() -> Void)?
 
-    private var filteredItems: [SettingItem] {
-        let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return SettingItem.all }
-        return SettingItem.all.filter {
-            $0.label.localizedCaseInsensitiveContains(value)
-                || $0.lead.localizedCaseInsensitiveContains(value)
-        }
+    private var filteredItems: [SettingsDestination] {
+        SettingsDestination.matching(query)
     }
 
     var body: some View {
@@ -43,11 +38,6 @@ struct SettingsView: View {
                     LabelValueRow(label: "Connected to", value: store.isPreview ? "Preview" : session.instanceLabel)
                     if let notice = session.familiarAdoptedNotice {
                         Text(notice)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    if !store.account.onboardingComplete && !store.isPreview {
-                        Text("Finish setting up on the web to choose your companion and connect a provider.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -111,8 +101,8 @@ struct SettingsView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Settings")
-            .navigationDestination(for: SettingItem.self) { item in
-                SettingDetailView(item: item)
+            .navigationDestination(for: SettingsDestination.self) { destination in
+                destinationView(destination)
             }
             .searchable(text: $query, prompt: "Search every setting")
             .confirmationDialog("Sign out of Boltrig on this phone?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
@@ -136,7 +126,23 @@ struct SettingsView: View {
     }
 }
 
-/// Each section is managed on the web for now. The screen says so rather than showing
+private extension SettingsView {
+    @ViewBuilder
+    func destinationView(_ destination: SettingsDestination) -> some View {
+        switch destination {
+        case .look: AppearanceView()
+        case .approvals: ApprovalsView()
+        case .spending: SpendingView()
+        case .health: HealthView()
+        case .archived: ArchivedChatsView()
+        case .security: SecurityView()
+        case .organisation: SettingDetailView(item: .organisation)
+        case .deleteAccount: DeleteAccountView()
+        }
+    }
+}
+
+/// Organisation is managed on the web. The screen says so rather than showing
 /// placeholder values; the link opens the signed-in instance.
 private struct SettingDetailView: View {
     @EnvironmentObject private var session: SessionStore

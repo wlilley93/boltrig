@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TodayView: View {
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var accountSettings: AccountSettingsStore
 
     var body: some View {
         NavigationStack {
@@ -200,6 +201,11 @@ struct TodayView: View {
                         .padding(.vertical, 13)
                     }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        if !working {
+                            Button("Archive", systemImage: "archivebox") { archive(conversation) }
+                        }
+                    }
 
                     if conversation.id != rows.last?.id {
                         Divider().padding(.leading, 69)
@@ -207,6 +213,17 @@ struct TodayView: View {
                 }
             }
             .background(BoltrigTheme.card, in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+    /// Soft-closes a chat; it moves to Settings, Archived chats, and can be brought back.
+    private func archive(_ conversation: ConversationSummary) {
+        Task {
+            if await accountSettings.archive(id: conversation.id) {
+                await store.refresh()
+            } else {
+                store.notice = accountSettings.notice
+            }
         }
     }
 

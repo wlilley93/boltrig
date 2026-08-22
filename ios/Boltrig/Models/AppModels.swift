@@ -87,18 +87,10 @@ struct SettingItem: Identifiable, Hashable {
 }
 
 extension SettingItem {
-    /// The sections the web app offers. Each opens on the web for now; the rows are
-    /// honest about that rather than showing placeholder values.
-    static let all: [SettingItem] = [
-        SettingItem(id: "you", label: "You", title: "You", lead: "How Boltrig looks, speaks and reaches you."),
-        SettingItem(id: "behaviour", label: "Behaviour", title: "Behaviour", lead: "What Boltrig may notice, remember, and do while you are away."),
-        SettingItem(id: "autonomy", label: "Autonomy", title: "Autonomy", lead: "Approval rules and spending limits that can stop work."),
-        SettingItem(id: "spend", label: "Spending", title: "Spending", lead: "What work is allowed to cost, and what it has cost."),
-        SettingItem(id: "models", label: "Models", title: "Models", lead: "Choose the models Boltrig uses."),
-        SettingItem(id: "health", label: "Health", title: "Health", lead: "What is working, and what Boltrig cannot do yet."),
-        SettingItem(id: "organisation", label: "Organisation", title: "Organisation", lead: "People, keys and the record. Admin-only."),
-        SettingItem(id: "archived", label: "Archived chats", title: "Archived chats", lead: "Out of the way, not gone. Everything they did is still in the record."),
-    ]
+    /// The one section that still opens on the web (admin-only); the row is honest about
+    /// that rather than showing placeholder values. Every other section has its own screen.
+    static let organisation = SettingItem(id: "organisation", label: "Organisation", title: "Organisation",
+                                          lead: "People, keys and the record. Admin-only.")
 }
 
 extension String {

@@ -23,6 +23,11 @@ enum BoltrigEnvironment {
     /// How long a phone's access token lives before the person has to sign in again.
     static let accessTokenLifetimeDays = 90
 
+    /// Deleting an account from the app needs a server route that does not exist yet
+    /// (`DELETE /v1/me` with the phone's key and a fresh password; see the handover). The
+    /// screen stays read-only and points at support until this is flipped.
+    static let accountDeletionAvailable = false
+
     static var versionLabel: String {
         let info = Bundle.main.infoDictionary ?? [:]
         let version = info["CFBundleShortVersionString"] as? String ?? "0"
