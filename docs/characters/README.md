@@ -120,3 +120,11 @@ constitution proposing its own containment profile, its own verbs or its own
 authority model describes a character governing itself, and none of that is
 implemented. Where a document asks for it, the deviation is recorded at the top
 of that document rather than left for a reader to discover by its absence.
+
+## Frame-video bodies
+
+Characters whose body is a graph of pre-rendered clips rather than a shader
+(first: General Montgomery) are specified in
+[frame-video-bodies.md](frame-video-bodies.md) — the hub-and-spoke contract,
+byte-exact joins via FrameGraph Studio, geometry and environment laws, and
+the call-mode full-bleed presentation.
