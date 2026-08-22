@@ -222,8 +222,10 @@ today moves through opbox kernel verbs (`file.put`/`file.download`, sealed
 AES-GCM into the kernel's MinIO), so a boltrig-only Files tab needs its own
 storage backend behind a new adapter, not a lift of the current one. The
 tiptap editor is the expensive half and should be DEFERRED: documents are
-not a model, they are TableRow rows in a system table written via kernel
-table verbs; the editor carries ~40 custom extensions (DOCX round-trip,
+not a model, they are TableRow rows in a system table whose SoR writes go
+through the kernel `tables.*` verb family (`table_ext.rs`, the frontend's
+`table-kernel-writes.ts` seam), not the kernel's separate fact-per-cell
+`table.*` data plane; reads stay frontend Prisma; the editor carries ~40 custom extensions (DOCX round-trip,
 track changes, entity mentions, inline AI) and 226 `components/ui` imports.
 Recommendation: no boltrig-only Files tab until a boltrig-only customer
 needs one — today the only boltrig-only audience is the app.boltrig.io
