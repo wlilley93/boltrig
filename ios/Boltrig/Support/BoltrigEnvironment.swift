@@ -15,6 +15,11 @@ enum BoltrigEnvironment {
     static let termsURL = URL(string: "https://boltrig.ai/terms")!
     static let supportURL = URL(string: "https://boltrig.ai")!
 
+    /// Where Boltrig Desktop is downloaded from. The server does not yet publish this address,
+    /// and the web app bakes its own at build time, so the phone points at the releases page
+    /// until a route exists (docs/HANDOVER-2026-08-22-ios-app.md, the desktop link).
+    static let desktopDownloadURL = URL(string: "https://github.com/wlilley93/boltrig/releases/latest")!
+
     /// How long a phone's access token lives before the person has to sign in again.
     static let accessTokenLifetimeDays = 90
 

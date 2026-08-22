@@ -5,6 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject private var session: SessionStore
     @State private var query = ""
     @State private var confirmingSignOut = false
+    @State private var disconnecting: LinkedDevice?
     let onLeavePreview: (() -> Void)?
 
     private var filteredItems: [SettingItem] {
@@ -55,6 +56,32 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    if store.devices.isEmpty {
+                        Text("No computer is linked yet.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(store.devices) { device in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(device.label)
+                                    Text(device.statusLabel())
+                                        .font(.subheadline)
+                                        .foregroundStyle(device.isOn() ? BoltrigTheme.accent : Color.secondary)
+                                }
+                                Spacer()
+                                Button("Disconnect", role: .destructive) { disconnecting = device }
+                                    .buttonStyle(.borderless)
+                            }
+                        }
+                    }
+                    Link("Download Boltrig Desktop", destination: BoltrigEnvironment.desktopDownloadURL)
+                } header: {
+                    Text("Your computer")
+                } footer: {
+                    Text("Install Boltrig Desktop on your computer and sign in with this account. It then shows here, and this phone and that computer share one Boltrig.")
+                }
+
+                Section {
                     ForEach(filteredItems) { item in
                         NavigationLink(value: item) {
                             Text(item.label)
@@ -95,6 +122,15 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Your work stays in Boltrig. This phone's access is revoked.")
+            }
+            .confirmationDialog("Disconnect \(disconnecting?.label ?? "this computer")?", isPresented: Binding(get: { disconnecting != nil }, set: { if !$0 { disconnecting = nil } }), titleVisibility: .visible) {
+                Button("Disconnect", role: .destructive) {
+                    if let device = disconnecting { Task { await store.disconnect(device) } }
+                    disconnecting = nil
+                }
+                Button("Cancel", role: .cancel) { disconnecting = nil }
+            } message: {
+                Text("Boltrig Desktop on that computer will have to sign in again.")
             }
         }
     }

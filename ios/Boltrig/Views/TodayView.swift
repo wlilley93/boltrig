@@ -9,6 +9,18 @@ struct TodayView: View {
                 VStack(alignment: .leading, spacing: 26) {
                     header
 
+                    if let device = store.devices.first {
+                        HStack(spacing: 8) {
+                            Image(systemName: "desktopcomputer")
+                                .foregroundStyle(device.isOn() ? BoltrigTheme.accent : Color.secondary)
+                            Text(device.isOn() ? "\(device.label) is on" : "\(device.label): \(device.statusLabel().lowercased())")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+
                     if let loadError = store.loadError {
                         NoticeBanner(message: loadError, symbol: "exclamationmark.triangle.fill")
                     }

@@ -9,6 +9,7 @@ final class AppStore: ObservableObject {
     @Published var selectedTab: AppTab = .today
     @Published private(set) var conversations: [ConversationSummary] = []
     @Published private(set) var approvals: [ApprovalRequest] = []
+    @Published private(set) var devices: [LinkedDevice] = []
     @Published private(set) var isLoading = false
     @Published private(set) var busyApprovalID: String?
     @Published var notice: String?
@@ -74,10 +75,28 @@ final class AppStore: ObservableObject {
             let (newApprovals, newConversations) = try await (liveApprovals, liveConversations)
             approvals = newApprovals
             conversations = newConversations.filter { $0.status.lowercased() != "closed" }
+            // The linked computers are shown when known; not knowing is not an error here.
+            if let linked = try? await client.devices() { devices = linked.filter { $0.revokedAt == nil } }
         } catch {
             loadError = (error as? BoltrigError)?.errorDescription ?? BoltrigError(kind: .unreachable, status: 0).errorDescription
         }
     }
+
+    /// Disconnects a computer from this account and drops it from the list.
+    func disconnect(_ device: LinkedDevice) async {
+        guard let client else {
+            devices.removeAll { $0.id == device.id }
+            return
+        }
+        do {
+            try await client.revokeDevice(id: device.id)
+            devices.removeAll { $0.id == device.id }
+        } catch {
+            notice = (error as? BoltrigError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    var onlineDevice: LinkedDevice? { devices.first { $0.isOn() } }
 
     // MARK: Navigation
 
