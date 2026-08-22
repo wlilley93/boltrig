@@ -22,6 +22,8 @@
 import { type FloatUniforms } from "../canvas/glResources";
 import { UltronPasses } from "./ultronPasses";
 import { BodyClock } from "../canvas/bodyClock";
+import { SpeechReach } from "../canvas/speechReach";
+import { fitCanvasToHost } from "../canvas/fitCanvas";
 import { ULTRON_ONSET, ultronDrive, ultronPalette } from "./ultronDrive";
 import {
   RESTING_PHENOTYPE,
@@ -42,6 +44,7 @@ import {
 import {
   ULTRON_ARRIVAL,
   ULTRON_PULSES,
+  ULTRON_SPEECH,
   ultronModeTuning,
 } from "../canvas/bodyPresets";
 import type { UltronStageState } from "./UltronState";
@@ -94,6 +97,8 @@ export class UltronRenderer {
    */
   private introLeft = 0;
   private live: UltronTuning = ULTRON_ARRIVAL;
+  /** The syllable meter and reach ride — see canvas/speechReach.ts. */
+  private speech = new SpeechReach();
   /** A bench override. Null means follow the mode, which is the shipped path. */
   private tuning: UltronTuning | null = null;
 
@@ -249,6 +254,7 @@ export class UltronRenderer {
     // An explicit bench override replaces the target outright, which is why
     // dragging a slider is instant.
     const mode = this.state?.mode ?? "standby";
+    this.speech.advance(this.state?.level ?? 0);
     let shown = this.live;
     if (this.introLeft > 0 && !this.reducedMotion) {
       // THE DRAW-IN, and it outranks a pinned tuning for as long as it lasts. The
@@ -274,7 +280,10 @@ export class UltronRenderer {
         : easeTuning(this.live, target, easeFactor(this.clock.easeDt));
       shown = this.reducedMotion
         ? this.live
-        : applyPulses(this.live, ULTRON_PULSES[mode], this.clock.animClock);
+        : this.speech.apply(
+          applyPulses(this.live, ULTRON_PULSES[mode], this.clock.animClock),
+          ULTRON_SPEECH,
+        );
     }
     d.radius *= shown.presence;
     passes.latticeDeck()?.tick(this.state?.mode ?? "standby", this.clock.easeDt, shown.latticeSpeed);
@@ -282,6 +291,7 @@ export class UltronRenderer {
   }
 
   // ------------------------------------------------------------------ internals
+
 
   private fail(reason: string): void {
     this._status = { state: "failed", reason };
@@ -291,17 +301,12 @@ export class UltronRenderer {
   }
 
   private resize(): void {
-    const canvas = this.canvas;
-    const host = this.host;
-    if (!canvas || !host || !this.passes) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, this.opts.maxDevicePixelRatio ?? 1.5);
-    const w = Math.max(1, Math.round(host.clientWidth * dpr));
-    const h = Math.max(1, Math.round(host.clientHeight * dpr));
-    if (w === this.size[0] && h === this.size[1]) return;
-    this.size = [w, h];
-    canvas.width = w;
-    canvas.height = h;
-    this.passes.resize(w, h);
+    if (!this.canvas || !this.host || !this.passes) return;
+    const next = fitCanvasToHost(
+      this.canvas, this.host, this.opts.maxDevicePixelRatio ?? 1.5, this.size);
+    if (!next) return;
+    this.size = next;
+    this.passes.resize(next[0], next[1]);
   }
 
 

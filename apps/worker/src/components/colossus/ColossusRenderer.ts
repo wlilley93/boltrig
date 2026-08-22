@@ -23,9 +23,10 @@
 import { type FloatUniforms } from "../canvas/glResources";
 import { ColossusPasses, type ColossusDrive } from "./colossusPasses";
 import type { ColossusStageState } from "./ColossusState";
+import { colossusModeTuning, COLOSSUS_TUNING, type ColossusTuning } from "./colossusTuning";
 import { READOUT_LEN } from "./shadersColossus";
 import { glyphIds } from "./glyphAtlas";
-import { scrollSpeed, tickerFor } from "./tickerText";
+import { tickerFor } from "./tickerText";
 
 const SILENT_BANDS = new Float32Array(8);
 
@@ -63,10 +64,12 @@ export class ColossusRenderer {
   private scroll = 0;
   private ticker = tickerFor("standby");
   private tickerMode: ColossusStageState["mode"] = "standby";
-  private tickerTakeaway: string | null = null;
+  private tickerPhrase: string | null = null;
   private counter = 0;
   private counterGlow = 0;
   private readout = new Int32Array(READOUT_LEN);
+  /** A bench override. Null means follow the mode, which is the shipped path. */
+  private tuning: ColossusTuning | null = null;
   private _status: Status = { state: "idle" };
 
   constructor(private readonly opts: ColossusRendererOptions = {}) {
@@ -130,21 +133,23 @@ export class ColossusRenderer {
       this.bands.set(SILENT_BANDS);
     }
     // The sign changes its sentence when the mode changes OR when he starts
-    // saying something else, and NOT otherwise: recompiling every update would
-    // reset the scroll and make the text stutter.
+    // saying (or thinking) something else, and NOT otherwise: recompiling
+    // every update would reset nothing but still churn for no reason.
     //
-    // The takeaway is part of the key rather than a second branch, because the
+    // The phrase is part of the key rather than a second branch, because the
     // two change together on the frame a reply starts -- mode goes to speaking
     // and the phrase arrives in the same update, and two separate checks would
-    // compile the sentence twice.
-    const takeaway = state.takeaway ?? null;
-    if (state.mode !== this.tickerMode || takeaway !== this.tickerTakeaway) {
-      this.ticker = tickerFor(state.mode, takeaway);
+    // compile the sentence twice. While he THINKS the phrase is the reasoning
+    // trace, so the key changes as the thought advances and the sign follows
+    // it live -- the scroll accumulator is separate, so the text never jumps.
+    const phrase = state.takeaway ?? state.trace ?? null;
+    if (state.mode !== this.tickerMode || phrase !== this.tickerPhrase) {
+      this.ticker = tickerFor(state.mode, phrase);
       this.tickerMode = state.mode;
-      this.tickerTakeaway = takeaway;
+      this.tickerPhrase = phrase;
     }
     const onset = typeof state.onset === "number" ? state.onset : 0;
-    if (onset > 0.35) {
+    if (onset > this.shown().counter[0]) {
       // The counter steps on onsets, which is the reference instrument's whole
       // behaviour: it is measuring something and the something is his speech.
       this.counter = (this.counter + 1) % 10000;
@@ -165,6 +170,24 @@ export class ColossusRenderer {
    */
   applyPhenotype(_pheno: Record<string, unknown> | null): void {}
 
+  /**
+   * Replace the look, for tests/visual/shader-bench.html — the same contract
+   * the three bodies hold. SNAPPED, not eased, so the panel and the dial agree
+   * the moment a slider moves. Nothing in the product calls this; the field
+   * defaults to the mode tables, which are what always shipped.
+   */
+  setTuning(next: ColossusTuning): void {
+    this.tuning = next;
+  }
+
+  /** What it is currently drawing with, so a bench can seed its own controls. */
+  currentTuning(): ColossusTuning { return this.tuning ?? COLOSSUS_TUNING; }
+
+  /** The register in force this frame: the bench pin, or the mode's table. */
+  private shown(): ColossusTuning {
+    return this.tuning ?? colossusModeTuning(this.state?.mode ?? "standby");
+  }
+
   suspend(): void { this.suspended = true; }
   resume(): void {
     if (!this.suspended) return;
@@ -177,8 +200,9 @@ export class ColossusRenderer {
     const passes = this.passes;
     if (!passes || !this.canvas) return;
     this.resize();
-    const drive = this.drive(nowMs);
-    passes.render(drive, this.palette(), 0.30 + 0.25 * drive.voice);
+    const t = this.shown();
+    const drive = this.drive(nowMs, t);
+    passes.render(drive, this.palette(t), t.bloom[0] + t.bloom[1] * drive.voice, t.vignette);
   }
 
   // ------------------------------------------------------------------ internals
@@ -211,7 +235,7 @@ export class ColossusRenderer {
     for (let i = 0; i < READOUT_LEN; i++) this.readout[i] = ids[i] ?? 0;
   }
 
-  private drive(nowMs: number): ColossusDrive {
+  private drive(nowMs: number, t: ColossusTuning): ColossusDrive {
     const dt = Math.min(0.05, Math.max(0.001, (nowMs - this.lastFrameAt) / 1000));
     this.lastFrameAt = nowMs;
     if (!this.reducedMotion) this.animClock += dt;
@@ -224,19 +248,16 @@ export class ColossusRenderer {
     // moving. Reduced motion holds it still anyway -- that is the one case
     // where a stopped sign is the correct answer.
     if (!this.reducedMotion) {
-      this.scroll += scrollSpeed(mode, level) * dt;
+      this.scroll += (t.ticker[0] + t.ticker[1] * level) * dt;
     }
-    this.counterGlow *= Math.exp(-dt * 3.4);
-
-    const base = speaking ? 0.90 : mode === "working" ? 0.70
-      : mode === "thinking" ? 0.55 : mode === "listening" ? 0.44 : 0.30;
+    this.counterGlow *= Math.exp(-dt * t.counter[1]);
 
     return {
       time: this.animClock,
-      energy: Math.min(1, base + level * 0.30),
+      energy: Math.min(1, t.energy[0] + level * t.energy[1]),
       // Speaking is when the voice should move the board. Idle stays idle -- a
       // panel answering silence would be answering nothing.
-      voice: speaking ? Math.max(0.30, level) : level * 0.25,
+      voice: speaking ? Math.max(t.voice[0], level) : level * t.voice[1],
       bands: this.bands,
       scroll: this.scroll,
       ticker: this.ticker.glyphs,
@@ -254,22 +275,21 @@ export class ColossusRenderer {
    * because the reference lamps genuinely blow out -- clipping the brightest
    * cores is faithful here rather than the saturation defect it was on Jarvis.
    */
-  private palette(): FloatUniforms {
+  private palette(t: ColossusTuning): FloatUniforms {
     return {
       uAmber: this.opts.amber ?? [1.0, 0.36, 0.05],
       uHot: this.opts.hot ?? [1.0, 0.62, 0.24],
       uTeal: this.opts.teal ?? [0.10, 0.82, 0.78],
-      uCurve: 0.055,
-      // FINE lamps across the panel width -- the indicator fields. Coarse in
-      // absolute terms: the reference boards are low-resolution, and a fine
-      // lattice reads as a modern LED screen.
-      uPitch: 138,
-      // And the sign draws at 1.8x that, which lands about a dozen characters
-      // across a 16:9 card. The reference destination boards show ten to
-      // twenty; below that a message will not fit and above it stops being
-      // readable at a glance, which is the whole job of a sign.
-      uTickerScale: 1.8,
-      uDecay: 0.85,
+      // The glass and the lamps read from the tuning now — colossusTuning.ts
+      // carries the numbers this function used to hardcode, and their
+      // reasoning (coarse pitch is the reference; a fine lattice reads as a
+      // modern LED screen; the sign at 1.8x pitch lands about a dozen
+      // characters across a 16:9 card, which is what a destination board
+      // shows).
+      uCurve: t.curve,
+      uPitch: t.pitch,
+      uTickerScale: t.tickerScale,
+      uDecay: t.decay,
     };
   }
 

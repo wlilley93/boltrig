@@ -6,6 +6,7 @@ import {
   readRepliesFromSettings,
   resolveRegisteredVoiceId,
 } from "../../characterVoice";
+import { parseColossusReply } from "./colossusReply";
 import { speechTakeaway } from "./speechTakeaway";
 import { normalisationGain } from "../voiceLoudness";
 import { useFamiliarBody } from "../StageBody";
@@ -183,7 +184,12 @@ export function useReplySpeech({
   const stop = useCallback(() => playerRef.current?.stop(), []);
 
   const readReply = useCallback(async (replyId: string, markdown: string) => {
-    const speech = speechText(markdown);
+    // Colossus replies in JSON ({"say", "sign"}): the voice reads what he
+    // SAYS, and the model's own summary rides the sign instead of the
+    // quoted opening clause. A reply that ignored the format falls back to
+    // the ordinary path in both places.
+    const structured = character.id === "colossus" ? parseColossusReply(markdown) : null;
+    const speech = speechText(structured ? structured.say : markdown);
     if (!enabled || !provider || !speech || spokenRef.current.has(replyId)) return;
     spokenRef.current.add(replyId);
     const voice = resolveRegisteredVoiceId(
@@ -206,7 +212,7 @@ export function useReplySpeech({
         onErrorRef.current(replySpeechFailure(result));
         return;
       }
-      playerRef.current?.say(speechTakeaway(speech));
+      playerRef.current?.say(structured?.sign ?? speechTakeaway(speech));
       await playerRef.current?.play(decodeAudio(output.audio_b64));
     } catch {
       onErrorRef.current("The reply could not be read aloud. Text chat is unaffected.");

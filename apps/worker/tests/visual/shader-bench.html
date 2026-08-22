@@ -23,7 +23,7 @@
         height: 100dvh;
         font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
         color: #d6d6dd;
-        background: #08080b;
+        background: #000;
         overscroll-behavior: none;
       }
       #sheetToggle { display: none; }
@@ -91,7 +91,13 @@
       body.desk-hidden #console { display: none; }
       body.desk-hidden #topbar { grid-row: 4; border-bottom: 0; border-top: 1px solid #1c1c22; }
       body.desk-hidden #stageWrap { grid-row: 1 / 4; }
-      #deskToggle.on { color: #0b0b0f; background: #6f8cff; border-color: #6f8cff; }
+      /* The expand control lives on the collapsed bar's right edge and only
+         exists while the desk is down; ▾ in the transport is its other half. */
+      #deskExpand { display: none; }
+      body.desk-hidden #deskExpand {
+        display: block; margin-left: auto; width: 30px; flex: 0 0 auto;
+        border-radius: 14px; font-size: 12px;
+      }
       #lockColour.on { color: #0b0b0f; background: #ffb060; border-color: #ffb060; }
       #presenceQuick { width: 130px; accent-color: #6f8cff; }
       #topbar .pq { display: flex; align-items: center; gap: 5px; }
@@ -104,7 +110,11 @@
       /* THE STAGE OWNS THE WHOLE HEIGHT. It spans the splitter and console
          rows, and the console floats translucent on top — so the avatar sits
          centred in the real window and resizing the desk never moves him. */
-      #stageWrap { position: relative; display: block; min-width: 0; overflow: hidden; grid-row: 2 / 5; grid-column: 1; }
+      /* TRUE BLACK behind every stage. The full-bleed bodies paint their own
+         black; the Familiar's SQUARE stage floats centred, and the surround
+         showed the page's near-black grey — a visible frame around a body
+         judged against darkness. The whole screen behind her is black now. */
+      #stageWrap { position: relative; display: block; min-width: 0; overflow: hidden; grid-row: 2 / 5; grid-column: 1; background: #000; }
       /* THE TRANSPORT. The states are the instrument's keys: standby, listening,
          thinking, working, speaking are the animated base looks, and everything
          else — voice, emotion — is a modifier layered on top. Clicking a state
@@ -211,6 +221,28 @@
         font-size: 9px; color: #ffb060; font-variant-numeric: tabular-nums;
       }
       .channel { position: relative; }
+      /* THE RACK: LFO cards at the desk's right, channels pinned by chip. */
+      .rackcard {
+        flex: 0 0 150px; position: relative; display: grid; gap: 3px;
+        padding: 6px 7px 5px; border: 1px solid #2a2a36; border-radius: 8px;
+        background: rgba(15, 15, 22, .4);
+      }
+      .rackcard .rackkill {
+        position: absolute; top: 2px; right: 4px; width: 20px; height: 18px;
+        padding: 0; font-size: 11px; border: 0; background: transparent; color: #74747e;
+      }
+      .rackcard .rackdial { display: grid; gap: 1px; font-size: 8.5px; margin: 0; }
+      .rackcard .rackdial input { width: 100%; margin: 0; accent-color: #6f8cff; }
+      .rackchips { display: flex; flex-wrap: wrap; gap: 3px; }
+      .rackchips button {
+        width: auto; height: 16px; padding: 0 5px; font-size: 8.5px;
+        border-radius: 8px; text-transform: uppercase; letter-spacing: .04em;
+      }
+      .rackchips button.on { color: #0b0b0f; background: #6f8cff; border-color: #6f8cff; }
+      .rackadd {
+        flex: 0 0 auto; width: auto; padding: 0 12px; align-self: center;
+        height: 28px; border-radius: 14px; font-size: 11px;
+      }
       /* The video channel wears its film mark top right; its drift count
          steps aside rather than fighting for the corner. */
       .channel .chvid { position: absolute; top: 3px; right: 5px; font-size: 9px; color: #6f8cff; }
@@ -242,6 +274,9 @@
         width: 18px; height: calc(64px * var(--deskScale)); margin: 0; accent-color: #6f8cff;
       }
       #bus .row .val b { font-size: 9.5px; }
+      /* An inverted dial: the fill runs the other way, so a stride of 1
+         (every particle a shard) sits at the TOP like the maximum it is. */
+      #bus .row .val input.invert { direction: ltr; }
       #bus .row .val .vtag {
         font-size: 8.5px; line-height: 1.15; color: #9a9aa4;
         max-width: 62px; text-align: center; white-space: normal;
@@ -495,7 +530,17 @@
         border: 1px solid #26262e; border-radius: 5px;
         color: #e8e8ef; font: inherit; font-size: 11px; background: #101016;
       }
-    </style>
+    /* A video character borrows the same header, transport and emotion row; the
+   tuning tools stand down rather than mislabel a body they cannot drive. */
+body.video-char #topbar > *:not(#body) { display: none; }
+/* A body with no tuning struct (one register) keeps the transport and the
+   emotion row; the save/preset/presence tools stand down rather than write
+   empty looks under a real body's keys. */
+body.no-tuning :is(#save, #applyAll, #fromBaseline, #allMin, #lockColour,
+                   #driftOnly, #abHold, #history, .pq, #saveState, #pace,
+                   #deskToggle, #bus, .tlabel, #emotions) { display: none; }
+body.video-char :is(#saveState, #pace, #deskMin, #bus, .sep) { display: none; }
+</style>
   </head>
   <body>
     <div id="stageWrap">
@@ -511,20 +556,21 @@
         <option value="familiar">Familiar</option>
         <option value="colossus">Colossus</option>
         <option value="montgomery">General Montgomery</option>
-        <option value="maya">Maya</option>
+        <option value="maya">Maya — framegraph</option>
+        <option value="maya-library">Maya — clip library</option>
       </select>
       <button id="save" type="button" class="primary"
               title="Every state of this body, and its baseline, to the file">Save everything</button>
       <button id="applyAll" type="button">Apply to all states</button>
+      <button id="undo" type="button" title="Undo the last edit gesture (Ctrl+Z)">↩</button>
       <button id="fromBaseline" type="button">Load baseline</button>
       <button id="allMin" type="button"
               title="Every slider to its minimum — build by eye, raising one at a time">All → min</button>
       <button id="lockColour" type="button"
-              title="Colour parity: colour dials move together, and their ×voice follows — speech cannot shift the colourisation">Lock colour</button>
+              title="Colour parity: colour dials move together, and their reach follows — speech cannot shift the colourisation">Lock colour</button>
       <button id="driftOnly" type="button" title="Show only dials off the baseline">Δ only</button>
       <button id="abHold" type="button" title="Hold to show the baseline (or hold B)">A/B</button>
       <select id="history"></select>
-      <button id="deskToggle" type="button" title="Hide the desk and bus; presence stays live here">Desk</button>
       <div class="pq"><span>Presence</span>
         <input id="presenceQuick" type="range" min="0.4" max="1.8" step="0.005" value="1" />
         <b id="presenceOut" title="Click to type a value">1.000</b>
@@ -535,6 +581,7 @@
       <button id="gear" type="button">⚙</button>
       <div id="baselineNote"></div>
       <div id="saved"></div>
+      <button id="deskExpand" type="button" title="Expand the desk">▴</button>
     </div>
     <div id="splitter" title="Drag to resize the console"></div>
     <div id="console">

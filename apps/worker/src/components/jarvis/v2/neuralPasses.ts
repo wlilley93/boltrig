@@ -166,7 +166,17 @@ export class NeuralPasses {
     this.simulate(d, tuning);
     this.drawScene(d, palette, tuning);
     this.bloom();
-    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), tuning.starburst, tuning.eye);
+    // The lens ring (eye.z) is drawn in SCREEN space by the composite, so it
+    // is the one radius presence's d.radius scaling cannot reach — scale it
+    // here or the ring stands still while the body grows and shrinks.
+    const eye: readonly [number, number, number, number] = [
+      tuning.eye[0], tuning.eye[1], tuning.eye[2] * tuning.presence, tuning.eye[3],
+    ];
+    this.composite({
+      palette, core: pulsedCore(tuning.core, d.energy, d.bands),
+      starburst: tuning.starburst, eye,
+      bounce: [tuning.bounce[0], tuning.bounce[1], tuning.bounceTrail], time: d.time,
+    });
   }
 
   destroy(): void {
@@ -280,12 +290,13 @@ export class NeuralPasses {
     this.fullscreen(prog);
   }
 
-  private composite(
-    palette: FloatUniforms, core: number, starburst: number,
-    // Passed in rather than read off a field: this method has no tuning of its
-    // own, and reaching for one is what made it fail to compile.
-    eye: readonly number[],
-  ): void {
+  // Spec object rather than a parameter list: this method has no tuning of
+  // its own, and reaching for one is what made it fail to compile.
+  private composite(spec: {
+    palette: FloatUniforms; core: number; starburst: number;
+    eye: readonly number[]; bounce: readonly number[]; time: number;
+  }): void {
+    const { palette, core, starburst, eye, bounce, time } = spec;
     const gl = this.gl;
     const [w, h] = this.size;
     const prog = this.progs.comp;
@@ -299,6 +310,7 @@ export class NeuralPasses {
     setUniforms(gl, prog, {
       ...palette, uAspect: w / Math.max(1, h), uBloomGain: 0.85,
       uCore: core, uStarburst: starburst, uEye: eye,
+      uBounce: bounce, uTime: time,
     }, { uScene: 0, uBloom: 1 });
     this.fullscreen(prog);
     gl.activeTexture(gl.TEXTURE0);

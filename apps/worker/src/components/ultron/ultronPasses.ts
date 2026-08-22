@@ -159,7 +159,11 @@ export class UltronPasses {
     this.simulate(d, tuning);
     this.drawScene(d, palette, tuning);
     this.bloom();
-    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), 0.0, tuning.eye, tuning.knee);
+    this.composite({
+      palette, core: pulsedCore(tuning.core, d.energy, d.bands), starburst: 0.0,
+      eye: tuning.eye, knee: tuning.knee,
+      bounce: [tuning.bounce[0], tuning.bounce[1], tuning.bounceTrail], time: d.time,
+    });
   }
 
   destroy(): void {
@@ -275,13 +279,13 @@ export class UltronPasses {
     this.fullscreen(prog);
   }
 
-  private composite(
-    palette: FloatUniforms, core: number, starburst: number,
-    // Passed in rather than read off a field: this method has no tuning of its
-    // own, and reaching for one is what made it fail to compile.
-    eye: readonly number[],
-    knee: number,
-  ): void {
+  // Spec object rather than a parameter list: this method has no tuning of
+  // its own, and reaching for one is what made it fail to compile.
+  private composite(spec: {
+    palette: FloatUniforms; core: number; starburst: number;
+    eye: readonly number[]; bounce: readonly number[]; time: number; knee: number;
+  }): void {
+    const { palette, core, starburst, eye, bounce, time, knee } = spec;
     const gl = this.gl;
     const [w, h] = this.size;
     const prog = this.progs.comp;
@@ -295,6 +299,7 @@ export class UltronPasses {
     setUniforms(gl, prog, {
       ...palette, uAspect: w / Math.max(1, h), uBloomGain: 1.05,
       uCore: core, uStarburst: starburst, uEye: eye,
+      uBounce: bounce, uTime: time,
       // Pre-knee compression for the additive pile-ups; 0 is the identity.
       uKnee: knee,
     }, { uScene: 0, uBloom: 1 });

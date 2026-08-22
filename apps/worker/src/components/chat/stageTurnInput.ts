@@ -19,11 +19,13 @@ export interface StageVoiceActivity {
  * nothing about the call site changed except its length.
  */
 export function stageTurnInput(
-  { loading, liveEventCount, liveEnded, voice }: {
+  { loading, liveEventCount, liveEnded, voice, thinkingTrace }: {
     loading: boolean;
     liveEventCount: number;
     liveEnded: boolean;
     voice: StageVoiceActivity;
+    /** See CharacterTurnInput.thinkingTrace: a bounded phrase, never the stream. */
+    thinkingTrace?: string | null;
   },
 ): StageTurnInput {
   return {
@@ -35,5 +37,6 @@ export function stageTurnInput(
     voiceBands: voice.bands ?? null,
     voiceOnset: voice.onset,
     speechTakeaway: voice.takeaway ?? null,
+    thinkingTrace: thinkingTrace ?? null,
   };
 }
