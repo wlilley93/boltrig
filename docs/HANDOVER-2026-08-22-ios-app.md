@@ -584,8 +584,74 @@ three decisions that are Will's: (1) let a phone-originated turn target the desk
 single-person tenants, (3) a server-published desktop download address and, if wanted, a
 pairing code flow the desktop can consume.
 
+## What landed after Part 3 (S5 to S9, the same day, later still)
+
+All on `feat/ios-app`, each slice one commit, each verified by the full XCTest suite on the
+iPhone 17 simulator (Xcode 26.6, M4). The ledger now reads **94 tests, 94 passed**.
+
+- **S5 spoken replies** (`ios/Boltrig/Speech/`): `SpeechResolution` mirrors the web rule
+  (the `voice.read_replies` setting turns it on; the provider bound to `voice.speak` in
+  `GET /v1/capabilities` decides the route; a valid local-voice override or Familiar's own
+  bundle voice decides the voice; no voice means silence). `ReplySpeaker` asks the server to
+  speak a finished reply once per run (`POST /v1/invoke voice.speak`), plays the audio with
+  metering, ducks other audio, stays silent on every failure, and stops when the person moves
+  on. Its level drives the presence's speaking mode. The phone's built-in speech is never used.
+- **S6 presence budgets** (`FamiliarIslandController`): the phenotype is polled every 3 s only
+  while a surface holds the island and the scene is active; backgrounding or releasing hands
+  `nil` to the island and Familiar wanders on her own. Measured on the simulator from the
+  unified log: page 163,384 bytes; `ready` 1.0 s after the load began (the 500 ms target was
+  not met on the simulator; measure on a device before tuning); hero 59 to 60 fps; conversation
+  30 fps; 0 frames while another app is in front; 1 fps under Reduce Motion; the WebContent
+  process holds 20.6 MB; one phenotype request per 3 s (a test proves the gating).
+- **S7 first-run setup** (`ios/Boltrig/Views/Onboarding/`, `OnboardingStore`,
+  `ProviderSetupStore`): Name, Connect your AI, an optional image model, Ready with the hero
+  presence and the one AI-disclosure line. The provider step keeps the web's one-press rule
+  (key blanked before the first await, a pending approval approved in the same press, an
+  administrator's pending proposal cached so the next press re-checks and never re-submits, the
+  step holds only when the saved provider did not answer, server reasons shown as written).
+  Finish writes `PATCH /v1/me/profile`, then `PUT /v1/me/settings` with `agent.character:
+  familiar` and `setup.onboarding_version: 1`, then the adopted announcement; a refused name
+  returns to the Name step. The provider catalogue is the web's models.dev snapshot bundled
+  verbatim (`ios/Boltrig/Resources/ProviderCatalogue.json`, `ios/scripts/sync-provider-catalogue.sh
+  --check`, revision pinned by a test, decodes off the main thread in 23 ms).
+  `RootDestination.resolve(account)` sends an account without the onboarding version to setup.
+- **S8 attachments**: an add button beside the composer offers a photo or a file
+  (`AttachmentImporter`): a file is refused by size before its bytes are read; a photo is
+  re-encoded as JPEG and shrunk until it fits the per-file limit or refused with the size copy;
+  the composer shows one line (the refusal, or the footnote that only text files are read); a
+  413 from the chat route reads as plain copy. Limits come from `GET /v1/chat/config`.
+- **S9 settings** (`ios/Boltrig/Views/Settings/`, `AccountSettingsStore`,
+  `BoltrigClient+Account`): Look (theme, density, text size, reduced motion, high contrast in
+  one write with rollback; read out replies), Approvals read-only with the web's three
+  descriptions, Archived chats with bring back and an archive action on Today's Earlier rows
+  (long press: Today is a scroll of cards, not a list), Security (sessions and keys, this phone
+  marked, revoking this phone's key signs out), Spending and Health read-only with plain labels
+  (`GET /readyz` tolerates 503), Delete account behind
+  `BoltrigEnvironment.accountDeletionAvailable = false` until `DELETE /v1/me` exists.
+  Organisation alone still opens on the web. The account's theme now applies on the phone
+  (the web default is dark, so an account with no theme key renders dark).
+
+Decisions taken while building, worth a glance: the approval posture is read-only on the phone
+because the route refuses a personal access token; a 403 on the provider routes shows the
+generic "not allowed" sentence (the flow cannot reach it under the can-add-key gate); a
+failed readiness read in setup shows the plain error with Try again rather than the web's
+managed-organisation notice.
+
+Not done on the code side: simulator captures of the setup flow (no debug launch argument for
+it yet); a live run against `dev.boltrig.ai` with a test account (spoken reply, queued turn,
+cancel, the Familiar switch seen in web Settings); push notifications; universal links; the
+account-deletion route; crash reporting; live voice calls; a Metal port of the shader.
+
 ## What is next, in order
 
-S5 spoken replies in Familiar's voice, S6 presence polish and budgets, S7 native onboarding
-(Familiar only), S8 attachments UI, S9 settings subset, S10 docs; the non-code track in
-`docs/IOS-LAUNCH-READINESS.md`. Build and test only on the M4; `ios/README.md` has the commands.
+1. The non-code track in `docs/IOS-LAUNCH-READINESS.md` (support and privacy mailbox, legal
+   pages at the linked URLs, the App Store Connect record, internal TestFlight on Will's phone,
+   the review demo account, error tracking, the `DELETE /v1/me` route).
+2. A live run against the hosted instance with a test account whose web choice is another
+   character: confirm the switch, a spoken reply with `voice.read_replies` on, a queued turn
+   and a cancel, and first-run setup end to end.
+3. The three desktop-link decisions above (0027, sole-author relief, a published download
+   address) if the phone is to drive work on the computer.
+4. Measure `ready` and memory on a real iPhone; the simulator numbers above are the floor.
+
+Build and test only on the M4; `ios/README.md` has the commands.
