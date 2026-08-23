@@ -52,3 +52,17 @@ export function companionIndex(id: CharacterId): number {
   const found = COMPANIONS.findIndex((choice) => choice.id === id);
   return found < 0 ? 0 : found;
 }
+
+/**
+ * The stored choice setup starts from: kept when it is one of the companions
+ * offered here, the first companion otherwise. A choice setup cannot show is
+ * not silently rewritten to a different one.
+ */
+export function offeredCompanion(id: CharacterId): CharacterId {
+  return COMPANIONS.some((choice) => choice.id === id) ? id : COMPANIONS[0].id;
+}
+
+/** The companion's own name, for copy that greets the person with it. */
+export function companionName(id: CharacterId): string {
+  return COMPANIONS[companionIndex(id)].name;
+}

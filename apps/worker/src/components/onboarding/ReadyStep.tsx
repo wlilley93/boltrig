@@ -1,8 +1,9 @@
 import type { CharacterId } from "../../character";
 import { configuredDesktopDownloadUrl } from "../../desktopDownload";
+import { companionName } from "./companionCatalogue";
 
 export function ReadyStep({ character, userName }: { character: CharacterId; userName: string }) {
-  const name = character === "jarvis" ? "Jarvis" : "Familiar";
+  const name = companionName(character);
   const downloadUrl = configuredDesktopDownloadUrl();
   return (
     <div className="onboarding-step ready-step">
