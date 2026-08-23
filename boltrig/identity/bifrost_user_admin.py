@@ -57,6 +57,25 @@ _MAX_MODEL_PAGES = 8
 _CUSTOM_ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 
 
+def _stored_base_url(row: dict[str, Any]) -> str | None:
+    """The endpoint Bifrost actually recorded for a custom provider row.
+
+    Read BOTH spellings. The deployed gateway keeps a custom provider's address
+    in ``network_config.base_url`` and silently drops it from
+    ``custom_provider_config``; reading only the latter therefore sees ``None``
+    for every row, which made the idempotency check below refuse its own
+    successful writes. ``network_config`` is preferred because that is where the
+    running gateway keeps it.
+    """
+    for key in ("network_config", "custom_provider_config"):
+        section = row.get(key)
+        if isinstance(section, dict):
+            stored = section.get("base_url")
+            if isinstance(stored, str) and stored:
+                return stored
+    return None
+
+
 def _custom_base_url(value: str | None) -> str:
     """A custom provider's endpoint: absolute http(s), no secrets in the URL.
 
@@ -243,20 +262,38 @@ class BifrostUserAdmin:
             if isinstance(row, dict) and row.get("name") == provider:
                 if custom_url is None:
                     return
-                config = row.get("custom_provider_config")
-                stored = config.get("base_url") if isinstance(config, dict) else None
+                stored = _stored_base_url(row)
                 if stored == custom_url:
                     return
+                if stored is None:
+                    # The row exists but carries NO address. That is not a
+                    # conflict, and calling it one sent an operator hunting for
+                    # a rival endpoint that does not exist: measured
+                    # 2026-08-23, every zai row on the estate was in exactly
+                    # this state and every retry raised the message below.
+                    raise BifrostUserBindingUnavailable(
+                        f"{provider} exists but has no endpoint recorded; "
+                        "remove it and add it again with its URL"
+                    )
                 raise BifrostUserBindingUnavailable(
                     f"{provider} is already bound to a different endpoint; "
                     "remove that binding first or use its address"
                 )
         body: dict[str, Any] = {"provider": provider}
         if custom_url is not None:
+            # base_url goes in NETWORK_CONFIG. Bifrost accepts it inside
+            # custom_provider_config with a 200 and then DISCARDS it - measured
+            # against the deployed gateway: a fresh POST carrying
+            # custom_provider_config.base_url reads back with only
+            # {is_key_less, base_provider_type} and provider_status "error",
+            # while the same URL under network_config persists. Sending it in
+            # both places keeps this working if a later Bifrost honours the
+            # custom_provider_config spelling too.
             body["custom_provider_config"] = {
                 "base_provider_type": "openai",
                 "base_url": custom_url,
             }
+            body["network_config"] = {"base_url": custom_url}
         status, _payload = await self._http.request(
             "POST", f"{self._http.base}api/providers", body
         )
