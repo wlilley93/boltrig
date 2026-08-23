@@ -16,3 +16,7 @@ Budgets measured the same day on the simulator (unified log, `ai.boltrig.app` su
 page 163,384 bytes; `ready` 1.0 s after the load began; hero 59 to 60 fps; conversation 30 fps;
 0 frames while another app is in front; 1 fps with Reduce Motion on; the WebContent process
 holds 20.6 MB; one phenotype reading every 3 s while a surface holds the presence.
+
+Setup captures (2026-08-22, later), from the stub preview (`-boltrigOnboarding -boltrigStep
+name|provider|vision|ready`): `setup-name-light.png`, `setup-provider-light.png`,
+`setup-vision-light.png`, `setup-ready-light.png` (the Ready step carries the live island).

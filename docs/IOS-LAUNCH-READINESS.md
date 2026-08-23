@@ -78,6 +78,9 @@ only Will can do (an account, a payment, a legal signature, a decision).
 
 ### 3.1 Documents that do not exist and must [BLOCKER for App Store, TESTFLIGHT for external]
 
+Drafts of all four, for a lawyer to review, are in `docs/legal/` (prepared 2026-08-22; nothing is
+published).
+
 1. **Privacy policy** at a public URL, linked from the app (Settings, already wired to
    `https://boltrig.ai/privacy`), from the marketing site footer and from the cookie banner
    (`site/src/components/common/Cookie/CookieBanner.tsx` links to `/privacy-policy`, a route that

@@ -53,6 +53,14 @@ final class OnboardingStore: ObservableObject {
         }
     }
 
+    #if DEBUG
+    /// Simulator captures only: land on a step with a name already given.
+    func debugJump(to target: Step, name: String) {
+        self.name = name
+        step = target
+    }
+    #endif
+
     /// An account that already has a name (set on the web) starts at Provider.
     static func startStep(for account: Account) -> Step {
         account.displayName.isEmpty ? .name : .provider
