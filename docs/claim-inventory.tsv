@@ -91,7 +91,7 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/delegation.py:43		Exchange a 
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/invites.py:21		A fresh high-entropy single-use invite secret (shown once, never stored).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/invites.py:26		The at-rest representation of an invite token: its sha256, never the secret.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/identity/passwords.py:25		A minimum-length floor so accept-invite cannot set a trivially weak password.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/identity/passwords.py:81		never as an error that could distinguish it from a wrong password.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/identity/passwords.py:96		never as an error that could distinguish it from a wrong password.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/rbac.py:284		The Knowledge access scopes a caller may use (SEC-KNO-01), derived server-side from the authenticated principal - never from caller-supplied context keys: their own user (and the user they act on behalf of), the active w
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/identity/rbac.py:34		Returned when no IdP group matches any mapping.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/rbac.py:52		Map a caller's IdP groups to (platform_role, merged_scope) (US-IAM-02).
@@ -430,7 +430,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/bifrost_user_admin.py:61
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/bifrost_user_transport.py:1	BifrostUserTransport	``BifrostUserTransport`` is the fail-closed scoped administration transport.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/mailersend_password_reset.py:1	MailerSendPasswordResetNotifier	``MailerSendPasswordResetNotifier`` provides bounded MailerSend delivery.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/passwords.py:1	verify_dummy	First-party password hashing ([2026] VJS-COUNTY 7, D4).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/passwords.py:65	verify_dummy	Whether ``password`` matches the stored argon2 ``encoded`` hash (D4/D5).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/passwords.py:80	verify_dummy	Whether ``password`` matches the stored argon2 ``encoded`` hash (D4/D5).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/provisioning.py:115	grants_for_scope	A role that implies authority must not arrive with a scope that grants none.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/provisioning.py:150	ensure_user_record	Provision (or refresh) a user on authenticated login (US-USR-01/02).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/provisioning.py:36	current_grants_for_user	The caller's EFFECTIVE grants for one request ([2026] VJS-COUNTY 8, D11).
@@ -1115,8 +1115,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/identity/bifrost_user_binding.py:238		routin
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/bifrost_user_binding.py:45		: Bifrost - an id is an identifier, never an address or an instruction.
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/onboarding.py:36		but a missing marker is deliberately fail-closed in Worker: chat is not
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/password_reset_evidence.py:15		deliberately never called, so attributing it to provider failure would
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/passwords.py:33		always fails but costs the same as a genuine verify.
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/passwords.py:80		A corrupt/foreign hash string is treated as a non-match (fail-closed),
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/passwords.py:48		always fails but costs the same as a genuine verify.
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/passwords.py:95		A corrupt/foreign hash string is treated as a non-match (fail-closed),
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/provisioning.py:173		the first read so the _RlsPool does not fail closed on login.
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:139		(see identity/provisioning.effective_grants_for_request), never up (COUNTY 5).
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:173		only ever intersected DOWN, never widened): a workspace membership can only take
