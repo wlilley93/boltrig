@@ -80,6 +80,14 @@ echo "$*" >> {log}
 if [[ "$*" == *"system df"* ]]; then
     echo "Images|{reclaimable}"
     echo "Containers|0B"
+    # DELIBERATELY LONGER THAN A PIPE BUFFER. A consumer that stops reading after
+    # the Images line leaves this producer writing into a closed pipe, so it takes
+    # SIGPIPE and returns 141, and `set -o pipefail` turns that into the script
+    # dying with the diagnostic unprinted. Real `docker system df` emits ~5 short
+    # lines, which FIT the buffer, so the bug survived CI and one local package
+    # run before showing up. Padding here makes the failure deterministic instead
+    # of a race that passes most of the time.
+    for i in $(seq 1 400); do echo "Filler$i|0B"; done
     exit 0
 fi
 {frees_clause}
@@ -156,3 +164,6 @@ def test_says_so_when_images_really_are_not_the_cause(tmp_path: Path) -> None:
 
     assert "outside Docker images" in result.stderr
     assert result.returncode == 1
+    # 141 is SIGPIPE reaching this script through pipefail. Naming it separately
+    # from "wrong message" keeps a silent death from reading as a content bug.
+    assert result.returncode != 141, "the reporting path died on SIGPIPE"
