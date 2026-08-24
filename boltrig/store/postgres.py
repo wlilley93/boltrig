@@ -20,6 +20,8 @@ from .audit_stream import AuditStreamStorePG
 from .run_records import RunRecordsStorePG
 from .conversations import ConversationsStorePG
 from .memory_planes import MemoryPlanesStorePG
+from .tenancy import TenancyStorePG
+from .ai_configs import AiConfigStorePG
 from .channel_dedup import ChannelDedupStorePG
 from .channel_outbox import ChannelOutboxStorePG
 from .budget_policy import BudgetPolicyPG
@@ -50,10 +52,9 @@ from .conversation_queue import ConversationQueueStorePG
 from .conversation_binding_postgres import ConversationBindingStorePG
 from .agent_mailbox_postgres import AgentMailboxStorePG
 from .rows import (
-    _adapter, _ai_config, _invitation, _notif, _org, _org_member, _pat, _personal,
+    _adapter, _invitation, _notif, _pat, _personal,
     _revision, _session, _setting, _tfa_challenge,
-    _user, _user_totp, _workflow, _workspace,
-    _workspace_member,
+    _user, _user_totp, _workflow,
 )
 from boltrig.models import (
     AdapterRecord,
@@ -69,18 +70,9 @@ from boltrig.models import (
     UserTotp,
     EMPTY_GRANTS,
     GrantSet,
-    AI_CONFIG_LEVELS,
-    AI_CONFIG_MODALITIES,
-    AiConfig,
-    Organisation,
-    OrgMember,
     TenantPermissions,
-    WORKSPACE_ROLES,
-    Workspace,
-    WorkspaceMember,
     WorkflowDefinition,
 )
-from boltrig.models.errors import SchemaValidationError
 _SCHEMA = Path(__file__).with_name("schema.sql")
 _RLS = Path(__file__).with_name("rls.sql")
 
@@ -130,6 +122,8 @@ class PostgresStore(
     RunRecordsStorePG,
     ConversationsStorePG,
     MemoryPlanesStorePG,
+    TenancyStorePG,
+    AiConfigStorePG,
     PermanentFleetStorePG,
     BirthProfileStorePG,
     BackgroundJobStorePG,
@@ -713,255 +707,4 @@ class PostgresStore(
                WHERE tenant_id=$1 AND id=$2""",
             s.tenant_id, s.id, s.client, s.last_seen_at, s.revoked,
             s.token_hash, s.expires_at, s.csrf_token, s.active_workspace_id, s.active_org_id,
-        )
-
-    # --- Org -> workspace tenancy ([2026] VJS-COUNTY 8) ----------------------
-    async def create_org(self, org: Organisation):
-        # Idempotent create (D1): ON CONFLICT DO NOTHING so ensure_default_org is a
-        # safe no-op for a tenant that already has its org. The org id IS the
-        # tenant_id.
-        await self._pool.execute(
-            """INSERT INTO organisations
-               (id, name, slug, settings, allow_own_ai_keys, require_two_factor,
-                created_at, updated_at, allow_own_integration_credentials)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-               ON CONFLICT (id) DO NOTHING""",
-            org.id, org.name, org.slug, org.settings,
-            org.allow_own_ai_keys, org.require_two_factor, org.created_at, org.updated_at,
-            org.allow_own_integration_credentials,
-        )
-
-    async def get_org(self, tenant_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM organisations WHERE id=$1", tenant_id
-        )
-        return _org(row)
-
-    # list_orgs lives in ControlPlaneReadsPG: it is cross-tenant BY DEFINITION and
-    # so runs outside the fence, which is a decision that needs its own guard.
-
-    async def update_org(self, org: Organisation):
-        await self._pool.execute(
-            """UPDATE organisations SET name=$2, slug=$3, settings=$4,
-                   allow_own_ai_keys=$5, require_two_factor=$6, updated_at=now(),
-                   allow_own_integration_credentials=$7
-               WHERE id=$1""",
-            org.id, org.name, org.slug, org.settings,
-            org.allow_own_ai_keys, org.require_two_factor,
-            org.allow_own_integration_credentials,
-        )
-
-    async def create_workspace(self, workspace: Workspace):
-        await self._pool.execute(
-            """INSERT INTO workspaces
-               (id, tenant_id, name, slug, settings, status, created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-               ON CONFLICT (tenant_id, id) DO NOTHING""",
-            workspace.id, workspace.tenant_id, workspace.name, workspace.slug,
-            workspace.settings, workspace.status,
-            workspace.created_at, workspace.updated_at,
-        )
-
-    async def get_workspace(self, tenant_id, workspace_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM workspaces WHERE tenant_id=$1 AND id=$2",
-            tenant_id, workspace_id,
-        )
-        return _workspace(row)
-
-    async def list_workspaces(self, tenant_id):
-        rows = await self._pool.fetch(
-            "SELECT * FROM workspaces WHERE tenant_id=$1 ORDER BY created_at DESC",
-            tenant_id,
-        )
-        return [_workspace(r) for r in rows]
-
-    async def update_workspace(self, workspace: Workspace):
-        await self._pool.execute(
-            """UPDATE workspaces SET name=$3, slug=$4, settings=$5, status=$6,
-                   updated_at=now()
-               WHERE tenant_id=$1 AND id=$2""",
-            workspace.tenant_id, workspace.id, workspace.name, workspace.slug,
-            workspace.settings, workspace.status,
-        )
-
-    async def add_org_member(self, member: OrgMember):
-        # Both writes commit or neither does (base.py's lockstep invariant): a
-        # failure between the org_members row and the identity_orgs index would
-        # otherwise leave a dangling switch candidate.
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                await _apply_guc(conn, assume_role=pool_assumes_app_role(self._pool))  # RLS-live: scope this explicit transaction
-                await conn.execute(
-                    """INSERT INTO org_members (tenant_id, user_id, role, created_at)
-                       VALUES ($1,$2,$3,$4)
-                       ON CONFLICT (tenant_id, user_id) DO UPDATE SET role=EXCLUDED.role""",
-                    member.tenant_id, member.user_id, member.role, member.created_at,
-                )
-                # Keep the global email -> orgs INDEX in lockstep ([2026] VJS-COUNTY 11, D1).
-                # identity_orgs is RLS-EXCLUDED (the pre-tenant lookup, keyed by the normalised
-                # email), so this write does not need the bound tenant and is safe under RLS.
-                await conn.execute(
-                    """INSERT INTO identity_orgs (email, tenant_id, role, created_at)
-                       VALUES (lower($1),$2,$3,$4)
-                       ON CONFLICT (email, tenant_id) DO UPDATE SET role=EXCLUDED.role""",
-                    member.user_id, member.tenant_id, member.role, member.created_at,
-                )
-
-    async def remove_org_member(self, tenant_id, user_id):
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                await _apply_guc(conn, assume_role=pool_assumes_app_role(self._pool))  # RLS-live: scope this explicit transaction
-                await conn.execute(
-                    "DELETE FROM org_members WHERE tenant_id=$1 AND user_id=$2",
-                    tenant_id, user_id,
-                )
-                # Drop the index pointer too so a revoked membership is no longer a switch
-                # candidate (the resolver also fail-closes on the org_members re-check).
-                await conn.execute(
-                    "DELETE FROM identity_orgs WHERE email=lower($1) AND tenant_id=$2",
-                    user_id, tenant_id,
-                )
-
-    async def get_org_member(self, tenant_id, user_id):
-        # Tenant-scoped single-membership re-auth ([2026] VJS-COUNTY 11, D2).
-        row = await self._pool.fetchrow(
-            "SELECT * FROM org_members WHERE tenant_id=$1 AND user_id=$2",
-            tenant_id, user_id,
-        )
-        return _org_member(row)
-
-    async def list_orgs_for_email(self, email):
-        # The pre-tenant email -> orgs index (D1): the tenant_ids an email is a member
-        # of. Resolved by the normalised email key (RLS-EXCLUDED), like get_pat_by_hash.
-        rows = await self._pool.fetch(
-            "SELECT tenant_id FROM identity_orgs WHERE email=lower($1) ORDER BY tenant_id",
-            email,
-        )
-        return [r["tenant_id"] for r in rows]
-
-    async def list_org_members(self, tenant_id):
-        rows = await self._pool.fetch(
-            "SELECT * FROM org_members WHERE tenant_id=$1 ORDER BY created_at",
-            tenant_id,
-        )
-        return [_org_member(r) for r in rows]
-
-    async def list_orgs_for_user(self, tenant_id, user_id):
-        # Tenant-scoped membership query (switching seam): only the bound tenant's
-        # org, never another tenant's, joined through org_members.
-        rows = await self._pool.fetch(
-            """SELECT o.* FROM organisations o
-               JOIN org_members m ON m.tenant_id = o.id
-               WHERE m.tenant_id=$1 AND m.user_id=$2
-               ORDER BY o.created_at DESC""",
-            tenant_id, user_id,
-        )
-        return [_org(r) for r in rows]
-
-    async def add_workspace_member(self, member: WorkspaceMember):
-        # A per-workspace role must be one of the allowed set (D3): reject an
-        # out-of-set role before it can be persisted.
-        if member.role not in WORKSPACE_ROLES:
-            raise SchemaValidationError(
-                f"invalid workspace role: {member.role!r}",
-                errors=[f"role must be one of {sorted(WORKSPACE_ROLES)}"],
-            )
-        await self._pool.execute(
-            """INSERT INTO workspace_members
-               (workspace_id, user_id, tenant_id, role, permissions, created_at)
-               VALUES ($1,$2,$3,$4,$5,$6)
-               ON CONFLICT (tenant_id, workspace_id, user_id) DO UPDATE SET
-                 role=EXCLUDED.role, permissions=EXCLUDED.permissions""",
-            member.workspace_id, member.user_id, member.tenant_id, member.role,
-            member.permissions, member.created_at,
-        )
-
-    async def remove_workspace_member(self, tenant_id, workspace_id, user_id):
-        await self._pool.execute(
-            """DELETE FROM workspace_members
-               WHERE tenant_id=$1 AND workspace_id=$2 AND user_id=$3""",
-            tenant_id, workspace_id, user_id,
-        )
-
-    async def list_workspace_members(self, tenant_id, workspace_id):
-        rows = await self._pool.fetch(
-            """SELECT * FROM workspace_members
-               WHERE tenant_id=$1 AND workspace_id=$2 ORDER BY created_at""",
-            tenant_id, workspace_id,
-        )
-        return [_workspace_member(r) for r in rows]
-
-    async def get_workspace_member(self, tenant_id, workspace_id, user_id):
-        # Tenant-scoped single-membership lookup (D11): the WHERE binds tenant_id, so
-        # it can never return another tenant's row (None when absent, fail-closed).
-        row = await self._pool.fetchrow(
-            """SELECT * FROM workspace_members
-               WHERE tenant_id=$1 AND workspace_id=$2 AND user_id=$3""",
-            tenant_id, workspace_id, user_id,
-        )
-        return _workspace_member(row)
-
-    async def list_workspaces_for_user(self, tenant_id, user_id):
-        # Tenant-scoped membership query (switching seam): only workspaces inside
-        # the bound tenant the user belongs to.
-        rows = await self._pool.fetch(
-            """SELECT w.* FROM workspaces w
-               JOIN workspace_members m
-                 ON m.tenant_id = w.tenant_id AND m.workspace_id = w.id
-               WHERE m.tenant_id=$1 AND m.user_id=$2
-               ORDER BY w.created_at DESC""",
-            tenant_id, user_id,
-        )
-        return [_workspace(r) for r in rows]
-
-    # --- per-org/workspace/user AI keys ([2026] VJS-COUNTY 8, D5) -------------
-    async def set_ai_config(self, config: AiConfig) -> None:
-        # Reject an out-of-set level before it can be persisted (mirrors the
-        # workspace-role guard). The row carries a credential_ref only, never a key.
-        if config.level not in AI_CONFIG_LEVELS:
-            raise SchemaValidationError(
-                f"invalid ai-config level: {config.level!r}",
-                errors=[f"level must be one of {sorted(AI_CONFIG_LEVELS)}"],
-            )
-        if config.modality not in AI_CONFIG_MODALITIES:
-            raise SchemaValidationError(
-                f"invalid ai-config modality: {config.modality!r}",
-                errors=[f"modality must be one of {sorted(AI_CONFIG_MODALITIES)}"],
-            )
-        await self._pool.execute(
-            """INSERT INTO ai_configs
-               (tenant_id, level, scope_id, provider, model, credential_ref,
-                base_url, modality, created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())
-               ON CONFLICT (tenant_id, level, scope_id, modality) DO UPDATE SET
-                 provider=EXCLUDED.provider, model=EXCLUDED.model,
-                 credential_ref=EXCLUDED.credential_ref,
-                 base_url=EXCLUDED.base_url, updated_at=now()""",
-            config.tenant_id, config.level, config.scope_id, config.provider,
-            config.model, config.credential_ref, config.base_url, config.modality,
-            config.created_at,
-        )
-
-    async def get_ai_config(self, tenant_id, level, scope_id, modality="text"):
-        # Tenant-scoped: the WHERE binds tenant_id, so it can never return another
-        # tenant's AI-config row (None when absent, fail-closed).
-        row = await self._pool.fetchrow(
-            """SELECT * FROM ai_configs
-               WHERE tenant_id=$1 AND level=$2 AND scope_id=$3 AND modality=$4""",
-            tenant_id, level, scope_id, modality,
-        )
-        return _ai_config(row)
-
-    async def list_ai_configs(self, tenant_id):
-        rows = await self._pool.fetch(
-            "SELECT * FROM ai_configs WHERE tenant_id=$1 ORDER BY level, scope_id",
-            tenant_id,
-        )
-        return [_ai_config(r) for r in rows]
-
-    async def delete_ai_config(self, tenant_id, level, scope_id, modality="text"):
-        await self._pool.execute(
-            "DELETE FROM ai_configs WHERE tenant_id=$1 AND level=$2 AND scope_id=$3 AND modality=$4",
-            tenant_id, level, scope_id, modality,
         )

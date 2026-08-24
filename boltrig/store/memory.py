@@ -14,6 +14,8 @@ from .audit_stream import AuditStreamStoreMem
 from .run_records import RunRecordsStoreMem
 from .conversations import ConversationsStoreMem
 from .memory_planes import MemoryPlanesStoreMem
+from .tenancy import TenancyStoreMem
+from .ai_configs import AiConfigStoreMem
 from .channel_dedup import ChannelDedupStoreMem
 from .channel_outbox import ChannelOutboxStoreMem
 from .budget_policy import BudgetPolicyMem
@@ -75,8 +77,6 @@ from boltrig.models import (
     MemoryFact,
     MemoryIngestion,
     MemoryProjectionStatus,
-    AI_CONFIG_LEVELS,
-    AI_CONFIG_MODALITIES,
     AiConfig,
     Organisation,
     OrgMember,
@@ -88,22 +88,14 @@ from boltrig.models import (
     UserSession,
     UserSetting,
     UserTotp,
-    WORKSPACE_ROLES,
     Workspace,
     WorkspaceMember,
     WorkflowDefinition,
     WorkItem,
-    utcnow,
 )
-from boltrig.models.errors import SchemaValidationError
 from boltrig.models.work import RunCheckpoint
 
 
-def _norm_email_key(value) -> str:
-    """Normalise an identity key (the email == user_id in the first-party flow) so
-    the global email -> orgs index is case/space-insensitive, matching the login
-    normalisation ([2026] VJS-COUNTY 11)."""
-    return value.strip().lower() if isinstance(value, str) else ""
 
 
 class InMemoryStore(
@@ -119,6 +111,8 @@ class InMemoryStore(
     RunRecordsStoreMem,
     ConversationsStoreMem,
     MemoryPlanesStoreMem,
+    TenancyStoreMem,
+    AiConfigStoreMem,
     ChannelStoreMem,
     CapabilityStoreMem,
     PermanentFleetStoreMem,
@@ -526,144 +520,3 @@ class InMemoryStore(
 
     async def update_session(self, session):
         self._sessions[(session.tenant_id, session.id)] = session
-
-    # --- Org -> workspace tenancy ([2026] VJS-COUNTY 8) ----------------------
-    async def create_org(self, org):
-        # Idempotent (mirrors the add_* ON CONFLICT DO NOTHING contract): a repeat
-        # create for an existing tenant_id is a no-op, so ensure_default_org is safe
-        # to call on every boot. The org id IS the tenant_id (D1).
-        self._orgs.setdefault(org.id, org)
-
-    async def get_org(self, tenant_id):
-        return self._orgs.get(tenant_id)
-
-    async def list_orgs(self):
-        # Cross-tenant enumeration for the control plane (no tenant is bound at the
-        # backfill). Not reachable from a tenant-scoped HTTP surface.
-        return list(self._orgs.values())
-
-    async def update_org(self, org):
-        org.updated_at = utcnow()
-        self._orgs[org.id] = org
-
-    async def create_workspace(self, workspace):
-        self._workspaces[(workspace.tenant_id, workspace.id)] = workspace
-
-    async def get_workspace(self, tenant_id, workspace_id):
-        return self._workspaces.get((tenant_id, workspace_id))
-
-    async def list_workspaces(self, tenant_id):
-        return [w for (t, _), w in self._workspaces.items() if t == tenant_id]
-
-    async def update_workspace(self, workspace):
-        workspace.updated_at = utcnow()
-        self._workspaces[(workspace.tenant_id, workspace.id)] = workspace
-
-    async def add_org_member(self, member):
-        self._org_members[(member.tenant_id, member.user_id)] = member
-        # Keep the global email -> orgs INDEX in lockstep ([2026] VJS-COUNTY 11, D1):
-        # the email (== user_id in the first-party flow) is now a member of this org.
-        email = _norm_email_key(member.user_id)
-        self._identity_orgs.setdefault(email, {})[member.tenant_id] = member.role
-
-    async def remove_org_member(self, tenant_id, user_id):
-        self._org_members.pop((tenant_id, user_id), None)
-        # Drop the index pointer too so a revoked membership is no longer a switch
-        # candidate (the resolver also fail-closes on the org_members re-check).
-        email = _norm_email_key(user_id)
-        orgs = self._identity_orgs.get(email)
-        if orgs is not None:
-            orgs.pop(tenant_id, None)
-            if not orgs:
-                self._identity_orgs.pop(email, None)
-
-    async def get_org_member(self, tenant_id, user_id):
-        # Tenant-scoped single-membership re-auth ([2026] VJS-COUNTY 11, D2): only the
-        # bound tenant's row, None otherwise (fail-closed).
-        return self._org_members.get((tenant_id, user_id))
-
-    async def list_orgs_for_email(self, email):
-        # The pre-tenant email -> orgs index (D1): the tenant_ids the email is a member
-        # of. Cross-tenant BY KEY (the normalised email), like get_pat_by_hash - never
-        # inside a tenant fence. Deterministic order so a default pick is stable.
-        return sorted(self._identity_orgs.get(_norm_email_key(email), {}).keys())
-
-    async def list_org_members(self, tenant_id):
-        return [m for (t, _), m in self._org_members.items() if t == tenant_id]
-
-    async def list_orgs_for_user(self, tenant_id, user_id):
-        # The membership query switching will later use. Still tenant-scoped: it
-        # only ever returns the bound tenant's org, never another tenant's.
-        out = []
-        for (t, u), _m in self._org_members.items():
-            if t == tenant_id and u == user_id:
-                org = self._orgs.get(t)
-                if org is not None:
-                    out.append(org)
-        return out
-
-    async def add_workspace_member(self, member):
-        # A per-workspace role must be one of the allowed set (D3): reject an
-        # out-of-set role so it can never be persisted.
-        if member.role not in WORKSPACE_ROLES:
-            raise SchemaValidationError(
-                f"invalid workspace role: {member.role!r}",
-                errors=[f"role must be one of {sorted(WORKSPACE_ROLES)}"],
-            )
-        self._workspace_members[(member.tenant_id, member.workspace_id, member.user_id)] = member
-
-    async def remove_workspace_member(self, tenant_id, workspace_id, user_id):
-        self._workspace_members.pop((tenant_id, workspace_id, user_id), None)
-
-    async def list_workspace_members(self, tenant_id, workspace_id):
-        return [
-            m
-            for (t, w, _), m in self._workspace_members.items()
-            if t == tenant_id and w == workspace_id
-        ]
-
-    async def get_workspace_member(self, tenant_id, workspace_id, user_id):
-        # Tenant-scoped single-membership lookup (D11): only return the row when it
-        # is inside the bound tenant, else None (fail-closed, never crosses tenants).
-        return self._workspace_members.get((tenant_id, workspace_id, user_id))
-
-    async def list_workspaces_for_user(self, tenant_id, user_id):
-        # Tenant-scoped: only workspaces in the bound tenant whose id the user is a
-        # member of. Never crosses a tenant boundary.
-        out = []
-        for (t, w, u), _m in self._workspace_members.items():
-            if t == tenant_id and u == user_id:
-                ws = self._workspaces.get((tenant_id, w))
-                if ws is not None:
-                    out.append(ws)
-        return out
-
-    # --- per-org/workspace/user AI keys ([2026] VJS-COUNTY 8, D5) -------------
-    async def set_ai_config(self, config: AiConfig) -> None:
-        # Reject an out-of-set level (mirrors the workspace-role guard) so an invalid
-        # level can never be persisted. The row stores a credential_ref, never a key.
-        if config.level not in AI_CONFIG_LEVELS:
-            raise SchemaValidationError(
-                f"invalid ai-config level: {config.level!r}",
-                errors=[f"level must be one of {sorted(AI_CONFIG_LEVELS)}"],
-            )
-        if config.modality not in AI_CONFIG_MODALITIES:
-            raise SchemaValidationError(
-                f"invalid ai-config modality: {config.modality!r}",
-                errors=[f"modality must be one of {sorted(AI_CONFIG_MODALITIES)}"],
-            )
-        config.updated_at = utcnow()
-        self._ai_configs[(config.tenant_id, config.level, config.scope_id, config.modality)] = (
-            config
-        )
-
-    async def get_ai_config(self, tenant_id, level, scope_id, modality="text"):
-        # Tenant-scoped: the key includes tenant_id, so a lookup under another tenant
-        # never returns this tenant's row (fail-closed, never crosses the boundary).
-        return self._ai_configs.get((tenant_id, level, scope_id, modality))
-
-    async def list_ai_configs(self, tenant_id):
-        return [c for (t, _, _, _), c in self._ai_configs.items() if t == tenant_id]
-
-    async def delete_ai_config(self, tenant_id, level, scope_id, modality="text"):
-        self._ai_configs.pop((tenant_id, level, scope_id, modality), None)
