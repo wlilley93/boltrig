@@ -5,9 +5,9 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/builtin/inbound_webhook.py:303	
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/builtin/runpod.py:113		Fail closed: never post an empty bearer (SEC-04/05).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/builtin/script_base.py:1		Shared harness for script-runtime builtin adapters (subprocess CLIs).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/builtin/xai_voice.py:154		Fail closed: never post an empty bearer (SEC-04/05).
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/http_base.py:135		Best-effort reachability probe.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/http_base.py:208		Turn credential material into request auth.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/http_base.py:261		cannot reach internal services or steal a managed-identity token.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/http_base.py:134		Best-effort reachability probe.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/adapters/http_base.py:207		Turn credential material into request auth.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/http_base.py:260		cannot reach internal services or steal a managed-identity token.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:249		The kernel-resolved credential is the ONLY bearer source: no instance
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:251		credential fails closed rather than posting an empty bearer.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/adapters/mcp_transport.py:146		server reads Authorization (it is the only header the Opbox /mcp door
@@ -249,7 +249,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:1	new_work_items	T
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:105	error	A bounded, infrastructure-free error note for a FAILED item's result.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/result.py:99	tokens_used	A clearly-marked degraded result (no SDK / no key / backend down, P9).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/runtime_resolver.py:57	pinned_policy	Resolve one runtime under either caller-routing or pinned profile policy.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/spawn.py:198	subagent	Resolve the runtime and run the turn, refunding the reservation on a raise.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/spawn.py:212	subagent	Resolve the runtime and run the turn, refunding the reservation on a raise.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/bifrost_user_admin.py:222	BIFROST_PROVIDERS	Ensure the provider row exists - native, or custom with an address.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/delegation.py:1	delegated	On-behalf-of identity decisions and OBO token exchange (US-IAM-03/05, SEC-03).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/password_reset_evidence.py:22	not_observed_in_bounded_tail	Project no recipient, provider, address, exception, or message content.
@@ -413,9 +413,9 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/result.py:16	ok	The outcome
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/result.py:86	degrade	The bounded degrade tag this result carries, or None.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/retention.py:1	run_retention_once	Retention purge: hard-erasure of closed conversations (M11, right-to-erasure).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/runtime_resolver.py:381	offer_candidates	The run's effective kernel tool set: tenant ceiling ∩ run grants.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:307	_publish_subagent_end_event	Retire the bearer this child inherited, at the child's run terminal.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:334	_publish_subagent_event	Settle a delegated child on the parent relay (G3, SDK-CONTRACT §5).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:409	resolve_run_scoped_credential	Carry a run-scoped adapter bearer from the spawning run to its child.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn_lifecycle.py:166	resolve_run_scoped_credential	Carry a run-scoped adapter bearer from the spawning run to its child.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn_lifecycle.py:64	_publish_subagent_end_event	Retire the bearer this child inherited, at the child's run terminal.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn_lifecycle.py:91	_publish_subagent_event	Settle a delegated child on the parent relay (G3, SDK-CONTRACT §5).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/stack_tool_status.py:182	cached_snapshot	``cached_snapshot`` returns only an already-reported scoped snapshot.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/ultracode_memory.py:73	identity.rbac.memory_owner_scopes	Memory RBAC owner scopes derivable at this layer: the principal + org.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/workers.py:1	register_workers	The Hatchet integration seam (P6, US-EXE-02).
@@ -624,9 +624,9 @@ ORDINARY	NO-SUBJECT	comment	boltrig/adapters/egress.py:88		config passed to a co
 ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/egress.py:99		The process-wide egress posture, or None when no manifest installed one (bare boots and tests: egress then behaves exactly as pre-manifest).
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/generator.py:326		string must not silently double as a file read.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/generator.py:347		pinned to the audited IP, and redirects are never followed into internal
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/http_base.py:177		of the base host so httpx cannot re-resolve to internal space at connect
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/http_base.py:201		SSRF: never auto-follow redirects - a 302 to 169.254.169.254 would
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/http_base.py:89		explicit config always wins;
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/http_base.py:176		of the base host so httpx cannot re-resolve to internal space at connect
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/http_base.py:200		SSRF: never auto-follow redirects - a 302 to 169.254.169.254 would
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/http_base.py:88		explicit config always wins;
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/loader.py:40		health claim.
 ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/loader.py:92		The cached posture, refreshed in the background when stale.
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/mcp_consumer.py:121		Round trip completed in THIS process? Set only in _call;
@@ -1096,10 +1096,10 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/result.py:51		never at zero.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/routine_run.py:159		so an engine retry never emits duplicate completion notices.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/routine_run.py:176		Notification delivery is a side channel, never the authority for
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime_resolver.py:32		A composed runtime cannot honestly satisfy an authored pinned profile.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:229		cross: see _inherit_adapter_bearer for why the child cannot use the seal
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:235		decided (SEC-13).
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:389		(0/0) is priced on the total exactly as before - never at zero.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:517		The run never happened: honest degradation (US-FLT-07), so the chat
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:243		cross: see _inherit_adapter_bearer for why the child cannot use the seal
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:249		decided (SEC-13).
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn_lifecycle.py:146		(0/0) is priced on the total exactly as before - never at zero.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn_lifecycle.py:274		The run never happened: honest degradation (US-FLT-07), so the chat
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/spawn_skills.py:136		Select the cheapest capable runtime, honouring explicit pins.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/ultracode.py:67		(ultracode_memory.memory_prompt), never as bare prompt text (SEC-72).
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ultracode_memory.py:283		Prompt-safe memory block: recall is untrusted data, never instruction.
@@ -1726,7 +1726,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/reflection.py:51	reflection_les
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/retention.py:108	run_retention_once	Loop :func:`run_retention_once` forever; cancellable, idle-sleeping.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:1	UnavailableRuntime	Agent-runtime selection for the Codex-owned fleet.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:76	RuntimeResolver	Build Codex or an explicit deterministic script runtime.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:532	Spawner	Construct the fleet ``Spawner`` for a kernel.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:303	Spawner	Construct the fleet ``Spawner`` for a kernel.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/sweep_progress.py:1	pending	Make a stalled loop distinguishable from an idle one.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/auth.py:331	OidcVerifier	Build a ``PrincipalResolver`` backed by Cloudflare Access (zero-trust edge).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/auth.py:386	build_principal_resolver	Header-trusting resolver for LOCAL DEV ONLY (mirrors the kernel default).
