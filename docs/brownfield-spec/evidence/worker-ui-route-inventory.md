@@ -1,7 +1,7 @@
 # Evidence: Worker UI module, route and SDK-call inventory
 
 Referent commit `19bcae7fa81663fe8998377c86451ba08fb16e48`, generated 2026-08-24 from
-the pinned tree at `/var/tmp/claude/claude-1011/-home-jellytot/f7f5f72e-a248-4744-a573-952de9fdf71f/scratchpad/bt-spec`.
+the pinned tree at `/home/jellytot/Projects/boltrig-spec`.
 Companion to `docs/brownfield-spec/specs/SPEC-15-worker-ui.md`, section 4.2.
 
 ## How every table here was produced

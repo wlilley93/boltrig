@@ -3,7 +3,7 @@
     area              17 The channel gateway, messaging bridges and calls
     id-block          BT-REQ-1700 .. BT-REQ-1799
     referent commit   19bcae7fa81663fe8998377c86451ba08fb16e48 (origin/main)
-    tree              /var/tmp/claude/claude-1011/-home-jellytot/f7f5f72e-a248-4744-a573-952de9fdf71f/scratchpad/bt-spec
+    tree              /home/jellytot/Projects/boltrig-spec
     author-agent      brownfield-spec area 17
     date              2026-08-24
 

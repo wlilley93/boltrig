@@ -8,7 +8,7 @@ contract. Read it fully before writing anything.
     repo    wlilley93/boltrig
     branch  origin/main
     commit  19bcae7fa81663fe8998377c86451ba08fb16e48
-    tree    /var/tmp/claude/claude-1011/-home-jellytot/f7f5f72e-a248-4744-a573-952de9fdf71f/scratchpad/bt-spec
+    tree    /home/jellytot/Projects/boltrig-spec
 
 Read ONLY that tree. Do not read `/home/jellytot/Projects/boltrig` (dirty, on a
 feature branch), any other `boltrig-*` worktree, or any deployed stack. If a

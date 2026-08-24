@@ -3,7 +3,7 @@
     area              06 Adapters, egress policy, and MCP consumption
     id-block          BT-REQ-0600 .. BT-REQ-0699
     referent commit   19bcae7fa81663fe8998377c86451ba08fb16e48 (origin/main)
-    tree              /var/tmp/claude/claude-1011/-home-jellytot/f7f5f72e-a248-4744-a573-952de9fdf71f/scratchpad/bt-spec
+    tree              /home/jellytot/Projects/boltrig-spec
     author-agent      brownfield-spec area 06
     date              2026-08-24
 
