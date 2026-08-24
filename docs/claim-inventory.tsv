@@ -34,10 +34,10 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/admin.py:107		Surface adapter c
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/birth_profile.py:30		Convert typed composition data to stable JSON solely for hashing.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/control_compat.py:1		Compatibility mutations routed through the governed ``control.*`` adapter.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/control_lifecycle.py:108		Unbind and delete the credential ref registration created, if unshared.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/config/manifest.py:275		Long-conversation compaction (append-only derived summaries).
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/config/manifest.py:333		Long-conversation compaction knobs (append-only derived summaries).
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/manifest.py:43		A reference to secret material - never the material itself (SEC-04).
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/manifest.py:528		One non-negative rate as a float, or None when absent/malformed/negative.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/config/manifest_chat.py:23		Long-conversation compaction (append-only derived summaries).
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/config/manifest_chat.py:81		Long-conversation compaction knobs (append-only derived summaries).
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/manifest_parse.py:114		One non-negative rate as a float, or None when absent/malformed/negative.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/manifest_types.py:32		A reference to secret material - never the material itself (SEC-04).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/config/permanent_fleet.py:196		The controlled mutation is one append-only desired-state write.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/weak_secrets.py:1		One predicate for "this secret is a placeholder, not a secret".
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/config/weak_secrets.py:24		Exact values that are never a real secret.
@@ -220,7 +220,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/api/logging_config.py:1	LOGGING_
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/author_ratchet.py:40	stays_author	Refuse a crossing DOWN to exactly one active author.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/channel_addressing.py:14	cos	The authored org default, legacy ``cos``, or no safe default.
 LOAD-BEARING	SUBJECT-EXTERNAL	comment	boltrig/config/dev_posture.py:185	actor_tier	D4.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/manifest.py:545	cost.py	One entry of the per-model price table, or None to drop it (FR-COST-04).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/manifest_parse.py:131	cost.py	One entry of the per-model price table, or None to drop it (FR-COST-04).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/distill/adapter_night.py:1	distill.night	The ``distill.night`` orchestration: one governed verb for one night.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/distill/bootstrap.py:1	boltrig.memory.bootstrap	Composition helper for the optional sleep-distillation subsystem.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/distill/corpus.py:200	target_tenant_id	Derive the tenant's training corpus from the governed record.
@@ -747,28 +747,28 @@ ORDINARY	NO-SUBJECT	comment	boltrig/config/control_workflows.py:34		so it can ne
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_workflows.py:57		The draft prefix is kernel-reserved;
 ORDINARY	NO-SUBJECT	comment	boltrig/config/dev_egress.py:70		and adapters are a FOUNDATION layer that may not depend upward on config
 ORDINARY	NO-SUBJECT	comment	boltrig/config/dev_posture.py:93		Empty means the declaration covers nobody, which refuses everything.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:107		Compatibility default for old manifests.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:176		profiles.
-ORDINARY	NO-SUBJECT	docstring	boltrig/config/manifest.py:217		Human-in-the-loop routing and the verbs that always block (S8, P5).
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:269		seconds while a run is producing nothing, so a slow-but-alive run never trips a
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:282		conversations are never compacted.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:292		unbounded scan is impossible).
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:293		caps: a manifest may only LOWER them (a smaller, more conservative page), never
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:322		test script.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:346		the call site because that order's forbidden list names
-ORDINARY	NO-SUBJECT	docstring	boltrig/config/manifest.py:404		Verbs that always require human approval (P5) - the Kernel's gate.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:499		selection never reads this field - so a deployment that sets it would
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:591		rather than failing load, so a bad price never blocks boot (the model just
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:700		absent or malformed yields (), which covers nobody and refuses everything.
-ORDINARY	NO-SUBJECT	docstring	boltrig/config/manifest.py:743		Resolve an attachment cap: a manifest may only TIGHTEN it, never loosen it ([2026] VJS-COUNTY 3, D2).
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:786		turns verbatim, never grow the verbatim window past the code ceiling.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:795		default/ceiling page, never grow a page past the code ceiling.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:803		tool name or show FEWER pairs, never widen what reaches a model's prompt.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_apply.py:125		One stale module_ref must not take down the whole boot: before this
 ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_apply.py:147		departments.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_apply.py:214		void for them.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_chat.py:149		turns verbatim, never grow the verbatim window past the code ceiling.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_chat.py:158		default/ceiling page, never grow a page past the code ceiling.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_chat.py:166		tool name or show FEWER pairs, never widen what reaches a model's prompt.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_chat.py:17		seconds while a run is producing nothing, so a slow-but-alive run never trips a
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_chat.py:30		conversations are never compacted.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_chat.py:40		unbounded scan is impossible).
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_chat.py:41		caps: a manifest may only LOWER them (a smaller, more conservative page), never
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_chat.py:70		test script.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_chat.py:94		the call site because that order's forbidden list names
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_parse.py:177		rather than failing load, so a bad price never blocks boot (the model just
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_parse.py:286		absent or malformed yields (), which covers nobody and refuses everything.
+ORDINARY	NO-SUBJECT	docstring	boltrig/config/manifest_parse.py:329		Resolve an attachment cap: a manifest may only TIGHTEN it, never loosen it ([2026] VJS-COUNTY 3, D2).
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_parse.py:85		selection never reads this field - so a deployment that sets it would
 ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_reconcile.py:117		arithmetic about rows this apply cannot touch, and the plan would promise
 ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_reconcile.py:118		drops that never happen.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_types.py:165		profiles.
+ORDINARY	NO-SUBJECT	docstring	boltrig/config/manifest_types.py:206		Human-in-the-loop routing and the verbs that always block (S8, P5).
+ORDINARY	NO-SUBJECT	docstring	boltrig/config/manifest_types.py:290		Verbs that always require human approval (P5) - the Kernel's gate.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest_types.py:96		Compatibility default for old manifests.
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/model_profile_views.py:45		Resolve an approved profile for the xAI realtime gateway.
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/permanent_fleet.py:325		Return an Admin export with the latest governed hierarchy overlaid.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/settings.py:43		the Codex execution stack is never constructed (a total no-op).
@@ -1573,7 +1573,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/control_capability_binding_sp
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/control_capability_bindings.py:1	proposed	Governed review of capability bindings (SPEC §5, doctrine step 4).
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/config/control_routing_policy_specs.py:25	control_approval	: ``control_approval``.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/control_workflows.py:91	GENERATED	Save a non-runnable draft under the reserved id prefix (low-consequence).
-ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/config/manifest.py:212	APPROVAL_TIMEOUT_SECONDS_FLOOR	``APPROVAL_TIMEOUT_SECONDS_FLOOR`` and cannot resolve differently.
+ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/config/manifest_types.py:201	APPROVAL_TIMEOUT_SECONDS_FLOOR	``APPROVAL_TIMEOUT_SECONDS_FLOOR`` and cannot resolve differently.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/spawn_rules.py:337	capability	Resolve one policy snapshot into effective skills/routing.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:1	model.yaml	Load the emotion tables from ``libraries/emotion`` into engine dataclasses (EMO-5).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:172	None	Load and validate the three emotion YAML tables, or ``None`` on ANY failure.
@@ -1687,10 +1687,10 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/api/codex_execution.py:1	shadow_admit
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/api/codex_trusted.py:113	assert_cell_isolation_boundary	Prove the read-only sandbox ENGAGES here, before composing anything on it.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/control_rehydrate.py:1	api.bootstrap._rehydrate_store_adapters	Rebuilding a live adapter instance from its persisted store row.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/control_routing_policy_specs.py:1	RoutingPolicy	Verb specs for routing policies (SPEC §8, doctrine step 6, the route half).
-ORDINARY	SUBJECT-REACHED	comment	boltrig/config/manifest.py:261	_tighten_cap	cap (min(default, manifest)), never loosen it (see ``_tighten_cap`` below).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/manifest.py:307	_parse_chat	Bare chat-turn authority ([2026] VJS-COUNTY 1): which skill set a bare chat turn spawns with, per caller role.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/manifest.py:676	dev_posture.posture_block	Parse ``development_posture`` into a ``dev_posture.DevelopmentPosture``.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/manifest_chat.py:55	_parse_chat	Bare chat-turn authority ([2026] VJS-COUNTY 1): which skill set a bare chat turn spawns with, per caller role.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/manifest_parse.py:262	dev_posture.posture_block	Parse ``development_posture`` into a ``dev_posture.DevelopmentPosture``.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/manifest_reconcile.py:99	BulkCapabilityDeactivationError	Compute the plan and enforce the mass-deactivation guard BEFORE any write.
+ORDINARY	SUBJECT-REACHED	comment	boltrig/config/manifest_types.py:250	_tighten_cap	cap (min(default, manifest)), never loosen it (see ``_tighten_cap`` below).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/weak_secrets.py:52	is_weak_secret	True when ``value`` is absent, a known placeholder, or obviously unfilled.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/distill/adapter.py:116	allow_internal	JSON call to the fixed operator-configured sidecar.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:1	now	The pure affective engine: emotions, needs, mood and tension over time (EMO-3).
