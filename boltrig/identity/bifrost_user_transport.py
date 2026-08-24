@@ -210,6 +210,83 @@ __all__ = [
 ]
 
 
+# Which dialect Bifrost should speak to a custom provider, by provider id.
+#
+# `openai` is right for most OpenAI-compatible endpoints and WRONG for z.ai. Its
+# OpenAI-shaped base already carries the version (`.../paas/v4`), and Bifrost's
+# openai driver appends `/v1`, so a model listing went to
+# `.../paas/v4/v1/models` and z.ai answered 404. Bifrost then marked the key
+# `list_models_failed`, which the onboarding screen reported as "your provider
+# did not answer at that address" - about an address the screen does not even
+# offer a field for, because the catalogue supplies it.
+#
+# Measured from the kernel container 2026-08-24:
+#     GET  .../api/anthropic/v1/models        -> 200
+#     POST .../api/anthropic/v1/messages      -> 401 (exists, wants a real key)
+#     GET  .../api/coding/paas/v4/models      -> 401
+#     GET  .../api/coding/paas/v4/v1/models   -> 404   <- what Bifrost asked for
+#
+# So z.ai rides the ANTHROPIC dialect against `https://api.z.ai/api/anthropic`,
+# where the `/v1/...` Bifrost appends is exactly the real path.
+_ANTHROPIC_DIALECT = frozenset({"zai", "zai-coding-plan"})
+_ANTHROPIC_BASES = {
+    "zai": "https://api.z.ai/api/anthropic",
+    "zai-coding-plan": "https://api.z.ai/api/anthropic",
+}
+
+
+# Bifrost APPENDS `/v1/...` to a custom provider's base URL, and the catalogue
+# publishes bases that already end in `/v1`, so the request went to `/v1/v1/...`.
+#
+# Probed all 161 catalogue providers that publish a base, from the kernel
+# container, 2026-08-24. Counting 200/401/403 as "the path is really there":
+#
+#     Bifrost's path reachable BEFORE stripping:   62/161
+#     Bifrost's path reachable AFTER  stripping:  147/161
+#     newly working: 85          regressed: 0
+#
+# The 14 that still do not answer are not this bug and must not be papered over
+# with a second rule: 6 are loopback addresses (lmstudio, privatemode-ai and
+# friends), 4 carry unexpanded `${VAR}` placeholders (databricks,
+# snowflake-cortex, cloudflare-workers-ai, infomaniak) and 4 genuinely publish no
+# such path (github-copilot, iflowcn, kuae-cloud-coding-plan, clarifai). The
+# first two groups are addresses only the operator can supply, so the UI asks for
+# them rather than submitting a guess.
+def bifrost_base_url(provider: str, url: str) -> str:
+    """The base to hand Bifrost, given what the catalogue publishes.
+
+    Strips ONE trailing `/v1` because Bifrost re-adds it. Providers on the
+    anthropic dialect get their anthropic-shaped base instead, where the
+    appended `/v1/...` is the real path.
+    """
+    trimmed = url.rstrip("/")
+    if provider.lower() in _ANTHROPIC_DIALECT:
+        return _ANTHROPIC_BASES.get(provider.lower(), trimmed)
+    return trimmed[:-3] if trimmed.endswith("/v1") else trimmed
+
+
+def custom_provider_dialect(provider: str) -> str:
+    """The `base_provider_type` Bifrost should use for a custom provider."""
+    return "anthropic" if provider.lower() in _ANTHROPIC_DIALECT else "openai"
+
+
+def custom_provider_body(provider: str, base_url: str) -> dict[str, Any]:
+    """The two body keys that bind a custom provider to an address.
+
+    base_url goes in BOTH: Bifrost silently drops it from
+    ``custom_provider_config`` and reads it from ``network_config``, so sending
+    only the former loses the address with no error. See ``stored_base_url``,
+    which reads them back in the same order.
+    """
+    return {
+        "custom_provider_config": {
+            "base_provider_type": custom_provider_dialect(provider),
+            "base_url": base_url,
+        },
+        "network_config": {"base_url": base_url},
+    }
+
+
 def stored_base_url(row: dict[str, Any]) -> str | None:
     """The endpoint Bifrost actually recorded. BOTH spellings, network first.
 
