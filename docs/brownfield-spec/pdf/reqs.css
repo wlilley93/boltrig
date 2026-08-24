@@ -1,0 +1,14 @@
+.reqs{ margin:0 0 1em; }
+/* One requirement is one block. A floated id could be left behind on the page
+   its statement did not fit on, which reads as a requirement with no text. */
+.req{ padding-left:17mm; text-indent:-17mm; margin:0 0 2.1mm; text-align:justify;
+      break-inside:avoid; page-break-inside:avoid; }
+.rid{ display:inline-block; width:17mm; text-indent:0; vertical-align:top;
+      font:400 7.6pt "JetBrains Mono", monospace; color:var(--accent); }
+.req code{ font-size:.86em; }
+.note{ page-break-after:always; padding-top:4mm; }
+.note h2{ font:600 13pt "IBM Plex Sans"; border:0; margin:0 0 3mm; padding:0; }
+.note p{ max-width:132mm; }
+.toc .cnt{ font:400 7.4pt "JetBrains Mono"; color:var(--faint); }
+.toc .cnt::before{ content:"  \00b7  "; }
+.toc .l1{ font:400 9.4pt "IBM Plex Sans"; }
