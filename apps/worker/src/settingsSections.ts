@@ -21,7 +21,6 @@ export type SettingsSection =
   | "knowledge"
   | "overnight"
   | "health"
-  | "operations"
   | "organisation"
   | "advanced"
   | "archived";
@@ -34,13 +33,6 @@ export interface SettingsEntry {
   title: string;
   lead: string;
 }
-
-const OPERATIONS_ENTRY: SettingsEntry = {
-  id: "operations",
-  label: "Operations",
-  title: "Operations",
-  lead: "Runtime health, audit history and budget controls.",
-};
 
 export const SETTINGS_SECTIONS: SettingsEntry[] = [
   {
@@ -139,7 +131,6 @@ const LEGACY_BEHAVIOUR_ENTRIES: Partial<Record<SettingsSection, SettingsEntry>> 
 };
 
 export function settingsEntry(id: string): SettingsEntry {
-  if (id === "operations") return OPERATIONS_ENTRY;
   if (Object.prototype.hasOwnProperty.call(LEGACY_BEHAVIOUR_ENTRIES, id)) {
     return LEGACY_BEHAVIOUR_ENTRIES[id as SettingsSection]!;
   }
@@ -147,8 +138,11 @@ export function settingsEntry(id: string): SettingsEntry {
 }
 
 export function isSettingsSection(value: string): value is SettingsSection {
-  return value === "operations"
-    || Object.prototype.hasOwnProperty.call(LEGACY_BEHAVIOUR_ENTRIES, value)
+  // "operations" was a deep-linkable pane onto the kernel operations console -
+  // runtime health, audit history, budget ceilings. None of it exists behind a
+  // Hermes cell, so the section is gone rather than answering a deep link with
+  // an empty page.
+  return Object.prototype.hasOwnProperty.call(LEGACY_BEHAVIOUR_ENTRIES, value)
     || SETTINGS_SECTIONS.some((entry) => entry.id === value);
 }
 

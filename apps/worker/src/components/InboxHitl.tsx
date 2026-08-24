@@ -190,7 +190,7 @@ function RequestReferences({ item }: { item: HITLRequest }) {
       {item.run_id && (
         <div>
           <dt>Run</dt>
-          <dd><a href={routeHash("runs", item.run_id)}>{item.run_id}</a></dd>
+          <dd>{item.run_id}</dd>
         </div>
       )}
       {item.work_item_id && <div><dt>Work item</dt><dd>{item.work_item_id}</dd></div>}

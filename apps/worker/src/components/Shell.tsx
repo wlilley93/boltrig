@@ -150,8 +150,7 @@ export function Sidebar({
       return;
     }
     if (action === "invite") {
-      onRoute("organisation");
-      return;
+      return; // The organisation console it opened was a kernel surface.
     }
     void client.logout().finally(() => window.location.reload());
   }
@@ -456,7 +455,6 @@ const settingsIcons: Record<SettingsSection, ShellIconName> = {
   knowledge: "book",
   overnight: "moon",
   health: "pulse",
-  operations: "pulse",
   organisation: "org",
   advanced: "code",
   archived: "archive",

@@ -16,10 +16,9 @@ const primary: Array<{
     shortcut: "⌘N",
     title: "Start something new. Anything running carries on",
   },
-  { route: "agents", label: "Agents", icon: "agentBranch" },
-  { route: "integrations", label: "Plugins", icon: "pluginGrid" },
-  { route: "browser", label: "Browser", icon: "browser" },
-  { route: "automations", label: "Routines", icon: "routineClock" },
+  // Agents, Plugins, Browser and Routines were consoles over the kernel; a
+  // Hermes cell has none of it, so the rows went with the routes rather than
+  // becoming four entries that lead to "unavailable".
 ];
 
 interface ShellNavProps {

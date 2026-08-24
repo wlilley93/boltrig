@@ -345,10 +345,6 @@ function ComposerContext({ runtime }: { runtime: ApprovalRuntime }) {
   );
   return (
     <div className="composer-context" aria-label="Task context">
-      <button className="composer-context-item" onClick={() => navigate("integrations")} type="button">
-        <span aria-hidden className="composer-plugin-stack"><i>P</i><i>＋</i></span>
-        <span>Plugins</span>
-      </button>
       <span className="composer-context-hint">Everything it does is recorded</span>
     </div>
   );

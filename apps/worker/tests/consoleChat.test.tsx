@@ -654,7 +654,8 @@ describe("console chat surface", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     expect(screen.getByRole("dialog", { name: "Add to task" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Files/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Record a skill/ })).toBeTruthy();
+    // "Record a skill" opened the Build console, removed with its route.
+    expect(screen.queryByRole("button", { name: /Record a skill/ })).toBeNull();
     expect(document.querySelector(".chat-header-actions .voice-call")).toBeNull();
   });
 
@@ -1036,8 +1037,10 @@ describe("console chat surface", () => {
 
     expect(await screen.findByRole("region", { name: "Automatic routine run" })).toBeTruthy();
     expect(screen.getByText("morning-priorities · Jarvis")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "View in Runs" }));
-    expect(window.location.hash).toBe("#/runs");
+    // The banner still names the routine that produced the turn; "View in
+    // Runs" is gone because the Runs console is - Hermes has no run index, only
+    // a per-run event stream.
+    expect(screen.queryByRole("button", { name: "View in Runs" })).toBeNull();
   });
 
   it("flips the theme from an active conversation header and persists the choice", async () => {
