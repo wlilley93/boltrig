@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import contextlib
 import json
-from datetime import datetime
 from pathlib import Path
 
 import asyncpg
@@ -18,6 +17,7 @@ import asyncpg
 from .effect_ledger_postgres import EffectLedgerStorePG
 from .channels import ChannelStorePG
 from .audit_stream import AuditStreamStorePG
+from .run_records import RunRecordsStorePG
 from .channel_dedup import ChannelDedupStorePG
 from .channel_outbox import ChannelOutboxStorePG
 from .budget_policy import BudgetPolicyPG
@@ -34,7 +34,7 @@ from .permanent_fleet import PermanentFleetStorePG
 from .birth_profiles import BirthProfileStorePG
 from .background_jobs import BackgroundJobStorePG
 from .sealing import seal_ref, unseal_ref
-from .work_items import WorkItemReadsPG, work_item_from_row
+from .work_items import WorkItemReadsPG
 from .workflow_triggers import WorkflowTriggerStorePG
 from .workflow_schedules import WorkflowScheduleStorePG
 from .authored_definitions_postgres import AuthoredDefinitionStorePG
@@ -48,8 +48,7 @@ from .conversation_queue import ConversationQueueStorePG
 from .conversation_binding_postgres import ConversationBindingStorePG
 from .agent_mailbox_postgres import AgentMailboxStorePG
 from .rows import (
-    _adapter, _ai_config, _checkpoint,
-    _conversation, _invitation, _mem_erasure, _mem_event, _mem_fact, _mem_ingestion, _mem_projection,
+    _adapter, _ai_config, _conversation, _invitation, _mem_erasure, _mem_event, _mem_fact, _mem_ingestion, _mem_projection,
     _memory, _message, _notif, _org, _org_member, _pat, _personal,
     _revision, _session, _setting, _summary, _tfa_challenge,
     _user, _user_totp, _workflow, _workspace,
@@ -85,7 +84,6 @@ from boltrig.models import (
     Workspace,
     WorkspaceMember,
     WorkflowDefinition,
-    WorkItem,
 )
 from boltrig.models.errors import SchemaValidationError
 _SCHEMA = Path(__file__).with_name("schema.sql")
@@ -134,6 +132,7 @@ class PostgresStore(
     BudgetPolicyPG, BudgetUsagePG, WorkItemReadsPG, IdempotencyStorePG, GuardedWritesPG,
     HitlStorePG,
     AuditStreamStorePG,
+    RunRecordsStorePG,
     PermanentFleetStorePG,
     BirthProfileStorePG,
     BackgroundJobStorePG,
@@ -303,222 +302,6 @@ class PostgresStore(
             tenant_id,
         )
         return [_workflow(r) for r in rows]
-
-    # --- workflow run records (design brief 22.1, observability-only) -------
-    async def record_workflow_run(self, tenant_id, workflow_id, run_id, status):
-        # Insert/replace on the (tenant_id, run_id) PK. ON CONFLICT DO NOTHING
-        # preserves the original started_at for a re-recorded run_id (idempotent
-        # re-recording of the same run never bumps its start time forward).
-        await self._pool.execute(
-            """INSERT INTO workflow_run_records (tenant_id, workflow_id, run_id, status)
-               VALUES ($1,$2,$3,$4)
-               ON CONFLICT (tenant_id, run_id) DO NOTHING""",
-            tenant_id, workflow_id, run_id, status,
-        )
-
-    async def list_workflow_run_ids(self, tenant_id, workflow_id, limit=100):
-        rows = await self._pool.fetch(
-            """SELECT run_id FROM workflow_run_records
-               WHERE tenant_id=$1 AND workflow_id=$2
-               ORDER BY started_at DESC LIMIT $3""",
-            tenant_id,
-            workflow_id,
-            max(0, min(limit, 1000)),
-        )
-        return [row["run_id"] for row in rows]
-
-    async def workflow_run_stats(self, tenant_id):
-        rows = await self._pool.fetch(
-            """SELECT workflow_id,
-                      COUNT(*) AS run_count,
-                      COUNT(*) FILTER (WHERE status='completed') AS success_count,
-                      MAX(started_at) AS last_run_at
-               FROM workflow_run_records
-               WHERE tenant_id=$1
-               GROUP BY workflow_id
-               ORDER BY workflow_id""",
-            tenant_id,
-        )
-        return [
-            {"workflow_id": r["workflow_id"], "run_count": int(r["run_count"]),
-             "success_count": int(r["success_count"]),
-             "last_run_at": r["last_run_at"]}
-            for r in rows
-        ]
-
-    # --- work items -------------------------------------------------------
-    async def create_work_item(self, w: WorkItem):
-        await self._pool.execute(
-            """INSERT INTO work_items (id, tenant_id, workspace_id, source, source_id, intent, confidence,
-                                       convergent, status, owner_member, parent_id, hatchet_run_id,
-                                       depth, on_behalf_of, constraints, raw, attempts, degraded,
-                                       result, lease_owner, lease_expires_at, target, reply_route)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
-               ON CONFLICT (tenant_id, id) DO UPDATE SET
-                 workspace_id=EXCLUDED.workspace_id, source=EXCLUDED.source, source_id=EXCLUDED.source_id, intent=EXCLUDED.intent,
-                 confidence=EXCLUDED.confidence, convergent=EXCLUDED.convergent,
-                 status=EXCLUDED.status, owner_member=EXCLUDED.owner_member,
-                 parent_id=EXCLUDED.parent_id, hatchet_run_id=EXCLUDED.hatchet_run_id,
-                 depth=EXCLUDED.depth, on_behalf_of=EXCLUDED.on_behalf_of,
-                 constraints=EXCLUDED.constraints, raw=EXCLUDED.raw,
-                 attempts=EXCLUDED.attempts, degraded=EXCLUDED.degraded,
-                 result=EXCLUDED.result, lease_owner=EXCLUDED.lease_owner,
-                 lease_expires_at=EXCLUDED.lease_expires_at,
-                 target=EXCLUDED.target, reply_route=EXCLUDED.reply_route, updated_at=now()""",
-            w.id, w.tenant_id, w.workspace_id, w.source, w.source_id, w.intent, w.confidence, w.convergent,
-            w.status.value, w.owner_member, w.parent_id, w.hatchet_run_id, w.depth,
-            w.on_behalf_of, w.constraints, w.raw, w.attempts, w.degraded, w.result,
-            w.lease_owner, w.lease_expires_at, w.target, w.reply_route,
-        )
-
-    async def update_work_item(self, item: WorkItem):
-        await self.create_work_item(item)  # upsert
-
-    async def update_work_item_if_leased(
-        self, item: WorkItem, *, lease_owner: str | None, lease_expires_at: datetime | None
-    ) -> bool:
-        """Write the row ONLY if it still carries the lease the caller was given.
-
-        Returns True if it wrote, False if the lease moved. The predicate is
-        evaluated HERE, by the party that serialises the write, in the same
-        statement ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1). That is the
-        whole point: a read-then-write check in the caller cannot decide a
-        read-then-write race, which is why the earlier `_still_leased` helper was
-        defeated by a reviewer who applied it and reproduced the original defect.
-
-        The expected tuple must be the one MINTED AT CLAIM and carried to this
-        body, never one the body re-read. A CAS whose expectation is re-derived at
-        body start inherits the identical defect.
-
-        Deliberately a distinct method rather than a keyword on update_work_item,
-        so a call site that must be fenced is greppable and an unfenced write to a
-        claimed row is visible in review.
-        """
-        row = await self._pool.fetchrow(
-            """UPDATE work_items SET
-                 workspace_id=$3, source=$4, source_id=$5, intent=$6, confidence=$7,
-                 convergent=$8, status=$9, owner_member=$10, parent_id=$11,
-                 hatchet_run_id=$12, depth=$13, on_behalf_of=$14, constraints=$15,
-                 raw=$16, attempts=$17, degraded=$18, result=$19, lease_owner=$20,
-                 lease_expires_at=$21, target=$22, reply_route=$23, updated_at=now()
-               WHERE tenant_id=$1 AND id=$2
-                 AND lease_owner IS NOT DISTINCT FROM $24
-                 AND lease_expires_at IS NOT DISTINCT FROM $25
-               RETURNING id""",
-            item.tenant_id, item.id, item.workspace_id, item.source, item.source_id,
-            item.intent, item.confidence, item.convergent, item.status.value,
-            item.owner_member, item.parent_id, item.hatchet_run_id, item.depth,
-            item.on_behalf_of, item.constraints, item.raw, item.attempts,
-            item.degraded, item.result, item.lease_owner, item.lease_expires_at,
-            item.target, item.reply_route, lease_owner, lease_expires_at,
-        )
-        return row is not None
-
-    async def transition_work_item_status(self, tenant_id, item_id, *, expected, new_status):
-        # Conditional status write (CAS on the guarded status): a concurrent
-        # transition that already moved the row matches 0 rows, so the loser
-        # fails instead of silently overwriting the winner.
-        row = await self._pool.fetchrow(
-            """UPDATE work_items SET status=$4, updated_at=now()
-               WHERE tenant_id=$1 AND id=$2 AND status=$3 RETURNING id""",
-            tenant_id, item_id, expected.value, new_status.value,
-        )
-        return row is not None
-
-    async def transition_work_item_settled(
-        self, tenant_id, item_id, *, expected, new_status, result
-    ):
-        # The payload-carrying twin: status CAS + lease clear + result stamp in
-        # ONE conditional UPDATE, so a sweeper's settle carries its reason
-        # without a read-then-write window a concurrent re-queue can slip into.
-        row = await self._pool.fetchrow(
-            """UPDATE work_items
-                  SET status=$4, lease_owner=NULL, lease_expires_at=NULL,
-                      result=$5, updated_at=now()
-               WHERE tenant_id=$1 AND id=$2 AND status=$3 RETURNING id""",
-            tenant_id, item_id, expected.value, new_status.value, result,
-        )
-        return row is not None
-
-    async def claim_work_item(self, tenant_id, worker_id, lease_seconds):
-        # atomic pending -> in_flight claim with a lease (US-FLT-05): one
-        # statement, FOR UPDATE SKIP LOCKED so concurrent claimers never block
-        # or double-claim; an expired lease is reclaimable. RETURNING tells us
-        # if we won (mirrors consume_hitl).
-        row = await self._pool.fetchrow(
-            """UPDATE work_items
-               SET status='in_flight', lease_owner=$2,
-                   lease_expires_at=now() + make_interval(secs => $3),
-                   attempts=attempts+1, updated_at=now()
-               WHERE tenant_id=$1 AND id IN (
-                 SELECT id FROM work_items
-                 WHERE tenant_id=$1 AND (status='pending'
-                        OR (status='in_flight' AND lease_expires_at < now()))
-                 ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED
-               )
-               RETURNING *""",
-            tenant_id, worker_id, float(lease_seconds),
-        )
-        return work_item_from_row(row)
-
-    async def try_increment_fanout(self, tenant_id, tree_id, counter, n, cap):
-        # atomic capped increment (US-EXE-07): the conditional upsert applies
-        # the whole increment or none; no row returned means refused. The INSERT
-        # arm has no WHERE, so an over-cap first increment is refused up front.
-        if n > cap:
-            return False
-        row = await self._pool.fetchrow(
-            """INSERT INTO fanout_counters (tenant_id, tree_id, counter, value)
-               VALUES ($1,$2,$3,$4)
-               ON CONFLICT (tenant_id, tree_id, counter) DO UPDATE
-                 SET value = fanout_counters.value + EXCLUDED.value
-                 WHERE fanout_counters.value + EXCLUDED.value <= $5
-               RETURNING value""",
-            tenant_id, tree_id, counter, n, cap,
-        )
-        return row is not None
-
-    # --- run checkpoints (Beat 3 resume seam) ------------------------------
-    async def upsert_checkpoint(
-        self, tenant_id, run_id, step, status, output=None, hitl_request_id=None
-    ):
-        await self._pool.execute(
-            """INSERT INTO run_checkpoints (tenant_id, run_id, step, status, output,
-                                            hitl_request_id, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,now())
-               ON CONFLICT (tenant_id, run_id, step) DO UPDATE SET
-                 status=EXCLUDED.status, output=EXCLUDED.output,
-                 hitl_request_id=EXCLUDED.hitl_request_id, updated_at=now()""",
-            tenant_id, run_id, step, status, output, hitl_request_id,
-        )
-
-    async def list_checkpoints(self, tenant_id, run_id):
-        rows = await self._pool.fetch(
-            """SELECT * FROM run_checkpoints WHERE tenant_id=$1 AND run_id=$2
-               ORDER BY updated_at, step""",
-            tenant_id, run_id,
-        )
-        return [_checkpoint(r) for r in rows]
-
-    # --- server-side run cancellation ([2026] VJS-COUNTY 6) ----------------
-    async def request_run_cancel(self, tenant_id, run_id, requested_by):
-        # Idempotent marker (D2): INSERT .. ON CONFLICT DO NOTHING, so a
-        # re-request never overwrites the original requester. Durable across
-        # restarts - the row is the backstop that stops a cancelled run being
-        # resurrected (the pump re-detects it and re-writes CANCELLED).
-        await self._pool.execute(
-            """INSERT INTO run_cancel_requests (tenant_id, run_id, requested_by)
-               VALUES ($1,$2,$3)
-               ON CONFLICT (tenant_id, run_id) DO NOTHING""",
-            tenant_id, run_id, requested_by,
-        )
-
-    async def is_run_cancel_requested(self, tenant_id, run_id):
-        row = await self._pool.fetchrow(
-            "SELECT 1 FROM run_cancel_requests WHERE tenant_id=$1 AND run_id=$2",
-            tenant_id, run_id,
-        )
-        return row is not None
 
     # --- credential references (sealed at rest, SEC-04 - see store/sealing.py) ---
     async def get_credential_ref(self, tenant_id, cred_id):

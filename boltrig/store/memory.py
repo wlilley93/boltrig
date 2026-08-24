@@ -6,11 +6,12 @@ Tenant scoping is enforced on every method (keys are ``(tenant_id, id)`` tuples)
 
 from __future__ import annotations
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import datetime
 from threading import Lock
 
 from .channels import ChannelStoreMem
 from .audit_stream import AuditStreamStoreMem
+from .run_records import RunRecordsStoreMem
 from .channel_dedup import ChannelDedupStoreMem
 from .channel_outbox import ChannelOutboxStoreMem
 from .budget_policy import BudgetPolicyMem
@@ -91,7 +92,6 @@ from boltrig.models import (
     WorkspaceMember,
     WorkflowDefinition,
     WorkItem,
-    WorkStatus,
     utcnow,
 )
 from boltrig.models.errors import SchemaValidationError
@@ -115,6 +115,7 @@ class InMemoryStore(
     GuardedWritesMem,
     HitlStoreMem,
     AuditStreamStoreMem,
+    RunRecordsStoreMem,
     ChannelStoreMem,
     CapabilityStoreMem,
     PermanentFleetStoreMem,
@@ -290,167 +291,6 @@ class InMemoryStore(
             if t == tenant_id and (wid not in latest or w.version > latest[wid].version):
                 latest[wid] = w
         return list(latest.values())
-
-    # --- workflow run records (design brief 22.1, observability-only) -------
-    async def record_workflow_run(self, tenant_id, workflow_id, run_id, status):
-        # Insert-only on the run_id PK, matching the postgres ON CONFLICT DO
-        # NOTHING: a re-record keeps the first status and started_at.
-        key = (tenant_id, run_id)
-        if key not in self._workflow_runs:
-            self._workflow_runs[key] = (workflow_id, status, utcnow())
-
-    async def list_workflow_run_ids(self, tenant_id, workflow_id, limit=100):
-        rows = [
-            (started, run_id)
-            for (tenant, run_id), (wf_id, _status, started) in self._workflow_runs.items()
-            if tenant == tenant_id and wf_id == workflow_id
-        ]
-        rows.sort(reverse=True)
-        return [run_id for _started, run_id in rows[: max(0, min(limit, 1000))]]
-
-    async def workflow_run_stats(self, tenant_id):
-        # Aggregate per workflow_id: run_count, success_count (status == completed),
-        # last_run_at (max started_at). Ordered by workflow_id, matching postgres.
-        buckets: dict[str, dict] = {}
-        for (t, _run_id), (wf_id, status, started) in self._workflow_runs.items():
-            if t != tenant_id:
-                continue
-            b = buckets.setdefault(wf_id, {"run_count": 0, "success_count": 0, "last_run_at": None})
-            b["run_count"] += 1
-            if status == "completed":
-                b["success_count"] += 1
-            if b["last_run_at"] is None or started > b["last_run_at"]:
-                b["last_run_at"] = started
-        return [
-            {
-                "workflow_id": wf_id,
-                "run_count": b["run_count"],
-                "success_count": b["success_count"],
-                "last_run_at": b["last_run_at"],
-            }
-            for wf_id, b in sorted(buckets.items())
-        ]
-
-    # --- work items ---
-    # Store a COPY, and hand back copies on read (see work_items._detached). The
-    # store used to alias the caller's object in both directions, so a caller
-    # mutating a row after writing it changed the store with no write call, and a
-    # conditional write would compare a stored object against itself and always
-    # agree. Postgres has never aliased; this is the parity repair
-    # ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D6).
-    async def create_work_item(self, item):
-        self._work[(item.tenant_id, item.id)] = replace(item)
-
-    async def update_work_item(self, item):
-        self._work[(item.tenant_id, item.id)] = replace(item)
-
-    async def update_work_item_if_leased(self, item, *, lease_owner, lease_expires_at):
-        """Write ONLY if the stored row still carries the lease the caller was
-        given; return whether it wrote (D1).
-
-        Mirrors the Postgres UPDATE ... WHERE lease_owner=$ AND lease_expires_at=$.
-        No await between the compare and the write, so it is atomic on the
-        single-threaded loop, the same argument transition_work_item_status and
-        claim_work_item already rely on.
-
-        The comparison is against the STORED row, which is only meaningful because
-        the store no longer hands callers that row: before the copy-on-read repair
-        the caller's `item` could BE the stored object and every comparison would
-        trivially pass.
-        """
-        stored = self._work.get((item.tenant_id, item.id))
-        if stored is None:
-            return False
-        if stored.lease_owner != lease_owner or stored.lease_expires_at != lease_expires_at:
-            return False
-        self._work[(item.tenant_id, item.id)] = replace(item)
-        return True
-
-    async def transition_work_item_status(self, tenant_id, item_id, *, expected, new_status):
-        # Conditional status write (mirrors the PG UPDATE ... WHERE status=$):
-        # no await between the check and the write, so it is atomic on the
-        # single-threaded event loop; a moved row fails the CAS.
-        item = self._work.get((tenant_id, item_id))
-        if item is None or item.status != expected:
-            return False
-        item.status = new_status
-        return True
-
-    async def transition_work_item_settled(
-        self, tenant_id, item_id, *, expected, new_status, result
-    ):
-        # The payload-carrying twin: status CAS + lease clear + result stamp in
-        # one conditional write (same event-loop-atomicity argument as above).
-        item = self._work.get((tenant_id, item_id))
-        if item is None or item.status != expected:
-            return False
-        item.status = new_status
-        item.lease_owner = None
-        item.lease_expires_at = None
-        item.result = result
-        return True
-
-    async def claim_work_item(self, tenant_id, worker_id, lease_seconds):
-        # atomic pending -> in_flight claim with a lease (US-FLT-05): no await between
-        # scan and write (mirrors consume_hitl); insertion order stands in for the
-        # Postgres ORDER BY created_at (oldest first).
-        now = utcnow()
-        for (t, _), item in self._work.items():
-            if t != tenant_id:
-                continue
-            claimable = item.status == WorkStatus.PENDING or (
-                item.status == WorkStatus.IN_FLIGHT
-                and item.lease_expires_at is not None
-                and item.lease_expires_at < now
-            )
-            if not claimable:
-                continue
-            item.status = WorkStatus.IN_FLIGHT
-            item.lease_owner = worker_id
-            item.lease_expires_at = now + timedelta(seconds=lease_seconds)
-            item.attempts += 1
-            # A copy: the claimer must not hold the stored object, or its own
-            # later mutations would land in the store unwritten.
-            return replace(item)
-        return None
-
-    async def try_increment_fanout(self, tenant_id, tree_id, counter, n, cap):
-        # atomic capped increment (US-EXE-07): all-or-nothing, no await between read/write.
-        key = (tenant_id, tree_id, counter)
-        new_value = self._fanout.get(key, 0) + n
-        if new_value > cap:
-            return False
-        self._fanout[key] = new_value
-        return True
-
-    # --- run checkpoints (Beat 3 resume seam) ---
-    async def upsert_checkpoint(
-        self, tenant_id, run_id, step, status, output=None, hitl_request_id=None
-    ):
-        self._checkpoints[(tenant_id, run_id, step)] = RunCheckpoint(
-            tenant_id=tenant_id,
-            run_id=run_id,
-            step=step,
-            status=status,
-            output=output,
-            hitl_request_id=hitl_request_id,
-            updated_at=utcnow(),
-        )
-
-    async def list_checkpoints(self, tenant_id, run_id):
-        out = [c for (t, r, _), c in self._checkpoints.items() if t == tenant_id and r == run_id]
-        # oldest-first with a step tiebreak, matching the Postgres ORDER BY.
-        return sorted(out, key=lambda c: (c.updated_at, c.step))
-
-    # --- server-side run cancellation ([2026] VJS-COUNTY 6) ---
-    async def request_run_cancel(self, tenant_id, run_id, requested_by):
-        # Idempotent marker (D2): the first request wins, a re-request is a no-op
-        # so the original requester is never overwritten. Durable for the process
-        # lifetime (the Postgres row is durable across restarts).
-        self._cancels.setdefault((tenant_id, run_id), requested_by)
-
-    async def is_run_cancel_requested(self, tenant_id, run_id):
-        return (tenant_id, run_id) in self._cancels
 
     # --- credential references (sealed at rest, SEC-04 - see store/sealing.py) ---
     async def get_credential_ref(self, tenant_id, cred_id):
