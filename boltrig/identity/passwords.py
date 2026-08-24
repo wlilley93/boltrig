@@ -25,7 +25,22 @@ _PH = PasswordHasher()
 # A minimum-length floor so accept-invite cannot set a trivially weak password.
 # Deliberately not an elaborate composition policy (which pushes users to
 # predictable patterns); length is the property that actually resists guessing.
-MIN_PASSWORD_LENGTH = 12
+#
+# LOWERED 12 -> 10 by the Principal's decision, 2026-08-24, to match the opbox
+# minimum lowered the same day (opbox genesis.sh SUPERADMIN_PASSWORD_MIN, which
+# carries the same note). Recorded here rather than quietly changed, because it
+# relaxes the floor for EVERY boltrig identity - every invite acceptance, every
+# password reset, every tenant - and not only for the one that prompted it.
+#
+# What prompted it: founding Classical Visas' own boltrig, where `initiate`
+# refused the operator's existing 10-character password and the two products
+# disagreed about the same person's credential.
+#
+# The rest of the control is untouched. Length is still the only axis, the
+# MAX_PASSWORD_LENGTH DoS cap is unchanged, and argon2id parameters are
+# unchanged. If this is ever raised again, note that identities created in the
+# interim carry 10-character passwords.
+MIN_PASSWORD_LENGTH = 10
 MAX_PASSWORD_LENGTH = 1024  # a sanity cap so a huge input cannot become a DoS via argon2
 
 # A fixed decoy hash used to equalise timing on the absent-user path (D5). It is a
