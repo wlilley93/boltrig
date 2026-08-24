@@ -16,6 +16,10 @@ from .memory_planes import MemoryPlanesStoreMem
 from .tenancy import TenancyStoreMem
 from .user_accounts import UserAccountsStoreMem
 from .user_auth import UserAuthStoreMem
+from .tenant_permissions import TenantPermissionsStoreMem
+from .libraries import LibraryStoreMem
+from .config_revisions import ConfigRevisionStoreMem
+from .notifications import NotificationsStoreMem, PersonalAgentsStoreMem
 from .ai_configs import AiConfigStoreMem
 from .channel_dedup import ChannelDedupStoreMem
 from .channel_outbox import ChannelOutboxStoreMem
@@ -31,14 +35,13 @@ from .password_resets import PasswordResetStoreMem
 from .permanent_fleet import PermanentFleetStoreMem
 from .birth_profiles import BirthProfileStoreMem
 from .background_jobs import BackgroundJobStoreMem
-from .sealing import seal_ref, unseal_ref
 from .work_items import WorkItemReadsMem
 from .workflow_triggers import WorkflowTriggerStoreMem
 from .workflow_schedules import WorkflowScheduleStoreMem
 from .authored_definitions_memory import AuthoredDefinitionStoreMem
 from .capability_routing import CapabilityRoutingStoreMem
 from .eval_cases import EvalCaseStoreMem
-from .credential_references import CredentialReferencePresenceMem
+from .credential_references import CredentialReferencePresenceMem, CredentialRefsStoreMem
 from .ai_key_proposals import AiKeyProposalStoreMem
 from .mcp_lifecycle import McpLifecycleStoreMem
 from .model_endpoints_memory import ModelEndpointStoreMem
@@ -62,7 +65,6 @@ from boltrig.models import (
     Conversation,
     ConversationMessage,
     ConversationSummary,
-    EMPTY_GRANTS,
     EvalCase,
     EvalRun,
     MemoryItem,
@@ -115,6 +117,9 @@ class InMemoryStore(
     TenancyStoreMem,
     UserAccountsStoreMem,
     UserAuthStoreMem,
+    TenantPermissionsStoreMem, LibraryStoreMem,
+    ConfigRevisionStoreMem, NotificationsStoreMem, PersonalAgentsStoreMem,
+    CredentialRefsStoreMem,
     AiConfigStoreMem,
     ChannelStoreMem,
     CapabilityStoreMem,
@@ -256,93 +261,3 @@ class InMemoryStore(
         # (tenant, level, scope_id); each value carries a credential_ref, never a raw
         # key. Tenant stays the isolation key.
         self._ai_configs: dict[tuple[str, str, str, str], AiConfig] = {}
-
-    # --- permissions ---
-    async def get_tenant_permissions(self, tenant_id):
-        return self._perms.get(tenant_id, TenantPermissions(tenant_id, EMPTY_GRANTS))
-
-    def set_tenant_permissions(self, perms: TenantPermissions) -> None:
-        """Seeding helper (manifest load / tests). Not part of the runtime contract."""
-        self._perms[perms.tenant_id] = perms
-
-    # --- libraries ---
-    async def upsert_adapter(self, adapter):
-        self._adapters[(adapter.tenant_id, adapter.id)] = adapter
-
-    async def get_adapter(self, tenant_id, adapter_id):
-        return self._adapters.get((tenant_id, adapter_id))
-
-    async def list_adapters(self, tenant_id):
-        return [a for (t, _), a in self._adapters.items() if t == tenant_id]
-
-    async def delete_adapter(self, tenant_id, adapter_id):
-        self._adapters.pop((tenant_id, adapter_id), None)
-        self._delete_mcp_lifecycle_state(tenant_id, adapter_id)
-
-    async def upsert_workflow(self, wf):
-        # Versioned like Postgres (PK tenant+id+version): every version is kept.
-        self._workflows[(wf.tenant_id, wf.id, wf.version)] = wf
-
-    async def list_workflows(self, tenant_id):
-        # Latest version per workflow id (the shelf), mirroring list_skills and
-        # the PG DISTINCT ON (id) ... ORDER BY id, version DESC.
-        latest: dict[str, WorkflowDefinition] = {}
-        for (t, wid, _), w in self._workflows.items():
-            if t == tenant_id and (wid not in latest or w.version > latest[wid].version):
-                latest[wid] = w
-        return list(latest.values())
-
-    # --- credential references (sealed at rest, SEC-04 - see store/sealing.py) ---
-    async def get_credential_ref(self, tenant_id, cred_id):
-        ref = self._creds.get((tenant_id, cred_id))
-        # Unseal transparently; legacy plaintext rows (no marker) pass through.
-        return unseal_ref(ref) if ref is not None else None
-
-    async def set_credential_ref(self, tenant_id: str, cred_id: str, ref: dict) -> None:
-        self._creds[(tenant_id, cred_id)] = seal_ref(ref)
-
-    async def delete_credential_ref(self, tenant_id: str, cred_id: str) -> None:
-        self._creds.pop((tenant_id, cred_id), None)
-
-    async def delete_credential_refs_for_run(self, tenant_id: str, run_id: str) -> int:
-        prefix = f"run:{run_id}:"
-        doomed = [key for key in self._creds if key[0] == tenant_id and key[1].startswith(prefix)]
-        for key in doomed:
-            del self._creds[key]
-        return len(doomed)
-
-    # --- Round Three: config revisions ---
-    async def add_config_revision(self, rev):
-        self._rev_seq += 1
-        rev.id = self._rev_seq
-        self._revisions.append(rev)
-        return rev
-
-    async def list_config_revisions(self, tenant_id, kind, ref):
-        return [
-            r
-            for r in self._revisions
-            if r.tenant_id == tenant_id and r.kind == kind and r.ref == ref
-        ]
-
-    async def get_config_revision(self, tenant_id, rev_id):
-        return next(
-            (r for r in self._revisions if r.tenant_id == tenant_id and r.id == rev_id), None
-        )
-
-    # --- notifications ---
-    async def upsert_notification_pref(self, pref):
-        self._notif[(pref.tenant_id, pref.id)] = pref
-
-    async def list_notification_prefs(self, tenant_id):
-        return [p for (t, _), p in self._notif.items() if t == tenant_id]
-
-    # --- personal agents ---
-    async def upsert_personal_agent(self, agent):
-        self._personal[(agent.tenant_id, agent.user_id)] = agent
-
-    async def get_personal_agent(self, tenant_id, user_id):
-        return self._personal.get((tenant_id, user_id))
-
-    async def delete_personal_agent(self, tenant_id, user_id):
-        return self._personal.pop((tenant_id, user_id), None) is not None

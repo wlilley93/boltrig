@@ -23,6 +23,10 @@ from .memory_planes import MemoryPlanesStorePG
 from .tenancy import TenancyStorePG
 from .user_accounts import UserAccountsStorePG
 from .user_auth import UserAuthStorePG
+from .tenant_permissions import TenantPermissionsStorePG
+from .libraries import LibraryStorePG
+from .config_revisions import ConfigRevisionStorePG
+from .notifications import NotificationsStorePG, PersonalAgentsStorePG
 from .ai_configs import AiConfigStorePG
 from .channel_dedup import ChannelDedupStorePG
 from .channel_outbox import ChannelOutboxStorePG
@@ -39,34 +43,19 @@ from .password_resets import PasswordResetStorePG
 from .permanent_fleet import PermanentFleetStorePG
 from .birth_profiles import BirthProfileStorePG
 from .background_jobs import BackgroundJobStorePG
-from .sealing import seal_ref, unseal_ref
 from .work_items import WorkItemReadsPG
 from .workflow_triggers import WorkflowTriggerStorePG
 from .workflow_schedules import WorkflowScheduleStorePG
 from .authored_definitions_postgres import AuthoredDefinitionStorePG
 from .capability_routing import CapabilityRoutingStorePG
 from .eval_cases import EvalCaseStorePG
-from .credential_references import CredentialReferencePresencePG
+from .credential_references import CredentialReferencePresencePG, CredentialRefsStorePG
 from .ai_key_proposals import AiKeyProposalStorePG
 from .mcp_lifecycle import McpLifecycleStorePG
 from .model_endpoints_postgres import ModelEndpointStorePG
 from .conversation_queue import ConversationQueueStorePG
 from .conversation_binding_postgres import ConversationBindingStorePG
 from .agent_mailbox_postgres import AgentMailboxStorePG
-from .rows import (
-    _adapter, _notif, _personal,
-    _revision, _workflow,
-)
-from boltrig.models import (
-    AdapterRecord,
-    ConfigRevision,
-    NotificationPref,
-    PersonalAgent,
-    EMPTY_GRANTS,
-    GrantSet,
-    TenantPermissions,
-    WorkflowDefinition,
-)
 _SCHEMA = Path(__file__).with_name("schema.sql")
 _RLS = Path(__file__).with_name("rls.sql")
 
@@ -119,6 +108,9 @@ class PostgresStore(
     TenancyStorePG,
     UserAccountsStorePG,
     UserAuthStorePG,
+    TenantPermissionsStorePG, LibraryStorePG,
+    ConfigRevisionStorePG, NotificationsStorePG, PersonalAgentsStorePG,
+    CredentialRefsStorePG,
     AiConfigStorePG,
     PermanentFleetStorePG,
     BirthProfileStorePG,
@@ -215,190 +207,3 @@ class PostgresStore(
                     await conn.execute("SET LOCAL ROLE boltrig_app")
                 await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_id)
                 yield conn
-
-    # --- permissions ------------------------------------------------------
-    async def get_tenant_permissions(self, tenant_id):
-        row = await self._pool.fetchrow(
-            "SELECT allow, deny FROM tenant_permissions WHERE tenant_id=$1", tenant_id
-        )
-        if row is None:
-            return TenantPermissions(tenant_id, EMPTY_GRANTS)
-        return TenantPermissions(
-            tenant_id, GrantSet.of(list(row["allow"] or []), list(row["deny"] or []))
-        )
-
-    async def set_tenant_permissions(self, perms: TenantPermissions) -> None:
-        await self._pool.execute(
-            """INSERT INTO tenant_permissions (tenant_id, allow, deny)
-               VALUES ($1,$2,$3)
-               ON CONFLICT (tenant_id) DO UPDATE SET
-                 allow=EXCLUDED.allow, deny=EXCLUDED.deny, updated_at=now()""",
-            perms.tenant_id, list(perms.grants.allow), list(perms.grants.deny),
-        )
-
-    # --- libraries --------------------------------------------------------
-    async def upsert_adapter(self, a: AdapterRecord):
-        await self._pool.execute(
-            """INSERT INTO adapters (id, tenant_id, version, runtime, source, module_ref,
-                                     health, spec_ref, created_by, activated)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-               ON CONFLICT (tenant_id, id) DO UPDATE SET
-                 version=EXCLUDED.version, runtime=EXCLUDED.runtime, source=EXCLUDED.source,
-                 module_ref=EXCLUDED.module_ref, health=EXCLUDED.health,
-                 spec_ref=EXCLUDED.spec_ref, created_by=EXCLUDED.created_by,
-                 activated=EXCLUDED.activated, updated_at=now()""",
-            a.id, a.tenant_id, a.version, a.runtime, a.source, a.module_ref,
-            a.health.value, a.spec_ref, a.created_by, a.activated,
-        )
-
-    async def get_adapter(self, tenant_id, adapter_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM adapters WHERE tenant_id=$1 AND id=$2", tenant_id, adapter_id
-        )
-        return _adapter(row)
-
-    async def list_adapters(self, tenant_id):
-        rows = await self._pool.fetch("SELECT * FROM adapters WHERE tenant_id=$1", tenant_id)
-        return [_adapter(r) for r in rows]
-
-    async def delete_adapter(self, tenant_id, adapter_id):
-        await self._pool.execute(
-            "DELETE FROM adapters WHERE tenant_id=$1 AND id=$2", tenant_id, adapter_id
-        )
-
-    async def upsert_workflow(self, w: WorkflowDefinition):
-        await self._pool.execute(
-            """INSERT INTO workflow_definitions (id, tenant_id, version, source, definition,
-                                                 intent_tags, origin_task, workspace_id)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-               ON CONFLICT (tenant_id, id, version) DO UPDATE SET
-                 source=EXCLUDED.source, definition=EXCLUDED.definition,
-                 intent_tags=EXCLUDED.intent_tags, origin_task=EXCLUDED.origin_task,
-                 workspace_id=EXCLUDED.workspace_id, updated_at=now()""",
-            w.id, w.tenant_id, w.version, w.source.value, w.definition, w.intent_tags,
-            w.origin_task, w.workspace_id,
-        )
-
-    async def list_workflows(self, tenant_id):
-        # Latest version per workflow id (the shelf), mirroring list_skills and
-        # the in-memory store, so callers matching a workflow by id never see
-        # duplicate or stale versions.
-        rows = await self._pool.fetch(
-            """SELECT DISTINCT ON (id) * FROM workflow_definitions WHERE tenant_id=$1
-               ORDER BY id, version DESC""",
-            tenant_id,
-        )
-        return [_workflow(r) for r in rows]
-
-    # --- credential references (sealed at rest, SEC-04 - see store/sealing.py) ---
-    async def get_credential_ref(self, tenant_id, cred_id):
-        row = await self._pool.fetchrow(
-            "SELECT data, store, ref FROM credential_refs WHERE tenant_id=$1 AND id=$2",
-            tenant_id, cred_id,
-        )
-        if row is None:
-            return None
-        # A falsy-but-present data dict (e.g. a ref cleared to {}) round-trips as
-        # written; only a NULL data column falls back to the store/ref pair.
-        if row["data"] is not None:
-            # Unseal transparently; legacy plaintext rows (no marker) pass through.
-            return unseal_ref(row["data"])
-        return {"store": row["store"], "ref": row["ref"]}
-
-    async def set_credential_ref(self, tenant_id, cred_id, ref: dict) -> None:
-        # Seal before persisting: credential_refs.data is ALWAYS an envelope
-        # (ciphertext), never plaintext (SEC-04). The typed store/ref columns keep
-        # the reference metadata (an env var name is not secret material).
-        await self._pool.execute(
-            """INSERT INTO credential_refs (id, tenant_id, store, ref, data, expires_at)
-               VALUES ($1,$2,$3,$4,$5,$6)
-               ON CONFLICT (tenant_id, id) DO UPDATE SET
-                 store=EXCLUDED.store, ref=EXCLUDED.ref, data=EXCLUDED.data,
-                 expires_at=EXCLUDED.expires_at, updated_at=now()""",
-            cred_id, tenant_id, ref.get("store", "env"), ref.get("ref", ""), seal_ref(ref),
-            ref.get("expires_at"),
-        )
-
-    async def delete_credential_ref(self, tenant_id: str, cred_id: str) -> None:
-        await self._pool.execute(
-            "DELETE FROM credential_refs WHERE tenant_id=$1 AND id=$2", tenant_id, cred_id
-        )
-
-    async def delete_credential_refs_for_run(self, tenant_id: str, run_id: str) -> int:
-        # strpos prefix match (no LIKE wildcards to escape): only the run-scoped
-        # secure-input ids minted as ``run:<run_id>:<purpose>`` (SEC-181).
-        result = await self._pool.execute(
-            "DELETE FROM credential_refs WHERE tenant_id=$1 AND strpos(id, $2) = 1",
-            tenant_id, f"run:{run_id}:",
-        )
-        return int(result.rsplit(" ", 1)[-1])
-
-    # --- Round Three: config revisions ---
-    async def add_config_revision(self, rev: ConfigRevision) -> ConfigRevision:
-        row = await self._pool.fetchrow(
-            """INSERT INTO config_revisions (tenant_id, kind, ref, version, payload, actor, rolled_back)
-               VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, created_at""",
-            rev.tenant_id, rev.kind, rev.ref, rev.version, rev.payload, rev.actor, rev.rolled_back,
-        )
-        rev.id = row["id"]
-        rev.created_at = row["created_at"]
-        return rev
-
-    async def list_config_revisions(self, tenant_id, kind, ref):
-        rows = await self._pool.fetch(
-            """SELECT * FROM config_revisions WHERE tenant_id=$1 AND kind=$2 AND ref=$3
-               ORDER BY created_at DESC""",
-            tenant_id, kind, ref,
-        )
-        return [_revision(r) for r in rows]
-
-    async def get_config_revision(self, tenant_id, rev_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM config_revisions WHERE tenant_id=$1 AND id=$2", tenant_id, rev_id
-        )
-        return _revision(row)
-
-    # --- notifications ---
-    async def upsert_notification_pref(self, p: NotificationPref):
-        await self._pool.execute(
-            """INSERT INTO notification_prefs (id, tenant_id, scope_kind, scope_ref, event_type, channel, target, enabled)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-               ON CONFLICT (tenant_id, id) DO UPDATE SET
-                 scope_kind=EXCLUDED.scope_kind, scope_ref=EXCLUDED.scope_ref,
-                 event_type=EXCLUDED.event_type, channel=EXCLUDED.channel,
-                 target=EXCLUDED.target, enabled=EXCLUDED.enabled""",
-            p.id, p.tenant_id, p.scope_kind, p.scope_ref, p.event_type, p.channel,
-            p.target, p.enabled,
-        )
-
-    async def list_notification_prefs(self, tenant_id):
-        rows = await self._pool.fetch(
-            "SELECT * FROM notification_prefs WHERE tenant_id=$1", tenant_id
-        )
-        return [_notif(r) for r in rows]
-
-    # --- personal agents ---
-    async def upsert_personal_agent(self, a: PersonalAgent):
-        await self._pool.execute(
-            """INSERT INTO personal_agents (id, tenant_id, user_id, runtime, skills, enabled)
-               VALUES ($1,$2,$3,$4,$5,$6)
-               ON CONFLICT (tenant_id, id) DO UPDATE SET
-                 user_id=EXCLUDED.user_id, runtime=EXCLUDED.runtime,
-                 skills=EXCLUDED.skills, enabled=EXCLUDED.enabled""",
-            a.id, a.tenant_id, a.user_id, a.runtime, a.skills, a.enabled,
-        )
-
-    async def get_personal_agent(self, tenant_id, user_id):
-        row = await self._pool.fetchrow(
-            """SELECT * FROM personal_agents WHERE tenant_id=$1 AND user_id=$2
-               ORDER BY created_at DESC LIMIT 1""",
-            tenant_id, user_id,
-        )
-        return _personal(row)
-
-    async def delete_personal_agent(self, tenant_id, user_id):
-        result = await self._pool.execute(
-            "DELETE FROM personal_agents WHERE tenant_id=$1 AND user_id=$2",
-            tenant_id, user_id,
-        )
-        return result != "DELETE 0"
