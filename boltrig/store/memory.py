@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from threading import Lock
 
 from .channels import ChannelStoreMem
+from .audit_stream import AuditStreamStoreMem
 from .channel_dedup import ChannelDedupStoreMem
 from .channel_outbox import ChannelOutboxStoreMem
 from .budget_policy import BudgetPolicyMem
@@ -113,6 +114,7 @@ class InMemoryStore(
     IdempotencyStoreMem,
     GuardedWritesMem,
     HitlStoreMem,
+    AuditStreamStoreMem,
     ChannelStoreMem,
     CapabilityStoreMem,
     PermanentFleetStoreMem,
@@ -449,96 +451,6 @@ class InMemoryStore(
 
     async def is_run_cancel_requested(self, tenant_id, run_id):
         return (tenant_id, run_id) in self._cancels
-
-    # --- audit ---
-    async def audit_head(self, tenant_id):
-        chain = self._audit.get(tenant_id, [])
-        if not chain:
-            return (0, None)
-        last = chain[-1]
-        return (last.seq or 0, last.hash)
-
-    async def audit_outbox_enqueue(self, tenant_id, payload, append_error):
-        if not hasattr(self, "_audit_outbox"):
-            self._audit_outbox: list[dict] = []
-        self._audit_outbox.append(
-            {
-                "id": len(self._audit_outbox) + 1,
-                "tenant_id": tenant_id,
-                "payload": payload,
-                "append_error": append_error,
-                "attempts": 0,
-                "next_retry_at": utcnow(),
-                "created_at": utcnow(),
-            }
-        )
-
-    async def audit_outbox_due(self, tenant_id, now, limit=100):
-        rows = [
-            r
-            for r in getattr(self, "_audit_outbox", [])
-            if r["next_retry_at"] <= now and r["tenant_id"] == tenant_id
-        ]
-        return rows[:limit]
-
-    async def audit_outbox_delete(self, outbox_id):
-        self._audit_outbox = [r for r in getattr(self, "_audit_outbox", []) if r["id"] != outbox_id]
-
-    async def audit_outbox_mark_failed(self, outbox_id, append_error, next_retry_at):
-        for r in getattr(self, "_audit_outbox", []):
-            if r["id"] == outbox_id:
-                r["attempts"] += 1
-                r["append_error"] = append_error
-                r["next_retry_at"] = next_retry_at
-                return
-
-    async def audit_append(self, event):
-        self._audit.setdefault(event.tenant_id, []).append(event)
-
-    async def audit_query(self, tenant_id, run_id=None, limit=200):
-        chain = list(self._audit.get(tenant_id, []))
-        if run_id is not None:
-            chain = [e for e in chain if e.run_id == run_id or e.parent_run_id == run_id]
-        return chain[-limit:]
-
-    async def audit_scan(self, tenant_id, after_seq, limit):
-        return [e for e in self._audit.get(tenant_id, []) if (e.seq or 0) > after_seq][:limit]
-
-    # --- security event stream ([2026] VJS-COUNTY 9, D3) ---
-    async def security_head(self, tenant_id):
-        chain = self._security.get(tenant_id, [])
-        if not chain:
-            return (0, None)
-        last = chain[-1]
-        return (last.seq or 0, last.hash)
-
-    async def security_append(self, event):
-        self._security.setdefault(event.tenant_id, []).append(event)
-
-    async def security_query(self, tenant_id, event_type=None, limit=200):
-        chain = list(self._security.get(tenant_id, []))
-        if event_type is not None:
-            chain = [e for e in chain if e.event_type.value == event_type]
-        return chain[-limit:]
-
-    async def security_scan(self, tenant_id, after_seq, limit):
-        return [e for e in self._security.get(tenant_id, []) if (e.seq or 0) > after_seq][:limit]
-
-    # --- audit rollup anchors ([2026] VJS-COUNTY 9, D4) ---
-    async def add_audit_anchor(self, anchor):
-        self._anchors.setdefault(anchor.tenant_id, []).append(anchor)
-
-    async def latest_audit_anchor(self, tenant_id, workspace_id=None):
-        rows = [a for a in self._anchors.get(tenant_id, []) if a.workspace_id == workspace_id]
-        return rows[-1] if rows else None
-
-    async def list_audit_anchors(self, tenant_id, workspace_id=None, limit=200):
-        rows = [
-            a
-            for a in self._anchors.get(tenant_id, [])
-            if workspace_id is None or a.workspace_id == workspace_id
-        ]
-        return rows[-limit:]
 
     # --- credential references (sealed at rest, SEC-04 - see store/sealing.py) ---
     async def get_credential_ref(self, tenant_id, cred_id):
