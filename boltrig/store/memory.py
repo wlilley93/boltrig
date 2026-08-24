@@ -17,6 +17,7 @@ from .distillation_reads_memory import DistillationReadsMem
 from .budget_usage import BudgetUsageMem
 from .capabilities import CapabilityStoreMem
 from .guarded_writes import GuardedWritesMem
+from .hitl import HitlStoreMem
 from .idempotency import IdempotencyStoreMem
 from .observability_reads import ObservabilityReadsMem
 from .password_resets import PasswordResetStoreMem
@@ -66,7 +67,6 @@ from boltrig.models import (
     BirthProfileReceipt,
     HITLRequest,
     HITLResponse,
-    HITLStatus,
     MemoryErasure,
     MemoryEvent,
     MemoryFact,
@@ -112,6 +112,7 @@ class InMemoryStore(
     WorkItemReadsMem,
     IdempotencyStoreMem,
     GuardedWritesMem,
+    HitlStoreMem,
     ChannelStoreMem,
     CapabilityStoreMem,
     PermanentFleetStoreMem,
@@ -448,79 +449,6 @@ class InMemoryStore(
 
     async def is_run_cancel_requested(self, tenant_id, run_id):
         return (tenant_id, run_id) in self._cancels
-
-    # --- hitl ---
-    async def create_hitl_request(self, req):
-        # PG is ON CONFLICT (tenant_id, id) DO UPDATE SET status: a conflicting
-        # id keeps the original row and only adopts the new status.
-        key = (req.tenant_id, req.id)
-        existing = self._hitl.get(key)
-        if existing is not None:
-            existing.status = req.status
-        else:
-            self._hitl[key] = req
-
-    async def get_hitl_request(self, tenant_id, req_id):
-        return self._hitl.get((tenant_id, req_id))
-
-    async def list_pending_hitl(self, tenant_id):
-        pending = HITLStatus.PENDING
-        return [r for (t, _), r in self._hitl.items() if t == tenant_id and r.status == pending]
-
-    async def list_answered_hitl(self, tenant_id):
-        answered = HITLStatus.ANSWERED
-        return [r for (t, _), r in self._hitl.items() if t == tenant_id and r.status == answered]
-
-    async def list_hitl_requests_for_requester(
-        self, tenant_id, requested_by, statuses, *, limit=20
-    ):
-        allowed = {
-            status.value if isinstance(status, HITLStatus) else str(status) for status in statuses
-        }
-        rows = [
-            request
-            for (tenant, _), request in self._hitl.items()
-            if tenant == tenant_id
-            and request.requested_by == requested_by
-            and request.status.value in allowed
-        ]
-        bounded = max(0, min(int(limit), 100))
-        return rows[-bounded:] if bounded else []
-
-    async def answer_hitl(self, resp):
-        req = self._hitl.get((resp.tenant_id, resp.request_id))
-        if req is None or req.status != HITLStatus.PENDING:
-            return None
-        self._hitl_resp[(resp.tenant_id, resp.id)] = resp
-        req.status = HITLStatus.ANSWERED
-        return req
-
-    async def get_hitl_response(self, tenant_id, request_id):
-        matches = [
-            resp
-            for resp in self._hitl_resp.values()
-            if resp.tenant_id == tenant_id and resp.request_id == request_id
-        ]
-        # Newest first, matching the PG ORDER BY responded_at DESC LIMIT 1.
-        return max(matches, key=lambda r: r.responded_at, default=None)
-
-    async def consume_hitl(self, tenant_id, request_id):
-        # atomic ANSWERED -> CONSUMED (single-use). No await between the check and
-        # the write, so it is atomic under cooperative scheduling.
-        req = self._hitl.get((tenant_id, request_id))
-        if req is None or req.status != HITLStatus.ANSWERED:
-            return False
-        req.status = HITLStatus.CONSUMED
-        return True
-
-    async def expire_hitl(self, tenant_id, request_id):
-        # atomic PENDING -> TIMED_OUT (SEC-14). Same no-await CAS shape as
-        # consume_hitl: a concurrently answered request is never clobbered.
-        req = self._hitl.get((tenant_id, request_id))
-        if req is None or req.status != HITLStatus.PENDING:
-            return False
-        req.status = HITLStatus.TIMED_OUT
-        return True
 
     # --- audit ---
     async def audit_head(self, tenant_id):

@@ -25,6 +25,7 @@ from .capabilities import CapabilityStorePG
 from .control_plane_reads import ControlPlaneReadsPG
 from .distillation_reads import DistillationReadsPG
 from .guarded_writes import GuardedWritesPG
+from .hitl import HitlStorePG
 from .idempotency import IdempotencyStorePG
 from .observability_reads import ObservabilityReadsPG
 from .password_resets import PasswordResetStorePG
@@ -47,8 +48,7 @@ from .conversation_binding_postgres import ConversationBindingStorePG
 from .agent_mailbox_postgres import AgentMailboxStorePG
 from .rows import (
     _adapter, _ai_config, _anchor, _audit, _checkpoint,
-    _conversation, _hitl_req, _hitl_resp,
-    _invitation, _mem_erasure, _mem_event, _mem_fact, _mem_ingestion, _mem_projection,
+    _conversation, _invitation, _mem_erasure, _mem_event, _mem_fact, _mem_ingestion, _mem_projection,
     _memory, _message, _notif, _org, _org_member, _pat, _personal,
     _revision, _security, _session, _setting, _summary, _tfa_challenge,
     _user, _user_totp, _workflow, _workspace,
@@ -75,9 +75,6 @@ from boltrig.models import (
     UserTotp,
     EMPTY_GRANTS,
     GrantSet,
-    HITLRequest,
-    HITLResponse,
-    HITLStatus,
     AI_CONFIG_LEVELS,
     AI_CONFIG_MODALITIES,
     AiConfig,
@@ -136,6 +133,7 @@ class PostgresStore(
     ControlPlaneReadsPG,
     DistillationReadsPG,
     BudgetPolicyPG, BudgetUsagePG, WorkItemReadsPG, IdempotencyStorePG, GuardedWritesPG,
+    HitlStorePG,
     PermanentFleetStorePG,
     BirthProfileStorePG,
     BackgroundJobStorePG,
@@ -521,110 +519,6 @@ class PostgresStore(
             tenant_id, run_id,
         )
         return row is not None
-
-    # --- hitl -------------------------------------------------------------
-    async def create_hitl_request(self, r: HITLRequest):
-        await self._pool.execute(
-            """INSERT INTO hitl_requests (id, tenant_id, run_id, work_item_id, type, urgency,
-                                          context, question, options, assignee, status, timeout_at,
-                                          verb, requested_by, requested_on_behalf_of, request_fingerprint, action_digest, workspace_id, department_scope,
-                                          secure, secure_purpose)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
-               ON CONFLICT (tenant_id, id) DO UPDATE SET
-                 status=EXCLUDED.status, updated_at=now()""",
-            r.id, r.tenant_id, r.run_id, r.work_item_id, r.type.value, r.urgency.value,
-            r.context, r.question, r.options, r.assignee, r.status.value, r.timeout_at,
-            r.verb, r.requested_by, r.requested_on_behalf_of, r.request_fingerprint, r.action_digest, r.workspace_id, r.department_scope,
-            r.secure, r.secure_purpose,
-        )
-
-    async def consume_hitl(self, tenant_id, request_id):
-        # atomic ANSWERED -> CONSUMED; RETURNING tells us if we won the CAS.
-        row = await self._pool.fetchrow(
-            """UPDATE hitl_requests SET status='consumed', updated_at=now()
-               WHERE tenant_id=$1 AND id=$2 AND status='answered' RETURNING id""",
-            tenant_id, request_id,
-        )
-        return row is not None
-
-    async def expire_hitl(self, tenant_id, request_id):
-        # atomic PENDING -> TIMED_OUT (SEC-14); RETURNING tells us if we won the
-        # CAS, so a concurrently answered request is never clobbered.
-        row = await self._pool.fetchrow(
-            """UPDATE hitl_requests SET status='timed_out', updated_at=now()
-               WHERE tenant_id=$1 AND id=$2 AND status='pending' RETURNING id""",
-            tenant_id, request_id,
-        )
-        return row is not None
-
-    async def get_hitl_request(self, tenant_id, req_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM hitl_requests WHERE tenant_id=$1 AND id=$2", tenant_id, req_id
-        )
-        return _hitl_req(row)
-
-    async def list_pending_hitl(self, tenant_id):
-        rows = await self._pool.fetch(
-            "SELECT * FROM hitl_requests WHERE tenant_id=$1 AND status=$2",
-            tenant_id, HITLStatus.PENDING.value,
-        )
-        return [_hitl_req(r) for r in rows]
-
-    async def list_answered_hitl(self, tenant_id):
-        rows = await self._pool.fetch(
-            "SELECT * FROM hitl_requests WHERE tenant_id=$1 AND status=$2",
-            tenant_id, HITLStatus.ANSWERED.value,
-        )
-        return [_hitl_req(r) for r in rows]
-
-    async def list_hitl_requests_for_requester(
-        self, tenant_id, requested_by, statuses, *, limit=20
-    ):
-        values = [
-            status.value if isinstance(status, HITLStatus) else str(status)
-            for status in statuses
-        ]
-        rows = await self._pool.fetch(
-            """SELECT * FROM hitl_requests
-               WHERE tenant_id=$1 AND requested_by=$2 AND status=ANY($3::text[])
-               ORDER BY updated_at DESC,id
-               LIMIT $4""",
-            tenant_id,
-            requested_by,
-            values,
-            max(0, min(int(limit), 100)),
-        )
-        return [_hitl_req(row) for row in rows]
-
-    async def answer_hitl(self, resp: HITLResponse):
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                await _apply_guc(conn, assume_role=pool_assumes_app_role(self._pool))  # RLS-live: scope this explicit transaction
-                row = await conn.fetchrow(
-                    """UPDATE hitl_requests SET status=$3, updated_at=now()
-                       WHERE tenant_id=$1 AND id=$2 AND status=$4 RETURNING *""",
-                    resp.tenant_id, resp.request_id, HITLStatus.ANSWERED.value,
-                    HITLStatus.PENDING.value,
-                )
-                if row is None:
-                    return None
-                await conn.execute(
-                    """INSERT INTO hitl_responses (id, request_id, tenant_id, decision, notes,
-                                                   respondent, responded_at)
-                       VALUES ($1,$2,$3,$4,$5,$6,$7)
-                       ON CONFLICT (tenant_id, id) DO NOTHING""",
-                    resp.id, resp.request_id, resp.tenant_id, resp.decision, resp.notes,
-                    resp.respondent, resp.responded_at,
-                )
-        return _hitl_req(row)
-
-    async def get_hitl_response(self, tenant_id, request_id):
-        row = await self._pool.fetchrow(
-            """SELECT * FROM hitl_responses WHERE tenant_id=$1 AND request_id=$2
-               ORDER BY responded_at DESC LIMIT 1""",
-            tenant_id, request_id,
-        )
-        return _hitl_resp(row)
 
     # --- audit ------------------------------------------------------------
     async def audit_head(self, tenant_id):
