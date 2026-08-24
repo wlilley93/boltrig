@@ -77,7 +77,7 @@ and the author went looking for a test and did not find one. In a repository
 whose entire governance story is that every claim is pinned to a test, a quarter
 of the specified behaviour is not.
 
-**906 rows, 47.6 percent, bind no invariant at all.** The invariant catalogue
+**928 rows, 48.8 percent, bind no invariant at all.** The invariant catalogue
 declares 421 invariants and the gate holds binding debt at zero, which is real
 and is a genuine achievement. But debt zero means every DECLARED invariant has a
 test, not that every behaviour has an invariant. Nearly half of what this system

@@ -701,7 +701,7 @@ record, an operator, or a repository outside the referent.
   `refuse-model-judged-approvals` and `sleep-distillation-and-the-adapter-seam`;
   `0030` names both `agents-tab-built-on-web-sdk` and `familiar-modes-and-dials`.
   A reference to "decision 0023" is therefore ambiguous and nothing detects it.
-- **47.6 percent of requirement rows bind no invariant.** Binding debt zero
+- **48.8 percent of requirement rows bind no invariant.** Binding debt zero
   means every declared invariant has a test. It does not mean every behaviour
   has an invariant, and nearly half do not.
 - **25 percent of rows are IMPLEMENTED-UNTESTED.** Reachable behaviour for which
