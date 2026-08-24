@@ -13,9 +13,29 @@ import { useProviderSetup } from "./useProviderSetup";
 
 export interface ProviderStepHandle {
   complete: () => Promise<boolean>;
+  /**
+   * Whether the model just chosen already covers vision.
+   *
+   * The step ALREADY told the user this ("Your model handles text and vision"),
+   * and the flow then walked them to "Add vision" anyway, because the gate
+   * advanced by index and nothing carried the capability out of here. Optional
+   * because the vision step reuses this same handle and has no answer to give.
+   */
+  handlesVision?: () => boolean;
 }
 
 type ProviderModality = "text" | "vision";
+
+/** The catalogue entry for what is selected, or null. ONE copy: the handle and
+ *  the form must not disagree about which model was chosen. */
+function chosenModel(providerId: string, modelId: string) {
+  const provider = AI_PROVIDERS.find((entry) => entry.id === providerId)
+    ?? AI_PROVIDERS[0];
+  return provider?.models.find(
+    (entry) => exactModelId(provider.id, entry.id) === modelId,
+  ) ?? null;
+}
+
 
 export const ProviderStep = forwardRef<ProviderStepHandle, { profile: UserProfile }>(
   function ProviderStep({ profile }, ref) {
@@ -47,7 +67,13 @@ export const ProviderStepBase = forwardRef<
   }
 >(function ProviderStepBase({ heading, kicker, modality, profile, skip, sub }, ref) {
   const setup = useProviderSetup(profile, modality);
-  useImperativeHandle(ref, () => ({ complete: setup.complete }), [setup.complete]);
+  useImperativeHandle(ref, () => ({
+    complete: setup.complete,
+    handlesVision: () => {
+      const model = chosenModel(setup.provider, setup.model);
+      return Boolean(model && modelAcceptsVision(model));
+    },
+  }), [setup.complete, setup.provider, setup.model]);
 
   return (
     <div className="onboarding-step provider-step">
@@ -71,9 +97,7 @@ function ProviderKeyForm({
 }) {
   const provider = AI_PROVIDERS.find((entry) => entry.id === setup.provider)
     ?? AI_PROVIDERS[0];
-  const selectedModel = provider?.models.find(
-    (entry) => exactModelId(provider.id, entry.id) === setup.model,
-  ) ?? null;
+  const selectedModel = chosenModel(setup.provider, setup.model);
   const providerOptions: SearchableOption[] = AI_PROVIDERS.map((entry) => ({
     value: entry.id,
     label: entry.name,
@@ -269,7 +293,7 @@ function CapabilityNotice({ vision }: { vision: boolean }) {
       )}
       <p className="onboarding-key-note">
         {vision
-          ? "Your model handles text and vision — you can skip the vision step."
+          ? "Your model handles text and vision, so the vision step is skipped."
           : "You can add a vision model on the next step."}
       </p>
     </div>

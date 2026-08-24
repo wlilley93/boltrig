@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-24T06:30:00.296Z",
+  "capturedAt": "2026-08-24T06:41:24.575Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,16 +17,16 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "4d481b7fda0eb4b910cf5315ac9934f966b4df02092a3031f801a541710ebb3d",
-    "digestAfterCapture": "4d481b7fda0eb4b910cf5315ac9934f966b4df02092a3031f801a541710ebb3d",
+    "digestBeforeCapture": "f8097b3ef0f90c41b50c49c961d50d1a816b080beafb254cee3404cecd03cf14",
+    "digestAfterCapture": "f8097b3ef0f90c41b50c49c961d50d1a816b080beafb254cee3404cecd03cf14",
     "sourceUnchangedDuringCapture": true,
     "branch": "fix/provider-key-id-per-provider",
-    "head": "5b056204cb18e8acb90157a46ee6826cebf73274",
-    "dirty": false
+    "head": "526184a20d2f3e28fb91db19529c155f00c86029",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
-    "node": "v22.23.1",
+    "node": "v24.15.0",
     "browser": "chromium",
     "browserVersion": "151.0.7922.34",
     "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
@@ -56,7 +56,7 @@
         "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

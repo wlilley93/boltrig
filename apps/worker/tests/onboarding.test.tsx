@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { providerApiBaseUrl, providerNeedsBaseUrl } from "../src/components/onboarding/providerCatalogue";
+import { VoiceStep, type VoiceStepHandle } from "../src/components/onboarding/VoiceStep";
 
 const api = vi.hoisted(() => ({
   activateAiKey: vi.fn(),
@@ -213,9 +215,6 @@ describe("first-run onboarding", () => {
     expect(await screen.findByText("Add vision")).toBeTruthy();
     await waitFor(() => expect((screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.keyDown(document.body, { key: "Enter" });
-    expect(await screen.findByText("Add voice")).toBeTruthy();
-    await waitFor(() => expect((screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.keyDown(document.body, { key: "Enter" });
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
   });
 
@@ -306,7 +305,7 @@ describe("first-run onboarding", () => {
     fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "GPT-5.4" } });
     fireEvent.click(screen.getByRole("option", { name: /GPT-5\.4 Text \+ vision$/ }));
     expect(screen.getByText("Text and Vision")).toBeTruthy();
-    expect(screen.getByText("Your model handles text and vision — you can skip the vision step.")).toBeTruthy();
+    expect(screen.getByText("Your model handles text and vision, so the vision step is skipped.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Save provider" })).toBeNull();
     await clickWhenReady("Continue");
 
@@ -318,11 +317,11 @@ describe("first-run onboarding", () => {
       api_key: "secret-provider-value",
     })));
     expect(secret.value).toBe("");
-    expect(await screen.findByText("Add vision")).toBeTruthy();
-    await clickWhenReady("Skip for now");
-    expect(await screen.findByText("Add voice")).toBeTruthy();
-    await clickWhenReady("Skip for now");
+    // A TEXT+VISION MODEL SKIPS THE VISION STEP. The model chosen above is
+    // "GPT-5.4 Text + vision", and the step said so on screen, so being asked to
+    // add vision anyway was the flow disagreeing with its own copy.
     expect(await screen.findByText("You’re ready, William. Meet Jarvis.")).toBeTruthy();
+    expect(screen.queryByText("Add vision")).toBeNull();
     expect(screen.getByText(/run and take approved actions locally on your personal computer/i)).toBeTruthy();
     const download = screen.getByRole("link", { name: /Download Boltrig Desktop/ });
     expect(download.getAttribute("href")).toBe("https://downloads.boltrig.test/desktop");
@@ -557,11 +556,9 @@ describe("first-run onboarding", () => {
     // One press covers the whole journey: a parked approval is answered inside
     // the same Continue, never by asking the person to press it twice.
     await waitFor(() => expect(api.approveAiKeyProposal).toHaveBeenCalledWith("proposal-1"));
-    expect(await screen.findByText("Add vision")).toBeTruthy();
-    await clickWhenReady("Skip for now");
-    expect(await screen.findByText("Add voice")).toBeTruthy();
-    await clickWhenReady("Skip for now");
+    // Same vision-capable model, so the approval press lands on completion.
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
+    expect(screen.queryByText("Add vision")).toBeNull();
   });
 
   it("waits with a plain sentence when the approval belongs to an administrator", async () => {
@@ -700,8 +697,6 @@ describe("first-run onboarding", () => {
     }));
     expect(await screen.findByText("Add vision")).toBeTruthy();
     await clickWhenReady("Skip for now");
-    expect(await screen.findByText("Add voice")).toBeTruthy();
-    await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
   });
 
@@ -729,8 +724,6 @@ describe("first-run onboarding", () => {
 
     await clickWhenReady("Continue");
     expect(await screen.findByText("Add vision")).toBeTruthy();
-    await clickWhenReady("Skip for now");
-    expect(await screen.findByText("Add voice")).toBeTruthy();
     await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
     expect(document.body.textContent).not.toMatch(
@@ -766,13 +759,19 @@ describe("first-run onboarding", () => {
     await clickWhenReady("Continue");
     expect(await screen.findByText("Add vision")).toBeTruthy();
     await clickWhenReady("Continue");
-    expect(await screen.findByText("Your organisation manages voice services.")).toBeTruthy();
-    await clickWhenReady("Continue");
     await clickWhenReady("Continue in browser");
     expect(await screen.findByText("Member workspace")).toBeTruthy();
   });
 
-  it("offers optional voice setup and clears the write-only key before awaiting", async () => {
+  // MOVED OFF THE ONBOARDING FLOW, not deleted.
+  //
+  // Setup no longer walks to "Add voice": a deployment with a speech service
+  // already configured was still being asked to add one, and a speech provider
+  // is connectable afterwards from Integrations. But the write-only key
+  // behaviour this pins is a property of the voice step wherever it is mounted,
+  // and dropping the test with the flow leg would have quietly retired
+  // coverage of a credential being cleared. So it drives the component.
+  it("submits the voice credential and clears the write-only field", async () => {
     api.integrationCatalogue.mockResolvedValueOnce({
       integrations: [{
         id: "deepgram-audio",
@@ -800,33 +799,21 @@ describe("first-run onboarding", () => {
         enabled_tools: [],
       }],
     });
-    render(
-      <OnboardingGate initialAccount={{ profile, settings: { "setup.onboarding_version": 0 } }}>
-        <div>Private workspace</div>
-      </OnboardingGate>,
-    );
+    const ref = createRef<VoiceStepHandle>();
+    render(<VoiceStep onSkip={() => undefined} profile={profile} ref={ref} />);
 
-    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Alex" } });
-    await clickWhenReady("Continue");
-    await clickWhenReady("Continue");
-    await screen.findByText("Choose your AI provider");
-    await clickWhenReady("Continue");
-
-    expect(await screen.findByText("Add vision")).toBeTruthy();
-    await clickWhenReady("Continue");
-    expect(await screen.findByText("Add voice")).toBeTruthy();
     expect(await screen.findByText("Spoken replies")).toBeTruthy();
     expect(screen.getByText("Transcription")).toBeTruthy();
     const voiceKey = screen.getByLabelText("Deepgram API key") as HTMLInputElement;
     fireEvent.change(voiceKey, { target: { value: "deepgram-secret-value" } });
-    await clickWhenReady("Continue");
 
-    await waitFor(() => expect(api.submitIntegrationSecret).toHaveBeenCalledWith(
+    await waitFor(async () => expect(await ref.current!.complete()).toBe(true));
+
+    expect(api.submitIntegrationSecret).toHaveBeenCalledWith(
       "deepgram-audio",
       { fields: { api_key: "deepgram-secret-value" }, label: "Deepgram" },
-    ));
+    );
     expect(voiceKey.value).toBe("");
-    expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
   });
 
   it("skips voice without submitting any credential", async () => {
@@ -841,8 +828,9 @@ describe("first-run onboarding", () => {
     await screen.findByText("Choose your AI provider");
     await clickWhenReady("Continue");
     await clickWhenReady("Skip for now");
-    await clickWhenReady("Skip for now");
     expect(await screen.findByText("You’re ready, Alex. Meet Familiar.")).toBeTruthy();
+    // Setup never asks for voice now, so finishing it must submit no speech
+    // credential at all - not merely leave the step unvisited.
     expect(api.submitIntegrationSecret).not.toHaveBeenCalled();
   });
 });

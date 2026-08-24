@@ -20,6 +20,27 @@ import { useOnboardingCompletion } from "./useOnboardingCompletion";
 import "./onboarding.css";
 
 type Step = 0 | 1 | 2 | 3 | 4 | 5;
+
+/**
+ * The steps this flow actually walks, in order.
+ *
+ * 4 is the voice step and is deliberately absent: voice is not asked during
+ * setup any more (see continueOnboarding). Counting a step the user never sees
+ * made the progress read "of 6" while five were reachable, and the dots showed a
+ * position nobody could arrive at.
+ */
+const VISITED_STEPS: readonly Step[] = [0, 1, 2, 3, 5];
+
+/** Back follows the same sequence Continue does.
+ *
+ *  `step - 1` was correct only while every index was reachable. With voice no
+ *  longer visited, Back from the ready step landed on "Add voice" - a screen the
+ *  flow had deliberately stopped showing, reachable only by going backwards. */
+function previousStep(step: Step): Step {
+  const at = VISITED_STEPS.indexOf(step);
+  if (at > 0) return VISITED_STEPS[at - 1]!;
+  return VISITED_STEPS[0]!;
+}
 const ProviderStep = lazy(async () => {
   const module = await import("./ProviderStep");
   return { default: module.ProviderStep };
@@ -136,7 +157,7 @@ function OnboardingFlow({
           name={name}
           onFinish={() => void finishSetup()}
           onName={setName}
-          onSkipVision={() => setStep(4)}
+          onSkipVision={() => void finishSetup()}
           onSelectCharacter={setCharacter}
           profile={account.profile}
           step={step}
@@ -145,7 +166,7 @@ function OnboardingFlow({
       {completion.error && <p className="onboarding-error" role="alert">{completion.error}</p>}
       <OnboardingActions
         nameReady={Boolean(name.trim())}
-        onBack={() => setStep((step - 1) as Step)}
+        onBack={() => setStep(previousStep(step))}
         onContinue={() => void continueFlow()}
         providerConnecting={providerConnecting}
         providerReady={providerReady}
@@ -217,15 +238,33 @@ async function continueOnboarding(
   onComplete: (settings: Record<string, unknown>, displayName: string) => void,
 ) {
   if (flow.step === 2 || flow.step === 3) {
-    const stepRef = flow.step === 2 ? flow.providerStepRef : flow.visionStepRef;
+    const onProvider = flow.step === 2;
+    const stepRef = onProvider ? flow.providerStepRef : flow.visionStepRef;
     const step = stepRef.current;
     if (!step) return;
-    if (flow.step === 2) flow.setProviderConnecting(true);
+    if (onProvider) flow.setProviderConnecting(true);
     else flow.setVisionConnecting(true);
     const completed = await step.complete();
-    if (flow.step === 2) flow.setProviderConnecting(false);
+    if (onProvider) flow.setProviderConnecting(false);
     else flow.setVisionConnecting(false);
     if (!completed) return;
+
+    // ASK FOR VISION ONLY WHEN THE MODEL LACKS IT. The provider step already
+    // reads the capability off the catalogue entry and says so on screen; until
+    // now the gate advanced by index and walked a text+vision model to "Add
+    // vision" regardless, which is the flow contradicting its own copy.
+    //
+    // AND NEVER ASK FOR VOICE. A deployment that has a speech service already
+    // (POCKET_VOICE_URL on the kernel) was still being asked to add one, and a
+    // speech provider is configurable afterwards in Integrations, with the voice
+    // model in Settings, so onboarding is not the only door. The step's code is
+    // left in place and simply not visited.
+    if (!onProvider || step.handlesVision?.()) {
+      await finishOnboarding(flow);
+      return;
+    }
+    flow.setStep(3);
+    return;
   }
   if (flow.step === 4) {
     const voiceStep = flow.voiceStepRef.current;
@@ -346,8 +385,13 @@ function OnboardingFrame({
       <section className="onboarding-panel" aria-label="Boltrig setup">
         <header className="onboarding-topbar">
           <BrandLockup />
-          <span className="onboarding-progress" aria-label={`Step ${step + 1} of 6`}>
-            {[0, 1, 2, 3, 4, 5].map((index) => <i className={index <= step ? "active" : ""} key={index} />)}
+          <span
+            className="onboarding-progress"
+            aria-label={`Step ${VISITED_STEPS.indexOf(step) + 1} of ${VISITED_STEPS.length}`}
+          >
+            {VISITED_STEPS.map((index) => (
+              <i className={index <= step ? "active" : ""} key={index} />
+            ))}
           </span>
           <span aria-hidden="true" />
         </header>
