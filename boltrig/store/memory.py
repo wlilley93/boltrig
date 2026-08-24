@@ -15,6 +15,7 @@ from .conversations import ConversationsStoreMem
 from .memory_planes import MemoryPlanesStoreMem
 from .tenancy import TenancyStoreMem
 from .user_accounts import UserAccountsStoreMem
+from .user_auth import UserAuthStoreMem
 from .ai_configs import AiConfigStoreMem
 from .channel_dedup import ChannelDedupStoreMem
 from .channel_outbox import ChannelOutboxStoreMem
@@ -113,6 +114,7 @@ class InMemoryStore(
     MemoryPlanesStoreMem,
     TenancyStoreMem,
     UserAccountsStoreMem,
+    UserAuthStoreMem,
     AiConfigStoreMem,
     ChannelStoreMem,
     CapabilityStoreMem,
@@ -344,79 +346,3 @@ class InMemoryStore(
 
     async def delete_personal_agent(self, tenant_id, user_id):
         return self._personal.pop((tenant_id, user_id), None) is not None
-
-    # --- TOTP two-factor ([2026] VJS-COUNTY 10) ---
-    async def set_user_totp(self, totp: UserTotp) -> None:
-        self._totp[(totp.tenant_id, totp.user_id)] = totp
-
-    async def get_user_totp(self, tenant_id, user_id):
-        return self._totp.get((tenant_id, user_id))
-
-    async def delete_user_totp(self, tenant_id, user_id) -> None:
-        self._totp.pop((tenant_id, user_id), None)
-
-    async def set_recovery_codes(self, tenant_id, user_id, code_hashes) -> None:
-        # Replace the whole set; each hash starts unused (False).
-        self._recovery[(tenant_id, user_id)] = {h: False for h in code_hashes}
-
-    async def consume_recovery_code(self, tenant_id, user_id, code_hash) -> bool:
-        # Atomic single-use (mirrors consume_invitation): only an unused matching
-        # hash flips to used (True) and returns True. A missing or already-used hash
-        # returns False (fail-closed). The read-modify-write does not await, so it is
-        # atomic on the single-threaded event loop.
-        codes = self._recovery.get((tenant_id, user_id))
-        if not codes or codes.get(code_hash) is not False:
-            return False
-        codes[code_hash] = True
-        return True
-
-    async def count_active_recovery_codes(self, tenant_id, user_id) -> int:
-        codes = self._recovery.get((tenant_id, user_id)) or {}
-        return sum(1 for used in codes.values() if not used)
-
-    async def clear_recovery_codes(self, tenant_id, user_id) -> None:
-        self._recovery.pop((tenant_id, user_id), None)
-
-    async def add_two_factor_challenge(self, challenge: TwoFactorChallenge) -> None:
-        self._tfa_challenges[(challenge.tenant_id, challenge.token_hash)] = challenge
-
-    async def get_two_factor_challenge(self, tenant_id, token_hash):
-        return self._tfa_challenges.get((tenant_id, token_hash))
-
-    async def consume_two_factor_challenge(self, tenant_id, token_hash) -> bool:
-        # Atomic single-use: delete-if-present, True only for the winner (the pop is
-        # a single non-awaiting op, atomic on the single-threaded event loop).
-        return self._tfa_challenges.pop((tenant_id, token_hash), None) is not None
-
-    # --- per-user settings (SET-*) ---
-    async def upsert_user_setting(self, setting):
-        self._settings[(setting.tenant_id, setting.user_id, setting.key)] = setting
-
-    async def list_user_settings(self, tenant_id, user_id):
-        return [s for (t, u, _), s in self._settings.items() if t == tenant_id and u == user_id]
-
-    # --- sessions (SET-70) ---
-    async def add_session(self, session):
-        # Insert-if-absent (mirrors the PG ON CONFLICT (tenant_id, id) DO NOTHING).
-        self._sessions.setdefault((session.tenant_id, session.id), session)
-
-    async def list_sessions(self, tenant_id, user_id):
-        return [
-            s for (t, _), s in self._sessions.items() if t == tenant_id and s.user_id == user_id
-        ]
-
-    async def get_session(self, tenant_id, session_id):
-        return self._sessions.get((tenant_id, session_id))
-
-    async def get_session_by_token_hash(self, tenant_id, token_hash):
-        # First-party session ([2026] VJS-COUNTY 7, D2): match a session by its
-        # cookie-secret hash, constant-time, tenant-scoped.
-        import hmac as _hmac
-
-        for (t, _), s in self._sessions.items():
-            if t == tenant_id and s.token_hash and _hmac.compare_digest(s.token_hash, token_hash):
-                return s
-        return None
-
-    async def update_session(self, session):
-        self._sessions[(session.tenant_id, session.id)] = session

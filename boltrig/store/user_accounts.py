@@ -2,7 +2,7 @@
 tokens, invitations and first-party password credentials - extracted verbatim
 from ``store/postgres.py`` + ``store/memory.py``. PG host: ``self._pool``; Mem
 host: ``self._users``/``_pats``/``_invites``/``_password_creds``. Public surface
-unchanged. (PG-side invitation READS live in their own guarded modules.)
+unchanged.
 """
 
 from __future__ import annotations
@@ -134,6 +134,34 @@ class UserAccountsStorePG:
             tenant_id, user_id,
         )
         return None if row is None else row["password_hash"]
+
+    async def get_invitation(self, tenant_id, inv_id):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM user_invitations WHERE tenant_id=$1 AND id=$2", tenant_id, inv_id
+        )
+        return _invitation(row)
+
+    async def list_invitations(self, tenant_id):
+        rows = await self._pool.fetch(
+            "SELECT * FROM user_invitations WHERE tenant_id=$1 ORDER BY created_at DESC",
+            tenant_id,
+        )
+        return [_invitation(r) for r in rows]
+
+    async def find_pending_invitation(self, tenant_id, email):
+        row = await self._pool.fetchrow(
+            """SELECT * FROM user_invitations
+               WHERE tenant_id=$1 AND status='pending' AND lower(email)=lower($2)
+               ORDER BY created_at DESC LIMIT 1""",
+            tenant_id, email,
+        )
+        return _invitation(row)
+
+    async def update_invitation(self, inv: UserInvitation):
+        await self._pool.execute(
+            "UPDATE user_invitations SET status=$3 WHERE tenant_id=$1 AND id=$2",
+            inv.tenant_id, inv.id, inv.status,
+        )
 
 
 class UserAccountsStoreMem:
