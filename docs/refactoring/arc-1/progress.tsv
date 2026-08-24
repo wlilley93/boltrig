@@ -16,3 +16,14 @@ planned	adapters/http_base.py	1	444 LOC; retry/pagination/egress sections
 done	scripts/cf-wire-boltrig.py	0	ae3a0d9	ruff E401 fixed
 done	tests/security/test_round_three.py	0	ae3a0d9	ruff E702 fixed
 done	kernel/channel_routes.py	0	ae3a0d9	SEC-003: binding channel_id consistency
+done	store/postgres.py	1r	9a24ed53..904cdd07 (9 partials, 1895->209, exemption deleted)
+done	store/memory.py	1r	9a24ed53..904cdd07 (lockstep, 1248->263, exemption deleted)
+done	fleet/spawn.py	1r	4fc07dae (lifecycle mixin + planning helper, exemption deleted)
+done	adapters/generator.py	1r	ab4a3c48 (classes -> generated_adapter.py, exemption deleted)
+done	adapters/http_base.py	1r	7089ff2c (error-mapping mixin, exemption deleted)
+done	config/manifest.py	1r	9b628ff4 (types/parse/chat split, exemption deleted)
+fork	kernel/platform_routes.py	1r	request-state singletons RULED 2026-08-24; execute round 2
+fork	kernel/access_routes.py	1r	same ruling
+fork	kernel/memory_routes.py	1r	same ruling
+fork	kernel/channel_routes.py	1r	same ruling
+fork	kernel/app.py	1r	same ruling (after route files)
