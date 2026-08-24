@@ -60,12 +60,12 @@ about eight weeks old.
 
 ## What the register says
 
-1,899 requirement rows across twenty areas, each a single testable sentence
+1,902 requirement rows across twenty areas, each a single testable sentence
 carrying a `path:line` citation and a verbatim anchor.
 
-    IMPLEMENTED             1,363   71.8 percent
-    IMPLEMENTED-UNTESTED      474   25.0 percent
-    DEAD                       41    2.2 percent
+    IMPLEMENTED             1,364   71.7 percent
+    IMPLEMENTED-UNTESTED      475   25.0 percent
+    DEAD                       42    2.2 percent
     SEAM                       11    0.6 percent
     SCAFFOLDED                  9    0.5 percent
     UNCERTAIN                   1    0.1 percent
@@ -77,7 +77,7 @@ and the author went looking for a test and did not find one. In a repository
 whose entire governance story is that every claim is pinned to a test, a quarter
 of the specified behaviour is not.
 
-**904 rows, 47.6 percent, bind no invariant at all.** The invariant catalogue
+**906 rows, 47.6 percent, bind no invariant at all.** The invariant catalogue
 declares 421 invariants and the gate holds binding debt at zero, which is real
 and is a genuine achievement. But debt zero means every DECLARED invariant has a
 test, not that every behaviour has an invariant. Nearly half of what this system
