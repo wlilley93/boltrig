@@ -13,6 +13,7 @@ from .channels import ChannelStoreMem
 from .audit_stream import AuditStreamStoreMem
 from .run_records import RunRecordsStoreMem
 from .conversations import ConversationsStoreMem
+from .memory_planes import MemoryPlanesStoreMem
 from .channel_dedup import ChannelDedupStoreMem
 from .channel_outbox import ChannelOutboxStoreMem
 from .budget_policy import BudgetPolicyMem
@@ -117,6 +118,7 @@ class InMemoryStore(
     AuditStreamStoreMem,
     RunRecordsStoreMem,
     ConversationsStoreMem,
+    MemoryPlanesStoreMem,
     ChannelStoreMem,
     CapabilityStoreMem,
     PermanentFleetStoreMem,
@@ -347,147 +349,6 @@ class InMemoryStore(
 
     async def delete_personal_agent(self, tenant_id, user_id):
         return self._personal.pop((tenant_id, user_id), None) is not None
-
-    # --- memory (scope-filtered, SEC-31) ---
-    async def add_memory_item(self, item):
-        self._memory.append(item)
-
-    async def query_memory(self, tenant_id, owner_scopes, kind=None, limit=20):
-        scopes = set(owner_scopes)
-        out = [
-            m
-            for m in self._memory
-            if m.tenant_id == tenant_id
-            and m.owner_scope in scopes
-            and (kind is None or m.kind == kind)
-        ]
-        # newest-first, matching the Postgres ORDER BY created_at DESC contract.
-        return sorted(out, key=lambda m: m.created_at, reverse=True)[:limit]
-
-    # --- Round Five: structured memory governance ---
-    async def add_memory_fact(self, fact):
-        self._mem_facts[(fact.tenant_id, fact.id)] = fact
-
-    async def get_memory_fact(self, tenant_id, fact_id):
-        return self._mem_facts.get((tenant_id, fact_id))
-
-    async def list_memory_facts(self, tenant_id, owner_scopes, kind=None, limit=50):
-        scopes = set(owner_scopes)
-        out = [
-            f
-            for (t, _), f in self._mem_facts.items()
-            if t == tenant_id and f.owner_scope in scopes and (kind is None or f.kind == kind)
-        ]
-        return sorted(out, key=lambda f: f.created_at, reverse=True)[:limit]
-
-    async def delete_memory_fact(self, tenant_id, fact_id):
-        self._mem_facts.pop((tenant_id, fact_id), None)
-
-    async def add_memory_ingestion(self, ing):
-        self._mem_ingest[(ing.tenant_id, ing.id)] = ing
-
-    async def update_memory_ingestion(self, ing):
-        self._mem_ingest[(ing.tenant_id, ing.id)] = ing
-
-    async def get_memory_ingestion_by_source(self, tenant_id, source_kind, source_ref):
-        hits = [
-            i
-            for (t, _), i in self._mem_ingest.items()
-            if t == tenant_id and i.source_kind == source_kind and i.source_ref == source_ref
-        ]
-        return max(hits, key=lambda i: i.created_at) if hits else None
-
-    async def list_memory_ingestions(self, tenant_id, limit=50):
-        out = [i for (t, _), i in self._mem_ingest.items() if t == tenant_id]
-        return sorted(out, key=lambda i: i.created_at, reverse=True)[:limit]
-
-    async def add_memory_erasure(self, er):
-        self._mem_erase.append(er)
-
-    async def list_memory_erasures(self, tenant_id, limit=50):
-        out = [e for e in self._mem_erase if e.tenant_id == tenant_id]
-        return sorted(out, key=lambda e: e.created_at, reverse=True)[:limit]
-
-    async def upsert_memory_projection_status(self, status):
-        key = (status.tenant_id, status.id)
-        previous = self._mem_projection.get(key)
-        self._mem_projection[key] = (
-            replace(status, created_at=previous.created_at) if previous is not None else status
-        )
-
-    async def list_memory_projection_statuses(self, tenant_id, fact_id=None, limit=50):
-        out = [
-            s
-            for (t, _), s in self._mem_projection.items()
-            if t == tenant_id and (fact_id is None or s.fact_id == fact_id)
-        ]
-        return sorted(out, key=lambda s: s.updated_at, reverse=True)[:limit]
-
-    # --- Typed memory planes (decision 0029) ---
-    async def get_active_memory_fact(self, tenant_id, memory_key):
-        # Newest non-expired active wins in the twin, mirroring the DB's
-        # one-active index plus the expiry filter (MEM-TYP-01: an expired
-        # value is history, not the current truth).
-        now = utcnow()
-        hits = [
-            f
-            for (t, _), f in self._mem_facts.items()
-            if t == tenant_id
-            and f.memory_key == memory_key
-            and f.status == "active"
-            and (f.valid_to is None or f.valid_to > now)
-        ]
-        return max(hits, key=lambda f: (f.version, f.created_at)) if hits else None
-
-    async def list_active_subject_facts(
-        self, tenant_id, owner_scopes, subject_type, subject_id, limit=64
-    ):
-        scopes = set(owner_scopes)
-        prefix = f"{subject_type}::{subject_id}::"
-        out = [
-            f
-            for (t, _), f in self._mem_facts.items()
-            if t == tenant_id
-            and f.owner_scope in scopes
-            and f.memory_key is not None
-            and f.memory_key.startswith(prefix)
-            and f.status == "active"
-            and (f.valid_to is None or f.valid_to > utcnow())
-        ]
-        return sorted(out, key=lambda f: f.created_at, reverse=True)[:limit]
-
-    async def list_memory_slot_history(self, tenant_id, memory_key, limit=50):
-        out = [
-            f
-            for (t, _), f in self._mem_facts.items()
-            if t == tenant_id and f.memory_key == memory_key
-        ]
-        return sorted(out, key=lambda f: f.version, reverse=True)[:limit]
-
-    async def list_memory_candidates(self, tenant_id, owner_scopes, limit=50):
-        scopes = set(owner_scopes)
-        out = [
-            f
-            for (t, _), f in self._mem_facts.items()
-            if t == tenant_id and f.owner_scope in scopes and f.status == "candidate"
-        ]
-        return sorted(out, key=lambda f: f.created_at, reverse=True)[:limit]
-
-    async def update_memory_fact(self, fact):
-        self._mem_facts[(fact.tenant_id, fact.id)] = fact
-
-    async def add_memory_event(self, event):
-        self._mem_events[(event.tenant_id, event.id)] = event
-
-    async def list_memory_events(self, tenant_id, *, memory_id=None, memory_key=None, limit=100):
-        out = [
-            e
-            for (t, _), e in self._mem_events.items()
-            if t == tenant_id
-            and (memory_id is None or e.memory_id == memory_id)
-            and (memory_key is None or e.memory_key == memory_key)
-        ]
-        return sorted(out, key=lambda e: e.created_at, reverse=True)[:limit]
 
     # --- Round Four: users + provisioning (USR) ---
     async def upsert_user(self, user):
