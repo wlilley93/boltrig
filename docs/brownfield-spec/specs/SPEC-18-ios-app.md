@@ -504,8 +504,15 @@ copy is deliberately non-committal, so the screen never reveals whether the acco
    ([`ios/Boltrig/Familiar/FamiliarIslandController.swift:39`](../../../ios/Boltrig/Familiar/FamiliarIslandController.swift)
    `"func claim(_ surface: String) -> Bool {"`). Three surfaces exist: `today`, `chat`,
    `onboarding` (bounded: `rg -n 'FamiliarPresenceView\(surface:' ios/`, 2026-08-24, pinned
-   tree, gives exactly [`ios/Boltrig/Views/ChatView.swift:92`](../../ios/Boltrig/Views/ChatView.swift), [`ios/Boltrig/Views/ChatView.swift:98`](../../ios/Boltrig/Views/ChatView.swift), [`ios/Boltrig/Views/Onboarding/ReadyStepView.swift:12`](../../ios/Boltrig/Views/Onboarding/ReadyStepView.swift),
-   [`ios/Boltrig/Views/TodayView.swift:84`](../../ios/Boltrig/Views/TodayView.swift)).
+   tree, gives exactly four call sites:
+   [`ios/Boltrig/Views/TodayView.swift:84`](../../../ios/Boltrig/Views/TodayView.swift)
+   `"FamiliarPresenceView(surface: \"today\", presentation: .conversation,"`,
+   [`ios/Boltrig/Views/ChatView.swift:92`](../../../ios/Boltrig/Views/ChatView.swift)
+   `"FamiliarPresenceView(surface: \"chat\", presentation: .hero,"`,
+   [`ios/Boltrig/Views/ChatView.swift:98`](../../../ios/Boltrig/Views/ChatView.swift)
+   `"FamiliarPresenceView(surface: \"chat\", presentation: .conversation,"`, and
+   [`ios/Boltrig/Views/Onboarding/ReadyStepView.swift:12`](../../../ios/Boltrig/Views/Onboarding/ReadyStepView.swift)
+   `"FamiliarPresenceView(surface: \"onboarding\", presentation: .hero,"`).
 2. The web view loads `familiar-island.html` from the bundle
    ([`:123`](../../../ios/Boltrig/Familiar/FamiliarIslandController.swift)
    `"if let url = Bundle.main.url(forResource: \"familiar-island\", withExtension: \"html\")"`).
@@ -791,7 +798,7 @@ under `CODE_SIGNING_ALLOWED=NO` with `errSecMissingEntitlement` (-34018)
 ([`ios/BoltrigTests/ClientAndParsingTests.swift:190`](../../../ios/BoltrigTests/ClientAndParsingTests.swift)
 `"} catch let error as Keychain.KeychainError where error.status == -34018 {"`).
 The README's build command uses `CODE_SIGNING_ALLOWED=NO`; the test command deliberately
-does not ([`ios/README.md:31`](../../../ios/README.md) `"the Keychain round-trip test needs a signed host app and skips itself"`).
+does not ([`ios/README.md:31`](../../../ios/README.md) `"Keychain round-trip test needs a signed host app and skips itself"`).
 
 ### 8.4 The live run against a real instance
 
@@ -1204,8 +1211,9 @@ interactive credential kind, and a PAT is not interactive
 `"INTERACTIVE_CREDENTIAL_KINDS = frozenset({\"session\", \"federated\", \"dev-header\"})"`),
 so the phone may be refused exactly where the web would be allowed. I did not read
 `approval_response_block` in full and this belongs to the HITL area of this corpus.
-**What would settle it**: read `boltrig/kernel/hitl_response_auth.py:165` to `:265` end to
-end, or run the live contract test with a pending approval on the account.
+**What would settle it**: read `approval_response_block` and `_development_posture_block`
+end to end, lines 162 to 269 of `boltrig/kernel/hitl_response_auth.py`, or run the live
+contract test with a pending approval on the account.
 
 OQ-1803: **Is the 20-second liveness window right?** `LinkedDevice.liveWindow` is 20 s
 against a desktop poll the comment says is 3 s

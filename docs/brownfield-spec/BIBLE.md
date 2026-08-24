@@ -87,6 +87,39 @@ Neither number is an accusation. Both are the difference between "our gate is
 green" and "our behaviour is covered", and a brownfield spec exists to make that
 difference legible.
 
+## What survived being attacked
+
+Every HIGH-severity finding the authors raised was put to three independent
+panels briefed to REFUTE it, each reading a different lens (what the code does,
+whether the path is reachable, whether the statement overclaims), each defaulting
+to refuted when uncertain.
+
+    56 findings put to panels
+    40 CONFIRMED
+    16 REFUTED as written
+     0 split
+
+Twenty-nine percent did not survive. One of the loudest, "68 of 161
+state-changing routes bypass the dispatcher, in breach of the one-chokepoint
+doctrine", was refuted by all three panels: the routes really do not dispatch,
+but AGENTS.md scopes the chokepoint to external actions, decision 0003 rules the
+channel intake path terminates at its seam, the external egress those routes
+front DOES dispatch, and the count itself was an unreproduced census. It is a
+governance-surface observation, not a demonstrated breach.
+
+Two findings got WORSE under attack. The audit-key boot guard was reported as
+falling back to an in-source development key; a panel established that the
+shipped `.env.example` sets `BOLTRIG_AUDIT_HMAC_KEY` to the empty string
+deliberately, so a deployment following the README keys its tamper-evidence
+chain with empty bytes, and the fallback never fires.
+
+`RISK-REGISTER.md` carries all 56 with their verdicts. Read the refuted section
+too: almost every refutation carries a narrower statement that IS true, and that
+narrower statement is what should be believed. Nothing here should be actioned
+from an author's first pass alone.
+
+MEDIUM and LOW findings were not put to panels. They carry exactly one reading.
+
 ## Evidence discipline
 
 Every claim in every spec carries a citation of the form
@@ -103,7 +136,7 @@ paraphrase. It carries a self-test that seeds four broken citations and two vali
 but awkward shapes, and fails if it misses a break OR flags a valid one. Run
 `python3 verify-citations.py --selftest` before trusting a green result.
 
-At the last run: 5,993 of 6,005 citations resolve and are anchored.
+At the last run every citation in the corpus resolved and was anchored.
 
 ## The standing caveats
 

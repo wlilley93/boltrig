@@ -156,7 +156,7 @@ multimodal endpoint
 
 `endpoints`, `default`, `sensitive_endpoint`, `prices`. `default` is parsed and projected
 but has no serving consumer today, and the platform route says so explicitly
-([`boltrig/kernel/platform_routes/model_endpoints.py:79`](../../../boltrig/kernel/platform_routes/model_endpoints.py) `"serving_state": "inactive_no_consumer",`). `sensitive_endpoint` is the endpoint id
+([`boltrig/kernel/platform_routes/model_endpoints.py:79`](../../../boltrig/kernel/platform_routes/model_endpoints.py) `"\"serving_state\": \"inactive_no_consumer\","`). `sensitive_endpoint` is the endpoint id
 sensitive traffic is redirected to
 ([`boltrig/config/manifest.py:74`](../../../boltrig/config/manifest.py) `"sensitive_endpoint: str | None = None  # endpoint id for sensitive data (local)"`).
 

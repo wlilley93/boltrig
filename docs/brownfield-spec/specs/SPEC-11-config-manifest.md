@@ -467,7 +467,7 @@ This subsystem owns no table of its own. It writes to four:
 | table | what config writes | where |
 | --- | --- | --- |
 | `config_revisions` | `kind='manifest_section'` rows on every Admin section edit and rollback; `kind='permanent_fleet'` on first legacy-hierarchy boot | [`boltrig/config/admin.py:51`](../../../boltrig/config/admin.py) `tenant_id=self._tenant, kind="manifest_section", ref=name,` |
-| `credential_refs` | one row per manifest adapter credential, holding `{store, ref, kind}` and never material; envelope-sealed at the store seam | [`boltrig/config/manifest_apply.py:106`](../../../boltrig/config/manifest_apply.py) `"set_credential_ref",` |
+| `credential_refs` | one row per manifest adapter credential, holding `{store, ref, kind}` and never material; envelope-sealed at the store seam | [`boltrig/config/manifest_apply.py:106`](../../../boltrig/config/manifest_apply.py) `"\"set_credential_ref\","` |
 | `agent_capabilities` | one row per ephemeral runtime and named agent, `source='manifest'`; absent names soft-deactivated | [`boltrig/config/manifest_reconcile.py:148`](../../../boltrig/config/manifest_reconcile.py) `"deactivate_absent_manifest_capabilities("` |
 | `birth_profile_receipts` | one bounded per-boot receipt per process kind, opaque digests only | [`boltrig/config/birth_profile.py:201`](../../../boltrig/config/birth_profile.py) `"async def record_birth_profile_startup("` |
 

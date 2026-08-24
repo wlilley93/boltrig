@@ -62,15 +62,36 @@ class Failure:
     detail: str
 
 
+def _git(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(ROOT), *args], capture_output=True, text=True,
+    )
+
+
 def head_commit() -> str:
-    try:
-        out = subprocess.run(
-            ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
-            capture_output=True, text=True, check=True,
-        )
-    except (OSError, subprocess.CalledProcessError) as exc:
-        return f"<unresolvable: {exc}>"
-    return out.stdout.strip()
+    out = _git("rev-parse", "HEAD")
+    return out.stdout.strip() if out.returncode == 0 else f"<unresolvable: {out.stderr.strip()}>"
+
+
+def source_drift() -> tuple[bool, list[str]]:
+    """Is the SOURCE this corpus cites still byte-identical to the referent?
+
+    Checking `HEAD == PIN` was wrong. The corpus lives on a branch cut from the
+    referent, so committing the corpus itself moves HEAD and the check fires on
+    its own authors. What actually has to hold is narrower and stronger: every
+    file a citation can point at must be unchanged from the referent. The corpus
+    directory is excluded because it is the thing being written.
+
+    Returns (ok, changed_paths). A missing referent commit is a hard failure:
+    an unresolvable referent is worse than a moved one.
+    """
+    if _git("cat-file", "-e", f"{PIN}^{{commit}}").returncode != 0:
+        return False, [f"<the referent commit {PIN[:12]} is not in this repository>"]
+    out = _git("diff", "--name-only", PIN, "--", ".", ":(exclude)docs/brownfield-spec")
+    if out.returncode != 0:
+        return False, [f"<git diff failed: {out.stderr.strip()}>"]
+    changed = [line for line in out.stdout.splitlines() if line.strip()]
+    return not changed, changed
 
 
 def corpus_files() -> list[Path]:
@@ -212,16 +233,23 @@ def main() -> int:
         return selftest()
 
     head = head_commit()
-    if head != PIN:
-        print(f"REFERENT MISMATCH: corpus is pinned to {PIN[:12]}, tree HEAD is {head[:12]}")
+    ok, changed = source_drift()
+    if not ok:
+        print(f"REFERENT DRIFT: the source no longer matches {PIN[:12]}. "
+              f"{len(changed)} path(s) differ:")
+        for c in changed[:20]:
+            print(f"    {c}")
+        if len(changed) > 20:
+            print(f"    ... and {len(changed) - 20} more")
         if not args.allow_unpinned:
-            print("Every citation below would be verified against the wrong tree. Refusing.")
+            print("Every citation below would be verified against a tree that has moved. Refusing.")
             return 1
         print("--allow-unpinned given: continuing against a tree that is NOT the referent.")
 
     files = corpus_files()
     total, failures = scan(files)
-    print(f"corpus: {len(files)} files, {total} citations, referent {head[:12]}")
+    print(f"corpus: {len(files)} files, {total} citations; source matches referent "
+          f"{PIN[:12]} (HEAD {head[:12]})")
     if not failures:
         print("all citations resolve and are anchored")
         return 0

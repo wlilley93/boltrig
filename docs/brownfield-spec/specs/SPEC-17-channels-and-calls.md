@@ -130,7 +130,7 @@ the sentence in the README is narrower than the shipped code.
 | `voice` | socket | `signing`, `api_key` | `model`, `voice`, `instructions`, `speaker`, `thread`, pricing keys | automatic |
 
 `msteams` is labelled honestly as a signed webhook, not a Graph connection:
-[`boltrig/models/channel_providers.py:34`](../../../boltrig/models/channel_providers.py) `"msteams", "Teams-labelled signed webhook", "webhook", ("signing",)`
+[`boltrig/models/channel_providers.py:34`](../../../boltrig/models/channel_providers.py) `"\"msteams\", \"Teams-labelled signed webhook\", \"webhook\", (\"signing\",)"`
 `transport` is derived from the platform, never authored:
 [`boltrig/models/channel_providers.py:95`](../../../boltrig/models/channel_providers.py) `"def transport_for(platform: str) -> str:"`
 An unknown platform id fails closed:
@@ -552,7 +552,7 @@ An unreachable user is an honest delivery gap, not an error.
    ([`boltrig/kernel/call_profiles.py:9`](../../../boltrig/kernel/call_profiles.py) `"async def resolve_call_profiles(kernel, principal, body: dict):"`),
    binds or creates a conversation owned by the caller, refuses a second concurrent
    call on the same conversation with 409
-   ([`boltrig/kernel/call_routes.py:93`](../../../boltrig/kernel/call_routes.py) `"status": "error", "reason": "call_already_active",`),
+   ([`boltrig/kernel/call_routes.py:93`](../../../boltrig/kernel/call_routes.py) `"\"status\": \"error\", \"reason\": \"call_already_active\","`),
    and snapshots the caller's permitted verbs into `tool_context`
    ([`boltrig/kernel/call_routes.py:59`](../../../boltrig/kernel/call_routes.py) `"concrete = canonical_concrete_verbs(tuple("`).
    **Failure branches:** an unresolvable profile returns 409 with a typed reason; no
@@ -1202,7 +1202,7 @@ One hundred rows, BT-REQ-1700 .. BT-REQ-1799. Status counts: 93 IMPLEMENTED,
 | BT-REQ-1760 | Heartbeat observations are shape-validated and then fenced on the lease. | IMPLEMENTED | [`boltrig/kernel/channel_gateway_reconcile_routes.py:113`](../../../boltrig/kernel/channel_gateway_reconcile_routes.py) `return "fenced"` | SEC-177 |
 | BT-REQ-1761 | Outbox claims are restricted to enabled socket channels this token still owns. | IMPLEMENTED | [`boltrig/kernel/channel_gateway_outbox_routes.py:39`](../../../boltrig/kernel/channel_gateway_outbox_routes.py) `"active_channels = await _owned_channels(kernel, token, lease)"` | SEC-177 |
 | BT-REQ-1762 | The owner lease id is never projected to a browser. | IMPLEMENTED | [`boltrig/kernel/channel_inventory_routes.py:136`](../../../boltrig/kernel/channel_inventory_routes.py) `"owner_lease_id_disclosed": False,` | SEC-177 |
-| BT-REQ-1763 | An owner lease is explicitly not a claim of process liveness or provider certification. | IMPLEMENTED | [`boltrig/kernel/channel_inventory_routes.py:137`](../../../boltrig/kernel/channel_inventory_routes.py) `"proves_process_liveness": False,` | SEC-177 |
+| BT-REQ-1763 | An owner lease is explicitly not a claim of process liveness or provider certification. | IMPLEMENTED | [`boltrig/kernel/channel_inventory_routes.py:137`](../../../boltrig/kernel/channel_inventory_routes.py) `"\"proves_process_liveness\": False,"` | SEC-177 |
 | BT-REQ-1764 | A static channel snapshot is refused in a production posture. | IMPLEMENTED | [`services/channel_gateway/app.py:700`](../../../services/channel_gateway/app.py) `"static channel specs are disabled in production; use kernel "` | SEC-177 |
 | BT-REQ-1765 | A rotated token file is hot-loaded only after an authorization refusal and only when the value changed. | IMPLEMENTED | [`services/channel_gateway/kernel_client.py:85`](../../../services/channel_gateway/kernel_client.py) `"def set_token(self, token: str) -> bool:"` | SEC-177 |
 | BT-REQ-1766 | Gateway readiness is distinct from liveness and requires token, reconciliation and adapter convergence. | IMPLEMENTED | [`services/channel_gateway/app.py:765`](../../../services/channel_gateway/app.py) `"converged = all(channel_id in daemon._adapters for channel_id in daemon._specs)"` | SEC-177 |
@@ -1236,6 +1236,6 @@ One hundred rows, BT-REQ-1700 .. BT-REQ-1799. Status counts: 93 IMPLEMENTED,
 | BT-REQ-1794 | Every other channel and call table is inside the tenant fence. | IMPLEMENTED | [`boltrig/store/rls.sql:120`](../../../boltrig/store/rls.sql) `"'channel_deliveries','channel_outbox',"` | SEC-08 |
 | BT-REQ-1795 | The channel gateway, signal-cli and whatsapp-bridge services are profile-gated and inert by default. | IMPLEMENTED | [`docker-compose.yml:584`](../../../docker-compose.yml) `profiles: ["channels"]` | - |
 | BT-REQ-1796 | The Worker edge proxies the entire gateway prefix, not only the media WebSocket. | IMPLEMENTED | [`apps/worker/nginx.conf:67`](../../../apps/worker/nginx.conf) `"location /voice/ {"` | - |
-| BT-REQ-1797 | The gateway status endpoint exposes channel ids, adapters and observations without authentication. | IMPLEMENTED | [`services/channel_gateway/app.py:869`](../../../services/channel_gateway/app.py) `"channels": sorted(daemon._specs),` | - |
+| BT-REQ-1797 | The gateway status endpoint exposes channel ids, adapters and observations without authentication. | IMPLEMENTED | [`services/channel_gateway/app.py:869`](../../../services/channel_gateway/app.py) `"\"channels\": sorted(daemon._specs),"` | - |
 | BT-REQ-1798 | A gateway session token cannot be revoked by any kernel route; only its TTL and lease bound it. | SCAFFOLDED | [`boltrig/kernel/mcp.py:130`](../../../boltrig/kernel/mcp.py) `"def revoke(self, token: str) -> None:"` | SEC-177 |
 | BT-REQ-1799 | The MCP run-token registry is process-local, so a restart invalidates every gateway session. | IMPLEMENTED | [`boltrig/kernel/mcp.py:79`](../../../boltrig/kernel/mcp.py) `"self._tokens: dict[str, RunToken] = {}"` | SEC-23 |
