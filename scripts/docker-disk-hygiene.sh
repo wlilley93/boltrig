@@ -99,8 +99,18 @@ echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') docker-disk-hygiene done: ${before_pct}% 
 # above a `docker system df` reporting 80.89GB reclaimable. The one run where
 # the message mattered, it pointed the reader away from the actual cause.
 if [ "$after_pct" -ge "$PRUNE_PCT" ]; then
+    # NO `exit` IN THE AWK. `awk '...{print; exit}'` closes the pipe while
+    # `docker system df` is still writing, docker takes SIGPIPE and returns 141,
+    # and `set -o pipefail` + `set -e` then kill this script HERE - silently,
+    # with the diagnostic below never printed and nothing on stderr to explain
+    # it. Whether it fires depends on whether the producer's output fits the pipe
+    # buffer, so the short real `docker system df` usually survives and a longer
+    # one does not: measured 2026-08-24, the same pipeline exits 141 with a
+    # 201-line producer and 0 with a 5-line one. A reporting path that dies
+    # under load is worse than the wrong message it replaced.
+    # Family: SIGPIPE, same shape as `grep -q` closing its own producer.
     img_reclaimable="$(docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null \
-        | awk -F'|' '$1=="Images"{print $2; exit}')"
+        | awk -F'|' '$1=="Images" && !seen {print $2; seen=1}')"
     case "${img_reclaimable:-}" in
         ""|0B*|"0 B"*)
             echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') docker-disk-hygiene STILL ${after_pct}% after pruning; no reclaimable images remain, so the cause is outside Docker images (volumes, logs, or host files)" >&2 ;;
