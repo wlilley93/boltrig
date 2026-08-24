@@ -12,6 +12,7 @@ from threading import Lock
 from .channels import ChannelStoreMem
 from .audit_stream import AuditStreamStoreMem
 from .run_records import RunRecordsStoreMem
+from .conversations import ConversationsStoreMem
 from .channel_dedup import ChannelDedupStoreMem
 from .channel_outbox import ChannelOutboxStoreMem
 from .budget_policy import BudgetPolicyMem
@@ -56,7 +57,6 @@ from boltrig.models import (
     ConfigRevision,
     Conversation,
     ConversationMessage,
-    ConversationStatus,
     ConversationSummary,
     EMPTY_GRANTS,
     EvalCase,
@@ -116,6 +116,7 @@ class InMemoryStore(
     HitlStoreMem,
     AuditStreamStoreMem,
     RunRecordsStoreMem,
+    ConversationsStoreMem,
     ChannelStoreMem,
     CapabilityStoreMem,
     PermanentFleetStoreMem,
@@ -310,127 +311,6 @@ class InMemoryStore(
         for key in doomed:
             del self._creds[key]
         return len(doomed)
-
-    # --- conversations ---
-    async def list_conversations(self, tenant_id, user_id):
-        return self._owned_conversations(tenant_id, user_id)
-
-    def _owned_conversations(self, tenant_id, user_id):
-        # Owner scope (SEC-25) + stable ordering: updated_at DESC with an id ASC
-        # tiebreak. Python's sort is stable, so sorting by id first then by
-        # updated_at (reverse) leaves ties ordered by ascending id deterministically.
-        out = [c for (t, _), c in self._convs.items() if t == tenant_id and c.user_id == user_id]
-        out.sort(key=lambda c: c.id)
-        out.sort(key=lambda c: c.updated_at, reverse=True)
-        return out
-
-    @staticmethod
-    def _page(rows, limit, offset):
-        # A stable window over an already-ordered list: the slice plus the next
-        # offset (None once the list is exhausted). Mirrors the postgres LIMIT/OFFSET.
-        start = max(0, offset)
-        window = rows[start : start + limit]
-        nxt = start + limit if start + limit < len(rows) else None
-        return window, nxt
-
-    async def list_conversations_page(self, tenant_id, user_id, *, limit, offset=0):
-        return self._page(self._owned_conversations(tenant_id, user_id), limit, offset)
-
-    async def search_conversations(self, tenant_id, user_id, query, *, limit, offset=0):
-        # Owner-scoped substring search (US-CONV-10): only the caller's own
-        # conversations are ever considered, so another user's thread can never
-        # surface. A conversation matches on its title OR any LIVE (non-superseded,
-        # [2026] VJS-COUNTY 4) message content; the snippet is the matched live
-        # message content, or None when only the title matched.
-        needle = (query or "").casefold()
-        matches: list[tuple] = []
-        for conv in self._owned_conversations(tenant_id, user_id):
-            snippet = None
-            # An empty needle still requires a non-NULL title (mirrors the PG
-            # ILIKE '%%' semantics: a NULL title never matches, it can only
-            # surface via a live message-content hit below).
-            if conv.title is not None and needle in conv.title.casefold():
-                matches.append((conv, None))
-                continue
-            for m in self._messages.get(conv.id, []):
-                if (
-                    m.tenant_id == tenant_id
-                    and m.superseded_by is None  # a superseded turn is never a live hit
-                    and m.content
-                    and needle in m.content.casefold()
-                ):
-                    snippet = m.content
-                    break
-            if snippet is not None:
-                matches.append((conv, snippet))
-        return self._page(matches, limit, offset)
-
-    async def restore_closed_conversation(self, tenant_id, conv_id, user_id, restored_at):
-        # One critical section decides existence, ownership, and CLOSED -> ACTIVE.
-        # `restore_closed_conversation` never upserts; a concurrent purge stays final.
-        with self._conversation_lifecycle_lock:
-            conv = self._convs.get((tenant_id, conv_id))
-            if conv is None:
-                return False, False, False
-            if conv.user_id != user_id:
-                return True, False, False
-            if conv.status != ConversationStatus.CLOSED:
-                return True, True, False
-            conv.status = ConversationStatus.ACTIVE
-            conv.updated_at = restored_at
-            return True, True, True
-
-    async def add_message(self, message):
-        # Insert-if-absent on (tenant_id, id) (mirrors the PG ON CONFLICT DO
-        # NOTHING): a replayed message id is a no-op, never a duplicate row.
-        msgs = self._messages.setdefault(message.conversation_id, [])
-        if not any(m.tenant_id == message.tenant_id and m.id == message.id for m in msgs):
-            msgs.append(message)
-
-    async def list_messages(self, tenant_id, conv_id):
-        return [m for m in self._messages.get(conv_id, []) if m.tenant_id == tenant_id]
-
-    async def mark_message_superseded(self, tenant_id, message_id, superseded_by):
-        # Marker-only ([2026] VJS-COUNTY 4, D3): set superseded_by and NOTHING else,
-        # so content/events/run_id/created_at stay immutable. Tenant-scoped.
-        for msgs in self._messages.values():
-            for m in msgs:
-                if m.tenant_id == tenant_id and m.id == message_id:
-                    m.superseded_by = superseded_by
-                    return
-
-    async def add_conversation_summary(self, summary):
-        # Append-only ([2026] VJS-COUNTY 4 keeps message content frozen): a summary
-        # is derived data, INSERTED here and never mutating any message row.
-        self._summaries.setdefault(summary.conversation_id, []).append(summary)
-
-    async def get_latest_conversation_summary(self, tenant_id, conversation_id):
-        rows = [s for s in self._summaries.get(conversation_id, []) if s.tenant_id == tenant_id]
-        if not rows:
-            return None
-        # The latest summary covers the most messages (widest boundary); break ties
-        # by created_at so a re-compaction's fresh row wins.
-        return max(rows, key=lambda s: (s.covered_count, s.created_at))
-
-    async def purge_closed_conversations(self, tenant_id, older_than):
-        # M11 / SEC-74: hard-erase CLOSED conversations past the cutoff plus their
-        # messages AND their derived summaries; audit rows are elsewhere and never
-        # touched. Tenant-scoped.
-        with self._conversation_lifecycle_lock:
-            doomed = [
-                c
-                for (t, _), c in self._convs.items()
-                if t == tenant_id
-                and c.status == ConversationStatus.CLOSED
-                and c.updated_at <= older_than
-            ]
-            for conv in doomed:
-                self._convs.pop((conv.tenant_id, conv.id), None)
-                self._conversation_agent_bindings.pop((conv.tenant_id, conv.id), None)
-                self._messages.pop(conv.id, None)
-                self._summaries.pop(conv.id, None)
-                self._steer_queues.pop((conv.tenant_id, conv.id), None)
-            return len(doomed)
 
     # --- Round Three: config revisions ---
     async def add_config_revision(self, rev):
