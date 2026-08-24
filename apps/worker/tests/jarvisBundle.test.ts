@@ -46,7 +46,7 @@ describe("Jarvis as a character bundle", () => {
     // Two bodies, one character. The default is FIRST, so an install that has
     // never heard of skins keeps rendering what it always rendered.
     expect(jarvis.skins?.map((skin) => skin.id)).toEqual(["default", "ultron"]);
-    expect(jarvis.skins?.[0].name).toBe("Instrument");
+    expect(jarvis.skins?.[0].name).toBe("Iron Man");
   });
 
   // A skin the canvas cannot draw must be refused BY NAME. Collapsing it to the

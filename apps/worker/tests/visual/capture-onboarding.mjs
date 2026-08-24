@@ -46,7 +46,7 @@ const workerRoot = join(repoRoot, "apps/worker");
  */
 const EXPECTATIONS = [
   { name: "Familiar", skin: null, surface: null },
-  { name: "Jarvis", skin: "Instrument", surface: "rgb(5, 5, 8)" },
+  { name: "Jarvis", skin: "Iron Man", surface: "rgb(5, 5, 8)" },
   { name: "Jarvis", skin: "Age of Ultron", surface: null },
   { name: "Ultron", skin: null, surface: null },
   { name: "Colossus", skin: null, surface: "rgb(6, 5, 4)" },
