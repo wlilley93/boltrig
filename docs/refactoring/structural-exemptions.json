@@ -31,14 +31,6 @@
       "reason": "Extract generated-adapter parsing, validation, and emission phases into focused modules. 2026-08-16: +13 lines only - the openapi spec URL fetch became a bounded streamed read (4 MiB cap) so a hostile multi-GB body is refused mid-read instead of buffered into kernel memory. 2026-08-16 second wave: +26 - the openapi spec fetch carries the manifest NetworkConfig so an operator air-gap/allowlist binds the generated adapter family too.",
       "expires": "2026-12-31"
     },
-    "boltrig/adapters/http_base.py": {
-      "max_file_lines": 441,
-      "max_function_lines": 74,
-      "over_limit_functions": [],
-      "owner": "adapter-maintainers",
-      "reason": "Separate transport policy, SSRF validation, and response handling from the shared HTTP adapter base. 2026-08-16 second wave: +17 - HttpAdapter carries the manifest NetworkConfig into every egress check, and an unpinnable base now fails closed instead of shipping a re-resolving rebinding-open client. 2026-08-16 third wave: audit-outbox seams / proxy-CA threading growth, re-measured.",
-      "expires": "2026-12-31"
-    },
     "boltrig/api/auth_routes.py": {
       "max_file_lines": 855,
       "max_function_lines": 516,
