@@ -64,8 +64,7 @@ Cited: `tests (lease fencing test)`
 
 ### H09 (area 04, 3/3 stand)
 
-Decision 0020's condition L3 is no longer satisfied: it requires the multi-
-runtime ROUTING MECHANISM to stay live with at least one non-Codex governed
+Decision 0020's condition L3 is no longer satisfied: it requires the multi-runtime ROUTING MECHANISM to stay live with at least one non-Codex governed
 leaf re-wirable by configuration alone until production_ready is reached.
 
 Cited: `docs/decisions/0020-retire-the-pi-lane.md`
@@ -175,8 +174,7 @@ Cited: `cognee compiler and realtime voice profile resolver`
 
 The dev_egress_loopback manifest key is unreachable: FleetManifest.extra is
 built from a closed fourteen-name tuple that omits it, so
-manifest.section("dev_egress_loopback") always returns {} and the court-
-permitted egress path is dead.
+manifest.section("dev_egress_loopback") always returns {} and the court-permitted egress path is dead.
 
 Cited: `boltrig/config/manifest.py FleetManifest.extra tuple`
 
@@ -349,8 +347,7 @@ Cited: `.githooks/pre-push:81 and Makefile:223`
 ### H55 (area 20, 3/3 stand)
 
 The invariant catalogue may under-declare its own bindings without failing:
-drift is checked catalogue-to-marker only, and 361 of the 1836 real marker-
-backed pairs are absent from the catalogue while the gate reports debt 0.
+drift is checked catalogue-to-marker only, and 361 of the 1836 real marker-backed pairs are absent from the catalogue while the gate reports debt 0.
 
 Cited: `scripts/check_invariants.py and tests/invariants.yaml`
 
@@ -497,10 +494,8 @@ diverging from a schema.sql bootstrap.
 
 Thirteen migrations (0041, 0042, 0043, 0044, 0045, 0056, 0058, 0059, 0061,
 0062, 0063, 0068, 0074) enable and FORCE row level security and create
-tenant_isolation policies unconditionally, fencing 19 tables on every Alembic-
-migrated database whether or not the operator opted into RLS - diverging from
-the schema.sql bootstrap, whose overlay boltrig/store/rls.sql:4 declares opt-
-in and which boltrig/store/postgres.py:207 does not run by default. The
+tenant_isolation policies unconditionally, fencing 19 tables on every Alembic-migrated database whether or not the operator opted into RLS - diverging from
+the schema.sql bootstrap, whose overlay boltrig/store/rls.sql:4 declares opt-in and which boltrig/store/postgres.py:207 does not run by default. The
 fourteenth file that mentions FORCE RLS, 0022_schema_parity.py:187-198, is not
 part of this: it applies RLS to its five tables only when
 `nouns.relrowsecurity` is already true, which is the opt-in-respecting pattern
@@ -545,8 +540,7 @@ development-posture relief, while the HITL approval gate one layer up
 (hitl_response_auth.approval_response_block) carries both. The consequence is
 a layer inconsistency in the other direction from the one claimed: on a
 single-author tenant the HITL approval can be self-answered under the
-sole_author relief but the device lease can then never be issued, so device-
-action verbs deadlock there. The device-lease rule is reachable production
+sole_author relief but the device lease can then never be issued, so device-action verbs deadlock there. The device-lease rule is reachable production
 code (registered by api/device_bootstrap.py whenever a lease-signing key is
 configured), not an unreachable one.
 
@@ -622,13 +616,11 @@ development key.
 **What is actually true:**
 
 The audit-key boot guard warns rather than aborts when nothing sets a
-production signal, and the shipped compose sets none (docker-
-compose.yml:605-606 emit empty BOLTRIG_ENV/BOLTRIG_PRODUCTION). A deployment
+production signal, and the shipped compose sets none (docker-compose.yml:605-606 emit empty BOLTRIG_ENV/BOLTRIG_PRODUCTION). A deployment
 that follows README.md:130 (`cp .env.example .env` then `make up`), without
 editing secrets and without running genesis.sh, gets BOLTRIG_AUDIT_HMAC_KEY as
 the EMPTY STRING - .env.example:51 ships it deliberately blank - so the audit
-chain is keyed with empty bytes, not with the in-source `dev-insecure-audit-
-key` (audit.py:28 only falls back to that when the variable is absent). The
+chain is keyed with empty bytes, not with the in-source `dev-insecure-audit-key` (audit.py:28 only falls back to that when the variable is absent). The
 warning fires at least twice per API boot, from bootstrap.py:419 and
 bootstrap.py:510. The other documented path, genesis.sh, mints a strong key at
 genesis.sh:104 and is not affected.
@@ -692,8 +684,7 @@ ios/scripts/sync-provider-catalogue.sh drift pin (enforced only inside
 ios/BoltrigTests/OnboardingTests.swift) run solely when a person runs
 xcodebuild test on the one Mac. The iOS directory is not entirely unverified,
 though: `make familiar-island-check`, which runs in CI inside the worker-build
-job via `make worker-quality`, rebuilds the Familiar island page and byte-
-compares it against the committed copy in
+job via `make worker-quality`, rebuilds the Familiar island page and byte-compares it against the committed copy in
 ios/Boltrig/Resources/FamiliarIsland/, failing the build if that bundled
 resource is stale.
 
