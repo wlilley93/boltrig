@@ -622,8 +622,8 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/egress.py:205		Resolve a host to 
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/egress.py:87		wins), read at adapter construction, and ALWAYS superseded by an explicit
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/egress.py:88		config passed to a constructor - never by an agent-influenced value.
 ORDINARY	NO-SUBJECT	docstring	boltrig/adapters/egress.py:99		The process-wide egress posture, or None when no manifest installed one (bare boots and tests: egress then behaves exactly as pre-manifest).
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/generator.py:326		string must not silently double as a file read.
-ORDINARY	NO-SUBJECT	comment	boltrig/adapters/generator.py:347		pinned to the audited IP, and redirects are never followed into internal
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/generator.py:128		string must not silently double as a file read.
+ORDINARY	NO-SUBJECT	comment	boltrig/adapters/generator.py:149		pinned to the audited IP, and redirects are never followed into internal
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/http_base.py:176		of the base host so httpx cannot re-resolve to internal space at connect
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/http_base.py:200		SSRF: never auto-follow redirects - a 302 to 169.254.169.254 would
 ORDINARY	NO-SUBJECT	comment	boltrig/adapters/http_base.py:88		explicit config always wins;
@@ -725,7 +725,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/config/channel_addressing.py:90		Runtime com
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_approval_adapters.py:140		Bind the reviewed endpoint/SEC-61 waiver so approval cannot be replayed
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_capability_profiles.py:42		not a 404 about a row the caller was never allowed to name.
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/control_channel_approval.py:13		Public metadata-only delivery receipt;
-ORDINARY	NO-SUBJECT	comment	boltrig/config/control_generated_adapter.py:106		prevents accepting a generator extension this version cannot reconstruct.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/control_generated_adapter.py:113		prevents accepting a generator extension this version cannot reconstruct.
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/control_integrations.py:208		The one write both revoke verbs make, so a second entry point cannot drift.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_integrations.py:252		Fail-closed and checked HERE, not only at the route: the control verb
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/control_integrations.py:81		Return the exact fail-closed reason for one provider-declared setup.
