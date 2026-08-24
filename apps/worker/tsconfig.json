@@ -19,6 +19,7 @@
     ,
     "baseUrl": ".",
     "paths": {
+      "@wlilley93/boltrig-web-sdk/*": ["../../sdks/web/src/*"],
       "@wlilley93/boltrig-web-sdk": ["../../sdks/web/src/index.ts"]
     }
   },

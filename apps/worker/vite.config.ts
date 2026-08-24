@@ -180,9 +180,23 @@ export default defineConfig({
   // middleware has already answered around.
   plugins: [benchAuth(), react(), benchPresets()],
   resolve: {
-    alias: {
-      "@wlilley93/boltrig-web-sdk": path.resolve(__dirname, "../../sdks/web/src/index.ts"),
-    },
+    // ARRAY FORM, AND THE ORDER IS THE POINT. Alias matching tests
+    // `id === find` or `id.startsWith(find + "/")`, so an object key that
+    // already ends in a slash can never match anything: the previous
+    // "@wlilley93/boltrig-web-sdk/" entry was inert, every subpath fell
+    // through to the bare alias, and `.../hermes/shim` resolved to
+    // `.../src/index.ts/hermes/shim` — ENOTDIR, at import time. A regex says
+    // exactly what it means, and the subpath rule has to come first.
+    alias: [
+      {
+        find: /^@wlilley93\/boltrig-web-sdk\/(.*)$/,
+        replacement: path.resolve(__dirname, "../../sdks/web/src/$1"),
+      },
+      {
+        find: /^@wlilley93\/boltrig-web-sdk$/,
+        replacement: path.resolve(__dirname, "../../sdks/web/src/index.ts"),
+      },
+    ],
   },
   server: {
     port: 1420,
