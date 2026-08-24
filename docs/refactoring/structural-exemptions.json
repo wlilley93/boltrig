@@ -333,7 +333,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/memory.py": {
-      "max_file_lines": 522,
+      "max_file_lines": 422,
       "max_function_lines": 71,
       "over_limit_functions": [],
       "owner": "store-maintainers",
@@ -341,7 +341,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/postgres.py": {
-      "max_file_lines": 710,
+      "max_file_lines": 588,
       "max_function_lines": 27,
       "over_limit_functions": [],
       "owner": "store-maintainers",

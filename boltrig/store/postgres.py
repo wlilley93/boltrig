@@ -21,6 +21,7 @@ from .run_records import RunRecordsStorePG
 from .conversations import ConversationsStorePG
 from .memory_planes import MemoryPlanesStorePG
 from .tenancy import TenancyStorePG
+from .user_accounts import UserAccountsStorePG
 from .ai_configs import AiConfigStorePG
 from .channel_dedup import ChannelDedupStorePG
 from .channel_outbox import ChannelOutboxStorePG
@@ -52,18 +53,16 @@ from .conversation_queue import ConversationQueueStorePG
 from .conversation_binding_postgres import ConversationBindingStorePG
 from .agent_mailbox_postgres import AgentMailboxStorePG
 from .rows import (
-    _adapter, _invitation, _notif, _pat, _personal,
+    _adapter, _invitation, _notif, _personal,
     _revision, _session, _setting, _tfa_challenge,
-    _user, _user_totp, _workflow,
+    _user_totp, _workflow,
 )
 from boltrig.models import (
     AdapterRecord,
     ConfigRevision,
     NotificationPref,
-    PersonalAccessToken,
     PersonalAgent,
     TwoFactorChallenge,
-    User,
     UserInvitation,
     UserSession,
     UserSetting,
@@ -123,6 +122,7 @@ class PostgresStore(
     ConversationsStorePG,
     MemoryPlanesStorePG,
     TenancyStorePG,
+    UserAccountsStorePG,
     AiConfigStorePG,
     PermanentFleetStorePG,
     BirthProfileStorePG,
@@ -406,128 +406,6 @@ class PostgresStore(
             tenant_id, user_id,
         )
         return result != "DELETE 0"
-
-    # --- Round Four: users + provisioning (USR) ---
-    async def upsert_user(self, u: User):
-        await self._pool.execute(
-            """INSERT INTO users (id, tenant_id, email, display_name, groups, role, scope,
-                                  status, source, source_group, last_seen_at, created_at,
-                                  must_change_password)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-               ON CONFLICT (tenant_id, id) DO UPDATE SET
-                 email=EXCLUDED.email, display_name=EXCLUDED.display_name,
-                 groups=EXCLUDED.groups, role=EXCLUDED.role, scope=EXCLUDED.scope,
-                 status=EXCLUDED.status, source=EXCLUDED.source,
-                 source_group=EXCLUDED.source_group, last_seen_at=EXCLUDED.last_seen_at,
-                 must_change_password=EXCLUDED.must_change_password""",
-            u.id, u.tenant_id, u.email, u.display_name, u.groups, u.role, u.scope,
-            u.status, u.source, u.source_group, u.last_seen_at, u.created_at,
-            u.must_change_password,
-        )
-
-    async def get_user(self, tenant_id, user_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM users WHERE tenant_id=$1 AND id=$2", tenant_id, user_id
-        )
-        return _user(row)
-
-    async def list_users(self, tenant_id):
-        rows = await self._pool.fetch(
-            "SELECT * FROM users WHERE tenant_id=$1 ORDER BY created_at DESC", tenant_id
-        )
-        return [_user(r) for r in rows]
-
-    # --- personal access tokens (PAT, SEC-34) ---
-    async def add_pat(self, p: PersonalAccessToken):
-        await self._pool.execute(
-            """INSERT INTO personal_access_tokens
-               (id, tenant_id, user_id, name, token_hash, scope, created_at,
-                expires_at, last_used_at, revoked)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-               ON CONFLICT (tenant_id, id) DO NOTHING""",
-            p.id, p.tenant_id, p.user_id, p.name, p.token_hash, p.scope, p.created_at,
-            p.expires_at, p.last_used_at, p.revoked,
-        )
-
-    async def get_pat(self, tenant_id, pat_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM personal_access_tokens WHERE tenant_id=$1 AND id=$2",
-            tenant_id, pat_id,
-        )
-        return _pat(row)
-
-    async def get_pat_by_hash(self, token_hash):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM personal_access_tokens WHERE token_hash=$1", token_hash
-        )
-        return _pat(row)
-
-    async def list_pats(self, tenant_id, user_id):
-        rows = await self._pool.fetch(
-            """SELECT * FROM personal_access_tokens WHERE tenant_id=$1 AND user_id=$2
-               ORDER BY created_at DESC""",
-            tenant_id, user_id,
-        )
-        return [_pat(r) for r in rows]
-
-    async def update_pat(self, p: PersonalAccessToken):
-        await self._pool.execute(
-            """UPDATE personal_access_tokens SET last_used_at=$3, revoked=$4
-               WHERE tenant_id=$1 AND id=$2""",
-            p.tenant_id, p.id, p.last_used_at, p.revoked,
-        )
-
-    # --- invitations (US-USR-02) ---
-    async def add_invitation(self, inv: UserInvitation):
-        await self._pool.execute(
-            """INSERT INTO user_invitations
-               (id, tenant_id, email, intended_role, intended_scope, invited_by,
-                created_at, expires_at, status, token_hash,
-                workspace_id, provision_workspace_name, provision_org_name)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-               ON CONFLICT (tenant_id, id) DO NOTHING""",
-            inv.id, inv.tenant_id, inv.email, inv.intended_role, inv.intended_scope,
-            inv.invited_by, inv.created_at, inv.expires_at, inv.status, inv.token_hash,
-            inv.workspace_id, inv.provision_workspace_name, inv.provision_org_name,
-        )
-
-    async def claim_invitation_by_token_hash(self, tenant_id, token_hash, now):
-        row = await self._pool.fetchrow(
-            """UPDATE user_invitations SET status='accepted'
-               WHERE tenant_id=$1 AND token_hash=$2 AND status='pending'
-                 AND (expires_at IS NULL OR expires_at > $3)
-               RETURNING *""",
-            tenant_id, token_hash, now,
-        )
-        return _invitation(row)
-
-    async def consume_invitation(self, tenant_id, inv_id):
-        # Atomic single-use consume (D1): pending -> accepted, True only for the
-        # winner. RETURNING makes the CAS observable across concurrent redeemers.
-        row = await self._pool.fetchrow(
-            """UPDATE user_invitations SET status='accepted'
-               WHERE tenant_id=$1 AND id=$2 AND status='pending'
-               RETURNING id""",
-            tenant_id, inv_id,
-        )
-        return row is not None
-
-    # --- first-party password credentials ([2026] VJS-COUNTY 7, D4) ---
-    async def set_password_credential(self, tenant_id, user_id, password_hash):
-        await self._pool.execute(
-            """INSERT INTO user_credentials (tenant_id, user_id, password_hash, updated_at)
-               VALUES ($1,$2,$3, now())
-               ON CONFLICT (tenant_id, user_id) DO UPDATE SET
-                 password_hash=EXCLUDED.password_hash, updated_at=now()""",
-            tenant_id, user_id, password_hash,
-        )
-
-    async def get_password_credential(self, tenant_id, user_id):
-        row = await self._pool.fetchrow(
-            "SELECT password_hash FROM user_credentials WHERE tenant_id=$1 AND user_id=$2",
-            tenant_id, user_id,
-        )
-        return None if row is None else row["password_hash"]
 
     # --- TOTP two-factor ([2026] VJS-COUNTY 10) ---
     async def set_user_totp(self, totp: UserTotp) -> None:
