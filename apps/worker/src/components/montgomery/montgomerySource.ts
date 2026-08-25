@@ -26,6 +26,14 @@ import { montgomeryStateFromTurn } from "./MontgomeryState";
 const MONTGOMERY_CONFIG = {
   id: "general-montgomery",
   library: "GeneralMontgomery",
+  // THIS PORT IS ALSO IN THE DESKTOP CSP, and the two must agree.
+  //
+  // src-tauri/tauri.conf.json pins `frame-src http://localhost:8902` in both
+  // `csp` and `devCsp`. He is the first character that is an IFRAME -- the
+  // other four are canvas bodies, so nothing had ever needed frame-src, and it
+  // read `'none'` until he arrived. Changing this port without changing that
+  // policy does not raise an error: the frame is refused by CSP and he renders
+  // as an empty stage, which looks exactly like a player that is not running.
   playerUrl: "http://localhost:8902",
   voiceBase: "montgomery",
 };

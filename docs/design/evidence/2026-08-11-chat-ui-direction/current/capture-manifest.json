@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-25T01:50:16.508Z",
+  "capturedAt": "2026-08-25T02:01:59.889Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,12 +17,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "adca4eb397990566a15aa2b98657b2f757e967f364c87a91f8cfa7f80a9cd254",
-    "digestAfterCapture": "adca4eb397990566a15aa2b98657b2f757e967f364c87a91f8cfa7f80a9cd254",
+    "digestBeforeCapture": "9847600763f12d1fa00a32d2ce9aecd8f33b533e2fc98dbf12c8cd6071c31821",
+    "digestAfterCapture": "9847600763f12d1fa00a32d2ce9aecd8f33b533e2fc98dbf12c8cd6071c31821",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/general-montgomery-onboarding",
-    "head": "7df8783396773862e1de8ae26b85149b86e0004c",
-    "dirty": false
+    "head": "2d86c985e6b22a344232889e7ef3379fcdf95f6c",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
