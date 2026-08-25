@@ -307,6 +307,44 @@ function useAppearanceSettings() {
   };
 }
 
+/** Where this console came from, and the way back to it.
+ *
+ *  A PLAIN LINK, NOT A CLIENT CALL. Everything else in this file asks the
+ *  agent; this asks for a different page of the same site. The workspace view
+ *  is served by the control plane at the same origin, so the session cookie
+ *  travels with an ordinary navigation and the person arrives already signed
+ *  in. Routing it through the client would mean inventing a method for
+ *  "navigate", and an absent one would hide the only way back.
+ *
+ *  WHY THE WAY BACK MATTERS. This console is what "/" opens once a team box is
+ *  answering, which is the right default - people want their agent. But
+ *  everything ABOUT the box lives on the other side: the address a desktop
+ *  client connects to, the members of the team, and adding another box. Without
+ *  a door here, arriving at the agent would be one-way for exactly the people
+ *  who have one.
+ *
+ *  It renders unconditionally rather than probing for anything. There is no
+ *  call that can fail, and a door that hides itself when it cannot verify the
+ *  room behind it is worse than one that opens onto a page saying why.
+ */
+function WorkspacesRow() {
+  return (
+    <SettingsRow
+      control={(
+        // An ANCHOR wearing the button's own class, not a button that
+        // navigates. It carries the same weight visually and still behaves
+        // like a link: middle-click and open-in-new-tab work, and it shows its
+        // destination on hover. A button would take all three away for nothing.
+        <a className="settings-kit-button" href="/?workspace">
+          Open
+        </a>
+      )}
+      desc="Your team boxes, the address each answers on, and adding another."
+      title="Your workspaces"
+    />
+  );
+}
+
 export function CompactYouSection() {
   const {
     account, appearance, busy, changeAppearance, changeCharacter, character, message, state,
@@ -344,6 +382,7 @@ export function CompactYouSection() {
           desc="Your workspace manages your identity and role."
           title="Signed in as"
         />
+        <WorkspacesRow />
       </SettingsGroup>
     </>
   );
