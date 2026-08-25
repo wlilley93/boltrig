@@ -76,10 +76,32 @@ export interface ClipState {
   speechHeld?: boolean;
 }
 
-/** Loopback only, and no credentials, query or fragment: this value doubles as
- *  the postMessage target origin, so a permissive one would widen where these
- *  messages can land. Identical rule to the clip renderer, deliberately. */
+/**
+ * Where the player may be, and it is two places for two different reasons.
+ *
+ * SAME-ORIGIN (a path like `/companion/montgomery/`) is how a HOSTED boltrig
+ * serves him. It has to be: a browser on dev.boltrig.ai resolves
+ * `http://localhost:8902` to the VIEWER's machine, where there is no player and
+ * never will be. Serving him from the app's own origin is also strictly tighter
+ * than loopback -- the frame is the app, so `frame-src 'self'` covers it and no
+ * exception is needed at all.
+ *
+ * LOOPBACK is how the DESKTOP app serves him, where localhost genuinely is the
+ * user's machine and the player is a sidecar beside the app.
+ *
+ * Everything else is refused. This value doubles as the postMessage target
+ * origin, so a permissive one widens where these messages can land -- which is
+ * why a relative path resolves against `location.origin` here rather than being
+ * passed through as `"*"`.
+ */
 export function validatedPlayerUrl(value: string): string | null {
+  if (value.startsWith("/") && !value.startsWith("//")) {
+    // Same-origin. `//` is excluded deliberately: it is protocol-relative and
+    // names ANOTHER host, which reads as a path and is not one.
+    if (value.includes("?") || value.includes("#")) return null;
+    if (typeof location === "undefined") return null;
+    return new URL(value, location.origin).toString();
+  }
   try {
     const parsed = new URL(value);
     const loopback = new Set(["localhost", "127.0.0.1", "[::1]"]);
