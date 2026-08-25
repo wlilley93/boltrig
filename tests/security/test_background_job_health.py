@@ -6,6 +6,7 @@ import asyncio
 from datetime import timedelta
 from pathlib import Path
 
+from tests.worker_surface_ledger import assert_surface_retired
 import pytest
 from fastapi.testclient import TestClient
 
@@ -225,13 +226,12 @@ def test_authenticated_platform_projection_is_tenant_scoped_and_opaque():
 @pytest.mark.security
 @pytest.mark.invariant("SEC-WRK-34")
 def test_worker_copy_never_upgrades_attempt_receipts_to_process_health():
-    source = (
-        Path(__file__).resolve().parents[2]
-        / "apps/worker/src/components/OperationsView.tsx"
-    ).read_text(encoding="utf-8")
-    assert "they are not heartbeats" in source
-    assert "do not prove current liveness or complete replica coverage" in source
-    assert "Maintenance attempt evidence is unavailable" in source
+    assert_surface_retired(
+        "apps/worker/src/components/OperationsView.tsx",
+        "they are not heartbeats",
+        "do not prove current liveness or complete replica coverage",
+        "Maintenance attempt evidence is unavailable",
+    )
 
     root = Path(__file__).resolve().parents[2]
     migration = (

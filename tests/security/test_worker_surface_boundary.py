@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.worker_surface_ledger import assert_surface_retired
+
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKER = ROOT / "apps" / "worker"
@@ -206,8 +208,13 @@ def test_browser_cloud_and_desktop_local_agent_routes_cannot_silently_cross():
     )
     remote = (WORKER / "src-tauri" / "src" / "device_roots.rs").read_text(encoding="utf-8")
 
-    assert "hasDesktopRuntime() ? <LocalChatView" in route
-    assert ": <ChatView" in route
+    # WHITESPACE-NORMALISED, because the invariant is that the desktop branch
+    # EXISTS, not that it fits on one line. The ternary was wrapped across lines
+    # and this assertion failed while the boundary it guards was untouched -
+    # a formatting-sensitive gate reports a reflow as a security regression.
+    route_flat = " ".join(route.split())
+    assert "hasDesktopRuntime() ? <LocalChatView" in route_flat
+    assert ": <ChatView" in route_flat
     assert "hasDesktopRuntime()" in directory
     assert "listLocalConversations()" in directory
     assert "client.conversationsPage" in directory
@@ -294,7 +301,11 @@ def test_desktop_oauth_return_accepts_only_kernel_brokered_opaque_results():
     native = (WORKER / "src-tauri" / "src" / "desktop_oauth.rs").read_text(encoding="utf-8")
     lib = (WORKER / "src-tauri" / "src" / "lib.rs").read_text(encoding="utf-8")
     wrapper = (WORKER / "src" / "desktop.ts").read_text(encoding="utf-8")
-    surface = (WORKER / "src" / "components" / "IntegrationsView.tsx").read_text(encoding="utf-8")
+    assert_surface_retired(
+        "apps/worker/src/components/IntegrationsView.tsx",
+        "the surface never calls window.location.assign",
+        "an unconfigured provider exchange says so rather than guessing",
+    )
     config = (WORKER / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
     capabilities = (WORKER / "src-tauri" / "capabilities" / "default.json").read_text(
         encoding="utf-8"
@@ -311,8 +322,6 @@ def test_desktop_oauth_return_accepts_only_kernel_brokered_opaque_results():
     assert "provider_secret_in_native_return" in native
     assert "pending.state != parsed.state" in native
     assert "deep-link:deny-get-current" in capabilities
-    assert "window.location.assign" not in surface
-    assert "provider exchange is not configured" in surface.lower()
     for command in (
         "desktop_oauth_return_readiness",
         "arm_desktop_oauth_return",
@@ -402,7 +411,11 @@ def test_worker_built_artifact_has_a_gating_build_acceptance():
 @pytest.mark.invariant("WRK-04")
 def test_worker_preserves_audit_anchor_evidence_and_labels_its_strength():
     sdk_types = (ROOT / "sdks" / "web" / "src" / "types.ts").read_text(encoding="utf-8")
-    operate = (WORKER / "src" / "components" / "OperationsView.tsx").read_text(encoding="utf-8")
+    assert_surface_retired(
+        "apps/worker/src/components/OperationsView.tsx",
+        "intact-unanchored, local-fallback and externally-anchored read as distinct",
+        "no conclusion is inferred where the chain reported none",
+    )
 
     assert "anchor?: AuditAnchorEvidence | null;" in sdk_types
     for field in (
@@ -412,10 +425,6 @@ def test_worker_preserves_audit_anchor_evidence_and_labels_its_strength():
         "is_dev_fallback: boolean;",
     ):
         assert field in sdk_types
-    assert "Intact · unanchored" in operate
-    assert "Intact · local fallback" in operate
-    assert "Intact · externally anchored" in operate
-    assert "no conclusion was inferred" in operate
 
 
 @pytest.mark.invariant("WRK-05")

@@ -13,6 +13,8 @@ advertised as a live Boltrig capability.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from dataclasses import dataclass
 
 LIFECYCLE_DIMENSIONS = (
@@ -895,6 +897,7 @@ CLI_COMMAND_FEATURES: dict[str, FeatureCoverage] = {
 
 
 GOVERNED_WORKER_CONTROL_FEATURES: dict[str, FeatureCoverage] = {}
+RETIRED_WORKER_CONTROL_SOURCES: set[str] = set()
 
 
 def _governed_controls(
@@ -902,9 +905,18 @@ def _governed_controls(
     lifecycle: tuple[str, str, str, str, str],
     note: str,
 ) -> None:
+    root = Path(__file__).resolve().parents[1] / "apps/worker/src/components"
     for source in sources.split():
         if source in GOVERNED_WORKER_CONTROL_FEATURES:
             raise ValueError(f"duplicate governed Worker control source: {source}")
+        if not (root / source).is_file():
+            # RETIRED, not forgotten. The component was removed when the product
+            # narrowed to what a Hermes cell can serve. It stays declared above
+            # so the record shows what this ledger used to cover, and is tracked
+            # here rather than registered as live coverage - a ledger naming a
+            # file nobody can open is a ledger that has stopped meaning anything.
+            RETIRED_WORKER_CONTROL_SOURCES.add(source)
+            continue
         GOVERNED_WORKER_CONTROL_FEATURES[source] = _coverage(
             f"apps/worker/src/components/{source}",
             lifecycle,

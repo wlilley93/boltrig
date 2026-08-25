@@ -14,6 +14,7 @@ from tests.worker_surface_ledger import (
     EXPECTED_ROUTE_COUNT,
     INDIRECT_WORKER_ROUTES,
     NON_UI_ROUTES,
+    RETIRED_WORKER_ROUTES,
     SDK_ONLY_METHODS,
     WORKER_ROUTES,
 )
@@ -44,11 +45,24 @@ def _public_sdk_methods(source: str) -> set[str]:
 
 @pytest.mark.invariant("SEC-WRK-22")
 def test_every_http_route_has_an_exact_worker_or_non_ui_classification():
-    declared = set(WORKER_ROUTES) | set(INDIRECT_WORKER_ROUTES) | set(NON_UI_ROUTES)
+    # RETIRED is a classification, not an omission. A route whose Worker surface
+    # was removed is still accounted for - it has to be, or the count below
+    # would quietly shrink by 155 and this gate would go on passing over a
+    # register that had stopped describing most of the API.
+    declared = (
+        set(WORKER_ROUTES)
+        | set(INDIRECT_WORKER_ROUTES)
+        | set(NON_UI_ROUTES)
+        | set(RETIRED_WORKER_ROUTES)
+    )
     assert len(declared) == EXPECTED_ROUTE_COUNT
     assert not (set(WORKER_ROUTES) & set(INDIRECT_WORKER_ROUTES))
     assert not (set(WORKER_ROUTES) & set(NON_UI_ROUTES))
     assert not (set(INDIRECT_WORKER_ROUTES) & set(NON_UI_ROUTES))
+    # A retired route cannot also be a live one.
+    assert not (set(RETIRED_WORKER_ROUTES) & set(WORKER_ROUTES))
+    assert not (set(RETIRED_WORKER_ROUTES) & set(INDIRECT_WORKER_ROUTES))
+    assert not (set(RETIRED_WORKER_ROUTES) & set(NON_UI_ROUTES))
     assert _http_routes() == declared
 
     assert set(NON_UI_ROUTES.values()) == {
@@ -99,7 +113,16 @@ def test_every_sdk_method_is_used_by_worker_or_explicitly_classified():
     called = set(re.findall(r"\bclient\.([A-Za-z][A-Za-z0-9_]*)\b", worker_source))
     sdk_only = sdk_methods - called
 
-    assert sdk_only == set(SDK_ONLY_METHODS)
+    # A method reachable only from a retired surface is uncalled BECAUSE the
+    # surface went, and that is derived from the register rather than restated
+    # by hand - a hand-kept list would drift the moment another route retires.
+    # AND UNCALLED. Some retired routes shared an SDK method with a surface that
+    # survived, so retirement alone does not make a method unused - only being
+    # uncalled does, and that is what this gate is about.
+    retired_methods = {
+        surface.sdk_method for surface in RETIRED_WORKER_ROUTES.values()
+    } & sdk_methods - called
+    assert sdk_only == set(SDK_ONLY_METHODS) | retired_methods
     for method, (classification, rationale) in SDK_ONLY_METHODS.items():
         assert method in sdk_methods
         assert classification in {
