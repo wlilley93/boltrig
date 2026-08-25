@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-25T03:51:38.979Z",
+  "capturedAt": "2026-08-25T04:35:55.321Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,12 +16,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "8fced0a5f633ab08a9e0adf609c377b06a8e8773f44a229dee4a31d84506116d",
-    "digestAfterCapture": "8fced0a5f633ab08a9e0adf609c377b06a8e8773f44a229dee4a31d84506116d",
+    "digestBeforeCapture": "6ed194ab5e908207eee48aee8e2c2e44f42c874c0acc2aa1d539d2a8bf6348d1",
+    "digestAfterCapture": "6ed194ab5e908207eee48aee8e2c2e44f42c874c0acc2aa1d539d2a8bf6348d1",
     "sourceUnchangedDuringCapture": true,
     "branch": "merge/hermes-into-main",
-    "head": "b9e63d5d147febcd654e857acb436f54c672a788",
-    "dirty": true
+    "head": "98602a783d90f0a6cf04b89b2382cdc2bd96d32e",
+    "dirty": false
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
@@ -147,7 +147,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 4,
+        "stableFrames": 3,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

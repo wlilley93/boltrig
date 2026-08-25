@@ -1,13 +1,13 @@
 {
   "captureManifestPath": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json",
-  "captureManifestSha256": "b913fe2e04151205d333051ea4e745d2e3c043dfe03f606a95906f0b2bfecfa8",
+  "captureManifestSha256": "ff4e89ffc2c5860a07b1540ab99904aab662eaeb114c82ebb7ed67ebc7b1fffd",
   "captureSourceBinding": {
     "branch": "merge/hermes-into-main",
-    "digestAfterCapture": "8fced0a5f633ab08a9e0adf609c377b06a8e8773f44a229dee4a31d84506116d",
+    "digestAfterCapture": "6ed194ab5e908207eee48aee8e2c2e44f42c874c0acc2aa1d539d2a8bf6348d1",
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "8fced0a5f633ab08a9e0adf609c377b06a8e8773f44a229dee4a31d84506116d",
-    "dirty": true,
-    "head": "b9e63d5d147febcd654e857acb436f54c672a788",
+    "digestBeforeCapture": "6ed194ab5e908207eee48aee8e2c2e44f42c874c0acc2aa1d539d2a8bf6348d1",
+    "dirty": false,
+    "head": "98602a783d90f0a6cf04b89b2382cdc2bd96d32e",
     "scope": [
       "apps/worker/src",
       "apps/worker/tests/visual"
