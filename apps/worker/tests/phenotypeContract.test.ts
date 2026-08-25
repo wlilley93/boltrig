@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import colossusBundle from "../src/bundles/colossus/character.json";
 import familiarBundle from "../src/bundles/familiar/character.json";
+import montgomeryBundle from "../src/bundles/general-montgomery/character.json";
 import jarvisBundle from "../src/bundles/jarvis/character.json";
 import ultronBundle from "../src/bundles/ultron/character.json";
 
@@ -41,6 +42,12 @@ const READS_THE_MACHINE_MOOD = {
   // still the fallback when the relay is absent or stale, which is what makes
   // this safe: nothing about her at rest changed.
   familiar: familiarBundle,
+  // He reads it and has the LEAST room to show it. The other three move a
+  // scalar into a shader; he cannot move anything. A measured mood reaches him
+  // as a directed emotion tag that selects the next clip, or it does not reach
+  // him at all -- which is why his three ambient tags are excluded from that
+  // channel entirely and left to drift.
+  "general-montgomery": montgomeryBundle,
 } as const;
 
 const HAS_ITS_OWN_INNER_LIFE = {
@@ -75,7 +82,7 @@ describe("the phenotype contract, per character", () => {
       ...Object.keys(READS_THE_MACHINE_MOOD),
       ...Object.keys(HAS_ITS_OWN_INNER_LIFE),
     ]);
-    const shipped = [familiarBundle, jarvisBundle, ultronBundle, colossusBundle]
+    const shipped = [familiarBundle, jarvisBundle, ultronBundle, colossusBundle, montgomeryBundle]
       .map((bundle) => (bundle as { id: string }).id);
     expect([...shipped].sort()).toEqual([...decided].sort());
   });

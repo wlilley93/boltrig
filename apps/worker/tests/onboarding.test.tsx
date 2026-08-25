@@ -290,6 +290,8 @@ describe("first-run onboarding", () => {
     await clickWhenReady("Show Ultron");
     expect(document.querySelectorAll(".companion-chevron.right")).toHaveLength(1);
     await clickWhenReady("Show Colossus");
+    expect(document.querySelectorAll(".companion-chevron.right")).toHaveLength(1);
+    await clickWhenReady("Show General Montgomery");
     expect(document.querySelectorAll(".companion-chevron.right")).toHaveLength(0);
     expect(screen.queryByRole("button", { name: /Show / })).toBeTruthy();
     await clickWhenReady("Show Ultron");

@@ -140,99 +140,127 @@ export function addressedAsMonty(address: string | null | undefined): boolean {
 }
 
 /**
+ * One branch of the policy, as data.
+ *
+ * The ordering below IS the character, so it is a list you can read top to
+ * bottom rather than a chain of ifs whose precedence you have to reconstruct.
+ * That started as a comment saying "order is the policy" above a function with
+ * a complexity of 27; the comment was true and the shape did not show it.
+ */
+interface Rule {
+  /** Why this branch fired. Carried for the HUD and asserted by no test. */
+  because(context: Context): string;
+  when(context: Context): boolean;
+  /** A DIRECTED tag, or absent to leave his ambient drift alone. */
+  emotion?: Emotion;
+  /** Where to walk him, or absent to leave him where he is. */
+  position?(context: Context): Position | undefined;
+  /** The register when he is NOT being called Monty. */
+  register: Register;
+}
+
+interface Context {
+  turn: CharacterStageState;
+  irritation: number;
+  alertness: number;
+  text: string;
+  at: Position | null;
+}
+
+/**
+ * Most specific cause first; the first match wins.
+ *
+ * Displeasure outranks urgency because a man who is both is displeased. The
+ * long view outranks command because "hold" appears in both and only one of
+ * them is an instruction.
+ */
+const RULES: readonly Rule[] = [
+  {
+    // Ordinary work does not wear a face.
+    because: () => "a run is in flight; he works at the desk",
+    when: (c) => c.turn.working === true && c.turn.speaking !== true,
+    position: () => DESK,
+    register: "base",
+  },
+  {
+    because: (c) => c.irritation >= 0.6 ? "measured irritation" : "the reply opens by refusing",
+    when: (c) => c.irritation >= 0.6 || REFUSAL.test(c.text),
+    emotion: "displeased",
+    // The fireplace is where displeasure and the long pause live. He does not
+    // deliver bad news from the window; the window is for the long view.
+    position: () => FIREPLACE,
+    register: "serious",
+  },
+  {
+    because: (c) => c.alertness >= 0.6 ? "measured alertness" : "the assessment is grave",
+    when: (c) => c.alertness >= 0.6 || GRAVE.test(c.text),
+    emotion: "vigilant",
+    position: (c) => c.at ?? DESK,
+    register: "serious",
+  },
+  {
+    // His humour is a directed state: it does not drift in.
+    because: () => "a dry aside",
+    when: (c) => WRY.test(c.text),
+    emotion: "wry",
+    position: (c) => c.at ?? DESK,
+    register: "amused",
+  },
+  {
+    // Rare, never announced, and a register rather than a face -- there is no
+    // clip of him being pleased with you, which is correct.
+    because: () => "something is being acknowledged",
+    when: (c) => REGARD.test(c.text),
+    position: (c) => c.at ?? DESK,
+    register: "warm",
+  },
+  {
+    // AMBIENT, so nothing is directed: he is walked to the window and left to
+    // arrive at `reflective` himself, which is what the ambient set is for.
+    because: () => "the long view; drift carries the mood, not a direction",
+    when: (c) => LONG_VIEW.test(c.text),
+    position: () => WINDOW,
+    register: "tender",
+  },
+  {
+    because: () => "an instruction, not an assessment",
+    when: (c) => URGENT.test(c.text),
+    position: (c) => c.at ?? DESK,
+    register: "urgent",
+  },
+];
+
+/**
  * The whole decision, in one place.
  *
- * ORDER IS THE POLICY. The checks below are not independent tests whose
- * results get merged -- the first one that matches wins, and they are ordered
- * from the most specific cause to the least. Displeasure outranks urgency
- * because a man who is both is displeased; the Monty register outranks every
- * emotional register because it is about who is being spoken to rather than
- * what is being said, and he does not stop being loosened because the news is
- * bad.
+ * Being addressed as "Monty" replaces the register at every branch and changes
+ * nothing else: it is about who is being spoken to rather than what is being
+ * said, and he does not stop being loosened because the news is bad.
  */
 export function drive(input: DriveInput): Drive {
-  const { turn, phenotype, reply, address, at } = input;
-  const irritation = clamp01(phenotype?.irritation);
-  const alertness = clamp01(phenotype?.alertness);
-  const text = reply ?? "";
-
-  // 1. He is working. A run in flight is a man at his desk, and it is not an
-  //    emotion -- directing one here would put a face on ordinary work.
-  if (turn.working && !turn.speaking) {
+  const context: Context = {
+    turn: input.turn,
+    irritation: clamp01(input.phenotype?.irritation),
+    alertness: clamp01(input.phenotype?.alertness),
+    text: input.reply ?? "",
+    at: input.at ?? null,
+  };
+  const monty = addressedAsMonty(input.address);
+  const rule = RULES.find((candidate) => candidate.when(context));
+  if (!rule) {
+    // Nothing directed and nothing moved: he speaks from wherever he is,
+    // because movement is never the price of a reply.
     return {
-      position: DESK,
-      register: baseOrMonty(address),
-      because: "a run is in flight; he works at the desk",
+      register: monty ? "monty" : context.text ? "calm" : "base",
+      because: context.text ? "an ordinary assessment" : "nothing to say yet",
     };
   }
-
-  // 2. Displeasure. Measured irritation, or a reply that opens by refusing.
-  if (irritation >= 0.6 || REFUSAL.test(text)) {
-    return {
-      emotion: "displeased",
-      // The fireplace is where displeasure and the long pause live. He does
-      // not deliver bad news from the window; the window is for the long view.
-      position: FIREPLACE,
-      register: addressedAsMonty(address) ? "monty" : "serious",
-      because: irritation >= 0.6 ? "measured irritation" : "the reply opens by refusing",
-    };
-  }
-
-  // 3. Vigilance. The machine is alert, or the reply is grave.
-  if (alertness >= 0.6 || GRAVE.test(text)) {
-    return {
-      emotion: "vigilant",
-      position: at ?? DESK,
-      register: addressedAsMonty(address) ? "monty" : "serious",
-      because: alertness >= 0.6 ? "measured alertness" : "the assessment is grave",
-    };
-  }
-
-  // 4. The dry aside. His humour is a directed state: it does not drift in.
-  if (WRY.test(text)) {
-    return {
-      emotion: "wry",
-      position: at ?? DESK,
-      register: addressedAsMonty(address) ? "monty" : "amused",
-      because: "a dry aside",
-    };
-  }
-
-  // 5. Regard. Rare, never announced, and it is a register rather than a face
-  //    -- there is no clip of him being pleased with you, which is correct.
-  if (REGARD.test(text)) {
-    return {
-      position: at ?? DESK,
-      register: addressedAsMonty(address) ? "monty" : "warm",
-      because: "something is being acknowledged",
-    };
-  }
-
-  // 6. The long view. AMBIENT, so no emotion is directed -- he is walked to
-  //    the window and left to drift into reflective on his own, which is
-  //    exactly what the ambient set is for.
-  if (LONG_VIEW.test(text)) {
-    return {
-      position: WINDOW,
-      register: addressedAsMonty(address) ? "monty" : "tender",
-      because: "the long view; drift carries the mood, not a direction",
-    };
-  }
-
-  // 7. Command.
-  if (URGENT.test(text)) {
-    return {
-      position: at ?? DESK,
-      register: addressedAsMonty(address) ? "monty" : "urgent",
-      because: "an instruction, not an assessment",
-    };
-  }
-
-  // 8. Ordinary speech. Nothing is directed and he is not moved: he speaks
-  //    from wherever he is, because movement is never the price of a reply.
+  const position = rule.position?.(context);
   return {
-    register: addressedAsMonty(address) ? "monty" : text ? "calm" : "base",
-    because: text ? "an ordinary assessment" : "nothing to say yet",
+    ...(rule.emotion ? { emotion: rule.emotion } : {}),
+    ...(position ? { position } : {}),
+    register: monty ? "monty" : rule.register,
+    because: rule.because(context),
   };
 }
 
