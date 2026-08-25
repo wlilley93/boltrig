@@ -46,12 +46,11 @@ const SOURCE_LABELS: Record<FederatedSearchSource, string> = {
 };
 
 export const workerCommands: Command[] = [
-  // The first four entries mirror the console rail; deeper destinations remain
-  // searchable without displacing the task-first vocabulary in an empty palette.
+  // Chat first, then every settings destination. The rail's other entries -
+  // Agents, Plugins, Routines - were kernel consoles and went with their
+  // routes; a palette command for a route that does not exist is a dead end
+  // wearing a search result's clothes.
   { route: "chat", label: "New chat", description: "Start something new", keywords: "new task chat codex voice call", hint: "Go" },
-  { route: "agents", label: "Agents", description: "Configure agent profiles", keywords: "subagents profiles familiar runtime" },
-  { route: "integrations", label: "Plugins", description: "Manage provider connections", keywords: "integrations connectors oauth external plugin" },
-  { route: "automations", label: "Routines", description: "Author workflows, DAGs, triggers, and schedules", keywords: "automations hatchet workflow cron webhook routine" },
   // Every settings destination in the downloaded target is directly
   // addressable by the current hash router, so the palette exposes the same
   // one-search-away catalogue without inventing controls or state.
@@ -68,23 +67,10 @@ export const workerCommands: Command[] = [
 
   { route: "chat", label: "Approve what is waiting", description: "Return to the originating conversation", keywords: "approval decide pending hitl", hint: "Chat" },
   { route: "settings", routeId: "autonomy", label: "Change what needs approving", description: "Open autonomy settings", keywords: "approval policy posture", hint: "Autonomy" },
-  { route: "integrations", label: "Add a plugin", description: "Browse provider connections", keywords: "connect integration oauth", hint: "Plugins" },
   { route: "settings", routeId: "organisation", label: "Verify the record", description: "Open organisation and audit settings", keywords: "audit verify receipts", hint: "Organisation" },
   { route: "settings", routeId: "you", label: "Switch theme", description: "Open appearance settings", keywords: "light dark system appearance", hint: "You" },
 
-  { route: "home", label: "Home", description: "See workspace activity and operational status", keywords: "overview dashboard" },
-  { route: "work", label: "Work", description: "Browse canonical work and project dependencies", keywords: "tasks projects queue dag" },
-  { route: "runs", label: "Runs", description: "Inspect execution, cost, and subagent topology", keywords: "history audit subagents codex" },
-  { route: "evaluations", label: "Evaluations", description: "Test agent behaviour", keywords: "eval fixtures regression" },
-  { route: "knowledge", label: "Knowledge", description: "Search and manage sources", keywords: "documents rag files citations" },
-  { route: "memory", label: "Memory", description: "Browse, recall, and improve durable memory", keywords: "facts remember ingest kernel" },
-  { route: "channels", label: "Channels", description: "Connect external message and event channels", keywords: "webhook messaging pairing" },
-  { route: "build", label: "Build", description: "Author capabilities and model endpoints", keywords: "skills mcp models tools" },
-  { route: "build", routeId: "skills", label: "Skills", description: "What the agents know how to do, and where it came from", keywords: "build capabilities know-how provenance" },
-  { route: "integrations", label: "Plugins and sources", description: "Choose connected context for a task", keywords: "slash context sources plugins integrations", hint: "Plugins" },
-  { route: "build", routeId: "actions", label: "Actions", description: "Everything an agent can do", keywords: "build verbs registry approval" },
   { route: "account", label: "Account", description: "Manage your profile, security, and automation", keywords: "identity auth devices keys" },
-  { route: "organisation", label: "Organisation", description: "Manage workspace members and policy", keywords: "team roles directory workspace" },
   { route: "settings", label: "Operations", routeId: "operations", description: "Review runtime posture, audit and budget evidence", keywords: "operate operations health audit budgets status" },
   { route: "settings", label: "Settings", description: "Configure Worker preferences", keywords: "theme device preferences" },
 ];
@@ -442,10 +428,14 @@ function contentDestination(hit: FederatedSearchHit): {
   route: WorkerRoute;
   routeId: string | null;
 } {
-  if (hit.route === "operate") {
-    return { route: "settings", routeId: "operations" };
+  // Federated search indexes surfaces this build no longer routes to -
+  // knowledge, memory, runs. A hit for one of them opens the conversation
+  // surface rather than a route that does not exist; sending someone to a dead
+  // hash would be a worse answer than a general one.
+  if (hit.route === "chat") {
+    return { route: "chat", routeId: boundedRouteId(hit.route_id) };
   }
-  return { route: hit.route, routeId: boundedRouteId(hit.route_id) };
+  return { route: "chat", routeId: null };
 }
 
 function sourceStatusCopy(source: FederatedSearchSourceResult): string {

@@ -89,8 +89,10 @@ describe("Worker human-decision Inbox", () => {
     expect(screen.getByText("Which signed copy?")).toBeTruthy();
     expect(screen.getByText("Clarify the intended audience")).toBeTruthy();
     expect(screen.getByText("Choose an escalation owner")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "run/a" }).getAttribute("href"))
-      .toBe("#/runs/run%2Fa");
+    // The run is still NAMED on the request - which is what the reader needs -
+    // but it is no longer a link: the Runs console went with its route.
+    expect(screen.getByText("run/a")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "run/a" })).toBeNull();
     expect(screen.getByRole("button", { name: "Latest" })).toBeTruthy();
     expect(document.body.textContent).toContain('"amount": 42');
     expect(document.body.textContent).toContain('"policy": "four-eyes"');

@@ -56,6 +56,12 @@ apps/worker/node_modules/
 # sdks/web installs its deps as a SYMLINK, and `node_modules/` (trailing slash)
 # only matches real directories - so the symlink needs its own entry.
 sdks/web/node_modules
+# And so does apps/worker, for exactly the same reason: a git WORKTREE shares
+# the main checkout's install by symlinking to it, the trailing-slash pattern
+# above does not match a symlink, and committing one breaks CI in a way that
+# looks nothing like its cause - pnpm fails with `ENOTDIR: mkdir node_modules`
+# before a line of application code runs, so every job dies at install.
+apps/worker/node_modules
 *.tsbuildinfo
 
 # --- editors / os ---

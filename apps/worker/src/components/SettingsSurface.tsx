@@ -14,7 +14,6 @@ import {
 import { HealthSection } from "./settings/HealthSection";
 import { LocalRuntimeSection } from "./settings/LocalRuntimeSection";
 import { ModelSettingsSection } from "./settings/ModelSettingsSection";
-import { OperationsSettingsSection } from "./settings/OperationsSettingsSection";
 import { SectionHead } from "./settings/SectionHead";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { SpendingSection } from "./settings/SpendingSection";
@@ -98,7 +97,6 @@ const SETTINGS_PANES: Record<SettingsSection, SettingsPane> = {
   health: HealthSection,
   knowledge: MemorySettingsPane,
   models: ModelSettingsSection,
-  operations: OperationsSettingsSection,
   organisation: OrganisationSettingsPane,
   overnight: OvernightSettingsPane,
   sensing: PresenceSettingsPane,

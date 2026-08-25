@@ -6,6 +6,8 @@ import asyncio
 from pathlib import Path
 
 import pytest
+
+from tests.worker_surface_ledger import assert_surface_retired
 from fastapi.testclient import TestClient
 
 from boltrig.kernel.app import create_app
@@ -110,24 +112,17 @@ def test_caller_approval_state_projects_rejection_and_expiry_without_params():
 @pytest.mark.security
 @pytest.mark.invariant("SEC-WRK-28")
 def test_worker_runner_has_no_raw_authority_or_changed_request_replay_surface():
-    runner = (
-        ROOT / "apps/worker/src/components/build/CapabilityRunner.tsx"
-    ).read_text(encoding="utf-8")
+    # The RUNNER is gone; the COMPILER is not, and it carries the half of this
+    # invariant that still has a subject. The runner's obligations are named in
+    # the retirement so restoring the component restores them with it.
+    assert_surface_retired(
+        "apps/worker/src/components/build/CapabilityRunner.tsx",
+        "the InvokeRequest carries noun/verb/params and never context, approval_id or raw",
+        "an edited request invalidates the held continuation",
+        "approval is re-checked through client.invokeApprovalState",
+    )
     compiler = (
         ROOT / "sdks/web/src/capabilityInvocation.ts"
     ).read_text(encoding="utf-8")
-
-    invoke_body = runner.split("const request: InvokeRequest = {", 1)[1].split(
-        "};", 1
-    )[0]
-    assert "noun: selected.noun" in invoke_body
-    assert "verb: selected.id" in invoke_body
-    assert "params: built.params" in invoke_body
-    assert "context:" not in invoke_body
-    assert "approval_id:" not in invoke_body
-    assert "raw" not in invoke_body.lower()
-    assert "current === null ? null : { ...current, invalidated: true }" in runner
-    assert "Check approval and continue" in runner
-    assert "client.invokeApprovalState" in runner
     assert "secret-shaped fields require a purpose-built secure-input surface" in compiler
     assert "open-ended additional properties require a purpose-built surface" in compiler

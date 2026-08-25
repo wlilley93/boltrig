@@ -54,7 +54,7 @@ The tree is much closer to this than a reading of the vision suggests.
 | Familiar / Jarvis bodies | `apps/worker/src/components/{familiar,jarvis}` | Exists |
 | Camera capture | `apps/worker/src-tauri/src/camera_uvc.m` | Exists |
 | Web build target | `apps/worker` — `vite build` | **Verified: 978ms** |
-| Automations with cron | `apps/worker/src/components/AutomationView.tsx` | Exists |
+| Automations with cron | `apps/worker/src/components/AutomationView.tsx` (since removed: the routes a Hermes cell cannot serve were dropped) | Exists |
 | Voice call UI | `apps/worker/src/components/VoiceCall.tsx` | Exists |
 
 The character system in particular already implements the last thing in the

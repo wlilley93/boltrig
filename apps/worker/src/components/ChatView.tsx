@@ -639,7 +639,8 @@ export function ChatView({
 
   function selectInspectorSource(source: TaskInspectorSource) {
     if (source.kind === "integration") {
-      navigate("integrations");
+      // The Plugins console was a kernel surface and is gone. Nothing to open,
+      // so this stays where it is rather than navigating to a dead route.
       return;
     }
     const attachment = sources[source.attachmentIndex];
@@ -999,7 +1000,7 @@ export function ChatView({
           loadingConversation={loadingConversation}
           messages={transcriptMessages}
           newState={isNewState}
-          onBack={() => navigate("home")}
+          onBack={() => navigate("chat")}
           onComposerChange={setDraft}
           onReconnect={() => {
             if (!conversationId) return;
@@ -1066,7 +1067,6 @@ export function ChatView({
           onClose={closeTaskDetails}
           onCreateOutput={conversationStatus === "closed" ? undefined : promptForOutput}
           onLoadMoreOutputs={() => void loadMoreArtifacts()}
-          onManageSources={() => navigate("integrations")}
           onOpenOutput={(output) => void useMaterializedInspectorOutput(
             output,
             openMaterializedArtifact,
@@ -1300,7 +1300,6 @@ export function ChatView({
           ? () => setSectionRunId(railTurn.runId ?? null)
           : undefined}
         onLoadMoreOutputs={() => void loadMoreArtifacts()}
-        onManageSources={() => navigate("integrations")}
         onOpenOutput={(output) => void useMaterializedInspectorOutput(
           output,
           openMaterializedArtifact,

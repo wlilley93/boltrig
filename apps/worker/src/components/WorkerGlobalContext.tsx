@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 
-import { client } from "../client";
+import { client, whenPresent } from "../client";
 import { characterFromSettings, saveCharacterLocal } from "../character";
 import { useIdentityRefreshLifecycle } from "./workerIdentityRefresh";
 
@@ -40,8 +40,8 @@ export function WorkerGlobalContextProvider({ children }: { children: React.Reac
   const refreshIdentity = useCallback(async () => {
     const [meResult, orgResult, workspaceResult, overviewResult] = await Promise.allSettled([
       client.meSettings(),
-      client.currentOrg(),
-      client.workspaces(),
+      whenPresent(client.currentOrg, () => client.currentOrg()),
+      whenPresent(client.workspaces, () => client.workspaces()),
       client.consoleOverview(1),
     ]);
 

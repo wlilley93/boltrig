@@ -65,36 +65,6 @@
         }
       ],
       "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-19: 465->371, LOWERED, and the ActiveContext entry RETIRED rather than re-anchored. That component moved to components/account/ActiveContext.tsx and split into a hook and a view, both under the floor, so it is no longer debt anywhere. It moved because it is the only control on the estate that changes what the whole application is looking at, and the reasoning for the reload it now performs on a successful switch needed room to be read.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/AgentProfileEditor.tsx": {
-      "file_lines": 244,
-      "max_function_lines": 153,
-      "max_parameters": 2,
-      "max_complexity": 24,
-      "max_nesting_depth": 2,
-      "over_limit_functions": [
-        {
-          "name": "AgentProfileEditor",
-          "line": 92,
-          "column": 1,
-          "lines": 153,
-          "parameters": 1,
-          "complexity": 7,
-          "nesting_depth": 1
-        },
-        {
-          "name": "AgentProfileEditor.save",
-          "line": 155,
-          "column": 3,
-          "lines": 62,
-          "parameters": 1,
-          "complexity": 24,
-          "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
       "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"
     },
@@ -119,306 +89,6 @@
       "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"
     },
-    "apps/worker/src/components/AutomationView.tsx": {
-      "file_lines": 2870,
-      "max_function_lines": 1272,
-      "max_parameters": 4,
-      "max_complexity": 53,
-      "max_nesting_depth": 6,
-      "over_limit_functions": [
-        {
-          "name": "AutomationsView",
-          "line": 182,
-          "column": 1,
-          "lines": 1272,
-          "parameters": 0,
-          "complexity": 23,
-          "nesting_depth": 1
-        },
-        {
-          "name": "AutomationsView.useCallback[0]",
-          "line": 299,
-          "column": 36,
-          "lines": 93,
-          "parameters": 1,
-          "complexity": 17,
-          "nesting_depth": 3
-        },
-        {
-          "name": "AutomationsView.isCurrent",
-          "line": 409,
-          "column": 16,
-          "lines": 44,
-          "parameters": 1,
-          "complexity": 21,
-          "nesting_depth": 2
-        },
-        {
-          "name": "AutomationsView.createTrigger",
-          "line": 1014,
-          "column": 3,
-          "lines": 68,
-          "parameters": 4,
-          "complexity": 16,
-          "nesting_depth": 4
-        },
-        {
-          "name": "AutomationsView.changeTrigger",
-          "line": 1083,
-          "column": 3,
-          "lines": 71,
-          "parameters": 3,
-          "complexity": 18,
-          "nesting_depth": 4
-        },
-        {
-          "name": "WorkflowEditor",
-          "line": 1514,
-          "column": 1,
-          "lines": 770,
-          "parameters": 1,
-          "complexity": 53,
-          "nesting_depth": 3
-        },
-        {
-          "name": "WorkflowTriggersPanel",
-          "line": 2311,
-          "column": 1,
-          "lines": 209,
-          "parameters": 1,
-          "complexity": 26,
-          "nesting_depth": 5
-        },
-        {
-          "name": "RoutinePicker",
-          "line": 2693,
-          "column": 1,
-          "lines": 178,
-          "parameters": 1,
-          "complexity": 2,
-          "nesting_depth": 0
-        },
-        {
-          "name": "RoutinePicker.workflows.map[0]",
-          "line": 2775,
-          "column": 22,
-          "lines": 91,
-          "parameters": 1,
-          "complexity": 26,
-          "nesting_depth": 6
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/build/AdaptersBuild.tsx": {
-      "file_lines": 397,
-      "max_function_lines": 357,
-      "max_parameters": 2,
-      "max_complexity": 25,
-      "max_nesting_depth": 2,
-      "over_limit_functions": [
-        {
-          "name": "AdaptersBuild",
-          "line": 41,
-          "column": 1,
-          "lines": 357,
-          "parameters": 0,
-          "complexity": 25,
-          "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/build/CapabilityRunner.tsx": {
-      "file_lines": 657,
-      "max_function_lines": 377,
-      "max_parameters": 2,
-      "max_complexity": 28,
-      "max_nesting_depth": 5,
-      "over_limit_functions": [
-        {
-          "name": "InvocationField",
-          "line": 79,
-          "column": 1,
-          "lines": 77,
-          "parameters": 1,
-          "complexity": 14,
-          "nesting_depth": 5
-        },
-        {
-          "name": "CapabilityRunner",
-          "line": 281,
-          "column": 1,
-          "lines": 377,
-          "parameters": 0,
-          "complexity": 28,
-          "nesting_depth": 4
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/build/McpServersBuild.tsx": {
-      "file_lines": 743,
-      "max_function_lines": 613,
-      "max_parameters": 2,
-      "max_complexity": 33,
-      "max_nesting_depth": 3,
-      "over_limit_functions": [
-        {
-          "name": "McpServersBuild",
-          "line": 131,
-          "column": 1,
-          "lines": 613,
-          "parameters": 1,
-          "complexity": 33,
-          "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/build/ModelEndpointsBuild.tsx": {
-      "file_lines": 418,
-      "max_function_lines": 365,
-      "max_parameters": 2,
-      "max_complexity": 18,
-      "max_nesting_depth": 3,
-      "over_limit_functions": [
-        {
-          "name": "ModelEndpointsBuild",
-          "line": 54,
-          "column": 1,
-          "lines": 365,
-          "parameters": 0,
-          "complexity": 18,
-          "nesting_depth": 3
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/build/RegistryBuild.tsx": {
-      "file_lines": 610,
-      "max_function_lines": 547,
-      "max_parameters": 2,
-      "max_complexity": 25,
-      "max_nesting_depth": 4,
-      "over_limit_functions": [
-        {
-          "name": "RegistryBuild",
-          "line": 64,
-          "column": 1,
-          "lines": 547,
-          "parameters": 1,
-          "complexity": 25,
-          "nesting_depth": 2
-        },
-        {
-          "name": "RegistryBuild.isCurrent",
-          "line": 131,
-          "column": 16,
-          "lines": 28,
-          "parameters": 1,
-          "complexity": 25,
-          "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/build/SkillsBuild.tsx": {
-      "file_lines": 343,
-      "max_function_lines": 301,
-      "max_parameters": 2,
-      "max_complexity": 18,
-      "max_nesting_depth": 3,
-      "over_limit_functions": [
-        {
-          "name": "SkillsBuild",
-          "line": 39,
-          "column": 1,
-          "lines": 301,
-          "parameters": 1,
-          "complexity": 18,
-          "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/build/SkillsTable.tsx": {
-      "file_lines": 148,
-      "max_function_lines": 103,
-      "max_parameters": 2,
-      "max_complexity": 6,
-      "max_nesting_depth": 2,
-      "over_limit_functions": [
-        {
-          "name": "SkillsTable",
-          "line": 46,
-          "column": 1,
-          "lines": 103,
-          "parameters": 1,
-          "complexity": 5,
-          "nesting_depth": 1
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/build/SpawnRulesBuild.tsx": {
-      "file_lines": 158,
-      "max_function_lines": 142,
-      "max_parameters": 3,
-      "max_complexity": 12,
-      "max_nesting_depth": 2,
-      "over_limit_functions": [
-        {
-          "name": "SpawnRulesBuild",
-          "line": 17,
-          "column": 1,
-          "lines": 142,
-          "parameters": 0,
-          "complexity": 12,
-          "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/BuildView.tsx": {
-      "file_lines": 287,
-      "max_function_lines": 187,
-      "max_parameters": 1,
-      "max_complexity": 23,
-      "max_nesting_depth": 1,
-      "over_limit_functions": [
-        {
-          "name": "BuildView",
-          "line": 93,
-          "column": 1,
-          "lines": 187,
-          "parameters": 0,
-          "complexity": 23,
-          "nesting_depth": 1
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
     "apps/worker/src/components/CameraDiscoverySettings.tsx": {
       "file_lines": 118,
       "max_function_lines": 98,
@@ -433,72 +103,6 @@
           "lines": 98,
           "parameters": 0,
           "complexity": 10,
-          "nesting_depth": 1
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/ChannelsView.tsx": {
-      "file_lines": 2141,
-      "max_function_lines": 817,
-      "max_parameters": 3,
-      "max_complexity": 57,
-      "max_nesting_depth": 4,
-      "over_limit_functions": [
-        {
-          "name": "ChannelsView",
-          "line": 140,
-          "column": 1,
-          "lines": 817,
-          "parameters": 0,
-          "complexity": 15,
-          "nesting_depth": 1
-        },
-        {
-          "name": "ChannelsView.submitBinding",
-          "line": 635,
-          "column": 3,
-          "lines": 94,
-          "parameters": 0,
-          "complexity": 18,
-          "nesting_depth": 4
-        },
-        {
-          "name": "ConnectChannelForm",
-          "line": 1051,
-          "column": 1,
-          "lines": 125,
-          "parameters": 1,
-          "complexity": 8,
-          "nesting_depth": 1
-        },
-        {
-          "name": "ChannelDetail",
-          "line": 1208,
-          "column": 1,
-          "lines": 618,
-          "parameters": 1,
-          "complexity": 57,
-          "nesting_depth": 2
-        },
-        {
-          "name": "GatewaySessionRecovery",
-          "line": 1827,
-          "column": 1,
-          "lines": 100,
-          "parameters": 1,
-          "complexity": 8,
-          "nesting_depth": 1
-        },
-        {
-          "name": "ChannelSendTest",
-          "line": 2025,
-          "column": 1,
-          "lines": 117,
-          "parameters": 1,
-          "complexity": 6,
           "nesting_depth": 1
         }
       ],
@@ -714,8 +318,8 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/ChatView.tsx": {
-      "file_lines": 1324,
-      "max_function_lines": 1240,
+      "file_lines": 1323,
+      "max_function_lines": 1239,
       "max_parameters": 3,
       "max_complexity": 100,
       "max_nesting_depth": 4,
@@ -724,7 +328,7 @@
           "name": "ChatView",
           "line": 85,
           "column": 1,
-          "lines": 1240,
+          "lines": 1239,
           "parameters": 1,
           "complexity": 100,
           "nesting_depth": 4
@@ -740,7 +344,7 @@
         },
         {
           "name": "ChatView.reattach",
-          "line": 656,
+          "line": 657,
           "column": 3,
           "lines": 67,
           "parameters": 3,
@@ -749,7 +353,7 @@
         },
         {
           "name": "ChatView.acceptLiveEvent",
-          "line": 724,
+          "line": 725,
           "column": 3,
           "lines": 61,
           "parameters": 2,
@@ -758,11 +362,11 @@
         }
       ],
       "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-20: named-agent turn selection moved into a bounded hook while ChatView stayed at the 1325-line file ratchet; send fell from 111/34 to 109/32 and the unchanged reattach/live-event functions moved with the extraction.",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/CommandPalette.tsx": {
-      "file_lines": 564,
+      "file_lines": 554,
       "max_function_lines": 329,
       "max_parameters": 2,
       "max_complexity": 13,
@@ -770,7 +374,7 @@
       "over_limit_functions": [
         {
           "name": "CommandPalette",
-          "line": 92,
+          "line": 78,
           "column": 1,
           "lines": 329,
           "parameters": 1,
@@ -839,27 +443,6 @@
           "parameters": 0,
           "complexity": 39,
           "nesting_depth": 3
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/EvaluationsView.tsx": {
-      "file_lines": 578,
-      "max_function_lines": 390,
-      "max_parameters": 2,
-      "max_complexity": 26,
-      "max_nesting_depth": 3,
-      "over_limit_functions": [
-        {
-          "name": "EvaluationsView",
-          "line": 56,
-          "column": 1,
-          "lines": 390,
-          "parameters": 0,
-          "complexity": 26,
-          "nesting_depth": 2
         }
       ],
       "owner": "worker-maintainers",
@@ -950,45 +533,6 @@
       "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"
     },
-    "apps/worker/src/components/IntegrationsView.tsx": {
-      "file_lines": 1526,
-      "max_function_lines": 707,
-      "max_parameters": 4,
-      "max_complexity": 34,
-      "max_nesting_depth": 3,
-      "over_limit_functions": [
-        {
-          "name": "IntegrationsView",
-          "line": 101,
-          "column": 1,
-          "lines": 707,
-          "parameters": 0,
-          "complexity": 22,
-          "nesting_depth": 2
-        },
-        {
-          "name": "IntegrationsView.connect",
-          "line": 376,
-          "column": 3,
-          "lines": 60,
-          "parameters": 1,
-          "complexity": 17,
-          "nesting_depth": 2
-        },
-        {
-          "name": "IntegrationRow",
-          "line": 809,
-          "column": 1,
-          "lines": 164,
-          "parameters": 1,
-          "complexity": 34,
-          "nesting_depth": 3
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-19: 1533->1526 and IntegrationRow 172->164 lines / 37->34 complexity, LOWERED while adding the capability-layer tabs. The tabs deliberately live in a WRAPPER (integrations/IntegrationsSurface.tsx) rather than inside this component: adding four tabs here would have meant raising a ratchet to make room for the thing the ratchet exists to discourage. The reduction itself is real, not accounting - the row's Enabled tools block became integrations/ConnectionSurface.tsx, which also fixed the row meta counting raw provider verbs where the kernel had been sending canonical capabilities all along. IntegrationsView keeps ZERO parameters: passing the tab strip in was tried and the trusted-baseline check refuses growth in any per-function metric, limit or no limit, so the strip owns its own selection instead (integrations/IntegrationsTabs.tsx). That is the better shape anyway - both places that render the page heading get the same strip with no state to keep in step.",
-      "expires": "2026-12-31"
-    },
     "apps/worker/src/components/jarvis/JarvisRenderer.ts": {
       "file_lines": 728,
       "max_function_lines": 130,
@@ -1025,48 +569,6 @@
           "parameters": 1,
           "complexity": 16,
           "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/knowledge/KnowledgeView.tsx": {
-      "file_lines": 631,
-      "max_function_lines": 469,
-      "max_parameters": 2,
-      "max_complexity": 40,
-      "max_nesting_depth": 3,
-      "over_limit_functions": [
-        {
-          "name": "KnowledgeView",
-          "line": 93,
-          "column": 1,
-          "lines": 469,
-          "parameters": 0,
-          "complexity": 40,
-          "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/knowledge/RemembersTab.tsx": {
-      "file_lines": 170,
-      "max_function_lines": 110,
-      "max_parameters": 2,
-      "max_complexity": 7,
-      "max_nesting_depth": 2,
-      "over_limit_functions": [
-        {
-          "name": "RemembersTab",
-          "line": 61,
-          "column": 1,
-          "lines": 110,
-          "parameters": 0,
-          "complexity": 7,
-          "nesting_depth": 1
         }
       ],
       "owner": "worker-maintainers",
@@ -1133,387 +635,6 @@
       "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"
     },
-    "apps/worker/src/components/OperationsView.tsx": {
-      "file_lines": 1282,
-      "max_function_lines": 443,
-      "max_parameters": 2,
-      "max_complexity": 72,
-      "max_nesting_depth": 4,
-      "over_limit_functions": [
-        {
-          "name": "HomeView",
-          "line": 44,
-          "column": 1,
-          "lines": 94,
-          "parameters": 1,
-          "complexity": 7,
-          "nesting_depth": 2
-        },
-        {
-          "name": "Posture",
-          "line": 185,
-          "column": 1,
-          "lines": 443,
-          "parameters": 0,
-          "complexity": 72,
-          "nesting_depth": 4
-        },
-        {
-          "name": "Audit",
-          "line": 629,
-          "column": 1,
-          "lines": 159,
-          "parameters": 0,
-          "complexity": 18,
-          "nesting_depth": 2
-        },
-        {
-          "name": "Budgets",
-          "line": 804,
-          "column": 1,
-          "lines": 180,
-          "parameters": 0,
-          "complexity": 3,
-          "nesting_depth": 1
-        },
-        {
-          "name": "MemoryProjectionDeliveryCard",
-          "line": 1062,
-          "column": 1,
-          "lines": 86,
-          "parameters": 1,
-          "complexity": 8,
-          "nesting_depth": 4
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/OrganisationDirectorySections.tsx": {
-      "file_lines": 531,
-      "max_function_lines": 227,
-      "max_parameters": 2,
-      "max_complexity": 12,
-      "max_nesting_depth": 2,
-      "over_limit_functions": [
-        {
-          "name": "AdminDirectory",
-          "line": 64,
-          "column": 1,
-          "lines": 182,
-          "parameters": 1,
-          "complexity": 2,
-          "nesting_depth": 0
-        },
-        {
-          "name": "InvitationAdministration",
-          "line": 247,
-          "column": 1,
-          "lines": 227,
-          "parameters": 1,
-          "complexity": 5,
-          "nesting_depth": 0
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/OrganisationView.tsx": {
-      "file_lines": 100,
-      "max_function_lines": 78,
-      "max_parameters": 1,
-      "max_complexity": 20,
-      "max_nesting_depth": 1,
-      "over_limit_functions": [
-        {
-          "name": "OrganisationView",
-          "line": 21,
-          "column": 1,
-          "lines": 78,
-          "parameters": 0,
-          "complexity": 20,
-          "nesting_depth": 1
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/OrganisationWorkspaceSections.tsx": {
-      "file_lines": 762,
-      "max_function_lines": 287,
-      "max_parameters": 2,
-      "max_complexity": 8,
-      "max_nesting_depth": 2,
-      "over_limit_functions": [
-        {
-          "name": "OrganisationPolicy",
-          "line": 50,
-          "column": 1,
-          "lines": 159,
-          "parameters": 1,
-          "complexity": 4,
-          "nesting_depth": 1
-        },
-        {
-          "name": "WorkspaceAdministration",
-          "line": 210,
-          "column": 1,
-          "lines": 148,
-          "parameters": 1,
-          "complexity": 6,
-          "nesting_depth": 0
-        },
-        {
-          "name": "WorkspaceMemberPanel",
-          "line": 359,
-          "column": 1,
-          "lines": 287,
-          "parameters": 1,
-          "complexity": 8,
-          "nesting_depth": 1
-        },
-        {
-          "name": "WorkspaceMemberRow",
-          "line": 647,
-          "column": 1,
-          "lines": 84,
-          "parameters": 1,
-          "complexity": 5,
-          "nesting_depth": 1
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/ParityViews.tsx": {
-      "file_lines": 1577,
-      "max_function_lines": 408,
-      "max_parameters": 2,
-      "max_complexity": 28,
-      "max_nesting_depth": 4,
-      "over_limit_functions": [
-        {
-          "name": "RunsView",
-          "line": 45,
-          "column": 1,
-          "lines": 209,
-          "parameters": 0,
-          "complexity": 23,
-          "nesting_depth": 1
-        },
-        {
-          "name": "WorkView",
-          "line": 287,
-          "column": 1,
-          "lines": 255,
-          "parameters": 0,
-          "complexity": 13,
-          "nesting_depth": 3
-        },
-        {
-          "name": "WorkDetail",
-          "line": 563,
-          "column": 1,
-          "lines": 218,
-          "parameters": 1,
-          "complexity": 16,
-          "nesting_depth": 1
-        },
-        {
-          "name": "WorkDetail.mutate",
-          "line": 659,
-          "column": 3,
-          "lines": 64,
-          "parameters": 2,
-          "complexity": 18,
-          "nesting_depth": 4
-        },
-        {
-          "name": "AgentsView",
-          "line": 844,
-          "column": 1,
-          "lines": 213,
-          "parameters": 0,
-          "complexity": 23,
-          "nesting_depth": 0
-        },
-        {
-          "name": "MemoryView",
-          "line": 1138,
-          "column": 1,
-          "lines": 408,
-          "parameters": 0,
-          "complexity": 28,
-          "nesting_depth": 1
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-20: extracted typed channel-origin facts, lowering the file 1588→1577 lines, RunsView 212→209 lines and complexity 25→23, and WorkDetail 226→218 lines and complexity 23→16.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/PermanentFleetTopology.tsx": {
-      "file_lines": 1139,
-      "max_function_lines": 434,
-      "max_parameters": 3,
-      "max_complexity": 40,
-      "max_nesting_depth": 3,
-      "over_limit_functions": [
-        {
-          "name": "PermanentFleetTopology",
-          "line": 410,
-          "column": 1,
-          "lines": 434,
-          "parameters": 1,
-          "complexity": 40,
-          "nesting_depth": 1
-        },
-        {
-          "name": "FleetInspector",
-          "line": 954,
-          "column": 1,
-          "lines": 131,
-          "parameters": 1,
-          "complexity": 33,
-          "nesting_depth": 3
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/routine/graphChecks.ts": {
-      "file_lines": 258,
-      "max_function_lines": 74,
-      "max_parameters": 2,
-      "max_complexity": 19,
-      "max_nesting_depth": 4,
-      "over_limit_functions": [
-        {
-          "name": "checkGraph",
-          "line": 63,
-          "column": 1,
-          "lines": 74,
-          "parameters": 1,
-          "complexity": 19,
-          "nesting_depth": 3
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/routine/predicates.ts": {
-      "file_lines": 306,
-      "max_function_lines": 57,
-      "max_parameters": 3,
-      "max_complexity": 31,
-      "max_nesting_depth": 4,
-      "over_limit_functions": [
-        {
-          "name": "comparePredicate",
-          "line": 69,
-          "column": 1,
-          "lines": 57,
-          "parameters": 3,
-          "complexity": 31,
-          "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/routine/RoutineCanvas.tsx": {
-      "file_lines": 755,
-      "max_function_lines": 619,
-      "max_parameters": 2,
-      "max_complexity": 28,
-      "max_nesting_depth": 5,
-      "over_limit_functions": [
-        {
-          "name": "RoutineCanvas",
-          "line": 137,
-          "column": 1,
-          "lines": 619,
-          "parameters": 1,
-          "complexity": 13,
-          "nesting_depth": 3
-        },
-        {
-          "name": "RoutineCanvas.useEffect[0].onKey",
-          "line": 341,
-          "column": 5,
-          "lines": 30,
-          "parameters": 1,
-          "complexity": 20,
-          "nesting_depth": 2
-        },
-        {
-          "name": "RoutineCanvas.chromeFor",
-          "line": 385,
-          "column": 3,
-          "lines": 82,
-          "parameters": 1,
-          "complexity": 28,
-          "nesting_depth": 5
-        },
-        {
-          "name": "RoutineCanvas.steps.map[0]",
-          "line": 638,
-          "column": 20,
-          "lines": 113,
-          "parameters": 1,
-          "complexity": 21,
-          "nesting_depth": 1
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/routine/StepInspector.tsx": {
-      "file_lines": 670,
-      "max_function_lines": 288,
-      "max_parameters": 5,
-      "max_complexity": 25,
-      "max_nesting_depth": 4,
-      "over_limit_functions": [
-        {
-          "name": "StepInspector",
-          "line": 65,
-          "column": 1,
-          "lines": 288,
-          "parameters": 1,
-          "complexity": 22,
-          "nesting_depth": 1
-        },
-        {
-          "name": "buildFacts",
-          "line": 356,
-          "column": 1,
-          "lines": 80,
-          "parameters": 5,
-          "complexity": 25,
-          "nesting_depth": 4
-        },
-        {
-          "name": "PredicateEditor",
-          "line": 574,
-          "column": 1,
-          "lines": 91,
-          "parameters": 1,
-          "complexity": 11,
-          "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
     "apps/worker/src/components/settings/CompactSections.tsx": {
       "file_lines": 622,
       "max_function_lines": 144,
@@ -1541,7 +662,7 @@
         }
       ],
       "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion. 2026-08-21 (+6): the adoption announcement fired after a successful companion save - the explicit novelty affordance; the emotion relay throttles it server-side. 2026-08-21: LOWERED 632 -> 622 - the companion save/rollback/adoption-announcement moved to companionSave.ts, which also took useAppearanceSettings back under the function floor.",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/settings/HealthSection.tsx": {
@@ -1595,27 +716,6 @@
       "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"
     },
-    "apps/worker/src/components/settings/OvernightSection.tsx": {
-      "file_lines": 207,
-      "max_function_lines": 125,
-      "max_parameters": 2,
-      "max_complexity": 15,
-      "max_nesting_depth": 2,
-      "over_limit_functions": [
-        {
-          "name": "OvernightSection",
-          "line": 48,
-          "column": 1,
-          "lines": 125,
-          "parameters": 1,
-          "complexity": 15,
-          "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
     "apps/worker/src/components/settings/SpendingSection.tsx": {
       "file_lines": 187,
       "max_function_lines": 135,
@@ -1638,8 +738,8 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/Shell.tsx": {
-      "file_lines": 507,
-      "max_function_lines": 380,
+      "file_lines": 505,
+      "max_function_lines": 379,
       "max_parameters": 2,
       "max_complexity": 7,
       "max_nesting_depth": 2,
@@ -1648,7 +748,7 @@
           "name": "Sidebar",
           "line": 67,
           "column": 1,
-          "lines": 380,
+          "lines": 379,
           "parameters": 1,
           "complexity": 7,
           "nesting_depth": 1
@@ -1786,3 +886,4 @@
     }
   }
 }
+

@@ -8,6 +8,7 @@ explicit non-UI classification with a documented boundary.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 
 Route = tuple[str, str]
@@ -28,6 +29,32 @@ class IndirectWorkerSurface:
 
 
 WORKER_ROUTES: dict[Route, WorkerSurface] = {}
+
+# Routes whose Worker surface was REMOVED when the product narrowed to what a
+# Hermes cell can serve. They are recorded rather than deleted: 155 of 252
+# governed routes went at once, and a register that simply got shorter would
+# leave nothing able to say what it used to cover or why it stopped.
+#
+# Every one of these is a console over the Boltrig kernel - runs, fleet
+# topology, integrations, evaluations, the registry - and a cell has no kernel
+# behind it. The components were deleted rather than left rendering an empty
+# frame, so these routes have no caller in this tree at all.
+RETIRED_WORKER_ROUTES: dict[Route, WorkerSurface] = {}
+
+
+def _retired(source: str, declarations: str) -> None:
+    """Record a route whose Worker surface no longer exists.
+
+    Deliberately NOT added to WORKER_ROUTES: the gates over that mapping assert
+    that every entry names a file somebody can open, and weakening them to
+    tolerate absent sources would retire the check rather than the route.
+    """
+
+    for declaration in declarations.strip().splitlines():
+        method, path, sdk_method = declaration.split()
+        RETIRED_WORKER_ROUTES[(method, path)] = WorkerSurface(
+            sdk_method=sdk_method, source=source,
+        )
 
 
 def _surface(source: str, declarations: str) -> None:
@@ -71,7 +98,7 @@ POST /v1/search federatedSearch
 # The doctrine's own review surface (A5/B). These were classified operator-only
 # for exactly one commit, while the routes existed and nothing read them; the
 # Integrations page's Capabilities / Rules / Review tabs read them now.
-_surface(
+_retired(
     # The hook, not the panel: the queue's state and its governed decision lane
     # were extracted so the approval handling could be read on its own, and the
     # read lives with them.
@@ -80,13 +107,13 @@ _surface(
 GET /v1/capability-bindings capabilityBindings
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/integrations/CapabilityCataloguePanel.tsx",
     """
 GET /v1/capability-catalogue capabilityCatalogue
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/integrations/RoutingRulesPanel.tsx",
     """
 GET /v1/routing-policies routingPolicies
@@ -321,13 +348,13 @@ _surface(
 POST /v1/auth/logout logout
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/OrganisationView.tsx",
     """
 GET /v1/orgs/current currentOrg
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/OrganisationDirectorySections.tsx",
     """
 GET /v1/orgs/current/members orgMembers
@@ -338,7 +365,7 @@ POST /v1/admin/invitations createInvitation
 DELETE /v1/admin/invitations/{invite_id} revokeInvitation
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/OrganisationWorkspaceSections.tsx",
     """
 PATCH /v1/orgs/current updateCurrentOrg
@@ -350,7 +377,7 @@ POST /v1/workspaces/{workspace_id}/members addWorkspaceMember
 DELETE /v1/workspaces/{workspace_id}/members/{user_id} removeWorkspaceMember
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/OperationsView.tsx",
     """
 GET /readyz readiness
@@ -372,7 +399,7 @@ _surface(
 GET /v1/backup/status backupStatus
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/ParityViews.tsx",
     """
 GET /v1/runs runs
@@ -398,7 +425,7 @@ POST /v1/memory/ingest memoryIngest
 GET /v1/memory/ingestions memoryIngestions
 """,
 )
-_surface(
+_retired(
     # The candidate review queue was extracted out of `ParityViews` when the
     # capability-doctrine merge pushed `MemoryView` past the Worker structural
     # ratchet. Exactly these three routes moved with it and nothing else did:
@@ -419,7 +446,7 @@ GET /v1/knowledge/providers knowledgeProviders
 POST /v1/knowledge/providers/{provider_id} setKnowledgeProvider
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/knowledge/KnowledgeView.tsx",
     """
 GET /v1/knowledge/assets knowledgeAssets
@@ -432,28 +459,28 @@ PUT /v1/knowledge/uploads/{upload_id} uploadKnowledge
 POST /v1/knowledge/uploads/{upload_id}/commit uploadKnowledge
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/PermanentFleetTopology.tsx",
     """
 GET /v1/permanent-fleet permanentFleet
 PUT /v1/permanent-fleet applyPermanentFleet
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/build/CapabilityRunner.tsx",
     """
 POST /v1/invoke invoke
 GET /v1/invoke/approvals/{request_id} invokeApprovalState
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/build/SpawnRulesBuild.tsx",
     """
 GET /v1/spawn-rules spawnRules
 POST /v1/spawn-rules/simulate simulateSpawnRules
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/AutomationView.tsx",
     """
 GET /v1/capabilities capabilities
@@ -479,7 +506,7 @@ POST /v1/workflows/{wf_id}/triggers/{trigger_id}/rotate rotateWorkflowTriggerSec
 GET /v1/workflows/{wf_id}/triggers/{trigger_id}/deliveries workflowTriggerDeliveries
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/build/SkillsBuild.tsx",
     """
 GET /v1/skills skills
@@ -494,7 +521,7 @@ POST /v1/skills/{skill_id:path}/restore restoreSkill
 POST /v1/skills/{skill_id:path}/test-spawn testSpawn
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/build/RegistryBuild.tsx",
     """
 GET /v1/nouns nouns
@@ -510,7 +537,7 @@ POST /v1/verbs/{verb_id}/restore restoreVerb
 POST /v1/verbs/{verb_id}/binding setBinding
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/build/AdaptersBuild.tsx",
     """
 GET /v1/adapters adapters
@@ -522,7 +549,7 @@ DELETE /v1/adapters/{adapter_id} deleteAdapter
 POST /v1/mcp/servers registerMcpServer
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/build/McpServersBuild.tsx",
     """
 GET /v1/mcp/servers mcpServers
@@ -536,13 +563,13 @@ POST /v1/mcp/servers/{server_id}/retire retireMcpServer
 POST /v1/mcp/servers/{server_id}/restore restoreMcpServer
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/build/RecentlyChanged.tsx",
     """
 GET /v1/capabilities/changelog capabilityChangelog
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/build/ModelEndpointsBuild.tsx",
     """
 GET /v1/model-endpoints modelEndpoints
@@ -552,7 +579,7 @@ POST /v1/model-endpoints/{endpoint_id}/retire retireModelEndpoint
 POST /v1/model-endpoints/{endpoint_id}/restore restoreModelEndpoint
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/ChannelsView.tsx",
     """
 GET /v1/channels channels
@@ -569,7 +596,7 @@ POST /v1/channels/{channel_id}/deliveries/{message_id}/retry retryChannelDeliver
 POST /v1/channels/{channel_id}/pair pairChannel
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/EvaluationsView.tsx",
     """
 GET /v1/eval/cases evalCases
@@ -589,7 +616,7 @@ POST /v1/hitl/{request_id}/respond respondHitl
 POST /v1/hitl/{question_id}/answer answerQuestion
 """,
 )
-_surface(
+_retired(
     "apps/worker/src/components/IntegrationsView.tsx",
     """
 GET /v1/addons addons
@@ -854,3 +881,24 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 # the sign-in screen). An exact census, not a ratchet: it must equal the
 # routes the app actually serves, so it moves when the surface does.
 EXPECTED_ROUTE_COUNT = 306
+
+
+def assert_surface_retired(relative: str, *obligations: str) -> None:
+    """A UI invariant whose surface was removed when the product narrowed.
+
+    NOT A SKIP. A skipped test is a test nobody notices going stale; this one
+    asserts the component really is absent, and NAMES the copy obligations that
+    were binding on it. Restore the component and this fails, pointing at
+    exactly what has to come back with it - which is the opposite of a silently
+    weakened invariant.
+
+    The backend half of these invariants is untouched and still asserted by the
+    caller: what went is the surface that rendered them, not the rule.
+    """
+
+    path = Path(__file__).resolve().parents[1] / relative
+    assert not path.exists(), (
+        f"{relative} exists again - restore its copy invariants: "
+        + "; ".join(obligations)
+    )
+

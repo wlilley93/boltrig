@@ -41,8 +41,25 @@ from vds_ledger_support import (  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ".vds/config.toml"
 ROUTE_SOURCE_PATH = "docs/design/evidence/2026-08-11-console-parity/current/vds-route-manifest.json"
-MIN_SCREEN_FILES = 10
-MIN_ROUTE_FILES = 6
+# ANTI-VACUITY FLOOR, NOT A COVERAGE TARGET. It exists so a screen glob that
+# has silently stopped matching - a renamed directory, a moved component - fails
+# loudly instead of letting the ledger check pass over an empty set.
+#
+# LOWERED 10 -> 5 ON 2026-08-25, AND THE COVERAGE DID FALL. Saying so is the
+# point: the worker UI went from 17 screens to 7 when the routes a Hermes cell
+# cannot serve were removed, because every one of them is a console over the
+# Boltrig kernel and a cell has no kernel. Six files match today. Five still
+# catches a glob that breaks entirely, and most ways one breaks partly.
+#
+# If this number is ever edited again, the question to answer first is the one
+# answered here: did the instrument break, or did the surface really shrink?
+MIN_SCREEN_FILES = 5
+# The same anti-vacuity floor as MIN_SCREEN_FILES, and lowered 6 -> 3 on the
+# same day for the same reason: Integrations and the permanent fleet topology
+# were retired from the parity programme because a Hermes cell has no kernel to
+# put a console over, so the declared route set fell from six to four. Three
+# still catches a route manifest that has emptied itself out.
+MIN_ROUTE_FILES = 3
 DEFAULT_CAPTURE_SOURCE_SCOPE = (
     "apps/worker/src",
     "apps/worker/tests/visual",

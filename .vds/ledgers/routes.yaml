@@ -1,12 +1,10 @@
 schemaVersion: 1
 generatedBy: Boltrig deterministic seven-state current capture harness
-takenAt: 2026-08-22T16:31:51Z
-source: docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json (sha256:c5357ee128a161dc78c5a18f6a87253c7bc84f093eac55e590d18c337b299794) and metrics.json (sha256:14482e512a5439659b3812e1cbe0c33e06e2a08b9e5836e91e7cba44d9ac451d)
+takenAt: 2026-08-25T04:35:55Z
+source: docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json (sha256:ff4e89ffc2c5860a07b1540ab99904aab662eaeb114c82ebb7ed67ebc7b1fffd) and metrics.json (sha256:ae5e2e56b149eb4cc4c2fdc4cd83f680307e46fce82db432e0a0e369a229b0eb)
 routes:
 - apps/worker/src/components/ChatView.tsx
 - apps/worker/src/components/CommandPalette.tsx
-- apps/worker/src/components/IntegrationsView.tsx
-- apps/worker/src/components/PermanentFleetTopology.tsx
 - apps/worker/src/components/SettingsSurface.tsx
 - apps/worker/src/components/VoiceCall.tsx
 doesNotCover:
@@ -14,4 +12,5 @@ doesNotCover:
 - SCR-0007 / Figma node 13:2 has no non-invented frameDigest and cannot occupy a second route-scoped visual-review slot.
 - This captured-unreviewed route manifest carries no frameDigest, sign-off, conformity verdict or visual-review authority.
 - There is no signed full-frame target for New chat; routes without a 2026-08-11 Figma CURRENT SOURCE frame are outside this parity programme.
-contentDigest: sha256:2d58526db97395bfeaec3a0e99c806a489037ca123d3a82cd7d342d46df4f0cb
+- 'Integrations and the permanent fleet topology are retired from this programme: both are consoles over the Boltrig kernel, a Hermes cell has no kernel, and the components were removed from the surface rather than left rendering nothing. Their route coverage is withdrawn rather than carried as a claim about files that no longer exist.'
+contentDigest: sha256:8ed254b737efa640e4ca8155028409b96e5131b9893e1c52115257ca70a4a711

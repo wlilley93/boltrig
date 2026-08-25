@@ -39,10 +39,5 @@ export function RoutineRunBanner({ provenance }: {
       <strong>Automatic routine</strong>
       <small>{provenance.source_ref ?? "Routine"} · {companion}</small>
     </span>
-    {provenance.source_run_id && (
-      <button className="text-button" onClick={() => navigate("runs")} type="button">
-        View in Runs
-      </button>
-    )}
   </section>;
 }

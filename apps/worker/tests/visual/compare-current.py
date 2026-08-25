@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare source-bound current Worker captures to the seven Figma exports.
+"""Compare source-bound current Worker captures to their Figma exports.
 
 This writes only beneath the manifest's ``current_capture_root`` and deliberately
 does not issue an authority or VDS verdict.
@@ -63,8 +63,14 @@ def source_tree_digest() -> str:
 def load_plan() -> tuple[dict[str, Any], list[dict[str, Any]], Path]:
     manifest = json.loads(STATES_PATH.read_text(encoding="utf-8"))
     governed_ids = manifest["governed_state_ids"]
-    if len(governed_ids) != 7 or len(set(governed_ids)) != 7:
-        raise ValueError("states.json must declare exactly seven unique governed states")
+    # NOT A FIXED SEVEN ANY MORE. The count was a proxy; UNIQUENESS is the
+    # invariant it was standing in for, because a repeated id would compare one
+    # state twice and report the second pass as coverage. agents, plugins and
+    # call were retired when the routes a cell can serve were narrowed, so a
+    # hard 7 now refuses a manifest that is correct - see `retired_state_ids`
+    # in states.json for which went and why.
+    if not governed_ids or len(set(governed_ids)) != len(governed_ids):
+        raise ValueError("states.json must declare a non-empty set of unique governed states")
     by_id = {state["id"]: state for state in manifest["states"]}
     states = []
     for state_id in governed_ids:
@@ -250,7 +256,7 @@ def main() -> None:
     parser.add_argument(
         "--check-plan",
         action="store_true",
-        help="validate the seven target/current mappings without requiring captures",
+        help="validate the target/current mappings without requiring captures",
     )
     args = parser.parse_args()
     manifest, states, current_root = load_plan()

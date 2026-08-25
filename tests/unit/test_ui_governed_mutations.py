@@ -28,6 +28,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.worker_surface_ledger import RETIRED_WORKER_ROUTES
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKER = ROOT / "apps" / "worker" / "src"
@@ -68,14 +69,23 @@ def test_high_control_mutations_render_the_pending_human_contract() -> None:
         "so the checks below would pass over an empty tree"
     )
 
+    # A high-control mutation with no callsite is acceptable ONLY when the
+    # register says its surface was retired. That keeps the original meaning of
+    # this gate - a mutation must not become unreachable by accident - while
+    # admitting the ones that became unreachable ON PURPOSE, on the record.
+    retired_methods = {
+        surface.sdk_method for surface in RETIRED_WORKER_ROUTES.values()
+    }
     unrouted: list[str] = []
     for method in HIGH_CONTROL_MUTATIONS:
         callsites = _callsites(method)
-        assert callsites, (
-            f"no Worker component calls client.{method} - either the mutation "
-            "moved and this list is stale, or the surface was dropped and the "
-            "capability is now unreachable"
-        )
+        if not callsites:
+            assert method in retired_methods, (
+                f"no Worker component calls client.{method} - either the mutation "
+                "moved and this list is stale, or the surface was dropped and the "
+                "capability is now unreachable with nothing recording it"
+            )
+            continue
         for path in callsites:
             source = path.read_text(encoding="utf-8")
             if not any(signal in source for signal in GOVERNED_SIGNALS):

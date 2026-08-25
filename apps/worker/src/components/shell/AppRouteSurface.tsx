@@ -3,33 +3,16 @@ import { lazy, Suspense } from "react";
 import type { SettingsSection } from "../../settingsSections";
 import type { WorkerRoute } from "../../routes";
 import { hasDesktopRuntime } from "../../desktop";
-import { MobileToday } from "../MobileToday";
 import type { WorkerIdentity } from "../WorkerGlobalContext";
 
-const AgentsView = lazyNamed(() => import("../ParityViews"), "AgentsView");
 const ChatView = lazyNamed(() => import("../ChatView"), "ChatView");
 const LocalChatView = lazyNamed(() => import("../LocalChatView"), "LocalChatView");
-const RoutinesView = lazyNamed(() => import("../RoutinesView"), "RoutinesView");
-const BuildView = lazyNamed(() => import("../BuildView"), "BuildView");
-const BrowserWorkspace = lazyNamed(
-  () => import("../browser/BrowserWorkspace"),
-  "BrowserWorkspace",
-);
-const ChannelsView = lazyNamed(() => import("../ChannelsView"), "ChannelsView");
-const EvaluationsView = lazyNamed(() => import("../EvaluationsView"), "EvaluationsView");
-const HomeView = lazyNamed(() => import("../OperationsView"), "HomeView");
-const IntegrationsSurface = lazyNamed(() => import("../integrations/IntegrationsSurface"), "IntegrationsSurface");
-const KnowledgeView = lazyNamed(() => import("../ParityViews"), "KnowledgeView");
-const MemoryView = lazyNamed(() => import("../ParityViews"), "MemoryView");
 const MobileSettings = lazyNamed(() => import("../MobileSettings"), "MobileSettings");
-const OrganisationView = lazyNamed(() => import("../OrganisationView"), "OrganisationView");
-const RunsView = lazyNamed(() => import("../ParityViews"), "RunsView");
 const SettingsView = lazyNamed(() => import("../Views"), "SettingsView");
 const SettingsSearchResults = lazyNamed(
   () => import("../settings/SearchResults"),
   "SettingsSearchResults",
 );
-const WorkView = lazyNamed(() => import("../ParityViews"), "WorkView");
 
 interface AppRouteSurfaceProps {
   identity: WorkerIdentity | null;
@@ -57,77 +40,38 @@ export function AppRouteSurface(props: AppRouteSurfaceProps) {
 }
 
 function RouteContent(props: AppRouteSurfaceProps) {
-  if (CORE_ROUTES.has(props.route)) return <CoreRoute {...props} />;
-  return <SupportingRoute {...props} />;
-}
-
-const CORE_ROUTES = new Set<WorkerRoute>([
-  "home", "chat", "automations", "channels", "build", "browser", "evaluations", "integrations",
-]);
-
-function CoreRoute(props: AppRouteSurfaceProps) {
   switch (props.route) {
-    case "home": return <HomeRoute {...props} />;
-    case "chat": return hasDesktopRuntime() ? <LocalChatView
-      conversationId={props.selectedConversation}
-      onCommandPalette={props.onCommandPalette}
-      onConversation={props.onConversation}
-      onChanged={props.onChanged}
-      onWorkingChange={props.onWorkingChange}
-    /> : <ChatView
-        conversationId={props.selectedConversation}
-        onCommandPalette={props.onCommandPalette}
-        onConversation={props.onConversation}
-        onChanged={props.onChanged}
-        onWorkingChange={props.onWorkingChange}
-      />;
-    case "automations": return <RoutinesView />;
-    case "channels": return <ChannelsView />;
-    case "build": return <BuildView />;
-    case "browser": return <BrowserWorkspace />;
-    case "evaluations": return <EvaluationsView />;
-    case "integrations": return <IntegrationsSurface />;
-    default: return null;
+    case "chat":
+      return hasDesktopRuntime()
+        ? <LocalChatView
+            conversationId={props.selectedConversation}
+            onChanged={props.onChanged}
+            onCommandPalette={props.onCommandPalette}
+            onConversation={props.onConversation}
+            onWorkingChange={props.onWorkingChange}
+          />
+        : <ChatView
+            conversationId={props.selectedConversation}
+            onChanged={props.onChanged}
+            onCommandPalette={props.onCommandPalette}
+            onConversation={props.onConversation}
+            onWorkingChange={props.onWorkingChange}
+          />;
+    case "settings":
+      return <SettingsRoute {...props} />;
+    case "account":
+      return <SettingsView section="you" />;
+    default:
+      return null;
   }
-}
-
-function SupportingRoute(props: AppRouteSurfaceProps) {
-  switch (props.route) {
-    case "organisation": return <OrganisationView />;
-    case "settings": return <SettingsRoute {...props} />;
-    case "account": return <SettingsView section="you" />;
-    case "runs": return <RunsView />;
-    case "work": return <WorkView />;
-    case "agents": return <AgentsView />;
-    case "knowledge": return <KnowledgeView />;
-    case "memory": return <MemoryView />;
-    default: return null;
-  }
-}
-
-function HomeRoute(props: AppRouteSurfaceProps) {
-  if (!props.phone) {
-    return <HomeView onRoute={props.onRoute} onSettingsSection={props.onSettingsSection} />;
-  }
-  return (
-    <MobileToday
-      initials={initialsOf(props.identity?.user)}
-      onNewChat={() => props.onRoute("chat")}
-      onOpenConversation={props.onConversation}
-      onSettings={() => props.onRoute("settings")}
-      workspace={props.identity
-        ? `${props.identity.organisation} · ${props.identity.workspace}`
-        : ""}
-    />
-  );
 }
 
 function SettingsRoute(props: AppRouteSurfaceProps) {
   if (props.phone) {
     return (
       <MobileSettings
-        initials={initialsOf(props.identity?.user)}
-        onLeave={() => props.onRoute("home")}
+        initials={mobileInitials(props.identity?.user)}
+        onLeave={() => props.onRoute("chat")}
         role={props.identity?.role ?? ""}
         user={props.identity?.user ?? ""}
       />
@@ -149,7 +93,7 @@ function SettingsRoute(props: AppRouteSurfaceProps) {
   );
 }
 
-function initialsOf(user?: string): string {
+function mobileInitials(user?: string): string {
   const parts = (user ?? "").split(/[\s@._-]+/).filter(Boolean).slice(0, 2);
   return parts.map((part) => part[0]!.toUpperCase()).join("") || "—";
 }

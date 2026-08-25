@@ -23,11 +23,6 @@ const settingsSource = readFileSync(
   join(sourceRoot, "components/SettingsSurface.tsx"),
   "utf-8",
 );
-const operationsSettingsSource = readFileSync(
-  join(sourceRoot, "components/settings/OperationsSettingsSection.tsx"),
-  "utf-8",
-);
-
 describe("shell rollout boundary", () => {
   it("keeps one route-preserving shell bootstrap with extracted navigation and tasks", () => {
     expect(appSource).toContain('import { AppFrame } from "./components/shell/AppFrame"');
@@ -51,7 +46,11 @@ describe("shell rollout boundary", () => {
     expect(routeSurfaceSource).toContain('import("../MobileSettings")');
     expect(routeSurfaceSource).toContain('import("../settings/SearchResults")');
     expect(routeSurfaceSource).not.toContain('import { MobileSettings } from "../MobileSettings"');
+    // The operations pane was a window onto the kernel operations console -
+    // runtime health, audit history, budget ceilings - and went with it. The
+    // assertion that survives is the one that still means something: the
+    // settings surface must not import it back statically.
     expect(settingsSource).not.toContain('from "./OperationsView"');
-    expect(operationsSettingsSource).toContain('import("../OperationsView")');
+    expect(settingsSource).not.toContain("OperationsSettingsSection");
   });
 });

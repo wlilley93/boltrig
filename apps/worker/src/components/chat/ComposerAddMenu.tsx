@@ -155,21 +155,10 @@ function buildSections({
         ...(onOpenCommands ? [{ id: "search", label: "Search Boltrig", description: "Chats, runs, knowledge and memory", icon: "search" as const, run: onOpenCommands }] : []),
       ],
     },
-    {
-      label: "Agent tools",
-      actions: [
-        { id: "work", label: "Work and goals", description: "Review active work", icon: "work", run: route("work") },
-        { id: "routines", label: "Routines", description: "Build scheduled or triggered work", icon: "routine", run: route("automations") },
-        { id: "skills", label: "Record a skill", description: "Teach an approved repeatable method", icon: "skill", run: route("build", "skills") },
-      ],
-    },
-    {
-      label: "Workspace",
-      actions: [
-        { id: "plugins", label: "Plugins", description: "Connect external context", icon: "plugin", run: route("integrations") },
-        { id: "knowledge", label: "Knowledge", description: "Browse sources", icon: "knowledge", run: route("knowledge") },
-      ],
-    },
+    // "Agent tools" and "Workspace" offered five destinations - work,
+    // routines, skills, plugins, knowledge - and every one of them was a
+    // kernel console. The routes are gone, so the menu entries go too: an
+    // affordance that navigates nowhere is worse than a shorter menu.
   ];
 }
 

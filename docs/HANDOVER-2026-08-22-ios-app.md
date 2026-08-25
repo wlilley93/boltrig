@@ -394,7 +394,7 @@ The next owner should not redesign the app from scratch and should not attempt a
 2. **Conversations DO carry authoritative run state.** `GET /v1/conversations` rows include
    `working` (server-owned, see `boltrig/kernel/conversation_list_views.py`). The "newest
    conversation is Working now" inference in Part 1 is a defect of the web `MobileToday`
-   component only (`apps/worker/src/components/MobileToday.tsx`, which destructures the first row);
+   component only (`apps/worker/src/components/MobileToday.tsx` (since removed: the routes a Hermes cell cannot serve were dropped), which destructures the first row);
    the native app uses the flag and nothing else.
 3. **The session is cookie-based and not the right shape for a phone.** `boltrig_session` is
    HttpOnly, SameSite=Strict, 12 hour sliding life, 7 day absolute cap, with a double-submit
@@ -679,7 +679,7 @@ the pull requests named here are the way to check what has moved since.
 | --- | --- | --- |
 | The iPhone app, Familiar only, slices S1 to S10 | `ios/` on `main` | merged, PR #339 at 8765e3d5 |
 | TestFlight runbook, export options, decision 0040, manifest declares photos | `docs/IOS-TESTFLIGHT-RUNBOOK.md`, `ios/ExportOptions.plist`, `docs/decisions/0040-phone-as-remote-monitor-of-the-desktop.md`, `ios/Boltrig/PrivacyInfo.xcprivacy` | merged, PR #344 at 673d042f |
-| Web defects from Part 1 (Today's working flag and cap, Ready step names, gate fallback) | `apps/worker/src/components/MobileToday.tsx`, `MobileTodaySections.tsx`, `onboarding/ReadyStep.tsx`, `onboarding/OnboardingGate.tsx`, `onboarding/companionCatalogue.ts` | open, PR #345 |
+| Web defects from Part 1 (Today's working flag and cap, Ready step names, gate fallback) | `apps/worker/src/components/MobileToday.tsx` (since removed: the routes a Hermes cell cannot serve were dropped), `MobileTodaySections.tsx`, `onboarding/ReadyStep.tsx`, `onboarding/OnboardingGate.tsx`, `onboarding/companionCatalogue.ts` | open, PR #345 |
 | Setup preview for captures, gated live contract test, legal drafts | `ios/Boltrig/Support/SetupPreview.swift`, `ios/BoltrigTests/LiveContractTests.swift`, `docs/legal/` | open, PR #346 |
 
 Both merged PRs ride v0.4.45 with two hardening PRs from another session; `ios/` is inert to the

@@ -50,15 +50,14 @@ describe("Worker command palette", () => {
     expect(screen.getByPlaceholderText("Go anywhere, change anything")).toBeTruthy();
     expect(screen.getByText("esc")).toBeTruthy();
     expect(screen.queryByText("Commands")).toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(8);
-    expect(screen.getAllByRole("option").slice(0, 4).map((option) => (
-      option.textContent
-    ))).toEqual(expect.arrayContaining([
-      expect.stringContaining("New chat"),
-      expect.stringContaining("Agents"),
-      expect.stringContaining("Plugins"),
-      expect.stringContaining("Routines"),
-    ]));
+    // Agents, Plugins and Routines were kernel consoles and went with their
+    // routes, so the opening list is New chat plus settings destinations. The
+    // assertion still pins that the list is BOUNDED and starts with the task.
+    const options = screen.getAllByRole("option");
+    expect(options.length).toBeLessThanOrEqual(8);
+    expect(options[0]?.textContent).toContain("New chat");
+    expect(options.map((option) => option.textContent).join(" "))
+      .not.toMatch(/Agents|Plugins|Routines/);
   });
 
   it("uses the canonical icon for each settings destination", () => {
@@ -108,13 +107,14 @@ describe("Worker command palette", () => {
     render(<CommandPalette open onClose={onClose} onNavigate={onNavigate} />);
 
     fireEvent.change(screen.getByLabelText("Search Worker"), {
-      target: { value: "hatchet" },
+      target: { value: "budget" },
     });
-    // "hatchet" is a keyword of the Routines entry, which the sidebar's
-    // decided-target vocabulary renamed from "Automations".
-    fireEvent.click(screen.getByRole("option", { name: /Routines/ }));
+    // "budget" is a keyword of the Spending settings entry. The routes this
+    // test used to drive - Routines, Memory - were kernel consoles and are
+    // gone; what it proves is that a keyword match navigates and closes.
+    fireEvent.click(screen.getByRole("option", { name: /Spending/ }));
 
-    expect(onNavigate).toHaveBeenCalledWith("automations", null);
+    expect(onNavigate).toHaveBeenCalledWith("settings", "spend");
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -124,9 +124,9 @@ describe("Worker command palette", () => {
     render(<CommandPalette open onClose={onClose} onNavigate={onNavigate} />);
     const input = screen.getByLabelText("Search Worker");
 
-    fireEvent.change(input, { target: { value: "durable memory" } });
+    fireEvent.change(input, { target: { value: "keyboard" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(onNavigate).toHaveBeenCalledWith("memory", null);
+    expect(onNavigate).toHaveBeenCalledWith("settings", "shortcuts");
 
     fireEvent.keyDown(input, { key: "Escape" });
     expect(onClose).toHaveBeenCalled();
@@ -201,11 +201,11 @@ describe("Worker command palette", () => {
     expect(screen.getByRole("status").textContent).toContain("0 results available.");
     expect(onNavigate).not.toHaveBeenCalled();
 
-    fireEvent.change(input, { target: { value: "memory" } });
+    fireEvent.change(input, { target: { value: "archive" } });
     fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
     expect(onNavigate).not.toHaveBeenCalled();
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(onNavigate).toHaveBeenCalledWith("memory", null);
+    expect(onNavigate).toHaveBeenCalledWith("settings", "archived");
   });
 
   it("traps focus and restores it to the opener when dismissed", () => {
@@ -378,7 +378,9 @@ describe("Worker command palette", () => {
     });
     expect(input.getAttribute("aria-activedescendant")).toBe(result.id);
     fireEvent.click(result);
-    expect(onNavigate).toHaveBeenCalledWith("runs", "run/a");
+    // A federated hit for a surface this build no longer routes to opens the
+    // conversation surface rather than a dead hash.
+    expect(onNavigate).toHaveBeenCalledWith("chat", null);
   });
 
   it("waits for a substantive query and moves the keyboard across both result kinds", async () => {
@@ -397,7 +399,7 @@ describe("Worker command palette", () => {
     });
     expect(api.federatedSearch).not.toHaveBeenCalled();
 
-    fireEvent.change(input, { target: { value: "memory" } });
+    fireEvent.change(input, { target: { value: "archive" } });
     await act(async () => {
       vi.advanceTimersByTime(249);
     });
@@ -408,7 +410,10 @@ describe("Worker command palette", () => {
     });
 
     const options = screen.getAllByRole("option");
-    expect(options[0].textContent).toContain("Memory");
+    // The command row is now a settings destination rather than the Memory
+    // console; what this test proves is that a command and a content hit sit in
+    // one list and the keyboard crosses between them.
+    expect(options[0].textContent).toContain("settings");
     expect(options[1].textContent).toContain("Memory planning conversation");
     fireEvent.keyDown(input, { key: "ArrowDown" });
     expect(input.getAttribute("aria-activedescendant")).toBe(options[1].id);
@@ -423,14 +428,14 @@ describe("Worker command palette", () => {
     render(<CommandPalette open onClose={vi.fn()} onNavigate={onNavigate} />);
     const input = screen.getByRole("combobox");
 
-    fireEvent.change(input, { target: { value: "memory" } });
+    fireEvent.change(input, { target: { value: "archive" } });
     await flushDebounce();
 
     expect(screen.getByRole("alert").textContent).toContain(
       "Content search is unavailable",
     );
-    fireEvent.click(screen.getByRole("option", { name: /Memory/ }));
-    expect(onNavigate).toHaveBeenCalledWith("memory", null);
+    fireEvent.click(screen.getAllByRole("option")[0]!);
+    expect(onNavigate).toHaveBeenCalledWith("settings", "archived");
   });
 
   it("ignores a stale response after the query changes", async () => {
@@ -496,8 +501,12 @@ describe("Worker command palette", () => {
     fireEvent.click(screen.getByRole("option", { name: /Remembered decision/ }));
     fireEvent.click(screen.getByRole("option", { name: /Audit event/ }));
 
-    expect(onNavigate).toHaveBeenNthCalledWith(1, "memory", null);
-    expect(onNavigate).toHaveBeenNthCalledWith(2, "settings", "operations");
+    // Both are content hits for surfaces this build no longer routes to, so
+    // both open the conversation surface. The point the test still makes is
+    // that neither invents a detail link: the absent id and the 257-character
+    // one both arrive as null rather than as a hash nothing can open.
+    expect(onNavigate).toHaveBeenNthCalledWith(1, "chat", null);
+    expect(onNavigate).toHaveBeenNthCalledWith(2, "chat", null);
   });
 });
 

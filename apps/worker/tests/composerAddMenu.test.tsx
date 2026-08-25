@@ -31,14 +31,16 @@ describe("composer add menu", () => {
     expect(screen.getByRole("button", { name: /Search Boltrig/ })).toBeTruthy();
     expect(screen.queryByText("Browser tabs")).toBeNull();
 
+    // The menu's "Agent tools" and "Workspace" groups pointed at Work,
+    // Routines, Skills, Plugins and Knowledge - kernel consoles, all removed
+    // with their routes. What is still worth pinning is that the search filters
+    // to TRUTHFUL actions and finds nothing for a destination that is gone.
     const search = screen.getByRole("textbox", { name: "Search actions" });
     fireEvent.change(search, { target: { value: "skill" } });
-    expect(screen.getByRole("button", { name: /Record a skill/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Record a skill/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Plugins/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Record a skill/ }));
-    expect(navigate).toHaveBeenCalledWith("build", "skills");
+    fireEvent.change(search, { target: { value: "" } });
 
-    fireEvent.click(opener);
     fireEvent.keyDown(screen.getByRole("dialog", { name: "Add to task" }), { key: "Escape" });
     await waitFor(() => expect(document.activeElement).toBe(opener));
   });
@@ -54,7 +56,9 @@ describe("composer add menu", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     expect((screen.getByRole("button", { name: /Files/ }) as HTMLButtonElement).disabled)
       .toBe(true);
-    expect((screen.getByRole("button", { name: /Routines/ }) as HTMLButtonElement).disabled)
-      .toBe(false);
+    // The menu still opens and still says why Files cannot be used, which is
+    // the honesty this test is named for.
+    expect(screen.getByRole("dialog", { name: "Add to task" })).toBeTruthy();
+    expect(screen.getByText("Unavailable for local tasks")).toBeTruthy();
   });
 });

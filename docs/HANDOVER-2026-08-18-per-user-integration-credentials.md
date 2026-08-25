@@ -93,7 +93,7 @@ in a few seconds.
 | Store, both twins | `boltrig/store/integration_atomic.py`, `boltrig/store/integrations.py` |
 | Governed connect/revoke | `boltrig/config/control_integrations.py` |
 | HTTP routes | `boltrig/kernel/platform_routes/integration_setup.py`, `boltrig/kernel/platform_routes/integrations.py` |
-| UI | `apps/worker/src/components/integrations/ManualSecretSetup.tsx` |
+| UI | `apps/worker/src/components/integrations/ManualSecretSetup.tsx` (since removed: the routes a Hermes cell cannot serve were dropped) |
 | Tests | `tests/security/test_integration_scope.py` (13) |
 | Invariants | SEC-200, SEC-201, FR-INTCRED-01, FR-INTCRED-02 |
 

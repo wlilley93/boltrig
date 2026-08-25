@@ -213,8 +213,10 @@ describe("console rail", () => {
       .toContain("renewal-playbook.txt");
     expect(rail.querySelector('[aria-label="Sources"]')?.textContent).toContain("Figma");
     expect(rail.querySelector('[data-integration="figma"]')).toBeTruthy();
-    expect(rail.querySelector('[aria-label="Sources"]')?.textContent).toContain("View all");
-    expect(rail.querySelector('[aria-label="Manage sources"]')).toBeTruthy();
+    // "View all" and "Manage sources" both opened the Plugins console, which
+    // was a kernel surface and is gone. The rail still LISTS the sources it
+    // has; what it no longer does is offer a door to a room that was removed.
+    expect(rail.querySelector('[aria-label="Manage sources"]')).toBeNull();
     // The section action owns the single plus; its empty row never repeats it.
     expect(rail.querySelector('[aria-label="Outputs"] .rail-output-mark')).toBeNull();
     // Ordinary tools have a real Work disclosure in the transcript; the rail
@@ -303,8 +305,8 @@ describe("console rail", () => {
       expect(group?.textContent).toContain("brief.txt");
       return group!;
     });
-    expect(sourceGroup.querySelector('[aria-label="Manage sources"]')).toBeTruthy();
-    expect(sourceGroup.textContent).toContain("View all");
+    // As above: the sources are listed, the removed console is not offered.
+    expect(sourceGroup.querySelector('[aria-label="Manage sources"]')).toBeNull();
   });
 
   it("keeps same-name attachment revisions when their payloads differ", async () => {

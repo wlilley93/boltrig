@@ -1,38 +1,27 @@
+/** The routes this build actually has.
+ *
+ *  MEASURED, NOT CHOSEN BY TASTE. Every other v1 route is a console over the
+ *  Boltrig kernel, and a Hermes cell has no kernel: `home` calls 11 methods
+ *  (audit, budgets, readiness, platform status) and none is backed; `build`
+ *  calls 45 and two are; the parity views - work, agents, runs, knowledge,
+ *  memory - call 22 between them and none belongs to those surfaces; routines
+ *  calls six workflow methods, all of them kernel; browser needs a WebSocket
+ *  the cell proxy refuses on purpose.
+ *
+ *  A route kept in that state renders "unavailable" for ever. That is honest
+ *  and it is still a promise nobody can keep, so the route goes. Their view
+ *  modules stay in the tree, unrouted and therefore unbundled, until the scope
+ *  is confirmed - deleting 100 files is easy to do and slow to undo.
+ */
 export type WorkerRoute =
-  | "home"
   | "chat"
-  | "runs"
-  | "work"
-  | "agents"
-  | "account"
-  | "build"
-  | "browser"
-  | "channels"
-  | "evaluations"
-  | "automations"
-  | "knowledge"
-  | "memory"
-  | "integrations"
-  | "organisation"
-  | "settings";
+  | "settings"
+  | "account";
 
 const routes = new Set<WorkerRoute>([
-  "home",
   "chat",
-  "runs",
-  "work",
-  "agents",
-  "account",
-  "build",
-  "browser",
-  "channels",
-  "evaluations",
-  "automations",
-  "knowledge",
-  "memory",
-  "integrations",
-  "organisation",
   "settings",
+  "account",
 ]);
 
 export function routeFromHash(hash: string): WorkerRoute {

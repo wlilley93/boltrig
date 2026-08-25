@@ -7,6 +7,8 @@ from pathlib import Path
 
 import httpx
 import pytest
+
+from tests.worker_surface_ledger import assert_surface_retired
 from fastapi.testclient import TestClient
 
 import boltrig.adapters.builtin.web_fetch as web_fetch
@@ -214,9 +216,16 @@ def test_authenticated_projection_is_redacted_and_marks_every_separate_surface(
 @pytest.mark.security
 @pytest.mark.invariant("SEC-WRK-35")
 def test_worker_contract_refuses_universal_coverage_or_raw_network_authoring():
-    worker = (
-        ROOT / "apps/worker/src/components/OperationsView.tsx"
-    ).read_text(encoding="utf-8")
+    # The Operate surface that rendered this policy is gone; the SDK type and
+    # the backend projection that make the claim honest are not, and they carry
+    # the rest of this invariant below.
+    assert_surface_retired(
+        "apps/worker/src/components/OperationsView.tsx",
+        "the coverage panel says it is not a universal egress firewall",
+        "proxy addresses, CA paths and contents are never rendered",
+        "no coverage is inferred where none was reported",
+        "the coverage section contains no password input",
+    )
     sdk = (ROOT / "sdks/web/src/types.ts").read_text(encoding="utf-8")
     bootstrap = (ROOT / "boltrig/api/bootstrap.py").read_text(encoding="utf-8")
 
@@ -224,9 +233,3 @@ def test_worker_contract_refuses_universal_coverage_or_raw_network_authoring():
     # reaches web.fetch (and the other adapter legs) as one typed projection
     assert "universal_egress_control: false;" in sdk
     assert "sensitive_values_redacted: true;" in sdk
-    assert "not a universal egress firewall" in worker
-    assert "Proxy addresses, CA paths and contents" in worker
-    assert "no coverage was inferred" in worker
-    assert 'type="password"' not in worker.split(
-        'aria-label="Effective network and egress coverage"', 1
-    )[1].split("</section>", 1)[0]
