@@ -34,3 +34,23 @@ describe("where his player may be", () => {
     expect(validatedPlayerUrl("not a url")).toBeNull();
   });
 });
+
+describe("the desktop check he restates", () => {
+  it("agrees with desktop.ts, which is the definition", async () => {
+    // Restated rather than imported, to keep the desktop module out of the
+    // character registry's import graph. That makes it a second copy, and this
+    // is the thing that stops the two drifting apart in silence.
+    const fs = await import("node:fs");
+    const probe = '"__TAURI_INTERNALS__" in window';
+    expect(fs.readFileSync("src/components/montgomery/montgomerySource.ts", "utf8"))
+      .toContain(probe);
+    expect(fs.readFileSync("src/desktop.ts", "utf8")).toContain(probe);
+  });
+
+  it("takes the same-origin branch off the desktop, which is where the web is", () => {
+    // happy-dom carries no __TAURI_INTERNALS__, so this is the hosted branch.
+    expect("__TAURI_INTERNALS__" in window).toBe(false);
+    expect(validatedPlayerUrl("/companion/montgomery/"))
+      .toBe(`${location.origin}/companion/montgomery/`);
+  });
+});

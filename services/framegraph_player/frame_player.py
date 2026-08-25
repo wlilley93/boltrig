@@ -128,9 +128,12 @@ const qOverride = new URLSearchParams(location.search).get('q');
 // 720 is the DEFAULT for every screen: a 1080 walk fragment is ~2.9MB and a
 // slow tailnet hop stalls it mid-walk, which reads as a dead button. HD is
 // an opt-in (?q=1080 or the settings toggle), never an inference from size.
-let wantHD = false;
-try { wantHD = localStorage.getItem('mg.hd') === '1'; } catch(_){}
-const MSEBASE = (qOverride === '1080' || (qOverride !== '720' && wantHD)) ? 'mse/' : 'mse720/';
+// The stored `mg.hd` preference is GONE with the settings toggle that wrote
+// it. A preference nothing can set and nothing can clear is worse than no
+// preference: a browser that happened to have it would ask for an `mse/` set
+// this bundle may not carry, and 404 in silence forever. ?q=1080 remains, for
+// a deliberate one-off on a bundle that has the 1080p derivative.
+const MSEBASE = qOverride === '1080' ? 'mse/' : 'mse720/';
 const earlyInit = fetch(MSEBASE + 'init.mp4').then(r => r.arrayBuffer());
 const earlySegs = fetch(MSEBASE + 'segments.json').then(r => r.json());
 const earlyManifest = fetch('manifest.json').then(r => r.json());
@@ -793,10 +796,13 @@ class H(BaseHTTPRequestHandler):
             body = PAGE_V2.encode()
             return self._hdr(200, "text/html; charset=utf-8", len(body)) or self.wfile.write(body)
         mm = re.match(r"^/(mse|mse720)/([A-Za-z0-9_.-]+)$", path)
-        if mm and MSE_DIR:
-            base = MSE_DIR if mm.group(1) == "mse" else MSE_DIR.parent / "mse720"
+        if mm:
+            # Serve whichever set was ASKED for, when the bundle carries it.
+            # Deriving the sibling from MSE_DIR meant the answer depended on
+            # which one happened to be found first.
+            base = FRAME.parent / mm.group(1)
             f = base / mm.group(2)
-            if f.is_file() and f.parent in (MSE_DIR, MSE_DIR.parent / "mse720"):
+            if base.is_dir() and f.is_file() and f.parent == base:
                 body = f.read_bytes()
                 ctype = ("application/json" if f.suffix == ".json" else "video/mp4")
                 return self._hdr(200, ctype, len(body)) or self.wfile.write(body)
@@ -924,8 +930,14 @@ def main():
     ac = FRAME.parent.parent / "audio"
     AMB_DIR = ac if ac.is_dir() else None
     global MSE_DIR
+    # EITHER DERIVATIVE IS ENOUGH. This used to be `mse` alone, and everything
+    # -- including mse720 -- was gated on that one directory existing. A bundle
+    # shipped with only the 720p set (34MB, against 114MB for the 1080p one)
+    # therefore served NO fragments at all, and the symptom was a page that
+    # loaded, reported its manifest correctly and then sat on a black frame.
     mc = FRAME.parent / "mse"
-    MSE_DIR = mc if mc.is_dir() else None
+    m7 = FRAME.parent / "mse720"
+    MSE_DIR = mc if mc.is_dir() else (m7 if m7.is_dir() else None)
     if not FRAME.is_file():
         raise SystemExit(f"no such file: {FRAME}")
     MANIFEST = frame_box.read(FRAME)

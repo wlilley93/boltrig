@@ -16,6 +16,23 @@ import { FrameGraphStage } from "./FrameGraphStage";
 import { montgomeryStateFromTurn } from "./MontgomeryState";
 
 /**
+ * The same test `desktop.ts` makes, restated rather than imported.
+ *
+ * Importing it would put the desktop module in the import graph of the
+ * CHARACTER REGISTRY, which almost every component pulls in -- and six test
+ * files mock `../src/desktop` with their own inline fixture, so every one of
+ * them would have to grow an `isDesktop` export or fail at import time. A
+ * one-line platform check is not worth that blast radius.
+ *
+ * It is a second copy, so it is gated: montgomeryPlayerUrl.test.ts asserts this
+ * agrees with `desktop.ts`. Two copies of a rule is one copy and a
+ * disagreement, unless something is checking.
+ */
+function onDesktop(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+/**
  * His player. Loopback, and the renderer refuses anything else because this
  * value doubles as the postMessage target origin.
  *
@@ -26,15 +43,22 @@ import { montgomeryStateFromTurn } from "./MontgomeryState";
 const MONTGOMERY_CONFIG = {
   id: "general-montgomery",
   library: "GeneralMontgomery",
-  // THIS PORT IS ALSO IN THE DESKTOP CSP, and the two must agree.
+  // WHERE HIS PLAYER IS DEPENDS ON WHO IS ASKING, and there are only two
+  // answers because there are only two kinds of surface.
   //
-  // src-tauri/tauri.conf.json pins `frame-src http://localhost:8902` in both
-  // `csp` and `devCsp`. He is the first character that is an IFRAME -- the
-  // other four are canvas bodies, so nothing had ever needed frame-src, and it
-  // read `'none'` until he arrived. Changing this port without changing that
-  // policy does not raise an error: the frame is refused by CSP and he renders
-  // as an empty stage, which looks exactly like a player that is not running.
-  playerUrl: "http://localhost:8902",
+  // HOSTED (web, and a cell's own UI): the player is served from THIS origin at
+  // /companion/montgomery/. It has to be -- a browser on dev.boltrig.ai
+  // resolves `localhost` to the VIEWER's machine, where there is no player and
+  // never will be. Same-origin is also tighter than loopback: the frame is the
+  // app, so `frame-src 'self'` covers it.
+  //
+  // DESKTOP: localhost genuinely IS the user's machine, and the player is a
+  // sidecar beside the app. That port is also pinned in the desktop CSP
+  // (src-tauri/tauri.conf.json, `frame-src http://localhost:8902`) and the two
+  // must agree -- changing one without the other raises no error, it refuses
+  // the frame and shows an empty stage, which looks exactly like a player that
+  // is not running.
+  playerUrl: onDesktop() ? "http://localhost:8902" : "/companion/montgomery/",
   voiceBase: "montgomery",
 };
 

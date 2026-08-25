@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-25T02:20:29.133Z",
+  "capturedAt": "2026-08-25T02:38:50.973Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "328900413f6e81ac453c56e322b0d1e8474224db693b88cc2c795483d5544320",
-    "digestAfterCapture": "328900413f6e81ac453c56e322b0d1e8474224db693b88cc2c795483d5544320",
+    "digestBeforeCapture": "d1d52c94be324107f56c010dc7fd0f4be1186e502985c9c6075ce4b95b367644",
+    "digestAfterCapture": "d1d52c94be324107f56c010dc7fd0f4be1186e502985c9c6075ce4b95b367644",
     "sourceUnchangedDuringCapture": true,
     "branch": "feat/general-montgomery-onboarding",
-    "head": "c35daa927dd9e54b185ca4762bbe0e23c2ea5781",
+    "head": "8b6e2307b0156b053531b00cc396cbd1db133087",
     "dirty": true
   },
   "runner": {
@@ -30,13 +30,13 @@
     "browser": "chromium",
     "browserVersion": "148.0.7778.215",
     "browserExecutable": "/usr/bin/google-chrome",
-    "origin": "http://localhost:1420",
+    "origin": "http://localhost:1427",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
   "states": [
     {
       "state": "chat-direction",
-      "url": "http://localhost:1420/tests/visual/parity.html?state=chat-direction&theme=dark",
+      "url": "http://localhost:1427/tests/visual/parity.html?state=chat-direction&theme=dark",
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",

@@ -25,7 +25,7 @@ describe("Voice Call parity CSS", () => {
     expect(notice).toContain("padding: 12px 13px;");
   });
 
-  it("gives Familiar and Jarvis the full call canvas at bounded retina resolution", () => {
+  it("gives every companion the full call canvas at bounded retina resolution", () => {
     const wrapper = rule(".voice-call-primary-familiar");
     expect(wrapper).toContain("flex: 1;");
     expect(wrapper).toContain("width: min(1120px, 100%);");
@@ -41,9 +41,29 @@ describe("Voice Call parity CSS", () => {
     expect(renderSurface).toContain("width: 100%;");
     expect(renderSurface).toContain("height: 100%;");
 
-    const jarvis = rule(".voice-call-primary-familiar .jarvis-stage");
-    expect(jarvis).toContain("width: 100%;");
-    expect(jarvis).toContain("height: 100%;");
+    // EVERY BODY, not two. A call is the one surface where the companion IS
+    // the screen, so a body with no sizing here arrives at whatever its own
+    // default box happens to be and reads as broken rather than small. This
+    // used to name Jarvis alone, which is how Ultron, Colossus and General
+    // Montgomery each shipped into the call unsized.
+    const filled = rule(
+      ".voice-call-primary-familiar .jarvis-stage,\n"
+      + ".voice-call-primary-familiar .ultron-stage,\n"
+      + ".voice-call-primary-familiar .colossus-stage,\n"
+      + ".voice-call-primary-familiar .frame-stage",
+    );
+    expect(filled).toContain("width: 100%;");
+    expect(filled).toContain("height: 100%;");
+
+    // The sphere is the exception and is constrained above; everything else
+    // fills, because a panel of lamps and a 16:9 video do not want a square.
+    for (const body of ["jarvis", "ultron", "colossus", "frame"]) {
+      expect(css).toContain(`.voice-call-primary-familiar .${body}-stage`);
+    }
+
+    // His surface is an iframe, which brings a border no canvas has.
+    const framed = rule(".voice-call-primary-familiar .frame-stage iframe");
+    expect(framed).toContain("border: 0;");
   });
 
   it("keeps a full-width chat bar below the call canvas", () => {
