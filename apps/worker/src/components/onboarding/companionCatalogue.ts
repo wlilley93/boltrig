@@ -54,6 +54,12 @@ const STOCK: readonly CompanionChoice[] = [
     blurb: "A defence system that has finished reasoning, and now reports.",
     note: "A panel of lamps, not a face. Formal, literal and immovable.",
   },
+  {
+    id: "general-montgomery",
+    name: "General Montgomery",
+    blurb: "An intelligence officer who reads the room and tells you what is in it.",
+    note: "A man in an office, not a shape on a canvas. He moves, and he does not soften.",
+  },
 ];
 
 /**
