@@ -45,3 +45,22 @@ if (isDesktop) {
   // @ts-ignore
   client.logout = desktopAccountLogout;
 }
+
+/** Call a client method only when it is actually there.
+ *
+ *  AN ABSENT METHOD IS `undefined`, NOT A REJECTING FUNCTION - deliberately, so
+ *  that `typeof client.x === "function"` probes report a feature as missing
+ *  instead of rendering it into a broken state. The cost is that INVOKING one
+ *  throws synchronously, and inside a `Promise.allSettled([...])` array literal
+ *  that throw escapes before allSettled can settle anything: the whole batch
+ *  rejects, and a caller that only inspects settled results waits forever with
+ *  no error to show. WorkerGlobalContext did exactly that, and the shell never
+ *  learned who you were - no name, no organisation, no workspace.
+ *
+ *  So the probe and the call belong together, once, rather than at each site
+ *  that has to remember. */
+export function whenPresent<T>(method: unknown, call: () => Promise<T>): Promise<T> {
+  return typeof method === "function"
+    ? call()
+    : Promise.reject(new Error("not available on this runtime"));
+}
