@@ -54,7 +54,12 @@ ROUTE_SOURCE_PATH = "docs/design/evidence/2026-08-11-console-parity/current/vds-
 # If this number is ever edited again, the question to answer first is the one
 # answered here: did the instrument break, or did the surface really shrink?
 MIN_SCREEN_FILES = 5
-MIN_ROUTE_FILES = 6
+# The same anti-vacuity floor as MIN_SCREEN_FILES, and lowered 6 -> 3 on the
+# same day for the same reason: Integrations and the permanent fleet topology
+# were retired from the parity programme because a Hermes cell has no kernel to
+# put a console over, so the declared route set fell from six to four. Three
+# still catches a route manifest that has emptied itself out.
+MIN_ROUTE_FILES = 3
 DEFAULT_CAPTURE_SOURCE_SCOPE = (
     "apps/worker/src",
     "apps/worker/tests/visual",
