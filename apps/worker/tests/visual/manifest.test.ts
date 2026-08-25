@@ -604,6 +604,8 @@ describe("console parity evidence manifest", () => {
       ".right-rail .rail-agent-stack [data-familiar-body=\"voyager\"]",
       ".transcript-tool-summary",
       ".transcript-subagent-chip",
+      ".display-object-card.display-object-communication[data-phase=\"draft\"]",
+      ".display-object-communication button",
     ]));
     expect(direction!.required_absence_selectors).toEqual(expect.arrayContaining([
       ".side-status",
@@ -621,6 +623,7 @@ describe("console parity evidence manifest", () => {
       "Used Figma integration, read files, edited files, ran commands",
     );
     expect(direction!.required_text).toContain("3 done");
+    expect(direction!.required_text).toContain("Draft update for #launch");
     expect(direction!.required_geometry).toEqual(expect.arrayContaining([
       { selector: "#shell-pinned-tasks.shell-task-group-label", height: 20 },
       { selector: "#shell-projects.shell-task-group-label", height: 20 },
@@ -650,8 +653,8 @@ describe("console parity evidence manifest", () => {
       { selector: ".right-rail .rail-group[aria-label=\"Background processes\"]", count: 1 },
       { selector: ".right-rail .rail-group[aria-label=\"Computer Use\"]", count: 1 },
       { selector: ".right-rail .rail-group[aria-label=\"Sources\"]", count: 1 },
-      { selector: ".message.user", count: 2 },
-      { selector: ".message.assistant", count: 2 },
+      { selector: ".display-object-card.display-object-communication", count: 1 },
+      { selector: ".display-object-communication .display-object-actions button", count: 4 },
       { selector: ".sidebar-footer > button", count: 2 },
       { selector: ".composer .voice-primary", count: 1 },
     ]));

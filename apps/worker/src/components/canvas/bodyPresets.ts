@@ -18,11 +18,16 @@ export {
   JARVIS_ARRIVAL,
   JARVIS_MODES,
   JARVIS_PULSES,
+  JARVIS_SPEECH,
+  JARVIS1_TUNING,
   jarvisModeTuning,
+  jarvis1ModeTuning,
+  type Jarvis1Tuning,
 } from "./jarvisPresets";
 export {
   ULTRON_ARRIVAL,
   ULTRON_MODES,
   ULTRON_PULSES,
+  ULTRON_SPEECH,
   ultronModeTuning,
 } from "./ultronPresets";

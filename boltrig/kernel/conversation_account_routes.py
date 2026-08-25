@@ -107,20 +107,25 @@ async def _move_conversation(
                 {"status": "error", "reason": "project is archived"}, status_code=409
             )
     chat = getattr(request.app.state, "chat", None)
-    if chat is not None:
-        move = await chat.move_conversation_workspace_if_idle(
-            p.tenant_id, conversation_id, expected, target
+    if chat is None:
+        # REFUSE, never bypass: the store CAS alone cannot see an active turn,
+        # so a direct fallback here would move a project under a running
+        # conversation - the exact race the idle guard exists to stop. A
+        # deployment without the chat service mounted has no safe way to
+        # perform this move, and saying so beats doing it wrong.
+        return JSONResponse(
+            {"status": "error", "reason": "conversation_moves_unavailable"},
+            status_code=503,
         )
-        if move.busy:
-            return JSONResponse(
-                {"status": "error", "reason": "conversation_project_move_busy"},
-                status_code=409,
-            )
-        found, converged = move.found, move.workspace_id
-    else:
-        found, converged = await k.store.move_conversation_workspace(
-            p.tenant_id, conversation_id, expected, target
+    move = await chat.move_conversation_workspace_if_idle(
+        p.tenant_id, conversation_id, expected, target
+    )
+    if move.busy:
+        return JSONResponse(
+            {"status": "error", "reason": "conversation_project_move_busy"},
+            status_code=409,
         )
+    found, converged = move.found, move.workspace_id
     if not found:
         return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
     if converged != target:

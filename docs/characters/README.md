@@ -12,6 +12,7 @@ something and nobody can remember why, the answer is in the long document.
 | Colossus | [colossus.md](colossus.md) | `apps/worker/src/bundles/colossus/character.json` |
 | Jarvis | [jarvis.md](jarvis.md) | `apps/worker/src/bundles/jarvis/character.json` |
 | Ultron | [ultron.md](ultron.md) | `apps/worker/src/bundles/ultron/character.json` |
+| General Montgomery | [general_montgomery.md](general_montgomery.md) | bundle root `character-bundles/general_montgomery/character.json` (companion lane; verbatim-held by boltrig-companion `tests/test_montgomery_persona.py`) |
 
 **Every shipped character's document is now here, and the bundle is checked
 against it.** `test_the_bundle_carries_its_document_section_VERBATIM` asserts
@@ -120,3 +121,11 @@ constitution proposing its own containment profile, its own verbs or its own
 authority model describes a character governing itself, and none of that is
 implemented. Where a document asks for it, the deviation is recorded at the top
 of that document rather than left for a reader to discover by its absence.
+
+## Frame-video bodies
+
+Characters whose body is a graph of pre-rendered clips rather than a shader
+(first: General Montgomery) are specified in
+[frame-video-bodies.md](frame-video-bodies.md) — the hub-and-spoke contract,
+byte-exact joins via FrameGraph Studio, geometry and environment laws, and
+the call-mode full-bleed presentation.

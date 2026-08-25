@@ -4,6 +4,10 @@
 
 export { FIELD_GLSL } from "./glslField";
 
+// Debris clustering (CLUMP_GLSL) moved to jarvis/v2/glslClump.ts: it is a
+// Jarvis-only chunk, and the Ultron bundle's uniform census counts every
+// uniform declared in this module as one his passes must drive.
+
 // Shared by every pass that puts a 3D point on screen. The reference is a
 // hologram seen head-on, so this is orthographic with only a gentle divide --
 // a real perspective would fight the front-on framing.

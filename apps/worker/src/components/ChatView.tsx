@@ -1,6 +1,7 @@
 import {
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -25,6 +26,7 @@ import {
 import { FamiliarBadge } from "./familiar/FamiliarBadge";
 import { StageBody, useFamiliarBody } from "./StageBody";
 import { stageTurnInput, type StageVoiceActivity } from "./chat/stageTurnInput";
+import { traceFromEvents } from "./chat/thinkingTrace";
 import { useCharacter } from "./characters";
 import { familiarBusy, familiarStateFromTurn } from "./familiar/FamiliarState";
 import { MobileChat } from "./MobileChat";
@@ -218,11 +220,9 @@ export function ChatView({
       || conversationLoad.phase === "loading"
     ),
   );
-  const conversationLoadError = (
-    conversationId
+  const conversationLoadError = (conversationId
     && conversationLoad.conversationId === conversationId
-    && conversationLoad.phase === "error"
-  ) ? conversationLoad.error : "";
+    && conversationLoad.phase === "error") ? conversationLoad.error : "";
   const conversationReady = !conversationId || (
     conversationLoad.conversationId === conversationId
     && conversationLoad.phase === "ready"
@@ -839,6 +839,7 @@ export function ChatView({
     liveEventCount: events.length,
     liveEnded: live.ended,
     voice: voiceActivity,
+    thinkingTrace: useMemo(() => traceFromEvents(events), [events]),
   });
   const stageState = familiarStateFromTurn(stageInput);
 
@@ -850,10 +851,8 @@ export function ChatView({
 
   // Live voice is feature-guarded the same way VoiceCall guards itself: the
   // affordances render only where the call control is actually mounted.
-  const voiceAvailable = (
-    typeof client.createCall === "function"
-    && (!conversationId || conversationStatus === "active")
-  );
+  const voiceAvailable = typeof client.createCall === "function"
+    && (!conversationId || conversationStatus === "active");
   const headerTitle = conversationStatus === "closed"
     ? "Closed conversation"
     : loadingConversation
@@ -1012,7 +1011,7 @@ export function ChatView({
             );
           }}
           onRetryConversation={retryConversationLoad}
-          onDecisionResolved={retryConversationLoad}
+          onDecisionResolved={retryConversationLoad} onDisplayReply={(text) => send(text, [])}
           onReorderQueued={queue.reorder}
           onRespondHitl={async (id, decision) => {
             try {
@@ -1220,7 +1219,7 @@ export function ChatView({
                 message={message}
                 agentLabel={agentSelection.messageLabel(message)}
                 tech={tech}
-                onDecisionResolved={retryConversationLoad}
+                onDecisionResolved={retryConversationLoad} onDisplayReply={(text) => send(text, [])}
                 durationSeconds={message.run_id ? turnDurations[message.run_id] : undefined}
               />
             )}
@@ -1232,7 +1231,7 @@ export function ChatView({
               tech={tech}
               startedAt={live.runId ? liveStartsRef.current.get(live.runId) ?? null : null}
               onOpenSubagent={canOpenPanes && railTurnIsLive ? openSubagentTab : undefined}
-              agentLabel={agentSelection.label(agentSelection.address)}
+              agentLabel={agentSelection.label(agentSelection.address)} onDisplayReply={(text) => send(text, [])}
             />
           )}
           {continuity && (

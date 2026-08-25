@@ -11,6 +11,7 @@ import { LiveQuestionCard } from "./LiveQuestionCard";
 import { WorkDisclosure } from "./chat/WorkDisclosure";
 import { MobileQueuedMessages } from "./chat/MobileQueuedMessages";
 import { PersistedDecision } from "./chat/PersistedDecision";
+import { DisplayObjectList } from "./chat/display/DisplayObjectList";
 import "./chat/chat.css";
 import "./MobileChatParity.css";
 
@@ -141,7 +142,6 @@ function MobileDecisions({
     </div>
   );
 }
-
 export function MobileChat({
   title,
   subtitle,
@@ -170,7 +170,7 @@ export function MobileChat({
   composerValue,
   onComposerChange,
   onRespondHitl,
-  onDecisionResolved,
+  onDecisionResolved, onDisplayReply,
 }: {
   title: string;
   subtitle: string;
@@ -198,7 +198,7 @@ export function MobileChat({
   busy: boolean;
   composerValue: string;
   onComposerChange(value: string): void;
-  onDecisionResolved?(): void;
+  onDecisionResolved?(): void; onDisplayReply?(message: string): Promise<boolean>;
   /** Governed approval responder (client.respondHitl behind it); resolves
       true when the kernel accepted the decision. Absent, pending rows stay
       read-only - the surface never draws a button that goes nowhere. */
@@ -209,7 +209,6 @@ export function MobileChat({
     document.documentElement.dataset.mobileSurface = "chat";
     return () => { delete document.documentElement.dataset.mobileSurface; };
   }, []);
-
   const [planOpen, setPlanOpen] = useState(true);
   const planId = useId();
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -298,7 +297,8 @@ export function MobileChat({
                 </ul>
               )}
               {durableTurn && (
-                <MobileDecisions answerable={false} onDecisionResolved={onDecisionResolved} turn={durableTurn} />
+                <><DisplayObjectList entries={durableTurn.displayObjects} settled onReply={onDisplayReply} />
+                  <MobileDecisions answerable={false} onDecisionResolved={onDecisionResolved} turn={durableTurn} /></>
               )}
             </article>
           );
@@ -306,7 +306,7 @@ export function MobileChat({
 
         {turnIsLive && (
           <article aria-label="Live response" className="m-message m-message-assistant m-message-live">
-            <p>{turn.text || "Working…"}</p>
+            <p>{turn.text || "Working…"}</p><DisplayObjectList entries={turn.displayObjects} settled={turn.ended} onReply={onDisplayReply} />
           </article>
         )}
 

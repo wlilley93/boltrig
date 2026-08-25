@@ -36,6 +36,7 @@ from boltrig.models import (
     Workspace,
     WorkspaceMember,
 )
+from boltrig.models.display_objects import build_display_object
 from boltrig.store import InMemoryStore
 
 T = "acme"
@@ -74,6 +75,16 @@ async def test_chat_streams_events_and_persists():
         {"type": "tool_call", "verb": "ticket.create", "input": {}, "status": "running"},
         {"type": "tool_result", "verb": "ticket.create", "status": "ok", "output": {"id": "1"}},
         {"type": "subagent", "child_run_id": "c1", "task": "decompose", "skills": ["a"]},
+        {
+            "type": "display_object",
+            "object": build_display_object(
+                {
+                    "kind": "status.notice", "title": "Ticket ready",
+                    "data": {"summary": "Ticket 1 is ready for review."},
+                },
+                run_id="display-run", agent_address="general",
+            ),
+        },
         {"type": "text_delta", "delta": "Created ticket 1."},
     ]
     chat = ChatService(store, relay, turn_executor=_stub_executor(events))
@@ -82,13 +93,14 @@ async def test_chat_streams_events_and_persists():
     )
     types = [e["type"] for e in out]
     assert types[0] == "message_start" and types[-1] == "message_end"
-    assert "tool_call" in types and "subagent" in types
+    assert "tool_call" in types and "subagent" in types and "display_object" in types
     # persisted: one conversation, user + assistant messages (US-CONV-05)
     convs = await store.list_conversations(T, "alice")
     assert len(convs) == 1
     msgs = await store.list_messages(T, convs[0].id)
     assert [m.role.value for m in msgs] == ["user", "assistant"]
     assert msgs[1].content == "Created ticket 1."
+    assert any(event["type"] == "display_object" for event in msgs[1].events)
 
 
 @pytest.mark.invariant("FR-CONV-04")
@@ -193,6 +205,7 @@ async def test_direct_chat_runs_the_default_named_identity(monkeypatch):
     assert seen["context"].actor == "researcher"
     assert seen["context"].actor_tier == "tier1"
     assert seen["context"].grants.permits("agent.send")
+    assert seen["context"].grants.permits("chat.present")
     assert store._agent_turn_leases[(T, "researcher")] is None
     conversation = (await store.list_conversations(T, "alice"))[0]
     assert conversation.agent_address == "researcher"
@@ -1474,3 +1487,203 @@ def test_the_channel_a_turn_arrived_through_is_recorded_without_steering_routing
         f"source is {items[0].source!r}, not 'chat': the caller just chose which "
         "department handles their work through a field documented as a label"
     )
+
+
+@pytest.mark.invariant("CONV-AGENT-02")
+async def test_turn_answers_as_the_agent_the_lock_settled_on(monkeypatch):
+    """An implicit send racing an explicit switch must not answer as the loser.
+
+    The switch wins BETWEEN resolution and admission; admission re-reads under
+    the lock and persists the user row against the fresh agent, so the turn
+    that follows has to execute and attribute as that same agent - answering
+    "User to writer" authored by researcher records a conversation that never
+    happened.
+    """
+    import boltrig.fleet.chat_turn_flow as turn_flow
+
+    store, relay = InMemoryStore(), EventRelay()
+    for address, default in (("researcher", True), ("writer", False)):
+        await store.upsert_named_agent(
+            NamedAgent(
+                tenant_id=T, address=address, name=address.title(),
+                runtime="script", default_for_intake=default,
+            )
+        )
+    await store.create_conversation(
+        Conversation(
+            id="agent-resolution-race", tenant_id=T, user_id="alice",
+            agent_address="researcher",
+        )
+    )
+    resolved, admit = asyncio.Event(), asyncio.Event()
+    original_resolve = turn_flow.resolve_conversation
+
+    async def gated_resolve(*args, **kwargs):
+        selection = await original_resolve(*args, **kwargs)
+        resolved.set()
+        await admit.wait()
+        return selection
+
+    monkeypatch.setattr(turn_flow, "resolve_conversation", gated_resolve)
+    called_as: list[str | None] = []
+
+    async def executor(
+        *, tenant_id, user_id, role, grants, conversation_id, agent_address,
+        run_id, message, relay, attachments=None,
+    ):
+        called_as.append(agent_address)
+        relay.publish(run_id, {"type": "text_delta", "delta": "done"})
+
+    chat = ChatService(store, relay, turn_executor=executor)
+    turn = asyncio.create_task(
+        _collect(
+            chat.handle_turn(
+                tenant_id=T, user_id="alice", role="engineer",
+                conversation_id="agent-resolution-race", message="continue",
+            )
+        )
+    )
+    await asyncio.wait_for(resolved.wait(), timeout=1)
+    # The explicit switch wins the window between resolution and the lock.
+    switched = await store.switch_conversation_agent(
+        T, "agent-resolution-race", "researcher", "writer"
+    )
+    assert switched == "writer"
+    admit.set()
+    await asyncio.wait_for(turn, timeout=1)
+
+    assert called_as == ["writer"]
+    messages = await store.list_messages(T, "agent-resolution-race")
+    assert [m.recipient_agent_address for m in messages if m.role == MessageRole.USER] == ["writer"]
+    assert [m.author_agent_address for m in messages if m.role == MessageRole.ASSISTANT] == ["writer"]
+
+
+@pytest.mark.invariant("CONV-AGENT-02")
+async def test_a_legacy_steer_without_recipient_continues_as_the_current_agent():
+    """A steer enqueued before the upgrade (NULL recipient) must not fall into
+    the legacy chief-of-staff lane, and its reply must not persist authorless."""
+    store, relay = InMemoryStore(), EventRelay()
+    await store.upsert_named_agent(
+        NamedAgent(
+            tenant_id=T, address="researcher", name="Researcher",
+            runtime="script", default_for_intake=True,
+        )
+    )
+    await store.create_conversation(
+        Conversation(
+            id="legacy-steer-chat", tenant_id=T, user_id="alice",
+            agent_address="researcher",
+        )
+    )
+    started, release = asyncio.Event(), asyncio.Event()
+    called_as: list[str | None] = []
+
+    async def executor(
+        *, tenant_id, user_id, role, grants, conversation_id, agent_address,
+        run_id, message, relay, attachments=None,
+    ):
+        called_as.append(agent_address)
+        started.set()
+        await release.wait()
+        relay.publish(run_id, {"type": "text_delta", "delta": f"reply:{message}"})
+
+    chat = ChatService(store, relay, turn_executor=executor)
+    turn = asyncio.create_task(
+        _collect(
+            chat.handle_turn(
+                tenant_id=T, user_id="alice", role="engineer",
+                conversation_id="legacy-steer-chat", message="first",
+            )
+        )
+    )
+    await asyncio.wait_for(started.wait(), timeout=1)
+    # A pre-upgrade queue row: no recipient recorded.
+    await store.enqueue_conversation_steer(
+        ConversationMessage(
+            id="legacy-steer", conversation_id="legacy-steer-chat", tenant_id=T,
+            role=MessageRole.USER, content="second", run_id="legacy-steer-run",
+            recipient_agent_address=None,
+        )
+    )
+    release.set()
+    await asyncio.wait_for(turn, timeout=2)
+
+    assert called_as == ["researcher", "researcher"]
+    replies = [
+        m for m in await store.list_messages(T, "legacy-steer-chat")
+        if m.role == MessageRole.ASSISTANT
+    ]
+    assert [m.author_agent_address for m in replies] == ["researcher", "researcher"]
+
+
+async def test_only_the_owner_can_retarget_a_conversation():
+    """A scoped role reads and steers; it does not choose who answers somebody
+    else's thread. Asserting the CURRENT agent stays open - it moves nothing."""
+    from boltrig.fleet.chat_conversation_access import (
+        ConversationAgentSwitchConflict,
+        resolve_conversation,
+    )
+
+    store = InMemoryStore()
+    for address, default in (("researcher", True), ("writer", False)):
+        await store.upsert_named_agent(
+            NamedAgent(
+                tenant_id=T, address=address, name=address.title(),
+                runtime="script", default_for_intake=default,
+            )
+        )
+    await store.create_conversation(
+        Conversation(
+            id="owned-chat", tenant_id=T, user_id="alice",
+            agent_address="researcher",
+        )
+    )
+
+    with pytest.raises(ConversationAgentSwitchConflict):
+        await resolve_conversation(
+            store, T, "owned-chat", "bob", "org-admin", "hi",
+            agent_address="writer",
+        )
+    same = await resolve_conversation(
+        store, T, "owned-chat", "bob", "org-admin", "hi",
+        agent_address="researcher",
+    )
+    assert same.agent_address == "researcher"
+    owner = await resolve_conversation(
+        store, T, "owned-chat", "alice", "engineer", "hi",
+        agent_address="writer",
+    )
+    assert owner.agent_address == "writer"
+
+
+def test_project_move_refuses_when_the_chat_service_is_absent():
+    """No idle guard, no move: the store CAS alone cannot see an active turn,
+    so a deployment shape without the chat service gets a refusal, never a
+    bypass that could move a project under a running conversation."""
+    store = InMemoryStore()
+
+    async def seed():
+        await store.create_workspace(Workspace(id="legal", tenant_id=T, name="Legal", slug="legal"))
+        await store.add_workspace_member(
+            WorkspaceMember(user_id="alice", workspace_id="legal", tenant_id=T, role="member")
+        )
+        await store.create_conversation(
+            Conversation(id="orphan-move-chat", tenant_id=T, user_id="alice")
+        )
+
+    asyncio.run(seed())
+    client = TestClient(create_app(Kernel(store)))
+    client.app.state.chat = None  # the deployment shape under test
+    refused = client.patch(
+        "/v1/me/conversations/orphan-move-chat/project",
+        json={"workspace_id": "legal", "expected_workspace_id": None},
+        headers={"x-boltrig-tenant": T, "x-boltrig-subject": "alice", "x-boltrig-role": "engineer"},
+    )
+    assert refused.status_code == 503
+    assert refused.json()["reason"] == "conversation_moves_unavailable"
+
+    async def unchanged():
+        conversation = await store.get_conversation(T, "orphan-move-chat")
+        assert conversation.workspace_id is None
+
+    asyncio.run(unchanged())

@@ -262,7 +262,7 @@ class AgentMailboxService(AgentMailboxContinuity):
         # dominate, and the independent tenant ceiling still binds dispatch.
         grants = GrantSet.of(
             list(source.grants.allow) + ["agent.send"],
-            list(source.grants.deny),
+            list(source.grants.deny) + ["chat.present"],
         )
         parent = message.run_id or source.parent_run_id or source.run_id
         return replace(

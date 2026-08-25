@@ -109,13 +109,15 @@ function LocalChatContent({
         {composer}
       </Welcome>}
       {controller.messages.map((message) => (
-        <Message key={message.id} message={message} tech={false} />
+        <Message key={message.id} message={message} tech={false}
+          onDisplayReply={(text) => controller.send(text, [])} />
       ))}
       {controller.events.length > 0 && <LiveTurn
         events={controller.events}
         turn={live}
         tech={false}
         startedAt={null}
+        onDisplayReply={(text) => controller.send(text, [])}
       />}
       {controller.error && <p className="notice" role="alert">{controller.error}</p>}
       {speechError && <p className="notice" role="status">{speechError}</p>}
@@ -212,6 +214,7 @@ function localUnavailableReason(
 ): string {
   if (!status) return "Checking the local agent";
   if (status.state !== "ready") return localStatusReason(status.reason);
+  if (!status.signed_in) return "Sign in to the local runtime in Settings → Advanced";
   if (roots.length === 0) return "Bind a local workspace in Settings → Advanced";
   return "";
 }

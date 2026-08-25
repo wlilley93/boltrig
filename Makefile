@@ -29,7 +29,7 @@ RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help gate-status relock fleet-drift-all up down logs test lint architecture structure vds-ledgers codex-protocol unwired-claims reachability prose-references refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality worker-install worker-structure worker-quality site-install site-quality compose-validate public-product-validate release-supply-chain-verify release-validate release-up doctor-fixture migration-parity recovery-verify recovery-rehearsal python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore commit-trailers tracked-symlinks
+.PHONY: help gate-status relock fleet-drift-all up down logs test lint architecture structure vds-ledgers codex-protocol unwired-claims reachability prose-references refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality worker-install worker-structure worker-quality familiar-island familiar-island-check site-install site-quality compose-validate public-product-validate release-supply-chain-verify release-validate release-up doctor-fixture migration-parity recovery-verify recovery-rehearsal python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore commit-trailers tracked-symlinks
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -243,6 +243,14 @@ worker-quality: worker-structure ## Audit, structure, typecheck, test, and build
 	cd apps/worker && $(PNPM) run typecheck
 	cd apps/worker && $(PNPM) run test
 	cd apps/worker && $(PNPM) run build
+	$(MAKE) --no-print-directory familiar-island-check
+
+familiar-island: ## Build the Familiar island page and copy it into the iOS app bundle
+	cd apps/worker && $(PNPM) run build:island
+	cd apps/worker && $(PNPM) run island:sync
+
+familiar-island-check: ## Refuse a committed Familiar island page that apps/worker/src no longer builds
+	cd apps/worker && $(PNPM) run island:check
 
 site-install: lockfile-policy ## Install the site from its frozen pnpm lockfile
 	cd site && $(PNPM) install --frozen-lockfile --ignore-scripts

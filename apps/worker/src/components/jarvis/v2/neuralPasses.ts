@@ -35,9 +35,9 @@ import {
   RING_FRAG,
   RING_SEGMENTS,
   RING_VERT,
-  SHARD_FRAG,
-  SHARD_VERT,
 } from "./shadersRing";
+import { SHARD_FRAG, SHARD_VERT } from "./shadersShard";
+import { LatticeDeck } from "../../canvas/latticeLayer";
 
 /** 128x128 = 16384 particles. Chosen against the draw cost, not the sim: the
  *  simulation is one full-screen pass regardless, but every particle is two
@@ -91,6 +91,7 @@ export class NeuralPasses {
   private blurFbo: WebGLFramebuffer[] = [];
   private ping = 0;
   private size: [number, number] = [0, 0];
+  private lattice: LatticeDeck | null = null;
 
   constructor(private readonly gl: WebGL2RenderingContext) {}
 
@@ -108,6 +109,9 @@ export class NeuralPasses {
       bloom: createProgram(gl, QUAD_VERT, BLOOM_FRAG),
       comp: createProgram(gl, QUAD_VERT, COMPOSITE_FRAG),
     };
+
+    this.lattice = new LatticeDeck(gl);
+    this.lattice.init();
 
     const seed = seedParticles(PARTICLES);
     for (let i = 0; i < 2; i++) {
@@ -152,17 +156,34 @@ export class NeuralPasses {
    * `tuning` defaults to what ships, so every existing caller is unaffected and
    * the bench is the only thing that ever passes anything else.
    */
+  /** The deck behind the body: per-state loops, crossfaded. */
+  latticeDeck(): LatticeDeck | null {
+    return this.lattice;
+  }
+
+
   render(d: Drive, palette: FloatUniforms, tuning: JarvisTuning = JARVIS_TUNING): void {
     this.simulate(d, tuning);
     this.drawScene(d, palette, tuning);
     this.bloom();
-    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), tuning.starburst, tuning.eye);
+    // The lens ring (eye.z) is drawn in SCREEN space by the composite, so it
+    // is the one radius presence's d.radius scaling cannot reach — scale it
+    // here or the ring stands still while the body grows and shrinks.
+    const eye: readonly [number, number, number, number] = [
+      tuning.eye[0], tuning.eye[1], tuning.eye[2] * tuning.presence, tuning.eye[3],
+    ];
+    this.composite({
+      palette, core: pulsedCore(tuning.core, d.energy, d.bands),
+      starburst: tuning.starburst, eye,
+      bounce: [tuning.bounce[0], tuning.bounce[1], tuning.bounceTrail], time: d.time,
+    });
   }
 
   destroy(): void {
     const gl = this.gl;
     [...this.simFbo, ...this.blurFbo, this.sceneFbo].forEach((f) => f && gl.deleteFramebuffer(f));
     [...this.simTex, ...this.blurTex, this.sceneTex].forEach((t) => t && gl.deleteTexture(t));
+    this.lattice?.destroy();
     Object.values(this.progs).forEach((p) => gl.deleteProgram(p));
     if (this.quad) gl.deleteBuffer(this.quad);
     if (this.vao) gl.deleteVertexArray(this.vao);
@@ -228,6 +249,7 @@ export class NeuralPasses {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.simTex[this.ping]);
 
+    this.drawLattice(d, tuning, shared);
     drawRing(gl, this.progs, d, tuning, shared);
     drawGlyph(gl, this.progs, d, tuning, shared);
     drawIris(gl, this.progs, d, tuning, shared);
@@ -235,6 +257,17 @@ export class NeuralPasses {
     drawParticleLayers(gl, this.progs, d, tuning, shared);
     drawShard(gl, this.progs, d, tuning, shared);
   }
+
+  /** The baked layer, under everything. Skipped entirely at zero gain. */
+  private drawLattice(d: Drive, tuning: JarvisTuning, shared: FloatUniforms): void {
+    const gain = ramp(tuning.lattice, d.energy) * (1 + 0.35 * d.swell);
+    this.lattice?.draw({
+      size: this.size, warm: shared.uWarm as number[], gain,
+      fullscreen: (p) => this.fullscreen(p), scale: tuning.presence,
+      fx: [tuning.latticeBlur, tuning.latticeSat, tuning.latticeGlow],
+    });
+  }
+
 
   private bloom(): void {
     const gl = this.gl;
@@ -257,12 +290,13 @@ export class NeuralPasses {
     this.fullscreen(prog);
   }
 
-  private composite(
-    palette: FloatUniforms, core: number, starburst: number,
-    // Passed in rather than read off a field: this method has no tuning of its
-    // own, and reaching for one is what made it fail to compile.
-    eye: readonly number[],
-  ): void {
+  // Spec object rather than a parameter list: this method has no tuning of
+  // its own, and reaching for one is what made it fail to compile.
+  private composite(spec: {
+    palette: FloatUniforms; core: number; starburst: number;
+    eye: readonly number[]; bounce: readonly number[]; time: number;
+  }): void {
+    const { palette, core, starburst, eye, bounce, time } = spec;
     const gl = this.gl;
     const [w, h] = this.size;
     const prog = this.progs.comp;
@@ -276,6 +310,7 @@ export class NeuralPasses {
     setUniforms(gl, prog, {
       ...palette, uAspect: w / Math.max(1, h), uBloomGain: 0.85,
       uCore: core, uStarburst: starburst, uEye: eye,
+      uBounce: bounce, uTime: time,
     }, { uScene: 0, uBloom: 1 });
     this.fullscreen(prog);
     gl.activeTexture(gl.TEXTURE0);

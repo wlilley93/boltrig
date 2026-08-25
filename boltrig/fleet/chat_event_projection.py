@@ -10,6 +10,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from boltrig.models.display_objects import (
+    DisplayObjectValidationError,
+    validate_display_object,
+)
+
 
 class _UnsupportedEvent(ValueError):
     """An internal frame cannot be represented by the public chat contract."""
@@ -270,6 +275,17 @@ def _artifact_rejected(event: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _display_object(event: dict[str, Any]) -> dict[str, Any]:
+    value = event.get("object")
+    try:
+        display_object = validate_display_object(value)
+    except DisplayObjectValidationError as exc:
+        raise _UnsupportedEvent("object") from exc
+    out: dict[str, Any] = {"type": "display_object", "object": display_object}
+    _put(out, "run_id", _optional_text(event, "run_id"))
+    return out
+
+
 def _steer(event: dict[str, Any]) -> dict[str, Any]:
     return _simple(
         event,
@@ -302,6 +318,7 @@ _PROJECTORS: dict[str, _Projector] = {
     "steer_consumed": _steer,
     "artifact": _artifact,
     "artifact_rejected": _artifact_rejected,
+    "display_object": _display_object,
 }
 
 

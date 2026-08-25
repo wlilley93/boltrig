@@ -19,8 +19,11 @@ import { FIELD_GLSL, PROJECT_GLSL, PULSE_GLSL } from "../../canvas/glslCommon";
 
 /** Marks per ring. Dense enough to read as text rather than as ticks. */
 export const GLYPH_MARKS = 96;
-/** Concentric layers. */
-export const GLYPH_RINGS = 4;
+/** Concentric layers PER BAND. The four rings became two independent bands of
+ *  two — inner and outer inscriptions, each with its own channel on the desk —
+ *  because four rings driven by one set of dials read as two layers that
+ *  cannot be told apart. The pass draws twice; uGlyphBase names the band. */
+export const GLYPH_RINGS = 2;
 /** Six vertices: each mark is a quad, so it has a width to shade. */
 export const GLYPH_VERTS = GLYPH_MARKS * GLYPH_RINGS * 6;
 
@@ -38,6 +41,10 @@ uniform float uBands[8];
 // a missing pass. Include the chunk, do not re-declare what it brings.
 /** x innermost layer radius, y outermost. Concentric, not scattered. */
 uniform vec2 uGlyphRadius;
+/** Which band this draw is: 0 for the inner pair, 2 for the outer. Folded
+ *  into the GLOBAL layer index so counter-rotation and per-mark seeds are
+ *  unchanged from the four-ring original. */
+uniform float uGlyphBase;
 /** x mark height, y mark width. Both tiny: these are inscriptions, not bars. */
 uniform vec2 uGlyphSize;
 /** x rotation SPEED, y how much each layer counter-rotates against the last. */
@@ -61,7 +68,7 @@ void main() {
   int idx = v / 6;
   int mark = idx % MARKS;
   int layer = idx / MARKS;
-  float flayer = float(layer);
+  float flayer = float(layer) + uGlyphBase;
   float along = ALONG[corner];
   float across = ACROSS[corner];
 
@@ -76,8 +83,9 @@ void main() {
   // wheels on purpose: an inscription belongs to the plane you are reading it in,
   // so the layers sit flat and face you rather than tumbling through orientations.
   // A tumbling glyph ring reads as debris.
+  // LOCAL t across this band's own radius pair — the band owns its span.
   float radius = mix(uGlyphRadius.x, uGlyphRadius.y,
-                     flayer / max(1.0, ${GLYPH_RINGS}.0 - 1.0)) * uRadius;
+                     float(layer) / max(1.0, ${GLYPH_RINGS}.0 - 1.0)) * uRadius;
 
   // Which marks are lit. Stable per mark so an inscription stays put while the
   // layer turns -- a re-rolled mask strobes and reads as noise.

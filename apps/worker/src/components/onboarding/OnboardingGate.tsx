@@ -2,7 +2,6 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import type { MeSettingsResponse } from "@wlilley93/boltrig-web-sdk";
 
 import {
-  DEFAULT_CHARACTER,
   characterFromSettings,
   type CharacterId,
 } from "../../character";
@@ -11,6 +10,7 @@ import { needsOnboarding } from "../../onboarding";
 import { BrandLockup } from "./BrandLockup";
 import { onboardingActionDisabled, onboardingActionLabel } from "./onboardingActionState";
 import { StepSkeleton } from "./StepSkeleton";
+import { offeredCompanion } from "./companionCatalogue";
 import { CompanionStep } from "./CompanionStep";
 import { NameStep } from "./NameStep";
 import type { ProviderStepHandle } from "./ProviderStep";
@@ -163,9 +163,7 @@ function OnboardingFlow({
 
 function useOnboardingFlowState(account: MeSettingsResponse) {
   const stored = characterFromSettings(account.settings);
-  const [character, setCharacter] = useState<CharacterId>(
-    stored === "jarvis" ? stored : DEFAULT_CHARACTER,
-  );
+  const [character, setCharacter] = useState<CharacterId>(offeredCompanion(stored));
   const [name, setName] = useState(account.profile.display_name?.trim() ?? "");
   const [step, setStep] = useState<Step>(0);
   const [providerReady, setProviderReady] = useState(false);

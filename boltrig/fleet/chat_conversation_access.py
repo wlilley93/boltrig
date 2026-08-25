@@ -125,6 +125,19 @@ async def resolve_conversation(
                 "switch to this conversation's project before continuing it"
             )
         if agent_address is not None:
+            # Retargeting is the OWNER's move. A scoped role can read and
+            # steer, but letting it assert a different agent onto somebody
+            # else's thread would rewrite who answers that person - the old
+            # contract refused non-matching assertions, and ownership is the
+            # narrowest grant that restores it. Asserting the CURRENT agent
+            # stays open to any reader: it retargets nothing.
+            if (
+                agent_address != conversation.agent_address
+                and conversation.user_id != user_id
+            ):
+                raise ConversationAgentSwitchConflict(
+                    "only the conversation owner can change its agent"
+                )
             profile = await _resolve_profile(store, tenant_id, agent_address)
             return ConversationSelection(conversation, profile.address)
         if conversation.agent_address is None:

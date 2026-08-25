@@ -13,20 +13,19 @@
 // renderer itself, on sliders, without a single line of the vendored shader
 // moving. A bench that rebuilt the recipe would drift from it, and then it
 // would be tuning something nobody ships.
+import { applyCanvasBob } from "../canvas/canvasBob";
 import fragSrc from "../../bundles/familiar/familiar.frag?raw";
 import type { FamiliarGenotype } from "@wlilley93/boltrig-web-sdk";
 import { easeFactor, easeTuning, TRANSITION_SECONDS, INTRO_SECONDS } from "../canvas/bodyModes";
 import { createProgram } from "../canvas/glResources";
+import { emotionColour, readBodyPhenotype } from "../canvas/bodyEmotion";
+import { LatticeDeck } from "../canvas/latticeLayer";
 import { FAMILIAR_TUNING, type FamiliarTuning } from "../canvas/familiarTuning";
 import { FAMILIAR_ARRIVAL, familiarModeTuning } from "../canvas/familiarPresets";
 import { packFamiliarGenotype } from "./FamiliarGenotype";
 import { BeatImpulse, VoiceEnvelope, familiarDrive } from "./familiarDrive";
 import { AmbientGesture, FamiliarMood, GESTURE, type Mood, type MoodKey } from "./familiarMood";
-import {
-  pushFamiliarUniforms,
-  UNIFORMS,
-  type UniformMap,
-} from "./familiarUniforms";
+import { pushFamiliarUniforms, UNIFORMS, type UniformMap } from "./familiarUniforms";
 import {
   clampStageState,
   RESTING_STAGE_STATE,
@@ -58,6 +57,8 @@ export class FamiliarWebGLRenderer {
   private lastReducedFrame = -Infinity;
   private readonly reducedMotion: boolean;
   private readonly onFirstPaint?: () => void;
+  /** A host-chosen ceiling on the device pixel ratio; absent means the mode decides. */
+  private readonly dprCap?: number;
   private painted = false;
   private mode: FamiliarPresentationMode = "hero";
 
@@ -82,18 +83,24 @@ export class FamiliarWebGLRenderer {
   private introLeft = 0;
 
   private packedGenotype = packFamiliarGenotype(null);
+  private prog: WebGLProgram | null = null;
+  /** Her per-state loops, crossfaded by the shared deck. */
+  private latticeDeck: LatticeDeck | null = null;
+  /** The last phenotype handed in, for the baked layer's recolour. */
+  private phenoRaw: Record<string, unknown> | null = null;
 
   /** Seconds since the previous frame, published by the mood tick. Seeded to
    *  a nominal 60fps so the first frame smooths rather than dividing by zero. */
   private lastDt = 1 / 60;
 
-  constructor(options?: { reducedMotion?: boolean; onFirstPaint?: () => void }) {
+  constructor(options?: { reducedMotion?: boolean; onFirstPaint?: () => void; dprCap?: number }) {
     this.reducedMotion = options?.reducedMotion
       ?? (typeof window !== "undefined"
         && ((typeof window.matchMedia === "function"
           && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
           || document.documentElement.classList.contains("reduce-motion")));
     this.onFirstPaint = options?.onFirstPaint;
+    this.dprCap = options?.dprCap;
   }
 
   mount(container: HTMLElement): void {
@@ -142,6 +149,7 @@ export class FamiliarWebGLRenderer {
    * calm being, never a broken one.
    */
   applyPhenotype(scalars: Partial<Record<MoodKey, number>> | null): void {
+    this.phenoRaw = scalars as Record<string, unknown> | null;
     this.mood.applyPhenotype(scalars, performance.now());
   }
 
@@ -202,6 +210,8 @@ export class FamiliarWebGLRenderer {
   }
 
   destroy(): void {
+    this.latticeDeck?.destroy();
+    this.latticeDeck = null;
     cancelAnimationFrame(this.raf);
     this.gl?.getExtension("WEBGL_lose_context")?.loseContext();
     this.canvas?.remove();
@@ -230,9 +240,15 @@ export class FamiliarWebGLRenderer {
 
     const t = this.reducedMotion ? 0 : (now - this.startTime) / 1000;
     const tuning = this.tick(now);
+    // HER BOUNCE IS THE CANVAS ITSELF — see canvas/canvasBob.ts.
+    applyCanvasBob(canvas, tuning.bounce, t, this.reducedMotion);
     const drive = familiarDrive(this.state, this.smoothers, this.lastDt, t, tuning);
+    // Presence folds into her composition, so one dial moves her and her
+    // baked orb together as a composite piece.
+    const sized = tuning.presence === 1 ? tuning : { ...tuning,
+      composition: [tuning.composition[0] * tuning.presence, tuning.composition[1]] as const };
     pushFamiliarUniforms(gl, this.uniforms, {
-      w, h, t, drive, tuning,
+      w, h, t, drive, tuning: sized,
       mood: this.shownMood(tuning),
       mode: this.state.mode,
       presentation: this.mode,
@@ -240,6 +256,7 @@ export class FamiliarWebGLRenderer {
     });
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this.drawLattice(gl, w, h, tuning);
     if (!this.painted) {
       this.painted = true;
       this.onFirstPaint?.();
@@ -285,7 +302,44 @@ export class FamiliarWebGLRenderer {
     return this.pinned ?? this.live;
   }
 
-  /** The wander, with the current mode's colouring laid over it. */
+  /**
+   * Mount (or clear) the baked orb loops. A single URL serves every state; a
+   * map gives each state its own loop, with standby as the fallback for any
+   * state the map does not name. See canvas/latticeLayer.ts.
+   */
+  setLatticeVideo(source: string | Partial<Record<FamiliarMode, string>> | null): void {
+    this.latticeDeck?.setSource(source);
+  }
+
+  /**
+   * The baked layer, RECOLOURED BY MOOD. Her colour is an emotion, so the
+   * footage is shot once in blue and repainted here every frame: the emotion
+   * palette's warm multipliers act on her cobalt base, fatigue pulls the
+   * result toward its own grey, and the layer's luminance carries the colour.
+   * Additive over her own pass -- light adds in either order.
+   */
+  private drawLattice(gl: WebGL2RenderingContext, w: number, h: number, tuning: FamiliarTuning): void {
+    if (!this.latticeDeck) return;
+    this.latticeDeck.tick(this.state.mode, this.lastDt, tuning.latticeSpeed);
+    const gain = tuning.lattice[0] + tuning.lattice[1] * this.state.level;
+    if (gain <= 0) return;
+    const e = emotionColour(readBodyPhenotype(this.phenoRaw));
+    const base: readonly [number, number, number] = [0.45, 0.72, 1.0];
+    const col = [base[0] * e.warm[0], base[1] * e.warm[1], base[2] * e.warm[2]];
+    const lum = 0.299 * col[0] + 0.587 * col[1] + 0.114 * col[2];
+    const mood = col.map((c) => c + (lum - c) * e.desaturate);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+    this.latticeDeck.draw({
+      size: [w, h], warm: mood, gain,
+      fullscreen: () => gl.drawArrays(gl.TRIANGLES, 0, 3), recolour: true,
+      scale: tuning.presence,
+      fx: [tuning.latticeBlur, tuning.latticeSat, tuning.latticeGlow],
+    });
+    gl.disable(gl.BLEND);
+    if (this.prog) gl.useProgram(this.prog);
+  }
+
   private shownMood(tuning: FamiliarTuning): Mood {
     if (this.state.mode !== "error") return this.mood.cur;
     const [tension, luminosity] = tuning.errorTone;
@@ -317,6 +371,9 @@ export class FamiliarWebGLRenderer {
     // compile/link path is a second place for a shader error to be reported
     // differently, and this one already throws with the info log attached.
     const prog = createProgram(gl, VERT_SRC, fragSrc);
+    this.prog = prog;
+    this.latticeDeck = new LatticeDeck(gl);
+    this.latticeDeck.init();
     gl.useProgram(prog);
     for (const name of UNIFORMS) this.uniforms[name] = gl.getUniformLocation(prog, name);
 
@@ -330,7 +387,8 @@ export class FamiliarWebGLRenderer {
     const canvas = this.canvas;
     if (!canvas) return;
     const css = canvas.clientWidth || 1;
-    const scale = Math.min(window.devicePixelRatio || 1, this.mode === "voice" ? 2 : 1.25);
+    const cap = this.dprCap ?? (this.mode === "voice" ? 2 : 1.25);
+    const scale = Math.min(window.devicePixelRatio || 1, cap);
     const size = Math.max(1, Math.round(css * scale));
     if (canvas.width !== size || canvas.height !== size) {
       canvas.width = size;

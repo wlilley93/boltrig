@@ -2726,6 +2726,17 @@ invariants:
       - tests/unit/test_permanent_fleet_store.py::test_memory_observation_is_tenant_scoped_and_latest_per_worker
       - tests/unit/test_permanent_fleet_store.py::test_observation_contract_rejects_false_or_overlapping_evidence
       - tests/store/test_postgres_store.py::test_pg_permanent_fleet_observation_is_tenant_scoped_and_upserted
+  FR-REV-01:
+    description: 'Every consequential verb a run completes is appended to the durable run-effect ledger with the exact inverse invocation built at record time, or an honest not_undoable row when no inverse exists; a verb the inverse registry does not know fails closed to not-undoable, and a revert run records nothing (an undo cannot re-enter the ledger).'
+    tests:
+      - tests/unit/test_run_effect_ledger.py::test_gated_success_records_with_its_inverse
+      - tests/unit/test_run_effect_ledger.py::test_unknown_verbs_fail_closed_to_not_undoable
+      - tests/unit/test_run_effect_ledger.py::test_a_revert_run_records_nothing
+  FR-REV-02:
+    description: 'Reverting a run walks its recorded effects newest-first and executes each inverse through the dispatch chokepoint (granted, gated, audited like the forward call); each row is settled by compare-and-swap before its inverse runs so a concurrent revert cannot execute the same inverse twice, and not_undoable rows are reported, never attempted.'
+    tests:
+      - tests/integration/test_run_revert.py::test_revert_executes_inverses_lifo_through_dispatch
+      - tests/integration/test_run_revert.py::test_not_undoable_rows_are_reported_never_attempted
   FLT-PEER-01:
     description: 'Live serving composition is a flat roster: every declared named agent is a durable addressable tier-1 peer, the declared default only receives unaddressed intake and has no structural authority, explicit addresses route directly, unknown addresses park, and the old Chief/Department shape is accepted only as a manifest migration input. Named peers own final synthesis and delegate bounded work only to one-task ephemeral children.'
     tests:

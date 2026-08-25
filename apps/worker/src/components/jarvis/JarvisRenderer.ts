@@ -15,6 +15,12 @@ import {
   WAVE_SAMPLES,
 } from "./JarvisMotion";
 import { genotypeFrom } from "./JarvisGenotype";
+import { parseLiveKnobs, type JarvisLiveKnobsInput } from "./jarvisLiveKnobs";
+import { pushInstrumentState } from "./jarvisInstrumentUniforms";
+import {
+  PHENO_KEYS, PHENO_STALE_MS, PHENO_TAU, RESTING_PHENOTYPE,
+  type PhenoKey, type Phenotype,
+} from "./jarvisPhenotype";
 import { NO_TELEMETRY, type JarvisTelemetry } from "./JarvisTelemetry";
 import { NO_WORK, type JarvisWork } from "./JarvisWork";
 import {
@@ -44,35 +50,6 @@ export const UNIFORMS = [
   "uWorkLoad", "uWorkFail", "uHDR", "uSpinDelta", "uParallax",
 ] as const;
 type UniformName = (typeof UNIFORMS)[number];
-
-/** The ten server phenotype scalars (decision 0013 + 0024's attachment). */
-const PHENO_KEYS = [
-  "valence", "arousal", "irritation", "fatigue", "attention",
-  "social", "buoyancy", "luminosity", "tension", "attachment",
-] as const;
-type PhenoKey = (typeof PHENO_KEYS)[number];
-type Phenotype = Record<PhenoKey, number>;
-
-/**
- * Rest values. Read them as "nothing is known", not "the agent is calm": the
- * instrument sits at neutral and drops its signal ring rather than performing a
- * mood it has not been told about.
- *
- * This is the one place the instrument deliberately diverges from the Familiar,
- * whose renderer WANDERS its mood when the relay is absent so the creature
- * still looks alive. A creature may idle plausibly; an instrument that invents
- * a reading is broken.
- */
-const RESTING_PHENOTYPE: Phenotype = {
-  valence: 0.5, arousal: 0.28, irritation: 0, fatigue: 0, attention: 0.5,
-  social: 0.5, buoyancy: 0.5, luminosity: 0.5, tension: 0, attachment: 0.5,
-};
-
-/** Phenotype crossfade time constant — mood morphs, it never snaps. */
-const PHENO_TAU = 2.0;
-
-/** How long a phenotype sample stays usable before the dial drops to rest. */
-const PHENO_STALE_MS = 10_000;
 
 /** Mode crossfade time constant. Slow enough to read as a morph, not a cut. */
 const MODE_TAU = 0.18;
@@ -152,11 +129,16 @@ export class JarvisWebGLRenderer {
 
   private readonly reducedMotion: boolean;
   private readonly maxDevicePixelRatio: number;
-  private readonly accent: readonly [number, number, number];
-  private readonly scale: number;
+  private accent: readonly [number, number, number];
+  private scale: number;
   private readonly labels: "shader" | "none";
   private readonly wantBloom: boolean;
   private readonly genes: Float32Array;
+  private geneLoc: WebGLUniformLocation | null = null;
+  private genesDirty = false;
+  private presence = 1;
+  private bloomTuning: readonly [number, number, number] =
+    [BLOOM_THRESHOLD, BLOOM_KNEE, BLOOM_STRENGTH];
   private readonly fit: "auto" | "fixed";
 
   private sceneProgram: WebGLProgram | null = null;
@@ -294,6 +276,7 @@ export class JarvisWebGLRenderer {
       // every frame, and changing it rebuilds the renderer.
       const geneLoc = gl.getUniformLocation(prog, "uGene")
         ?? gl.getUniformLocation(prog, "uGene[0]");
+      this.geneLoc = geneLoc;
       if (geneLoc) gl.uniform4fv(geneLoc, this.genes);
       // Array uniforms answer to "name[0]" on some drivers and bare "name" on
       // others; ask for both rather than silently binding to null.
@@ -336,6 +319,20 @@ export class JarvisWebGLRenderer {
    * null to clear: the tracks fall back to ghosts, which is the honest
    * rendering of "no reading" and is NOT the same as a gauge at zero.
    */
+  /** The bench's live knobs, parsed in jarvisLiveKnobs.ts. Genes re-upload
+   *  on the next frame, where the scene program is bound. */
+  setTuning(next: JarvisLiveKnobsInput): void {
+    const knobs = parseLiveKnobs(next);
+    if (knobs.presence !== undefined) this.presence = knobs.presence;
+    if (knobs.accent) this.accent = knobs.accent;
+    if (knobs.scale !== undefined) this.scale = knobs.scale;
+    if (knobs.bloom) this.bloomTuning = knobs.bloom;
+    for (const [index, value] of knobs.genes) {
+      this.genes[index] = value;
+      this.genesDirty = true;
+    }
+  }
+
   applyTelemetry(next: JarvisTelemetry | null): void {
     this.telemetry = next ?? NO_TELEMETRY;
   }
@@ -693,36 +690,22 @@ export class JarvisWebGLRenderer {
     f("uReadout", readout ?? 0);
     f("uReduced", this.reducedMotion ? 1 : 0);
     gl.uniform3f(u.uAccent ?? null, this.accent[0], this.accent[1], this.accent[2]);
-    f("uScale", this.scale * this.fitScale(w, h));
+    f("uScale", this.scale * this.presence * this.fitScale(w, h));
+    if (this.genesDirty && this.geneLoc) {
+      // The scene program is bound here, which is where uGene lives.
+      gl.uniform4fv(this.geneLoc, this.genes);
+      this.genesDirty = false;
+    }
 
-    f("uSpin", this.spin);
-    f("uSpinDelta", this.spinDelta);
-    gl.uniform2f(u.uParallax ?? null, this.parallax.x, this.parallax.y);
-    f("uPhenoFresh", this.phenoFresh);
-    f("uValence", this.pheno.valence);
-    f("uArousal", this.pheno.arousal);
-    f("uIrritation", this.pheno.irritation);
-    f("uFatigue", this.pheno.fatigue);
-    f("uAttention", this.pheno.attention);
-    f("uLuminosity", this.pheno.luminosity);
-    f("uTension", this.pheno.tension);
-
-    const { budget, tokens } = this.telemetry;
-    f("uBudgetFill", budget.fill);
-    f("uBudgetKnown", budget.known ? 1 : 0);
-    f("uBudgetHard", budget.hard ? 1 : 0);
-    f("uTokenFill", tokens.fill);
-    f("uTokenKnown", tokens.known ? 1 : 0);
-
-    f("uWorkLoad", this.workLoad);
-    f("uWorkFail", this.workFail);
-
-    const labels = labelsForMode(mode);
-    const labelGain = this.labels === "shader" ? 1 : 0;
-    i1("uLabelTop", labels.top);
-    i1("uLabelBottom", labels.bottom);
-    f("uLabelTopAmt", labels.topAmt * labelGain);
-    f("uLabelBottomAmt", labels.bottomAmt * labelGain);
+    pushInstrumentState(
+      { f, i1, set2: (n, x, y) => gl.uniform2f(u[n as keyof typeof u] ?? null, x, y) },
+      {
+        spin: this.spin, spinDelta: this.spinDelta, parallax: this.parallax,
+        phenoFresh: this.phenoFresh, pheno: this.pheno, telemetry: this.telemetry,
+        workLoad: this.workLoad, workFail: this.workFail,
+        mode, shaderLabels: this.labels === "shader",
+      },
+    );
 
     f("uHDR", offscreen ? 1 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -734,9 +717,9 @@ export class JarvisWebGLRenderer {
     // pass ever reads the target it is writing.
     gl.useProgram(this.postProgram);
     const pu = this.postUniforms;
-    gl.uniform1f(pu.uThreshold ?? null, BLOOM_THRESHOLD);
-    gl.uniform1f(pu.uKnee ?? null, BLOOM_KNEE);
-    gl.uniform1f(pu.uStrength ?? null, BLOOM_STRENGTH);
+    gl.uniform1f(pu.uThreshold ?? null, this.bloomTuning[0]);
+    gl.uniform1f(pu.uKnee ?? null, this.bloomTuning[1]);
+    gl.uniform1f(pu.uStrength ?? null, this.bloomTuning[2]);
     this.postPass(gl, PASS.BRIGHT, this.scene!, this.bloomA!, t);
     this.postPass(gl, PASS.BLUR_H, this.bloomA!, this.bloomB!, t);
     this.postPass(gl, PASS.BLUR_V, this.bloomB!, this.bloomA!, t);

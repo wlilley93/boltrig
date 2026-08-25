@@ -8,6 +8,8 @@
 export * from "./types.js";
 export * from "./capabilityInvocation.js";
 export * from "./chatTurnTypes.js";
+export * from "./displayObjects.js";
+export { parseDisplayObject } from "./displayObjectValidation.js";
 export { normalizeEvents } from "./chatTurnNormalizer.js";
 export {
   BoltrigApiError,

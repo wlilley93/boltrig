@@ -208,3 +208,19 @@ __all__ = [
     "ascii_secret",
     "safe_identifier",
 ]
+
+
+def stored_base_url(row: dict[str, Any]) -> str | None:
+    """The endpoint Bifrost actually recorded. BOTH spellings, network first.
+
+    The gateway keeps a custom provider's address in ``network_config`` and
+    drops it from ``custom_provider_config``, so reading only the latter saw
+    ``None`` for every row and refused our own successful writes.
+    """
+    for key in ("network_config", "custom_provider_config"):
+        section = row.get(key)
+        if isinstance(section, dict):
+            stored = section.get("base_url")
+            if isinstance(stored, str) and stored:
+                return stored
+    return None

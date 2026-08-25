@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-20T20:10:39.952Z",
+  "capturedAt": "2026-08-22T15:31:03.918Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,19 +17,19 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "52216c365e5c0cde084324304d8461fcd63872e1ed327e33e510109c3dfdb18f",
-    "digestAfterCapture": "52216c365e5c0cde084324304d8461fcd63872e1ed327e33e510109c3dfdb18f",
+    "digestBeforeCapture": "249f9bb6ab487b401051f04e920d5d3000ff07183471004c205aa5ffafba5aed",
+    "digestAfterCapture": "249f9bb6ab487b401051f04e920d5d3000ff07183471004c205aa5ffafba5aed",
     "sourceUnchangedDuringCapture": true,
-    "branch": "codex/flat-named-agent-peers",
-    "head": "4c8a564092f56a266c5a7d5cb0a6cfa6f7dd6e49",
+    "branch": "worker/today-and-companion-names",
+    "head": "1d6c16cffd0302388e049e5504f30869d0d1a598",
     "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
-    "node": "v22.23.1",
+    "node": "v24.15.0",
     "browser": "chromium",
     "browserVersion": "151.0.7922.34",
-    "browserExecutable": "/Users/williamlilley/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
     "origin": "http://localhost:1420",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
@@ -40,7 +40,7 @@
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "f2b3690e14d6c5e4be08ddedb35165c74b041d133faeb0b3e7babdc358e6a440",
+      "sha256": "c66d6f153e87a58f0763d9147260f75905e74a0b923752bc8dec73dc88318f2d",
       "width": 1440,
       "height": 900,
       "captureContract": {

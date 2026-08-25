@@ -2,6 +2,8 @@
 // Fields the kernel may add later (binding target, live verb health) are kept
 // optional so the client tolerates their absence.
 
+import type { DisplayObjectEnvelope } from "./displayObjects.js";
+
 export type AdapterHealth = "ok" | "degraded" | "down" | "unknown";
 
 export interface HealthResponse {
@@ -780,6 +782,39 @@ export interface CancelRunResponse {
   reason?: string;
 }
 
+// GET /v1/runs/{run_id}/effects: the run's durable effect ledger, each step
+// with its honest undoability. POST /v1/runs/{run_id}/revert walks recorded
+// rows newest-first; an outcome of "approval_pending" carries the HITL
+// request id, and re-sending it as approvals[seq] releases the SAME inverse.
+export interface RunEffectView {
+  seq: number;
+  verb: string;
+  status: "recorded" | "not_undoable" | "reverted" | "revert_failed";
+  undoable: boolean;
+  summary: string;
+  created_at: string;
+}
+
+export interface RunEffectsResponse {
+  run_id: string;
+  effects: RunEffectView[];
+}
+
+export interface RunRevertResult extends RunEffectView {
+  outcome:
+    | "reverted"
+    | "revert_failed"
+    | "not_undoable"
+    | "already_settled"
+    | "approval_pending";
+  approval_id?: string;
+}
+
+export interface RunRevertResponse {
+  run_id: string;
+  results: RunRevertResult[];
+}
+
 // --- The streamed event union (one JSON object per SSE data line) -----------
 
 export interface ChatMessageStart {
@@ -993,6 +1028,13 @@ export interface ChatArtifactRejected {
   run_id?: string;
 }
 
+/** A validated visual object emitted by the named agent for this turn. */
+export interface ChatDisplayObject {
+  type: "display_object";
+  object: DisplayObjectEnvelope;
+  run_id?: string;
+}
+
 /**
  * A relay frame was intentionally withheld because it is not part of the
  * reviewed public chat vocabulary or did not satisfy that vocabulary.
@@ -1022,6 +1064,7 @@ export type ChatEvent =
   | ChatModelRouting
   | ChatArtifact
   | ChatArtifactRejected
+  | ChatDisplayObject
   | ChatEventUnavailable;
 
 // POST /v1/hitl/{question_id}/answer: owner-only, fail-closed answer to an

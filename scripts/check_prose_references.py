@@ -229,6 +229,59 @@ _PROSPECTIVE_RE = re.compile(
 
 ALLOW: dict[tuple[str, str], str] = {
     (
+        "docs/HANDOVER-2026-08-22-release-train.md",
+        "apps/worker/tests/visual/presets.json",
+    ): (
+        "The canon store is gitignored BY DESIGN (.gitignore:85) and lives in one "
+        "working tree on the beelink; the handover's whole point at that line is to "
+        "say so and to name the backups. The path cannot resolve in a clone, which "
+        "is exactly the fact being recorded - and this gate passing locally while "
+        "failing in CI, because an untracked copy sat in the author's worktree, is "
+        "the same index-versus-worktree trap the document describes two lines later."
+    ),
+    (
+        "docs/PROPOSAL-native-tables-surface.md",
+        "migrations/0026_data_plane.sql",
+    ): (
+        "A PROPOSED artefact of a deferred proposal (status deferred; revisit "
+        "trigger = a paying Boltrig-only customer). The document names the file "
+        "the work would create; it does not exist until the proposal is taken up, "
+        "and the proposal says so in its status line."
+    ),
+    (
+        "docs/PROPOSAL-native-tables-surface.md",
+        "boltrig/adapters/builtin/tables.py",
+    ): (
+        "Same deferred proposal, same reason: the adapter module it would add. "
+        "Naming the future path is the proposal's job; the ALLOW is what keeps "
+        "the gate honest about the fact that nothing ships it yet."
+    ),
+    (
+        "docs/characters/README.md",
+        "tests/test_montgomery_persona.py",
+    ): (
+        "General Montgomery ships from the boltrig-companion repository; the verbatim "
+        "test the table cites lives THERE, not here. The row exists so this repo's "
+        "character census is complete, and the citation names the companion repo's "
+        "net rather than pretending this repo holds one."
+    ),
+    (
+        "docs/characters/frame-video-bodies.md",
+        "scripts/agents/general_montgomery/generate_ambient_loop.py",
+    ): (
+        "The ambient-loop generator lives in the boltrig-companion repository "
+        "alongside the frame graphs it renders; this document is the contract both "
+        "repos share, so it must be able to name the other side's tooling."
+    ),
+    (
+        "docs/characters/general_montgomery.md",
+        "docs/MONTGOMERY-GRAPH.md",
+    ): (
+        "The clip-graph document is FrameGraph Studio's, in its own repository; "
+        "Montgomery's constitution cites it as the authority on his move set and "
+        "says whose document it is in the same sentence."
+    ),
+    (
         "scripts/check_commit_trailers.py",
         "docs/proposals/DEV-POSTURE-001-draft.yaml",
     ): (

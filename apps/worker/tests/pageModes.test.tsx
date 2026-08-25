@@ -1,0 +1,149 @@
+// @vitest-environment happy-dom
+
+// Page modes (?theme= / ?embed=1): URL-carried, per-load, never persisted.
+// An embedding host (the Opbox Agents panel) opens the worker with
+// `?theme=light&embed=1`; the override clamps the stamped palette and hides
+// the shell chrome without ever writing the person's saved preference.
+
+import { render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  applyAppearance,
+  bootstrapAppearance,
+  forcedThemeOverride,
+  isEmbedMode,
+  loadAppearance,
+  saveAppearanceLocal,
+} from "../src/theme";
+import { ThemeToggle } from "../src/components/chat/ThemeToggle";
+import { configuredApiOrigin, mountPrefix } from "../src/apiOrigin";
+
+function setPageUrl(pathAndQuery: string) {
+  window.history.replaceState(null, "", pathAndQuery);
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  document.documentElement.className = "";
+  document.documentElement.removeAttribute("style");
+  for (const key of ["theme", "themePreference", "density", "contrast", "embed"]) {
+    delete document.documentElement.dataset[key];
+  }
+  setPageUrl("/");
+  vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({
+    matches: true,
+    media: "(prefers-color-scheme: dark)",
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  setPageUrl("/");
+});
+
+describe("?theme= page override", () => {
+  it("clamps the stamped palette without touching the saved preference", () => {
+    saveAppearanceLocal({ ...loadAppearance(), theme: "dark" });
+    setPageUrl("/?theme=light");
+
+    bootstrapAppearance();
+
+    expect(document.documentElement.dataset.theme).toBe("light");
+    // The preference attr and storage keep what the person chose.
+    expect(document.documentElement.dataset.themePreference).toBe("dark");
+    expect(loadAppearance().theme).toBe("dark");
+  });
+
+  it("survives the server-settings re-apply (saveAppearanceLocal re-stamps through the clamp)", () => {
+    setPageUrl("/?theme=light");
+    bootstrapAppearance();
+
+    // CompactSections adopts kernel settings via saveAppearanceLocal - the
+    // clamp must win again on that re-apply, not just at boot.
+    saveAppearanceLocal({ ...loadAppearance(), theme: "dark" });
+
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(loadAppearance().theme).toBe("dark");
+  });
+
+  it("ignores an invalid value", () => {
+    setPageUrl("/?theme=neon");
+    expect(forcedThemeOverride()).toBeNull();
+    bootstrapAppearance();
+    expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  it("hides the ThemeToggle while forced - toggling would write a preference the person never chose", () => {
+    setPageUrl("/?theme=light");
+    const { container } = render(<ThemeToggle />);
+    expect(container.innerHTML).toBe("");
+    expect(screen.queryByRole("button", { name: "Toggle theme" })).toBeNull();
+  });
+
+  it("keeps the ThemeToggle without the override", () => {
+    render(<ThemeToggle />);
+    expect(screen.getByRole("button", { name: "Toggle theme" })).toBeTruthy();
+  });
+});
+
+describe("?embed=1 mode", () => {
+  it("stamps data-embed so the shell chrome CSS can hide", () => {
+    setPageUrl("/?embed=1");
+    expect(isEmbedMode()).toBe(true);
+    bootstrapAppearance();
+    expect(document.documentElement.dataset.embed).toBe("");
+  });
+
+  it("does not stamp (and clears a stale stamp) without the param", () => {
+    document.documentElement.dataset.embed = "";
+    applyAppearance(loadAppearance());
+    expect("embed" in document.documentElement.dataset).toBe(false);
+    expect(isEmbedMode()).toBe(false);
+  });
+
+  it("only accepts embed=1, not any truthy string", () => {
+    setPageUrl("/?embed=true");
+    expect(isEmbedMode()).toBe(false);
+  });
+});
+
+describe("mount-derived API base (GOAL console-mounts M2/M3)", () => {
+  it("standalone at root keeps the empty same-origin base - the negative control", () => {
+    setPageUrl("/");
+    expect(mountPrefix()).toBe("");
+    expect(configuredApiOrigin()).toBe("");
+  });
+
+  it("derives the mount prefix from the document path when mounted", () => {
+    setPageUrl("/boltrig/");
+    expect(mountPrefix()).toBe("/boltrig");
+    expect(configuredApiOrigin()).toBe("/boltrig");
+  });
+
+  it("survives an index.html document path", () => {
+    setPageUrl("/boltrig/index.html");
+    expect(mountPrefix()).toBe("/boltrig");
+  });
+
+  it("derives the mount from an EXTENSIONLESS path - the host stripped the slash", () => {
+    // Next.js 308-strips trailing slashes BEFORE its middleware (measured on
+    // the opbox mount 2026-08-21), so the framed document lives at /boltrig,
+    // never /boltrig/. An extensionless path is never a real file here.
+    setPageUrl("/boltrig");
+    expect(mountPrefix()).toBe("/boltrig");
+    expect(configuredApiOrigin()).toBe("/boltrig");
+  });
+
+  it("treats any other document path as ROOT - the visual-harness trap", () => {
+    // The first derivation prefixed everything: served at
+    // /tests/visual/parity.html, every /v1 fixture request became
+    // /tests/visual/parity.html/v1/... and the capture missed all of them.
+    // Only a directory path (or /index.html) is a mount.
+    setPageUrl("/tests/visual/parity.html");
+    expect(mountPrefix()).toBe("");
+    expect(configuredApiOrigin()).toBe("");
+  });
+});

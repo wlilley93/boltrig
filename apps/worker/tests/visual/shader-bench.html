@@ -9,20 +9,23 @@
          the middle, so the chrome is deliberately quiet — and the stage is black
          because both bodies are light on black and neither can be judged over
          anything else. */
-      :root { color-scheme: dark; }
+      /* --deskScale is the console's physical size, dragged from the grip
+         above the transport: fader travel and bus slider travel scale with it,
+         and the stage takes whatever the console gives up. */
+      :root { color-scheme: dark; --deskScale: 1; }
       * { box-sizing: border-box; }
       body {
         margin: 0;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 380px;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr) auto auto;
         height: 100vh;
         height: 100dvh;
         font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
         color: #d6d6dd;
-        background: #08080b;
+        background: #000;
         overscroll-behavior: none;
       }
-      /* Desktop keeps the sidebar; the sheet handle is for touch only. */
       #sheetToggle { display: none; }
 
       @media (max-width: 900px) {
@@ -66,7 +69,269 @@
         h1, p.lede { display: none; }
         .top { grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
       }
-      #stageWrap { position: relative; display: block; min-width: 0; overflow: hidden; }
+      /* THE CONSOLE: toolbar, stage, transport, desk, effects bus - one column,
+         the stage taking what is left after the console rows claim theirs. */
+      #topbar {
+        grid-row: 1;
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 10px; background: #0b0b0f; border-bottom: 1px solid #1c1c22;
+        overflow-x: auto;
+      }
+      #topbar select, #topbar button { width: auto; height: 28px; font-size: 11px; border-radius: 6px; padding: 0 10px; }
+      #topbar #history { max-width: 300px; }
+      #topbar #baselineNote { margin: 0; white-space: nowrap; }
+      #topbar #saved { margin: 0; min-height: 0; white-space: nowrap; }
+      /* Framing mode: the desk and bus fold away, the stage takes the height,
+         and presence stays live in the toolbar so the composite can be sized
+         against the real screen. */
+      body.desk-hidden #mixer, body.desk-hidden #bus, body.desk-hidden #splitter { display: none; }
+      /* MINIMISED = EVERYTHING AT THE BOTTOM. The console goes entirely and
+         the header itself drops below the stage, so the whole shader stands
+         clear with one slim bar under it; the Desk button there restores. */
+      body.desk-hidden #console { display: none; }
+      body.desk-hidden #topbar { grid-row: 4; border-bottom: 0; border-top: 1px solid #1c1c22; }
+      body.desk-hidden #stageWrap { grid-row: 1 / 4; }
+      /* The expand control lives on the collapsed bar's right edge and only
+         exists while the desk is down; ▾ in the transport is its other half. */
+      #deskExpand { display: none; }
+      body.desk-hidden #deskExpand {
+        display: block; margin-left: auto; width: 30px; flex: 0 0 auto;
+        border-radius: 14px; font-size: 12px;
+      }
+      #lockColour.on { color: #0b0b0f; background: #ffb060; border-color: #ffb060; }
+      #presenceQuick { width: 130px; accent-color: #6f8cff; }
+      #topbar .pq { display: flex; align-items: center; gap: 5px; }
+      #topbar .pq b {
+        font-variant-numeric: tabular-nums; font-weight: 500;
+        color: #c9c9d2; font-size: 10.5px; cursor: text; min-width: 34px;
+      }
+      #topbar .pq .lfo-bind { width: 24px; height: 24px; }
+      #topbar .pq span { font-size: 9.5px; text-transform: uppercase; letter-spacing: .07em; color: #55555f; }
+      /* THE STAGE OWNS THE WHOLE HEIGHT. It spans the splitter and console
+         rows, and the console floats translucent on top — so the avatar sits
+         centred in the real window and resizing the desk never moves him. */
+      /* TRUE BLACK behind every stage. The full-bleed bodies paint their own
+         black; the Familiar's SQUARE stage floats centred, and the surround
+         showed the page's near-black grey — a visible frame around a body
+         judged against darkness. The whole screen behind her is black now. */
+      #stageWrap { position: relative; display: block; min-width: 0; overflow: hidden; grid-row: 2 / 5; grid-column: 1; background: #000; }
+      /* THE TRANSPORT. The states are the instrument's keys: standby, listening,
+         thinking, working, speaking are the animated base looks, and everything
+         else — voice, emotion — is a modifier layered on top. Clicking a state
+         eases the body there at the chosen pace. */
+      /* THE GRIP. A thin bar between stage and console; dragging it rescales
+         the desk — fader travel, bus sliders — and the whole console follows,
+         stage taking up the difference. */
+      /* ABOVE THE STAGE. #stage is positioned (inset 0) and so paints over
+         later static siblings — without a z-index of their own the grip and
+         the console are underneath the canvas and never see a pointer. */
+      #splitter, #console { position: relative; z-index: 2; }
+      #splitter {
+        grid-row: 3; grid-column: 1; height: 12px; cursor: ns-resize;
+        background: rgba(11, 11, 15, .3); border-top: 1px solid #1c1c22;
+        display: grid; place-items: center;
+      }
+      #splitter::before {
+        content: ""; width: 64px; height: 4px; border-radius: 2px; background: #3a3a46;
+      }
+      #splitter:hover::before, #splitter:active::before { background: #6f8cff; }
+      /* THE CONSOLE: transport across the top, desk and bus stacked on the
+         left, the player pane full height on the right. */
+      #console {
+        grid-row: 4; grid-column: 1;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 240px;
+        grid-template-rows: auto auto auto;
+        background: rgba(11, 11, 15, .34);
+        backdrop-filter: blur(2px);
+      }
+      #transport {
+        grid-column: 1 / -1; grid-row: 1;
+        display: flex; align-items: center; gap: 10px;
+        padding: 8px 10px 2px; background: transparent;
+        border-top: 1px solid #1c1c22;
+        overflow-x: auto;
+      }
+      #states { display: flex; gap: 6px; }
+      #saveState {
+        width: auto; flex: 0 0 auto; padding: 0 12px; height: 30px;
+        border-radius: 15px; font-size: 11px;
+      }
+      /* Minimise/maximise the desk, top right of the console. */
+      #deskMin {
+        margin-left: auto; width: 30px; flex: 0 0 auto; height: 30px;
+        border-radius: 15px; font-size: 12px;
+      }
+      #states button {
+        width: auto; padding: 0 14px; height: 30px; border-radius: 15px;
+        font-size: 11.5px; letter-spacing: .02em; white-space: nowrap;
+      }
+      #states button.on { color: #0b0b0f; background: #6f8cff; border-color: #6f8cff; font-weight: 600; }
+      #pace { width: auto; height: 30px; border-radius: 15px; font-size: 11px; }
+      #transport .sep { flex: 0 0 1px; height: 22px; background: #26262e; }
+      #transport .tlabel {
+        font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em;
+        color: #55555f; white-space: nowrap;
+      }
+      #emotions { display: flex; gap: 5px; }
+      #emotions button {
+        width: auto; padding: 0 10px; height: 24px; border-radius: 12px;
+        font-size: 10.5px; color: #9a9aa4; white-space: nowrap;
+      }
+      #emotions button.on { color: #e8e8ef; border-color: #6f8cff; background: #10101a; }
+      /* THE DESK. One strip per draw pass, along the bottom like a mixing
+         console: fader on the pass's master level, mute/solo for auditioning,
+         a lamp when an LFO is sweeping it. Click a strip and the right rail
+         becomes that channel's effects. */
+      #mixer {
+        grid-column: 1; grid-row: 2;
+        display: flex; gap: 6px; padding: 8px 10px;
+        border-top: 1px solid #1c1c22; background: transparent;
+        overflow-x: auto; overflow-y: hidden;
+      }
+      .channel {
+        flex: 0 0 92px; display: grid; justify-items: center; gap: 3px;
+        padding: 6px 5px 5px; border: 1px solid #1c1c22; border-radius: 8px;
+        background: rgba(13, 13, 17, .3); cursor: pointer; user-select: none;
+      }
+      .channel:hover { border-color: #3a3a46; }
+      .channel.selected { border-color: #6f8cff; background: #10101a; }
+      .channel.muted { opacity: .45; }
+      .channel .chname {
+        font-size: 11px; font-weight: 600; letter-spacing: .05em;
+        text-transform: uppercase; color: #d6d6dd; text-align: center;
+        max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .channel.selected .chname { color: #6f8cff; }
+      .channel .chlamp { width: 6px; height: 6px; border-radius: 3px; background: #1a1a22; }
+      .channel .chlamp.on { background: #6f8cff; box-shadow: 0 0 6px #6f8cff; }
+      .channel .fader {
+        writing-mode: vertical-lr; direction: rtl;
+        width: 22px; height: calc(96px * var(--deskScale)); margin: 2px 0; accent-color: #6f8cff;
+      }
+      .channel b {
+        font-variant-numeric: tabular-nums; font-weight: 500;
+        color: #c9c9d2; font-size: 10.5px;
+      }
+      .channel .ms { display: flex; gap: 4px; }
+      .channel .ms button { width: auto; min-width: 22px; height: 20px; padding: 0 4px; font-size: 10px; border-radius: 5px; }
+      .channel .ms button.on { color: #0b0b0f; background: #6f8cff; border-color: #6f8cff; }
+      .channel .chdrift {
+        position: absolute; top: 3px; right: 5px;
+        font-size: 9px; color: #ffb060; font-variant-numeric: tabular-nums;
+      }
+      .channel { position: relative; }
+      /* THE RACK: LFO cards at the desk's right, channels pinned by chip. */
+      .rackcard {
+        flex: 0 0 150px; position: relative; display: grid; gap: 3px;
+        padding: 6px 7px 5px; border: 1px solid #2a2a36; border-radius: 8px;
+        background: rgba(15, 15, 22, .4);
+      }
+      .rackcard .rackkill {
+        position: absolute; top: 2px; right: 4px; width: 20px; height: 18px;
+        padding: 0; font-size: 11px; border: 0; background: transparent; color: #74747e;
+      }
+      .rackcard .rackdial { display: grid; gap: 1px; font-size: 8.5px; margin: 0; }
+      .rackcard .rackdial input { width: 100%; margin: 0; accent-color: #6f8cff; }
+      .rackchips { display: flex; flex-wrap: wrap; gap: 3px; }
+      .rackchips button {
+        width: auto; height: 16px; padding: 0 5px; font-size: 8.5px;
+        border-radius: 8px; text-transform: uppercase; letter-spacing: .04em;
+      }
+      .rackchips button.on { color: #0b0b0f; background: #6f8cff; border-color: #6f8cff; }
+      .rackadd {
+        flex: 0 0 auto; width: auto; padding: 0 12px; align-self: center;
+        height: 28px; border-radius: 14px; font-size: 11px;
+      }
+      /* The video channel wears its film mark top right; its drift count
+         steps aside rather than fighting for the corner. */
+      .channel .chvid { position: absolute; top: 3px; right: 5px; font-size: 9px; color: #6f8cff; }
+      .channel.video .chdrift { right: auto; left: 5px; }
+      /* THE EFFECTS BUS. The selected channel's dials run horizontally under
+         the desk - one card per dial, console-style - so the stage keeps the
+         whole width and the eye never leaves the body. */
+      #bus {
+        grid-column: 1; grid-row: 3;
+        display: flex; gap: 6px; align-items: stretch;
+        padding: 6px 10px 10px; background: transparent;
+        border-top: 1px solid #1c1c22;
+        overflow-x: auto; overflow-y: hidden;
+        min-height: calc(86px * var(--deskScale));
+      }
+      /* FX AS FADERS. Every effect value stands vertical like the desk; the
+         visible label is the code name alone, and the prose title with the
+         value legend rides the native tooltip — hover to be told what a dial
+         is, drag to find out what it does. */
+      #bus .row {
+        flex: 0 0 auto; margin: 0; padding: 5px 7px 4px;
+        border: 1px solid #1c1c22; border-radius: 8px; background: rgba(13, 13, 17, .3);
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+      }
+      #bus .row .vals { display: flex; gap: 5px; align-items: flex-end; }
+      #bus .row .val { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+      #bus .row .val input[type="range"] {
+        writing-mode: vertical-lr; direction: rtl;
+        width: 18px; height: calc(64px * var(--deskScale)); margin: 0; accent-color: #6f8cff;
+      }
+      #bus .row .val b { font-size: 9.5px; }
+      /* An inverted dial: the fill runs the other way, so a stride of 1
+         (every particle a shard) sits at the TOP like the maximum it is. */
+      #bus .row .val input.invert { direction: ltr; }
+      #bus .row .val .vtag {
+        font-size: 8.5px; line-height: 1.15; color: #9a9aa4;
+        max-width: 62px; text-align: center; white-space: normal;
+      }
+      /* ×voice: dim while shadowing the dial, amber once it names a journey.
+         input.xv, so this outweighs the vertical-fader rule above it. */
+      #bus .row .val input.xv {
+        writing-mode: horizontal-tb; direction: ltr;
+        width: 46px; height: 12px; margin: 1px 0 0; accent-color: #3a3a46;
+      }
+      #bus .row .val input.xv.set { accent-color: #ffb060; }
+      /* The LFO panel folds inside the card instead of stretching it flat. */
+      #bus .row .lfo { flex-wrap: wrap; max-width: 210px; justify-content: center; }
+      #bus .row .lfo input { width: 58px; }
+      #bus .row .val .fxbtns { display: flex; gap: 2px; }
+      #bus .row label { margin: 0; text-align: center; }
+      #bus .row label .code {
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        display: block; max-width: 110px; font-size: 10px; color: #c9c9d2;
+      }
+      #bus .row .lfo { width: 100%; }
+      @media (max-width: 900px) { #mixer, #transport { display: none; } }
+      /* Values sitting off the baseline are marked, so "how far have we gone"
+         is a glance rather than an audit. */
+      .row b.drift { color: #ffb060; }
+      #baselineNote { font-size: 10.5px; color: #74747e; margin: 2px 0 8px; min-height: 12px; }
+      #baselineNote b { color: #ffb060; font-weight: 500; }
+      #driftOnly.on { color: #0b0b0f; background: #ffb060; border-color: #ffb060; }
+      #states button .sbadge { font-size: 9px; color: #ffb060; margin-left: 6px; font-variant-numeric: tabular-nums; }
+      #states button.on .sbadge { color: #0b0b0f; }
+      #abHold:active { color: #0b0b0f; background: #6ee7a8; border-color: #6ee7a8; }
+      #rec { width: 34px; height: 30px; border-radius: 15px; color: #ff6a4a; font-size: 13px; }
+      #rec.armed { background: #2a1a12; border-color: #ffb060; color: #ffb060; }
+      #rec.live { background: #ff6a4a; border-color: #ff6a4a; color: #0b0b0f; animation: recpulse 1s infinite; }
+      @keyframes recpulse { 50% { opacity: .55; } }
+      #transTo, #transChoose { width: auto; height: 30px; border-radius: 15px; font-size: 11px; }
+      #transSave { width: auto; height: 30px; border-radius: 15px; font-size: 11px; padding: 0 12px; }
+      #transLoop { width: 34px; height: 30px; border-radius: 15px; }
+      #transLoop.on { color: #0b0b0f; background: #6ee7a8; border-color: #6ee7a8; }
+      #transStatus { color: #74747e; text-transform: none; letter-spacing: normal; }
+      #states button.legal .sbadge::after { content: " ⇢"; color: #6ee7a8; }
+      /* THE SETTINGS MODAL: voice, capture and export utilities off the rail,
+         so the rail is nothing but the selected channel's effects. */
+      #modal {
+        position: fixed; inset: 0; z-index: 10; display: none;
+        place-items: center; background: rgba(0, 0, 0, .55);
+      }
+      #modal.open { display: grid; }
+      #modal .card {
+        width: min(440px, 92vw); max-height: 84vh; overflow: auto;
+        background: #0d0d11; border: 1px solid #26262e; border-radius: 12px;
+        padding: 18px;
+      }
+      #modal h2 { margin: 0 0 12px; font-size: 13px; letter-spacing: .02em; }
+      #modal .top { margin-bottom: 10px; }
       /* FULL BLEED. It was a 760px square box floating in the page, which meant the
          body was always judged inside a frame roughly its own size -- and how much
          empty space sits around a being is part of how big it reads. Filling the
@@ -78,6 +343,55 @@
         background: #000;
       }
       #stage canvas { display: block; width: 100%; height: 100%; }
+      /* The audition pane rides the console's right edge, over the desk and
+         bus rows, so the player is always where the mixing hand already is. */
+      /* THE PLAYER PANE. The full height of the console's right side, over the
+         desk and the bus together: a mini player in the Spotify shape — art,
+         title, seek bar, transport keys — with the TTS line underneath, so a
+         written sentence is one Enter away from being spoken over standby. */
+      #voiceDock {
+        grid-column: 2; grid-row: 2 / span 2;
+        display: flex; flex-direction: column; gap: 6px;
+        padding: 10px; min-width: 0;
+        border-left: 1px solid #1c1c22; background: rgba(13, 13, 17, .72);
+      }
+      #voiceDock select, #voiceDock button { height: 26px; font-size: 11px; }
+      #voiceDock input[type="file"] { font-size: 10px; color: #74747e; margin-top: auto; }
+      #npRow { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; align-items: center; }
+      #npArt {
+        width: 34px; height: 34px; border-radius: 6px; display: grid; place-items: center;
+        font-size: 15px; color: #0b0b0f; font-weight: 700;
+        background: linear-gradient(135deg, #6f8cff, #2a3566);
+      }
+      #npMeta { min-width: 0; }
+      #npTitle {
+        font-size: 11.5px; font-weight: 600; color: #e8e8ef;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      #npSub {
+        font-size: 10px; color: #74747e;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      #npProg { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+      #npProg span { font-size: 9.5px; color: #74747e; font-variant-numeric: tabular-nums; }
+      #npProg input[type="range"] { width: 100%; margin: 0; accent-color: #6f8cff; }
+      #npCtl { display: flex; gap: 5px; justify-content: center; align-items: center; }
+      #npCtl button { width: 30px; padding: 0; }
+      #npCtl #voicePlay {
+        width: 34px; height: 30px; border-radius: 15px;
+        color: #0b0b0f; background: #6f8cff; border-color: #6f8cff; font-size: 12px;
+      }
+      #npCtl button.on { color: #0b0b0f; background: #6f8cff; border-color: #6f8cff; }
+      #npVol { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px; align-items: center; }
+      #npVol span { font-size: 9.5px; color: #74747e; text-transform: uppercase; letter-spacing: .06em; }
+      #npVol input[type="range"] { width: 100%; margin: 0; accent-color: #6f8cff; }
+      #ttsRow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 5px; }
+      #ttsRow input[type="text"] {
+        height: 26px; padding: 0 8px; font: inherit; font-size: 11px;
+        color: #e8e8ef; background: #14141a;
+        border: 1px solid #26262e; border-radius: 7px; min-width: 0;
+      }
+      #ttsRow button { width: 44px; }
       /* SQUARE FOR THE FAMILIAR. Her canvas sizes itself from its own width and
          draws square -- the shipped Stage is `aspect-ratio: 1` on every surface
          -- so a full-bleed host stretches the drawing buffer across a wide
@@ -92,14 +406,17 @@
         height: auto;
         aspect-ratio: 1;
       }
+      /* Top of the stage now: the console floats over the stage's bottom, and
+         a readout underneath a translucent desk reads as noise on both. */
       #readout {
-        position: absolute; left: 0; right: 0; bottom: 10px;
+        position: absolute; left: 0; right: 0; top: 8px;
         text-align: center; font-variant-numeric: tabular-nums; color: #8b8b95;
       }
       #readout b { color: #e8e8ef; font-weight: 600; }
       #readout b.bad { color: #ff6a4a; }
       #readout b.good { color: #5cb87f; }
       aside {
+        grid-column: 2; grid-row: 1 / -1;
         overflow: auto;
         padding: 16px 18px 28px;
         border-left: 1px solid #1c1c22;
@@ -198,6 +515,9 @@
         color: #74747e; background: #14141a; border-color: #26262e;
       }
       .lfo-bind.on { color: #0b0b0f; background: #6f8cff; border-color: #6f8cff; }
+      /* An ARMED reach is amber: the slider is being ridden to the far point,
+         and the next press locks it in. */
+      .lfo-bind.reach.arm { color: #0b0b0f; background: #ffb060; border-color: #ffb060; }
       .row input[type="range"]:disabled { opacity: .75; }
       .lfo { display: none; grid-column: 1 / -1; gap: 6px; margin: 2px 0 4px; }
       .lfo.open { display: flex; }
@@ -210,7 +530,17 @@
         border: 1px solid #26262e; border-radius: 5px;
         color: #e8e8ef; font: inherit; font-size: 11px; background: #101016;
       }
-    </style>
+    /* A video character borrows the same header, transport and emotion row; the
+   tuning tools stand down rather than mislabel a body they cannot drive. */
+body.video-char #topbar > *:not(#body) { display: none; }
+/* A body with no tuning struct (one register) keeps the transport and the
+   emotion row; the save/preset/presence tools stand down rather than write
+   empty looks under a real body's keys. */
+body.no-tuning :is(#save, #applyAll, #fromBaseline, #allMin, #lockColour,
+                   #driftOnly, #abHold, #history, .pq, #saveState, #pace,
+                   #deskToggle, #bus, .tlabel, #emotions) { display: none; }
+body.video-char :is(#saveState, #pace, #deskMin, #bus, .sep) { display: none; }
+</style>
   </head>
   <body>
     <div id="stageWrap">
@@ -218,57 +548,116 @@
       <div id="readout">starting…</div>
       <button id="sheetToggle" type="button" aria-expanded="true">Controls</button>
     </div>
-    <aside>
-      <h1>Shader bench</h1>
-      <p class="lede">
-        The real renderers, live — Jarvis and Ultron by their draw passes, the
-        Familiar by her host recipe (the vendored shader is never edited here).
-        <code>white</code> is the centre-blowout number — keep it at zero. Copy
-        settings pastes straight into <code>canvas/bodyTuning.ts</code>. Every change is remembered, so a reload
-        keeps your look; <b>Copy link</b> makes it shareable.
-      </p>
-      <div class="top">
-        <div>
-          <label for="body">Body</label>
-          <select id="body">
-            <option value="jarvis">Jarvis V2</option>
-            <option value="ultron">Ultron</option>
-            <option value="familiar">Familiar</option>
-          </select>
-        </div>
-        <div>
-          <label for="mode">Mode</label>
-          <!-- Filled by paintModes(): the bodies do not all have the same
-               states, and a hardcoded list would offer one nothing renders. -->
-          <select id="mode"></select>
-        </div>
+    <div id="topbar">
+      <select id="body">
+        <option value="jarvis">Jarvis V2</option>
+        <option value="jarvis1">Jarvis V1</option>
+        <option value="ultron">Ultron</option>
+        <option value="familiar">Familiar</option>
+        <option value="colossus">Colossus</option>
+        <option value="montgomery">General Montgomery</option>
+        <option value="maya">Maya — framegraph</option>
+        <option value="maya-library">Maya — clip library</option>
+      </select>
+      <button id="save" type="button" class="primary"
+              title="Every state of this body, and its baseline, to the file">Save everything</button>
+      <button id="applyAll" type="button">Apply to all states</button>
+      <button id="undo" type="button" title="Undo the last edit gesture (Ctrl+Z)">↩</button>
+      <button id="fromBaseline" type="button">Load baseline</button>
+      <button id="allMin" type="button"
+              title="Every slider to its minimum — build by eye, raising one at a time">All → min</button>
+      <button id="lockColour" type="button"
+              title="Colour parity: colour dials move together, and their reach follows — speech cannot shift the colourisation">Lock colour</button>
+      <button id="driftOnly" type="button" title="Show only dials off the baseline">Δ only</button>
+      <button id="abHold" type="button" title="Hold to show the baseline (or hold B)">A/B</button>
+      <select id="history"></select>
+      <div class="pq"><span>Presence</span>
+        <input id="presenceQuick" type="range" min="0.4" max="1.8" step="0.005" value="1" />
+        <b id="presenceOut" title="Click to type a value">1.000</b>
+        <button id="presenceOsc" type="button" class="lfo-bind" title="Sweep presence">∿</button>
+        <button id="presenceReach" type="button" class="lfo-bind reach"
+                title="Speech reach — click, drag to the far size, click again to set. Shift-click clears.">◉</button>
       </div>
-      <div class="row">
-        <label for="level">Voice level</label>
-        <input id="level" type="range" min="0" max="1" step="0.01" value="0.8" />
-      </div>
-      <div class="top">
-        <div class="voice">
-          <select id="clip"></select>
-          <button id="voicePlay" type="button">▶ Speak</button>
-          <button id="voiceStop" type="button">■</button>
-          <label class="tick"><input id="loop" type="checkbox" checked /> loop</label>
-          <input id="clipFile" type="file" accept="audio/*" />
-          <div class="meter"><i id="voiceMeter"></i></div>
-          <div id="voiceState"></div>
-        </div>
-        <button id="save" type="button" class="primary">Save preset</button>
-        <button id="play" type="button">Play draw-in</button>
-        <button id="reset" type="button">Reset to shipped</button>
-        <button id="copy" type="button">Copy settings</button>
-      </div>
-      <div class="top">
-        <button id="link" type="button">Copy link to this look</button>
-      </div>
-      <div id="controls"></div>
+      <button id="gear" type="button">⚙</button>
+      <div id="baselineNote"></div>
       <div id="saved"></div>
-      <div id="export"></div>
-    </aside>
+      <button id="deskExpand" type="button" title="Expand the desk">▴</button>
+    </div>
+    <div id="splitter" title="Drag to resize the console"></div>
+    <div id="console">
+    <div id="transport">
+      <div id="states"></div>
+      <button id="saveState" type="button" class="primary"
+              title="Save just the state on stage">Save state</button>
+      <select id="pace" title="How fast the body travels between states">
+        <option value="instant">instant</option>
+        <option value="fast">fast</option>
+        <option value="normal" selected>normal</option>
+        <option value="slow">slow</option>
+      </select>
+      <span class="sep"></span>
+      <span class="tlabel">Emotion</span>
+      <div id="emotions"></div>
+      <button id="deskMin" type="button" title="Minimise or restore the desk">▾</button>
+    </div>
+    <div id="mixer"></div>
+    <div id="modal">
+      <div class="card">
+        <h2>Settings</h2>
+        <div class="top">
+          <button id="play" type="button">Play draw-in</button>
+          <button id="reset" type="button">Reset to shipped</button>
+        </div>
+        <div class="top">
+          <button id="copy" type="button">Copy settings</button>
+          <button id="link" type="button">Copy link to this look</button>
+        </div>
+        <div id="export"></div>
+        <div class="top" style="margin-top: 12px">
+          <button id="modalClose" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+    <div id="bus"><div id="controls" style="display:contents"></div></div>
+    <!-- The player pane: full height of the console's right side. -->
+    <div id="voiceDock">
+      <div id="npRow">
+        <div id="npArt">♪</div>
+        <div id="npMeta">
+          <div id="npTitle">Nothing playing</div>
+          <div id="npSub">pick a clip, or type a line below</div>
+        </div>
+      </div>
+      <div id="npProg">
+        <span id="npNow">0:00</span>
+        <input id="npSeek" type="range" min="0" max="1000" step="1" value="0" />
+        <span id="npDur">0:00</span>
+      </div>
+      <div id="npCtl">
+        <button id="voicePrev" type="button" title="Previous clip">⏮</button>
+        <button id="voicePlay" type="button" title="Play over standby">▶</button>
+        <button id="voiceNext" type="button" title="Next clip">⏭</button>
+        <button id="voiceLoop" type="button" title="Loop the clip">⟳</button>
+        <button id="voiceStop" type="button" title="Stop">■</button>
+      </div>
+      <input id="loop" type="checkbox" checked hidden />
+      <div id="npVol">
+        <span>vol</span>
+        <input id="level" type="range" min="0" max="1" step="0.01" value="0.8"
+               title="Voice level" />
+      </div>
+      <div class="meter"><i id="voiceMeter"></i></div>
+      <select id="clip"></select>
+      <div id="ttsRow">
+        <input id="ttsText" type="text" placeholder="Type a line to speak…" autocomplete="off" />
+        <button id="ttsGo" type="button" title="Render through pocket TTS and play">Say</button>
+        <button id="ttsKeep" type="button" disabled
+                title="Save the last rendered line as a wav in the clip list">Keep</button>
+      </div>
+      <input id="clipFile" type="file" accept="audio/*" />
+      <div id="voiceState"></div>
+    </div>
+    </div>
     <script type="module" src="/tests/visual/shader-bench.ts"></script>
   </body>
 </html>

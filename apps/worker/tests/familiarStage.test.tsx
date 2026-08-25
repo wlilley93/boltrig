@@ -58,7 +58,13 @@ describe("FamiliarStage fallback ladder", () => {
       compileShader: vi.fn(),
       createProgram: vi.fn(() => ({})),
       createShader: vi.fn(() => ({})),
+      // The lattice deck owns programs and textures of its own and releases
+      // them on destroy; a fake without the delete half throws in teardown and
+      // poisons every later test in the file.
+      createTexture: vi.fn(() => ({})),
+      deleteProgram: vi.fn(),
       deleteShader: vi.fn(),
+      deleteTexture: vi.fn(),
       drawArrays: vi.fn(),
       getExtension: vi.fn(() => null),
       getProgramInfoLog: vi.fn(() => null),
@@ -344,6 +350,51 @@ describe("FamiliarWebGLRenderer lifecycle", () => {
     expect(onFirstPaint).toHaveBeenCalledTimes(1);
     renderer.destroy();
     dateNow.mockRestore();
+  });
+
+  // A HOST MAY CAP THE PIXEL RATIO BELOW THE MODE'S OWN CEILING. The phone's
+  // island pays for every pixel in battery, and the mode table here was written
+  // for a laptop; the seam lets the host choose without touching the table.
+  it("lets a host cap the device pixel ratio below the mode's own ceiling", () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("devicePixelRatio", 3);
+    const measure = (options: { dprCap?: number }, mode: "voice" | "hero"): number => {
+      const canvas = document.createElement("canvas");
+      Object.defineProperty(canvas, "clientWidth", { configurable: true, value: 100 });
+      const gl = {
+        COLOR_BUFFER_BIT: 0x4000,
+        TRIANGLES: 4,
+        clear: vi.fn(),
+        clearColor: vi.fn(),
+        drawArrays: vi.fn(),
+        getExtension: vi.fn(() => null),
+        uniform1f: vi.fn(),
+        uniform2f: vi.fn(),
+        uniform4f: vi.fn(),
+        viewport: vi.fn(),
+      };
+      const renderer = new FamiliarWebGLRenderer({ reducedMotion: true, ...options });
+      renderer.setMode(mode);
+      const internals = renderer as unknown as {
+        canvas: HTMLCanvasElement;
+        frame(now: number): void;
+        gl: typeof gl;
+        statusValue: { kind: "webgl2"; state: "running" };
+        uniforms: Record<string, string>;
+      };
+      internals.canvas = canvas;
+      internals.gl = gl;
+      internals.statusValue = { kind: "webgl2", state: "running" };
+      internals.uniforms = new Proxy({}, { get: (_t, property) => String(property) });
+      internals.frame(5_000);
+      renderer.destroy();
+      return canvas.width;
+    };
+    // Voice alone allows 2x; the cap wins. Without a cap the mode decides.
+    expect(measure({ dprCap: 1.5 }, "voice")).toBe(150);
+    expect(measure({}, "voice")).toBe(200);
+    expect(measure({}, "hero")).toBe(125);
+    expect(measure({ dprCap: 1 }, "hero")).toBe(100);
   });
 
   /**

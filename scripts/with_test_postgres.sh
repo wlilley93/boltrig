@@ -21,7 +21,18 @@ image="pgvector/pgvector:pg16@sha256:131dcf7ff6a900545df8e7e092c270aa8c6db2f2c81
 name="boltrig-quality-postgres-$$-${RANDOM}"
 
 cleanup() {
-  docker rm -f "$name" >/dev/null 2>&1 || true
+  # `-v`, and it is load-bearing. The pgvector image declares
+  # `VOLUME /var/lib/postgresql/data`, so every run gets an anonymous ~180MB
+  # volume. `docker run --rm` would clean that up on exit, but this trap removes
+  # the container FIRST and `docker rm` without `-v` keeps the anonymous volume,
+  # so the auto-remove never gets to it.
+  #
+  # Measured on the beelink 2026-08-24, same image, same flags: `docker rm -f`
+  # leaked exactly 1 dangling volume per run, `docker rm -f -v` leaked 0. Eleven
+  # days of gate runs had left 138 of them, 16.7GB, which is most of what took
+  # that box to 88% and the same class of pressure that took jellytot-prod to
+  # 100% mid-roll. A quality gate must not bill its host for every green run.
+  docker rm -f -v "$name" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 

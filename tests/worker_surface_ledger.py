@@ -787,6 +787,31 @@ POST /v1/memory/bundle
 GET /v1/memory/resolve
 """,
 )
+# The run-effect ledger (0085): the chat "Undo" affordance consumes both -
+# RunUndoPanel lists each step with its honest undoability and walks the
+# governed revert (approval_pending outcomes carry the HITL id back in).
+_surface(
+    "apps/worker/src/components/chat/RunUndoPanel.tsx",
+    """
+GET /v1/runs/{run_id}/effects runEffects
+POST /v1/runs/{run_id}/revert revertRun
+""",
+)
+# The two mood affordances (2026-08-21): the explicit Settings reset, and the
+# adoption announcement fired when a companion save succeeds. Both publish
+# plain relay frames; the emotion relay's tap is the only interpreter.
+_surface(
+    "apps/worker/src/components/settings/CompanionRows.tsx",
+    """
+POST /v1/familiar/emotion/reset resetEmotion
+""",
+)
+_surface(
+    "apps/worker/src/components/settings/companionSave.ts",
+    """
+POST /v1/familiar/emotion/adopted characterAdopted
+""",
+)
 
 
 SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
@@ -828,4 +853,4 @@ SDK_ONLY_METHODS: dict[str, tuple[str, str]] = {
 # 294 since GET /v1/me and GET /v1/branding (the product's own name, read unauthenticated by
 # the sign-in screen). An exact census, not a ratchet: it must equal the
 # routes the app actually serves, so it moves when the surface does.
-EXPECTED_ROUTE_COUNT = 302
+EXPECTED_ROUTE_COUNT = 306

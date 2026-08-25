@@ -178,7 +178,10 @@ def test_desktop_native_process_seams_are_explicit_and_bounded():
     ):
         assert f"#[tauri::command]\nfn {forbidden_export}" not in lib
     assert "connect-src 'self' https: wss:" not in config
-    assert "https://*.boltrig.io" in config
+    # The desktop webview may reach the product domain and, for the
+    # dev.boltrig.io API grace path, the retired one; nothing wider.
+    for origin in ("https://*.boltrig.ai", "wss://*.boltrig.ai", "https://*.boltrig.io"):
+        assert origin in config
 
 
 @pytest.mark.invariant("SEC-198")
@@ -466,7 +469,13 @@ def test_worker_edge_allows_same_origin_voice_without_opening_browser_capabiliti
 
     for source in (caddy, nginx):
         assert "X-Content-Type-Options" in source and "nosniff" in source
-        assert "X-Frame-Options" in source and "DENY" in source
+        # SAMEORIGIN, not DENY (ADR-0030 amendment, Principal 2026-08-21): the
+        # console is mounted at <host>/boltrig and framed SAME-ORIGIN by the
+        # host app (the Opbox Agents panel). Cross-origin framing stays barred
+        # - the negative assertions pin that the relaxation stopped at 'self'
+        # and never became an allowlist or a wildcard.
+        assert "X-Frame-Options" in source and "SAMEORIGIN" in source
+        assert "DENY" not in source
         assert "Referrer-Policy" in source and "no-referrer" in source
         assert "camera=()" in source
         assert "geolocation=()" in source
@@ -474,7 +483,9 @@ def test_worker_edge_allows_same_origin_voice_without_opening_browser_capabiliti
         assert "connect-src 'self'" in source
         assert "connect-src 'self' https: wss:" not in source
         assert "object-src 'none'" in source
-        assert "frame-ancestors 'none'" in source
+        assert "frame-ancestors 'self'" in source
+        assert "frame-ancestors 'none'" not in source
+        assert "frame-ancestors 'self' http" not in source
     assert macos_bundle["NSMicrophoneUsageDescription"] == (
         "Boltrig Worker uses the microphone only while you are participating in a voice call."
     )

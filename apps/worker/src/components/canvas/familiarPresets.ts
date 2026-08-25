@@ -27,6 +27,14 @@ export const FAMILIAR_ARRIVAL: FamiliarTuning = {
   // arrives as a drift rather than as a jump on the first frame.
   wander: [9, 40],
   gesture: [40, 120],
+  lattice: [0, 0],
+  latticeBlur: 0,
+  latticeSat: 1,
+  latticeGlow: 0,
+  latticeSpeed: 1,
+  presence: 1,
+  bounce: [0, 0],
+  bounceTrail: 0,
 };
 
 /**

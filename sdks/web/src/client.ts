@@ -192,7 +192,9 @@ import type {
   UpdateMcpServerRequest,
   UpdateMcpServerResponse,
   RespondResult,
+  RunEffectsResponse,
   RunEvalRequest,
+  RunRevertResponse,
   RunsResponse,
   RunTopologyResponse,
   ScheduleWorkflowRequest,
@@ -1279,6 +1281,36 @@ export class BoltrigClient {
 
   cancelRun(runId: string): Promise<CancelRunResponse> {
     return this.json(`/v1/runs/${encodeURIComponent(runId)}/cancel`, "POST", undefined, true);
+  }
+
+  /** Clear the companion's accumulated mood (never memory or data). */
+  resetEmotion(): Promise<{ status: string }> {
+    return this.json("/v1/familiar/emotion/reset", "POST", {}, true);
+  }
+
+  /** The explicit novelty affordance: announce that a companion was adopted. */
+  characterAdopted(character: string): Promise<{ status: string }> {
+    return this.json("/v1/familiar/emotion/adopted", "POST", { character }, true);
+  }
+
+  /** The run's durable effect ledger: each step with its honest undoability. */
+  runEffects(runId: string): Promise<RunEffectsResponse> {
+    return this.request<RunEffectsResponse>(`/v1/runs/${encodeURIComponent(runId)}/effects`, {});
+  }
+
+  /**
+   * Revert the run's recorded effects, newest first, through the governed
+   * chokepoint. An `approval_pending` outcome names the HITL request; answer
+   * it, then call again with `approvals={String(seq): approval_id}` so the
+   * SAME approved request releases the SAME inverse.
+   */
+  revertRun(runId: string, approvals?: Record<string, string>): Promise<RunRevertResponse> {
+    return this.json(
+      `/v1/runs/${encodeURIComponent(runId)}/revert`,
+      "POST",
+      approvals && Object.keys(approvals).length ? { approvals } : {},
+      true,
+    );
   }
 
   /**

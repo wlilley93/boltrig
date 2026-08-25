@@ -15,6 +15,7 @@ from .bifrost_user_transport import (
     BifrostUserTransport,
     ascii_secret,
     safe_identifier,
+    stored_base_url,
 )
 
 BIFROST_PROVIDERS = frozenset(
@@ -243,20 +244,28 @@ class BifrostUserAdmin:
             if isinstance(row, dict) and row.get("name") == provider:
                 if custom_url is None:
                     return
-                config = row.get("custom_provider_config")
-                stored = config.get("base_url") if isinstance(config, dict) else None
+                stored = stored_base_url(row)
                 if stored == custom_url:
                     return
+                if stored is None:
+                    # No address is not a conflict.
+                    raise BifrostUserBindingUnavailable(
+                        f"{provider} exists but has no endpoint recorded; "
+                        "remove it and add it again with its URL"
+                    )
                 raise BifrostUserBindingUnavailable(
                     f"{provider} is already bound to a different endpoint; "
                     "remove that binding first or use its address"
                 )
         body: dict[str, Any] = {"provider": provider}
         if custom_url is not None:
+            # base_url must go in NETWORK_CONFIG - Bifrost silently drops it
+            # from custom_provider_config. See stored_base_url.
             body["custom_provider_config"] = {
                 "base_provider_type": "openai",
                 "base_url": custom_url,
             }
+            body["network_config"] = {"base_url": custom_url}
         status, _payload = await self._http.request(
             "POST", f"{self._http.base}api/providers", body
         )

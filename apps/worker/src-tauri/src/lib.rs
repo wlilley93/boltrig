@@ -235,6 +235,23 @@ async fn stop_local_agent_turn(
     local_agent::stop(&runtime).await
 }
 
+#[tauri::command]
+async fn local_agent_sign_in(
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, local_agent::LocalAgentRuntime>,
+    on_event: tauri::ipc::Channel<local_agent::LocalAgentSignInEvent>,
+) -> Result<local_agent::LocalAgentSignInView, String> {
+    local_agent::sign_in(&app, &runtime, on_event).await
+}
+
+#[tauri::command]
+async fn local_agent_sign_out(
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, local_agent::LocalAgentRuntime>,
+) -> Result<local_agent::LocalAgentSignInView, String> {
+    local_agent::sign_out(&app, &runtime).await
+}
+
 fn safe_name(value: &str) -> String {
     let leaf = PathBuf::from(value)
         .file_name()
@@ -431,6 +448,8 @@ pub fn run() {
             put_local_agent_posture,
             run_local_agent_turn,
             stop_local_agent_turn,
+            local_agent_sign_in,
+            local_agent_sign_out,
             materialize_artifact,
             open_materialized_artifact,
             reveal_materialized_artifact,

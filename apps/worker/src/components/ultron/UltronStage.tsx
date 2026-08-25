@@ -41,6 +41,16 @@ export function UltronStage({
     const renderer = new UltronRenderer({
       maxDevicePixelRatio: highResolution ? 2 : 1.5,
     });
+    // "Ultron final 1800" is built ON the membrane films (lattice idles at
+    // 2.2) — unlike Jarvis he keeps one loop PER STATE, and the deck
+    // crossfades between them on a change of mode.
+    renderer.setLatticeVideo({
+      standby: "/companion/ultron-membrane.mp4",
+      listening: "/companion/ultron-membrane-listening.mp4",
+      thinking: "/companion/ultron-membrane-thinking.mp4",
+      working: "/companion/ultron-membrane-working.mp4",
+      speaking: "/companion/ultron-membrane-speaking.mp4",
+    });
     rendererRef.current = renderer;
     renderer.mount(host);
     setFallback(renderer.status().state === "failed");

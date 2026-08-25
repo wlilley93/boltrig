@@ -28,6 +28,7 @@ import { ULTRON_TUNING, pulsedCore, ramp, type UltronTuning } from "../canvas/bo
 import { IRIS_FRAG, IRIS_VERT, IRIS_VERTS } from "../canvas/shadersIris";
 import { BLOOM_FRAG, COMPOSITE_FRAG } from "../canvas/shadersPost";
 import { QUAD_VERT, SIM_FRAG } from "../canvas/shadersSim";
+import { LatticeDeck } from "../canvas/latticeLayer";
 import {
   DENDRITE_DEPTH,
   DENDRITE_FRAG,
@@ -92,6 +93,7 @@ export class UltronPasses {
   private blurTex: WebGLTexture[] = [];
   private blurFbo: WebGLFramebuffer[] = [];
   private ping = 0;
+  private lattice: LatticeDeck | null = null;
   private size: [number, number] = [0, 0];
 
   constructor(private readonly gl: WebGL2RenderingContext) {}
@@ -109,6 +111,9 @@ export class UltronPasses {
       comp: createProgram(gl, QUAD_VERT, COMPOSITE_FRAG),
       iris: createProgram(gl, IRIS_VERT, IRIS_FRAG),
     };
+
+    this.lattice = new LatticeDeck(gl);
+    this.lattice.init();
 
     const seed = seedParticles(PARTICLES);
     for (let i = 0; i < 2; i++) {
@@ -145,14 +150,24 @@ export class UltronPasses {
   }
 
   /** One frame. `tuning` defaults to what ships; only the bench overrides it. */
+  /** The deck behind the body: per-state loops, crossfaded. */
+  latticeDeck(): LatticeDeck | null {
+    return this.lattice;
+  }
+
   render(d: UltronDrive, palette: FloatUniforms, tuning: UltronTuning = ULTRON_TUNING): void {
     this.simulate(d, tuning);
     this.drawScene(d, palette, tuning);
     this.bloom();
-    this.composite(palette, pulsedCore(tuning.core, d.energy, d.bands), 0.0, tuning.eye, tuning.knee);
+    this.composite({
+      palette, core: pulsedCore(tuning.core, d.energy, d.bands), starburst: 0.0,
+      eye: tuning.eye, knee: tuning.knee,
+      bounce: [tuning.bounce[0], tuning.bounce[1], tuning.bounceTrail], time: d.time,
+    });
   }
 
   destroy(): void {
+    this.lattice?.destroy();
     const gl = this.gl;
     [...this.simFbo, ...this.blurFbo, this.sceneFbo].forEach((f) => f && gl.deleteFramebuffer(f));
     [...this.simTex, ...this.blurTex, this.sceneTex].forEach((t) => t && gl.deleteTexture(t));
@@ -227,6 +242,14 @@ export class UltronPasses {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.simTex[this.ping]);
 
+    // The baked membrane, under everything: the heavy slow structure is
+    // footage, the electricity and the instability stay live on top.
+    this.lattice?.draw({
+      size: this.size, warm: shared.uWarm as number[],
+      gain: ramp(tuning.lattice, d.energy) * (1 + 0.35 * d.swell),
+      fullscreen: (p) => this.fullscreen(p), scale: tuning.presence,
+      fx: [tuning.latticeBlur, tuning.latticeSat, tuning.latticeGlow],
+    });
     drawMembrane(gl, this.progs, d, tuning, shared);
     drawDendrite(gl, this.progs, d, tuning, shared);
     drawIris(gl, this.progs, d, tuning, shared);
@@ -256,13 +279,13 @@ export class UltronPasses {
     this.fullscreen(prog);
   }
 
-  private composite(
-    palette: FloatUniforms, core: number, starburst: number,
-    // Passed in rather than read off a field: this method has no tuning of its
-    // own, and reaching for one is what made it fail to compile.
-    eye: readonly number[],
-    knee: number,
-  ): void {
+  // Spec object rather than a parameter list: this method has no tuning of
+  // its own, and reaching for one is what made it fail to compile.
+  private composite(spec: {
+    palette: FloatUniforms; core: number; starburst: number;
+    eye: readonly number[]; bounce: readonly number[]; time: number; knee: number;
+  }): void {
+    const { palette, core, starburst, eye, bounce, time, knee } = spec;
     const gl = this.gl;
     const [w, h] = this.size;
     const prog = this.progs.comp;
@@ -276,6 +299,7 @@ export class UltronPasses {
     setUniforms(gl, prog, {
       ...palette, uAspect: w / Math.max(1, h), uBloomGain: 1.05,
       uCore: core, uStarburst: starburst, uEye: eye,
+      uBounce: bounce, uTime: time,
       // Pre-knee compression for the additive pile-ups; 0 is the identity.
       uKnee: knee,
     }, { uScene: 0, uBloom: 1 });

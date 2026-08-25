@@ -90,6 +90,29 @@ export interface UltronTuning {
    */
   eye: readonly [pupil: number, iris: number, lens: number, auraWidth: number];
   /**
+   * The baked membrane layer: gain on a pre-rendered loop of the organic
+   * outer mass — membranes, crust plates, heavy slow structure — composited
+   * additively under the live passes, voice on the second component. Zero
+   * ships. See canvas/latticeLayer.ts.
+   */
+  lattice: EnergyRamp;
+  /** The video channel's effects rack, as on Jarvis: blur / sat / glow. */
+  latticeBlur: number;
+  latticeSat: number;
+  latticeGlow: number;
+  /** Playback speed of the footage itself. 1 ships. */
+  latticeSpeed: number;
+  /**
+   * How big the whole composite sits in the frame: one scale on the live body
+   * AND the baked layer together, so they never drift apart. 1 ships.
+   */
+  presence: number;
+  /** A slight bounce of the whole composite: amplitude (UV) and speed (Hz),
+   *  with trails as ghost taps of where the body just was. [0,0] and 0 ship:
+   *  perfectly still until raised. */
+  bounce: readonly [amount: number, speed: number];
+  bounceTrail: number;
+  /**
    * Three concentric clouds spread into arms. Jarvis leaves this at 0.
    *
    * 0.3, not 1.0. At 1.0 the arms reach far enough to read as flares around the
@@ -160,38 +183,58 @@ export interface UltronTuning {
   membrane: readonly [radius: number, feather: number, veil: number];
 }
 
+/**
+ * What ships: "Ultron final 1800" — the look mixed and saved on the character
+ * bench (2026-08-21, all seven slots), standby slot verbatim.
+ *
+ * Unlike Jarvis's canon this one runs NO continuous sweeps: the bench rack was
+ * empty when it was saved, so the living motion is the membrane film (lattice
+ * 2.2 with the deck's per-mode loops), the bounce, and ULTRON_SPEECH riding
+ * the voice. The veins, cracks and heart sit at zero at rest and bloom only
+ * on a syllable.
+ */
 export const ULTRON_TUNING: UltronTuning = {
-  dendriteGain: [4.86, 2.52],
-  dendrite: [0.34, 0.52, 0.78, 0.035],
-  dendriteTip: [0.45, 0.22],
-  bead: [9.0, 0.16],
-  signal: [0.55, 2.4, 5.5],
-  arc: [0.9, 2.5, 0.42, 0.0],
-  outerShell: [1.45, 0.20, 0.30],
-  facetSpin: [0.13, 0.40],
-  swirl: [0.20, 0.32],
-  veinGain: [1.03, 0.86],
-  veinStreak: [0.10, 0.02],
-  crackGain: [1.05, 0.78],
-  crackRange: 0.19,
-  facetGain: [0.98, 0.72],
-  facetSize: 0.016,
-  core: [0.82, 1.0],
-  eye: [1, 1, 0, 60],
-  reverb: [1.7, 0.26, 0.8, 1.4],
-  // Tighter than Jarvis's and dimmer: his is the subject of the frame, this is the
-  // thing at the middle of a much larger mass.
-  irisGain: [0.5, 0.32],
-  irisRadius: [0.04, 0.19],
-  irisFil: [0.8, 0.004],
-  irisFlow: [0.16, 0.7],
-  petal: 0.0,
-  cloud: [0.34, 0.85],
-  homePull: 1.1,
-  knee: 0.75,
-  membraneGain: [0.5, 0.35],
+  dendriteGain: [0.945, 0.75],
+  dendrite: [0.28, 0.52, 0.78, 0],
+  dendriteTip: [1.14, 1.26],
+  bead: [10, 21],
+  signal: [0.22, 2.4, 7],
+  arc: [0.82, 2.5, 0.42, 0.85],
+  outerShell: [0.57, 2.2, 2.2],
+  facetSpin: [1, 0],
+  swirl: [0, 0],
+  veinGain: [0, 0],
+  veinStreak: [0, 0],
+  crackGain: [0, 0],
+  crackRange: 0.02,
+  facetGain: [3, 3],
+  facetSize: 0.002,
+  core: [0, 0],
+  eye: [0, 0, 0, 4],
+  reverb: [0.8, 0.44, 0.48, 1.34],
+  irisGain: [3, 3],
+  irisRadius: [1.2, 1.2],
+  irisFil: [1, 1],
+  irisFlow: [0.8, 0.8],
+  petal: 0,
+  cloud: [0.3, 0.7],
+  veinLimb: [0, 0],
+  crackLimb: [0, 0],
+  facetLimb: [0.08, 0.08],
+  // Main's live-membrane mechanics, carried for the type but OFF: the canon
+  // ("Ultron final 1800") was authored on the film deck — lattice IS his
+  // membrane — and every one of these zeros is that mechanism's documented
+  // identity value.
+  homePull: 0.0,
+  knee: 0,
+  membraneGain: [0.0, 0.0],
   membrane: [0.98, 0.10, 0.12],
-  veinLimb: [0.26, 1.35],
-  crackLimb: [0.22, 1.0],
-  facetLimb: [0.22, 1.05],
+  lattice: [2.2, 0],
+  latticeBlur: 0,
+  latticeSat: 0.5,
+  latticeGlow: 0,
+  latticeSpeed: 1.2,
+  presence: 0.6,
+  bounce: [0.037, 0.35],
+  bounceTrail: 0,
 };

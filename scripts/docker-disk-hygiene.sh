@@ -27,6 +27,8 @@
 #   WARN_PCT       report loudly at or above    (default 80)
 #   PRUNE_PCT      prune at or above            (default 85)
 #   RETAIN_HOURS   keep images newer than this  (default 168, i.e. 7 days)
+#   RETAIN_LADDER  shorter windows to escalate through if still over
+#                  (default "72 24 6"; set empty to disable escalation)
 
 set -euo pipefail
 
@@ -34,6 +36,9 @@ DISK_PATH="${DISK_PATH:-/}"
 WARN_PCT="${WARN_PCT:-80}"
 PRUNE_PCT="${PRUNE_PCT:-85}"
 RETAIN_HOURS="${RETAIN_HOURS:-168}"
+# Windows to fall back through when the 168h pass reclaims nothing. See the
+# escalation block below for why a single window cannot bound disk use.
+RETAIN_LADDER="${RETAIN_LADDER:-72 24 6}"
 FORCE=0
 [ "${1:-}" = "--force" ] && FORCE=1
 
@@ -62,15 +67,56 @@ if [ "$(usage_pct)" -ge "$PRUNE_PCT" ] || [ "$FORCE" -eq 1 ]; then
     docker image prune -a --filter "until=${RETAIN_HOURS}h" -f >/dev/null 2>&1 || true
 fi
 
+# ESCALATE, because one fixed window bounds AGE and the release cadence sets
+# VOLUME. On 2026-08-23 this script ran at 03:17, reclaimed nothing (89% -> 89%)
+# and reported "reclaimable images are not the cause" while `docker system df`
+# on the very next line said 80.89GB of images were reclaimable: fifteen
+# releases had been rolled in four days, so every untagged image was newer than
+# 168h and the window was protecting precisely the garbage it exists to remove.
+# Six hours later the host reached 100% and a client tenant's UI crash-looped on
+# `No space left on device` in the middle of a roll.
+#
+# This cannot pull an image out from under a running container: `prune -a` skips
+# images a container references, and nothing here passes `-f` to `rmi`. The only
+# thing a shorter window costs is a rollback target, which is the cheaper loss.
+last_window="$RETAIN_HOURS"
+for window in $RETAIN_LADDER; do
+    [ "$(usage_pct)" -ge "$PRUNE_PCT" ] || break
+    echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') docker-disk-hygiene still $(usage_pct)% after until=${last_window}h; escalating to until=${window}h"
+    docker image prune -a --filter "until=${window}h" -f >/dev/null 2>&1 || true
+    last_window="$window"
+done
+
 after_pct="$(usage_pct)"
 after_avail="$(avail_h)"
 echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') docker-disk-hygiene done: ${before_pct}% -> ${after_pct}% used, ${before_avail} -> ${after_avail} free (kept images newer than ${RETAIN_HOURS}h)"
 
-# Still over after pruning means the problem is not reclaimable images: volumes,
-# logs, or something outside Docker. Exit non-zero so cron mails it rather than
-# letting a host walk to zero while a "cleanup ran" line scrolls past.
+# Still over after pruning. Exit non-zero so cron mails it rather than letting a
+# host walk to zero while a "cleanup ran" line scrolls past.
+#
+# READ THE NUMBER, DO NOT ASSERT IT. This used to state flatly that "reclaimable
+# images are not the cause" - a conclusion it never tested, printed directly
+# above a `docker system df` reporting 80.89GB reclaimable. The one run where
+# the message mattered, it pointed the reader away from the actual cause.
 if [ "$after_pct" -ge "$PRUNE_PCT" ]; then
-    echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') docker-disk-hygiene STILL ${after_pct}% after pruning; reclaimable images are not the cause" >&2
+    # NO `exit` IN THE AWK. `awk '...{print; exit}'` closes the pipe while
+    # `docker system df` is still writing, docker takes SIGPIPE and returns 141,
+    # and `set -o pipefail` + `set -e` then kill this script HERE - silently,
+    # with the diagnostic below never printed and nothing on stderr to explain
+    # it. Whether it fires depends on whether the producer's output fits the pipe
+    # buffer, so the short real `docker system df` usually survives and a longer
+    # one does not: measured 2026-08-24, the same pipeline exits 141 with a
+    # 201-line producer and 0 with a 5-line one. A reporting path that dies
+    # under load is worse than the wrong message it replaced.
+    # Family: SIGPIPE, same shape as `grep -q` closing its own producer.
+    img_reclaimable="$(docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null \
+        | awk -F'|' '$1=="Images" && !seen {print $2; seen=1}')"
+    case "${img_reclaimable:-}" in
+        ""|0B*|"0 B"*)
+            echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') docker-disk-hygiene STILL ${after_pct}% after pruning; no reclaimable images remain, so the cause is outside Docker images (volumes, logs, or host files)" >&2 ;;
+        *)
+            echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') docker-disk-hygiene STILL ${after_pct}% after pruning; ${img_reclaimable} of images are STILL reclaimable - they are in use, or newer than the shortest window tried (until=${last_window}h). Lower RETAIN_LADDER or stop the containers holding them" >&2 ;;
+    esac
     docker system df >&2 || true
     exit 1
 fi

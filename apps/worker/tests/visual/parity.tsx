@@ -320,6 +320,36 @@ const directionThread = {
         { type: "subagent_end", child_run_id: "run-vds-scout-direction", status: "ok" },
         { type: "subagent_end", child_run_id: "run-repo-scout-direction", status: "ok" },
         { type: "subagent_end", child_run_id: "run-capture-scout-direction", status: "ok" },
+        {
+          type: "display_object",
+          run_id: "run-chat-direction-evidence",
+          object: {
+            schema: "boltrig.display.v1",
+            id: "direction-slack-draft",
+            kind: "slack.message.draft",
+            title: "Draft update for #launch",
+            status: "draft",
+            revision: 1,
+            data: {
+              channel_id: "slack-primary",
+              workspace_label: "Acme",
+              recipient: "#launch",
+              body: "The review evidence is ready. I will hold this draft until you send it.",
+            },
+            actions: [
+              { id: "edit", label: "Edit", intent: "edit" },
+              { id: "change-recipient", label: "Change recipient", intent: "change_recipient" },
+              { id: "send", label: "Send", intent: "send", style: "primary" },
+              { id: "discard", label: "Discard", intent: "discard" },
+            ],
+            provenance: {
+              run_id: "run-chat-direction-evidence",
+              agent_address: "chief-of-staff",
+              provider: "Slack",
+              connection_label: "Acme",
+            },
+          },
+        },
       ],
     },
   ],
@@ -958,9 +988,12 @@ function directionThreadSurfaceIsReady(): boolean {
     && document.querySelector("#shell-recent-tasks")
     && document.querySelectorAll(".message.user").length === 2
     && document.querySelectorAll(".message.assistant").length === 2
+    && document.querySelectorAll(".message-agent-label").length === 4
+    && document.querySelector(".display-object-communication")
     && document.querySelector('.transcript-navigation[aria-label="Transcript navigation"]')
     && bodyHas("Desktop chat evidence")
     && bodyHas("The preview and inspection receipts completed without inventing live state.")
+    && bodyHas("Draft update for #launch")
   );
 }
 

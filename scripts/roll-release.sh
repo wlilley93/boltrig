@@ -29,6 +29,36 @@ die() { echo "ABORT: $*" >&2; exit 1; }
 VERSION="${1:-}"
 [ -n "$VERSION" ] || { echo "usage: $0 <version>   e.g. $0 v0.4.19" >&2; exit 2; }
 
+# THE CHECKOUT GUARD.
+#
+# On 2026-08-23 v0.4.46 was rolled by running THIS SCRIPT out of a checkout
+# sitting on `codex/flat-named-agent-peers`, 170 commits behind the tag and
+# predating the change that taught `bring_up` to bounce hatchet-worker. The roll
+# reported success. Both hatchet-workers were silently left on the previous
+# release, and the attempt to bounce them by hand recreated hatchet-engine,
+# which regenerated its signing keys and took durable execution down on all
+# three stacks.
+#
+# Nothing in the roll noticed, because every check it runs is against the BOX.
+# The one thing it never checked was itself: a script old enough to be missing a
+# step cannot report the step as missing. The version being rolled is the only
+# thing that pins which script is correct, so assert the checkout CONTAINS the
+# tag before any of it runs.
+#
+# Deliberately not `git describe`: that answers about the checked-out branch,
+# not the repository, and on this very branch it returns v0.4.33 while v0.4.46
+# exists - the exact reassuring-but-wrong answer this guard exists to refuse.
+SCRIPT_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if git -C "$SCRIPT_REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git -C "$SCRIPT_REPO" rev-parse -q --verify "refs/tags/$VERSION" >/dev/null 2>&1 \
+    || die "$SCRIPT_REPO has no tag $VERSION - fetch it, or you are rolling from the wrong checkout"
+  git -C "$SCRIPT_REPO" merge-base --is-ancestor "$VERSION" HEAD 2>/dev/null \
+    || die "$SCRIPT_REPO HEAD ($(git -C "$SCRIPT_REPO" rev-parse --abbrev-ref HEAD)) does not contain $VERSION - this script would be older than the release it is rolling. Check out a commit that contains the tag."
+  echo "  checkout contains $VERSION ($(git -C "$SCRIPT_REPO" rev-parse --abbrev-ref HEAD))"
+else
+  die "$SCRIPT_REPO is not a git checkout - cannot prove this script matches $VERSION"
+fi
+
 # Deployment coordinates are operator inputs, never repository defaults.
 H="${ROLL_HOST:-}"
 TEN="${ROLL_TENANTS:-}"
@@ -100,15 +130,20 @@ s = re.sub(r'ghcr\.io/wlilley93/boltrig-ui:[^\s"]+', f'ghcr.io/wlilley93/boltrig
 open(p, 'w').write(s)
 PY
 
-  local n
+  local n expected image_lines
   n=$(diff "$src.bak-roll-$STAMP" "$src" | grep -c '^[<>]' || true)
   diff "$src.bak-roll-$STAMP" "$src" || true
-  # 6: three image lines (kernel, fleet, Worker), each contributing a `<` and a
-  # `>`. A count that only sees what it expects cannot report an omitted service.
+  # The overlays repeat images (fleet serves fleet-worker AND hatchet-worker),
+  # so the expected diff is 2 lines per MATCHING IMAGE LINE IN THIS FILE - a
+  # hardcoded 6 aborted every roll of a 4-image-line overlay and forced the
+  # hand-pin-first workaround. Counting what the regex actually rewrites keeps
+  # the property the 6 was for: an omitted service line still fails loudly.
+  image_lines=$(grep -cE 'ghcr\.io/wlilley93/boltrig-(kernel|fleet|ui):' "$src" || true)
+  expected=$((2 * image_lines))
   case "${n:-0}" in
-    6) echo "  [ok] repinned kernel, fleet and Worker image lines IN THE SOURCE ($rel)" ;;
+    "$expected") echo "  [ok] repinned $image_lines image lines IN THE SOURCE ($rel)" ;;
     0) echo "  [ok] source already pinned at $VERSION (safe no-op re-run)" ;;
-    *) die "source diff for $rel is $n changed lines; expected 6 (repin kernel+fleet+Worker) or 0 (already pinned)" ;;
+    *) die "source diff for $rel is $n changed lines; expected $expected (2 per image line) or 0 (already pinned)" ;;
   esac
   rm -f "$src.bak-roll-$STAMP"
 
@@ -137,9 +172,11 @@ PY
 }
 
 bring_up() { # $1=overlay $2=project
+  # hatchet-worker rides the fleet image and was bounced BY HAND after every
+  # roll since v0.4.32 split it out - a manual step is a forgotten step.
   ssh "$H" "cd $PROJECT_DIR && \
-    docker compose -f $COMPOSE -f $1 -p $2 pull kernel fleet-worker ui && \
-    docker compose -f $COMPOSE -f $1 -p $2 up -d --no-deps kernel fleet-worker ui" \
+    docker compose -f $COMPOSE -f $1 -p $2 pull kernel fleet-worker hatchet-worker ui && \
+    docker compose -f $COMPOSE -f $1 -p $2 up -d --no-deps kernel fleet-worker hatchet-worker ui" \
     || die "compose up failed for $2"
 }
 

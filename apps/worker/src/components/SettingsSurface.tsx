@@ -12,6 +12,7 @@ import {
   CompactYouSection,
 } from "./settings/CompactSections";
 import { HealthSection } from "./settings/HealthSection";
+import { LocalRuntimeSection } from "./settings/LocalRuntimeSection";
 import { ModelSettingsSection } from "./settings/ModelSettingsSection";
 import { SectionHead } from "./settings/SectionHead";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
@@ -148,5 +149,11 @@ function MemorySettingsPane({ head = true }: { head?: boolean }) {
 }
 
 function AdvancedSettingsPane({ head = true }: { head?: boolean }) {
-  return <>{head && <SectionHead section="advanced" />}<CompactAdvancedSection /></>;
+  return (
+    <>
+      {head && <SectionHead section="advanced" />}
+      <CompactAdvancedSection />
+      <LocalRuntimeSection />
+    </>
+  );
 }
