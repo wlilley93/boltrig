@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-25T21:28:56.679Z",
+  "capturedAt": "2026-08-25T21:42:42.984Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,11 +16,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "d4f40cde7da88f3c55e1247fdab7fb82a92b813a49e32cc0a207c5befc79b251",
-    "digestAfterCapture": "d4f40cde7da88f3c55e1247fdab7fb82a92b813a49e32cc0a207c5befc79b251",
+    "digestBeforeCapture": "7db190afccb1fb81c0612dcde96231618ee32e2cc6b39afa345452f0952b6f81",
+    "digestAfterCapture": "7db190afccb1fb81c0612dcde96231618ee32e2cc6b39afa345452f0952b6f81",
     "sourceUnchangedDuringCapture": true,
     "branch": "console/workspace-links",
-    "head": "a72d2ca16191717997e2f9ac8d4256f55752ae99",
+    "head": "f4db981d2d0bf0fdc4e2fe94d66121c30a1630fd",
     "dirty": true
   },
   "runner": {
@@ -101,7 +101,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/chat-run.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],
