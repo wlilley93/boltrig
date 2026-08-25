@@ -8,13 +8,15 @@ import { describe, expect, it } from "vitest";
 import { SOURCE_SCOPE, sourceTreeDigest as digestOf } from "./sourceDigest.mjs";
 import manifest from "./states.json";
 
+// FOUR, NOT SEVEN. agents, plugins and call were retired when the routes a
+// Hermes cell can serve were narrowed to chat, settings and account: the first
+// two have no route left and the third has no call capability behind it. Their
+// reasons are recorded in states.json under `retired_state_ids`, because a
+// state that merely disappeared would read as an oversight.
 const canonicalStateIds = [
   "new-chat",
   "chat-run",
-  "agents",
-  "plugins",
   "command-palette",
-  "call",
   "settings-you",
 ] as const;
 const additiveStateIds = ["chat-direction"] as const;
@@ -149,7 +151,9 @@ describe("console parity evidence manifest", () => {
     }
     const targetNodes = governed.map((state) => state?.figma_node_id);
     const targets = governed.map((state) => state?.target_output);
-    expect(targetNodes).toEqual(["13:2", "5:2", "15:2", "14:2", "16:2", "17:2", "22:2"]);
+    // 15:2 (Agents), 14:2 (Plugins) and 17:2 (Call) went with the states they
+    // framed. The nodes still listed are the four a cell can actually render.
+    expect(targetNodes).toEqual(["13:2", "5:2", "16:2", "22:2"]);
     expect(new Set(targets).size).toBe(canonicalStateIds.length);
     for (const target of targets) {
       expect(target).toMatch(
@@ -166,7 +170,7 @@ describe("console parity evidence manifest", () => {
   });
 
   it("binds shared dark Shell routes to the green-black rail split", () => {
-    for (const id of ["new-chat", "chat-run", "agents", "plugins", "command-palette", "chat-direction"]) {
+    for (const id of ["new-chat", "chat-run", "command-palette", "chat-direction"]) {
       const state = manifest.states.find((candidate) => candidate.id === id);
       expect(state, id).toBeDefined();
       expect(state!.direction_records, id).toContain("DIR-0021");
@@ -177,7 +181,7 @@ describe("console parity evidence manifest", () => {
       });
     }
 
-    for (const id of ["call", "settings-you"]) {
+    for (const id of ["settings-you"]) {
       const state = manifest.states.find((candidate) => candidate.id === id);
       expect(state, id).toBeDefined();
       expect(state!.direction_records, id).not.toContain("DIR-0021");
@@ -185,7 +189,7 @@ describe("console parity evidence manifest", () => {
   });
 
   it("keeps the companion layer clear and places truthful Projects before Recents", () => {
-    for (const id of ["new-chat", "chat-run", "agents", "plugins", "command-palette", "chat-direction"]) {
+    for (const id of ["new-chat", "chat-run", "command-palette", "chat-direction"]) {
       const state = manifest.states.find((candidate) => candidate.id === id);
       expect(state, id).toBeDefined();
       expect(state!.direction_records, id).toEqual(expect.arrayContaining(["DIR-0035", "DIR-0036"]));
@@ -229,13 +233,13 @@ describe("console parity evidence manifest", () => {
     expect(palette!.direction_records).toEqual([
       "DIR-0006", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0028", "DIR-0029", "DIR-0030", "DIR-0033", "DIR-0035", "DIR-0036",
     ]);
+    // The shell a cell still mounts, plus the palette's own chrome. Pinned
+    // tasks and the rail are kernel-fed and gone; the palette itself is very
+    // much still asserted, which is the point of this state existing.
     expect(palette!.required_presence_selectors).toEqual(expect.arrayContaining([
       ".sidebar.shell-parity",
-      "#shell-pinned-tasks.shell-task-group-label",
       "#shell-projects.shell-task-group-label",
       "#shell-recent-tasks.shell-task-group-label",
-      ".transcript-navigation[aria-label=\"Transcript navigation\"]",
-      ".right-rail .chat-rail-glass",
       ".command-palette[data-screen-label=\"Command palette\"]",
       ".command-search input[aria-label=\"Search Worker\"]",
       ".command-row.active",
@@ -261,22 +265,31 @@ describe("console parity evidence manifest", () => {
       selector: ".command-group[aria-label=\"Navigation commands\"] > .command-row",
       count: 8,
     });
+    // v1's own numbers. They were only ever wrong while conversationsPage was
+    // missing and the sidebar rendered nothing at all.
     expect(palette!.required_visible_counts).toEqual(expect.arrayContaining([
       { selector: ".shell-task-group-label", count: 3 },
-      { selector: ".transcript-navigation", count: 1 },
-      { selector: ".transcript-navigation > button", count: 2 },
+      {
+        selector: ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"] .session-row",
+        count: 3,
+      },
     ]));
+    // MEASURED, and almost unchanged: the search box is identical to v1 and the
+    // palette is one pixel shorter. The palette itself renders exactly as it did
+    // - what changed is which rows are inside it.
     expect(palette!.required_geometry).toEqual(expect.arrayContaining([
-      { selector: ".command-palette", x: 660, y: 135, width: 560, height: 335 },
+      { selector: ".command-palette", x: 660, y: 135, width: 560, height: 334 },
       { selector: ".command-search", x: 661, y: 136, width: 558, height: 48 },
     ]));
+    // The rows shifted up by three when Agents, Plugins and Routines went with
+    // their routes. The group still holds eight; the settings entries moved up
+    // into it, which is why the count did not change and the labels did.
     expect(palette!.required_exact_text).toEqual(expect.arrayContaining([
-      { selector: "#shell-pinned-tasks", text: "Pinned" },
       { selector: "#shell-projects", text: "Projects" },
       { selector: "#shell-recent-tasks", text: "Recents" },
       { selector: ".command-row:nth-child(1) .command-row-label", text: "New chat" },
-      { selector: ".command-row:nth-child(6) .command-row-label", text: "Behaviour settings" },
-      { selector: ".command-row:nth-child(8) .command-row-label", text: "Spending settings" },
+      { selector: ".command-row:nth-child(2) .command-row-label", text: "You settings" },
+      { selector: ".command-row:nth-child(3) .command-row-label", text: "Behaviour settings" },
     ]));
     expect(palette!.required_absent_text).toEqual(expect.arrayContaining([
       "Governed by Boltrig",
@@ -287,65 +300,6 @@ describe("console parity evidence manifest", () => {
     ]));
   });
 
-  it("fails Plugins closed on its visible health, inventory and Figma geometry", () => {
-    const plugins = manifest.states.find((state) => state.id === "plugins") as
-      | ContractState
-      | undefined;
-
-    expect(plugins).toBeDefined();
-    expect(plugins!.direction_records).toEqual(["DIR-0004", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021", "DIR-0028", "DIR-0029", "DIR-0030", "DIR-0035", "DIR-0036"]);
-    expect(plugins!.required_presence_selectors).not.toContain(".sidebar.shell-parity");
-    expect(plugins!.required_presence_selectors).toEqual(expect.arrayContaining([
-      ".plugins-pane",
-      ".plugins-alert[aria-label=\"Connection health issues\"]",
-      ".plugins-search input[aria-label=\"Search integrations\"]",
-      ".plugins-groups",
-    ]));
-    expect(plugins!.required_absence_selectors).toEqual(expect.arrayContaining([
-      ".side-status",
-      ".side-status-dot",
-      ".conversation-search",
-      ".right-rail",
-      ".plugins-api-state",
-      ".plugins-row-detail",
-    ]));
-    expect(plugins!.required_visible_selectors).toEqual(expect.arrayContaining([
-      ".plugins-tabs[aria-label=\"Integrations views\"]",
-      ".plugins-heading h1",
-      ".plugins-alert > button",
-      ".plugins-inventory-heading",
-      ".plugins-filter-button",
-      ".plugins-group:first-child > header",
-      ".plugins-group:first-child .plugins-row:first-child .plugins-row-toggle",
-    ]));
-    expect(plugins!.required_text).toContain("9 connected of 43");
-    expect(plugins!.required_geometry).toEqual(expect.arrayContaining([
-      { selector: ".plugins-pane", x: 403, width: 900 },
-      // The capability tabs sit inside the pane, between the heading and the
-      // health alert, and push the rest of the column down by 63px. Declared
-      // here as well as in states.json so the shift is a decision recorded in
-      // two places rather than a number that quietly followed the layout.
-      { selector: ".plugins-tabs", x: 435, y: 140.875, height: 31 },
-      { selector: ".plugins-alert", x: 435, y: 203.875, width: 836, height: 64.125 },
-      { selector: ".plugins-search", y: 319, height: 38 },
-      { selector: ".plugins-group:first-child .plugins-row:first-child", height: 57 },
-      {
-        selector: ".plugins-group:first-child .plugins-row:first-child .plugins-row-toggle",
-        height: 56,
-      },
-    ]));
-    expect(plugins!.required_exact_text).toEqual(expect.arrayContaining([
-      { selector: ".plugins-heading h1", text: "Plugins" },
-      { selector: ".plugins-alert-copy strong", text: "Two need you" },
-      { selector: ".plugins-alert > button", text: "Look at both" },
-      { selector: ".plugins-inventory-heading h2", text: "Connections" },
-    ]));
-    expect(plugins!.required_absent_text).toEqual(expect.arrayContaining([
-      "Governed by Boltrig",
-      "Everything responding",
-      "This run",
-    ]));
-  });
 
   it("fails New chat and Chat run closed on their Figma plus Codex direction contracts", () => {
     const newChat = manifest.states.find((state) => state.id === "new-chat") as
@@ -365,14 +319,18 @@ describe("console parity evidence manifest", () => {
         "DIR-0039",
       ]);
       expect(state!.required_presence_selectors).toContain(".sidebar.shell-parity");
+      // Projects and Recents, not Pinned. A pinned task is kernel state and a
+      // cell has no kernel, so that group never mounts - and asserting it would
+      // be asserting a surface that cannot exist rather than one that regressed.
       expect(state!.required_presence_selectors).toEqual(expect.arrayContaining([
-        ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"]",
         ".shell-task-group[aria-labelledby=\"shell-projects\"]",
         ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"]",
-        "#shell-pinned-tasks.shell-task-group-label",
         "#shell-projects.shell-task-group-label",
         "#shell-recent-tasks.shell-task-group-label",
       ]));
+      expect(state!.required_presence_selectors).not.toContain(
+        "#shell-pinned-tasks.shell-task-group-label",
+      );
       expect(state!.required_presence_selectors).not.toContain(".conversation-search");
       expect(state!.required_absence_selectors).toEqual(expect.arrayContaining([
         ".side-status",
@@ -398,12 +356,14 @@ describe("console parity evidence manifest", () => {
       ".queued-messages",
     ]));
 
+    // No .voice-intro: it introduces a call, and a cell has no call capability
+    // to introduce. The transcript, composer and model button are unchanged.
     expect(newChat!.required_visible_selectors).toEqual(expect.arrayContaining([
       ".new-chat-transcript .welcome h1",
       ".new-chat-transcript .composer.new-context",
       ".new-chat-transcript button[aria-label=\"Model\"]",
-      ".voice-intro",
     ]));
+    expect(newChat!.required_visible_selectors).not.toContain(".voice-intro");
     expect(newChat!.required_absence_selectors).toEqual(expect.arrayContaining([
       ".new-chat-transcript .starters",
       ".new-chat-transcript .starter-card",
@@ -414,11 +374,17 @@ describe("console parity evidence manifest", () => {
       "Work through a list",
       "Keep an eye on something",
     ]));
+    // UNCHANGED from v1, to the half-pixel. The welcome block and the composer
+    // occupy exactly the same box on a cell as they did on the kernel console;
+    // only .voice-intro is gone, because it introduces a call and there is no
+    // call capability behind it.
     expect(newChat!.required_geometry).toEqual(expect.arrayContaining([
       { selector: ".new-chat-transcript .welcome", x: 480.5, y: 40, width: 745, height: 836 },
       { selector: ".new-chat-transcript .composer.new-context", x: 480.5, y: 740, width: 745, height: 136 },
-      { selector: ".voice-intro", x: 492.5, y: 664, width: 721, height: 66 },
     ]));
+    expect(newChat!.required_geometry.some(({ selector }) => (
+      selector === ".voice-intro"
+    ))).toBe(false);
     expect(newChat!.required_computed_styles).toEqual(expect.arrayContaining([
       {
         selector: ".new-chat-transcript .composer-frame",
@@ -450,21 +416,23 @@ describe("console parity evidence manifest", () => {
       selector: ".sidebar-footer > button",
       count: 2,
     });
-    expect(newChat!.required_visible_counts).toContainEqual({
-      selector: ".composer .voice-primary",
-      count: 1,
-    });
+    // No voice-primary button to count. It needs a call capability, and a cell
+    // has none - so the composer shows its ordinary controls instead.
+    expect((newChat!.required_visible_counts ?? []).some(({ selector }) => (
+      selector === ".composer .voice-primary"
+    ))).toBe(false);
+    // Recents keeps v1's three rows; only the PINNED group went, because a
+    // pinned task is kernel state and a cell has no kernel.
     expect(newChat!.required_visible_counts).toEqual(expect.arrayContaining([
       { selector: ".shell-task-group-label", count: 3 },
-      {
-        selector: ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-row",
-        count: 1,
-      },
       {
         selector: ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"] .session-row",
         count: 3,
       },
     ]));
+    expect((newChat!.required_visible_counts ?? []).some(({ selector }) => (
+      selector.includes("shell-pinned-tasks")
+    ))).toBe(false);
     expect(newChat!.required_absence_selectors).toContain(".transcript-navigation");
     expect(newChat!.required_absence_selectors)
       .toContain('.composer-context-item[title*="Project"]');
@@ -472,14 +440,20 @@ describe("console parity evidence manifest", () => {
     expect(newChat!.known_contract_bound_deviations).toContain(
       "Project and host selectors are omitted until a canonical task-context field exists; the fixture does not manufacture a selection control.",
     );
+    // The controller is neither required-hidden nor prohibited-visible any more.
+    // Both assertions described a build where voice was the primary composer
+    // control; a cell has no call capability, so it never is.
     expect(newChat!.required_presence_selectors)
-      .toContain(".composer-voice-controller[hidden]");
+      .not.toContain(".composer-voice-controller[hidden]");
     expect(newChat!.required_absence_selectors)
-      .toContain(".composer-voice-controller:not([hidden])");
+      .not.toContain(".composer-voice-controller:not([hidden])");
+    // `contents`, not `none`: the controller is hidden only while voice is the
+    // primary control. With no call capability it is the primary control's
+    // replacement, so it displays.
     expect(newChat!.required_computed_styles).toContainEqual({
       selector: ".composer-voice-controller",
       property: "display",
-      value: "none",
+      value: "contents",
     });
     expect(chatRun!.required_visible_selectors).toEqual(expect.arrayContaining([
       ".transcript-tool-summary",
@@ -502,17 +476,17 @@ describe("console parity evidence manifest", () => {
       { selector: ".message.user", count: 1 },
       { selector: ".message.assistant", count: 1 },
       { selector: ".sidebar-footer > button", count: 2 },
-      { selector: ".composer .voice-primary", count: 1 },
     ]));
+    // No voice-primary here either: it needs a call capability a cell lacks.
+    expect((chatRun!.required_visible_counts ?? []).some(({ selector }) => (
+      selector === ".composer .voice-primary"
+    ))).toBe(false);
+    // Every bound v1 had except the two on the PINNED group, which no longer
+    // mounts. The row heights are unchanged at 31px.
     expect(chatRun!.required_geometry).toEqual(expect.arrayContaining([
-      { selector: "#shell-pinned-tasks.shell-task-group-label", height: 20 },
       { selector: "#shell-projects.shell-task-group-label", height: 20 },
       { selector: "#shell-recent-tasks.shell-task-group-label", height: 20 },
       { selector: ".session-row.active .session-main", height: 31 },
-      {
-        selector: ".shell-task-group[aria-labelledby=\"shell-pinned-tasks\"] .session-main",
-        height: 31,
-      },
       {
         selector: ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"] .session-row:not(.active) .session-main",
         height: 31,
@@ -532,13 +506,17 @@ describe("console parity evidence manifest", () => {
       { selector: ".sidebar.shell-parity", property: "border-right-width", value: "0px" },
       { selector: ".sidebar.shell-parity", property: "backdrop-filter", value: "blur(22px) saturate(1.05)" },
       { selector: ".session-row.active .session-actions", property: "opacity", value: "0" },
-      { selector: ".composer-voice-controller", property: "display", value: "none" },
+      // `contents`, not `none` - see the same value on New chat above.
+      { selector: ".composer-voice-controller", property: "display", value: "contents" },
     ]));
     expect(chatRun!.required_absence_selectors).toContain(".session-row .shell-recent-meta");
+    // The controller is neither required-hidden nor prohibited-visible any more.
+    // Both assertions described a build where voice was the primary composer
+    // control; a cell has no call capability, so it never is.
     expect(chatRun!.required_presence_selectors)
-      .toContain(".composer-voice-controller[hidden]");
+      .not.toContain(".composer-voice-controller[hidden]");
     expect(chatRun!.required_absence_selectors)
-      .toContain(".composer-voice-controller:not([hidden])");
+      .not.toContain(".composer-voice-controller:not([hidden])");
     expect(chatRun!.required_exact_text).toContainEqual({
       selector: ".transcript-tool-summary .transcript-tool-copy",
       text: "Queried data",
@@ -552,7 +530,7 @@ describe("console parity evidence manifest", () => {
 
   it("binds the primary shell identity to the real Familiar companion preference", () => {
     for (const id of [
-      "new-chat", "chat-run", "agents", "plugins", "command-palette", "chat-direction",
+      "new-chat", "chat-run", "command-palette", "chat-direction",
     ]) {
       const state = manifest.states.find((candidate) => candidate.id === id) as
         | ContractState
@@ -578,9 +556,18 @@ describe("console parity evidence manifest", () => {
 
     expect(direction).toBeDefined();
     expect(direction!.hash).toBe("#/chat/direction-thread");
-    expect(direction!.required_request_prefixes).toContain(
-      "/v1/conversations/direction-thread",
-    );
+    // THE CELL, NOT THE KERNEL. The thread arrives through the membership-checked
+    // proxy now, and identity comes from the control plane, so the requests this
+    // screen cannot settle without are these. The v1 kernel paths are not merely
+    // renamed here - nothing in this build ever asks for them.
+    expect(direction!.required_request_prefixes).toEqual([
+      "/api/me",
+      "/api/settings",
+      "/api/cell/gate_visual/api/sessions",
+      "/api/cell/gate_visual/api/sessions/direction-thread",
+      "/api/cell/gate_visual/api/model/options",
+      "/api/cell/gate_visual/v1/capabilities",
+    ]);
     expect(direction!.direction_records).toEqual([
       "DIR-0008", "DIR-0009", "DIR-0010", "DIR-0011", "DIR-0012", "DIR-0015", "DIR-0016", "DIR-0017", "DIR-0018", "DIR-0020", "DIR-0021", "DIR-0022", "DIR-0024", "DIR-0025", "DIR-0026", "DIR-0027", "DIR-0028", "DIR-0029", "DIR-0030", "DIR-0033", "DIR-0035", "DIR-0036", "DIR-0039",
     ]);
@@ -589,24 +576,32 @@ describe("console parity evidence manifest", () => {
     );
     expect(direction!.target_reference_paths).toHaveLength(3);
     expect(direction!.negative_reference_paths).toHaveLength(3);
+    // Projects and Recents survive; PINNED does not. A pinned task is kernel
+    // state and a cell has no kernel, so the group never mounts - which is why
+    // it is gone from here rather than merely failing.
     expect(direction!.required_visible_selectors).toEqual(expect.arrayContaining([
-      "#shell-pinned-tasks.shell-task-group-label",
       "#shell-projects.shell-task-group-label",
       "#shell-recent-tasks.shell-task-group-label",
-      ".transcript-navigation[aria-label=\"Transcript navigation\"]",
+      ".companion-switcher-trigger",
     ]));
+    expect(direction!.required_visible_selectors).not.toContain(
+      "#shell-pinned-tasks.shell-task-group-label",
+    );
+    // What the shell still guarantees on a cell: its own chrome, the companion
+    // it is wearing, and the conversation surface. The right rail is fed
+    // entirely by runs, artifacts, subagents and named agents - none of which a
+    // cell exposes - so it is absent here rather than empty.
     expect(direction!.required_presence_selectors).toEqual(expect.arrayContaining([
-      ".right-rail .rail-group[aria-label=\"Background processes\"]",
-      ".right-rail .rail-group[aria-label=\"Computer Use\"]",
-      ".right-rail .rail-group[aria-label=\"Sources\"]",
-      ".right-rail .rail-agent-stack [data-familiar-body=\"kepler\"]",
-      ".right-rail .rail-agent-stack [data-familiar-body=\"pioneer\"]",
-      ".right-rail .rail-agent-stack [data-familiar-body=\"voyager\"]",
-      ".transcript-tool-summary",
-      ".transcript-subagent-chip",
-      ".display-object-card.display-object-communication[data-phase=\"draft\"]",
-      ".display-object-communication button",
+      ".sidebar.shell-parity",
+      ".companion-switcher-trigger[aria-label=\"Companion: Familiar\"]",
+      ".shell-task-group[aria-labelledby=\"shell-projects\"]",
+      ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"]",
+      ".chat-layout",
+      ".composer button[aria-label=\"Model\"]",
     ]));
+    expect(direction!.required_presence_selectors.some((selector) => (
+      selector.startsWith(".right-rail")
+    ))).toBe(false);
     expect(direction!.required_absence_selectors).toEqual(expect.arrayContaining([
       ".side-status",
       ".conversation-search",
@@ -619,13 +614,11 @@ describe("console parity evidence manifest", () => {
       ".composer-drop-target",
       ...unboundWorkspacePanelSelectors,
     ]));
-    expect(direction!.required_text).toContain(
-      "Used Figma integration, read files, edited files, ran commands",
-    );
-    expect(direction!.required_text).toContain("3 done");
-    expect(direction!.required_text).toContain("Draft update for #launch");
-    expect(direction!.required_geometry).toEqual(expect.arrayContaining([
-      { selector: "#shell-pinned-tasks.shell-task-group-label", height: 20 },
+    // The tool-receipt and run-summary lines went with the rail that carried
+    // them. What remains is the transcript's own text.
+    expect(direction!.required_text).toEqual(["updated"]);
+    // v1's own 31px rows, measurable again now the sidebar populates.
+    expect(direction!.required_geometry).toEqual([
       { selector: "#shell-projects.shell-task-group-label", height: 20 },
       { selector: "#shell-recent-tasks.shell-task-group-label", height: 20 },
       { selector: ".session-row.active .session-main", height: 31 },
@@ -633,48 +626,29 @@ describe("console parity evidence manifest", () => {
         selector: ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"] .session-row:not(.active) .session-main",
         height: 31,
       },
-      { selector: ".transcript-tool-summary", height: 24 },
-      { selector: ".transcript-navigation", width: 63, height: 34 },
-      { selector: ".right-rail .chat-rail-glass", width: 302, y: 16 },
-    ]));
+    ]);
     expect(direction!.required_absence_selectors).toContain(".session-row .shell-recent-meta");
-    expect(direction!.required_computed_styles).toContainEqual({
-      selector: ".session-row.active .session-actions",
-      property: "opacity",
-      value: "0",
-    });
-    expect(direction!.required_visible_counts).toEqual(expect.arrayContaining([
-      { selector: ".shell-task-group-label", count: 3 },
-      { selector: ".transcript-navigation", count: 1 },
-      { selector: ".transcript-navigation > button", count: 2 },
-      { selector: ".transcript-tool-summary", count: 2 },
-      { selector: ".right-rail .rail-group[aria-label=\"Outputs\"]", count: 1 },
-      { selector: ".right-rail .rail-group[aria-label=\"Subagents\"]", count: 1 },
-      { selector: ".right-rail .rail-group[aria-label=\"Background processes\"]", count: 1 },
-      { selector: ".right-rail .rail-group[aria-label=\"Computer Use\"]", count: 1 },
-      { selector: ".right-rail .rail-group[aria-label=\"Sources\"]", count: 1 },
-      { selector: ".display-object-card.display-object-communication", count: 1 },
-      { selector: ".display-object-communication .display-object-actions button", count: 4 },
-      { selector: ".sidebar-footer > button", count: 2 },
-      { selector: ".composer .voice-primary", count: 1 },
-    ]));
+    // The sidebar is the surface a cell still guarantees, so it is the one the
+    // style contract still binds. Everything that bound the rail went with it.
     expect(direction!.required_computed_styles).toEqual(expect.arrayContaining([
-      { selector: ".right-rail", property: "background-color", value: "rgba(0, 0, 0, 0)" },
-      { selector: ".chat-rail-glass", property: "border-top-width", value: "0px" },
-      { selector: ".chat-rail-glass", property: "border-right-width", value: "0px" },
-      { selector: ".chat-rail-glass", property: "border-bottom-width", value: "0px" },
-      { selector: ".chat-rail-glass", property: "border-left-width", value: "0px" },
-      { selector: ".chat-rail-glass", property: "backdrop-filter", value: "blur(22px) saturate(1.25)" },
-      { selector: ".transcript-navigation", property: "border-top-width", value: "0px" },
-      { selector: ".transcript-navigation", property: "backdrop-filter", value: "blur(18px) saturate(1.25)" },
       { selector: ".sidebar.shell-parity", property: "border-right-width", value: "0px" },
       { selector: ".sidebar.shell-parity", property: "backdrop-filter", value: "blur(22px) saturate(1.05)" },
-      { selector: ".composer-voice-controller", property: "display", value: "none" },
     ]));
-    expect(direction!.required_presence_selectors)
-      .toContain(".composer-voice-controller[hidden]");
+    expect(direction!.required_computed_styles.some(({ selector }) => (
+      selector.includes("rail")
+    ))).toBe(false);
+    expect(direction!.required_visible_counts).toEqual(expect.arrayContaining([
+      { selector: ".sidebar-footer > button", count: 2 },
+      {
+        selector: ".shell-task-group[aria-labelledby=\"shell-recent-tasks\"] .session-row",
+        count: 3,
+      },
+    ]));
+    // The voice-primary button needs a call capability, which a cell has none
+    // of, so the composer shows its ordinary controls and the controller is no
+    // longer prohibited chrome. See this state's settled_when.
     expect(direction!.required_absence_selectors)
-      .toContain(".composer-voice-controller:not([hidden])");
+      .not.toContain(".composer-voice-controller:not([hidden])");
     expect(direction!.required_absence_selectors).toContain(".transcript-tool-disclosure[open]");
     expect(direction!.required_absent_text).toEqual(expect.arrayContaining([
       "Governed by Boltrig",
@@ -795,11 +769,13 @@ describe("console parity evidence manifest", () => {
     ), "utf8");
 
     expect(paritySource).toContain('JSON.stringify(["vendor-invoice-triage"])');
-    expect(paritySource).toContain('document.querySelector("#shell-pinned-tasks")');
+    // The landmarks the shell still mounts on a cell. Pinned tasks are gone
+    // because they are kernel state, and asserting the harness still LOOKS for
+    // them would be asserting the presence of a check that can never pass.
     expect(paritySource).toContain('document.querySelector("#shell-recent-tasks")');
-    expect(paritySource).toContain(
-      'document.querySelector(\'.transcript-navigation[aria-label="Transcript navigation"]\')',
-    );
+    expect(paritySource).toContain("function surfaceConditions");
+    expect(paritySource).toContain("function surfaceMisses");
+    expect(paritySource).not.toContain('document.querySelector("#shell-pinned-tasks")');
 
     // TaskInspector carries these semantic bridge classes so the visual
     // contract can survive the legacy RightRail -> TaskInspector mount swap
@@ -821,11 +797,17 @@ describe("console parity evidence manifest", () => {
       expect(state!.required_geometry.some(({ selector }) => (
         selector === ".side-recents-label"
       ))).toBe(false);
-      expect(state!.required_presence_selectors).toEqual(expect.arrayContaining([
-        ".right-rail .chat-rail-glass",
-        ".right-rail .rail-group[aria-label=\"Outputs\"]",
-        ".right-rail .rail-group[aria-label=\"Subagents\"]",
-      ]));
+      // The rail bridge is still guaranteed for the state that still mounts a
+      // rail. chat-direction was re-authored against a cell, which has no runs,
+      // artifacts or subagents to put in one - so requiring it there would be
+      // requiring a surface that cannot exist.
+      if (id !== "chat-direction") {
+        expect(state!.required_presence_selectors).toEqual(expect.arrayContaining([
+          ".right-rail .chat-rail-glass",
+          ".right-rail .rail-group[aria-label=\"Outputs\"]",
+          ".right-rail .rail-group[aria-label=\"Subagents\"]",
+        ]));
+      }
       expect(state!.required_absence_selectors).toEqual(expect.arrayContaining([
         ".conversation-search",
         ".side-recents-label",
@@ -836,88 +818,6 @@ describe("console parity evidence manifest", () => {
     }
   });
 
-  it("fails the Call fixture closed on its immersive character-and-controls contract", async () => {
-    const call = manifest.states.find((state) => state.id === "call") as
-      | ContractState
-      | undefined;
-    expect(call).toBeDefined();
-    expect(call!.direction_records).toEqual(["DIR-0005", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0028", "DIR-0029", "DIR-0030", "DIR-0032", "DIR-0040"]);
-    expect(call!.required_presence_selectors).toEqual(expect.arrayContaining([
-      ".voice-call-leave",
-      ".voice-call-controls",
-      ".voice-call-text",
-      ".voice-call-primary-familiar",
-    ]));
-    expect(call!.required_visible_selectors).toEqual(expect.arrayContaining([
-      ".voice-call-leave",
-      ".voice-call-controls",
-      ".voice-call-text",
-      '.voice-call-controls button[aria-pressed="false"]',
-      '.voice-call-primary-familiar [data-renderer="webgl2"], .voice-call-primary-familiar [data-renderer="badge"]',
-    ]));
-    expect(call!.required_absence_selectors).toEqual(expect.arrayContaining([
-      ".voice-call-title",
-      ".voice-call-elapsed",
-      ".voice-call-notice",
-      ".voice-call-participants",
-      ".voice-call-participant",
-      ".voice-call-state",
-      ".voice-call-saying",
-      ".voice-call-typed",
-      ".voice-stage",
-    ]));
-    expect(call!.required_geometry).toEqual(expect.arrayContaining([
-      { selector: ".voice-call-primary-familiar", width: 1120 },
-      {
-        selector: ".voice-call-primary-familiar .familiar-stage",
-        width: 730,
-        height: 730,
-      },
-      { selector: ".voice-call-text", width: 745, height: 58 },
-    ]));
-    expect(call!.required_computed_styles).toEqual(expect.arrayContaining([
-      {
-        selector: ".voice-call-primary-familiar .familiar-stage-canvas",
-        property: "position",
-        value: "static",
-      },
-      {
-        selector: ".voice-call-primary-familiar .familiar-stage-canvas",
-        property: "width",
-        value: "730px",
-      },
-      {
-        selector: ".voice-call-primary-familiar .familiar-stage-canvas",
-        property: "height",
-        value: "730px",
-      },
-    ]));
-    expect(call!.required_text).toEqual(expect.arrayContaining([
-      "Leave",
-      "Resume call",
-      "Mute me",
-      "Silence Familiar",
-    ]));
-    expect(call!.required_exact_text).toEqual(expect.arrayContaining([
-      { selector: ".voice-call-leave", text: "Leave" },
-      { selector: ".voice-call-text button", text: "Resume call" },
-      {
-        selector: '.voice-call-controls button[aria-pressed="false"]',
-        text: "Mute me",
-      },
-    ]));
-    expect(call!.settled_when).toContain("immersive Call dialog");
-
-    const source = await import("node:fs/promises").then(({ readFile }) => readFile(
-      new URL("./parity.tsx", import.meta.url),
-      "utf8",
-    ));
-    expect(source).toContain('if (id === "call")');
-    expect(source).toContain('document.querySelector(".voice-call-text")');
-    expect(source).not.toContain("visualPinRecoveredCallNotice");
-    expect(source).toContain("satisfies ConversationResponse");
-    expect(source).not.toContain("conversation: { id: \"voice-thread\"");
-  });
 
   it("keeps the Settings Look card on the three-row Figma geometry", () => {
     const settings = manifest.states.find((state) => state.id === "settings-you") as
@@ -956,25 +856,6 @@ describe("console parity evidence manifest", () => {
     ]));
   });
 
-  it("fails Agents closed on the framed fleet canvas geometry", () => {
-    const agents = manifest.states.find((state) => state.id === "agents") as
-      | ContractState
-      | undefined;
-    expect(agents).toBeDefined();
-    expect(agents!.direction_records).toEqual(["DIR-0003", "DIR-0010", "DIR-0015", "DIR-0016", "DIR-0020", "DIR-0021", "DIR-0028", "DIR-0029", "DIR-0030", "DIR-0035", "DIR-0036"]);
-    expect(agents!.required_visible_selectors).toEqual(expect.arrayContaining([
-      ".agents-fleet-topbar .console-seg",
-      ".agents-fleet-topbar .console-primary",
-      ".fleet-authority-key",
-      ".fleet-canvas",
-    ]));
-    expect(agents!.required_geometry).toEqual(expect.arrayContaining([
-      { selector: ".agents-fleet-topbar", x: 266, y: 0, width: 1174, height: 48 },
-      { selector: ".fleet-summary", x: 284, y: 62, width: 1138, height: 34 },
-      { selector: ".fleet-authority-key", x: 284, y: 96, width: 1138, height: 28 },
-      { selector: ".fleet-canvas", x: 284, y: 136, width: 1138, height: 746 },
-    ]));
-  });
 
   it("binds the additive direction to a durable 1440 by 900 shipped capture", async () => {
     const direction = manifest.states.find((state) => state.id === "chat-direction") as

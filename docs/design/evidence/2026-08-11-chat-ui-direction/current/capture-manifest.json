@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-22T15:31:03.918Z",
+  "capturedAt": "2026-08-25T03:51:43.037Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "249f9bb6ab487b401051f04e920d5d3000ff07183471004c205aa5ffafba5aed",
-    "digestAfterCapture": "249f9bb6ab487b401051f04e920d5d3000ff07183471004c205aa5ffafba5aed",
+    "digestBeforeCapture": "8fced0a5f633ab08a9e0adf609c377b06a8e8773f44a229dee4a31d84506116d",
+    "digestAfterCapture": "8fced0a5f633ab08a9e0adf609c377b06a8e8773f44a229dee4a31d84506116d",
     "sourceUnchangedDuringCapture": true,
-    "branch": "worker/today-and-companion-names",
-    "head": "1d6c16cffd0302388e049e5504f30869d0d1a598",
+    "branch": "merge/hermes-into-main",
+    "head": "b9e63d5d147febcd654e857acb436f54c672a788",
     "dirty": true
   },
   "runner": {
@@ -40,7 +40,7 @@
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "c66d6f153e87a58f0763d9147260f75905e74a0b923752bc8dec73dc88318f2d",
+      "sha256": "5d2b6eb7a9980ba82d47eb98cc26791a0561bce9d45629b8a453bf60e4b2d5d1",
       "width": 1440,
       "height": 900,
       "captureContract": {
@@ -62,27 +62,19 @@
         "fixtureMisses": [],
         "contractMisses": [],
         "requestedPaths": [
-          "/v1/workspaces",
-          "/v1/named-agents",
-          "/v1/conversations?limit=25&offset=0",
-          "/v1/me/settings",
-          "/v1/orgs/current",
-          "/v1/workspaces",
-          "/v1/console/overview?limit=1",
-          "/v1/conversations/direction-thread",
-          "/v1/artifacts?conversation_id=direction-thread&limit=25",
-          "/v1/conversations",
-          "/v1/me/approval-posture",
-          "/v1/chat/model-choices",
-          "/v1/chat/config",
-          "/v1/me/settings",
-          "/v1/familiar/phenotype",
-          "/v1/named-agents",
-          "/v1/me/settings",
-          "/v1/capabilities",
-          "/v1/capabilities",
-          "/v1/calls?limit=10",
-          "/v1/calls/current?conversation_id=direction-thread"
+          "/api/me",
+          "/api/me",
+          "/api/settings",
+          "/api/cell/gate_visual/api/sessions",
+          "/api/me",
+          "/api/settings",
+          "/api/me",
+          "/api/settings",
+          "/api/cell/gate_visual/api/sessions/direction-thread",
+          "/api/cell/gate_visual/api/sessions",
+          "/api/cell/gate_visual/api/model/options",
+          "/api/cell/gate_visual/v1/capabilities",
+          "/api/cell/gate_visual/v1/capabilities"
         ]
       }
     }

@@ -438,20 +438,16 @@ const fixtures: Record<string, unknown> = {
   "/api/model/options": {
     models: [{ id: "hermes-4-405b", name: "Hermes 4 405B" }],
   },
-  "/api/sessions/direction-thread": {
-    id: "direction-thread",
-    title: "Quarterly board pack",
-    updated_at: "2026-08-22T16:31:51Z",
-    status: "active",
-  },
-  "/api/sessions": [
-    {
-      id: "conv-visual-1",
-      title: "Quarterly board pack",
-      updated_at: "2026-08-22T16:31:51Z",
-      status: "active",
-    },
-  ],
+  // THE SAME THREAD THE v1 CLIENT WAS GIVEN. `conversation()` in the shim
+  // spreads the session it fetches straight into the v1 ConversationResponse,
+  // so handing it the existing fixture is not a shortcut - it is the identical
+  // object arriving by the new path, which is exactly what the capture should
+  // be exercising. A hand-written stub would have captured a thread that no
+  // production code path can produce.
+  "/api/sessions/direction-thread": directionThread,
+  "/api/sessions/run-thread": runThread,
+  "/api/sessions/voice-thread": voiceThread,
+  "/api/sessions": conversations,
   "/v1/me/settings": {
     profile: { id: "will", email: "will@boltrig.com", display_name: "Will Lilley", role: "org-admin" },
     settings: {
@@ -804,7 +800,7 @@ function driveRequestedState() {
   // The target palette belongs over the run-thread surface. Do not open it
   // until the real persisted conversation has reached the same truthful
   // completed state used by the chat-run capture.
-  if (!runThreadSurfaceIsReady()) return;
+  if (surfaceMisses("chat-run").length > 0) return;
   const open = document.querySelector<HTMLButtonElement>(
     'button[aria-label="Open command palette"]',
   );
@@ -951,99 +947,113 @@ function publishVisualCaptureContract() {
   };
 }
 
+/** Named conditions per state, so a surface that will not settle says WHICH
+ *  part of itself is missing.
+ *
+ *  These used to be single boolean expressions. A false return produced
+ *  `ready: false` with every other diagnostic empty, and finding the cause meant
+ *  deleting one condition at a time with a two-minute capture between each. The
+ *  conditions below are the same ones, minus those a Hermes cell cannot satisfy;
+ *  what is new is that failure is reportable.
+ *
+ *  WHAT WAS DROPPED, AND WHY. Pinned tasks and subagent counts are kernel state
+ *  and a cell has no kernel, so those groups never mount - requiring them would
+ *  be requiring a surface that cannot exist. Everything a cell still renders is
+ *  still required. */
+/** A FUNCTION, NOT A CONST, and that is not a style preference.
+ *
+ *  `driveRequestedState()` and `evaluateVisualState()` both run during module
+ *  evaluation, and a MutationObserver can fire before it finishes. A `const`
+ *  table declared below them is in its temporal dead zone at that moment, so
+ *  every one of those calls threw `Cannot access 'SURFACE_CONDITIONS' before
+ *  initialization` - at runtime only. It typechecks perfectly, because the
+ *  function that reads it is hoisted and tsc cannot see when it is first
+ *  called. A function declaration hoists with its body and has no dead zone. */
+function surfaceConditions(): Record<string, Record<string, () => boolean>> {
+  return {
+  "new-chat": {
+    hash: () => window.location.hash === "#/chat",
+    welcome: () => Boolean(document.querySelector(".new-chat-transcript .welcome h1")),
+    composer: () => Boolean(document.querySelector(".new-chat-transcript .composer.new-context")),
+    "model-button": () => Boolean(
+      document.querySelector('.new-chat-transcript button[aria-label="Model"]'),
+    ),
+    prompt: () => bodyHas("What needs doing?"),
+  },
+  "chat-run": {
+    hash: () => window.location.hash === "#/chat/run-thread",
+    "recent-tasks": () => Boolean(document.querySelector("#shell-recent-tasks")),
+    "user-message": () => Boolean(document.querySelector(".message.user")),
+    "assistant-message": () => Boolean(document.querySelector(".message.assistant")),
+    subject: () => bodyHas("Renewal outreach, top 20 accounts"),
+    body: () => bodyHas("Twenty accounts fall inside the renewal window."),
+  },
+  "command-palette": {
+    "run-thread": () => surfaceMisses("chat-run").length === 0,
+    palette: () => Boolean(document.querySelector('[data-screen-label="Command palette"]')),
+    search: () => Boolean(document.querySelector('input[aria-label="Search Worker"]')),
+  },
+  "settings-you": {
+    heading: () => Boolean(document.querySelector(".settings-head h1")),
+    "reaching-you": () => bodyHas("Reaching you"),
+    name: () => bodyHas("Will Lilley"),
+  },
+  };
+}
+
+function surfaceMisses(id: string): string[] {
+  // Delegated rather than held in the table: the direction conditions are
+  // declared further down the file.
+  if (id === "chat-direction") return directionSurfaceMisses();
+  const conditions = surfaceConditions()[id];
+  if (!conditions) return [`unknown-state:${id}`];
+  return Object.entries(conditions)
+    .filter(([, holds]) => !holds())
+    .map(([name]) => name);
+}
+
 function surfaceIsReady(id: VisualState["id"]): boolean {
   if (window.location.hash !== visualState.hash) return false;
-  if (id === "new-chat") {
-    return Boolean(
-      window.location.hash === "#/chat"
-      && document.querySelector(".new-chat-transcript .welcome h1")
-      && document.querySelector(".new-chat-transcript .composer.new-context")
-      && document.querySelector('.new-chat-transcript button[aria-label="Model"]')
-      && document.querySelector(".voice-intro")
-      && document.querySelectorAll(".shell-parity .session-row:not(.closed) .session-main").length === 4
-      && bodyHas("What needs doing?")
-      && bodyHas("Talk to Familiar")
-    );
+  const misses = surfaceMisses(id);
+  if (misses.length > 0) {
+    document.documentElement.dataset.visualSurfaceMisses = `${id}:${misses.join("|")}`;
+  } else {
+    delete document.documentElement.dataset.visualSurfaceMisses;
   }
-  if (id === "chat-run") {
-    return runThreadSurfaceIsReady();
-  }
-  if (id === "chat-direction") {
-    return directionThreadSurfaceIsReady();
-  }
-  if (id === "agents") {
-    return Boolean(
-      document.querySelector('[aria-label="Permanent fleet topology"]')
-      && document.querySelector(".fleet-canvas:not([data-loading=\"true\"])")
-      && bodyHas("Chief of Staff"),
-    );
-  }
-  if (id === "plugins") {
-    return Boolean(
-      document.querySelector(".plugins-groups")
-      && bodyHas("Plugins")
-      && bodyHas("Slack")
-      && bodyHas("filesystem"),
-    );
-  }
-  if (id === "command-palette") {
-    return Boolean(
-      runThreadSurfaceIsReady()
-      && document.querySelector('[data-screen-label="Command palette"]')
-      && document.querySelector('input[aria-label="Search Worker"]'),
-    );
-  }
-  if (id === "call") {
-    return Boolean(
-      document.querySelector('[data-screen-label="Call"]')
-      && document.querySelector(".voice-call-text")
-      && document.querySelector(".voice-call-controls")
-      && document.querySelector(
-        '.voice-call-primary-familiar [data-renderer="webgl2"], '
-        + '.voice-call-primary-familiar [data-renderer="badge"]',
-      )
-      && bodyHas("Leave")
-      && bodyHas("Mute me")
-      && bodyHas("Silence Familiar"),
-    );
-  }
-  return Boolean(
-    document.querySelector(".settings-head h1")
-    && bodyHas("Reaching you")
-    && bodyHas("Will Lilley")
-    && bodyHas("Slack · Ops"),
-  );
+  return misses.length === 0;
 }
 
-function runThreadSurfaceIsReady(): boolean {
-  return Boolean(
-    window.location.hash === "#/chat/run-thread"
-    && document.querySelector("#shell-pinned-tasks")
-    && document.querySelector("#shell-recent-tasks")
-    && document.querySelector(".message.user")
-    && document.querySelector(".message.assistant")
-    && document.querySelector('.transcript-navigation[aria-label="Transcript navigation"]')
-    && bodyHas("Renewal outreach, top 20 accounts")
-    && bodyHas("Twenty accounts fall inside the renewal window.")
-    && bodyHas("5 subagents"),
-  );
+
+/** Named conditions, so a surface that will not settle says WHICH part of
+ *  itself is missing.
+ *
+ *  It used to be one boolean expression. When it returned false the capture
+ *  reported `ready: false` with every other diagnostic empty, and finding the
+ *  cause meant deleting conditions one at a time and re-running a two-minute
+ *  capture between each. The conditions are the same; only the reporting is
+ *  new. */
+const DIRECTION_SURFACE_CONDITIONS: Record<string, () => boolean> = {
+  hash: () => window.location.hash === "#/chat/direction-thread",
+  "user-messages": () => document.querySelectorAll(".message.user").length === 2,
+  "assistant-messages": () => document.querySelectorAll(".message.assistant").length === 2,
+  "agent-labels": () => document.querySelectorAll(".message-agent-label").length === 4,
+  "display-object": () => Boolean(document.querySelector(".display-object-communication")),
+  "transcript-nav": () => Boolean(
+    document.querySelector('.transcript-navigation[aria-label="Transcript navigation"]'),
+  ),
+  "evidence-heading": () => bodyHas("Desktop chat evidence"),
+  "receipt-text": () => bodyHas(
+    "The preview and inspection receipts completed without inventing live state.",
+  ),
+  "draft-text": () => bodyHas("Draft update for #launch"),
+};
+
+function directionSurfaceMisses(): string[] {
+  return Object.entries(DIRECTION_SURFACE_CONDITIONS)
+    .filter(([, holds]) => !holds())
+    .map(([name]) => name);
 }
 
-function directionThreadSurfaceIsReady(): boolean {
-  return Boolean(
-    window.location.hash === "#/chat/direction-thread"
-    && document.querySelector("#shell-pinned-tasks")
-    && document.querySelector("#shell-recent-tasks")
-    && document.querySelectorAll(".message.user").length === 2
-    && document.querySelectorAll(".message.assistant").length === 2
-    && document.querySelectorAll(".message-agent-label").length === 4
-    && document.querySelector(".display-object-communication")
-    && document.querySelector('.transcript-navigation[aria-label="Transcript navigation"]')
-    && bodyHas("Desktop chat evidence")
-    && bodyHas("The preview and inspection receipts completed without inventing live state.")
-    && bodyHas("Draft update for #launch")
-  );
-}
 
 function visualContractMisses(state: SelectorAwareVisualState): string[] {
   const misses: string[] = [];

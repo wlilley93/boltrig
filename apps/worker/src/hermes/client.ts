@@ -21,6 +21,7 @@ const adapter = {
 
   // Conversations, over Hermes sessions
   conversations: conv.conversations,
+  conversationsPage: conv.conversationsPage,
   conversation: conv.conversation,
   deleteConversation: conv.deleteConversation,
   renameConversation: conv.renameConversation,

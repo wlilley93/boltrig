@@ -20,6 +20,32 @@ export async function conversations(): Promise<ConversationsResponse> {
   };
 }
 
+/** The page the SIDEBAR asks for, which is not the list `conversations()`
+ *  returns.
+ *
+ *  THIS IS WHY THE CONVERSATION LIST WAS EMPTY. `useConversationDirectory`
+ *  calls `conversationsPage(25, 0)` and nothing else; `conversations()` is used
+ *  by ChatView and the archived-settings section. Implementing only the latter
+ *  left the sidebar calling a method the adapter did not have, so its promise
+ *  rejected, the directory sat at `unavailable`, and not one `.session-row` was
+ *  ever rendered - with no error on screen, because the catch sets a status the
+ *  empty state renders quietly.
+ *
+ *  PAGINATED HERE RATHER THAN AT THE CELL. Hermes serves the whole session list
+ *  in one response and takes no limit or offset, so slicing client-side is the
+ *  honest translation: the caller gets the contract it expects, and
+ *  `next_offset` is null at the end rather than an offset that would fetch the
+ *  same list again. */
+export async function conversationsPage(
+  limit: number,
+  offset: number,
+): Promise<ConversationsResponse & { next_offset: number | null }> {
+  const all = (await conversations()).conversations;
+  const page = all.slice(offset, offset + limit);
+  const next = offset + page.length;
+  return { conversations: page, next_offset: next < all.length ? next : null };
+}
+
 export async function conversation(id: string): Promise<ConversationResponse> {
   const session = await cellJson<any>(`/api/sessions/${encodeURIComponent(id)}`);
   
