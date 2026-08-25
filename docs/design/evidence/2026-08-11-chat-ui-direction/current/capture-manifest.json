@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-25T04:35:59.308Z",
+  "capturedAt": "2026-08-25T15:14:58.636Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,11 +17,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "6ed194ab5e908207eee48aee8e2c2e44f42c874c0acc2aa1d539d2a8bf6348d1",
-    "digestAfterCapture": "6ed194ab5e908207eee48aee8e2c2e44f42c874c0acc2aa1d539d2a8bf6348d1",
+    "digestBeforeCapture": "1dd4d78d228baf022bad16c17b0504940ec96681c6b7e607caf84092edc415af",
+    "digestAfterCapture": "1dd4d78d228baf022bad16c17b0504940ec96681c6b7e607caf84092edc415af",
     "sourceUnchangedDuringCapture": true,
-    "branch": "merge/hermes-into-main",
-    "head": "98602a783d90f0a6cf04b89b2382cdc2bd96d32e",
+    "branch": "parity/workspace-link",
+    "head": "f3317fc38d1b38ce6742ad20881a08e47e9284b3",
     "dirty": false
   },
   "runner": {
