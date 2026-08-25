@@ -38,10 +38,21 @@ export function WorkerGlobalContextProvider({ children }: { children: React.Reac
   const [identityStatus, setIdentityStatus] = useState<LoadStatus>("loading");
 
   const refreshIdentity = useCallback(async () => {
+    // PROBED, NOT CALLED, and the difference took the shell out. `currentOrg`
+    // and `workspaces` are kernel surfaces a Hermes cell does not have, and an
+    // absent method reads as `undefined` rather than as a rejecting function -
+    // deliberately, so that `typeof client.x === "function"` probes elsewhere
+    // report the feature as missing instead of rendering it into a broken
+    // state. This call site never probed. Invoking undefined threw a
+    // TypeError synchronously, inside the array literal, BEFORE allSettled
+    // could settle anything, so the rejection escaped as an unhandled one and
+    // identityStatus sat on "loading" forever: no name, no organisation, no
+    // workspace, and no error either.
+    const absent = () => Promise.reject(new Error("not available on this runtime"));
     const [meResult, orgResult, workspaceResult, overviewResult] = await Promise.allSettled([
       client.meSettings(),
-      client.currentOrg(),
-      client.workspaces(),
+      typeof client.currentOrg === "function" ? client.currentOrg() : absent(),
+      typeof client.workspaces === "function" ? client.workspaces() : absent(),
       client.consoleOverview(1),
     ]);
 

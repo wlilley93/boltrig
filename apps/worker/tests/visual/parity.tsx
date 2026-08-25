@@ -410,7 +410,48 @@ const routines = [
   workflow("weekly-board-pack", ["work.read", "doc.write", "mail.draft"], ["leadership", "reporting"], "generated", { cron: "0 15 * * 5", timezone: "Europe/London" }),
 ];
 
+/** The cell this fixture pretends the signed-in person owns.
+ *
+ *  Every cell call is addressed `/api/cell/<this>/...`, so it has to be one
+ *  value rather than a literal repeated per path. */
+const VISUAL_GATEWAY_ID = "gate_visual";
+
 const fixtures: Record<string, unknown> = {
+  // THE CONTROL PLANE, which the Hermes build talks to for identity and
+  // preferences. AuthGate gates the entire application on `/api/me` returning
+  // 200, so without this fixture nothing renders at all and the capture dies
+  // before its first screenshot rather than producing a diagnosable frame.
+  "/api/me": {
+    user: { id: "will", email: "will@boltrig.com", display_name: "Will Lilley" },
+    tenant_gateway_id: VISUAL_GATEWAY_ID,
+    gateways: [{ gateway_id: VISUAL_GATEWAY_ID, character: "familiar" }],
+  },
+  "/api/settings": {
+    settings: {
+      theme: visualTheme,
+      density: "comfortable",
+      font_scale: "1",
+      "a11y.reduced_motion": true,
+    },
+  },
+  // Cell reads, matched after the proxy prefix is stripped below.
+  "/api/model/options": {
+    models: [{ id: "hermes-4-405b", name: "Hermes 4 405B" }],
+  },
+  "/api/sessions/direction-thread": {
+    id: "direction-thread",
+    title: "Quarterly board pack",
+    updated_at: "2026-08-22T16:31:51Z",
+    status: "active",
+  },
+  "/api/sessions": [
+    {
+      id: "conv-visual-1",
+      title: "Quarterly board pack",
+      updated_at: "2026-08-22T16:31:51Z",
+      status: "active",
+    },
+  ],
   "/v1/me/settings": {
     profile: { id: "will", email: "will@boltrig.com", display_name: "Will Lilley", role: "org-admin" },
     settings: {
@@ -697,7 +738,14 @@ window.fetch = async (input) => {
   invalidateVisualReadiness();
   updateVisualDiagnostics();
   try {
-    const runMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/events$/);
+    // THE CELL PROXY PREFIX IS STRIPPED FIRST. A cell call is addressed
+    // `/api/cell/<gateway>/<path>`, and <path> is the very same `/v1/...` the
+    // v1 client used. Matching on the stripped path means every fixture below
+    // keeps working through the proxy instead of needing a second, prefixed
+    // copy of itself that would drift from the first.
+    const cellMatch = url.pathname.match(/^\/api\/cell\/[^/]+(\/.*)$/);
+    const lookupPath = cellMatch ? cellMatch[1]! : url.pathname;
+    const runMatch = lookupPath.match(/^\/v1\/runs\/([^/]+)\/events$/);
     if (runMatch) {
       const events = runEventFixtures[decodeURIComponent(runMatch[1]!)];
       if (!events) {
@@ -706,11 +754,11 @@ window.fetch = async (input) => {
       }
       return sse(events);
     }
-    const routine = routines.find((item) => url.pathname === `/v1/workflows/${item.id}`);
-    const value = routine ?? fixtures[url.pathname];
+    const routine = routines.find((item) => lookupPath === `/v1/workflows/${item.id}`);
+    const value = routine ?? fixtures[lookupPath];
     if (value === undefined) {
       if (!fixtureMisses.includes(requestPath)) fixtureMisses.push(requestPath);
-      return json({ status: "unavailable", reason: `No visual fixture for ${url.pathname}` }, 404);
+      return json({ status: "unavailable", reason: `No visual fixture for ${lookupPath}` }, 404);
     }
     return json(value);
   } finally {
