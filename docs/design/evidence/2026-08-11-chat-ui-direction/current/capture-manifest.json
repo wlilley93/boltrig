@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-22T15:31:03.918Z",
+  "capturedAt": "2026-08-25T01:50:16.508Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,19 +17,19 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "249f9bb6ab487b401051f04e920d5d3000ff07183471004c205aa5ffafba5aed",
-    "digestAfterCapture": "249f9bb6ab487b401051f04e920d5d3000ff07183471004c205aa5ffafba5aed",
+    "digestBeforeCapture": "adca4eb397990566a15aa2b98657b2f757e967f364c87a91f8cfa7f80a9cd254",
+    "digestAfterCapture": "adca4eb397990566a15aa2b98657b2f757e967f364c87a91f8cfa7f80a9cd254",
     "sourceUnchangedDuringCapture": true,
-    "branch": "worker/today-and-companion-names",
-    "head": "1d6c16cffd0302388e049e5504f30869d0d1a598",
-    "dirty": true
+    "branch": "feat/general-montgomery-onboarding",
+    "head": "7df8783396773862e1de8ae26b85149b86e0004c",
+    "dirty": false
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
     "node": "v24.15.0",
     "browser": "chromium",
-    "browserVersion": "151.0.7922.34",
-    "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
+    "browserVersion": "148.0.7778.215",
+    "browserExecutable": "/usr/bin/google-chrome",
     "origin": "http://localhost:1420",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
@@ -40,7 +40,7 @@
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "c66d6f153e87a58f0763d9147260f75905e74a0b923752bc8dec73dc88318f2d",
+      "sha256": "b1b43ff4efa09df573e213ccd2d4fe47d4a5986b45dadf00636ba29fa592ffd0",
       "width": 1440,
       "height": 900,
       "captureContract": {
