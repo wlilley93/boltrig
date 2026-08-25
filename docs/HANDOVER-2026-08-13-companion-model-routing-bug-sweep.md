@@ -170,7 +170,7 @@ projection for existing readers.
 Agent profiles now use a generic modality-to-endpoint map rather than growing a
 new schema column for every modality. The UI is in:
 
-- `apps/worker/src/components/agent/AgentModelRouting.tsx`
+- `apps/worker/src/components/agent/AgentModelRouting.tsx` (since removed: the routes a Hermes cell cannot serve were dropped)
 
 The storage migration is:
 
