@@ -205,10 +205,32 @@ body.voice-call-animate .task-inspector.right-rail {
   margin: 0;
 }
 
-.voice-call-primary-familiar .jarvis-stage {
+/* EVERY BODY IN THE CALL, not two of them.
+ *
+ * This sized `.familiar-stage` and `.jarvis-stage` and nothing else, so Ultron,
+ * Colossus and General Montgomery arrived at whatever their own default box
+ * happened to be. A call is the one surface where the companion IS the screen,
+ * and a body that does not fill it reads as broken rather than small.
+ *
+ * The two shapes are deliberate. A sphere is square and is constrained above;
+ * everything else FILLS -- Colossus is a panel of lamps and Montgomery is
+ * 16:9 video, and neither wants to be boxed into a square. */
+.voice-call-primary-familiar .jarvis-stage,
+.voice-call-primary-familiar .ultron-stage,
+.voice-call-primary-familiar .colossus-stage,
+.voice-call-primary-familiar .frame-stage {
   width: 100%;
   height: 100%;
   min-height: 220px;
+}
+
+/* His surface is an iframe, and an iframe brings a border by default. Every
+   other body's surface is a canvas, which does not. */
+.voice-call-primary-familiar .frame-stage iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
 }
 
 @keyframes voice-call-character-arrive {

@@ -22,11 +22,15 @@ describe("the character registry", () => {
     // Colossus has ONE register by design and no irritated variant of a
     // stability report, so a phenotype would concede moods he does not have.
     expect(characterFor("colossus").readsPhenotype).toBe(false);
+    // Montgomery reads it and has the least room to express it: his body
+    // cannot move a scalar, only choose a clip, so the measured affect arrives
+    // as a directed emotion or not at all.
+    expect(characterFor("general-montgomery").readsPhenotype).toBe(true);
   });
 
-  it("ships exactly the four stock bodies through the production plugin join", () => {
+  it("ships exactly the five stock bodies through the production plugin join", () => {
     expect(listCharacters().map((c) => c.id).sort())
-      .toEqual(["colossus", "familiar", "jarvis", "ultron"]);
+      .toEqual(["colossus", "familiar", "general-montgomery", "jarvis", "ultron"]);
   });
 
   // Jarvis and Ultron are SEPARATE CHARACTERS, not one with two skins, and the

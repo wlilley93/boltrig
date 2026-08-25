@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-22T15:31:03.918Z",
+  "capturedAt": "2026-08-25T02:38:50.973Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,30 +17,30 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "249f9bb6ab487b401051f04e920d5d3000ff07183471004c205aa5ffafba5aed",
-    "digestAfterCapture": "249f9bb6ab487b401051f04e920d5d3000ff07183471004c205aa5ffafba5aed",
+    "digestBeforeCapture": "d1d52c94be324107f56c010dc7fd0f4be1186e502985c9c6075ce4b95b367644",
+    "digestAfterCapture": "d1d52c94be324107f56c010dc7fd0f4be1186e502985c9c6075ce4b95b367644",
     "sourceUnchangedDuringCapture": true,
-    "branch": "worker/today-and-companion-names",
-    "head": "1d6c16cffd0302388e049e5504f30869d0d1a598",
+    "branch": "feat/general-montgomery-onboarding",
+    "head": "8b6e2307b0156b053531b00cc396cbd1db133087",
     "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
     "node": "v24.15.0",
     "browser": "chromium",
-    "browserVersion": "151.0.7922.34",
-    "browserExecutable": "/home/jellytot/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
-    "origin": "http://localhost:1420",
+    "browserVersion": "148.0.7778.215",
+    "browserExecutable": "/usr/bin/google-chrome",
+    "origin": "http://localhost:1427",
     "readiness": "two stable animation frames after fonts, requests, route and DOM contract settle"
   },
   "states": [
     {
       "state": "chat-direction",
-      "url": "http://localhost:1420/tests/visual/parity.html?state=chat-direction&theme=dark",
+      "url": "http://localhost:1427/tests/visual/parity.html?state=chat-direction&theme=dark",
       "hash": "#/chat/direction-thread",
       "settledSelector": "html[data-visual-ready=\"chat-direction\"]",
       "output": "docs/design/evidence/2026-08-11-chat-ui-direction/current/shipped/chat-direction.png",
-      "sha256": "c66d6f153e87a58f0763d9147260f75905e74a0b923752bc8dec73dc88318f2d",
+      "sha256": "b1b43ff4efa09df573e213ccd2d4fe47d4a5986b45dadf00636ba29fa592ffd0",
       "width": 1440,
       "height": 900,
       "captureContract": {

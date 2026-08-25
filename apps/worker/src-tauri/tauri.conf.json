@@ -25,8 +25,8 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' https://boltrig.ai https://*.boltrig.ai wss://boltrig.ai wss://*.boltrig.ai https://boltrig.io https://*.boltrig.io wss://boltrig.io wss://*.boltrig.io; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; font-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'",
-      "devCsp": "default-src 'self'; connect-src 'self' https://boltrig.ai https://*.boltrig.ai wss://boltrig.ai wss://*.boltrig.ai https://boltrig.io https://*.boltrig.io wss://boltrig.io wss://*.boltrig.io http://localhost:* ws://localhost:*; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; font-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'"
+      "csp": "default-src 'self'; connect-src 'self' https://boltrig.ai https://*.boltrig.ai wss://boltrig.ai wss://*.boltrig.ai https://boltrig.io https://*.boltrig.io wss://boltrig.io wss://*.boltrig.io; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; font-src 'self'; object-src 'none'; frame-src http://localhost:8902; base-uri 'none'",
+      "devCsp": "default-src 'self'; connect-src 'self' https://boltrig.ai https://*.boltrig.ai wss://boltrig.ai wss://*.boltrig.ai https://boltrig.io https://*.boltrig.io wss://boltrig.io wss://*.boltrig.io http://localhost:* ws://localhost:*; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; font-src 'self'; object-src 'none'; frame-src http://localhost:8902; base-uri 'none'"
     }
   },
   "bundle": {

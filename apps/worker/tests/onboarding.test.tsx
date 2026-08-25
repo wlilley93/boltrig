@@ -179,9 +179,14 @@ describe("first-run onboarding", () => {
     fireEvent.keyDown(screen.getByRole("radio", { name: "Ultron" }), { key: "ArrowRight" });
     expect(screen.getByRole("radio", { name: "Colossus" }).getAttribute("aria-checked"))
       .toBe("true");
-    // And Colossus is the end of the rail, so this one goes nowhere.
     fireEvent.keyDown(screen.getByRole("radio", { name: "Colossus" }), { key: "ArrowRight" });
-    expect(screen.getByRole("radio", { name: "Colossus" }).getAttribute("aria-checked"))
+    expect(screen.getByRole("radio", { name: "General Montgomery" }).getAttribute("aria-checked"))
+      .toBe("true");
+    // And General Montgomery is the end of the rail, so this one goes nowhere.
+    // The assertion has always been "the last one does not wrap"; the last one
+    // has simply moved along again.
+    fireEvent.keyDown(screen.getByRole("radio", { name: "General Montgomery" }), { key: "ArrowRight" });
+    expect(screen.getByRole("radio", { name: "General Montgomery" }).getAttribute("aria-checked"))
       .toBe("true");
   });
 
@@ -290,8 +295,12 @@ describe("first-run onboarding", () => {
     await clickWhenReady("Show Ultron");
     expect(document.querySelectorAll(".companion-chevron.right")).toHaveLength(1);
     await clickWhenReady("Show Colossus");
+    expect(document.querySelectorAll(".companion-chevron.right")).toHaveLength(1);
+    await clickWhenReady("Show General Montgomery");
     expect(document.querySelectorAll(".companion-chevron.right")).toHaveLength(0);
     expect(screen.queryByRole("button", { name: /Show / })).toBeTruthy();
+    // And back down the rail. One more stop than there used to be.
+    await clickWhenReady("Show Colossus");
     await clickWhenReady("Show Ultron");
     await clickWhenReady("Show Jarvis");
     // The dots carry the choice for anyone not using the picture.

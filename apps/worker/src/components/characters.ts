@@ -64,6 +64,7 @@ import { jarvisStateFromTurn } from "./jarvis/JarvisState";
 import { UNIFORMS as COLOSSUS_UNIFORMS } from "./colossus/ColossusRenderer";
 import { ColossusStage } from "./colossus/ColossusStage";
 import { colossusStateFromTurn } from "./colossus/ColossusState";
+import { MONTGOMERY } from "./montgomery/montgomerySource";
 import { UltronStage } from "./ultron/UltronStage";
 import { ultronStateFromTurn } from "./ultron/UltronState";
 
@@ -356,8 +357,9 @@ registerCharacter(FAMILIAR);
 registerCharacter(JARVIS);
 registerCharacter(ULTRON);
 registerCharacter(COLOSSUS);
+registerCharacter(MONTGOMERY);
 
-// Published web and desktop builds contain exactly the four supported bodies
+// Published web and desktop builds contain exactly the five supported bodies
 // above. Do not use a bundler directory glob here: Vite emits every matched companion
 // as a production chunk even when the surrounding branch is DEV-only. A local
 // developer can import a companion's register.ts explicitly in a dev harness
