@@ -37,21 +37,15 @@ PAGE_V2 = r"""<!doctype html><meta charset=utf-8>
 body{margin:0;background:#06070a;color:#e9e3d5;font:14px/1.5 system-ui,-apple-system,sans-serif;
      height:100dvh;overflow:hidden}
 #stage{position:absolute;inset:0;background:#000}
-video{width:100%;height:100%;object-fit:contain;display:block}
+/* LETTERBOXED, never cropped. The room is composed -- he stands where he
+   stands in relation to the desk and the window -- so filling the box by
+   cutting the top off the chandelier loses the composition to gain nothing.
+   The bars are black and deliberate. */
+video{width:100%;height:100%;object-fit:contain;display:block;background:#000}
 #lips{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #vignette{position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(120% 90% at 50% 42%,transparent 62%,rgba(0,0,0,.42) 100%),
              linear-gradient(to top,rgba(4,5,8,.55),transparent 26%)}
-#plate{position:absolute;top:calc(10px + env(safe-area-inset-top));left:14px;display:flex;align-items:center;gap:10px;
-  padding:8px 14px 8px 10px;border:1px solid rgba(201,164,92,.35);border-radius:10px;
-  background:rgba(10,11,15,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  transition:opacity .6s}
-#crest{width:30px;height:30px;border-radius:50%;border:1px solid rgba(201,164,92,.55);
-  display:flex;align-items:center;justify-content:center;color:#c9a45c;font-size:15px}
-#pname{font-family:Georgia,'Times New Roman',serif;font-size:13px;letter-spacing:.17em;color:#e6d5ae}
-#pscene{font-size:10px;letter-spacing:.08em;color:#98917f;text-transform:uppercase}
-#lamp{width:9px;height:9px;border-radius:50%;background:#3a3d45;margin-left:4px;transition:all .3s}
-body.speaking #lamp{background:#43c98a;box-shadow:0 0 10px 2px rgba(67,201,138,.55)}
 #hud{position:absolute;top:calc(10px + env(safe-area-inset-top));right:94px;max-width:56vw;display:none;
   font:11px ui-monospace,monospace;color:#9fb0c4;background:rgba(7,9,13,.7);
   padding:5px 9px;border-radius:6px;border:1px solid #1e2836}
@@ -101,19 +95,15 @@ select{width:100%;appearance:none;-webkit-appearance:none;padding-right:34px;
 .snote{font-size:10px;line-height:1.45;color:#8a8272}
 body.idle #pad,body.idle #devbtn,body.idle #setbtn{opacity:0;pointer-events:none}
 body.idle #settings{display:none}
-body.idle #plate{opacity:.25}
 @media (max-width:700px){
   #pad{gap:8px 14px}
   .grp{width:100%}
   #grpsay{min-width:0}
-  #pname{font-size:11px;letter-spacing:.13em}
-  #pscene{font-size:9px}
   button,select,input[type=text]{min-height:44px}
   #toast{white-space:normal;width:max-content;max-width:86vw;text-align:center;bottom:38dvh}
 }
 </style>
 <div id=stage><video id=v playsinline webkit-playsinline muted autoplay poster=mse/poster.jpg></video><canvas id=lips></canvas><div id=vignette></div>
-<div id=plate><div id=crest>&#9733;</div><div><div id=pname>GENERAL MONTGOMERY</div><div id=pscene>Foreign Secretary&#39;s Office</div></div><div id=lamp></div></div>
 <div id=hud></div><div id=toast></div></div>
 <script>
 // SPLICE, NEVER SEEK. Traversal appends each chosen edge's fMP4 fragment into
@@ -611,16 +601,31 @@ function tick(){
   if (!v.paused && sb){
     if (tick.lastT === v.currentTime){
       tick.stuck = (tick.stuck || 0) + 1;
-      if (tick.stuck > 300){                      // ~5s: a slow fetch is not a gap
+      // THE HOLE IS 0.08s WIDE AND IT IS IN THE MEDIA, not in the network.
+      //
+      // Measured on the hosted player: buffered ranges come back as
+      // [0.08,6] [6.08,16] [16.08,21] [21.08,26.12] -- a two-frame hole at
+      // 24fps between every fragment. Playback reaches the end of a range and
+      // cannot cross, so it sits at readyState 2 (has the current frame, not
+      // the next) with ten seconds already buffered on the far side.
+      //
+      // The first version of this test asked whether the playhead was OUTSIDE
+      // a buffered range, which is the obvious shape of a gap and the wrong
+      // one here: it freezes 0.12s SHORT of the hole, still inside the range.
+      // So the test is not "am I in a hole" but "am I stopped with more media
+      // waiting past the end of the one I am in".
+      //
+      // A slow fetch still waits, because a slow fetch has no later range to
+      // jump to and this does nothing.
+      const b = v.buffered;
+      let ahead = -1;
+      for (let i = 0; i < b.length; i++){
+        if (b.start(i) > v.currentTime + 0.001){ ahead = b.start(i); break; }
+      }
+      // Three frames of grace, so one dropped frame is not read as a stall.
+      if (ahead >= 0 && tick.stuck > 3){
         tick.stuck = 0;
-        const b = v.buffered;
-        for (let i = 0; i < b.length; i++){
-          if (b.start(i) > v.currentTime + 0.01){
-            hud.textContent += '  [gap-jump]';
-            v.currentTime = b.start(i) + 0.001;
-            break;
-          }
-        }
+        v.currentTime = ahead + 0.001;
       }
     } else { tick.stuck = 0; tick.lastT = v.currentTime; }
   }
