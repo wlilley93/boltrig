@@ -735,7 +735,7 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/settings/CompactSections.tsx": {
-      "file_lines": 559,
+      "file_lines": 523,
       "max_function_lines": 144,
       "max_parameters": 3,
       "max_complexity": 23,
@@ -743,7 +743,7 @@
       "over_limit_functions": [
         {
           "name": "AppearanceGroup",
-          "line": 86,
+          "line": 88,
           "column": 1,
           "lines": 144,
           "parameters": 1,
