@@ -85,3 +85,7 @@ _migration/
 apps/worker/tests/visual/presets.json
 # a pnpm install tree for linux docker builds; materialised by the Dockerfile install, never source
 apps/worker/node_modules.linux/
+
+# Private character join. The stock characterPlugins.ts must stay empty
+# (its own note says so), so a local/private build puts its imports here.
+apps/worker/src/characterPlugins.local.ts
