@@ -109,7 +109,12 @@ export class FrameGraphRenderer {
   private readonly origin: string | null;
   private frame: HTMLIFrameElement | null = null;
   private statusValue: FrameGraphRendererStatus = { kind: "iframe", state: "mounted" };
-  private state: ClipState = {};
+  // Partial, and the distinction is the point: `ClipState` describes the
+  // MESSAGE the player sends, which always carries its `type`. This field
+  // holds what we have LEARNED from those messages, and before the first one
+  // arrives that is nothing. Typing the second as the first is how a body ends
+  // up reasoning about a position it was never told.
+  private state: Partial<ClipState> = {};
   private listener: ((event: MessageEvent) => void) | null = null;
 
   // EDGES, NOT POLLS. update() runs on every render; a walk across the room is
@@ -211,7 +216,7 @@ export class FrameGraphRenderer {
   }
 
   /** Where he is, as the player last reported it. Never where we last asked. */
-  where(): ClipState {
+  where(): Partial<ClipState> {
     return this.state;
   }
 
