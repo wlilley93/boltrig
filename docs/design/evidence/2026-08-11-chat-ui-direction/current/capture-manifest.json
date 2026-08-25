@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-22T15:31:03.918Z",
+  "capturedAt": "2026-08-24T07:12:16.948Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,12 +17,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "249f9bb6ab487b401051f04e920d5d3000ff07183471004c205aa5ffafba5aed",
-    "digestAfterCapture": "249f9bb6ab487b401051f04e920d5d3000ff07183471004c205aa5ffafba5aed",
+    "digestBeforeCapture": "67df9804e2e5f053b25ea34fc5182d35668c19a6e732b1d863b030ea39085516",
+    "digestAfterCapture": "67df9804e2e5f053b25ea34fc5182d35668c19a6e732b1d863b030ea39085516",
     "sourceUnchangedDuringCapture": true,
-    "branch": "worker/today-and-companion-names",
-    "head": "1d6c16cffd0302388e049e5504f30869d0d1a598",
-    "dirty": true
+    "branch": "fix/provider-key-id-per-provider",
+    "head": "52641fe332c4edcb50f0a8a6a7621f941e4548cb",
+    "dirty": false
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",

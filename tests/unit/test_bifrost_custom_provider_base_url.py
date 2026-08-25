@@ -30,7 +30,21 @@ import pytest
 from boltrig.identity.bifrost_user_admin import BifrostUserAdmin
 from boltrig.identity.bifrost_user_binding import BifrostUserBindingUnavailable
 
-URL = "https://api.z.ai/api/coding/paas/v4"
+# A NEUTRAL CUSTOM PROVIDER, deliberately not z.ai any more.
+#
+# These tests pin where the address LANDS, which is true of every custom
+# provider. z.ai stopped being a neutral fixture once its base became one the
+# binding rewrites: it rides the anthropic dialect at
+# https://api.z.ai/api/anthropic, because Bifrost appends `/v1` and z.ai's
+# OpenAI-shaped base already ends in `/v4` (measured: .../v4/v1/models -> 404,
+# .../api/anthropic/v1/models -> 200). Asserting the URL arrives verbatim would
+# now be asserting that rewrite does not happen.
+#
+# No trailing `/v1` either, so the strip-one-`/v1` rule leaves it alone and these
+# assertions stay about the field, not the normalisation.
+# z.ai's own behaviour is pinned in test_bifrost_base_url_normalisation.py.
+PROVIDER = "acme-llm"
+URL = "https://llm.acme.test"
 
 
 class _Http:
@@ -60,7 +74,7 @@ class TestTheAddressIsSentWhereBifrostKeepsIt:
     @pytest.mark.asyncio
     async def test_a_new_custom_provider_carries_its_url_in_network_config(self):
         http = _Http()
-        await _admin(http).ensure_provider("zai-coding-plan", base_url=URL)
+        await _admin(http).ensure_provider(PROVIDER, base_url=URL)
         _url, body = http.posts[0]
         assert body["network_config"]["base_url"] == URL
 
@@ -68,7 +82,7 @@ class TestTheAddressIsSentWhereBifrostKeepsIt:
     async def test_the_custom_provider_config_spelling_is_kept_too(self):
         """Harmless on the gateway that drops it, correct on one that does not."""
         http = _Http()
-        await _admin(http).ensure_provider("zai-coding-plan", base_url=URL)
+        await _admin(http).ensure_provider(PROVIDER, base_url=URL)
         _url, body = http.posts[0]
         assert body["custom_provider_config"]["base_url"] == URL
 
@@ -86,9 +100,9 @@ class TestReadingBackWhatBifrostRecorded:
     async def test_a_matching_row_stored_under_network_config_is_accepted(self):
         """The regression: this used to raise, refusing its own earlier write."""
         http = _Http(
-            [{"name": "zai-coding-plan", "network_config": {"base_url": URL}}]
+            [{"name": PROVIDER, "network_config": {"base_url": URL}}]
         )
-        await _admin(http).ensure_provider("zai-coding-plan", base_url=URL)
+        await _admin(http).ensure_provider(PROVIDER, base_url=URL)
         assert http.posts == []  # already correct: nothing re-created
 
     @pytest.mark.asyncio
@@ -96,12 +110,12 @@ class TestReadingBackWhatBifrostRecorded:
         http = _Http(
             [
                 {
-                    "name": "zai-coding-plan",
+                    "name": PROVIDER,
                     "custom_provider_config": {"base_url": URL},
                 }
             ]
         )
-        await _admin(http).ensure_provider("zai-coding-plan", base_url=URL)
+        await _admin(http).ensure_provider(PROVIDER, base_url=URL)
         assert http.posts == []
 
     @pytest.mark.asyncio
@@ -109,13 +123,13 @@ class TestReadingBackWhatBifrostRecorded:
         http = _Http(
             [
                 {
-                    "name": "zai-coding-plan",
+                    "name": PROVIDER,
                     "network_config": {"base_url": "https://elsewhere.example/v1"},
                 }
             ]
         )
         with pytest.raises(BifrostUserBindingUnavailable) as err:
-            await _admin(http).ensure_provider("zai-coding-plan", base_url=URL)
+            await _admin(http).ensure_provider(PROVIDER, base_url=URL)
         assert "already bound to a different endpoint" in str(err.value)
 
     @pytest.mark.asyncio
@@ -124,13 +138,13 @@ class TestReadingBackWhatBifrostRecorded:
         http = _Http(
             [
                 {
-                    "name": "zai-coding-plan",
+                    "name": PROVIDER,
                     "custom_provider_config": {"base_provider_type": "openai"},
                 }
             ]
         )
         with pytest.raises(BifrostUserBindingUnavailable) as err:
-            await _admin(http).ensure_provider("zai-coding-plan", base_url=URL)
+            await _admin(http).ensure_provider(PROVIDER, base_url=URL)
         message = str(err.value)
         assert "no endpoint recorded" in message
         assert "already bound to a different endpoint" not in message

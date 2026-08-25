@@ -14,6 +14,8 @@ from .bifrost_user_transport import (
     BifrostUserBindingUnavailable,
     BifrostUserTransport,
     ascii_secret,
+    bifrost_base_url,
+    custom_provider_body,
     safe_identifier,
     stored_base_url,
 )
@@ -240,6 +242,8 @@ class BifrostUserAdmin:
                 "the provider list could not be read; try again shortly"
             )
         custom_url = _custom_base_url(base_url) if provider not in BIFROST_PROVIDERS else None
+        if custom_url is not None:
+            custom_url = bifrost_base_url(provider, custom_url)
         for row in rows:
             if isinstance(row, dict) and row.get("name") == provider:
                 if custom_url is None:
@@ -259,13 +263,7 @@ class BifrostUserAdmin:
                 )
         body: dict[str, Any] = {"provider": provider}
         if custom_url is not None:
-            # base_url must go in NETWORK_CONFIG - Bifrost silently drops it
-            # from custom_provider_config. See stored_base_url.
-            body["custom_provider_config"] = {
-                "base_provider_type": "openai",
-                "base_url": custom_url,
-            }
-            body["network_config"] = {"base_url": custom_url}
+            body.update(custom_provider_body(provider, custom_url))
         status, _payload = await self._http.request(
             "POST", f"{self._http.base}api/providers", body
         )

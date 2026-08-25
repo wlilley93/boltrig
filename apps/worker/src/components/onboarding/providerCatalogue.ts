@@ -111,10 +111,40 @@ export function providerApiBaseUrl(providerId: string): string | undefined {
  * provider WITH a published URL submits it silently -- the custom binding
  * needs an address, and the catalogue already knows it.
  */
+/**
+ * A published base URL nobody but the operator can complete.
+ *
+ * Probing all 161 catalogue providers that publish a base (from the kernel
+ * container, 2026-08-24) left 14 that answer nothing, and 10 of those are not
+ * reachable by anyone else by construction:
+ *
+ *   - unexpanded templates: `https://${DATABRICKS_HOST}/...`, snowflake-cortex,
+ *     cloudflare-workers-ai, infomaniak. Submitting these sends a literal
+ *     `${VAR}` to the gateway.
+ *   - loopback: lmstudio `http://127.0.0.1:1234/v1`, privatemode-ai, lynkr,
+ *     atomic-chat. The catalogue's loopback is the CATALOGUE AUTHOR'S machine,
+ *     never the operator's, and inside a container it is the container itself.
+ *
+ * Publishing one of these and hiding the field produced the worst version of the
+ * failure: the screen said "check the URL" with no URL to check.
+ */
+function baseUrlIsUnusableAsPublished(api: string | undefined): boolean {
+  if (!api) return false;
+  if (api.includes("${")) return true;
+  try {
+    const host = new URL(api).hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0";
+  } catch {
+    // Unparseable is also not something to submit silently.
+    return true;
+  }
+}
+
 export function providerNeedsBaseUrl(providerId: string): boolean {
   const provider = AI_PROVIDERS.find((entry) => entry.id === providerId);
   if (!provider) return false;
   if (provider.requiresBaseUrl === true) return true;
+  if (baseUrlIsUnusableAsPublished(provider.api)) return true;
   return !isBifrostSupported(provider.id) && !provider.api;
 }
 

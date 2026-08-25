@@ -73,10 +73,35 @@ def binding_credential_ref(tenant_id: str, resolution: Any) -> str:
     return f"bifrost_binding:{digest}"
 
 
-def _binding_ids(tenant_id: str, resolution: Any) -> tuple[str, str, str]:
+def _binding_ids(
+    tenant_id: str, resolution: Any, provider: str
+) -> tuple[str, str, str]:
+    """The credential ref, and the Bifrost ids to create under one provider.
+
+    THE PROVIDER IS IN THE BIFROST IDS AND NOT IN THE REF, and the asymmetry is
+    the whole point. The ref addresses OUR record for this scope and modality,
+    which is one row per scope no matter who serves it; folding a provider into
+    it would orphan every stored binding.
+
+    Bifrost's key ids, though, are GLOBAL - not scoped per provider. Deriving
+    them from scope alone meant every provider at one scope wanted the SAME id,
+    so binding a second provider went: GET /providers/<new>/keys/<id> -> 404
+    (that id is not under the new provider), therefore POST -> 409 Conflict
+    (that id exists, under the OLD one). The 409 surfaced as "the key could not
+    be saved; check it and try again", which blames the key for a collision it
+    had no part in.
+
+    Measured on dev 2026-08-24: a `zai-coding-plan` key held
+    `bt-7dc143bd478d60d59b2dadd7bd80d874`; `cerebras` then asked for that exact
+    id while `/api/providers/cerebras/keys` reported `total: 0`. So the first
+    provider a tenant binds locks out every other one until someone deletes the
+    row by hand - which is why this screen "never once worked" for anyone who
+    tried a second provider.
+    """
     ref = binding_credential_ref(tenant_id, resolution)
     digest = ref.rsplit(":", 1)[-1]
-    return ref, f"bt-{digest[:32]}", f"boltrig-{digest[:24]}"
+    scoped = hashlib.sha256(f"{digest}\0{provider}".encode()).hexdigest()
+    return ref, f"bt-{scoped[:32]}", f"boltrig-{scoped[:24]}"
 
 
 def _provider_and_model(resolution: Any) -> tuple[str, str, str]:
@@ -218,7 +243,9 @@ class BifrostUserGateway:
         provider_key: str,
     ) -> BifrostUserBinding:
         provider, raw_model, model_id = _provider_and_model(resolution)
-        ref, provider_key_id, virtual_key_name = _binding_ids(tenant_id, resolution)
+        ref, provider_key_id, virtual_key_name = _binding_ids(
+            tenant_id, resolution, provider
+        )
         previous = await store.get_credential_ref(tenant_id, ref)
         if (
             isinstance(previous, dict)

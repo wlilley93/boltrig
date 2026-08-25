@@ -14,12 +14,12 @@ import { offeredCompanion } from "./companionCatalogue";
 import { CompanionStep } from "./CompanionStep";
 import { NameStep } from "./NameStep";
 import type { ProviderStepHandle } from "./ProviderStep";
+import { VISITED_STEPS, previousStep, type Step } from "./onboardingSteps";
 import { ReadyStep } from "./ReadyStep";
 import type { VoiceStepHandle } from "./VoiceStep";
 import { useOnboardingCompletion } from "./useOnboardingCompletion";
 import "./onboarding.css";
 
-type Step = 0 | 1 | 2 | 3 | 4 | 5;
 const ProviderStep = lazy(async () => {
   const module = await import("./ProviderStep");
   return { default: module.ProviderStep };
@@ -136,7 +136,7 @@ function OnboardingFlow({
           name={name}
           onFinish={() => void finishSetup()}
           onName={setName}
-          onSkipVision={() => setStep(4)}
+          onSkipVision={() => void finishSetup()}
           onSelectCharacter={setCharacter}
           profile={account.profile}
           step={step}
@@ -145,7 +145,7 @@ function OnboardingFlow({
       {completion.error && <p className="onboarding-error" role="alert">{completion.error}</p>}
       <OnboardingActions
         nameReady={Boolean(name.trim())}
-        onBack={() => setStep((step - 1) as Step)}
+        onBack={() => setStep(previousStep(step))}
         onContinue={() => void continueFlow()}
         providerConnecting={providerConnecting}
         providerReady={providerReady}
@@ -217,15 +217,27 @@ async function continueOnboarding(
   onComplete: (settings: Record<string, unknown>, displayName: string) => void,
 ) {
   if (flow.step === 2 || flow.step === 3) {
-    const stepRef = flow.step === 2 ? flow.providerStepRef : flow.visionStepRef;
+    const onProvider = flow.step === 2;
+    const stepRef = onProvider ? flow.providerStepRef : flow.visionStepRef;
     const step = stepRef.current;
     if (!step) return;
-    if (flow.step === 2) flow.setProviderConnecting(true);
+    if (onProvider) flow.setProviderConnecting(true);
     else flow.setVisionConnecting(true);
     const completed = await step.complete();
-    if (flow.step === 2) flow.setProviderConnecting(false);
+    if (onProvider) flow.setProviderConnecting(false);
     else flow.setVisionConnecting(false);
     if (!completed) return;
+
+    // Vision only when the model lacks it: the step already reads the capability
+    // and says so on screen, while the gate advanced by index and walked a
+    // text+vision model to "Add vision" anyway. Voice is never asked; see
+    // VISITED_STEPS in ./onboardingSteps for why.
+    if (!onProvider || step.handlesVision?.()) {
+      await finishOnboarding(flow);
+      return;
+    }
+    flow.setStep(3);
+    return;
   }
   if (flow.step === 4) {
     const voiceStep = flow.voiceStepRef.current;
@@ -346,8 +358,13 @@ function OnboardingFrame({
       <section className="onboarding-panel" aria-label="Boltrig setup">
         <header className="onboarding-topbar">
           <BrandLockup />
-          <span className="onboarding-progress" aria-label={`Step ${step + 1} of 6`}>
-            {[0, 1, 2, 3, 4, 5].map((index) => <i className={index <= step ? "active" : ""} key={index} />)}
+          <span
+            className="onboarding-progress"
+            aria-label={`Step ${VISITED_STEPS.indexOf(step) + 1} of ${VISITED_STEPS.length}`}
+          >
+            {VISITED_STEPS.map((index) => (
+              <i className={index <= step ? "active" : ""} key={index} />
+            ))}
           </span>
           <span aria-hidden="true" />
         </header>
