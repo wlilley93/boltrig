@@ -318,17 +318,17 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/ChatView.tsx": {
-      "file_lines": 1324,
-      "max_function_lines": 1242,
+      "file_lines": 1323,
+      "max_function_lines": 1239,
       "max_parameters": 3,
       "max_complexity": 100,
       "max_nesting_depth": 4,
       "over_limit_functions": [
         {
           "name": "ChatView",
-          "line": 83,
+          "line": 85,
           "column": 1,
-          "lines": 1242,
+          "lines": 1239,
           "parameters": 1,
           "complexity": 100,
           "nesting_depth": 4
@@ -534,19 +534,19 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/jarvis/JarvisRenderer.ts": {
-      "file_lines": 745,
-      "max_function_lines": 144,
+      "file_lines": 728,
+      "max_function_lines": 130,
       "max_parameters": 5,
-      "max_complexity": 37,
+      "max_complexity": 34,
       "max_nesting_depth": 2,
       "over_limit_functions": [
         {
           "name": "JarvisWebGLRenderer.frame",
-          "line": 601,
+          "line": 598,
           "column": 19,
-          "lines": 144,
+          "lines": 130,
           "parameters": 1,
-          "complexity": 37,
+          "complexity": 34,
           "nesting_depth": 2
         }
       ],
@@ -636,7 +636,7 @@
       "expires": "2026-12-31"
     },
     "apps/worker/src/components/settings/CompactSections.tsx": {
-      "file_lines": 632,
+      "file_lines": 622,
       "max_function_lines": 144,
       "max_parameters": 3,
       "max_complexity": 23,
@@ -644,7 +644,7 @@
       "over_limit_functions": [
         {
           "name": "AppearanceGroup",
-          "line": 83,
+          "line": 84,
           "column": 1,
           "lines": 144,
           "parameters": 1,
@@ -652,17 +652,8 @@
           "nesting_depth": 1
         },
         {
-          "name": "useAppearanceSettings",
-          "line": 228,
-          "column": 1,
-          "lines": 91,
-          "parameters": 0,
-          "complexity": 1,
-          "nesting_depth": 0
-        },
-        {
           "name": "CompactReachingYouSection",
-          "line": 370,
+          "line": 360,
           "column": 1,
           "lines": 95,
           "parameters": 0,
