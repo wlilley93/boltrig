@@ -8,6 +8,8 @@ import type {
 } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../../client";
+import { copySensitiveText } from "../../clipboard";
+import { planeJson } from "../../hermes/http";
 
 import { CompactReachingYouSection } from "./ReachingYouSection";
 import { saveCompanion } from "./companionSave";
@@ -309,6 +311,91 @@ function useAppearanceSettings() {
   };
 }
 
+/** The address a desktop client connects to.
+ *
+ *  WHY IT IS HERE AS WELL AS ON THE WORKSPACE PAGE. Connecting a desktop client
+ *  is something you do while sitting in this console, and the address is the
+ *  one thing you cannot guess: it is derived from the workspace name, not from
+ *  the name itself, and a rename does not move it. Sending somebody to another
+ *  page to copy a string and come back is the kind of trip a settings panel
+ *  exists to save.
+ *
+ *  ONE SOURCE, NOT TWO. It reads the same /api/me the workspace page reads
+ *  rather than keeping its own copy, so there is no second place for the
+ *  address to be wrong. A cached or hard-coded host would be a string that
+ *  looks authoritative and drifts silently.
+ *
+ *  IT SAYS WHEN IT CANNOT ANSWER, in three distinguishable ways: still reading,
+ *  no box answering yet, and could not ask. A single "unavailable" would make a
+ *  box that is merely still starting look like a fault, and the difference
+ *  decides whether waiting is the right thing to do.
+ *
+ *  THE ADDRESS ALONE REACHES NOTHING - a client needs a token beside it - and
+ *  the row says so. Presenting it as sufficient invites a support conversation
+ *  that begins "it says unauthorised".
+ */
+function ConnectAddressRow() {
+  const [state, setState] = useState<"reading" | "ready" | "starting" | "unavailable">("reading");
+  const [address, setAddress] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    planeJson<{
+      tenant_gateway_id?: string | null;
+      gateways?: { gateway_id?: string; host?: string; status?: string }[];
+    }>("/api/me")
+      .then((me) => {
+        if (!active) return;
+        const rows = me.gateways ?? [];
+        // tenant_gateway_id first: on a tenant address the control plane is the
+        // only thing that knows which workspace this hostname belongs to, and
+        // the browser must not parse it out of the hostname itself.
+        const mine = me.tenant_gateway_id
+          ? rows.find((row) => row.gateway_id === me.tenant_gateway_id)
+          : rows[0];
+        if (mine?.host && mine.status === "ready") {
+          setAddress(`https://${mine.host}`);
+          setState("ready");
+        } else {
+          setState("starting");
+        }
+      })
+      .catch(() => {
+        if (active) setState("unavailable");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function copy() {
+    setMessage(await copySensitiveText(address)
+      ? "Address copied."
+      : "The address could not be copied. Select it and copy it by hand.");
+  }
+
+  const description = state === "ready"
+    ? `${address} - paste this into a desktop app. It needs an access token beside it; the address on its own reaches nothing.`
+    : state === "starting"
+      ? "Available once your box is answering."
+      : state === "reading"
+        ? "Reading your workspace…"
+        : "Your workspace could not be read.";
+
+  return (
+    <SettingsRow
+      control={state === "ready" ? (
+        <button className="settings-kit-button" onClick={copy} type="button">
+          Copy
+        </button>
+      ) : undefined}
+      desc={message || description}
+      title="Desktop app"
+    />
+  );
+}
+
 /** Where this console came from, and the way back to it.
  *
  *  A PLAIN LINK, NOT A CLIENT CALL. Everything else in this file asks the
@@ -385,6 +472,7 @@ export function CompactYouSection() {
           title="Signed in as"
         />
         <WorkspacesRow />
+        <ConnectAddressRow />
       </SettingsGroup>
     </>
   );

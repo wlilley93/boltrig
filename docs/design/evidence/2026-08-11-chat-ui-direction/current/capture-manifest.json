@@ -4,7 +4,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-25T15:31:27.650Z",
+  "capturedAt": "2026-08-25T21:27:58.001Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -17,12 +17,12 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "57edc3e82d051ddeb7e8fee7208f1db6e76c2e83108faadc46c80871f57becdd",
-    "digestAfterCapture": "57edc3e82d051ddeb7e8fee7208f1db6e76c2e83108faadc46c80871f57becdd",
+    "digestBeforeCapture": "d4f40cde7da88f3c55e1247fdab7fb82a92b813a49e32cc0a207c5befc79b251",
+    "digestAfterCapture": "d4f40cde7da88f3c55e1247fdab7fb82a92b813a49e32cc0a207c5befc79b251",
     "sourceUnchangedDuringCapture": true,
-    "branch": "parity/workspace-link",
-    "head": "bd172e9d54b7d9e51c6e07e16a2b4db3f57eb99d",
-    "dirty": false
+    "branch": "console/workspace-links",
+    "head": "a72d2ca16191717997e2f9ac8d4256f55752ae99",
+    "dirty": true
   },
   "runner": {
     "script": "apps/worker/tests/visual/capture-current.mjs",
