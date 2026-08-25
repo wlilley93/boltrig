@@ -20,7 +20,16 @@ export interface CompanionChoice {
   note: string;
 }
 
-export const COMPANIONS: readonly CompanionChoice[] = [
+/**
+ * The stock rail: the four bodies every build can actually draw.
+ *
+ * A character whose RENDERER is not in this build must not appear here. The
+ * registry degrades an unknown id to the default at render time, so an entry
+ * for a body this build cannot draw is not an error -- it is a first-run user
+ * choosing a companion by name and silently receiving a different one. That is
+ * the worst outcome available on this screen, because it looks like it worked.
+ */
+const STOCK: readonly CompanionChoice[] = [
   {
     id: "familiar",
     name: "Familiar",
@@ -46,6 +55,45 @@ export const COMPANIONS: readonly CompanionChoice[] = [
     note: "A panel of lamps, not a face. Formal, literal and immovable.",
   },
 ];
+
+/**
+ * The rail, in order: what ships, then what a private distribution added.
+ *
+ * THE SAME INVERSION THE REGISTRY ALREADY USES. Core states the contract and
+ * discovers what is installed; a character supplies itself. `registerCharacter`
+ * does that for BODIES and `register_persona` does it for prompts, and until
+ * now onboarding was the one surface with no join -- so a privately registered
+ * character could be installed, drawable and choosable in Settings, and still
+ * be absent from the only screen that introduces it.
+ *
+ * Deliberately NOT driven off the registry, which is what the note at the top
+ * of this file already refuses: the registry holds whatever is installed,
+ * including a locally registered dev character, and first-run would then walk
+ * a stranger through that character in registration order with a blurb written
+ * for a settings row. This list holds only what somebody wrote a pitch for.
+ *
+ * `readonly` is the type every caller sees; `rail` is the single reference
+ * that may append, and it is not exported.
+ */
+const rail: CompanionChoice[] = [...STOCK];
+export const COMPANIONS: readonly CompanionChoice[] = rail;
+
+/**
+ * Offer a companion during setup.
+ *
+ * Idempotent by id, and the FIRST pitch wins: an import cycle or a
+ * double-installed plugin re-registering an id must not rewrite copy a user is
+ * part-way through reading.
+ *
+ * A caller must only register a character this build can actually DRAW. The
+ * registry degrades an unknown id to the default at render time, so offering a
+ * body whose renderer is absent is not an error -- it is a first-run user
+ * picking a companion by name and silently receiving a different one.
+ */
+export function registerCompanionChoice(choice: CompanionChoice): void {
+  if (rail.some((existing) => existing.id === choice.id)) return;
+  rail.push(choice);
+}
 
 /** Rail position of a companion, or 0 for one that is not offered here. */
 export function companionIndex(id: CharacterId): number {
