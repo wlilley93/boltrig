@@ -8,6 +8,8 @@ import type {
 } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../../client";
+
+import { CompactReachingYouSection } from "./ReachingYouSection";
 import { saveCompanion } from "./companionSave";
 import {
   characterFromSettings,
@@ -384,110 +386,6 @@ export function CompactYouSection() {
         />
         <WorkspacesRow />
       </SettingsGroup>
-    </>
-  );
-}
-
-function eventEnabled(prefs: MeNotificationItem[], eventType: string): boolean {
-  return prefs.some((pref) => pref.event_type === eventType && pref.enabled);
-}
-
-function eventAvailable(catalogue: NotificationCatalogue, eventType: string): boolean {
-  return catalogue.events.some((event) => event.id === eventType);
-}
-
-function CompactReachingYouSection() {
-  const [prefs, setPrefs] = useState<MeNotificationItem[]>([]);
-  const [catalogue, setCatalogue] = useState<NotificationCatalogue>({
-    events: [],
-    transports: [],
-  });
-  const [state, setState] = useState<"loading" | "ready" | "unavailable">("loading");
-
-  useEffect(() => {
-    let cancelled = false;
-    if (typeof client.meNotifications !== "function") {
-      setState("unavailable");
-      return;
-    }
-    void client.meNotifications()
-      .then((result) => {
-        if (cancelled) return;
-        setPrefs(result.prefs);
-        setCatalogue(result.catalogue);
-        setState("ready");
-      })
-      .catch(() => { if (!cancelled) setState("unavailable"); });
-    return () => { cancelled = true; };
-  }, []);
-
-  const approvalRoutes = prefs.filter((pref) => pref.event_type === "approval" && pref.enabled);
-  const approvalDestinations = [...new Set(approvalRoutes.map((pref) => {
-    const transport = catalogue.transports.find((item) => item.id === pref.channel);
-    const target = transport?.targets.find((item) => item.id === pref.target);
-    return [transport?.label ?? pref.channel, target?.label ?? pref.target].filter(Boolean).join(" · ");
-  }))];
-  const destinationOptions = approvalDestinations.length > 0
-    ? approvalDestinations
-    : [state === "loading" ? "Reading routes…" : "No verified route"];
-
-  function eventRow(title: string, eventType: string, desc: string) {
-    const available = state === "ready" && eventAvailable(catalogue, eventType);
-    return (
-      <SettingsRow
-        control={(
-          <SettingsToggle
-            disabled
-            label={title}
-            on={available && eventEnabled(prefs, eventType)}
-            onToggle={() => {}}
-          />
-        )}
-        desc={desc}
-        key={eventType}
-        title={title}
-      />
-    );
-  }
-
-  return (
-    <>
-      <SettingsGroup
-      advanced={[
-        eventRow("Escalations", "escalation", "A sub-agent asked for more authority than it has."),
-        eventRow("Budget warnings", "budget_warning", "Spend crossed the warning threshold."),
-        eventRow("Failures", "failure", "A run failed or a connection degraded."),
-        eventRow("Work completed", "work_status", "When requested or automatic work finishes."),
-      ]}
-      title="Reaching you"
-      >
-        {eventRow(
-          "When something needs approving",
-          "approval",
-          "The one interruption worth having",
-        )}
-        <SettingsRow
-          control={(
-            <SettingsSelect
-              disabled
-              label="Send approval notifications to"
-              onChange={() => {}}
-              options={destinationOptions}
-              value={destinationOptions[0]!}
-            />
-          )}
-          title="Send those to"
-        />
-        <SettingsRow
-          control={<span className="settings-value">Unavailable</span>}
-          desc="Only approvals and failures get through"
-          title="Quiet hours"
-        />
-      </SettingsGroup>
-      {state === "unavailable" && (
-        <span className="settings-visually-hidden">Notification routes could not be read.</span>
-      )}
-      <span className="settings-visually-hidden">Quiet hours are not available.</span>
     </>
   );
 }
