@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "generatedBy": "Boltrig deterministic seven-state current capture harness",
-  "takenAt": "2026-08-25T04:35:55Z",
-  "source": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json (sha256:ff4e89ffc2c5860a07b1540ab99904aab662eaeb114c82ebb7ed67ebc7b1fffd) and metrics.json (sha256:ae5e2e56b149eb4cc4c2fdc4cd83f680307e46fce82db432e0a0e369a229b0eb)",
+  "takenAt": "2026-08-25T15:31:23Z",
+  "source": "docs/design/evidence/2026-08-11-console-parity/current/capture-manifest.json (sha256:87ee8a4a267696fc44e44340e4ed47f4d0786d245818f0078999e9ba407737b5) and metrics.json (sha256:19c7fb874207da572ed75123eb7f9134f97a9b8eb979b69053ba2bf409d7b71c)",
   "routes": [
     "apps/worker/src/components/ChatView.tsx",
     "apps/worker/src/components/CommandPalette.tsx",
@@ -16,5 +16,5 @@
     "There is no signed full-frame target for New chat; routes without a 2026-08-11 Figma CURRENT SOURCE frame are outside this parity programme.",
     "Integrations and the permanent fleet topology are retired from this programme: both are consoles over the Boltrig kernel, a Hermes cell has no kernel, and the components were removed from the surface rather than left rendering nothing. Their route coverage is withdrawn rather than carried as a claim about files that no longer exist."
   ],
-  "contentDigest": "sha256:8ed254b737efa640e4ca8155028409b96e5131b9893e1c52115257ca70a4a711"
+  "contentDigest": "sha256:aabccc5d9edcfb082d87a9ed9f479ff8efdde60dbe25567f9b476af06a66cf4a"
 }

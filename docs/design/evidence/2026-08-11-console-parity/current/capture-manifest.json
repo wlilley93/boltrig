@@ -3,7 +3,7 @@
   "status": "captured_unreviewed",
   "visualVerdict": "not_assessed",
   "vdsReviewsUpdated": false,
-  "capturedAt": "2026-08-25T04:35:55.321Z",
+  "capturedAt": "2026-08-25T15:31:23.573Z",
   "viewport": {
     "width": 1440,
     "height": 900,
@@ -16,11 +16,11 @@
       "apps/worker/tests/visual"
     ],
     "digestAlgorithm": "sha256-path-type-content-v1",
-    "digestBeforeCapture": "6ed194ab5e908207eee48aee8e2c2e44f42c874c0acc2aa1d539d2a8bf6348d1",
-    "digestAfterCapture": "6ed194ab5e908207eee48aee8e2c2e44f42c874c0acc2aa1d539d2a8bf6348d1",
+    "digestBeforeCapture": "57edc3e82d051ddeb7e8fee7208f1db6e76c2e83108faadc46c80871f57becdd",
+    "digestAfterCapture": "57edc3e82d051ddeb7e8fee7208f1db6e76c2e83108faadc46c80871f57becdd",
     "sourceUnchangedDuringCapture": true,
-    "branch": "merge/hermes-into-main",
-    "head": "98602a783d90f0a6cf04b89b2382cdc2bd96d32e",
+    "branch": "parity/workspace-link",
+    "head": "bd172e9d54b7d9e51c6e07e16a2b4db3f57eb99d",
     "dirty": false
   },
   "runner": {
@@ -147,7 +147,7 @@
         "output": "docs/design/evidence/2026-08-11-console-parity/current/shipped/command-palette.png",
         "ready": true,
         "settledAt": "2026-08-11T03:30:00Z",
-        "stableFrames": 3,
+        "stableFrames": 4,
         "pendingRequests": 0,
         "missingRequestPrefixes": [],
         "fixtureMisses": [],

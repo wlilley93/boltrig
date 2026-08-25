@@ -110,6 +110,360 @@
       "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"
     },
+    "apps/worker/src/components/ChatView.tsx": {
+      "file_lines": 1323,
+      "max_function_lines": 1239,
+      "max_parameters": 3,
+      "max_complexity": 100,
+      "max_nesting_depth": 4,
+      "over_limit_functions": [
+        {
+          "name": "ChatView",
+          "line": 85,
+          "column": 1,
+          "lines": 1239,
+          "parameters": 1,
+          "complexity": 100,
+          "nesting_depth": 4
+        },
+        {
+          "name": "ChatView.send",
+          "line": 341,
+          "column": 3,
+          "lines": 109,
+          "parameters": 2,
+          "complexity": 32,
+          "nesting_depth": 4
+        },
+        {
+          "name": "ChatView.reattach",
+          "line": 657,
+          "column": 3,
+          "lines": 67,
+          "parameters": 3,
+          "complexity": 16,
+          "nesting_depth": 3
+        },
+        {
+          "name": "ChatView.acceptLiveEvent",
+          "line": 725,
+          "column": 3,
+          "lines": 61,
+          "parameters": 2,
+          "complexity": 21,
+          "nesting_depth": 2
+        }
+      ],
+      "owner": "worker-maintainers",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "expires": "2026-12-31"
+    },
+    "apps/worker/src/components/CommandPalette.tsx": {
+      "file_lines": 554,
+      "max_function_lines": 329,
+      "max_parameters": 2,
+      "max_complexity": 13,
+      "max_nesting_depth": 2,
+      "over_limit_functions": [
+        {
+          "name": "CommandPalette",
+          "line": 78,
+          "column": 1,
+          "lines": 329,
+          "parameters": 1,
+          "complexity": 8,
+          "nesting_depth": 1
+        }
+      ],
+      "owner": "worker-maintainers",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "expires": "2026-12-31"
+    },
+    "apps/worker/src/components/ConversationControls.tsx": {
+      "file_lines": 167,
+      "max_function_lines": 154,
+      "max_parameters": 1,
+      "max_complexity": 11,
+      "max_nesting_depth": 2,
+      "over_limit_functions": [
+        {
+          "name": "ConversationControls",
+          "line": 14,
+          "column": 1,
+          "lines": 154,
+          "parameters": 1,
+          "complexity": 11,
+          "nesting_depth": 2
+        }
+      ],
+      "owner": "worker-maintainers",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "expires": "2026-12-31"
+    },
+    "apps/worker/src/components/DesktopUpdater.tsx": {
+      "file_lines": 214,
+      "max_function_lines": 178,
+      "max_parameters": 1,
+      "max_complexity": 24,
+      "max_nesting_depth": 2,
+      "over_limit_functions": [
+        {
+          "name": "DesktopUpdater",
+          "line": 24,
+          "column": 1,
+          "lines": 178,
+          "parameters": 0,
+          "complexity": 24,
+          "nesting_depth": 2
+        }
+      ],
+      "owner": "worker-maintainers",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "expires": "2026-12-31"
+    },
+    "apps/worker/src/components/DeviceSettings.tsx": {
+      "file_lines": 517,
+      "max_function_lines": 421,
+      "max_parameters": 2,
+      "max_complexity": 39,
+      "max_nesting_depth": 4,
+      "over_limit_functions": [
+        {
+          "name": "DeviceSettings",
+          "line": 32,
+          "column": 1,
+          "lines": 421,
+          "parameters": 0,
+          "complexity": 39,
+          "nesting_depth": 3
+        }
+      ],
+      "owner": "worker-maintainers",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "expires": "2026-12-31"
+    },
+    "apps/worker/src/components/ExactApprovalFinalizer.tsx": {
+      "file_lines": 294,
+      "max_function_lines": 143,
+      "max_parameters": 3,
+      "max_complexity": 13,
+      "max_nesting_depth": 3,
+      "over_limit_functions": [
+        {
+          "name": "useExactApprovalFinalizer",
+          "line": 86,
+          "column": 1,
+          "lines": 143,
+          "parameters": 1,
+          "complexity": 2,
+          "nesting_depth": 0
+        }
+      ],
+      "owner": "worker-maintainers",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "expires": "2026-12-31"
+    },
+    "apps/worker/src/components/GovernedCreateModal.tsx": {
+      "file_lines": 142,
+      "max_function_lines": 106,
+      "max_parameters": 1,
+      "max_complexity": 9,
+      "max_nesting_depth": 1,
+      "over_limit_functions": [
+        {
+          "name": "GovernedCreateModal",
+          "line": 21,
+          "column": 1,
+          "lines": 106,
+          "parameters": 1,
+          "complexity": 1,
+          "nesting_depth": 0
+        }
+      ],
+      "owner": "worker-maintainers",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "expires": "2026-12-31"
+    },
+    "apps/worker/src/components/InboxHitl.tsx": {
+      "file_lines": 354,
+      "max_function_lines": 107,
+      "max_parameters": 3,
+      "max_complexity": 13,
+      "max_nesting_depth": 3,
+      "over_limit_functions": [
+        {
+          "name": "InboxQueue",
+          "line": 17,
+          "column": 1,
+          "lines": 107,
+          "parameters": 0,
+          "complexity": 13,
+          "nesting_depth": 3
+        }
+      ],
+      "owner": "worker-maintainers",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "expires": "2026-12-31"
+    },
+    "apps/worker/src/components/LocalDeviceActions.tsx": {
+      "file_lines": 583,
+      "max_function_lines": 457,
+      "max_parameters": 4,
+      "max_complexity": 31,
+      "max_nesting_depth": 3,
+      "over_limit_functions": [
+        {
+          "name": "LocalDeviceActions",
+          "line": 89,
+          "column": 1,
+          "lines": 457,
+          "parameters": 1,
+          "complexity": 31,
+          "nesting_depth": 2
+        },
+        {
+          "name": "LocalDeviceActions.prepare",
+          "line": 274,
+          "column": 3,
+          "lines": 64,
+          "parameters": 0,
+          "complexity": 19,
+          "nesting_depth": 2
+        },
+        {
+          "name": "LocalDeviceActions.dispatch",
+          "line": 339,
+          "column": 3,
+          "lines": 87,
+          "parameters": 0,
+          "complexity": 20,
+          "nesting_depth": 3
+        }
+      ],
+      "owner": "worker-maintainers",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "expires": "2026-12-31"
+    },
+    "apps/worker/src/components/MobileChat.tsx": {
+      "file_lines": 430,
+      "max_function_lines": 286,
+      "max_parameters": 2,
+      "max_complexity": 28,
+      "max_nesting_depth": 3,
+      "over_limit_functions": [
+        {
+          "name": "MobileChat",
+          "line": 145,
+          "column": 1,
+          "lines": 286,
+          "parameters": 1,
+          "complexity": 28,
+          "nesting_depth": 3
+        }
+      ],
+      "owner": "worker-maintainers",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "expires": "2026-12-31"
+    },
+    "apps/worker/src/components/Shell.tsx": {
+      "file_lines": 505,
+      "max_function_lines": 379,
+      "max_parameters": 2,
+      "max_complexity": 7,
+      "max_nesting_depth": 2,
+      "over_limit_functions": [
+        {
+          "name": "Sidebar",
+          "line": 67,
+          "column": 1,
+          "lines": 379,
+          "parameters": 1,
+          "complexity": 7,
+          "nesting_depth": 1
+        }
+      ],
+      "owner": "worker-maintainers",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "expires": "2026-12-31"
+    },
+    "apps/worker/src/components/VoiceCall.tsx": {
+      "file_lines": 1525,
+      "max_function_lines": 943,
+      "max_parameters": 3,
+      "max_complexity": 31,
+      "max_nesting_depth": 4,
+      "over_limit_functions": [
+        {
+          "name": "VoiceCall",
+          "line": 192,
+          "column": 1,
+          "lines": 943,
+          "parameters": 1,
+          "complexity": 31,
+          "nesting_depth": 2
+        },
+        {
+          "name": "VoiceCall.useLayoutEffect[0]",
+          "line": 267,
+          "column": 19,
+          "lines": 105,
+          "parameters": 0,
+          "complexity": 9,
+          "nesting_depth": 2
+        },
+        {
+          "name": "VoiceCall.connect",
+          "line": 572,
+          "column": 3,
+          "lines": 223,
+          "parameters": 2,
+          "complexity": 9,
+          "nesting_depth": 2
+        },
+        {
+          "name": "VoiceCall.connect.<anonymous>",
+          "line": 666,
+          "column": 31,
+          "lines": 118,
+          "parameters": 2,
+          "complexity": 1,
+          "nesting_depth": 0
+        },
+        {
+          "name": "VoiceCall.applyCallEvent",
+          "line": 944,
+          "column": 3,
+          "lines": 70,
+          "parameters": 2,
+          "complexity": 30,
+          "nesting_depth": 4
+        }
+      ],
+      "owner": "worker-maintainers",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "expires": "2026-12-31"
+    },
+    "apps/worker/src/components/WorkerGlobalContext.tsx": {
+      "file_lines": 112,
+      "max_function_lines": 69,
+      "max_parameters": 1,
+      "max_complexity": 17,
+      "max_nesting_depth": 1,
+      "over_limit_functions": [
+        {
+          "name": "WorkerGlobalContextProvider.useCallback[0]",
+          "line": 40,
+          "column": 39,
+          "lines": 51,
+          "parameters": 0,
+          "complexity": 17,
+          "nesting_depth": 1
+        }
+      ],
+      "owner": "worker-maintainers",
+      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
+      "expires": "2026-12-31"
+    },
     "apps/worker/src/components/chat/InlineApproval.tsx": {
       "file_lines": 208,
       "max_function_lines": 147,
@@ -317,159 +671,6 @@
       "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"
     },
-    "apps/worker/src/components/ChatView.tsx": {
-      "file_lines": 1323,
-      "max_function_lines": 1239,
-      "max_parameters": 3,
-      "max_complexity": 100,
-      "max_nesting_depth": 4,
-      "over_limit_functions": [
-        {
-          "name": "ChatView",
-          "line": 85,
-          "column": 1,
-          "lines": 1239,
-          "parameters": 1,
-          "complexity": 100,
-          "nesting_depth": 4
-        },
-        {
-          "name": "ChatView.send",
-          "line": 341,
-          "column": 3,
-          "lines": 109,
-          "parameters": 2,
-          "complexity": 32,
-          "nesting_depth": 4
-        },
-        {
-          "name": "ChatView.reattach",
-          "line": 657,
-          "column": 3,
-          "lines": 67,
-          "parameters": 3,
-          "complexity": 16,
-          "nesting_depth": 3
-        },
-        {
-          "name": "ChatView.acceptLiveEvent",
-          "line": 725,
-          "column": 3,
-          "lines": 61,
-          "parameters": 2,
-          "complexity": 21,
-          "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/CommandPalette.tsx": {
-      "file_lines": 554,
-      "max_function_lines": 329,
-      "max_parameters": 2,
-      "max_complexity": 13,
-      "max_nesting_depth": 2,
-      "over_limit_functions": [
-        {
-          "name": "CommandPalette",
-          "line": 78,
-          "column": 1,
-          "lines": 329,
-          "parameters": 1,
-          "complexity": 8,
-          "nesting_depth": 1
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/ConversationControls.tsx": {
-      "file_lines": 167,
-      "max_function_lines": 154,
-      "max_parameters": 1,
-      "max_complexity": 11,
-      "max_nesting_depth": 2,
-      "over_limit_functions": [
-        {
-          "name": "ConversationControls",
-          "line": 14,
-          "column": 1,
-          "lines": 154,
-          "parameters": 1,
-          "complexity": 11,
-          "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/DesktopUpdater.tsx": {
-      "file_lines": 214,
-      "max_function_lines": 178,
-      "max_parameters": 1,
-      "max_complexity": 24,
-      "max_nesting_depth": 2,
-      "over_limit_functions": [
-        {
-          "name": "DesktopUpdater",
-          "line": 24,
-          "column": 1,
-          "lines": 178,
-          "parameters": 0,
-          "complexity": 24,
-          "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/DeviceSettings.tsx": {
-      "file_lines": 517,
-      "max_function_lines": 421,
-      "max_parameters": 2,
-      "max_complexity": 39,
-      "max_nesting_depth": 4,
-      "over_limit_functions": [
-        {
-          "name": "DeviceSettings",
-          "line": 32,
-          "column": 1,
-          "lines": 421,
-          "parameters": 0,
-          "complexity": 39,
-          "nesting_depth": 3
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/ExactApprovalFinalizer.tsx": {
-      "file_lines": 294,
-      "max_function_lines": 143,
-      "max_parameters": 3,
-      "max_complexity": 13,
-      "max_nesting_depth": 3,
-      "over_limit_functions": [
-        {
-          "name": "useExactApprovalFinalizer",
-          "line": 86,
-          "column": 1,
-          "lines": 143,
-          "parameters": 1,
-          "complexity": 2,
-          "nesting_depth": 0
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
     "apps/worker/src/components/familiar/FamiliarGenotype.ts": {
       "file_lines": 217,
       "max_function_lines": 98,
@@ -485,48 +686,6 @@
           "parameters": 1,
           "complexity": 18,
           "nesting_depth": 2
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/GovernedCreateModal.tsx": {
-      "file_lines": 142,
-      "max_function_lines": 106,
-      "max_parameters": 1,
-      "max_complexity": 9,
-      "max_nesting_depth": 1,
-      "over_limit_functions": [
-        {
-          "name": "GovernedCreateModal",
-          "line": 21,
-          "column": 1,
-          "lines": 106,
-          "parameters": 1,
-          "complexity": 1,
-          "nesting_depth": 0
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/InboxHitl.tsx": {
-      "file_lines": 354,
-      "max_function_lines": 107,
-      "max_parameters": 3,
-      "max_complexity": 13,
-      "max_nesting_depth": 3,
-      "over_limit_functions": [
-        {
-          "name": "InboxQueue",
-          "line": 17,
-          "column": 1,
-          "lines": 107,
-          "parameters": 0,
-          "complexity": 13,
-          "nesting_depth": 3
         }
       ],
       "owner": "worker-maintainers",
@@ -575,68 +734,8 @@
       "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"
     },
-    "apps/worker/src/components/LocalDeviceActions.tsx": {
-      "file_lines": 583,
-      "max_function_lines": 457,
-      "max_parameters": 4,
-      "max_complexity": 31,
-      "max_nesting_depth": 3,
-      "over_limit_functions": [
-        {
-          "name": "LocalDeviceActions",
-          "line": 89,
-          "column": 1,
-          "lines": 457,
-          "parameters": 1,
-          "complexity": 31,
-          "nesting_depth": 2
-        },
-        {
-          "name": "LocalDeviceActions.prepare",
-          "line": 274,
-          "column": 3,
-          "lines": 64,
-          "parameters": 0,
-          "complexity": 19,
-          "nesting_depth": 2
-        },
-        {
-          "name": "LocalDeviceActions.dispatch",
-          "line": 339,
-          "column": 3,
-          "lines": 87,
-          "parameters": 0,
-          "complexity": 20,
-          "nesting_depth": 3
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/MobileChat.tsx": {
-      "file_lines": 430,
-      "max_function_lines": 286,
-      "max_parameters": 2,
-      "max_complexity": 28,
-      "max_nesting_depth": 3,
-      "over_limit_functions": [
-        {
-          "name": "MobileChat",
-          "line": 145,
-          "column": 1,
-          "lines": 286,
-          "parameters": 1,
-          "complexity": 28,
-          "nesting_depth": 3
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
     "apps/worker/src/components/settings/CompactSections.tsx": {
-      "file_lines": 622,
+      "file_lines": 559,
       "max_function_lines": 144,
       "max_parameters": 3,
       "max_complexity": 23,
@@ -644,21 +743,12 @@
       "over_limit_functions": [
         {
           "name": "AppearanceGroup",
-          "line": 84,
+          "line": 86,
           "column": 1,
           "lines": 144,
           "parameters": 1,
           "complexity": 23,
           "nesting_depth": 1
-        },
-        {
-          "name": "CompactReachingYouSection",
-          "line": 360,
-          "column": 1,
-          "lines": 95,
-          "parameters": 0,
-          "complexity": 4,
-          "nesting_depth": 2
         }
       ],
       "owner": "worker-maintainers",
@@ -737,105 +827,6 @@
       "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
       "expires": "2026-12-31"
     },
-    "apps/worker/src/components/Shell.tsx": {
-      "file_lines": 505,
-      "max_function_lines": 379,
-      "max_parameters": 2,
-      "max_complexity": 7,
-      "max_nesting_depth": 2,
-      "over_limit_functions": [
-        {
-          "name": "Sidebar",
-          "line": 67,
-          "column": 1,
-          "lines": 379,
-          "parameters": 1,
-          "complexity": 7,
-          "nesting_depth": 1
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/VoiceCall.tsx": {
-      "file_lines": 1525,
-      "max_function_lines": 943,
-      "max_parameters": 3,
-      "max_complexity": 31,
-      "max_nesting_depth": 4,
-      "over_limit_functions": [
-        {
-          "name": "VoiceCall",
-          "line": 192,
-          "column": 1,
-          "lines": 943,
-          "parameters": 1,
-          "complexity": 31,
-          "nesting_depth": 2
-        },
-        {
-          "name": "VoiceCall.useLayoutEffect[0]",
-          "line": 267,
-          "column": 19,
-          "lines": 105,
-          "parameters": 0,
-          "complexity": 9,
-          "nesting_depth": 2
-        },
-        {
-          "name": "VoiceCall.connect",
-          "line": 572,
-          "column": 3,
-          "lines": 223,
-          "parameters": 2,
-          "complexity": 9,
-          "nesting_depth": 2
-        },
-        {
-          "name": "VoiceCall.connect.<anonymous>",
-          "line": 666,
-          "column": 31,
-          "lines": 118,
-          "parameters": 2,
-          "complexity": 1,
-          "nesting_depth": 0
-        },
-        {
-          "name": "VoiceCall.applyCallEvent",
-          "line": 944,
-          "column": 3,
-          "lines": 70,
-          "parameters": 2,
-          "complexity": 30,
-          "nesting_depth": 4
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
-    "apps/worker/src/components/WorkerGlobalContext.tsx": {
-      "file_lines": 112,
-      "max_function_lines": 69,
-      "max_parameters": 1,
-      "max_complexity": 17,
-      "max_nesting_depth": 1,
-      "over_limit_functions": [
-        {
-          "name": "WorkerGlobalContextProvider.useCallback[0]",
-          "line": 40,
-          "column": 39,
-          "lines": 51,
-          "parameters": 0,
-          "complexity": 17,
-          "nesting_depth": 1
-        }
-      ],
-      "owner": "worker-maintainers",
-      "reason": "Legacy Worker source debt captured when the TypeScript structural floor became enforceable; reduce by component without semantic reversion.",
-      "expires": "2026-12-31"
-    },
     "apps/worker/src/workflowDraft.ts": {
       "file_lines": 492,
       "max_function_lines": 114,
@@ -886,4 +877,3 @@
     }
   }
 }
-

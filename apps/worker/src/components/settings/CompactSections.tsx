@@ -8,6 +8,8 @@ import type {
 } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../../client";
+
+import { CompactReachingYouSection } from "./ReachingYouSection";
 import { saveCompanion } from "./companionSave";
 import {
   characterFromSettings,
@@ -307,6 +309,44 @@ function useAppearanceSettings() {
   };
 }
 
+/** Where this console came from, and the way back to it.
+ *
+ *  A PLAIN LINK, NOT A CLIENT CALL. Everything else in this file asks the
+ *  agent; this asks for a different page of the same site. The workspace view
+ *  is served by the control plane at the same origin, so the session cookie
+ *  travels with an ordinary navigation and the person arrives already signed
+ *  in. Routing it through the client would mean inventing a method for
+ *  "navigate", and an absent one would hide the only way back.
+ *
+ *  WHY THE WAY BACK MATTERS. This console is what "/" opens once a team box is
+ *  answering, which is the right default - people want their agent. But
+ *  everything ABOUT the box lives on the other side: the address a desktop
+ *  client connects to, the members of the team, and adding another box. Without
+ *  a door here, arriving at the agent would be one-way for exactly the people
+ *  who have one.
+ *
+ *  It renders unconditionally rather than probing for anything. There is no
+ *  call that can fail, and a door that hides itself when it cannot verify the
+ *  room behind it is worse than one that opens onto a page saying why.
+ */
+function WorkspacesRow() {
+  return (
+    <SettingsRow
+      control={(
+        // An ANCHOR wearing the button's own class, not a button that
+        // navigates. It carries the same weight visually and still behaves
+        // like a link: middle-click and open-in-new-tab work, and it shows its
+        // destination on hover. A button would take all three away for nothing.
+        <a className="settings-kit-button" href="/?workspace">
+          Open
+        </a>
+      )}
+      desc="Your team boxes, the address each answers on, and adding another."
+      title="Your workspaces"
+    />
+  );
+}
+
 export function CompactYouSection() {
   const {
     account, appearance, busy, changeAppearance, changeCharacter, character, message, state,
@@ -344,111 +384,8 @@ export function CompactYouSection() {
           desc="Your workspace manages your identity and role."
           title="Signed in as"
         />
+        <WorkspacesRow />
       </SettingsGroup>
-    </>
-  );
-}
-
-function eventEnabled(prefs: MeNotificationItem[], eventType: string): boolean {
-  return prefs.some((pref) => pref.event_type === eventType && pref.enabled);
-}
-
-function eventAvailable(catalogue: NotificationCatalogue, eventType: string): boolean {
-  return catalogue.events.some((event) => event.id === eventType);
-}
-
-function CompactReachingYouSection() {
-  const [prefs, setPrefs] = useState<MeNotificationItem[]>([]);
-  const [catalogue, setCatalogue] = useState<NotificationCatalogue>({
-    events: [],
-    transports: [],
-  });
-  const [state, setState] = useState<"loading" | "ready" | "unavailable">("loading");
-
-  useEffect(() => {
-    let cancelled = false;
-    if (typeof client.meNotifications !== "function") {
-      setState("unavailable");
-      return;
-    }
-    void client.meNotifications()
-      .then((result) => {
-        if (cancelled) return;
-        setPrefs(result.prefs);
-        setCatalogue(result.catalogue);
-        setState("ready");
-      })
-      .catch(() => { if (!cancelled) setState("unavailable"); });
-    return () => { cancelled = true; };
-  }, []);
-
-  const approvalRoutes = prefs.filter((pref) => pref.event_type === "approval" && pref.enabled);
-  const approvalDestinations = [...new Set(approvalRoutes.map((pref) => {
-    const transport = catalogue.transports.find((item) => item.id === pref.channel);
-    const target = transport?.targets.find((item) => item.id === pref.target);
-    return [transport?.label ?? pref.channel, target?.label ?? pref.target].filter(Boolean).join(" · ");
-  }))];
-  const destinationOptions = approvalDestinations.length > 0
-    ? approvalDestinations
-    : [state === "loading" ? "Reading routes…" : "No verified route"];
-
-  function eventRow(title: string, eventType: string, desc: string) {
-    const available = state === "ready" && eventAvailable(catalogue, eventType);
-    return (
-      <SettingsRow
-        control={(
-          <SettingsToggle
-            disabled
-            label={title}
-            on={available && eventEnabled(prefs, eventType)}
-            onToggle={() => {}}
-          />
-        )}
-        desc={desc}
-        key={eventType}
-        title={title}
-      />
-    );
-  }
-
-  return (
-    <>
-      <SettingsGroup
-      advanced={[
-        eventRow("Escalations", "escalation", "A sub-agent asked for more authority than it has."),
-        eventRow("Budget warnings", "budget_warning", "Spend crossed the warning threshold."),
-        eventRow("Failures", "failure", "A run failed or a connection degraded."),
-        eventRow("Work completed", "work_status", "When requested or automatic work finishes."),
-      ]}
-      title="Reaching you"
-      >
-        {eventRow(
-          "When something needs approving",
-          "approval",
-          "The one interruption worth having",
-        )}
-        <SettingsRow
-          control={(
-            <SettingsSelect
-              disabled
-              label="Send approval notifications to"
-              onChange={() => {}}
-              options={destinationOptions}
-              value={destinationOptions[0]!}
-            />
-          )}
-          title="Send those to"
-        />
-        <SettingsRow
-          control={<span className="settings-value">Unavailable</span>}
-          desc="Only approvals and failures get through"
-          title="Quiet hours"
-        />
-      </SettingsGroup>
-      {state === "unavailable" && (
-        <span className="settings-visually-hidden">Notification routes could not be read.</span>
-      )}
-      <span className="settings-visually-hidden">Quiet hours are not available.</span>
     </>
   );
 }
