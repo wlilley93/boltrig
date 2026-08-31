@@ -6,10 +6,10 @@ aiohttp==3.14.3
 # advisories against it (CVE-2026-59935-59938 fixed across 6.14.0-6.14.2, then
 # CVE-2026-71852/71870 fixed in 6.15.0). Taking the highest fixed release, now
 # 6.16.1; the CVEs listed are the reason the override exists, not its ceiling.
-pypdf==6.16.1
-click==8.4.2
+pypdf==6.16.2
+click==8.5.0
 pillow==12.3.0
 # browser-use resolves mcp 1.26.0, which carries PYSEC-2026-3481/3482 (fixed
 # 1.27.2) and PYSEC-2026-3483 (fixed 1.28.1). Now pinned at 1.29.0; as with
 # pypdf the advisories are why the override exists, not a ceiling on it.
-mcp==1.29.0
+mcp==1.29.1
