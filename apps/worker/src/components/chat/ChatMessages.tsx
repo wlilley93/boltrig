@@ -17,6 +17,7 @@ import {
   downloadAttachment,
   formatBytes,
 } from "./attachmentPresentation";
+import { productName } from "../../productName";
 
 export function Message({
   message,
@@ -94,7 +95,7 @@ export function LiveTurn({
             ? "Response complete."
             : turn.text
               ? "Response in progress."
-              : "Balmoral is working."}
+              : `${productName()} is working.`}
         </span>
         {turn.degraded && (
           <p className="notice" role="status">

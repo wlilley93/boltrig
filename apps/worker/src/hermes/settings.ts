@@ -7,7 +7,8 @@ import type {
 } from "@wlilley93/boltrig-web-sdk";
 
 import { ONBOARDING_SETTING_KEY, ONBOARDING_VERSION } from "../onboarding";
-import { cellJson, planeJson, planePost } from "./http";
+import { cellJson, planeFetch, planeJson, planePost } from "./http";
+import { currentSignOutUrl } from "../productName";
 
 /** Identity and preferences, which live on the CONTROL PLANE, not in the cell.
  *
@@ -127,4 +128,17 @@ export async function chatConfig(): Promise<ChatConfigResponse> {
   return {
     attachments: { max_files: 0, max_bytes: 0, accepted: [] },
   } as unknown as ChatConfigResponse;
+}
+
+/** What this deployment is called, and where to end the single sign-on session. Public. */
+export async function branding(): Promise<{ product_name: string; sign_out_url: string }> {
+  return planeJson("/v1/branding");
+}
+
+/** End the control-plane session; when single sign-on is on, carry the browser
+ *  to the identity provider so the next application asks for a password too. */
+export async function logout(): Promise<void> {
+  await planeFetch("/api/auth/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  const next = currentSignOutUrl();
+  if (next) window.location.assign(next);
 }

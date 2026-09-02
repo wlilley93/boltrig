@@ -18,6 +18,7 @@ import { ReadyStep } from "./ReadyStep";
 import type { VoiceStepHandle } from "./VoiceStep";
 import { useOnboardingCompletion } from "./useOnboardingCompletion";
 import "./onboarding.css";
+import { productName } from "../../productName";
 
 type Step = 0 | 1 | 2 | 3 | 4 | 5;
 const ProviderStep = lazy(async () => {
@@ -84,7 +85,7 @@ function OnboardingUnavailable() {
   return (
     <main className="onboarding" aria-label="Setup unavailable">
       <div className="onboarding-aurora one" /><div className="onboarding-aurora two" />
-      <section className="onboarding-panel" aria-label="Balmoral setup">
+      <section className="onboarding-panel" aria-label={`${productName()} setup`}>
         <header className="onboarding-topbar">
           <BrandLockup />
         </header>
@@ -345,7 +346,7 @@ function OnboardingFrame({
   return (
     <main className="onboarding">
       <div className="onboarding-aurora one" /><div className="onboarding-aurora two" />
-      <section className="onboarding-panel" aria-label="Balmoral setup">
+      <section className="onboarding-panel" aria-label={`${productName()} setup`}>
         <header className="onboarding-topbar">
           <BrandLockup />
           <span className="onboarding-progress" aria-label={`Step ${step + 1} of 6`}>

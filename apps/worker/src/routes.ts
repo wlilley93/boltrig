@@ -1,7 +1,7 @@
 /** The routes this build actually has.
  *
  *  MEASURED, NOT CHOSEN BY TASTE. Every other v1 route is a console over the
- *  Balmoral kernel, and a Hermes cell has no kernel: `home` calls 11 methods
+ *  Boltrig kernel, and a Hermes cell has no kernel: `home` calls 11 methods
  *  (audit, budgets, readiness, platform status) and none is backed; `build`
  *  calls 45 and two are; the parity views - work, agents, runs, knowledge,
  *  memory - call 22 between them and none belongs to those surfaces; routines

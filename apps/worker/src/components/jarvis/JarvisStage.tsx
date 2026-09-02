@@ -5,6 +5,7 @@ import type { JarvisStageState } from "./JarvisState";
 import { NO_TELEMETRY, telemetryFromBudgets } from "./JarvisTelemetry";
 import { useJarvisRenderer } from "./useJarvisRenderer";
 import "./jarvis.css";
+import { productName } from "../../productName";
 
 // The HUD instrument stage. Same contract as FamiliarStage — it owns its
 // renderer's lifecycle and reports a fallback rather than showing a blank
@@ -95,7 +96,7 @@ export function JarvisStage({
       className={`jarvis-stage${neural ? " neural" : ""}${fallback ? " fallback" : ""}${className ? ` ${className}` : ""}`}
       data-skin={neural ? "ultron" : "default"}
       role="img"
-      aria-label={`Balmoral · ${state.mode}`}
+      aria-label={`${productName()} · ${state.mode}`}
       data-renderer={fallback ? "none" : "webgl2"}
       data-mode={state.mode}
     >

@@ -1,12 +1,13 @@
 import { BrandMark } from "../BrandMark";
 import { BrandWordmark } from "../BrandWordmark";
+import { productName } from "../../productName";
 
 export function AuthSplash() {
   return (
     <main className="auth-surface">
       <div className="auth-splash" role="status">
         <span className="auth-spinner" />
-        <span>Opening Balmoral Worker…</span>
+        <span>Opening {productName()} Worker…</span>
       </div>
     </main>
   );
@@ -15,12 +16,12 @@ export function AuthSplash() {
 export function DesktopServerMissing() {
   return (
     <AuthCard
-      title="No Balmoral server configured"
-      lead="This desktop build was packaged without a Balmoral API origin."
+      title={`No ${productName()} server configured`}
+      lead={`This desktop build was packaged without a ${productName()} API origin.`}
     >
       <div className="auth-handoff">
         <p role="alert" className="auth-error">
-          Rebuild the desktop app with VITE_API_BASE set to the Balmoral origin
+          Rebuild the desktop app with VITE_API_BASE set to the {productName()} origin
           this install should use. Without it the app can only reach its own
           window, so sign-in, chat and voice have nothing to talk to.
         </p>

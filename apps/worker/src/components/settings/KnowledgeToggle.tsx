@@ -14,6 +14,7 @@ import {
   StateWord,
   type Tone,
 } from "./rowKit";
+import { productName } from "../../productName";
 
 function providerTone(provider: KnowledgeProvider): { tone: Tone; state: string } {
   if (!provider.enabled) return { tone: "unknown", state: "off" };
@@ -142,7 +143,7 @@ function KnowledgeProviderRow(props: {
       <StateWord tone={tone.tone}>{tone.state}</StateWord>
       <SettingsInfo
         label={`About ${provider.display_name}`}
-        text="Cognee connects related knowledge so Balmoral can recall it later. It uses the same server-side AI connection as chat; no key enters this page."
+        text={`Cognee connects related knowledge so ${productName()} can recall it later. It uses the same server-side AI connection as chat; no key enters this page.`}
       />
       <SettingsToggle
         disabled={provider.status === "unavailable"}

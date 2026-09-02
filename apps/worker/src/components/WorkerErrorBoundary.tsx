@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
 import { BrandWordmark } from "./BrandWordmark";
+import { productName } from "../productName";
 
 export const WORKER_CHUNK_RECOVERY_KEY = "boltrig.worker.chunk-recovery";
 
@@ -51,8 +52,8 @@ function RecoveryScreen({ error, recovering, reload }: {
 }) {
   const staleChunk = isRecoverableChunkError(error);
   const title = recovering
-    ? "Updating Balmoral…"
-    : staleChunk ? "The update didn’t load." : "Balmoral couldn’t open.";
+    ? `Updating ${productName()}…`
+    : staleChunk ? "The update didn’t load." : `${productName()} couldn’t open.`;
   const detail = recovering
     ? "A newer version is ready. Reloading once to finish the update."
     : "Your work is safe. Reload the app to try again.";

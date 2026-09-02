@@ -3,6 +3,7 @@ import { useState } from "react";
 import { client } from "../../client";
 import { AuthCard } from "./AuthShell";
 import { tokenFromHash } from "./routing";
+import { productName } from "../../productName";
 
 export function AcceptInviteScreen({ onDone }: { onDone(): void }) {
   const token = tokenFromHash();
@@ -31,7 +32,7 @@ export function AcceptInviteScreen({ onDone }: { onDone(): void }) {
   if (email !== null) return <InviteAccepted email={email} onDone={onDone} />;
   if (!token) return <MissingInviteToken onDone={onDone} />;
   return (
-    <AuthCard title="Accept your invitation" lead="Choose a password to finish creating your Balmoral account.">
+    <AuthCard title="Accept your invitation" lead={`Choose a password to finish creating your ${productName()} account.`}>
       <form className="auth-form" onSubmit={submit}>
         <label><span>New password</span><input type="password" autoComplete="new-password" autoFocus value={password} onChange={(event) => setPassword(event.target.value)} /></label>
         <label><span>Confirm password</span><input type="password" autoComplete="new-password" value={confirm} onChange={(event) => setConfirm(event.target.value)} /></label>
@@ -60,7 +61,7 @@ function InviteAccepted({ email, onDone }: { email: string; onDone(): void }) {
 
 function MissingInviteToken({ onDone }: { onDone(): void }) {
   return (
-    <AuthCard title="Accept your invitation" lead="Choose a password to finish creating your Balmoral account.">
+    <AuthCard title="Accept your invitation" lead={`Choose a password to finish creating your ${productName()} account.`}>
       <div className="auth-handoff">
         <p className="auth-error">This invitation link is missing its token. Ask an administrator to resend it.</p>
         <button className="secondary-button" onClick={onDone}>Back to sign in</button>

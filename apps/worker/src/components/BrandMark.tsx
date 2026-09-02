@@ -1,11 +1,11 @@
-/** The Balmoral mark: five concentric dashed rings around a live core.
+/** The Boltrig mark: five concentric dashed rings around a live core.
  *
  * Inline SVG rather than an <img> to favicon.svg, for the same reason
  * BrandWordmark is inline text -- no second network request, no flash of a
  * missing logo, and it scales with the type around it.
  *
  * THE GEOMETRY IS THE DESIGN'S, NOT AN APPROXIMATION. Radii, dash lengths and
- * the alternating rotations come straight from `Balmoral Logo.dc.html`. The
+ * the alternating rotations come straight from `Boltrig Logo.dc.html`. The
  * rotations are the whole trick: each ring's gap is turned away from its
  * neighbours, so the eye never finds a seam running through the mark.
  *

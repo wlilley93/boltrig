@@ -1,3 +1,4 @@
+import { productName } from "./productName";
 // The settings surface the decided target draws. Related behaviour controls live
 // behind one section with four small views instead of competing for rail space.
 // Operations remains a valid deep-linked pane for the workspace home, but it
@@ -46,7 +47,7 @@ export const SETTINGS_SECTIONS: SettingsEntry[] = [
     id: "behaviour",
     label: "Behaviour",
     title: "Behaviour",
-    lead: "What Balmoral may notice, remember, and do while you are away.",
+    lead: `What ${productName()} may notice, remember, and do while you are away.`,
   },
   {
     id: "autonomy",
@@ -64,7 +65,7 @@ export const SETTINGS_SECTIONS: SettingsEntry[] = [
     id: "models",
     label: "Models",
     title: "Models",
-    lead: "Choose the models Balmoral uses.",
+    lead: `Choose the models ${productName()} uses.`,
   },
   {
     id: "shortcuts",
@@ -108,25 +109,25 @@ const LEGACY_BEHAVIOUR_ENTRIES: Partial<Record<SettingsSection, SettingsEntry>> 
     id: "sensing",
     label: "Behaviour",
     title: "Behaviour",
-    lead: "What Balmoral may notice, remember, and do while you are away.",
+    lead: `What ${productName()} may notice, remember, and do while you are away.`,
   },
   sight: {
     id: "sight",
     label: "Behaviour",
     title: "Behaviour",
-    lead: "What Balmoral may notice, remember, and do while you are away.",
+    lead: `What ${productName()} may notice, remember, and do while you are away.`,
   },
   knowledge: {
     id: "knowledge",
     label: "Behaviour",
     title: "Behaviour",
-    lead: "What Balmoral may notice, remember, and do while you are away.",
+    lead: `What ${productName()} may notice, remember, and do while you are away.`,
   },
   overnight: {
     id: "overnight",
     label: "Behaviour",
     title: "Behaviour",
-    lead: "What Balmoral may notice, remember, and do while you are away.",
+    lead: `What ${productName()} may notice, remember, and do while you are away.`,
   },
 };
 

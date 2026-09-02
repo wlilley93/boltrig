@@ -3,6 +3,7 @@ import { useState } from "react";
 import { client } from "../../client";
 import { AuthCard } from "./AuthShell";
 import { tokenFromHash } from "./routing";
+import { productName } from "../../productName";
 
 export function RequestPasswordResetScreen({
   initialEmail,
@@ -26,7 +27,7 @@ export function RequestPasswordResetScreen({
       if (result.status === "ok") setSent(true);
       else setError(result.reason ?? "Password recovery is temporarily unavailable.");
     } catch {
-      setError("Could not reach Balmoral. Try again.");
+      setError(`Could not reach ${productName()}. Try again.`);
     } finally {
       setBusy(false);
     }
@@ -34,7 +35,7 @@ export function RequestPasswordResetScreen({
 
   if (sent) return <PasswordResetSent onDone={onDone} />;
   return (
-    <AuthCard title="Reset your password" lead="Enter the email used for your Balmoral account.">
+    <AuthCard title="Reset your password" lead={`Enter the email used for your ${productName()} account.`}>
       <form className="auth-form" onSubmit={submit}>
         <label>
           <span>Email</span>

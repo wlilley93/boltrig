@@ -1,6 +1,7 @@
 import { ExactApprovalFinalizer } from "../ExactApprovalFinalizer";
 import { SettingsGroup, SettingsInfo, SettingsRow, SettingsToggle } from "./rowKit";
 import { useOvernightBehaviour } from "./useOvernightBehaviour";
+import { productName } from "../../productName";
 
 export function OvernightToggle() {
   const controller = useOvernightBehaviour();
@@ -18,7 +19,7 @@ export function OvernightToggle() {
             <div className="settings-status">
               <SettingsInfo
                 label="About overnight"
-                text="Allows Balmoral to prepare a checked model adapter from approved work when an overnight worker is available. Nothing is applied automatically."
+                text={`Allows ${productName()} to prepare a checked model adapter from approved work when an overnight worker is available. Nothing is applied automatically.`}
               />
               <SettingsToggle
                 disabled={controller.busy || controller.finalizer.busy}

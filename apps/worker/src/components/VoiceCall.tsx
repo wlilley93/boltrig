@@ -28,6 +28,7 @@ import { audioTracks, createVoicePlaybackAnalyser, resamplePcm16, safeDisconnect
 import { UtteranceGain, pcm16ToFloat } from "./voiceLoudness";
 import { voiceStageInput } from "./voiceStageInput";
 import "./VoiceCall.css";
+import { productName } from "../productName";
 
 interface VoiceCallProps {
   onFamiliarActivity?(activity: {
@@ -950,7 +951,7 @@ export function VoiceCall({
     if (event.type === "transcript" && typeof payload.text === "string") {
       const line: VoiceLine = {
         id: event.id ?? crypto.randomUUID(),
-        speaker: payload.kind === "input" ? "You" : "Balmoral",
+        speaker: payload.kind === "input" ? "You" : `${productName()}`,
         text: payload.text,
         typed: payload.via === "text",
       };

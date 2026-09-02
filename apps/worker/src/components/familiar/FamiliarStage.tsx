@@ -10,6 +10,7 @@ import {
   type FamiliarStageState,
 } from "./FamiliarState";
 import "./familiar.css";
+import { productName } from "../../productName";
 
 // The one premium visual body (ADR 0025). Mount at most one Stage per Worker
 // client — badges stay cheap CSS. The Stage owns its renderer's lifecycle and
@@ -79,5 +80,5 @@ function familiarStageAccessibleName(label?: string) {
   const trimmed = label?.trim();
   return trimmed?.toLocaleLowerCase() === "familiar"
     ? trimmed
-    : `${trimmed || "Balmoral"} Familiar`;
+    : `${trimmed || "${productName()}"} Familiar`;
 }

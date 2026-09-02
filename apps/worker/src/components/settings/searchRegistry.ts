@@ -1,5 +1,6 @@
 import { SHORTCUTS } from "../../shortcuts";
 import { settingsEntry, type SettingsSection } from "../../settingsSections";
+import { productName } from "../../productName";
 
 // A declarative index of every settings row, so one query can search every
 // sections rather than only the nav labels. Rows for the console-idiom
@@ -56,7 +57,7 @@ export const SETTINGS_INDEX: SettingsIndexRow[] = [
   { section: "spend", title: "Where it went", desc: "Spend attributed per actor" },
 
   // Models — choices and their recoverable lifecycle.
-  { section: "models", title: "Your models", desc: "Models available to Balmoral" },
+  { section: "models", title: "Your models", desc: `Models available to ${productName()}` },
   { section: "models", title: "Add model", desc: "Add a model" },
   { section: "models", title: "Change model", desc: "Change a model" },
   { section: "models", title: "Remove model", desc: "Remove a model wherever it is used" },
@@ -85,7 +86,7 @@ export const SETTINGS_INDEX: SettingsIndexRow[] = [
   // Advanced — the device view plus the kit's own switch.
   { section: "advanced", title: "Developer details", desc: "Shows the identifiers behind each row", tech: "developer_details" },
   { section: "advanced", title: "This device", desc: "Desktop app or web browser" },
-  { section: "advanced", title: "Balmoral Desktop", desc: "Download or connect this computer" },
+  { section: "advanced", title: `${productName()} Desktop`, desc: "Download or connect this computer" },
   { section: "advanced", title: "Trusted computers", desc: "Revocable per-computer access" },
   { section: "advanced", title: "Desktop updates" },
   { section: "advanced", title: "Sign out", desc: "Signs out this account session" },

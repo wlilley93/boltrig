@@ -12,6 +12,7 @@ import {
   SettingsSelect,
   SettingsToggle,
 } from "./rowKit";
+import { productName } from "../../productName";
 
 export interface CameraChoice {
   camera_id: string;
@@ -64,7 +65,7 @@ function CameraToggleRow({ busy, compact, save, sensing }: {
         {compact && (
           <SettingsInfo
             label="About sight"
-            text="When Sight is off, Balmoral captures no camera frame. Turning it on does not bypass quiet hours or retention."
+            text={`When Sight is off, ${productName()} captures no camera frame. Turning it on does not bypass quiet hours or retention.`}
           />
         )}
         <SettingsToggle disabled={busy} label="Camera" on={camera.enabled} onToggle={(next) => void save(
@@ -185,7 +186,7 @@ export function CameraSettingsGroup({ busy, cameras, compact = false, deviceId, 
 }) {
   return (
     <SettingsGroup
-      foot={compact ? undefined : "Balmoral controls the camera connection for this computer. A character may request access, but never owns the camera and is told when access is off."}
+      foot={compact ? undefined : `${productName()} controls the camera connection for this computer. A character may request access, but never owns the camera and is told when access is off.`}
       title={compact ? undefined : "What this computer may see"}
     >
       <CameraToggleRow busy={busy} compact={compact} save={save} sensing={sensing} />
@@ -263,7 +264,7 @@ export function PresenceSettingsGroup({ busy, compact = false, save, sensing }: 
       />
       {!compact && (
         <SettingsRow
-          desc="Anchor images are the character's face and travel with it. The enrolled face is yours, and Balmoral keeps it here."
+          desc={`Anchor images are the character's face and travel with it. The enrolled face is yours, and ${productName()} keeps it here.`}
           title="It is never included in a character bundle"
         />
       )}

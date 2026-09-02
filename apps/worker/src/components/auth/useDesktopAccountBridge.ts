@@ -7,6 +7,7 @@ import {
   isDesktop,
 } from "../../desktop";
 import { connectAuthenticatedDesktop } from "../../desktopTrust";
+import { productName } from "../../productName";
 
 export type DesktopBridgeState = "checking" | "ready" | "replace" | "unavailable";
 
@@ -27,7 +28,7 @@ async function inspectDesktopConnection(): Promise<Inspection> {
       ? { state: "ready" }
       : {
           state: "replace",
-          reason: "This computer is connected to a different or revoked Balmoral account.",
+          reason: `This computer is connected to a different or revoked ${productName()} account.`,
         };
   } catch {
     // Account auth succeeded. A transient device-list failure must not turn

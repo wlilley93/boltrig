@@ -8,6 +8,7 @@ import {
   type FamiliarMarking,
 } from "./FamiliarGenotype";
 import "./familiar.css";
+import { productName } from "../../productName";
 
 // The lightweight Familiar: message avatars, subagent markers, and the floor of
 // the renderer ladder (ADR 0025). Extracted verbatim from ChatView's `Familiar`.
@@ -45,7 +46,7 @@ export function FamiliarBadge({
         ? undefined
         : identity.bound
           ? `${label ?? "Agent"} Familiar · ${state}`
-          : `Balmoral activity · ${state}`}
+          : `${productName()} activity · ${state}`}
       style={{
         ...familiarPalette(identity.palette),
         ...(size === undefined ? {} : { width: size, height: size }),

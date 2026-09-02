@@ -1,10 +1,11 @@
 import { useLayoutEffect, type MutableRefObject, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { CallStatus } from "@wlilley93/boltrig-web-sdk";
+import { productName } from "../../productName";
 
 export interface VoiceLine {
   id: string;
-  speaker: "You" | "Balmoral";
+  speaker: string;
   text: string;
   typed?: boolean;
 }

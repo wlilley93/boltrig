@@ -121,7 +121,7 @@ function CompanionMenu(props: CompanionMenuProps) {
 }
 
 /** The selected companion is product state, so the shell names it instead of
- * displaying a static Balmoral wordmark. */
+ * displaying a static Boltrig wordmark. */
 export function CompanionSwitcher({ route }: CompanionSwitcherProps) {
   const selectedId = useFamiliarBody();
   const installed = useCharacters();

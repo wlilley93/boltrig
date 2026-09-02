@@ -14,6 +14,7 @@ import {
 } from "../character";
 import { skinFor, type StageTurnInput, useCharacter, useSkin } from "./characters";
 import type { FamiliarPresentationMode } from "./familiar/FamiliarState";
+import { productName } from "../productName";
 
 // The one place that decides WHICH body is on the Stage — and it does so
 // without naming any of them.
@@ -119,7 +120,7 @@ function useSensing(capabilities: readonly string[] | undefined): Record<string,
       status: "refused",
       capability,
       reason: "kernel_unreachable",
-      detail: "Balmoral could not be asked, so consent is unknown and nothing is being seen.",
+      detail: `${productName()} could not be asked, so consent is unknown and nothing is being seen.`,
       remedy: "retry:automatic",
     });
     const ask = () => {

@@ -40,6 +40,7 @@ import {
 } from "./rowKit";
 import { CompanionRows } from "./CompanionRows";
 import { ReadRepliesSetting } from "./ReadRepliesSetting";
+import { productName } from "../../productName";
 // Compact row-idiom panes for the identity, organisation, knowledge and
 // advanced settings sections. Every row reads real SDK data; the larger
 // operational views remain separate from the default settings path.
@@ -624,7 +625,7 @@ export function CompactAdvancedSection() {
             />
           )}
           desc="Signs out this account session. Computer trust stays until you revoke it."
-          title="Signed in to Balmoral"
+          title={`Signed in to ${productName()}`}
         />
       </SettingsGroup>
     </>

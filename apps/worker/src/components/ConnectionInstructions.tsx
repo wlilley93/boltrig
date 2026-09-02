@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ConnectionsResponse } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../client";
+import { productName } from "../productName";
 
 export function ConnectionInstructions() {
   const [instructions, setInstructions] = useState<ConnectionsResponse | null>(null);
@@ -16,7 +17,7 @@ export function ConnectionInstructions() {
   return (
     <section className="settings-card">
       <p className="eyebrow">Developer connections</p>
-      <h2>Connect a client to Balmoral</h2>
+      <h2>Connect a client to {productName()}</h2>
       {!instructions ? (
         <p className="muted">Loading connections…</p>
       ) : (

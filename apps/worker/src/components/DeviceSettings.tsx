@@ -29,6 +29,7 @@ import {
   needsLocalEnrollmentCleanup,
   trustedComputersVisible,
 } from "./deviceSettingsVisibility";
+import { productName } from "../productName";
 export function DeviceSettings() {
   const desktop = hasDesktopRuntime();
   const [devices, setDevices] = useState<EnrolledDevice[]>([]);
@@ -477,7 +478,7 @@ function DesktopConnectionCard({
     <section className="settings-card author-form">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Balmoral Desktop</p>
+          <p className="eyebrow">{productName()} Desktop</p>
           <h2>{desktop ? "This computer" : "Work locally on your computer"}</h2>
         </div>
         <span className="row-meta">{desktop ? "signed app" : "download"}</span>
@@ -498,7 +499,7 @@ function DesktopConnectionCard({
         <>
           <p>Sign in to the desktop app with this account to run local tasks. No handoff code is required.</p>
           {downloadUrl
-            ? <a className="primary-button" href={downloadUrl} rel="noreferrer" target="_blank">Download Balmoral Desktop</a>
+            ? <a className="primary-button" href={downloadUrl} rel="noreferrer" target="_blank">Download {productName()} Desktop</a>
             : <p className="notice">A signed desktop download has not been published for this deployment.</p>}
         </>
       )}

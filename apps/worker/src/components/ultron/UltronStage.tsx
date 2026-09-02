@@ -4,6 +4,7 @@ import type { FamiliarPhenotypeResponse } from "@wlilley93/boltrig-web-sdk";
 import { UltronRenderer } from "./UltronRenderer";
 import type { UltronStageState } from "./UltronState";
 import "./ultron.css";
+import { productName } from "../../productName";
 
 /**
  * Ultron's mount point.
@@ -72,7 +73,7 @@ export function UltronStage({
       ref={hostRef}
       className={`ultron-stage${fallback ? " fallback" : ""}${className ? ` ${className}` : ""}`}
       role="img"
-      aria-label={`Balmoral · ${state.mode}`}
+      aria-label={`${productName()} · ${state.mode}`}
       data-renderer={fallback ? "none" : "webgl2"}
       data-mode={state.mode}
     />

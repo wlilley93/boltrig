@@ -29,6 +29,8 @@ const adapter = {
   meSettings: sett.meSettings,
   putMeSettings: sett.putMeSettings,
   refreshSession: sett.refreshSession,
+  branding: sett.branding,
+  logout: sett.logout,
   chatModelChoices: sett.chatModelChoices,
   chatConfig: sett.chatConfig,
   capabilities: sett.capabilities,

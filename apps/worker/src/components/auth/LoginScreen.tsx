@@ -4,6 +4,7 @@ import { client, rememberSessionCsrf } from "../../client";
 import { isDesktop } from "../../desktop";
 import { AuthCard } from "./AuthShell";
 import type { GateState } from "./types";
+import { productName } from "../../productName";
 
 interface LoginScreenProps {
   onChallenge(token: string): void;
@@ -35,7 +36,7 @@ export function LoginScreen({ onChallenge, onState, onForgot }: LoginScreenProps
       if (result.status === "2fa_enrollment_required") return onState("enrollment_required");
       setError(result.reason ?? "Incorrect email or password.");
     } catch {
-      setError("Could not reach Balmoral. Try again.");
+      setError(`Could not reach ${productName()}. Try again.`);
     } finally {
       setBusy(false);
     }
@@ -45,8 +46,8 @@ export function LoginScreen({ onChallenge, onState, onForgot }: LoginScreenProps
     <AuthCard
       title="Welcome back"
       lead={isDesktop
-        ? "Sign in to your Balmoral account. This desktop connects to it after authentication."
-        : "Sign in to your Balmoral workspace."}
+        ? `Sign in to your ${productName()} account. This desktop connects to it after authentication.`
+        : `Sign in to your ${productName()} workspace.`}
     >
       <form className="auth-form" onSubmit={submit}>
         <label><span>Email</span><input type="email" autoComplete="username" autoFocus value={email} onChange={(event) => setEmail(event.target.value)} /></label>
@@ -59,7 +60,7 @@ export function LoginScreen({ onChallenge, onState, onForgot }: LoginScreenProps
           Forgot password?
         </button>
       </div>
-      <p className="auth-foot">Balmoral is invite only. Permanent provider and integration credentials never enter this client.</p>
+      <p className="auth-foot">{productName()} is invite only. Permanent provider and integration credentials never enter this client.</p>
     </AuthCard>
   );
 }

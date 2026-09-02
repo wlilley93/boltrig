@@ -11,6 +11,7 @@ import type {
 
 import { client } from "../../client";
 import { voiceCatalogueEntries } from "./voiceProviderCatalogue";
+import { productName } from "../../productName";
 
 const ADMIN_ROLES = new Set(["admin", "org-admin", "owner", "superadmin"]);
 
@@ -107,7 +108,7 @@ async function completeVoiceSetup(context: VoiceCompletionContext): Promise<bool
   const entry = current?.entries.find((candidate) => candidate.id === context.provider);
   const contract = entry?.setup_contract;
   if (!current || !entry || !entry.setup_supported || contract?.kind !== "manual_secret") {
-    context.setMessage("That voice service is not available on this Balmoral server.");
+    context.setMessage(`That voice service is not available on this ${productName()} server.`);
     return false;
   }
   if (current.connections.some((connection) => (

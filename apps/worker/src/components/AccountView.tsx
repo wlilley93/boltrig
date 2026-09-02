@@ -21,6 +21,7 @@ import {
   TwoFactorSecurity,
 } from "./AccountSecuritySections";
 import { ConnectionInstructions } from "./ConnectionInstructions";
+import { productName } from "../productName";
 
 type AccountTab = "profile" | "access" | "notifications" | "agent";
 
@@ -44,7 +45,7 @@ export function AccountView({ onContextChanged }: { onContextChanged?(): void })
       <div className="page-content">
         <div className="page-intro">
           <div>
-            <h2>Your Balmoral account</h2>
+            <h2>Your {productName()} account</h2>
             <p>Preferences, activity, sessions, developer access and delegated automation.</p>
           </div>
         </div>

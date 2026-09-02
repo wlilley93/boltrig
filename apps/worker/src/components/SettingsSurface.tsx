@@ -20,6 +20,7 @@ import { SettingsGroup, SettingsRow } from "./settings/rowKit";
 import { ApprovalPostureSettings } from "./ApprovalPostureControl";
 import { MemberIntegrationConnections } from "./integrations/MemberConnections";
 import "./settings/settings-you.css";
+import { productName } from "../productName";
 
 // The settings pane, recast onto the typed row-control kit in
 // ./settings/rowKit.tsx. Every section uses the same calm row idiom. Larger
@@ -67,7 +68,7 @@ function AutonomySection({ head = true }: { head?: boolean }) {
           )}
         />
         <SettingsRow
-          title={localAgent ? "Balmoral credentials stay server-side" : "Credentials stay server-side"}
+          title={localAgent ? `${productName()} credentials stay server-side` : "Credentials stay server-side"}
           desc={localAgent
             ? "The local agent never receives your provider keys. File access follows the setting above."
             : "Cloud tools can use credentials without exposing them to this device."}

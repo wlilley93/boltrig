@@ -3,12 +3,13 @@ import type {
   RunRow,
   WorkItem,
 } from "@wlilley93/boltrig-web-sdk";
+import { productName } from "../productName";
 
 export function originLabel(value: {
   source?: string | null;
   provenance?: ChannelMessageProvenance | null;
 }): string {
-  return value.provenance?.display_label || value.source || "Balmoral";
+  return value.provenance?.display_label || value.source || `${productName()}`;
 }
 
 function Fact({ label, value }: { label: string; value: string }) {
@@ -42,7 +43,7 @@ export function WorkFacts({ item }: { item: WorkItem }) {
     <Fact label="Status" value={item.status.replaceAll("_", " ")} />
     <Fact label="Owner" value={item.owner_member ?? "Unassigned"} />
     <Fact label="Confidence" value={item.confidence == null ? "—" : `${Math.round(item.confidence * 100)}%`} />
-    <Fact label="Source" value={item.source ?? "Balmoral"} />
+    <Fact label="Source" value={item.source ?? `${productName()}`} />
     <Fact label="Shape" value={item.convergent ? "Convergent goal" : "Non-convergent work"} />
     <Fact label="Parent" value={item.parent_id ?? "Root"} />
     <Fact label="Hatchet run" value={item.hatchet_run_id ?? "None"} />

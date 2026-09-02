@@ -16,18 +16,38 @@
 // stale or tampered cache costs a wrong label until the fetch lands.
 import { client } from "./client";
 
-export const DEFAULT_PRODUCT_NAME = "Balmoral";
+export const DEFAULT_PRODUCT_NAME = "Boltrig";
 
 const CACHE_KEY = "boltrig.product-name";
 // Only names the kernel can actually return. An unrecognised cached value is
 // discarded rather than rendered: localStorage is writable by anything sharing
 // the origin, and the wordmark is not a place to display arbitrary text.
-const KNOWN = new Set([DEFAULT_PRODUCT_NAME, "Boltrig", "Opbox Agents"]);
+// A name is a short line of text, not markup and not a paragraph. The cache is
+// writable by anything sharing the origin, so a value that is not name-shaped
+// is discarded rather than rendered.
+const NAME_SHAPE = /^[A-Za-z][A-Za-z0-9 .&'-]{0,39}$/;
+function nameShaped(value: unknown): value is string {
+  return typeof value === "string" && NAME_SHAPE.test(value);
+}
+/** The name the server put in the page, so the first paint is right on every
+ *  visit and not only after the first. The control plane injects
+ *  `<meta name="product-name">` into the console document it serves. */
+function servedName(): string | null {
+  if (typeof document === "undefined") return null;
+  const content = document.querySelector('meta[name="product-name"]')?.getAttribute("content");
+  return nameShaped(content) ? content : null;
+}
+let signOut: string | null = null;
+/** Where "Log out" sends the browser after the control-plane session ends: the
+ *  identity provider's logout endpoint when single sign-on is on, else null. */
+export function currentSignOutUrl(): string | null {
+  return signOut;
+}
 
 function cached(): string | null {
   try {
     const value = window.localStorage.getItem(CACHE_KEY);
-    return value && KNOWN.has(value) ? value : null;
+    return nameShaped(value) ? value : null;
   } catch {
     return null; // private mode, or storage disabled. The default still works.
   }
@@ -76,19 +96,25 @@ export function subscribeProductName(listener: (name: string) => void): () => vo
 
 async function resolveProductName(): Promise<string> {
   try {
-    const { product_name: name } = await client.branding();
-    if (typeof name !== "string" || !KNOWN.has(name)) {
-      return cached() ?? DEFAULT_PRODUCT_NAME;
+    const answer = (await client.branding()) as { product_name?: unknown; sign_out_url?: unknown };
+    const name = answer.product_name;
+    if (typeof answer.sign_out_url === "string" && /^https:\/\//.test(answer.sign_out_url)) {
+      signOut = answer.sign_out_url;
     }
+    if (!nameShaped(name)) return current;
     remember(name);
     return name;
   } catch {
-    // Offline, or the kernel is not up yet. The sign-in screen still renders.
-    return cached() ?? DEFAULT_PRODUCT_NAME;
+    return current; // the last known name stands until the kernel answers
   }
 }
 
+/** The product name for copy that is not a component: settings tables, alerts,
+ *  status strings. Components that must follow a late answer subscribe. */
+export function productName(): string {
+  return current;
+}
 
 function initialProductName(): string {
-  return cached() ?? DEFAULT_PRODUCT_NAME;
+  return servedName() ?? cached() ?? DEFAULT_PRODUCT_NAME;
 }

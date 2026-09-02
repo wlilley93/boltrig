@@ -28,7 +28,7 @@
 //
 // WHY IT LIVES HERE AND NOT IN THE BUNDLE. jarvis-post.frag set the precedent:
 // a character bundle carries the character's shader, byte-pinned by its
-// manifest; Balmoral's rendering machinery stays in components/jarvis. V2 is
+// manifest; Boltrig's rendering machinery stays in components/jarvis. V2 is
 // machinery -- a simulation, five draw passes and a compositor -- so pinning it
 // as character data would mean re-digesting six files every time a blur radius
 // changes.
