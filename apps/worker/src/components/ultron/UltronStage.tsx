@@ -72,7 +72,7 @@ export function UltronStage({
       ref={hostRef}
       className={`ultron-stage${fallback ? " fallback" : ""}${className ? ` ${className}` : ""}`}
       role="img"
-      aria-label={`Boltrig · ${state.mode}`}
+      aria-label={`Balmoral · ${state.mode}`}
       data-renderer={fallback ? "none" : "webgl2"}
       data-mode={state.mode}
     />

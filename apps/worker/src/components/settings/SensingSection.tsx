@@ -12,7 +12,7 @@ import {
   type CameraChoice,
 } from "./SensingSettingsGroups";
 
-// Camera and presence are Boltrig services, not character-owned daemons. A
+// Camera and presence are Balmoral services, not character-owned daemons. A
 // character can request either capability, and the kernel refuses it plainly
 // when the user has disabled it or its local preconditions are not met.
 

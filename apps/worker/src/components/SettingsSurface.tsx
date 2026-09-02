@@ -67,7 +67,7 @@ function AutonomySection({ head = true }: { head?: boolean }) {
           )}
         />
         <SettingsRow
-          title={localAgent ? "Boltrig credentials stay server-side" : "Credentials stay server-side"}
+          title={localAgent ? "Balmoral credentials stay server-side" : "Credentials stay server-side"}
           desc={localAgent
             ? "The local agent never receives your provider keys. File access follows the setting above."
             : "Cloud tools can use credentials without exposing them to this device."}

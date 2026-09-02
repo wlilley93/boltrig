@@ -29,7 +29,7 @@ export const APPEARANCE_KEYS = {
 } as const;
 
 export const DEFAULT_APPEARANCE: Appearance = {
-  // DARK, not "system". Boltrig is a dark product - every surface, the brand
+  // DARK, not "system". Balmoral is a dark product - every surface, the brand
   // mark's ground and the captured design targets are all built dark - so
   // following the OS meant a first-run visitor on a light Mac got the light
   // palette as their introduction to it. "system" remains a choice a person can

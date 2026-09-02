@@ -94,7 +94,7 @@ export function LiveTurn({
             ? "Response complete."
             : turn.text
               ? "Response in progress."
-              : "Boltrig is working."}
+              : "Balmoral is working."}
         </span>
         {turn.degraded && (
           <p className="notice" role="status">

@@ -3,7 +3,7 @@
 // Everything shown is a crossfaded mode weight or live voice, never invented
 // mood. The shader remains the visual source of truth; this file decides WHEN.
 // jarvis.frag lives in the character bundle and is byte-pinned by its manifest.
-// jarvis-post.frag stays here as Boltrig rendering machinery: a bundle never
+// jarvis-post.frag stays here as Balmoral rendering machinery: a bundle never
 // carries a renderer.
 import fragSrc from "../../bundles/jarvis/jarvis.frag?raw";
 import postSrc from "./jarvis-post.frag?raw";

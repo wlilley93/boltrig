@@ -16,7 +16,7 @@ export function ConnectionInstructions() {
   return (
     <section className="settings-card">
       <p className="eyebrow">Developer connections</p>
-      <h2>Connect a client to Boltrig</h2>
+      <h2>Connect a client to Balmoral</h2>
       {!instructions ? (
         <p className="muted">Loading connections…</p>
       ) : (

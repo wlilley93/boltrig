@@ -32,7 +32,7 @@ const SELF_HOSTED_OLLAMA: CatalogueProvider = {
   id: "ollama",
   name: "Ollama",
   detail: "Self-hosted",
-  info: "Hosted Boltrig can use Ollama through a secured public HTTPS endpoint. Never expose an unauthenticated Ollama port. Use Boltrig Desktop to keep Ollama local to your computer.",
+  info: "Hosted Balmoral can use Ollama through a secured public HTTPS endpoint. Never expose an unauthenticated Ollama port. Use Balmoral Desktop to keep Ollama local to your computer.",
   models: [],
   requiresBaseUrl: true,
   keyOptional: true,

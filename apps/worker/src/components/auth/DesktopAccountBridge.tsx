@@ -16,7 +16,7 @@ export function DesktopAccountBridge({ children }: { children: React.ReactNode }
   return (
     <AuthCard
       title={bridge.state === "replace" ? "Connect this computer" : "Desktop connection unavailable"}
-      lead="Your Boltrig account is signed in. Local access uses a separate, revocable key for this computer."
+      lead="Your Balmoral account is signed in. Local access uses a separate, revocable key for this computer."
     >
       <div className="auth-handoff">
         <p role="alert" className="auth-error">{bridge.reason}</p>

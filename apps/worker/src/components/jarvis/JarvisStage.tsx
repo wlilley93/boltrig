@@ -95,7 +95,7 @@ export function JarvisStage({
       className={`jarvis-stage${neural ? " neural" : ""}${fallback ? " fallback" : ""}${className ? ` ${className}` : ""}`}
       data-skin={neural ? "ultron" : "default"}
       role="img"
-      aria-label={`Boltrig · ${state.mode}`}
+      aria-label={`Balmoral · ${state.mode}`}
       data-renderer={fallback ? "none" : "webgl2"}
       data-mode={state.mode}
     >

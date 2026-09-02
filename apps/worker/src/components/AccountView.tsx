@@ -44,7 +44,7 @@ export function AccountView({ onContextChanged }: { onContextChanged?(): void })
       <div className="page-content">
         <div className="page-intro">
           <div>
-            <h2>Your Boltrig account</h2>
+            <h2>Your Balmoral account</h2>
             <p>Preferences, activity, sessions, developer access and delegated automation.</p>
           </div>
         </div>

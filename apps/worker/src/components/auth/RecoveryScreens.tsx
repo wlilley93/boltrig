@@ -26,7 +26,7 @@ export function RequestPasswordResetScreen({
       if (result.status === "ok") setSent(true);
       else setError(result.reason ?? "Password recovery is temporarily unavailable.");
     } catch {
-      setError("Could not reach Boltrig. Try again.");
+      setError("Could not reach Balmoral. Try again.");
     } finally {
       setBusy(false);
     }
@@ -34,7 +34,7 @@ export function RequestPasswordResetScreen({
 
   if (sent) return <PasswordResetSent onDone={onDone} />;
   return (
-    <AuthCard title="Reset your password" lead="Enter the email used for your Boltrig account.">
+    <AuthCard title="Reset your password" lead="Enter the email used for your Balmoral account.">
       <form className="auth-form" onSubmit={submit}>
         <label>
           <span>Email</span>

@@ -90,7 +90,7 @@ function VoiceConfigurationForm({ onSkip, options, setup }: {
       )}
       <VoiceCredentials setup={setup} />
       {setup.provider === "openai-compatible-audio" && (
-        <p className="onboarding-key-note">The address must be HTTPS, reachable from the Boltrig server, and allowed by its network policy. Use the desktop app for private on-device audio.</p>
+        <p className="onboarding-key-note">The address must be HTTPS, reachable from the Balmoral server, and allowed by its network policy. Use the desktop app for private on-device audio.</p>
       )}
       <button className="onboarding-secondary voice-skip" disabled={setup.busy} onClick={onSkip} type="button">Skip for now</button>
     </div>
@@ -102,7 +102,7 @@ function VoiceCredentials({ setup }: { setup: VoiceSetup }) {
     return <p className="onboarding-capability voice-connected"><span aria-hidden="true">✓</span><strong>Already added</strong></p>;
   }
   if (!setup.selected?.setup_supported || !setup.selected.setup_contract) {
-    return <p className="onboarding-key-note">This service has not been enabled by the Boltrig host.</p>;
+    return <p className="onboarding-key-note">This service has not been enabled by the Balmoral host.</p>;
   }
   return (
     <div className="voice-secret-fields">

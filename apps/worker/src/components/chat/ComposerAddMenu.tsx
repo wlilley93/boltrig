@@ -152,7 +152,7 @@ function buildSections({
       label: "Add",
       actions: [
         { id: "files", label: "Files", description: attachmentsDisabled ? "Unavailable for local tasks" : "Attach from this device", icon: "file", disabled: attachmentsDisabled, run: onAttach },
-        ...(onOpenCommands ? [{ id: "search", label: "Search Boltrig", description: "Chats, runs, knowledge and memory", icon: "search" as const, run: onOpenCommands }] : []),
+        ...(onOpenCommands ? [{ id: "search", label: "Search Balmoral", description: "Chats, runs, knowledge and memory", icon: "search" as const, run: onOpenCommands }] : []),
       ],
     },
     // "Agent tools" and "Workspace" offered five destinations - work,

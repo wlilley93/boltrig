@@ -624,7 +624,7 @@ export function CompactAdvancedSection() {
             />
           )}
           desc="Signs out this account session. Computer trust stays until you revoke it."
-          title="Signed in to Boltrig"
+          title="Signed in to Balmoral"
         />
       </SettingsGroup>
     </>

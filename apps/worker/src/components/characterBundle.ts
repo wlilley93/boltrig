@@ -1,7 +1,7 @@
 // Binding a character BUNDLE to the canvas.
 //
 // A bundle is data (schemas/character-bundle/v1/character-bundle.schema.json).
-// The thing that actually draws is a canvas SOURCE, and the source is Boltrig's
+// The thing that actually draws is a canvas SOURCE, and the source is Balmoral's
 // — the loop, the uniform drive, the segment machinery. This module is the join
 // between the two, and it is the only place a manifest turns into a registry
 // entry.
@@ -40,7 +40,7 @@ type BundledCharacter = SdkCharacter<ReactNode, FamiliarPhenotypeResponse, Famil
 type BundledRenderProps = SdkCharacterRenderProps<FamiliarPhenotypeResponse, FamiliarGenotype>;
 
 /**
- * A way of drawing onto the one canvas. Sources are Boltrig's; bundles choose
+ * A way of drawing onto the one canvas. Sources are Balmoral's; bundles choose
  * between them by id and declare what they need the chosen one to do.
  */
 export interface CharacterCanvasSource {

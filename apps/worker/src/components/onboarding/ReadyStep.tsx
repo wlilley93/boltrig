@@ -10,7 +10,7 @@ export function ReadyStep({ character, userName }: { character: CharacterId; use
       <div className="onboarding-heading onboarding-rise" style={{ "--onboarding-delay": "80ms" } as React.CSSProperties}>
         <p className="onboarding-kicker">Setup complete</p>
         <h1>You’re ready, {userName}. Meet {name}.</h1>
-        <p>You can keep using Boltrig in your browser or bring it onto this computer.</p>
+        <p>You can keep using Balmoral in your browser or bring it onto this computer.</p>
       </div>
       <section
         className="ready-desktop onboarding-rise"
@@ -24,7 +24,7 @@ export function ReadyStep({ character, userName }: { character: CharacterId; use
         </span>
         <div className="ready-desktop-copy">
           <h2>Use {name} on this computer</h2>
-          <p>Download Boltrig Desktop so {name} can run and take approved actions locally on your personal computer. You choose which files, folders and apps it can use.</p>
+          <p>Download Balmoral Desktop so {name} can run and take approved actions locally on your personal computer. You choose which files, folders and apps it can use.</p>
           <small>Optional — you can continue in the browser instead.</small>
         </div>
         {downloadUrl ? (
@@ -34,7 +34,7 @@ export function ReadyStep({ character, userName }: { character: CharacterId; use
             rel="noreferrer"
             target="_blank"
           >
-            Download Boltrig Desktop
+            Download Balmoral Desktop
             <span aria-hidden="true">↗</span>
           </a>
         ) : (

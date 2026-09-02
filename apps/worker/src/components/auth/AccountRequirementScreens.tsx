@@ -166,7 +166,7 @@ function EnrollmentForm(props: EnrollmentFormProps) {
       {props.recoveryCodes.length > 0 && (
         <div className="recovery-codes">
           <strong>Save these recovery codes now</strong>
-          <p>They are shown once. Store them outside Boltrig.</p>
+          <p>They are shown once. Store them outside Balmoral.</p>
           <code>{props.recoveryCodes.join("\n")}</code>
         </div>
       )}

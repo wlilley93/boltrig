@@ -38,7 +38,7 @@ export function DeveloperTokens() {
       }
       setOneTimeSecret(result.secret);
       setName("");
-      setMessage("Copy this token now. Boltrig will not show it again.");
+      setMessage("Copy this token now. Balmoral will not show it again.");
       refresh();
     } catch {
       setMessage("The token could not be minted. No token was created.");
@@ -283,7 +283,7 @@ export function TwoFactorSecurity() {
     <section className="settings-card">
       <p className="eyebrow">Two-factor authentication</p>
       <h2>Authenticator and recovery codes</h2>
-      <p>Enrollment secrets and recovery codes are shown once. Boltrig stores only sealed factor material and recovery-code hashes.</p>
+      <p>Enrollment secrets and recovery codes are shown once. Balmoral stores only sealed factor material and recovery-code hashes.</p>
       {!enrollment ? (
         <button className="primary-button" disabled={busy} onClick={() => void beginEnrollment()}>
           {busy ? "Starting…" : "Start enrollment"}

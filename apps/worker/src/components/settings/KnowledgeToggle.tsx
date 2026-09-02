@@ -142,7 +142,7 @@ function KnowledgeProviderRow(props: {
       <StateWord tone={tone.tone}>{tone.state}</StateWord>
       <SettingsInfo
         label={`About ${provider.display_name}`}
-        text="Cognee connects related knowledge so Boltrig can recall it later. It uses the same server-side AI connection as chat; no key enters this page."
+        text="Cognee connects related knowledge so Balmoral can recall it later. It uses the same server-side AI connection as chat; no key enters this page."
       />
       <SettingsToggle
         disabled={provider.status === "unavailable"}

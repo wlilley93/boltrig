@@ -84,7 +84,7 @@ function OnboardingUnavailable() {
   return (
     <main className="onboarding" aria-label="Setup unavailable">
       <div className="onboarding-aurora one" /><div className="onboarding-aurora two" />
-      <section className="onboarding-panel" aria-label="Boltrig setup">
+      <section className="onboarding-panel" aria-label="Balmoral setup">
         <header className="onboarding-topbar">
           <BrandLockup />
         </header>
@@ -345,7 +345,7 @@ function OnboardingFrame({
   return (
     <main className="onboarding">
       <div className="onboarding-aurora one" /><div className="onboarding-aurora two" />
-      <section className="onboarding-panel" aria-label="Boltrig setup">
+      <section className="onboarding-panel" aria-label="Balmoral setup">
         <header className="onboarding-topbar">
           <BrandLockup />
           <span className="onboarding-progress" aria-label={`Step ${step + 1} of 6`}>

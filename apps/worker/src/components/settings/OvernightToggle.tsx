@@ -18,7 +18,7 @@ export function OvernightToggle() {
             <div className="settings-status">
               <SettingsInfo
                 label="About overnight"
-                text="Allows Boltrig to prepare a checked model adapter from approved work when an overnight worker is available. Nothing is applied automatically."
+                text="Allows Balmoral to prepare a checked model adapter from approved work when an overnight worker is available. Nothing is applied automatically."
               />
               <SettingsToggle
                 disabled={controller.busy || controller.finalizer.busy}

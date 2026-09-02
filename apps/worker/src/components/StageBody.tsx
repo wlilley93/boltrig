@@ -119,7 +119,7 @@ function useSensing(capabilities: readonly string[] | undefined): Record<string,
       status: "refused",
       capability,
       reason: "kernel_unreachable",
-      detail: "Boltrig could not be asked, so consent is unknown and nothing is being seen.",
+      detail: "Balmoral could not be asked, so consent is unknown and nothing is being seen.",
       remedy: "retry:automatic",
     });
     const ask = () => {

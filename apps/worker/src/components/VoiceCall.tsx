@@ -950,7 +950,7 @@ export function VoiceCall({
     if (event.type === "transcript" && typeof payload.text === "string") {
       const line: VoiceLine = {
         id: event.id ?? crypto.randomUUID(),
-        speaker: payload.kind === "input" ? "You" : "Boltrig",
+        speaker: payload.kind === "input" ? "You" : "Balmoral",
         text: payload.text,
         typed: payload.via === "text",
       };

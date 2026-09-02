@@ -3,7 +3,7 @@ import type { DeviceEnrollmentStart } from "@wlilley93/boltrig-web-sdk";
 import { client } from "./client";
 import { completeDesktopEnrollment } from "./desktop";
 
-export const DEFAULT_DESKTOP_LABEL = "Boltrig Desktop";
+export const DEFAULT_DESKTOP_LABEL = "Balmoral Desktop";
 
 export async function connectAuthenticatedDesktop(
   label = DEFAULT_DESKTOP_LABEL,

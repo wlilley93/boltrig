@@ -58,7 +58,7 @@ export const workerCommands: Command[] = [
   { route: "settings", routeId: "behaviour", label: "Behaviour settings", description: "Presence, sight, learning, and overnight", keywords: "camera presence sensing privacy retention cognee knowledge nightly", hint: "Settings" },
   { route: "settings", routeId: "autonomy", label: "Autonomy settings", description: "Review what stops and governs work", keywords: "approval permissions posture", hint: "Settings" },
   { route: "settings", routeId: "spend", label: "Spending settings", description: "Review cost and budget ceilings", keywords: "budget cost money", hint: "Settings" },
-  { route: "settings", routeId: "models", label: "Models settings", description: "Choose the models Boltrig may use", keywords: "llm text vision voice routes", hint: "Settings" },
+  { route: "settings", routeId: "models", label: "Models settings", description: "Choose the models Balmoral may use", keywords: "llm text vision voice routes", hint: "Settings" },
   { route: "settings", routeId: "shortcuts", label: "Keyboard shortcuts settings", description: "See the shortcuts this build actually binds", keywords: "keys commands keyboard", hint: "Settings" },
   { route: "settings", routeId: "health", label: "Health settings", description: "See what is working and what is bounded", keywords: "status checks readiness", hint: "Settings" },
   { route: "settings", routeId: "organisation", label: "Organisation settings", description: "Review workspace people and policy", keywords: "members roles audit", hint: "Settings" },

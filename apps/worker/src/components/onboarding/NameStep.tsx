@@ -9,8 +9,8 @@ export function NameStep({
     <div className="onboarding-step name-step">
       <div className="onboarding-heading onboarding-rise">
         <p className="onboarding-kicker">First things first</p>
-        <h1>What should Boltrig call you?</h1>
-        <p>We’ll use this to make Boltrig feel personal.</p>
+        <h1>What should Balmoral call you?</h1>
+        <p>We’ll use this to make Balmoral feel personal.</p>
       </div>
       <label
         className="onboarding-name onboarding-rise"

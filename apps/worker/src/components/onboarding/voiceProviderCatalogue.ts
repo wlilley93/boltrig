@@ -9,14 +9,14 @@ export interface VoiceProviderDefinition {
   info?: string;
 }
 
-const CUSTOM_INFO = "Hosted Boltrig can use a local or private speech service only when its HTTPS address is reachable and allowed by the Boltrig server. Boltrig Desktop is the private on-device option.";
+const CUSTOM_INFO = "Hosted Balmoral can use a local or private speech service only when its HTTPS address is reachable and allowed by the Balmoral server. Balmoral Desktop is the private on-device option.";
 
 export const VOICE_PROVIDERS: readonly VoiceProviderDefinition[] = [
   {
     id: "xai-voice",
     capabilities: ["Spoken replies", "Transcription", "Live voice"],
     detail: "Speech and optional realtime calls",
-    info: "The key connects speech. Live voice also requires the realtime call service to be enabled by your Boltrig host.",
+    info: "The key connects speech. Live voice also requires the realtime call service to be enabled by your Balmoral host.",
   },
   {
     id: "elevenlabs-audio",
@@ -37,7 +37,7 @@ export const VOICE_PROVIDERS: readonly VoiceProviderDefinition[] = [
     id: "fish-audio",
     capabilities: ["Spoken replies"],
     detail: "Expressive spoken replies",
-    info: "Fish transcription appears only when the Boltrig host has enabled Fish ASR.",
+    info: "Fish transcription appears only when the Balmoral host has enabled Fish ASR.",
   },
   {
     id: "openai-compatible-audio",

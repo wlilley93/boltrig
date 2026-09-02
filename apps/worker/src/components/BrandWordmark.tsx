@@ -5,7 +5,7 @@ import { currentProductName, subscribeProductName } from "../productName";
 /**
  * The product's name in the brand face.
  *
- * The FACE never changes: "Opbox Agents" and "Boltrig" are the same wordmark
+ * The FACE never changes: "Opbox Agents" and "Balmoral" are the same wordmark
  * in the same typeface beside the same mark, because they are the same
  * product. Only the word differs, and which word is the kernel's answer rather
  * than this bundle's (see ../productName).

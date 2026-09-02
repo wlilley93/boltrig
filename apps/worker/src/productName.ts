@@ -16,13 +16,13 @@
 // stale or tampered cache costs a wrong label until the fetch lands.
 import { client } from "./client";
 
-export const DEFAULT_PRODUCT_NAME = "Boltrig";
+export const DEFAULT_PRODUCT_NAME = "Balmoral";
 
 const CACHE_KEY = "boltrig.product-name";
 // Only names the kernel can actually return. An unrecognised cached value is
 // discarded rather than rendered: localStorage is writable by anything sharing
 // the origin, and the wordmark is not a place to display arbitrary text.
-const KNOWN = new Set([DEFAULT_PRODUCT_NAME, "Opbox Agents"]);
+const KNOWN = new Set([DEFAULT_PRODUCT_NAME, "Boltrig", "Opbox Agents"]);
 
 function cached(): string | null {
   try {

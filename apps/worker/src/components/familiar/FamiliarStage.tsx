@@ -79,5 +79,5 @@ function familiarStageAccessibleName(label?: string) {
   const trimmed = label?.trim();
   return trimmed?.toLocaleLowerCase() === "familiar"
     ? trimmed
-    : `${trimmed || "Boltrig"} Familiar`;
+    : `${trimmed || "Balmoral"} Familiar`;
 }

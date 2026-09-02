@@ -4,7 +4,7 @@ import type { CallStatus } from "@wlilley93/boltrig-web-sdk";
 
 export interface VoiceLine {
   id: string;
-  speaker: "You" | "Boltrig";
+  speaker: "You" | "Balmoral";
   text: string;
   typed?: boolean;
 }

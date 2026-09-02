@@ -8,7 +8,7 @@ export function originLabel(value: {
   source?: string | null;
   provenance?: ChannelMessageProvenance | null;
 }): string {
-  return value.provenance?.display_label || value.source || "Boltrig";
+  return value.provenance?.display_label || value.source || "Balmoral";
 }
 
 function Fact({ label, value }: { label: string; value: string }) {
@@ -42,7 +42,7 @@ export function WorkFacts({ item }: { item: WorkItem }) {
     <Fact label="Status" value={item.status.replaceAll("_", " ")} />
     <Fact label="Owner" value={item.owner_member ?? "Unassigned"} />
     <Fact label="Confidence" value={item.confidence == null ? "—" : `${Math.round(item.confidence * 100)}%`} />
-    <Fact label="Source" value={item.source ?? "Boltrig"} />
+    <Fact label="Source" value={item.source ?? "Balmoral"} />
     <Fact label="Shape" value={item.convergent ? "Convergent goal" : "Non-convergent work"} />
     <Fact label="Parent" value={item.parent_id ?? "Root"} />
     <Fact label="Hatchet run" value={item.hatchet_run_id ?? "None"} />

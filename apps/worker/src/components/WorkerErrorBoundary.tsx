@@ -51,8 +51,8 @@ function RecoveryScreen({ error, recovering, reload }: {
 }) {
   const staleChunk = isRecoverableChunkError(error);
   const title = recovering
-    ? "Updating Boltrig…"
-    : staleChunk ? "The update didn’t load." : "Boltrig couldn’t open.";
+    ? "Updating Balmoral…"
+    : staleChunk ? "The update didn’t load." : "Balmoral couldn’t open.";
   const detail = recovering
     ? "A newer version is ready. Reloading once to finish the update."
     : "Your work is safe. Reload the app to try again.";

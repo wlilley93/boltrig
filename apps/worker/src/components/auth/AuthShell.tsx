@@ -6,7 +6,7 @@ export function AuthSplash() {
     <main className="auth-surface">
       <div className="auth-splash" role="status">
         <span className="auth-spinner" />
-        <span>Opening Boltrig Worker…</span>
+        <span>Opening Balmoral Worker…</span>
       </div>
     </main>
   );
@@ -15,12 +15,12 @@ export function AuthSplash() {
 export function DesktopServerMissing() {
   return (
     <AuthCard
-      title="No Boltrig server configured"
-      lead="This desktop build was packaged without a Boltrig API origin."
+      title="No Balmoral server configured"
+      lead="This desktop build was packaged without a Balmoral API origin."
     >
       <div className="auth-handoff">
         <p role="alert" className="auth-error">
-          Rebuild the desktop app with VITE_API_BASE set to the Boltrig origin
+          Rebuild the desktop app with VITE_API_BASE set to the Balmoral origin
           this install should use. Without it the app can only reach its own
           window, so sign-in, chat and voice have nothing to talk to.
         </p>

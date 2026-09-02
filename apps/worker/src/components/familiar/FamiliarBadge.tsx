@@ -45,7 +45,7 @@ export function FamiliarBadge({
         ? undefined
         : identity.bound
           ? `${label ?? "Agent"} Familiar · ${state}`
-          : `Boltrig activity · ${state}`}
+          : `Balmoral activity · ${state}`}
       style={{
         ...familiarPalette(identity.palette),
         ...(size === undefined ? {} : { width: size, height: size }),
