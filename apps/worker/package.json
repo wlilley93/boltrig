@@ -22,21 +22,21 @@
   },
   "dependencies": {
     "@wlilley93/boltrig-web-sdk": "file:../../sdks/web",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "react-markdown": "10.1.0",
     "remark-gfm": "4.0.1"
   },
   "devDependencies": {
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/cli": "2.11.4",
-    "@testing-library/react": "16.3.2",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.4",
-    "@vitejs/plugin-react": "6.0.5",
-    "happy-dom": "20.11.2",
+    "@testing-library/react": "16.3.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "happy-dom": "20.14.3",
     "typescript": "5.6.3",
-    "vite": "8.2.1",
+    "vite": "8.3.0",
     "vitest": "4.1.10"
   },
   "packageManager": "pnpm@11.5.0"
