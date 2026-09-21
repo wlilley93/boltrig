@@ -39,7 +39,7 @@ RUN cd apps/worker && pnpm run build
 # set must fail to BUILD, not ship and 200 its way past every status probe.
 RUN test -f apps/worker/dist/favicon.ico && test -d apps/worker/dist/companion
 
-FROM nginx:1.30.4-alpine@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46 AS runtime
+FROM nginx:1.30.5-alpine@sha256:a5f2157a0302eb0c5e300415effb63a9e70ed1eb9c107283819bf6d149ab607c AS runtime
 RUN apk add --no-cache c-ares=1.34.8-r0 expat=2.8.3-r0 libexpat=2.8.3-r0
 COPY apps/worker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=worker-build /workspace/apps/worker/dist /usr/share/nginx/html
