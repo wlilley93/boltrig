@@ -61,11 +61,12 @@ export const STORY_SECTIONS: StorySectionData[] = [
   {
     id: "signals",
     kind: "takeover",
-    eyebrow: "Operations",
-    title: "Turn requests into finished work.",
+    eyebrow: "Connected operations",
+    title: "Connect your systems. Turn every request into finished work.",
     body:
-      "A customer issue, release chore, compliance request or internal handoff can become a tracked run with clear ownership, live progress and a result your team can inspect. Agents do the routine work, and people stay in the loop where judgment is required.",
+      "Bring your CRM, support desk, code, docs and internal tools into one governed run. A customer issue, release chore, compliance request or handoff can move across systems with clear ownership, live progress and an inspectable result. Agents do the routine work; people stay in the loop where judgment matters.",
     readouts: [
+      { label: "systems", value: "CONNECTED" },
       { label: "requests", value: "ROUTED" },
       { label: "handoffs", value: "VISIBLE" },
     ],
