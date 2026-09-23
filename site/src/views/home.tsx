@@ -1,5 +1,4 @@
 import { BrainCanvas, BrainControls, BrainLoader, BrainTelemetry } from "@/components/brain";
-import { FeaturesSection } from "@/components/features";
 import { StoryOverlay } from "@/components/story";
 
 /**
@@ -10,9 +9,7 @@ import { StoryOverlay } from "@/components/story";
  * brain in the finale, while a full-screen procedural "signal field" takes over
  * mid-story and then reveals the brain again. The terminal-style telemetry monitor
  * (`BrainTelemetry`) tracks the active chapter; the loader (`BrainLoader`) fronts
- * the first paint. The features catalogue (`FeaturesSection`, z-10, opaque black)
- * follows the story in normal flow and occludes the fixed canvas. The dev
- * parameters drawer mounts only in development.
+ * the first paint. The dev parameters drawer mounts only in development.
  */
 export const HomeView = () => {
   return (
@@ -25,7 +22,6 @@ export const HomeView = () => {
 
       <BrainTelemetry />
       <StoryOverlay />
-      <FeaturesSection />
       <BrainLoader />
 
       {process.env.NODE_ENV === "development" && <BrainControls />}

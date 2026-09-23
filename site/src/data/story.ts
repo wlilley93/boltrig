@@ -61,11 +61,12 @@ export const STORY_SECTIONS: StorySectionData[] = [
   {
     id: "signals",
     kind: "takeover",
-    eyebrow: "Operations",
-    title: "Turn requests into finished work.",
+    eyebrow: "Connected operations",
+    title: "Connect your systems. Turn every request into finished work.",
     body:
-      "A customer issue, release chore, compliance request or internal handoff can become a tracked run with clear ownership, live progress and a result your team can inspect. Agents do the routine work, and people stay in the loop where judgment is required.",
+      "Bring your CRM, support desk, code, docs and internal tools into one governed run. A customer issue, release chore, compliance request or handoff can move across systems with clear ownership, live progress and an inspectable result. Agents do the routine work; people stay in the loop where judgment matters.",
     readouts: [
+      { label: "systems", value: "CONNECTED" },
       { label: "requests", value: "ROUTED" },
       { label: "handoffs", value: "VISIBLE" },
     ],
@@ -76,11 +77,7 @@ export const STORY_SECTIONS: StorySectionData[] = [
     eyebrow: "Workforce",
     title: "Specialists for the jobs teams repeat every day.",
     body:
-      "Bolt routes work to the right agent, then short-lived workers handle the specific job: release prep, support triage, dependency checks, renewals, notifications and more. Skills are reusable, costs are bounded, and sensitive work can stay on infrastructure you control.",
-    readouts: [
-      { label: "skills", value: "REUSABLE" },
-      { label: "cost", value: "BOUNDED" },
-    ],
+      "Boltrig routes each request to the right specialist for release prep, support triage, dependency checks, renewals, notifications and more. Procedures are repeatable, execution is controlled, and sensitive work remains on infrastructure you control.",
   },
   {
     id: "vision",
@@ -100,7 +97,7 @@ export const STORY_SECTIONS: StorySectionData[] = [
     eyebrow: "Integrations",
     title: "Bring your systems, tools and workflows.",
     body:
-      "Connect the systems your team already uses and package your own domain verbs, workflows and skills. Boltrig can run behind your own product UI, serve agents over MCP, and keep the same governance across every entry point.",
+      "Connect the systems your team already uses and package your own domain verbs, workflows and operating rules. Boltrig can run behind your own product UI, serve agents over MCP, and keep the same governance across every entry point.",
     readouts: [
       { label: "plugins", value: "ADOPTED" },
       { label: "frontends", value: "HEADLESS" },
@@ -118,7 +115,7 @@ export const STORY_SECTIONS: StorySectionData[] = [
       { label: "proof", value: "AUDITABLE" },
     ],
     align: "center",
-    cta: { label: "Request access", href: "mailto:access@boltrig.io?subject=Boltrig%20access%20request" },
+    cta: { label: "Request access", href: "mailto:info@boltrig.ai?subject=Boltrig%20access%20request" },
   },
 ];
 
