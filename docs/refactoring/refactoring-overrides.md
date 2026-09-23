@@ -62,10 +62,13 @@ overridden here.
 
 ## Structural floor (STRUCTURAL_SWEEP)
 
-Defaults apply. Boltrig's `store/postgres.py` and `store/memory.py` remain Tier-3
-debt, not permanent exemptions: decompose them in lockstep by DOMAIN SECTION
-(channels, memory, identity, and so on) into symmetric partials rather than
-chopping at arbitrary line boundaries. Any temporary over-floor exception must
+Defaults apply. ~~`store/postgres.py` and `store/memory.py` remain Tier-3
+debt~~ **RESOLVED 2026-08-24 (round-1-resume): both stores under floor**
+(postgres 209, memory 263) via 15 symmetric domain partials; exemptions
+deleted. Remaining Tier-3 debt heads to round 2: the route cluster
+(channel/platform/access/memory_routes + app.py create_app + auth_routes
+register fn) under the RULED request-state-singleton pattern, then
+dispatch/pump/cell_spawner. Any temporary over-floor exception must
 be explicit in `docs/refactoring/structural-exemptions.json` with its current
 file-line, largest-function, and individual over-limit-function baselines plus a
 reason, owner, and ISO expiry. The stdlib-only gate scans `boltrig/**/*.py`,

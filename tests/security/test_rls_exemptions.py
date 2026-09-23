@@ -48,6 +48,7 @@ EXEMPT_READ_CALLERS = {
 EXEMPT_DEFINITION_MODULES = {
     "boltrig/store/control_plane_reads.py",
     "boltrig/store/memory.py",  # the in-memory store has no RLS to skip
+    "boltrig/store/tenancy.py",  # mem-side list_orgs lives in the tenancy partial (arc-1 move); the in-memory store has no RLS to skip
     "boltrig/store/base.py",  # protocol declaration only
 }
 

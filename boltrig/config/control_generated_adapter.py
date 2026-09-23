@@ -21,6 +21,13 @@ from boltrig.adapters.http_base import RateLimitConfig
 
 GENERATED_ADAPTER_KIND = "boltrig.generated-openapi.v1"
 GENERATED_ADAPTER_MODULE = "boltrig.adapters.generator"
+# arc-1 structural move: GeneratedAdapter now lives in generated_adapter.py, so
+# new rows carry type(adapter).__module__ == the new path. Records written
+# before the move keep the historical marker; BOTH must reconstruct.
+GENERATED_ADAPTER_MODULES = (
+    GENERATED_ADAPTER_MODULE,
+    "boltrig.adapters.generated_adapter",
+)
 MAX_GENERATED_PROJECTION_BYTES = 1024 * 1024
 MAX_GENERATED_OPERATIONS = 512
 _NON_EXECUTABLE_SCHEMA_KEYS = frozenset(
@@ -34,7 +41,7 @@ _SCHEMA_NAME_MAPS = frozenset(
 def is_generated_adapter_record(record: Any) -> bool:
     return bool(
         getattr(record, "source", None) == "generated"
-        and getattr(record, "module_ref", None) == GENERATED_ADAPTER_MODULE
+        and getattr(record, "module_ref", None) in GENERATED_ADAPTER_MODULES
     )
 
 

@@ -14,6 +14,14 @@ from __future__ import annotations
 class DistillationReadsMem:
     """Requires ``self._convs``, ``self._mem_ingest`` and ``self._messages``."""
 
+    async def get_memory_ingestion_by_source(self, tenant_id, source_kind, source_ref):
+        hits = [
+            i
+            for (t, _), i in self._mem_ingest.items()
+            if t == tenant_id and i.source_kind == source_kind and i.source_ref == source_ref
+        ]
+        return max(hits, key=lambda i: i.created_at) if hits else None
+
     async def count_pending_distillation(self, tenant_id, idle_before):
         # #43: a thread is settled when a receipt is NEWER than its last message,
         # so a CONTINUED thread counts as pending again. TIME-based on purpose
