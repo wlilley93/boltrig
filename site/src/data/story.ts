@@ -118,7 +118,7 @@ export const STORY_SECTIONS: StorySectionData[] = [
       { label: "proof", value: "AUDITABLE" },
     ],
     align: "center",
-    cta: { label: "Request access", href: "mailto:access@boltrig.io?subject=Boltrig%20access%20request" },
+    cta: { label: "Request access", href: "mailto:info@boltrig.ai?subject=Boltrig%20access%20request" },
   },
 ];
 
