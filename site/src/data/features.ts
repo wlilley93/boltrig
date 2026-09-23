@@ -1,7 +1,7 @@
 /**
  * Feature catalogue for the post-story features section (see
  * `components/features/features-section.tsx`). Six themed groups, each with a
- * one-line hook and five concrete capabilities written as buyer outcomes.
+ * one-line hook and concrete capabilities written as buyer outcomes.
  * Claims are bounded to shipped behaviour; known seams are not advertised as
  * active capability. Pure typed content: no markup, no styling.
  */
@@ -26,42 +26,47 @@ export interface FeatureGroup {
 export const FEATURE_GROUPS: FeatureGroup[] = [
   {
     id: "outcomes",
-    title: "Finish more operational work",
-    hook: "Move recurring requests out of chat threads and into tracked agent runs.",
+    title: "Connect the work your team already does",
+    hook: "Turn requests from customers, colleagues and systems into one visible run.",
     items: [
       {
-        name: "One place to delegate",
+        name: "One place to route work",
         outcome:
-          "Use Boltrig chat, the work board and workflow runs from one console to delegate and track operational work.",
+          "Bring chat, webhooks, work boards and workflow runs into one operating view.",
       },
       {
         name: "Governed agent profiles",
         outcome:
-          "Configure specialist workers by runtime, depth, lifecycle and execution tier while caller authority remains the ceiling.",
+          "Give support, release, compliance and operations work to the right specialist without losing the operating context.",
       },
       {
-        name: "Governed workflows",
+        name: "Tracked workflows",
         outcome:
-          "Define and trigger dependency-ordered workflows whose capability steps still cross the kernel.",
+          "Define multi-step work with dependencies, ownership and a result your team can inspect.",
       },
       {
-        name: "Work board",
+        name: "Human and agent handoffs",
         outcome: "Track agent and human work together, with nested tasks, status and ownership in one view.",
+      },
+      {
+        name: "Request intake",
+        outcome:
+          "Accept customer, team and system requests as identity-bound work with a clear owner.",
       },
     ],
   },
   {
     id: "control",
-    title: "Control what agents can change",
-    hook: "Give agents useful access without turning them into unrestricted service accounts.",
+    title: "Keep every action inside the rules",
+    hook: "Give agents useful access without handing them a blank cheque.",
     items: [
       {
-        name: "Scoped permissions",
+        name: "Permission checks",
         outcome:
           "Every capability call is checked against organisation, workspace, caller and run authority before it executes.",
       },
       {
-        name: "Human approvals",
+        name: "Approval gates",
         outcome:
           "High-impact actions pause for a human decision instead of relying on a prompt to be careful.",
       },
@@ -70,19 +75,24 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
         outcome: "Credentials are resolved inside Boltrig for one call and are never handed to the agent.",
       },
       {
-        name: "Sensitive routing",
+        name: "Private model routing",
         outcome:
           "Sensitive work can be routed to local models and blocked from unsuitable endpoints.",
+      },
+      {
+        name: "Work limits",
+        outcome:
+          "Reserve organisation and department budgets so over-limit spawned work can be stopped safely.",
       },
     ],
   },
   {
     id: "evidence",
-    title: "Show the evidence",
-    hook: "Replace vague AI output with a run record your operators and auditors can inspect.",
+    title: "Make the result provable",
+    hook: "Replace vague AI output with a run record operators can inspect and explain.",
     items: [
       {
-        name: "Live execution stream",
+        name: "Live run history",
         outcome:
           "Watch reasoning, tool calls, approvals and handoffs as they happen, then reattach if a client drops.",
       },
@@ -91,9 +101,9 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
         outcome: "Open any run and walk through the steps, workers and tool receipts behind the result.",
       },
       {
-        name: "Audit and scoped reporting",
+        name: "Tamper-evident audit",
         outcome:
-          "Governed actions, denials and approvals produce a tamper-evident record, with activity views filtered to the caller's scope.",
+          "Actions, denials and approvals produce a tamper-evident record with activity filtered to the caller's scope.",
       },
       {
         name: "Knowledge with citations",
@@ -110,15 +120,15 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
   {
     id: "experience",
     title: "Meet teams where they work",
-    hook: "Use Boltrig's console, your own frontend, or external agent clients.",
+    hook: "Use Boltrig's console, your own frontend or the clients your team already trusts.",
     items: [
       {
-        name: "Console chat",
+        name: "Boltrig chat",
         outcome:
           "Command the fleet from a live conversation with files, approvals, tool receipts and run recovery.",
       },
       {
-        name: "Headless engine",
+        name: "Your own frontend",
         outcome:
           "Build your own UI over Boltrig's HTTP, SSE and MCP surfaces without forking the engine.",
       },
@@ -127,7 +137,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
         outcome: "Expose governed capabilities to external agents and consume reviewed MCP tool servers as new verbs.",
       },
       {
-        name: "Signed channel intake",
+        name: "Signed intake",
         outcome:
           "Accept identity-bound Microsoft Teams or generic webhook events after signature, replay and rate-limit checks.",
       },
@@ -140,18 +150,18 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
   },
   {
     id: "extension",
-    title: "Bring your domain",
-    hook: "Package the nouns, verbs, workflows and rules that make your business specific.",
+    title: "Connect the systems that matter",
+    hook: "Bring your CRM, support desk, code, docs and internal tools into the same governed model.",
     items: [
       {
-        name: "Deployment bundles",
+        name: "Integration bundles",
         outcome:
-          "Ship project adapters, workflows and manifest policy as a bundle loaded by Boltrig at deploy time.",
+          "Ship project adapters, workflows and policy together so a deployment carries its operating model with it.",
       },
       {
-        name: "Live authoring",
+        name: "Domain rules",
         outcome:
-          "Author nouns, verbs, bindings, workflows and agent profiles as governed data from the console or API.",
+          "Author the nouns, verbs, bindings and workflows that make your business specific.",
       },
       {
         name: "External systems",
@@ -172,7 +182,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
   {
     id: "deployment",
     title: "Run it where the data lives",
-    hook: "Self-host the engine and keep enterprise identity, data and credentials under your control.",
+    hook: "Self-host Boltrig and keep identity, data and credentials under your control.",
     items: [
       {
         name: "Self-hosted stack",
