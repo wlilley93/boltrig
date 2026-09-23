@@ -37,7 +37,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       {
         name: "Governed agent profiles",
         outcome:
-          "Configure specialist workers by runtime, skills, depth, lifecycle and cost tier while caller authority remains the ceiling.",
+          "Configure specialist workers by runtime, depth, lifecycle and execution tier while caller authority remains the ceiling.",
       },
       {
         name: "Governed workflows",
@@ -48,17 +48,12 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
         name: "Work board",
         outcome: "Track agent and human work together, with nested tasks, status and ownership in one view.",
       },
-      {
-        name: "Reusable skills",
-        outcome:
-          "Package the procedures your team repeats, then let agents pull them only when the job matches.",
-      },
     ],
   },
   {
     id: "control",
     title: "Control what agents can change",
-    hook: "Give agents useful access without turning them into unbounded service accounts.",
+    hook: "Give agents useful access without turning them into unrestricted service accounts.",
     items: [
       {
         name: "Scoped permissions",
@@ -73,11 +68,6 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       {
         name: "Secrets stay server-side",
         outcome: "Credentials are resolved inside Boltrig for one call and are never handed to the agent.",
-      },
-      {
-        name: "Scoped cost boundaries",
-        outcome:
-          "Configured organisation and department budgets reserve estimated spend and can hard-stop over-limit spawned agent work.",
       },
       {
         name: "Sensitive routing",
@@ -103,7 +93,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       {
         name: "Audit and scoped reporting",
         outcome:
-          "Governed actions, denials and approvals produce a tamper-evident record, with cost and activity views filtered to the caller's scope.",
+          "Governed actions, denials and approvals produce a tamper-evident record, with activity views filtered to the caller's scope.",
       },
       {
         name: "Knowledge with citations",
@@ -113,7 +103,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       {
         name: "Evaluation cases",
         outcome:
-          "Run reusable cases under the initiator's grants and inspect assertions, outputs, effective permissions and history.",
+          "Run evaluation cases under the initiator's grants and inspect assertions, outputs, effective permissions and history.",
       },
     ],
   },
@@ -156,12 +146,12 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       {
         name: "Deployment bundles",
         outcome:
-          "Ship project adapters, skills, workflows and manifest policy as a bundle loaded by Boltrig at deploy time.",
+          "Ship project adapters, workflows and manifest policy as a bundle loaded by Boltrig at deploy time.",
       },
       {
         name: "Live authoring",
         outcome:
-          "Author nouns, verbs, bindings, skills, workflows and agent profiles as governed data from the console or API.",
+          "Author nouns, verbs, bindings, workflows and agent profiles as governed data from the console or API.",
       },
       {
         name: "External systems",

@@ -77,7 +77,7 @@ export const STORY_SECTIONS: StorySectionData[] = [
     eyebrow: "Workforce",
     title: "Specialists for the jobs teams repeat every day.",
     body:
-      "Boltrig routes each request to the right specialist for release prep, support triage, dependency checks, renewals, notifications and more. Skills are reusable, costs are bounded, and sensitive work remains on infrastructure you control.",
+      "Boltrig routes each request to the right specialist for release prep, support triage, dependency checks, renewals, notifications and more. Procedures are repeatable, execution is controlled, and sensitive work remains on infrastructure you control.",
   },
   {
     id: "vision",
@@ -97,7 +97,7 @@ export const STORY_SECTIONS: StorySectionData[] = [
     eyebrow: "Integrations",
     title: "Bring your systems, tools and workflows.",
     body:
-      "Connect the systems your team already uses and package your own domain verbs, workflows and skills. Boltrig can run behind your own product UI, serve agents over MCP, and keep the same governance across every entry point.",
+      "Connect the systems your team already uses and package your own domain verbs, workflows and operating rules. Boltrig can run behind your own product UI, serve agents over MCP, and keep the same governance across every entry point.",
     readouts: [
       { label: "plugins", value: "ADOPTED" },
       { label: "frontends", value: "HEADLESS" },
