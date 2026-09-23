@@ -77,7 +77,7 @@ export const STORY_SECTIONS: StorySectionData[] = [
     eyebrow: "Workforce",
     title: "Specialists for the jobs teams repeat every day.",
     body:
-      "Bolt routes work to the right agent, then short-lived workers handle the specific job: release prep, support triage, dependency checks, renewals, notifications and more. Skills are reusable, costs are bounded, and sensitive work can stay on infrastructure you control.",
+      "Boltrig routes work to the right agent, then short-lived workers handle the specific job: release prep, support triage, dependency checks, renewals, notifications and more. Skills are reusable, costs are bounded, and sensitive work can stay on infrastructure you control.",
     readouts: [
       { label: "skills", value: "REUSABLE" },
       { label: "cost", value: "BOUNDED" },

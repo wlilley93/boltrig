@@ -32,7 +32,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       {
         name: "One place to delegate",
         outcome:
-          "Use Bolt chat, the work board and workflow runs from one console to delegate and track operational work.",
+          "Use Boltrig chat, the work board and workflow runs from one console to delegate and track operational work.",
       },
       {
         name: "Governed agent profiles",
